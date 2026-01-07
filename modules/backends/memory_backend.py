@@ -549,10 +549,16 @@ class MemoryGeometricFilter(GeometricFilterBackend):
             new_expression = f'$id IN ({id_list})'
             
             # Combine with old subset if needed
+            # CRITICAL FIX v2.9.42: Respect combine_operator=None as REPLACE signal
             if old_subset and old_subset.strip():
-                if not combine_operator:
+                if combine_operator is None:
+                    # Explicit None = REPLACE (multi-step filter)
+                    final_expression = new_expression
+                elif not combine_operator:
                     combine_operator = 'AND'
-                final_expression = f"({old_subset}) {combine_operator} ({new_expression})"
+                    final_expression = f"({old_subset}) {combine_operator} ({new_expression})"
+                else:
+                    final_expression = f"({old_subset}) {combine_operator} ({new_expression})"
             else:
                 final_expression = new_expression
             
@@ -585,10 +591,16 @@ class MemoryGeometricFilter(GeometricFilterBackend):
     ) -> bool:
         """Apply simple attribute filter without spatial operations."""
         try:
+            # CRITICAL FIX v2.9.42: Respect combine_operator=None as REPLACE signal
             if old_subset and old_subset.strip():
-                if not combine_operator:
+                if combine_operator is None:
+                    # Explicit None = REPLACE (multi-step filter)
+                    final_expression = expression
+                elif not combine_operator:
                     combine_operator = 'AND'
-                final_expression = f"({old_subset}) {combine_operator} ({expression})"
+                    final_expression = f"({old_subset}) {combine_operator} ({expression})"
+                else:
+                    final_expression = f"({old_subset}) {combine_operator} ({expression})"
             else:
                 final_expression = expression
             

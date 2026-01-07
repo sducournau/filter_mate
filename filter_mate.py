@@ -727,6 +727,17 @@ class FilterMate:
                 except Exception as e:
                     logger.debug(f"Error clearing layer combobox on project cleared: {e}")
                 
+                # CRITICAL FIX: Clear QgsFeaturePickerWidget to prevent access violation
+                # The widget has an internal timer that triggers scheduledReload which
+                # creates QgsVectorLayerFeatureSource - if the layer is invalid/destroyed,
+                # this causes a Windows fatal exception (access violation).
+                # See stack trace: QgsFeaturePickerModelBase::scheduledReload -> QgsVectorLayerFeatureSource
+                try:
+                    if hasattr(self.app.dockwidget, 'mFeaturePickerWidget_exploring_single_selection'):
+                        self.app.dockwidget.mFeaturePickerWidget_exploring_single_selection.setLayer(None)
+                except Exception as e:
+                    logger.debug(f"Error clearing FeaturePickerWidget on project cleared: {e}")
+                
                 # Update indicator to show waiting state
                 if hasattr(self.app.dockwidget, 'backend_indicator_label') and self.app.dockwidget.backend_indicator_label:
                     self.app.dockwidget.backend_indicator_label.setText("...")
@@ -954,6 +965,17 @@ class FilterMate:
                 except Exception as e:
                     logger.debug(f"Error clearing layer combobox: {e}")
             
+            # 5b. CRITICAL: Clear QgsFeaturePickerWidget to prevent access violation
+            # The widget has an internal timer that triggers scheduledReload which
+            # creates QgsVectorLayerFeatureSource - if the layer is invalid/destroyed,
+            # this causes a Windows fatal exception (access violation).
+            if (self.app.dockwidget and 
+                hasattr(self.app.dockwidget, 'mFeaturePickerWidget_exploring_single_selection')):
+                try:
+                    self.app.dockwidget.mFeaturePickerWidget_exploring_single_selection.setLayer(None)
+                except Exception as e:
+                    logger.debug(f"Error clearing FeaturePickerWidget: {e}")
+            
             # 6. Reset dockwidget layer references
             if self.app.dockwidget:
                 self.app.dockwidget.current_layer = None
@@ -1044,6 +1066,15 @@ class FilterMate:
                     logger.debug("FilterMate: Layer combo box cleared during unload")
             except Exception as e:
                 logger.debug(f"FilterMate: Error clearing layer combo during unload: {e}")
+            
+            # CRITICAL: Clear QgsFeaturePickerWidget to prevent access violation
+            # The widget has an internal timer that triggers scheduledReload
+            try:
+                if hasattr(self.app.dockwidget, 'mFeaturePickerWidget_exploring_single_selection'):
+                    self.app.dockwidget.mFeaturePickerWidget_exploring_single_selection.setLayer(None)
+                    logger.debug("FilterMate: FeaturePickerWidget cleared during unload")
+            except Exception as e:
+                logger.debug(f"FilterMate: Error clearing FeaturePickerWidget during unload: {e}")
         
         # Nettoyer les ressources de l'application FilterMate
         if self.app:

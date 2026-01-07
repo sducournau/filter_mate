@@ -5,24 +5,33 @@
 [general]
 name=FilterMate
 qgisMinimumVersion=3.0
-description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.9.26
+description=🚀 The ultimate spatial filtering plugin! Explore, filter & export vector data with lightning-fast performance on ANY data source.
+version=3.0.1
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate is a powerful QGIS plugin for exploring, filtering and exporting vector data.
+about=🎯 FilterMate 3.0 - Your Swiss Army Knife for Spatial Data!
     
-    Works with any data source: PostgreSQL/PostGIS, Spatialite, OGR (Shapefiles, GeoPackages, etc.)
+    Stop struggling with complex filters. FilterMate makes spatial queries intuitive, fast, and powerful.
     
-    Key Features:
-    - Multi-backend support with automatic optimization
-    - Advanced spatial filtering with undo/redo
-    - Filter favorites and configuration management
-    - Export filtered data to various formats
+    🌟 WHY FILTERMATE?
+    ━━━━━━━━━━━━━━━━━
+    ✓ Works with EVERYTHING: PostgreSQL, Spatialite, GeoPackage, Shapefiles, WFS...
+    ✓ Lightning fast: Smart multi-backend optimization with intelligent caching
+    ✓ Intuitive: Filter by clicking, drawing, or selecting - no SQL needed!
+    ✓ Professional: Undo/Redo, Favorites, Dark Mode, 21 languages
     
-    v2.9.24: Fixed UI responsiveness after filtering operations.
+    🔥 KILLER FEATURES:
+    ━━━━━━━━━━━━━━━━━━
+    📍 Geometric filtering with buffer, intersection, containment...
+    🔍 Smart entity search across any layer type
+    ⭐ Save & share your favorite filter configurations
+    📦 One-click export with styles to GeoPackage
+    🎨 Beautiful UI that adapts to your QGIS theme
     
-    See the full changelog on GitHub for detailed release notes.
+    💡 v3.0.0: Major milestone! 40+ stability fixes, performance optimizations, and rock-solid reliability.
+    
+    📖 Full docs: https://sducournau.github.io/filter_mate
 
 tracker=https://github.com/sducournau/filter_mate/issues
 repository=https://github.com/sducournau/filter_mate

@@ -1835,13 +1835,24 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             # CRITICAL FIX v2.5.10: Combine attribute filter with geometric filter
             # If old_subset is still set (was determined to be an attribute filter),
             # combine it with the geometric expression using AND operator
+            # 
+            # CRITICAL FIX v2.9.42: Respect combine_operator=None as REPLACE signal
+            # When combine_operator is explicitly None (not just missing), it means:
+            # "Replace old_subset, don't combine" - used for FID filters in multi-step filtering
             if old_subset:
-                # Use combine_operator if provided, otherwise default to AND
-                op = combine_operator if combine_operator else 'AND'
-                final_expression = f"({old_subset}) {op} ({expression})"
-                self.log_info(f"✅ Combined expression: ({len(final_expression)} chars)")
-                self.log_info(f"  → Attribute filter + {op} + Geometric filter")
-                self.log_debug(f"  → Combined: {final_expression[:200]}...")
+                # Check if combine_operator is explicitly None (REPLACE signal)
+                if combine_operator is None:
+                    # Explicit None = REPLACE the old filter
+                    self.log_info(f"🔄 combine_operator=None → REPLACING old subset (multi-step filter)")
+                    self.log_info(f"  → Old subset: '{old_subset[:100]}...'")
+                    final_expression = expression
+                else:
+                    # Use provided operator or default to AND
+                    op = combine_operator if combine_operator else 'AND'
+                    final_expression = f"({old_subset}) {op} ({expression})"
+                    self.log_info(f"✅ Combined expression: ({len(final_expression)} chars)")
+                    self.log_info(f"  → Attribute filter + {op} + Geometric filter")
+                    self.log_debug(f"  → Combined: {final_expression[:200]}...")
             else:
                 final_expression = expression
             

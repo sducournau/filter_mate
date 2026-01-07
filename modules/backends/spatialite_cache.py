@@ -427,7 +427,9 @@ class SpatialiteCacheDB:
     def get_previous_fids(
         self, 
         layer: QgsVectorLayer,
-        current_source_geom_wkt: Optional[str] = None
+        current_source_geom_wkt: Optional[str] = None,
+        current_buffer_value: Optional[float] = None,
+        current_predicates: Optional[List[str]] = None
     ) -> Optional[Set[int]]:
         """
         Get the most recent cached FIDs for a layer (for multi-step filtering).
@@ -436,14 +438,22 @@ class SpatialiteCacheDB:
         This prevents incorrect intersection when a new filter uses a different 
         source geometry (e.g., user draws a new polygon).
         
+        v2.9.30: FIX - Also compare buffer_value and predicates!
+        This prevents incorrect intersection when buffer changes (e.g., 0m → 1m).
+        Multi-step filtering should only intersect when ALL filter parameters match.
+        
         Args:
             layer: Layer to get previous FIDs for
             current_source_geom_wkt: Current source geometry WKT. If provided,
                 only return FIDs if the cached source_geom_hash matches.
                 If None, returns FIDs regardless (backward compatible).
+            current_buffer_value: Current buffer value. If provided,
+                only return FIDs if the cached buffer_value matches.
+            current_predicates: Current predicates list. If provided,
+                only return FIDs if the cached predicates match.
         
         Returns:
-            Set of FIDs from most recent cache, None if no cache or geometry mismatch
+            Set of FIDs from most recent cache, None if no cache or parameter mismatch
         """
         layer_id = layer.id()
         
@@ -457,7 +467,8 @@ class SpatialiteCacheDB:
             
             now = datetime.now(timezone.utc).isoformat()
             cursor.execute(f'''
-                SELECT fids, fid_count, step_number, source_geom_hash FROM {CACHE_TABLE_NAME}
+                SELECT fids, fid_count, step_number, source_geom_hash, buffer_value, predicates 
+                FROM {CACHE_TABLE_NAME}
                 WHERE layer_id = ? AND expires_at > ?
                 ORDER BY created_at DESC
                 LIMIT 1
@@ -466,6 +477,8 @@ class SpatialiteCacheDB:
             row = cursor.fetchone()
             if row:
                 cached_geom_hash = row['source_geom_hash']
+                cached_buffer_value = row['buffer_value']
+                cached_predicates_str = row['predicates']
                 
                 # v2.9.19: If current geometry hash provided, check if it matches
                 if current_geom_hash and cached_geom_hash:
@@ -475,6 +488,28 @@ class SpatialiteCacheDB:
                             "FilterMate", Qgis.Info
                         )
                         return None  # Different source geometry, don't intersect
+                
+                # v2.9.30: Check buffer_value match
+                if current_buffer_value is not None and cached_buffer_value is not None:
+                    if abs(current_buffer_value - cached_buffer_value) > 0.001:  # Float tolerance
+                        QgsMessageLog.logMessage(
+                            f"Cache SKIP: {layer.name()} → buffer changed ({cached_buffer_value} → {current_buffer_value})",
+                            "FilterMate", Qgis.Info
+                        )
+                        return None  # Different buffer, don't intersect
+                
+                # v2.9.30: Check predicates match
+                if current_predicates is not None and cached_predicates_str:
+                    try:
+                        cached_predicates = json.loads(cached_predicates_str)
+                        if sorted(current_predicates) != sorted(cached_predicates):
+                            QgsMessageLog.logMessage(
+                                f"Cache SKIP: {layer.name()} → predicates changed",
+                                "FilterMate", Qgis.Info
+                            )
+                            return None  # Different predicates, don't intersect
+                    except (json.JSONDecodeError, TypeError):
+                        pass  # Can't compare, allow intersection
                 
                 fids_str = row['fids']
                 fids = set(int(f) for f in fids_str.split(',') if f)
@@ -491,7 +526,9 @@ class SpatialiteCacheDB:
         self,
         layer: QgsVectorLayer,
         new_fids: Set[int],
-        current_source_geom_wkt: Optional[str] = None
+        current_source_geom_wkt: Optional[str] = None,
+        current_buffer_value: Optional[float] = None,
+        current_predicates: Optional[List[str]] = None
     ) -> Tuple[Set[int], int]:
         """
         Intersect new FIDs with previously cached FIDs for multi-step filtering.
@@ -500,15 +537,23 @@ class SpatialiteCacheDB:
         This prevents incorrect intersection when the user applies a new filter
         with a different source geometry.
         
+        v2.9.30: FIX - Also check buffer_value and predicates!
+        Multi-step filtering should only intersect when ALL filter parameters match.
+        Changing buffer from 0m to 1m should NOT intersect with previous results.
+        
         Args:
             layer: Layer being filtered
             new_fids: New FIDs from current filter operation
             current_source_geom_wkt: Current source geometry WKT for hash comparison
+            current_buffer_value: Current buffer value for comparison
+            current_predicates: Current predicates for comparison
         
         Returns:
             Tuple of (intersected FIDs, previous step number)
         """
-        previous_fids = self.get_previous_fids(layer, current_source_geom_wkt)
+        previous_fids = self.get_previous_fids(
+            layer, current_source_geom_wkt, current_buffer_value, current_predicates
+        )
         
         if previous_fids is not None:
             # Intersect with previous results
@@ -718,27 +763,37 @@ def store_filter_fids(
 
 def get_previous_filter_fids(
     layer: QgsVectorLayer,
-    current_source_geom_wkt: Optional[str] = None
+    current_source_geom_wkt: Optional[str] = None,
+    current_buffer_value: Optional[float] = None,
+    current_predicates: Optional[List[str]] = None
 ) -> Optional[Set[int]]:
     """
     Convenience function to get previous filter FIDs.
     
     v2.9.19: Added current_source_geom_wkt parameter to prevent wrong cache intersection.
+    v2.9.30: Added current_buffer_value and current_predicates for full parameter comparison.
     """
-    return get_cache().get_previous_fids(layer, current_source_geom_wkt)
+    return get_cache().get_previous_fids(
+        layer, current_source_geom_wkt, current_buffer_value, current_predicates
+    )
 
 
 def intersect_filter_fids(
     layer: QgsVectorLayer,
     new_fids: Set[int],
-    current_source_geom_wkt: Optional[str] = None
+    current_source_geom_wkt: Optional[str] = None,
+    current_buffer_value: Optional[float] = None,
+    current_predicates: Optional[List[str]] = None
 ) -> Tuple[Set[int], int]:
     """
     Convenience function to intersect with previous FIDs.
     
     v2.9.19: Added current_source_geom_wkt parameter to prevent wrong cache intersection.
+    v2.9.30: Added current_buffer_value and current_predicates for full parameter comparison.
     """
-    return get_cache().intersect_with_previous(layer, new_fids, current_source_geom_wkt)
+    return get_cache().intersect_with_previous(
+        layer, new_fids, current_source_geom_wkt, current_buffer_value, current_predicates
+    )
 
 
 def clear_cache():

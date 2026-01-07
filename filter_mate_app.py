@@ -825,6 +825,16 @@ class FilterMateApp:
             except Exception as e:
                 logger.debug(f"Error resetting layer combobox during reload: {e}")
             
+            # CRITICAL: Clear QgsFeaturePickerWidget to prevent access violation
+            # The widget has an internal timer that triggers scheduledReload which
+            # creates QgsVectorLayerFeatureSource - if the layer is invalid/destroyed,
+            # this causes a Windows fatal exception (access violation).
+            try:
+                if hasattr(self.dockwidget, 'mFeaturePickerWidget_exploring_single_selection'):
+                    self.dockwidget.mFeaturePickerWidget_exploring_single_selection.setLayer(None)
+            except Exception as e:
+                logger.debug(f"Error resetting FeaturePickerWidget during reload: {e}")
+            
             # Update indicator to show reloading state
             if hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
                 self.dockwidget.backend_indicator_label.setText("⟳")
@@ -1301,7 +1311,10 @@ class FilterMateApp:
                     def safe_add_new_layers():
                         strong_self = weak_self()
                         if strong_self is not None:
-                            strong_self.manage_task('add_layers', usable)
+                            # v2.9.19: CRASH FIX - Re-filter to remove layers deleted during the delay
+                            still_valid = [l for l in usable if l is not None and not sip.isdeleted(l)]
+                            if still_valid:
+                                strong_self.manage_task('add_layers', still_valid)
                     QTimer.singleShot(300, safe_add_new_layers)
                 else:
                     # No new layers, but update UI if it's empty
@@ -1313,7 +1326,10 @@ class FilterMateApp:
                         def safe_add_layers_refresh():
                             strong_self = weak_self()
                             if strong_self is not None:
-                                strong_self.manage_task('add_layers', usable_layers)
+                                # v2.9.19: CRASH FIX - Re-filter to remove layers deleted during the delay
+                                still_valid = [l for l in usable_layers if l is not None and not sip.isdeleted(l)]
+                                if still_valid:
+                                    strong_self.manage_task('add_layers', still_valid)
                         QTimer.singleShot(300, safe_add_layers_refresh)
 
 
@@ -1469,6 +1485,15 @@ class FilterMateApp:
             except Exception as e:
                 logger.debug(f"FilterMate: Error resetting layer combo during remove_all_layers: {e}")
             
+            # CRITICAL: Reset QgsFeaturePickerWidget to prevent access violation
+            # The widget has an internal timer that triggers scheduledReload
+            try:
+                if hasattr(self.dockwidget, 'mFeaturePickerWidget_exploring_single_selection'):
+                    self.dockwidget.mFeaturePickerWidget_exploring_single_selection.setLayer(None)
+                    logger.debug("FilterMate: FeaturePickerWidget reset during remove_all_layers")
+            except Exception as e:
+                logger.debug(f"FilterMate: Error resetting FeaturePickerWidget during remove_all_layers: {e}")
+            
             # STABILITY FIX: Disconnect LAYER_TREE_VIEW signal to prevent callbacks to invalid layers
             try:
                 self.dockwidget.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'disconnect')
@@ -1543,6 +1568,14 @@ class FilterMateApp:
                     logger.debug(f"FilterMate: Layer combo reset before {task_name}")
             except Exception as e:
                 logger.debug(f"FilterMate: Error resetting layer combo before {task_name}: {e}")
+            
+            # CRITICAL: Reset QgsFeaturePickerWidget to prevent access violation
+            try:
+                if hasattr(self.dockwidget, 'mFeaturePickerWidget_exploring_single_selection'):
+                    self.dockwidget.mFeaturePickerWidget_exploring_single_selection.setLayer(None)
+                    logger.debug(f"FilterMate: FeaturePickerWidget reset before {task_name}")
+            except Exception as e:
+                logger.debug(f"FilterMate: Error resetting FeaturePickerWidget before {task_name}: {e}")
         
         # STABILITY FIX: Set dockwidget busy flag to prevent concurrent layer changes
         if self.dockwidget is not None:
@@ -1777,9 +1810,16 @@ class FilterMateApp:
         # v2.7.17: Enhanced logging for task reception
         logger.info(f"=" * 60)
         logger.info(f"manage_task: RECEIVED task_name='{task_name}'")
-        if self.dockwidget and hasattr(self.dockwidget, 'current_layer') and self.dockwidget.current_layer:
-            logger.info(f"  current_layer: {self.dockwidget.current_layer.name()}")
-            logger.info(f"  current_exploring_groupbox: {getattr(self.dockwidget, 'current_exploring_groupbox', 'unknown')}")
+        # v2.9.19: CRASH FIX - Check if current_layer is deleted before accessing it
+        if self.dockwidget and hasattr(self.dockwidget, 'current_layer'):
+            try:
+                current_layer = self.dockwidget.current_layer
+                if current_layer and not sip.isdeleted(current_layer):
+                    logger.info(f"  current_layer: {current_layer.name()}")
+                    logger.info(f"  current_exploring_groupbox: {getattr(self.dockwidget, 'current_exploring_groupbox', 'unknown')}")
+            except RuntimeError:
+                # Layer was deleted between check and access
+                logger.debug("  current_layer: <deleted>")
         logger.info(f"=" * 60)
         
         # STABILITY FIX: Check and reset stale flags before processing
@@ -2421,6 +2461,15 @@ class FilterMateApp:
             except Exception as e:
                 logger.debug(f"FilterMate: Error clearing layer combo in on_remove_layer_task_begun: {e}")
         
+        # CRITICAL: Clear QgsFeaturePickerWidget before layers are removed
+        # The widget has an internal timer that can cause access violation if layer is destroyed
+        if self.dockwidget and hasattr(self.dockwidget, 'mFeaturePickerWidget_exploring_single_selection'):
+            try:
+                self.dockwidget.mFeaturePickerWidget_exploring_single_selection.setLayer(None)
+                logger.debug("FilterMate: Cleared FeaturePickerWidget during remove_layers task")
+            except Exception as e:
+                logger.debug(f"FilterMate: Error clearing FeaturePickerWidget in on_remove_layer_task_begun: {e}")
+        
         self.dockwidget.disconnect_widgets_signals()
         self.dockwidget.reset_multiple_checkable_combobox()
     
@@ -2497,9 +2546,14 @@ class FilterMateApp:
             layers_to_filter_ids = filtering_params.get("layers_to_filter", [])
             
             # v2.8.7: Check if distant layers centroid is already enabled
+            # v2.9.31 FIX: checkBox_filtering_use_centroids_distant_layers doesn't exist!
+            # Use checkBox_filtering_use_centroids_source_layer instead (controls both)
             distant_centroid_enabled = False
             if self.dockwidget and hasattr(self.dockwidget, 'checkBox_filtering_use_centroids_distant_layers'):
                 distant_centroid_enabled = self.dockwidget.checkBox_filtering_use_centroids_distant_layers.isChecked()
+            elif self.dockwidget and hasattr(self.dockwidget, 'checkBox_filtering_use_centroids_source_layer'):
+                # v2.9.31 FIX: Fallback to source checkbox (controls both source and distant layers)
+                distant_centroid_enabled = self.dockwidget.checkBox_filtering_use_centroids_source_layer.isChecked()
             
             # v2.8.7: Collect and analyze distant layers for centroid optimization
             distant_layers_recommendations = []
@@ -3376,40 +3430,49 @@ class FilterMateApp:
                     self.PROJECT_LAYERS[current_layer.id()]["filtering"]["layers_to_filter"] = current_layers_to_filter
 
             # v2.7.17: Enhanced logging before getting features
-            logger.info(f"get_task_parameters: Calling get_current_features()...")
-            features, expression = self.dockwidget.get_current_features()
-            logger.info(f"get_task_parameters: get_current_features() returned {len(features)} features, expression='{expression}'")
-            
-            # v2.7.17: CRITICAL CHECK - Warn if no features and no expression
-            # v2.9.20: Enhanced warning with QGIS MessageLog for visibility
-            # v2.9.21: FIX - Abort filter in single_selection mode to prevent FALLBACK MODE
-            if len(features) == 0 and not expression:
-                logger.warning(f"⚠️ get_task_parameters: NO FEATURES and NO EXPRESSION!")
-                logger.warning(f"   current_exploring_groupbox: {self.dockwidget.current_exploring_groupbox}")
-                logger.warning(f"   This may cause the filter task to abort or filter incorrectly")
-                from qgis.core import QgsMessageLog, Qgis
-                QgsMessageLog.logMessage(
-                    f"⚠️ CRITICAL: No source features selected! Groupbox: {self.dockwidget.current_exploring_groupbox}",
-                    "FilterMate", Qgis.Warning
-                )
+            # v2.9.28: FIX - reset and unfilter do NOT require features to be selected
+            # Only filter operation requires features - reset/unfilter just need source layer and distant layers
+            if task_name == 'filter':
+                logger.info(f"get_task_parameters: Calling get_current_features()...")
+                features, expression = self.dockwidget.get_current_features()
+                logger.info(f"get_task_parameters: get_current_features() returned {len(features)} features, expression='{expression}'")
                 
-                # v2.9.21: ABORT filter in single_selection mode instead of continuing with ALL features
-                if self.dockwidget.current_exploring_groupbox == "single_selection":
+                # v2.7.17: CRITICAL CHECK - Warn if no features and no expression
+                # v2.9.20: Enhanced warning with QGIS MessageLog for visibility
+                # v2.9.21: FIX - Abort filter in single_selection mode to prevent FALLBACK MODE
+                if len(features) == 0 and not expression:
+                    logger.warning(f"⚠️ get_task_parameters: NO FEATURES and NO EXPRESSION!")
+                    logger.warning(f"   current_exploring_groupbox: {self.dockwidget.current_exploring_groupbox}")
+                    logger.warning(f"   This may cause the filter task to abort or filter incorrectly")
+                    from qgis.core import QgsMessageLog, Qgis
                     QgsMessageLog.logMessage(
-                        f"   Aborting filter - single_selection mode requires a selected feature!",
+                        f"⚠️ CRITICAL: No source features selected! Groupbox: {self.dockwidget.current_exploring_groupbox}",
                         "FilterMate", Qgis.Warning
                     )
-                    iface.messageBar().pushWarning(
-                        "FilterMate",
-                        "Aucune entité sélectionnée! Le widget de sélection a perdu la feature. Re-sélectionnez une entité."
-                    )
-                    logger.warning(f"⚠️ ABORTING filter task - single_selection mode with no selection!")
-                    return None  # v2.9.21: Abort filter instead of using FALLBACK MODE
-                else:
-                    QgsMessageLog.logMessage(
-                        f"   The filter will use ALL features from source layer - this is probably NOT what you want!",
-                        "FilterMate", Qgis.Warning
-                    )
+                    
+                    # v2.9.21: ABORT filter in single_selection mode instead of continuing with ALL features
+                    if self.dockwidget.current_exploring_groupbox == "single_selection":
+                        QgsMessageLog.logMessage(
+                            f"   Aborting filter - single_selection mode requires a selected feature!",
+                            "FilterMate", Qgis.Warning
+                        )
+                        iface.messageBar().pushWarning(
+                            "FilterMate",
+                            "Aucune entité sélectionnée! Le widget de sélection a perdu la feature. Re-sélectionnez une entité."
+                        )
+                        logger.warning(f"⚠️ ABORTING filter task - single_selection mode with no selection!")
+                        return None  # v2.9.21: Abort filter instead of using FALLBACK MODE
+                    else:
+                        QgsMessageLog.logMessage(
+                            f"   The filter will use ALL features from source layer - this is probably NOT what you want!",
+                            "FilterMate", Qgis.Warning
+                        )
+            else:
+                # v2.9.28: For reset and unfilter, we don't need features - just initialize empty values
+                # These operations just clear filters on source and distant layers
+                logger.info(f"get_task_parameters: task_name='{task_name}' - no features needed (reset/unfilter)")
+                features = []
+                expression = ""
 
             if task_name in ('filter', 'unfilter', 'reset'):
                 # Build validated list of layers to filter
@@ -4168,6 +4231,13 @@ class FilterMateApp:
                         
                         self.dockwidget._restore_groupbox_ui_state(groupbox_to_restore)
                         logger.info(f"v2.9.28: ✅ Restored groupbox UI state for '{groupbox_to_restore}'")
+                        
+                        # v2.9.41: CRITICAL - Update button states after filtering completes
+                        # Ensures zoom/identify buttons are enabled/disabled based on current selection
+                        # This is especially important for Spatialite multi-step filters where the
+                        # exploring widgets have been reloaded with filtered features
+                        self.dockwidget._update_exploring_buttons_state()
+                        logger.info(f"v2.9.41: ✅ Updated exploring button states after {display_backend} filter")
                         
                         logger.info(f"v2.9.20: ✅ Exploring widgets reloaded successfully")
                     else:

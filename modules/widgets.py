@@ -1416,6 +1416,36 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
             self.list_widgets[self.layer.id()].setDisplayExpression(working_expression)
 
+            # FIX v2.9.24: Force complete widget refresh before rebuilding feature list
+            # This ensures the widget is in a clean state when display expression changes
+            # Prevents stale items from remaining visible during task execution
+            try:
+                # Clear the widget completely
+                self.list_widgets[self.layer.id()].clear()
+                # Force immediate visual update
+                self.list_widgets[self.layer.id()].viewport().update()
+                # Process pending events to ensure UI is updated before tasks start
+                from qgis.PyQt.QtCore import QCoreApplication
+                QCoreApplication.processEvents()
+                logger.debug(f"Cleared feature list widget for expression change: {working_expression[:50] if len(working_expression) > 50 else working_expression}...")
+            except Exception as clear_err:
+                logger.debug(f"Could not clear widget before expression change: {clear_err}")
+
+            # FIX v2.9.24: Force complete widget refresh before rebuilding feature list
+            # This ensures the widget is in a clean state when display expression changes
+            # Prevents stale items from remaining visible during task execution
+            try:
+                # Clear the widget completely
+                self.list_widgets[self.layer.id()].clear()
+                # Force immediate visual update
+                self.list_widgets[self.layer.id()].viewport().update()
+                # Process pending events to ensure UI is updated before tasks start
+                from qgis.PyQt.QtCore import QCoreApplication
+                QCoreApplication.processEvents()
+                logger.debug(f"Cleared feature list widget for expression change: {working_expression[:50] if working_expression else 'None'}...")
+            except Exception as clear_err:
+                logger.debug(f"Could not clear widget before expression change: {clear_err}")
+
             sub_description = 'Building features list'
             sub_action = 'buildFeaturesList'
 
@@ -1427,7 +1457,69 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
             self.tasks['loadFeaturesList'][self.layer.id()].addSubTask(self.tasks[sub_action][self.layer.id()], [], QgsTask.ParentDependsOnSubTask)
 
+            # FIX v2.9.33: Add task completion/failure handlers to detect if list fails to populate
+            try:
+                main_task = self.tasks['loadFeaturesList'][self.layer.id()]
+                
+                # Store expression for potential retry
+                self._pending_expression = working_expression
+                self._pending_layer_id = self.layer.id()
+                
+                # Connect to task failure to log the issue
+                def on_task_failed():
+                    logger.warning(f"Feature list population FAILED for expression: {working_expression[:50]}...")
+                    logger.warning(f"Widget may appear empty - try refreshing layer or changing expression")
+                
+                def on_task_completed():
+                    logger.debug(f"Feature list population COMPLETED for expression: {working_expression[:50]}...")
+                
+                main_task.taskTerminated.connect(on_task_failed)
+                main_task.taskCompleted.connect(on_task_completed)
+                
+            except Exception as handler_err:
+                logger.debug(f"Could not connect task handlers: {handler_err}")
+
             self.launch_task('loadFeaturesList')
+            
+            # FIX v2.9.33: Add fallback to detect if list remains empty after task completion
+            # Schedule a check 500ms after task launch to verify list was populated
+            from qgis.PyQt.QtCore import QTimer
+            
+            def check_list_populated():
+                """Verify that feature list was successfully populated."""
+                try:
+                    if self.layer is None or self.layer.id() not in self.list_widgets:
+                        return
+                    
+                    widget = self.list_widgets[self.layer.id()]
+                    count = widget.count()
+                    
+                    # If list is empty, log warning and suggest retry
+                    if count == 0:
+                        logger.warning(f"Feature list remains EMPTY 500ms after task launch!")
+                        logger.warning(f"Expression: {working_expression[:50]}...")
+                        logger.warning(f"Layer: {self.layer.name()}, features: {self.layer.featureCount()}")
+                        
+                        # Check if task failed
+                        if self.layer.id() in self.tasks.get('loadFeaturesList', {}):
+                            task = self.tasks['loadFeaturesList'][self.layer.id()]
+                            if not is_sip_deleted(task):
+                                status = task.status()
+                                logger.warning(f"Task status: {status} (0=Complete, 1=Queued, 2=Running, 3=Canceled, 4=Terminated)")
+                                
+                                # If task is still running after 500ms, something is wrong
+                                if status in [QgsTask.Running, QgsTask.Queued]:
+                                    logger.warning("Task still running - may be stuck!")
+                                elif status == QgsTask.Terminated:
+                                    logger.warning("Task terminated - likely an error occurred")
+                    else:
+                        logger.debug(f"✓ Feature list populated successfully: {count} items")
+                        
+                except Exception as check_err:
+                    logger.debug(f"Error in check_list_populated: {check_err}")
+            
+            # Schedule check after 500ms
+            QTimer.singleShot(500, check_list_populated)
                 
         
 
@@ -1659,6 +1751,9 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                 if existing_task.status() in [QgsTask.Running, QgsTask.Queued]:
                     logger.debug(f"Cancelling existing {action} task for layer {self.layer.id()}")
                     existing_task.cancel()
+                    # FIX v2.9.24: Mark that a task was just cancelled
+                    # This allows launch_task to add a small delay for cleanup
+                    self._last_task_cancelled = True
   
         self.tasks[action][self.layer.id()] = PopulateListEngineTask(description, self, action, silent_flag)
         self.tasks[action][self.layer.id()].setDependentLayers([self.layer])
@@ -1668,7 +1763,20 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
 
     def launch_task(self, action):
-
+        """
+        Launch a task for the current layer.
+        
+        FIX v2.9.24: Improved task management when launching new tasks
+        - Wait briefly after connecting signals to ensure they're ready
+        - Add small delay if previous task was just cancelled
+        """
+        # FIX v2.9.24: Small delay after cancellation to ensure cleanup
+        # This prevents race conditions when rapidly changing display expressions
+        if hasattr(self, '_last_task_cancelled') and self._last_task_cancelled:
+            import time
+            time.sleep(0.02)  # 20ms delay - imperceptible but prevents conflicts
+            self._last_task_cancelled = False
+        
         self.tasks[action][self.layer.id()].taskCompleted.connect(self.connect_filter_lineEdit)
         QgsApplication.taskManager().addTask(self.tasks[action][self.layer.id()])
 

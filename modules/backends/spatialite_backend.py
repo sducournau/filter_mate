@@ -47,6 +47,7 @@ from .base_backend import GeometricFilterBackend
 from ..logging_config import get_tasks_logger
 from ..constants import PROVIDER_SPATIALITE
 from ..appUtils import safe_set_subset_string
+from ..object_safety import is_valid_layer  # v2.9.24: For selection clearing
 
 logger = get_tasks_logger()
 
@@ -119,6 +120,10 @@ SPATIALITE_INTERRUPT_CHECK_INTERVAL = 0.5  # Check for cancellation every N seco
 SPATIALITE_WKT_SIMPLIFY_THRESHOLD = 30000  # 30KB - trigger Python simplification (was 100KB)
 SPATIALITE_WKT_MAX_POINTS = 3000  # Max points before aggressive simplification (was 5000)
 SPATIALITE_GEOM_INSERT_TIMEOUT = 30  # Timeout for geometry insertion (seconds)
+
+# v2.9.27: Sentinel value to signal that OGR fallback is required
+# Used when GeometryCollection cannot be converted and RTTOPO MakeValid would fail
+USE_OGR_FALLBACK = "__USE_OGR_FALLBACK__"
 
 
 class InterruptibleSQLiteQuery:
@@ -1622,7 +1627,13 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                         )
                         if error:
                             error_msg = str(error)
-                            if "timeout" in error_msg.lower():
+                            # v2.9.28: Detect RTTOPO errors for better fallback handling
+                            if "makevalid" in error_msg.lower() or "rttopo" in error_msg.lower():
+                                self.log_warning(f"Spatialite RTTOPO error - geometry too complex for MakeValid()")
+                                self.log_info(f"  → Error: {error_msg}")
+                                self.log_info(f"  → Will abort source table and trigger OGR fallback")
+                                raise Exception(f"RTTOPO error: {error_msg}")
+                            elif "timeout" in error_msg.lower():
                                 self.log_error(f"Geometry insert timeout after {SPATIALITE_GEOM_INSERT_TIMEOUT}s - geometry too complex")
                                 from qgis.core import QgsMessageLog, Qgis
                                 QgsMessageLog.logMessage(
@@ -1656,7 +1667,13 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                         )
                         if error:
                             error_msg = str(error)
-                            if "timeout" in error_msg.lower():
+                            # v2.9.28: Detect RTTOPO errors for better fallback handling  
+                            if "makevalid" in error_msg.lower() or "rttopo" in error_msg.lower():
+                                self.log_warning(f"Spatialite RTTOPO error - geometry too complex for MakeValid()")
+                                self.log_info(f"  → Error: {error_msg}")
+                                self.log_info(f"  → Will abort source table and trigger OGR fallback")
+                                raise Exception(f"RTTOPO error: {error_msg}")
+                            elif "timeout" in error_msg.lower():
                                 self.log_error(f"Geometry insert timeout after {SPATIALITE_GEOM_INSERT_TIMEOUT}s - geometry too complex")
                                 from qgis.core import QgsMessageLog, Qgis
                                 QgsMessageLog.logMessage(
@@ -2002,6 +2019,13 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                     f"  ⚠️ Conversion failed - still GeometryCollection ({wkt_length} chars)",
                     "FilterMate", Qgis.Warning
                 )
+                # v2.9.27: GeometryCollection causes RTTOPO MakeValid errors
+                # Force OGR fallback instead of attempting SQL with MakeValid
+                QgsMessageLog.logMessage(
+                    f"  → v2.9.27: Returning USE_OGR_FALLBACK to avoid RTTOPO error",
+                    "FilterMate", Qgis.Info
+                )
+                return USE_OGR_FALLBACK
         
         # v2.8.12: Apply WKT simplification BEFORE building SQL expression
         # This prevents MakeValid errors on complex geometries (e.g., detailed commune boundaries)
@@ -2188,16 +2212,43 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             # v2.9.7: For very large WKT (>50KB), add SimplifyPreserveTopology in SQL as backup
             # This helps when Python simplification wasn't aggressive enough and RTTOPO fails
             # SimplifyPreserveTopology is more stable than MakeValid for complex geometries
-            LARGE_WKT_SQL_SIMPLIFY_THRESHOLD = 50000
+            # v2.9.28: Reduced threshold from 50KB to 30KB to match OGR fallback threshold
+            # Prevents RTTOPO errors like "MakeValid error - RTTOPO reports: Unknown Reason"
+            LARGE_WKT_SQL_SIMPLIFY_THRESHOLD = 30000
             
-            if wkt_length > LARGE_WKT_SQL_SIMPLIFY_THRESHOLD:
+            # v2.9.28: Check if geometry is already valid to avoid unnecessary MakeValid()
+            # GeometryCollection and complex multi-geometries often cause RTTOPO errors
+            needs_make_valid = True
+            is_geometry_collection = False
+            try:
+                from qgis.core import QgsGeometry
+                temp_geom = QgsGeometry.fromWkt(source_geom.replace("''", "'"))
+                if temp_geom and not temp_geom.isEmpty():
+                    # Check if already valid
+                    geom_valid = temp_geom.isGeosValid()
+                    if geom_valid:
+                        needs_make_valid = False
+                        self.log_debug(f"  ✓ Source geometry is already valid - skipping MakeValid()")
+                    
+                    # Check geometry type - GeometryCollection is problematic for RTTOPO
+                    geom_type = temp_geom.wkbType()
+                    from qgis.core import QgsWkbTypes
+                    if geom_type == QgsWkbTypes.GeometryCollection or \
+                       geom_type == QgsWkbTypes.GeometryCollectionZ or \
+                       geom_type == QgsWkbTypes.GeometryCollectionM or \
+                       geom_type == QgsWkbTypes.GeometryCollectionZM:
+                        is_geometry_collection = True
+                        self.log_info(f"  ⚠️ GeometryCollection detected - forcing simplification to avoid RTTOPO errors")
+            except Exception as e:
+                self.log_debug(f"  Could not validate geometry, will use MakeValid(): {e}")
+            
+            # v2.9.28: Force simplification for GeometryCollection OR large WKT
+            if is_geometry_collection or wkt_length > LARGE_WKT_SQL_SIMPLIFY_THRESHOLD:
                 # Calculate simplify tolerance based on geometry extent (from bbox in logs)
                 # Use a small tolerance that won't distort the geometry significantly
                 # but will reduce vertex count enough to avoid RTTOPO issues
                 simplify_tolerance = 0.1  # Default small tolerance
                 try:
-                    from qgis.core import QgsGeometry
-                    temp_geom = QgsGeometry.fromWkt(source_geom.replace("''", "'"))
                     if temp_geom and not temp_geom.isEmpty():
                         bbox = temp_geom.boundingBox()
                         extent = max(bbox.width(), bbox.height())
@@ -2206,11 +2257,21 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 except Exception:
                     pass
                 
-                self.log_info(f"  🔧 Large WKT ({wkt_length:,} chars) - adding SQL SimplifyPreserveTopology (tolerance={simplify_tolerance:.4f})")
-                source_geom_expr = f"SimplifyPreserveTopology(MakeValid(GeomFromText('{source_geom}', {source_srid})), {simplify_tolerance})"
+                reason = "GeometryCollection" if is_geometry_collection else f"Large WKT ({wkt_length:,} chars)"
+                self.log_info(f"  🔧 {reason} - using SQL SimplifyPreserveTopology (tolerance={simplify_tolerance:.4f})")
+                
+                if needs_make_valid:
+                    source_geom_expr = f"SimplifyPreserveTopology(MakeValid(GeomFromText('{source_geom}', {source_srid})), {simplify_tolerance})"
+                else:
+                    source_geom_expr = f"SimplifyPreserveTopology(GeomFromText('{source_geom}', {source_srid}), {simplify_tolerance})"
             else:
-                source_geom_expr = f"MakeValid(GeomFromText('{source_geom}', {source_srid}))"
-            self.log_debug(f"Created base geometry expression with SRID {source_srid} + MakeValid()")
+                if needs_make_valid:
+                    source_geom_expr = f"MakeValid(GeomFromText('{source_geom}', {source_srid}))"
+                else:
+                    # Geometry is already valid, no MakeValid needed
+                    source_geom_expr = f"GeomFromText('{source_geom}', {source_srid})"
+            
+            self.log_debug(f"Created base geometry expression with SRID {source_srid}")
         
         # Apply buffer using ST_Buffer() SQL function if specified
         # This uses Spatialite native spatial functions instead of QGIS processing
@@ -2533,6 +2594,13 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                     self.log_info(f"🔄 Old subset contains geometric filter - replacing instead of combining")
                     self.log_info(f"  → Old subset: '{old_subset[:80]}...'")
                     final_expression = expression
+                # CRITICAL FIX v2.9.42: Respect combine_operator=None as REPLACE signal
+                # When combine_operator is explicitly None (not just missing), it means:
+                # "Replace old_subset, don't combine" - used for FID filters in multi-step filtering
+                elif combine_operator is None:
+                    self.log_info(f"🔄 combine_operator=None → REPLACING old subset (multi-step filter)")
+                    self.log_info(f"  → Old subset: '{old_subset[:80]}...'")
+                    final_expression = expression
                 else:
                     if not combine_operator:
                         combine_operator = 'AND'
@@ -2560,6 +2628,15 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 # Fallback: direct application (for testing or non-task contexts)
                 self.log_warning(f"No queue callback - applying directly (may cause thread issues)")
                 result = safe_set_subset_string(layer, final_expression)
+                
+                # FIX v2.9.24: Clear any existing selection after filter application
+                # This prevents "all features selected" bug on second filter
+                try:
+                    if layer and is_valid_layer(layer):
+                        layer.removeSelection()
+                        self.log_debug(f"Cleared selection after Spatialite filter")
+                except Exception as sel_err:
+                    self.log_debug(f"Could not clear selection: {sel_err}")
             
             elapsed = time.time() - start_time
             
@@ -3216,6 +3293,10 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             # When re-filtering (e.g., adding buffer), old_subset may contain a FID filter
             # from the previous filtering. If we don't include it, we query ALL features
             # instead of just the previously filtered ones, returning wrong results.
+            # 
+            # v2.9.34: CRITICAL FIX - Don't combine FID-only filters in multi-step spatial filtering
+            # FID filters from previous spatial steps are based on a DIFFERENT source geometry
+            # and must be REPLACED, not combined. Only combine true user attribute filters.
             old_subset_sql_filter = ""
             if old_subset:
                 old_subset_upper = old_subset.upper()
@@ -3229,13 +3310,28 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 ]
                 has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
                 
-                if not has_source_alias and not has_exists and not has_spatial_predicate:
-                    # old_subset is a simple filter (likely FID-based) - include it in SQL
+                # v2.9.34: Check if old_subset is ONLY a FID filter (from previous spatial step)
+                # Pattern: starts with optional "(" then "fid IN (" or "fid = -1" or '"fid" IN ('
+                # This should be REPLACED, not combined (different source geometry)
+                import re
+                is_fid_only = bool(re.match(r'^\s*\(?\s*(["\']?)fid\1\s+(IN\s*\(|=\s*-?\d+)', old_subset, re.IGNORECASE))
+                
+                if not has_source_alias and not has_exists and not has_spatial_predicate and not is_fid_only:
+                    # old_subset is a true user attribute filter (not just FID) - include it in SQL
                     old_subset_sql_filter = f"({old_subset}) AND "
-                    self.log_info(f"  → Including previous FID filter in SQL query")
+                    self.log_info(f"  → Including previous attribute filter in SQL query")
+                elif is_fid_only:
+                    # v2.9.34: FID-only filter from previous spatial step - don't combine
+                    self.log_info(f"  → Old subset is FID filter from previous spatial step - will be REPLACED")
                 else:
                     # old_subset contains spatial predicates - will be replaced, not combined
                     self.log_info(f"  → Old subset has spatial predicates - will be replaced")
+            
+            # v2.9.33: Log old_subset_sql_filter for debugging
+            QgsMessageLog.logMessage(
+                f"  → old_subset_sql_filter: '{old_subset_sql_filter[:100] if old_subset_sql_filter else '(empty)'}'",
+                "FilterMate", Qgis.Info
+            )
             
             if use_bbox_prefilter and bbox_filter:
                 # Use two-stage filtering: fast bbox check first, then precise geometry test
@@ -3245,6 +3341,17 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 select_query = f'SELECT "{pk_col}" FROM "{table_name}" WHERE {old_subset_sql_filter}{expression}'
             
             self.log_info(f"  → Direct SQL query: {select_query[:200]}...")
+            # v2.9.33: Log if old_subset was included in query
+            if old_subset_sql_filter:
+                QgsMessageLog.logMessage(
+                    f"  ✓ Query INCLUDES previous filter (old_subset combined)",
+                    "FilterMate", Qgis.Info
+                )
+            else:
+                QgsMessageLog.logMessage(
+                    f"  ⚠️ Query does NOT include previous filter (new filter only)",
+                    "FilterMate", Qgis.Info
+                )
             # v2.6.4: Also log to QgsMessageLog for visibility
             QgsMessageLog.logMessage(
                 f"_apply_filter_direct_sql: Executing query ({len(select_query)} chars) for {layer.name()}",
@@ -3282,6 +3389,13 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                     elif "timeout" in error_msg.lower():
                         self.log_error(f"Query timeout after {SPATIALITE_QUERY_TIMEOUT}s - geometry too complex")
                         self.log_error(f"  → Consider using smaller source geometry or PostgreSQL backend")
+                        conn.close()
+                        return False
+                    # v2.9.28: Detect RTTOPO MakeValid errors and explain to user
+                    elif "makevalid" in error_msg.lower() or "rttopo" in error_msg.lower():
+                        self.log_warning(f"Spatialite RTTOPO error with complex geometry - will use OGR fallback")
+                        self.log_info(f"  → Error: {error_msg}")
+                        # v2.9.28: Don't show as error since OGR fallback will handle it
                         conn.close()
                         return False
                     else:
@@ -3331,20 +3445,43 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             
             # v2.8.11: MULTI-STEP FILTERING - Intersect with previous cache if exists
             # v2.9.19: FIX - Pass source_wkt to only intersect if geometry matches
+            # v2.9.30: FIX - Also pass buffer_val and predicates_list to avoid wrong intersection
+            # v2.9.43: CRITICAL - Cache multi-step only supports AND operator
+            # OR and NOT AND require different logic (union/difference) not yet implemented
             step_number = 1
             if SPATIALITE_CACHE_AVAILABLE and old_subset:
-                # Check if this is a re-filter (multi-step) with SAME source geometry
-                previous_fids = get_previous_filter_fids(layer, source_wkt)
-                if previous_fids is not None:
-                    original_count = len(matching_fids)
-                    # Intersect new results with previous (only if same source geom)
-                    matching_fids_set, step_number = intersect_filter_fids(layer, set(matching_fids), source_wkt)
-                    matching_fids = list(matching_fids_set)
-                    self.log_info(f"  🔄 Multi-step intersection: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)}")
-                    QgsMessageLog.logMessage(
-                        f"  → Multi-step step {step_number}: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)} FIDs",
-                        "FilterMate", Qgis.Info
+                # Get combine_operator from task_params if available
+                cache_operator = None
+                if hasattr(self, 'task_params') and self.task_params:
+                    cache_operator = self.task_params.get('_current_combine_operator')
+                
+                # Validate operator support for cache intersection
+                if cache_operator in ('OR', 'NOT AND'):
+                    self.log_warning(
+                        f"⚠️ Multi-step filtering with {cache_operator} - "
+                        f"cache intersection not supported (only AND), performing full filter"
                     )
+                    QgsMessageLog.logMessage(
+                        f"⚠️ Cache multi-step: {cache_operator} not supported, skipping intersection",
+                        "FilterMate", Qgis.Warning
+                    )
+                    # Skip cache intersection for OR/NOT AND
+                else:
+                    # AND or None → use cache intersection
+                    # Check if this is a re-filter (multi-step) with SAME source geometry AND parameters
+                    previous_fids = get_previous_filter_fids(layer, source_wkt, buffer_val, predicates_list)
+                    if previous_fids is not None:
+                        original_count = len(matching_fids)
+                        # Intersect new results with previous (only if same source geom AND params)
+                        matching_fids_set, step_number = intersect_filter_fids(
+                            layer, set(matching_fids), source_wkt, buffer_val, predicates_list
+                        )
+                        matching_fids = list(matching_fids_set)
+                        self.log_info(f"  🔄 Multi-step intersection: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)}")
+                        QgsMessageLog.logMessage(
+                            f"  → Multi-step step {step_number}: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)} FIDs",
+                            "FilterMate", Qgis.Info
+                        )
             
             # v2.8.11: Store result in cache for future multi-step filtering
             QgsMessageLog.logMessage(
@@ -3374,9 +3511,45 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                     self.log_debug(f"Cache storage traceback: {traceback.format_exc()}")
             
             if len(matching_fids) == 0:
+                # v2.9.40: FALLBACK - When Spatialite returns 0 features, trigger OGR fallback
+                # This handles cases where Spatialite SQL succeeded but returned incorrect results
+                # (e.g., MakeValid errors that don't raise exceptions but return empty sets)
+                
+                # Check if this is a multi-step filter continuation (already has cache)
+                is_multistep_continuation = False
+                if SPATIALITE_CACHE_AVAILABLE and old_subset:
+                    # v2.9.40: Get source WKT to check cache
+                    source_wkt_for_cache = ""
+                    predicates_list_for_cache = []
+                    buffer_val_for_cache = 0.0
+                    if hasattr(self, 'task_params') and self.task_params:
+                        infos = self.task_params.get('infos', {})
+                        source_wkt_for_cache = infos.get('source_geom_wkt', '')
+                        geom_preds = self.task_params.get('filtering', {}).get('geometric_predicates', [])
+                        if isinstance(geom_preds, dict):
+                            predicates_list_for_cache = list(geom_preds.keys())
+                        elif isinstance(geom_preds, list):
+                            predicates_list_for_cache = geom_preds
+                        buffer_val_for_cache = self.task_params.get('filtering', {}).get('buffer_value', 0.0)
+                    
+                    previous_fids = get_previous_filter_fids(layer, source_wkt_for_cache, buffer_val_for_cache, predicates_list_for_cache)
+                    is_multistep_continuation = (previous_fids is not None and len(previous_fids) > 0)
+                
+                # If NOT a multi-step continuation, return False to trigger OGR fallback
+                # Multi-step filters can legitimately return 0 (intersection of sets)
+                if not is_multistep_continuation:
+                    self.log_warning(f"⚠️ Spatialite returned 0 features - this may indicate query error")
+                    self.log_warning(f"  → Returning False to trigger OGR fallback verification")
+                    QgsMessageLog.logMessage(
+                        f"⚠️ {layer.name()}: Spatialite found 0 features - attempting OGR fallback",
+                        "FilterMate", Qgis.Warning
+                    )
+                    return False  # Trigger OGR fallback
+                
+                # Multi-step continuation with 0 results - this is valid (empty intersection)
                 # v2.6.9: FIX - Use unquoted 'fid = -1' for OGR/GeoPackage compatibility
                 fid_expression = 'fid = -1'  # No valid FID is -1
-                self.log_info(f"  → No matching features, applying: {fid_expression}")
+                self.log_info(f"  → Multi-step filter resulted in 0 features (valid empty intersection)")
             elif len(matching_fids) >= feature_count * 0.99 and feature_count > 10000:
                 # v2.9.11: OPTIMIZATION - Skip filter when 99%+ features match
                 # Applying a filter for 99%+ of features is wasteful - the filter expression
@@ -3897,6 +4070,10 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             # When re-filtering (e.g., adding buffer), old_subset may contain a FID filter
             # from the previous filtering. If we don't include it, we query ALL features
             # instead of just the previously filtered ones, returning wrong results.
+            # 
+            # v2.9.34: CRITICAL FIX - Don't combine FID-only filters in multi-step spatial filtering
+            # FID filters from previous spatial steps are based on a DIFFERENT source geometry
+            # and must be REPLACED, not combined. Only combine true user attribute filters.
             old_subset_sql_filter = ""
             if old_subset:
                 old_subset_upper = old_subset.upper()
@@ -3910,10 +4087,19 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 ]
                 has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
                 
-                if not has_source_alias and not has_exists and not has_spatial_predicate:
-                    # old_subset is a simple filter (likely FID-based) - include it in SQL
+                # v2.9.34: Check if old_subset is ONLY a FID filter (from previous spatial step)
+                # Pattern: starts with optional "(" then "fid IN (" or "fid = -1" or '"fid" IN ('
+                # This should be REPLACED, not combined (different source geometry)
+                import re
+                is_fid_only = bool(re.match(r'^\s*\(?\s*(["\']{0,1})fid\1\s+(IN\s*\(|=\s*-?\d+)', old_subset, re.IGNORECASE))
+                
+                if not has_source_alias and not has_exists and not has_spatial_predicate and not is_fid_only:
+                    # old_subset is a true user attribute filter (not just FID) - include it in SQL
                     old_subset_sql_filter = f"({old_subset}) AND "
-                    self.log_info(f"  → Including previous FID filter in SQL query")
+                    self.log_info(f"  → Including previous attribute filter in SQL query")
+                elif is_fid_only:
+                    # v2.9.34: FID-only filter from previous spatial step - don't combine
+                    self.log_info(f"  → Old subset is FID filter from previous spatial step - will be REPLACED")
                 else:
                     # old_subset contains spatial predicates - will be replaced, not combined
                     self.log_info(f"  → Old subset has spatial predicates - will be replaced")
@@ -4108,20 +4294,45 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             
             # v2.8.11: MULTI-STEP FILTERING - Intersect with previous cache if exists
             # v2.9.19: FIX - Pass source_wkt to only intersect if geometry matches
+            # v2.9.30: FIX - Also pass buffer_value and predicates to avoid wrong intersection
+            # v2.9.43: CRITICAL - Cache multi-step only supports AND operator
             step_number = 1
             if SPATIALITE_CACHE_AVAILABLE and old_subset:
-                # Check if this is a re-filter (multi-step) with SAME source geometry
-                previous_fids = get_previous_filter_fids(layer, source_wkt)
-                if previous_fids is not None:
-                    original_count = len(matching_fids)
-                    # Intersect new results with previous (only if same source geom)
-                    matching_fids_set, step_number = intersect_filter_fids(layer, set(matching_fids), source_wkt)
-                    matching_fids = list(matching_fids_set)
-                    self.log_info(f"  🔄 Multi-step intersection: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)}")
-                    QgsMessageLog.logMessage(
-                        f"  → Multi-step step {step_number}: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)} FIDs",
-                        "FilterMate", Qgis.Info
+                # Get combine_operator from task_params if available
+                cache_operator = None
+                if hasattr(self, 'task_params') and self.task_params:
+                    cache_operator = self.task_params.get('_current_combine_operator')
+                
+                # Validate operator support for cache intersection
+                if cache_operator in ('OR', 'NOT AND'):
+                    self.log_warning(
+                        f"⚠️ Multi-step filtering with {cache_operator} - "
+                        f"cache intersection not supported (only AND), performing full filter"
                     )
+                    # Skip cache intersection for OR/NOT AND
+                elif True:  # AND or None → use cache intersection
+                    # Check if this is a re-filter (multi-step) with SAME source geometry AND parameters
+                    # Get predicates as list for comparison
+                    if isinstance(predicates, dict):
+                        predicates_for_cache = list(predicates.keys())
+                    elif isinstance(predicates, list):
+                        predicates_for_cache = predicates
+                    else:
+                        predicates_for_cache = []
+                        
+                    previous_fids = get_previous_filter_fids(layer, source_wkt, buffer_value, predicates_for_cache)
+                    if previous_fids is not None:
+                        original_count = len(matching_fids)
+                        # Intersect new results with previous (only if same source geom AND params)
+                        matching_fids_set, step_number = intersect_filter_fids(
+                            layer, set(matching_fids), source_wkt, buffer_value, predicates_for_cache
+                        )
+                        matching_fids = list(matching_fids_set)
+                        self.log_info(f"  🔄 Multi-step intersection: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)}")
+                        QgsMessageLog.logMessage(
+                            f"  → Multi-step step {step_number}: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)} FIDs",
+                            "FilterMate", Qgis.Info
+                        )
             
             # v2.8.11: Store result in cache for future multi-step filtering
             if SPATIALITE_CACHE_AVAILABLE and matching_fids:
@@ -4149,10 +4360,9 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             
             # v2.6.5: Build optimized FID-based filter expression
             if len(matching_fids) == 0:
-                # v2.6.10: Suspicious 0 results on large dataset - might be geometry issue
-                # v2.8.10: EXCEPT when using negative buffer - empty result is expected
-                # Check if we should fallback to OGR instead of applying empty filter
-                SUSPICIOUS_ZERO_THRESHOLD = 10000  # If target has >10k features, 0 results is suspicious
+                # v2.9.40: FALLBACK - When Spatialite returns 0 features, trigger OGR fallback
+                # This handles cases where Spatialite SQL succeeded but returned incorrect results
+                # (e.g., MakeValid errors that don't raise exceptions but return empty sets)
                 
                 # Check if this is due to negative buffer producing empty geometry
                 is_negative_buffer_empty = False
@@ -4162,40 +4372,61 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                     if buf_val < 0 and has_buffer:
                         # Check if source geometry is empty
                         try:
+                            conn_check = sqlite3.connect(source_path)
+                            cursor_check = conn_check.cursor()
                             source_geom_col_check = 'geom_buffered' if has_buffer else 'geom'
-                            cursor.execute(f'SELECT ST_IsEmpty({source_geom_col_check}) FROM "{source_table}" LIMIT 1')
-                            result = cursor.fetchone()
+                            cursor_check.execute(f'SELECT ST_IsEmpty({source_geom_col_check}) FROM "{source_table}" LIMIT 1')
+                            result = cursor_check.fetchone()
+                            conn_check.close()
                             if result and result[0] == 1:
                                 is_negative_buffer_empty = True
                         except (sqlite3.Error, sqlite3.OperationalError):
                             pass  # Query failed, assume geometry is valid
                 
-                # Only trigger OGR fallback if it's NOT a negative buffer empty case
-                if feature_count >= SUSPICIOUS_ZERO_THRESHOLD and not is_negative_buffer_empty:
-                    self.log_warning(f"⚠️ SUSPICIOUS: 0 features matched for {layer.name()} with {feature_count:,} total features")
-                    self.log_warning(f"  → Large dataset with 0 results suggests geometry processing issue")
-                    self.log_warning(f"  → Signaling fallback to OGR backend for reliable filtering")
+                # Check if this is a multi-step filter continuation (already has cache)
+                is_multistep_continuation = False
+                if SPATIALITE_CACHE_AVAILABLE and old_subset:
+                    # Get predicates as list for comparison
+                    if isinstance(predicates, dict):
+                        predicates_for_cache = list(predicates.keys())
+                    elif isinstance(predicates, list):
+                        predicates_for_cache = predicates
+                    else:
+                        predicates_for_cache = []
+                        
+                    previous_fids = get_previous_filter_fids(layer, source_wkt, buffer_value, predicates_for_cache)
+                    is_multistep_continuation = (previous_fids is not None and len(previous_fids) > 0)
+                
+                # v2.9.40: Trigger OGR fallback for ALL 0-feature results (not just large datasets)
+                # UNLESS it's a valid case (negative buffer empty OR multi-step continuation)
+                if not is_negative_buffer_empty and not is_multistep_continuation:
+                    self.log_warning(f"⚠️ Spatialite returned 0 features for {layer.name()} ({feature_count:,} total features)")
+                    self.log_warning(f"  → This may indicate geometry processing issue - signaling OGR fallback")
                     from qgis.core import QgsMessageLog, Qgis
                     QgsMessageLog.logMessage(
                         f"⚠️ {layer.name()}: Spatialite returned 0/{feature_count:,} features - falling back to OGR",
                         "FilterMate", Qgis.Warning
                     )
                     # Return False to signal that Spatialite failed and caller should try OGR
-                    # Store a flag so the calling code knows this is a fallback request
                     self._spatialite_zero_result_fallback = True
                     return False
                 
+                # Valid 0-result case (negative buffer empty OR multi-step continuation)
                 # v2.6.9: FIX - Use FID-based impossible filter
                 # For OGR/GeoPackage, use unquoted 'fid' which is the internal row ID
                 # Quoted column names may not work correctly with some OGR configurations
                 fid_expression = 'fid = -1'  # No valid FID is -1
-                # v2.6.9: Warn about 0 features - might indicate buffer issue
+                
                 if is_negative_buffer_empty:
-                    self.log_info(f"ℹ️ 0 features matched for {layer.name()} (negative buffer made geometry empty)")
+                    self.log_info(f"ℹ️ 0 features matched for {layer.name()} (negative buffer made geometry empty - valid)")
+                elif is_multistep_continuation:
+                    self.log_info(f"ℹ️ 0 features matched for {layer.name()} (multi-step intersection resulted in empty set - valid)")
                 else:
+                    # This shouldn't happen (we returned False above) but log just in case
                     self.log_warning(f"⚠️ 0 features matched for {layer.name()}")
+                
                 self.log_info(f"  → Applying empty filter expression: {fid_expression}")
-                if buffer_value == 0:
+                if buffer_value == 0 and not is_multistep_continuation:
                     self.log_warning(f"  → Hint: Source has no buffer. Use buffer for proximity filtering.")
                 from qgis.core import QgsMessageLog, Qgis
                 QgsMessageLog.logMessage(

@@ -326,6 +326,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # This allows recovery when QgsFeaturePickerWidget loses its selection after layer refresh
         self._last_single_selection_fid = None
         self._last_single_selection_layer_id = None
+        
+        # v2.9.29: Track last selected feature IDs for multiple_selection mode
+        # This allows recovery when widget loses checked items after layer refresh (multi-step filtering)
+        self._last_multiple_selection_fids = None
+        self._last_multiple_selection_layer_id = None
 
         self.predicates = None
         self.buffer_property_has_been_init = False
@@ -4678,10 +4683,41 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         - Actual data refresh via exploring_source_params_changed
         - Loading state cleanup
         
+        FIX v2.9.24: Force feature picker widget refresh for both single and multiple selection
+        to ensure visual consistency when display expression changes
+        
         Args:
             groupbox: The groupbox type
         """
         try:
+            # FIX v2.9.24: Ensure feature picker widgets are properly refreshed
+            # This prevents stale display when the expression changes
+            
+            if groupbox == "single_selection":
+                try:
+                    # Force a visual update of the single selection feature picker
+                    widget = self.mFeaturePickerWidget_exploring_single_selection
+                    if widget and hasattr(widget, 'update'):
+                        # QgsFeaturePickerWidget is a native QGIS widget that should auto-refresh,
+                        # but we force an update to ensure immediate visual feedback
+                        widget.update()
+                        logger.debug("Forced feature picker widget refresh for single_selection")
+                except Exception as refresh_err:
+                    logger.debug(f"Could not force single selection widget refresh: {refresh_err}")
+            
+            elif groupbox == "multiple_selection":
+                try:
+                    # Force a visual update of the checkable combo box
+                    widget = self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection
+                    if widget and hasattr(widget, 'list_widgets') and self.current_layer:
+                        layer_id = self.current_layer.id()
+                        if layer_id in widget.list_widgets:
+                            # Force viewport update to reflect expression changes
+                            widget.list_widgets[layer_id].viewport().update()
+                            logger.debug("Forced feature picker widget refresh for multiple_selection")
+                except Exception as refresh_err:
+                    logger.debug(f"Could not force multiple selection widget refresh: {refresh_err}")
+            
             # Call the standard source params changed
             self.exploring_source_params_changed(groupbox_override=groupbox)
         finally:
@@ -6932,6 +6968,59 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             self.exploring_groupbox_changed(exploring_groupbox)
 
+    def _update_exploring_buttons_state(self):
+        """
+        Update the enabled/disabled state of exploring buttons based on:
+        1. Current exploring groupbox (single_selection, multiple_selection, custom_selection)
+        2. Number of features selected in the active groupbox
+        
+        Buttons affected: identify, zoom (other buttons like tracking, selecting, linking are always enabled)
+        
+        v2.9.34: Fix for Spatialite backend - buttons were not respecting groupbox/feature selection state
+        """
+        if not self.widgets_initialized or self.current_layer is None:
+            # Disable all buttons if no layer
+            self.pushButton_exploring_identify.setEnabled(False)
+            self.pushButton_exploring_zoom.setEnabled(False)
+            return
+        
+        has_features = False
+        
+        try:
+            # Check current groupbox for selected features
+            if self.current_exploring_groupbox == "single_selection":
+                # Single selection: check if feature picker has a valid feature
+                feature_picker = self.widgets.get("EXPLORING", {}).get("SINGLE_SELECTION_FEATURES", {}).get("WIDGET")
+                if feature_picker:
+                    feature = feature_picker.feature()
+                    has_features = feature is not None and (not hasattr(feature, 'isValid') or feature.isValid())
+                    
+            elif self.current_exploring_groupbox == "multiple_selection":
+                # Multiple selection: check if any items are checked
+                combo = self.widgets.get("EXPLORING", {}).get("MULTIPLE_SELECTION_FEATURES", {}).get("WIDGET")
+                if combo:
+                    checked_items = combo.checkedItems()
+                    has_features = checked_items is not None and len(checked_items) > 0
+                    
+            elif self.current_exploring_groupbox == "custom_selection":
+                # Custom selection: check if expression widget has a valid expression
+                expr_widget = self.widgets.get("EXPLORING", {}).get("CUSTOM_SELECTION_EXPRESSION", {}).get("WIDGET")
+                if expr_widget:
+                    expression = expr_widget.expression()
+                    # Enable buttons if there's a non-empty expression
+                    has_features = expression is not None and expression.strip() != ""
+                    
+        except (AttributeError, RuntimeError) as e:
+            logger.debug(f"_update_exploring_buttons_state: Error checking features: {e}")
+            has_features = False
+        
+        # Update button states
+        self.pushButton_exploring_identify.setEnabled(has_features)
+        self.pushButton_exploring_zoom.setEnabled(has_features)
+        
+        # Log state change for debugging
+        logger.debug(f"_update_exploring_buttons_state: groupbox='{self.current_exploring_groupbox}', has_features={has_features}")
+
     def _configure_single_selection_groupbox(self):
         """
         Configure UI for single feature selection mode.
@@ -7016,6 +7105,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
         
+        # v2.9.41: Update button states based on current selection
+        # Ensures zoom/identify buttons reflect feature selection after groupbox switch
+        self._update_exploring_buttons_state()
+        
         return True
 
     def _configure_multiple_selection_groupbox(self):
@@ -7090,6 +7183,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
         
+        # Update button states based on current selection
+        self._update_exploring_buttons_state()
+        
         return True
 
     def _configure_custom_selection_groupbox(self):
@@ -7153,6 +7249,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         else:
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+        
+        # Update button states based on current expression
+        self._update_exploring_buttons_state()
         
         return True
 
@@ -7406,6 +7505,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             elif self.current_exploring_groupbox == "multiple_selection":
                 input = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].checkedItems()
                 logger.debug(f"   MULTIPLE_SELECTION checked items: {len(input) if input else 0}")
+                
+                # v2.9.29: If no checked items but we have saved FIDs, try to recover
+                # This fixes multi-step additive filtering where the widget loses checked items after refresh
+                if (not input or len(input) == 0) and hasattr(self, '_last_multiple_selection_fids') and self._last_multiple_selection_fids:
+                    layer_id = self.current_layer.id() if self.current_layer else None
+                    if layer_id == getattr(self, '_last_multiple_selection_layer_id', None):
+                        saved_fids = self._last_multiple_selection_fids
+                        logger.info(f"   ⚠️ MULTIPLE_SELECTION: Widget has no checked items, recovering from saved FIDs: {len(saved_fids)}")
+                        
+                        try:
+                            # Reconstruct input format: [[display_value, pk_value, font, brush], ...]
+                            # We only need display and pk for get_exploring_features
+                            input = [[str(fid), fid, None, None] for fid in saved_fids]
+                            logger.info(f"   ✓ MULTIPLE_SELECTION: Recovered {len(input)} items from saved FIDs")
+                        except Exception as e:
+                            logger.warning(f"   ⚠️ MULTIPLE_SELECTION: Error recovering from saved FIDs: {e}")
+                            input = []
+                    else:
+                        logger.debug(f"   MULTIPLE_SELECTION: Saved FIDs are for different layer, not recovering")
+                        
                 features, expression = self.get_exploring_features(input, True)
                 logger.debug(f"   RESULT: features count = {len(features)}, expression = '{expression}'")
 
@@ -8225,7 +8344,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     else:
                         # Update stored expression
                         self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["single_selection_expression"] = expression
-                        self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(expression)
+                        
+                        # FIX v2.9.24: Force visual refresh for single selection widget
+                        try:
+                            picker_widget = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+                            # First update the display expression
+                            picker_widget.setDisplayExpression(expression)
+                            # Then force a visual update to ensure immediate feedback
+                            picker_widget.update()
+                            logger.debug("single_selection: Updated display expression and forced widget refresh")
+                        except Exception as e:
+                            logger.warning(f"single_selection: Could not force widget refresh: {e}")
+                        
                         # CRITICAL: Update linked widgets when single selection expression changes
                         self.exploring_link_widgets()
                         # Invalidate cache for this layer since expression changed
@@ -8248,7 +8378,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         # Update stored expression
                         self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["multiple_selection_expression"] = expression
                         logger.debug(f"Calling setDisplayExpression with: {expression}")
-                        self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(expression)
+                        
+                        # FIX v2.9.33: Force visual refresh for multiple selection widget
+                        try:
+                            picker_widget = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
+                            # First update the display expression (this launches async tasks)
+                            picker_widget.setDisplayExpression(expression)
+                            # Then force a visual update to ensure immediate feedback
+                            picker_widget.update()
+                            logger.debug("multiple_selection: Updated display expression and forced widget refresh")
+                        except Exception as e:
+                            logger.warning(f"multiple_selection: Could not force widget refresh: {e}")
+                        
                         # CRITICAL: Update linked widgets when multiple selection expression changes
                         self.exploring_link_widgets()
                         # Invalidate cache for this layer since expression changed
@@ -8282,6 +8423,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         # Filter, Zoom, Flash, or other action buttons.
                         logger.debug("custom_selection: Expression stored, skipping immediate feature evaluation and link_widgets")
                         self._update_buffer_validation()
+                        # Update button states based on expression
+                        self._update_exploring_buttons_state()
                         return  # Skip get_current_features() for custom_selection
 
             self.get_current_features()
@@ -8441,6 +8584,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     self._last_single_selection_layer_id = self.current_layer.id()
                     logger.debug(f"exploring_features_changed: Saved single_selection FID={input.id()} for layer {self.current_layer.name()}")
             
+            # v2.9.29: Save FIDs for multiple_selection mode to allow recovery after layer refresh
+            # This is critical for multi-step additive filtering where the widget is refreshed
+            # after the first filter, causing checked items to be lost.
+            elif self.current_exploring_groupbox == "multiple_selection" and isinstance(input, list):
+                if len(input) > 0:
+                    # Input is list of [[display, pk, ...], ...] from updatingCheckedItemList signal
+                    try:
+                        # Extract PK values (index 1) from input items
+                        checked_fids = [item[1] for item in input if len(item) > 1]
+                        if checked_fids:
+                            self._last_multiple_selection_fids = checked_fids
+                            self._last_multiple_selection_layer_id = self.current_layer.id()
+                            logger.debug(f"exploring_features_changed: Saved {len(checked_fids)} multiple_selection FIDs for layer {self.current_layer.name()}")
+                    except (IndexError, TypeError) as e:
+                        logger.debug(f"exploring_features_changed: Could not extract FIDs from input: {e}")
+            
             # Update buffer validation when source features/layer changes
             try:
                 self._update_buffer_validation()
@@ -8589,6 +8748,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if layer_props["exploring"].get("is_tracking", False):
             logger.debug(f"_handle_exploring_features_result: Tracking {len(features)} features")
             self.zooming_to_features(features)  
+        
+        # Update button states after features are processed
+        self._update_exploring_buttons_state()
 
         return features
 
@@ -9509,9 +9671,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setValue(layer_props[property_tuple[0]][property_tuple[1]])
                     elif widget_type == 'CheckBox':
                         # Synchronize CheckBox state from layer properties
+                        # v2.9.31: Standard per-layer save/restore behavior (default: False)
                         widget = self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"]
+                        stored_value = layer_props[property_tuple[0]][property_tuple[1]]
+                        
+                        # VERIFICATION v2.9.32: Log centroid checkbox synchronization
+                        if property_tuple[1] in ('use_centroids_source_layer', 'use_centroids_distant_layers'):
+                            logger.debug(f"🔍 Synchronizing {property_tuple[1]} checkbox: stored_value={stored_value}, "
+                                        f"current_checked={widget.isChecked()} for layer {layer.name() if layer else 'unknown'}")
+                        
                         widget.blockSignals(True)
-                        widget.setChecked(layer_props[property_tuple[0]][property_tuple[1]])
+                        widget.setChecked(stored_value)
                         widget.blockSignals(False)
                     elif widget_type == 'LineEdit':
                         self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setText(layer_props[property_tuple[0]][property_tuple[1]])
@@ -9655,6 +9825,33 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # Multiple selection widget - use validated layer parameter
             if "MULTIPLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
+                # v2.9.29: CRITICAL FIX - Save checked items FIDs before widget refresh
+                # This fixes the multi-step additive filter bug where 2nd filter fails
+                # because checked items are lost when widget is refreshed after 1st filter.
+                saved_checked_fids = []
+                saved_multi_layer_id = None
+                multi_widget = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
+                
+                # Save currently checked items (format: [[display_value, pk_value, ...], ...])
+                if multi_widget and hasattr(multi_widget, 'checkedItems'):
+                    try:
+                        checked_items = multi_widget.checkedItems()
+                        if checked_items:
+                            # Extract PK values (index 1) from checked items
+                            saved_checked_fids = [item[1] for item in checked_items if len(item) > 1]
+                            if multi_widget.layer:
+                                saved_multi_layer_id = multi_widget.layer.id()
+                            logger.info(f"_reload_exploration_widgets: Saved {len(saved_checked_fids)} checked items FIDs before refresh")
+                    except Exception as e:
+                        logger.debug(f"_reload_exploration_widgets: Could not save checked items: {e}")
+                
+                # Also try to get from _last_multiple_selection_fids backup
+                if not saved_checked_fids:
+                    if hasattr(self, '_last_multiple_selection_fids') and self._last_multiple_selection_fids:
+                        saved_checked_fids = self._last_multiple_selection_fids
+                        saved_multi_layer_id = getattr(self, '_last_multiple_selection_layer_id', None)
+                        logger.info(f"_reload_exploration_widgets: Using backup _last_multiple_selection_fids: {len(saved_checked_fids)} FIDs")
+                
                 # OGR FIX v2.8.16: Force feature list refresh after filtering
                 # The custom widget caches features and may not detect subsetString changes.
                 # Call setLayer first to ensure proper initialization, then force refresh via setDisplayExpression.
@@ -9662,6 +9859,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # Force refresh by explicitly calling setDisplayExpression even if expression hasn't changed
                 # This ensures the widget reloads features after OGR filtering
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(multiple_expr)
+                
+                # v2.9.29: Restore checked items after widget refresh
+                # This maintains selection state across filter operations for multi-step filtering
+                if saved_checked_fids and layer is not None:
+                    # Only restore if we're reloading the same layer
+                    if saved_multi_layer_id is None or saved_multi_layer_id == layer.id():
+                        logger.info(f"_reload_exploration_widgets: Attempting to restore {len(saved_checked_fids)} checked items after refresh")
+                        try:
+                            # Get the list widget wrapper and restore selections
+                            if hasattr(multi_widget, 'list_widgets') and layer.id() in multi_widget.list_widgets:
+                                list_widget_wrapper = multi_widget.list_widgets[layer.id()]
+                                # Restore the selected features list (this will be used when items are reloaded)
+                                # Format: [[display_value, pk_value, is_visible], ...]
+                                restored_selection = [[str(fid), fid, True] for fid in saved_checked_fids]
+                                list_widget_wrapper.setSelectedFeaturesList(restored_selection)
+                                logger.info(f"_reload_exploration_widgets: Restored {len(saved_checked_fids)} checked items to selection list")
+                            
+                            # Save to backup for future use
+                            self._last_multiple_selection_fids = saved_checked_fids
+                            self._last_multiple_selection_layer_id = layer.id()
+                        except Exception as e:
+                            logger.warning(f"_reload_exploration_widgets: Failed to restore checked items: {e}")
             
             # Field expression widgets - setLayer BEFORE setExpression - use validated layer parameter
             if "SINGLE_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
@@ -10064,6 +10283,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.debug(f"current_layer_changed: Clearing saved single_selection FID (layer changed)")
                 self._last_single_selection_fid = None
                 self._last_single_selection_layer_id = None
+        
+        # v2.9.29: Reset saved multiple_selection FIDs when changing source layer
+        # The saved FIDs are only valid for the layer they were saved from
+        if hasattr(self, '_last_multiple_selection_layer_id'):
+            if layer is None or layer.id() != self._last_multiple_selection_layer_id:
+                logger.debug(f"current_layer_changed: Clearing saved multiple_selection FIDs (layer changed)")
+                self._last_multiple_selection_fids = None
+                self._last_multiple_selection_layer_id = None
             
         try:
             # Validate layer and prepare for change
@@ -10082,6 +10309,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # Reload exploration widgets with validated layer
             self._reload_exploration_widgets(validated_layer, layer_props)
+            
+            # v2.9.41: CRITICAL - Update exploring buttons state after layer change
+            # This ensures zoom/identify buttons reflect the current selection state,
+            # preventing them from being stuck in disabled state when switching layers
+            # especially important for Spatialite backend in multi-step filtering scenarios
+            self._update_exploring_buttons_state()
             
             # Reconnect all signals and restore state
             self._reconnect_layer_signals(widgets_to_reconnect, layer_props)
@@ -11869,6 +12102,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     self.comboBox_filtering_current_layer.setLayer(None)
             except Exception as e:
                 logger.debug(f"FilterMate: Error resetting layer combo on close: {e}")
+            
+            # CRITICAL FIX: Reset QgsFeaturePickerWidget to prevent access violations
+            # The widget has an internal timer (scheduledReload) that can fire even after
+            # the layer is destroyed, causing QgsVectorLayerFeatureSource to crash.
+            # See stack trace: QgsFeaturePickerModelBase::scheduledReload -> QgsVectorLayerFeatureSource
+            try:
+                if hasattr(self, 'mFeaturePickerWidget_exploring_single_selection'):
+                    self.mFeaturePickerWidget_exploring_single_selection.setLayer(None)
+            except Exception as e:
+                logger.debug(f"FilterMate: Error resetting FeaturePickerWidget on close: {e}")
             
             # Clean up exploring cache
             try:

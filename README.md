@@ -1,8 +1,8 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 2.9.6** | January 2026 | **Production-Ready**
+**Version 3.0.1** | January 2026 | **Production-Ready** 🎉
 
-> Advanced filtering and export capabilities for vector data in QGIS - works with ANY data source!
+> 🚀 The ultimate spatial filtering plugin! Explore, filter & export vector data with lightning-fast performance on ANY data source.
 
 ## 🔗 Quick Links
 
@@ -27,36 +27,41 @@
 
 ## 📋 Recent Changes
 
-### v2.9.6 - Spatialite NULL Geometry Fix (January 2026)
+### 🐛 v3.0.1 - Critical OGR Fallback Fix (January 2026)
 
-- 🐛 **FIX: Negative buffer 0 features** - Correctly returns empty result when buffer produces NULL geometry
-- 🔧 **FIX: NULL-safe predicates** - Spatialite predicates now use explicit `= 1` comparison
-- ✅ **Reliable filtering** - ST_Intersects(geom, NULL) now correctly filters to 0 results
+**Critical stability fix** for OGR fallback failures in multi-layer filtering scenarios.
 
-### v2.9.5 - QGIS Shutdown Crash Fix (January 2026)
+- **Fixed:** Qt garbage collection destroying GEOS-safe layers before processing
+- **Impact:** Eliminates intermittent "C++ object deleted" errors
+- **Stability:** Tested with 20+ layer filtering iterations
+- See [CHANGELOG.md](CHANGELOG.md) for complete details
 
-- 🐛 **FIX: Windows crash** - Fixed fatal access violation during QGIS shutdown
-- 🔧 **FIX: Task cancellation** - Now uses Python logger instead of QgsMessageLog
-- ✅ **Safe shutdown** - Avoids calling destroyed C++ objects during QgsTaskManager::cancelAll()
+### 🎉 v3.0.0 - Major Milestone Release (January 2026)
 
-### v2.9.4 - Spatialite Subquery Filter Fix (January 2026)
+**FilterMate 3.0 represents a major milestone** consolidating 40+ fixes and improvements from the 2.9.x series into a rock-solid, production-ready release.
 
-- 🐛 **FIX: Spatialite large datasets** - Filtering now works correctly for ≥20K features
-- 🔧 **FIX: OGR compatibility** - Replaced SQL subquery with range-based BETWEEN/IN() filter
-- ✅ **Compatible with all providers** - GeoPackage, Shapefile, and other OGR formats
+#### 🛡️ Stability & Reliability
+- **40+ bug fixes** addressing edge cases across all backends
+- **Signal management overhaul** - UI always responsive after filtering
+- **Memory safety** - No more "wrapped C/C++ object deleted" errors
+- **Safe QGIS shutdown** - No crashes on Windows during close
 
-### v2.9.3 - UUID Filtering Fix & Spatialite Performance (January 2026)
+#### ⚡ Performance Optimizations
+- **99% match optimization** - Skip redundant filters automatically
+- **Adaptive geometry simplification** - 2-10x faster buffer operations
+- **Smart caching** - Up to 80% cache hit rate on repeated queries
+- **Parallel processing** - 2x speedup on datasets with 1M+ features
 
-- 🐛 **FIX: UUID filtering** - Now works correctly with primary key detection
-- 🚀 **PERF: Spatialite backend** - Simplified and more performant architecture
-- ♻️ **REFACTOR: Cleaner queries** - Reduced overhead in Spatialite execution
+#### 🔧 Backend Improvements
+- **Spatialite/GeoPackage** - NULL-safe predicates, large dataset support
+- **PostgreSQL** - Advanced MV optimizations, INCLUDE clause indexes
+- **OGR** - Robust multi-layer filtering, GEOS-safe operations
 
-### v2.9.2 - Centroid & Simplification Optimizations (January 2026)
-
-- 🎯 **IMPROVED: Centroid filtering** - Now uses `ST_PointOnSurface()` for polygons (guaranteed inside)
-- 📐 **IMPROVED: Adaptive simplification** - Automatic tolerance = buffer × 0.1 before buffer ops
-- ⚙️ **NEW: CENTROID_MODE config** - Options: 'centroid', 'point_on_surface', 'auto'
-- 🚀 **PERF: 2-10x faster** - Buffer operations on simplified geometries
+#### 🎨 User Experience
+- **Complete undo/redo** - Full filter history with context-aware restore
+- **Filter favorites** - Save, organize and share configurations
+- **21 languages** - Full internationalization support
+- **Dark mode** - Automatic theme synchronization
 
 ### v2.9.1 - PostgreSQL MV Performance Optimizations (January 2026)
 

@@ -5,7 +5,22 @@ slug: /
 
 # Welcome to FilterMate
 
-**FilterMate v2.9.6** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
+**FilterMate v3.0.0** 🎉 is a production-ready QGIS plugin that makes spatial filtering intuitive, fast, and powerful - works with ANY data source!
+
+## 🚀 Why FilterMate?
+
+Stop struggling with complex filters. Whether you're working with PostgreSQL, GeoPackage, Shapefiles, or any other format, FilterMate gives you **professional-grade spatial filtering** with zero SQL knowledge required.
+
+| What You Get              | Why It Matters                                    |
+| ------------------------- | ------------------------------------------------- |
+| 🎯 **Click to Filter**    | Select features visually - no queries to write    |
+| ⚡ **Lightning Fast**     | Smart caching & optimization for any data size    |
+| 🔄 **Undo/Redo**          | Experiment freely - go back anytime               |
+| ⭐ **Save Favorites**     | Reuse your best filters with one click            |
+| 🌍 **21 Languages**       | Work in your language                             |
+| 🎨 **Beautiful UI**       | Dark mode, themes, HiDPI support                  |
+
+---
 
 ## ✨ Key Features
 
@@ -21,83 +36,44 @@ slug: /
 
 ---
 
-## 🎉 What's New in v2.9.6 - Spatialite NULL Geometry Fix
+## 🎉 What's New in v3.0.0 - Major Milestone Release
 
-This release fixes a critical issue where negative buffer operations could return ALL features instead of 0.
+**FilterMate 3.0** consolidates 40+ fixes and improvements from the 2.9.x series into a rock-solid, production-ready release.
 
-### 🐛 Bug Fix: NULL Geometry Filter Failure
+### 🛡️ Stability & Reliability
 
-- **Problem:** Negative buffer producing empty geometry returned ALL features instead of 0
-- **Cause:** `ST_Intersects(geom, NULL)` returns NULL in SQLite, which doesn't filter in WHERE clause
-- **Solution:** Spatialite predicates now use explicit `= 1` comparison for NULL-safe evaluation
+- **40+ bug fixes** covering edge cases across all backends
+- **Signal management overhaul** - UI always responsive after filtering
+- **Memory safety** - No more "wrapped C/C++ object deleted" errors
+- **Safe QGIS shutdown** - No crashes on Windows during close
 
-### ✅ NULL-Safe Predicate Implementation
+### ⚡ Performance Optimizations
 
-- All spatial predicates now use `ST_Intersects(...) = 1` format
-- `NULL = 1` evaluates to FALSE, correctly filtering out all features
-- Prevents silent filter failures with complex buffer operations
+| Optimization                | Improvement                          |
+| --------------------------- | ------------------------------------ |
+| 99% match detection         | Skip redundant filters automatically |
+| Adaptive simplification     | 2-10x faster buffer operations       |
+| Smart caching               | Up to 80% cache hit rate             |
+| Parallel processing         | 2x speedup on 1M+ features           |
 
----
+### 🔧 Backend Improvements
 
-## Previous: v2.9.5 - QGIS Shutdown Crash Fix
+- **Spatialite/GeoPackage:** NULL-safe predicates, large dataset support (≥20K features)
+- **PostgreSQL:** Advanced MV optimizations, INCLUDE clause indexes
+- **OGR:** Robust multi-layer filtering, GEOS-safe operations
 
-- 🐛 Fixed Windows fatal access violation during QGIS shutdown
-- 🔧 Task cancellation now uses Python logger instead of QgsMessageLog
-- ✅ Safe shutdown: Avoids calling destroyed C++ objects
+### 🎨 User Experience
 
----
-
-## Previous: v2.9.4 - Spatialite Subquery Filter Fix
-
-- 🐛 Spatialite large dataset filtering now works correctly (≥20K features)
-- 🔧 Replaced SQL subquery with range-based BETWEEN/IN() filter
-- ✅ Compatible with all OGR providers
-
----
-
-## Previous: v2.9.3 - UUID Filtering Fix & Spatialite Performance
-
-- 🐛 Fixed UUID filtering with primary key (PM) detection
-- 🚀 Simplified Spatialite backend architecture
-- ♻️ Cleaner query execution with reduced overhead
+- Complete undo/redo with context-aware restore
+- Filter favorites: save, organize, and share configurations
+- HiDPI support for 4K/Retina displays
+- Automatic theme synchronization
 
 ---
 
-## Previous: v2.9.2 - Centroid & Simplification Optimizations
+## Previous: v2.9.x Series - Stability Journey
 
-Major improvements to centroid-based filtering and geometry simplification for buffer operations.
-
-### 🎯 Enhanced: Centroid Optimization with ST_PointOnSurface
-
-| Feature              | Before (v2.8.x)           | After (v2.9.2)                   |
-| -------------------- | ------------------------- | -------------------------------- |
-| **Function**         | `ST_Centroid()`           | `ST_PointOnSurface()`            |
-| **Concave polygons** | Point may be **outside**  | Point **guaranteed inside**      |
-| **L-shapes, rings**  | Incorrect spatial results | Accurate results                 |
-| **Configuration**    | Fixed                     | Configurable via `CENTROID_MODE` |
-
-**CENTROID_MODE Options:**
-
-- `point_on_surface` (default) - Accurate for all polygon shapes
-- `centroid` - Faster for simple convex shapes (legacy)
-- `auto` - PointOnSurface for polygons, Centroid for lines
-
-### 📐 Enhanced: Adaptive Simplification Before Buffer
-
-| Metric                  | Improvement                    |
-| ----------------------- | ------------------------------ |
-| **Vertex reduction**    | 50-90% fewer vertices          |
-| **ST_Buffer speed**     | 2-10x faster                   |
-| **Auto-tolerance**      | buffer × 0.1 (clamped 0.5-10m) |
-| **No UI action needed** | Automatic when config enabled  |
-
----
-
-## 🎉 What's New in v2.9.1 - PostgreSQL MV Performance
-
-### 🚀 Advanced Materialized View Optimizations
-
-| Optimization            | Improvement                       | PostgreSQL |
+The 2.9.x series (v2.9.1 - v2.9.26) focused on comprehensive stability improvements:
 | ----------------------- | --------------------------------- | ---------- |
 | INCLUDE in GIST indexes | 10-30% faster spatial queries     | 11+        |
 | Bbox pre-filter column  | 2-5x faster && checks             | All        |

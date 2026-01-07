@@ -733,6 +733,11 @@ class LayersManagementEngineTask(QgsTask):
         )
         new_layer_variables["filtering"] = json.loads(self.json_template_layer_filtering)
         
+        # VERIFICATION v2.9.32: Log default centroid checkbox values to confirm they are False
+        logger.debug(f"🔍 Default centroid values for new layer {layer.name()}: "
+                    f"use_centroids_source_layer={new_layer_variables['filtering']['use_centroids_source_layer']}, "
+                    f"use_centroids_distant_layers={new_layer_variables['filtering']['use_centroids_distant_layers']}")
+        
         return new_layer_variables
 
     def _set_layer_variables(self, layer, layer_variables):

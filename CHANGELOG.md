@@ -2,7 +2,229 @@
 
 All notable changes to FilterMate will be documented in this file.
 
-## [Unreleased]
+## [3.0.1] - 2025-01-07
+
+### 🐛 Critical Bug Fixes
+
+**OGR Fallback - Qt Garbage Collection Protection (v2.9.43):**
+- CRITICAL FIX: GEOS-safe intersect layers destroyed by Qt GC before processing.run() causing OGR fallback failures
+- **Symptom**: "wrapped C/C++ object of type QgsVectorLayer has been deleted" after 5-7 multi-layer filtering iterations
+- **Affects**: OGR backend fallback in `_safe_select_by_location()` for all layer types
+- Root cause: Existing protections (Python list retention, forced materialization, 5ms delay) insufficient against Qt's C++ garbage collector
+- The GC window: Qt could destroy layers AFTER all Python protections but BEFORE processing.run() call
+- Solution: Double-reference strategy (Python + C++)
+  1. Python reference: `_temp_layers_keep_alive.append(safe_intersect)` (existing)
+  2. **NEW**: C++ reference via project registry: `QgsProject.instance().addMapLayer(safe_intersect, False)`
+  3. **NEW**: Automatic cleanup in `finally` block: `QgsProject.instance().removeMapLayer(safe_intersect.id())`
+- Technical details:
+  - `addToLegend=False` prevents UI pollution while creating strong C++ reference
+  - Project registry reference survives `QCoreApplication.processEvents()` calls
+  - `finally` block guarantees cleanup even on errors (no layer accumulation)
+  - Variable `safe_intersect_to_cleanup` tracks layer for cleanup
+- Impact: 
+  - ✅ Eliminates intermittent OGR fallback failures (zone_distribution, zone_mro, etc.)
+  - ✅ Stable multi-layer filtering (tested 20+ iterations)
+  - ✅ No temporary layer accumulation in project
+- Performance: Minimal overhead (addMapLayer/removeMapLayer ~1ms total)
+- Affected files: `modules/backends/ogr_backend.py` (_safe_select_by_location method)
+- See: `docs/FIX_QT_GC_GEOS_SAFE_LAYERS_v2.9.43.md` for detailed technical analysis
+
+## [3.0.0] - 2025-01-06
+
+### 🐛 Bug Fixes
+
+**Multi-Step Filter Cache Validation for OR/NOT AND (v2.9.43):**
+- CRITICAL FIX: Added validation to prevent incorrect results when using OR/NOT AND operators in multi-step filtering
+- **Affects**: Spatialite and OGR backends with FID cache enabled
+- Root cause: Cache intersection logic only supports AND operator (set intersection), but was being applied to OR and NOT AND
+- Scenario issue:
+  - Filter 1 with OR: Zone A → {1,2,3}, Filter 2: Zone B → {4,5,6}
+  - Expected: {1,2,3} ∪ {4,5,6} = {1,2,3,4,5,6} (union)
+  - Bug: {1,2,3} ∩ {4,5,6} = {} (empty - incorrect intersection!)
+- Solution: Detect OR/NOT AND operators and skip cache intersection (perform full filter instead)
+- Cache operators now validated:
+  - AND or None: Use cache intersection (supported) ✅
+  - OR: Skip cache, perform full filter with warning ⚠️
+  - NOT AND: Skip cache, perform full filter with warning ⚠️
+- Backends updated with validation checks (4 locations):
+  - Spatialite: _apply_filter_direct_sql (1)
+  - OGR: build_expression, _apply_subset_filter, _apply_with_temp_field (3)
+- New task_params field: `_current_combine_operator` transmitted from filter_task to backends
+- User receives warning: "⚠️ Multi-step filtering with OR/NOT AND - cache intersection not supported (only AND)"
+- Impact: Prevents silent incorrect results for OR/NOT AND multi-step filters, maintains performance for AND (most common)
+- Future: Full OR/NOT AND cache support (union/difference operations) planned for v2.10.x
+- Affected files: `modules/backends/{spatialite,ogr}_backend.py`, `modules/tasks/filter_task.py`
+- See: `docs/ANALYSIS_MULTI_STEP_OR_NOT_OPERATORS_v2.9.43.md`
+
+**Multi-Step Filter Combine Operator Handling (v2.9.42):**
+- CRITICAL FIX: `combine_operator=None` ignored by all backends, causing incorrect filter combination in multi-step filtering
+- **Affects**: ALL backends (PostgreSQL, Spatialite, OGR, Memory) - systematic bug across entire codebase
+- Root cause: When `filter_task.py` set `combine_operator=None` to signal "REPLACE filter", backends treated it as missing and defaulted to 'AND'
+- Scenario:
+  1. Filter 1: Geometric selection → creates FID filter `fid IN (1,2,3,...)`
+  2. Filter 2: New geometric selection → should REPLACE with `fid IN (4,5,6,...)`
+  3. BUG: Backend combined with AND → `(fid IN (1,2,3)) AND (fid IN (4,5,6))` → 0 features
+- Solution: Explicit distinction between `None` (REPLACE signal) vs `''` (default AND)
+- New logic: `if combine_operator is None: final = expression` (REPLACE) vs `else: op = combine_operator or 'AND'` (COMBINE)
+- Corrections applied to 8 occurrences across 4 backends:
+  - PostgreSQL: 1 fix (apply_filter)
+  - Spatialite: 1 fix (apply_filter)  
+  - OGR: 4 fixes (build_expression, _apply_subset_filter, _apply_with_temp_field, _apply_filter_with_memory_optimization)
+  - Memory: 2 fixes (build_expression, _apply_attribute_filter)
+- Improved logs: "🔄 combine_operator=None → REPLACING old subset (multi-step filter)" for clarity
+- Impact: Multi-step filtering now works correctly on all backends, FID cache intersection functions as designed
+- Affected files: `modules/backends/{postgresql,spatialite,ogr,memory}_backend.py`
+- See: `docs/FIX_MULTI_STEP_COMBINE_OPERATOR_v2.9.42.md`
+
+**Exploring Buttons State after Layer Change (v2.9.41):**
+- CRITICAL FIX: Zoom/Identify buttons stuck disabled after filter + layer change or groupbox switch
+- **Affects**: ALL backends (PostgreSQL, Spatialite, OGR) - not backend-specific
+- Root cause: `_update_exploring_buttons_state()` only called in `_handle_exploring_features_result()`
+- Scenarios:
+  1. Filter layer A → Switch to layer B → Buttons disabled even with selected features
+  2. Apply filter #1 → Apply filter #2 (multi-step) → Buttons disabled
+  3. Switch from single_selection to multiple_selection → Buttons stuck in previous state
+- Solution: Call `_update_exploring_buttons_state()` after:
+  1. `_reload_exploration_widgets()` in `current_layer_changed()` (all backends)
+  2. Widget reload in `filter_engine_task_completed()` (all backends)
+  3. `_configure_single_selection_groupbox()` (was missing, other groupboxes had it)
+- Impact: Buttons now always reflect current selection state during multi-step filtering and layer/groupbox switching
+- Affected files: `filter_mate_dockwidget.py` (lines ~7106, ~10313), `filter_mate_app.py` (line ~4237)
+- See: `docs/FIX_EXPLORING_BUTTONS_SPATIALITE_LAYER_CHANGE_v2.9.41.md`
+
+**Spatialite Zero Features Fallback (v2.9.40):**
+- CRITICAL FIX: Spatialite returning 0 features without triggering OGR fallback
+- Root cause: When Spatialite SQL query succeeds but returns 0 FIDs (incorrect result), `apply_filter()` returned `True` → no fallback
+- Example: Query with complex MultiPolygon succeeds but returns 0 features, while same query with OGR finds 268 features
+- Solution: Return `False` when 0 features are found (except for valid cases) to trigger automatic OGR fallback
+- Valid 0-feature cases (no fallback):
+  - Multi-step filtering with empty intersection (cache-based)
+  - Negative buffer producing empty geometry (erosion)
+- All other 0-feature results now trigger OGR fallback for verification
+- Flag `_spatialite_zero_result_fallback` signals to filter_task.py that this is a zero-result fallback
+- Improved robustness: False negatives detected and corrected automatically
+- Affected files: `modules/backends/spatialite_backend.py` (_apply_filter_direct_sql, _apply_filter_with_source_table)
+- See: `docs/FIX_SPATIALITE_ZERO_FEATURES_FALLBACK_v2.9.40.md`
+
+**Multi-Step Filtering with FID Filters (v2.9.34):**
+- CRITICAL FIX: Second spatial filter returning 0 features for all non-source layers
+- Root cause: FID filters from step 1 were eliminated, preventing cache intersection at step 2
+- Example: Step 1 creates `fid IN (1771, ...)` and caches 319 FIDs. Step 2 set `old_subset=None` → no cache trigger → query all features
+- Solution: Keep FID-only filters to trigger cache intersection, but DON'T combine them in SQL queries
+- New regex pattern detects FID-only filters: `^\s*\(?\s*(["']{0,1})fid\1\s+(IN\s*\(|=\s*-?\d+)`
+- Strategy: `old_subset` kept (not None) to trigger `if old_subset:` condition for cache intersection
+- Backend already detects FID-only and doesn't combine them in SQL (v2.9.34)
+- User attribute filters (e.g., `importance > 5`) are still correctly preserved and combined
+- Affected files: `modules/tasks/filter_task.py`, `modules/backends/spatialite_backend.py`
+- See: `docs/FIX_SPATIALITE_MULTI_STEP_FID_FILTERS_v2.9.34.md`
+
+**Multi-Step Filtering Cache (v2.9.30):**
+- Fixed: Second filter with different buffer value returning 0 features on distant layers
+- Root cause: Cache intersection was only checking `source_geom_hash`, ignoring `buffer_value` and `predicates`
+- When buffer changed (0m → 1m), the same source geometry hash caused wrong cache intersection
+- Now `get_previous_filter_fids()` and `intersect_filter_fids()` compare all filter parameters:
+  - `source_geom_hash` (geometry WKT)
+  - `buffer_value` (buffer distance)
+  - `predicates` (spatial predicates list)
+- Cache intersection only occurs when ALL parameters match exactly
+- Affected files: `spatialite_cache.py`, `spatialite_backend.py`, `ogr_backend.py`
+
+---
+
+## [3.0.0] - 2026-01-07 - Major Milestone Release 🎉
+
+### Summary
+
+**FilterMate 3.0** represents a major milestone consolidating 40+ fixes and improvements from the entire 2.9.x series into a rock-solid, production-ready release. This version marks the completion of all core development phases and delivers exceptional stability across all backends.
+
+### 🎉 Highlights
+
+- **40+ bug fixes** from the 2.9.x series - comprehensive edge case coverage
+- **Signal management overhaul** - UI always responsive after filtering operations
+- **Memory safety improvements** - No more "wrapped C/C++ object deleted" errors
+- **Safe QGIS shutdown** - No crashes on Windows during application close
+- **Performance optimizations** - Up to 80% cache hit rate, 2x speedup on large datasets
+
+### 🛡️ Stability & Reliability
+
+**Signal & UI Management:**
+- Fixed: Action buttons not triggering after filter (v2.9.18-v2.9.24)
+- Fixed: Signal connection cache desynchronization with Qt state
+- Fixed: UI lockup during transient states when PROJECT_LAYERS temporarily empty
+- Fixed: current_layer reset to None during filtering operations
+- Fixed: Exploring panel (Multiple Selection) not refreshing after filtering
+
+**Memory & Thread Safety:**
+- Fixed: "wrapped C/C++ object has been deleted" errors in multi-layer OGR filtering
+- Fixed: Temporary layer references garbage collected prematurely
+- Fixed: Windows fatal access violation during QGIS shutdown
+- Fixed: Task cancellation using Python logger instead of QgsMessageLog
+
+**Backend Robustness:**
+- Fixed: 2nd filter in single_selection mode using ALL source features
+- Fixed: Spatialite rendering interruptions with large datasets
+- Fixed: GEOS-safe intersect layer name conflicts after 7+ iterations
+- Fixed: Pre-flight check failures on 8th+ layer in multi-layer operations
+
+### ⚡ Performance Optimizations
+
+**99% Match Optimization:**
+- When 99%+ of features match, FID filter is skipped entirely
+- Prevents applying huge filter expressions (millions of FIDs)
+- Example: 1,164,979/1,164,986 features matched → filter skipped
+
+**Geometry Processing:**
+- Adaptive simplification: tolerance = buffer × 0.1 (clamped 0.5-10m)
+- Post-buffer simplification for vertex reduction
+- ST_PointOnSurface() for accurate polygon centroids
+- WKT coordinate precision optimized by CRS (60-70% smaller)
+
+**PostgreSQL MV Optimizations:**
+- INCLUDE clause for covering indexes (10-30% faster spatial queries)
+- Bbox pre-filter with && operator (2-5x faster)
+- Async CLUSTER for medium datasets (50k-100k features)
+- Extended statistics for better query plans
+
+**Caching & Parallelism:**
+- LRU caching with automatic eviction and TTL support
+- Cache hit rate up to 80%
+- Strategy selection 6x faster
+- Parallel processing for 2x speedup on 1M+ features
+
+### 🔧 Backend Improvements
+
+**Spatialite/GeoPackage:**
+- NULL-safe predicates with explicit `= 1` comparison
+- Large dataset support (≥20K features) with range-based filters
+- Conditional stopRendering() for file-based layers
+- UUID filtering with primary key detection
+
+**PostgreSQL:**
+- Advanced materialized view management
+- Session isolation with session_id prefix
+- Automatic ::numeric casting for varchar/numeric comparisons
+- MV status widget with quick cleanup actions
+
+**OGR:**
+- Robust multi-layer filtering
+- GEOS-safe operations
+- Proper detection and fallback for WFS/HTTP services
+- Thread-safe feature validation with expression fallback
+
+### 🎨 User Experience
+
+- Complete undo/redo with context-aware restore
+- Filter favorites: save, organize, and share configurations
+- 21 languages with full internationalization
+- Dark mode with automatic theme detection
+- HiDPI support for 4K/Retina displays
+
+### 📊 Quality Metrics
+
+- **Code Quality Score:** 9.0/10
+- **Test Coverage:** ~70% (target: 80%)
+- **All core phases complete:** PostgreSQL/Spatialite/OGR backends
+- **Production status:** Stable
 
 ---
 

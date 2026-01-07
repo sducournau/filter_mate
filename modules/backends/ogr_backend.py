@@ -128,6 +128,28 @@ _ogr_operations_lock = threading.Lock()
 _last_operation_thread = None
 
 
+def cleanup_ogr_temp_layers(backend_instance):
+    """
+    v2.9.24: Clean up temporary GEOS-safe layers for an OGR backend instance.
+    
+    CRITICAL: This should only be called when ALL target layers have been filtered,
+    not between individual layers. Premature cleanup causes garbage collection of
+    safe_intersect layers that are still needed for subsequent target layers.
+    
+    Args:
+        backend_instance: Instance of OGRGeometricFilter
+    """
+    if hasattr(backend_instance, '_temp_layers_keep_alive') and backend_instance._temp_layers_keep_alive:
+        layer_count = len(backend_instance._temp_layers_keep_alive)
+        backend_instance._temp_layers_keep_alive = []
+        if hasattr(backend_instance, 'log_debug'):
+            backend_instance.log_debug(f"🧹 Cleaned up {layer_count} temporary GEOS-safe layers after filter operation")
+    if hasattr(backend_instance, '_source_layer_keep_alive') and backend_instance._source_layer_keep_alive:
+        backend_instance._source_layer_keep_alive = []
+        if hasattr(backend_instance, 'log_debug'):
+            backend_instance.log_debug("🧹 Cleaned up source layer references")
+
+
 class CancellableFeedback(QgsProcessingFeedback):
     """
     v2.6.2: QgsProcessingFeedback subclass that checks for task cancellation.
@@ -512,39 +534,56 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     matching_fids.append(feat.id())
                 
                 # v2.8.11: MULTI-STEP FILTERING - Intersect with previous cache if exists
+                # v2.9.30: FIX - Also pass buffer_val and predicates_list to avoid wrong intersection
                 step_number = 1
+                source_wkt = ""
+                predicates_list = []
+                buffer_val = 0.0
+                if hasattr(self, 'task_params') and self.task_params:
+                    infos = self.task_params.get('infos', {})
+                    source_wkt = infos.get('source_geom_wkt', '')
+                    # v2.8.12: FIX - geometric_predicates can be list or dict
+                    geom_preds = self.task_params.get('filtering', {}).get('geometric_predicates', [])
+                    if isinstance(geom_preds, dict):
+                        predicates_list = list(geom_preds.keys())
+                    elif isinstance(geom_preds, list):
+                        predicates_list = geom_preds
+                    else:
+                        predicates_list = []
+                    buffer_val = self.task_params.get('filtering', {}).get('buffer_value', 0.0)
+                
                 if SPATIALITE_CACHE_AVAILABLE and intersect_filter_fids and old_subset:
-                    previous_fids = get_previous_filter_fids(layer)
-                    if previous_fids is not None:
-                        original_count = len(matching_fids)
-                        matching_fids_set, step_number = intersect_filter_fids(layer, set(matching_fids))
-                        matching_fids = list(matching_fids_set)
-                        final_matching = matching_fids_set
-                        self.log_info(f"  🔄 Multi-step intersection: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)}")
-                        from qgis.core import QgsMessageLog, Qgis
-                        QgsMessageLog.logMessage(
-                            f"  → OGR ATTRIBUTE_FIRST Multi-step step {step_number}: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)} FIDs",
-                            "FilterMate", Qgis.Info  # DEBUG
+                    # v2.9.43: CRITICAL - Cache multi-step only supports AND operator
+                    cache_operator = None
+                    if hasattr(self, 'task_params') and self.task_params:
+                        cache_operator = self.task_params.get('_current_combine_operator')
+                    
+                    if cache_operator in ('OR', 'NOT AND'):
+                        self.log_warning(
+                            f"⚠️ OGR Multi-step filtering with {cache_operator} - "
+                            f"cache intersection not supported (only AND), performing full filter"
                         )
+                        # Skip cache intersection for OR/NOT AND
+                    else:
+                        # AND or None → use cache intersection
+                        previous_fids = get_previous_filter_fids(layer, source_wkt, buffer_val, predicates_list)
+                        if previous_fids is not None:
+                            original_count = len(matching_fids)
+                            matching_fids_set, step_number = intersect_filter_fids(
+                                layer, set(matching_fids), source_wkt, buffer_val, predicates_list
+                            )
+                            matching_fids = list(matching_fids_set)
+                            final_matching = matching_fids_set
+                            self.log_info(f"  🔄 Multi-step intersection: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)}")
+                            from qgis.core import QgsMessageLog, Qgis
+                            QgsMessageLog.logMessage(
+                                f"  → OGR ATTRIBUTE_FIRST Multi-step step {step_number}: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)} FIDs",
+                                "FilterMate", Qgis.Info  # DEBUG
+                            )
                 
                 # v2.8.11: Store result in cache for future multi-step filtering
                 if SPATIALITE_CACHE_AVAILABLE and store_filter_fids and matching_fids:
                     try:
-                        source_wkt = ""
-                        predicates_list = []
-                        buffer_val = 0.0
-                        if hasattr(self, 'task_params') and self.task_params:
-                            infos = self.task_params.get('infos', {})
-                            source_wkt = infos.get('source_geom_wkt', '')
-                            # v2.8.12: FIX - geometric_predicates can be list or dict
-                            geom_preds = self.task_params.get('filtering', {}).get('geometric_predicates', [])
-                            if isinstance(geom_preds, dict):
-                                predicates_list = list(geom_preds.keys())
-                            elif isinstance(geom_preds, list):
-                                predicates_list = geom_preds
-                            else:
-                                predicates_list = []
-                            buffer_val = self.task_params.get('filtering', {}).get('buffer_value', 0.0)
                         
                         cache_key = store_filter_fids(
                             layer=layer,
@@ -598,10 +637,15 @@ class OGRGeometricFilter(GeometricFilterBackend):
                         new_expression = 'fid = -1'  # No valid FID is -1
                 
                 # Combine with old subset if needed
+                # CRITICAL FIX v2.9.42: Respect combine_operator=None as REPLACE signal
                 if old_subset and not self._should_clear_old_subset(old_subset):
-                    if not combine_operator:
-                        combine_operator = 'AND'
-                    final_expression = f"({old_subset}) {combine_operator} ({new_expression})"
+                    if combine_operator is None:
+                        # Explicit None = REPLACE (multi-step filter)
+                        final_expression = new_expression
+                    else:
+                        if not combine_operator:
+                            combine_operator = 'AND'
+                        final_expression = f"({old_subset}) {combine_operator} ({new_expression})"
                 else:
                     final_expression = new_expression
                 
@@ -783,13 +827,18 @@ class OGRGeometricFilter(GeometricFilterBackend):
                         self._source_layer_keep_alive.append(source_layer)
                         self.log_debug(f"🔒 PERSISTENT reference created for source_geom '{source_layer.name()}'")
                 
-                # Clear temporary GEOS-safe layer references from previous target layer
-                # These are created fresh for each target layer by _safe_select_by_location()
-                if hasattr(self, '_temp_layers_keep_alive'):
+                # FIX v2.9.24: DO NOT clear _temp_layers_keep_alive between target layers!
+                # CRITICAL BUG: safe_intersect layers created for layer N are garbage-collected
+                # before layer N+1 can use them, causing "wrapped C/C++ object has been deleted".
+                # The same source_geom (e.g., 'output') is REUSED across multiple target layers,
+                # but the GEOS-safe wrapper (safe_intersect) was being deleted after each layer.
+                # SOLUTION: Accumulate temp layers throughout the ENTIRE filter operation,
+                # only clear when the full task completes (in finished() or cancel()).
+                if not hasattr(self, '_temp_layers_keep_alive'):
                     self._temp_layers_keep_alive = []
-                    self.log_debug("🧹 Cleared temporary GEOS-safe layer references from previous iteration")
-                else:
-                    self._temp_layers_keep_alive = []
+                    self.log_debug("🆕 Initialized _temp_layers_keep_alive list")
+                # DO NOT CLEAR - let them accumulate for the entire filter operation
+                # self.log_debug(f"🔒 Retaining {len(self._temp_layers_keep_alive)} temp layers from previous iterations")
                 
                 # DIAGNOSTIC: Log source layer state
                 # FIX v2.6.13: Also log to QGIS MessagePanel for visibility
@@ -1802,7 +1851,10 @@ class OGRGeometricFilter(GeometricFilterBackend):
         Returns:
             True if selection completed successfully, False on error
         """
-        from qgis.core import QgsMessageLog, Qgis
+        from qgis.core import QgsMessageLog, Qgis, QgsProject
+        
+        # FIX v2.9.43: Track safe_intersect layer for cleanup
+        safe_intersect_to_cleanup = None
         
         try:
             # Validate both layers before processing
@@ -1883,14 +1935,16 @@ class OGRGeometricFilter(GeometricFilterBackend):
             # The memory layers created by create_geos_safe_layer() are created FRESH for each target
             # layer and can be deleted by Python GC before processing completes.
             # 
-            # STRATEGY (v2.9.13): 
-            # - _temp_layers_keep_alive: Cleared at START of apply_filter() for each target layer,
-            #   then accumulates GEOS-safe layers during that layer's processing
-            # - _source_layer_keep_alive: PERSISTENT across ALL target layers (never cleared)
+            # STRATEGY (v2.9.24 UPDATE): 
+            # - _temp_layers_keep_alive: ACCUMULATE across ALL target layers during filter operation
+            #   Cleared ONLY when entire task completes (via cleanup_temp_layers())
+            # - _source_layer_keep_alive: PERSISTENT across ALL target layers (never cleared mid-operation)
             #   to retain source_geom for the entire filter operation
+            # 
+            # CRITICAL: DO NOT clear _temp_layers_keep_alive between layers - causes GC of safe_intersect
             if not hasattr(self, '_temp_layers_keep_alive') or self._temp_layers_keep_alive is None:
                 self._temp_layers_keep_alive = []
-            # NOTE: _temp_layers_keep_alive is cleared in apply_filter() at the start of each layer's processing
+            # NOTE: _temp_layers_keep_alive is NO LONGER cleared between layers (v2.9.24 fix)
             # NOTE: _source_layer_keep_alive is initialized ONCE in apply_filter() and NEVER cleared
             
             # FIX v2.8.14: Log to QGIS MessageLog before create_geos_safe_layer
@@ -1937,6 +1991,15 @@ class OGRGeometricFilter(GeometricFilterBackend):
                         # Re-validate after event processing to catch late GC
                         _ = safe_intersect.isValid()
                         _ = safe_intersect.featureCount()
+                        
+                        # FIX v2.9.43: ULTIMATE PROTECTION - Add to QGIS project temporarily
+                        # Even with all the above protections, Qt can still GC the layer after the delay
+                        # but BEFORE processing.run(). Adding to project gives it a C++ reference in the
+                        # QgsProject registry, which Qt respects and won't GC.
+                        # We'll remove it after processing.run() completes.
+                        QgsProject.instance().addMapLayer(safe_intersect, False)  # addToLegend=False
+                        safe_intersect_to_cleanup = safe_intersect  # Track for cleanup
+                        self.log_debug(f"🔒 Added '{layer_name}' to project registry for GC protection")
                     except RuntimeError as name_err:
                         # If even basic access fails after adding to list, the layer is already dead
                         QgsMessageLog.logMessage(
@@ -2056,6 +2119,7 @@ class OGRGeometricFilter(GeometricFilterBackend):
             
             # Execute with error handling - use safe layers
             # FIX v2.9.11: Wrap processing.run in try-except to catch C++ level errors
+            # FIX v2.9.43: Use finally block to ensure safe_intersect is removed from project
             try:
                 if not use_safe_input:
                     # Direct selection on original layer
@@ -2205,6 +2269,23 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 pass  # Layer may be invalid or destroyed
             
             return False
+        
+        finally:
+            # FIX v2.9.43: CRITICAL - Remove safe_intersect from project registry
+            # This cleanup MUST happen whether the operation succeeded or failed
+            # to prevent accumulating temporary layers in the project
+            if safe_intersect_to_cleanup is not None:
+                try:
+                    # Check if layer still exists in project before trying to remove
+                    if QgsProject.instance().mapLayer(safe_intersect_to_cleanup.id()):
+                        QgsProject.instance().removeMapLayer(safe_intersect_to_cleanup.id())
+                        self.log_debug(f"🧹 Removed safe_intersect from project registry")
+                except (RuntimeError, AttributeError) as cleanup_err:
+                    # Layer may have been destroyed or removed already - not critical
+                    self.log_debug(f"Safe intersect cleanup note: {cleanup_err}")
+                except Exception as cleanup_err:
+                    # Unexpected error - log but don't fail the operation
+                    self.log_debug(f"Safe intersect cleanup error: {cleanup_err}")
     
     def _apply_filter_standard(
         self, layer, source_layer, predicates, buffer_value,
@@ -2270,14 +2351,19 @@ class OGRGeometricFilter(GeometricFilterBackend):
         # This prevents GDAL "feature id out of available range" errors when
         # selectbylocation tries to access features that are filtered out by the existing subset.
         # The existing subset is saved and will be combined with the new filter later if needed.
+        # 
+        # FIX v2.9.40: CRITICAL - In multi-step filtering, old_subset already contains the FID filter
+        # from the previous step, so we must ALWAYS use existing_subset (from layer.subsetString())
+        # instead of old_subset. This ensures that we filter within the already-filtered features.
         existing_subset = layer.subsetString()
         if existing_subset:
             self.log_info(f"🔄 Temporarily clearing existing subset on {layer.name()} for selectbylocation")
             self.log_debug(f"  → Existing subset: '{existing_subset[:100]}...'")
             safe_set_subset_string(layer, "")
-            # Update old_subset to use the existing subset for combination later
-            if old_subset is None:
-                old_subset = existing_subset
+            # v2.9.40: ALWAYS use existing_subset for combination (even if old_subset is not None)
+            # This is critical for multi-step filtering where we need to filter within filtered features
+            old_subset = existing_subset
+            self.log_debug(f"  → old_subset updated to existing_subset for multi-step filtering compatibility")
         
         self.log_debug(f"OGR standard filter: target={layer.name()} ({layer.featureCount()} features), source={source_layer.name()} ({source_layer.featureCount()} features)")
         
@@ -2373,16 +2459,48 @@ class OGRGeometricFilter(GeometricFilterBackend):
                         return False
                     
                     # v2.8.11: MULTI-STEP FILTERING - Intersect with previous cache if exists
+                    # v2.9.30: FIX - Also pass buffer_val and predicates_list to avoid wrong intersection
                     step_number = 1
+                    source_wkt = ""
+                    predicates_list = []
+                    buffer_val = 0.0
+                    if hasattr(self, 'task_params') and self.task_params:
+                        infos = self.task_params.get('infos', {})
+                        source_wkt = infos.get('source_geom_wkt', '')
+                        # v2.8.12: FIX - geometric_predicates can be list or dict
+                        geom_preds = self.task_params.get('filtering', {}).get('geometric_predicates', [])
+                        if isinstance(geom_preds, dict):
+                            predicates_list = list(geom_preds.keys())
+                        elif isinstance(geom_preds, list):
+                            predicates_list = geom_preds
+                        else:
+                            predicates_list = []
+                        buffer_val = self.task_params.get('filtering', {}).get('buffer_value', 0.0)
+                    
                     if SPATIALITE_CACHE_AVAILABLE and intersect_filter_fids and old_subset:
-                        previous_fids = get_previous_filter_fids(layer)
-                        if previous_fids is not None:
-                            original_count = len(matching_fids)
-                            matching_fids_set, step_number = intersect_filter_fids(layer, set(matching_fids))
-                            matching_fids = list(matching_fids_set)
-                            selected_ids = matching_fids  # Update for expression building
-                            self.log_info(f"  🔄 Multi-step intersection: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)}")
-                            from qgis.core import QgsMessageLog, Qgis
+                        # v2.9.43: CRITICAL - Cache multi-step only supports AND operator
+                        cache_operator = None
+                        if hasattr(self, 'task_params') and self.task_params:
+                            cache_operator = self.task_params.get('_current_combine_operator')
+                        
+                        if cache_operator in ('OR', 'NOT AND'):
+                            self.log_warning(
+                                f"⚠️ OGR Multi-step with {cache_operator} - "
+                                f"cache intersection not supported, performing full filter"
+                            )
+                            # Skip cache intersection for OR/NOT AND
+                        else:
+                            # AND or None → use cache intersection
+                            previous_fids = get_previous_filter_fids(layer, source_wkt, buffer_val, predicates_list)
+                            if previous_fids is not None:
+                                original_count = len(matching_fids)
+                                matching_fids_set, step_number = intersect_filter_fids(
+                                    layer, set(matching_fids), source_wkt, buffer_val, predicates_list
+                                )
+                                matching_fids = list(matching_fids_set)
+                                selected_ids = matching_fids  # Update for expression building
+                                self.log_info(f"  🔄 Multi-step intersection: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)}")
+                                from qgis.core import QgsMessageLog, Qgis
                             QgsMessageLog.logMessage(
                                 f"  → OGR Multi-step step {step_number}: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)} FIDs",
                                 "FilterMate", Qgis.Info  # DEBUG
@@ -2391,21 +2509,6 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     # v2.8.11: Store result in cache for future multi-step filtering
                     if SPATIALITE_CACHE_AVAILABLE and store_filter_fids and matching_fids:
                         try:
-                            source_wkt = ""
-                            predicates_list = []
-                            buffer_val = 0.0
-                            if hasattr(self, 'task_params') and self.task_params:
-                                infos = self.task_params.get('infos', {})
-                                source_wkt = infos.get('source_geom_wkt', '')
-                                # v2.8.12: FIX - geometric_predicates can be list or dict
-                                geom_preds = self.task_params.get('filtering', {}).get('geometric_predicates', [])
-                                if isinstance(geom_preds, dict):
-                                    predicates_list = list(geom_preds.keys())
-                                elif isinstance(geom_preds, list):
-                                    predicates_list = geom_preds
-                                else:
-                                    predicates_list = []
-                                buffer_val = self.task_params.get('filtering', {}).get('buffer_value', 0.0)
                             
                             cache_key = store_filter_fids(
                                 layer=layer,
@@ -2445,20 +2548,52 @@ class OGRGeometricFilter(GeometricFilterBackend):
                         return False
                     
                     # v2.8.11: MULTI-STEP FILTERING - Intersect with previous cache if exists
+                    # v2.9.30: FIX - Also pass buffer_val and predicates_list to avoid wrong intersection
                     step_number = 1
+                    source_wkt = ""
+                    predicates_list = []
+                    buffer_val = 0.0
+                    if hasattr(self, 'task_params') and self.task_params:
+                        infos = self.task_params.get('infos', {})
+                        source_wkt = infos.get('source_geom_wkt', '')
+                        # v2.8.12: FIX - geometric_predicates can be list or dict
+                        geom_preds = self.task_params.get('filtering', {}).get('geometric_predicates', [])
+                        if isinstance(geom_preds, dict):
+                            predicates_list = list(geom_preds.keys())
+                        elif isinstance(geom_preds, list):
+                            predicates_list = geom_preds
+                        else:
+                            predicates_list = []
+                        buffer_val = self.task_params.get('filtering', {}).get('buffer_value', 0.0)
+                    
                     if SPATIALITE_CACHE_AVAILABLE and intersect_filter_fids and old_subset:
-                        previous_fids = get_previous_filter_fids(layer)
-                        if previous_fids is not None:
-                            original_count = len(matching_fids)
-                            matching_fids_set, step_number = intersect_filter_fids(layer, set(matching_fids))
-                            matching_fids = list(matching_fids_set)
-                            
-                            # We need to re-map FIDs to PK values after intersection
-                            # Get the PK values for the intersected FIDs
-                            if len(matching_fids) < original_count:
-                                # Need to filter selected_values to match intersected FIDs
-                                fid_to_value = dict(zip([f.id() for f in layer.selectedFeatures()], selected_values))
-                                selected_values = [fid_to_value[fid] for fid in matching_fids if fid in fid_to_value]
+                        # v2.9.43: CRITICAL - Cache multi-step only supports AND operator
+                        cache_operator = None
+                        if hasattr(self, 'task_params') and self.task_params:
+                            cache_operator = self.task_params.get('_current_combine_operator')
+                        
+                        if cache_operator in ('OR', 'NOT AND'):
+                            self.log_warning(
+                                f"⚠️ OGR Multi-step with {cache_operator} - "
+                                f"cache intersection not supported, performing full filter"
+                            )
+                            # Skip cache intersection for OR/NOT AND
+                        else:
+                            # AND or None → use cache intersection
+                            previous_fids = get_previous_filter_fids(layer, source_wkt, buffer_val, predicates_list)
+                            if previous_fids is not None:
+                                original_count = len(matching_fids)
+                                matching_fids_set, step_number = intersect_filter_fids(
+                                    layer, set(matching_fids), source_wkt, buffer_val, predicates_list
+                                )
+                                matching_fids = list(matching_fids_set)
+                                
+                                # We need to re-map FIDs to PK values after intersection
+                                # Get the PK values for the intersected FIDs
+                                if len(matching_fids) < original_count:
+                                    # Need to filter selected_values to match intersected FIDs
+                                    fid_to_value = dict(zip([f.id() for f in layer.selectedFeatures()], selected_values))
+                                    selected_values = [fid_to_value[fid] for fid in matching_fids if fid in fid_to_value]
                             
                             self.log_info(f"  🔄 Multi-step intersection: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)}")
                             from qgis.core import QgsMessageLog, Qgis
@@ -2470,21 +2605,6 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     # v2.8.11: Store result in cache for future multi-step filtering
                     if SPATIALITE_CACHE_AVAILABLE and store_filter_fids and matching_fids:
                         try:
-                            source_wkt = ""
-                            predicates_list = []
-                            buffer_val = 0.0
-                            if hasattr(self, 'task_params') and self.task_params:
-                                infos = self.task_params.get('infos', {})
-                                source_wkt = infos.get('source_geom_wkt', '')
-                                # v2.8.12: FIX - geometric_predicates can be list or dict
-                                geom_preds = self.task_params.get('filtering', {}).get('geometric_predicates', [])
-                                if isinstance(geom_preds, dict):
-                                    predicates_list = list(geom_preds.keys())
-                                elif isinstance(geom_preds, list):
-                                    predicates_list = geom_preds
-                                else:
-                                    predicates_list = []
-                                buffer_val = self.task_params.get('filtering', {}).get('buffer_value', 0.0)
                             
                             cache_key = store_filter_fids(
                                 layer=layer,
@@ -2510,14 +2630,19 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 self.log_debug(f"Generated subset expression using key '{pk_field}'")
                 
                 # Combine with old subset if needed (but not if it contains invalid patterns)
+                # CRITICAL FIX v2.9.42: Respect combine_operator=None as REPLACE signal
                 if old_subset and not self._should_clear_old_subset(old_subset):
-                    if not combine_operator:
-                        combine_operator = 'AND'
+                    if combine_operator is None:
+                        # Explicit None = REPLACE (multi-step filter)
+                        final_expression = new_subset_expression
+                    else:
+                        if not combine_operator:
+                            combine_operator = 'AND'
                         self.log_info(f"🔗 Préservation du filtre existant avec {combine_operator}")
-                    self.log_info(f"  → Ancien subset: '{old_subset[:80]}...' (longueur: {len(old_subset)})")
-                    self.log_info(f"  → Nouveau filtre: '{new_subset_expression[:80]}...'")
-                    final_expression = f"({old_subset}) {combine_operator} ({new_subset_expression})"
-                    self.log_info(f"  → Expression combinée: longueur {len(final_expression)} chars")
+                        self.log_info(f"  → Ancien subset: '{old_subset[:80]}...' (longueur: {len(old_subset)})")
+                        self.log_info(f"  → Nouveau filtre: '{new_subset_expression[:80]}...'")
+                        final_expression = f"({old_subset}) {combine_operator} ({new_subset_expression})"
+                        self.log_info(f"  → Expression combinée: longueur {len(final_expression)} chars")
                 else:
                     final_expression = new_subset_expression
                 
@@ -2887,13 +3012,18 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 new_subset_expression = f'{escaped_temp} = 1'
                 
                 # Combine with old subset if needed (but not if it contains invalid patterns)
+                # CRITICAL FIX v2.9.42: Respect combine_operator=None as REPLACE signal
                 if old_subset and not self._should_clear_old_subset(old_subset):
-                    if not combine_operator:
-                        combine_operator = 'AND'
+                    if combine_operator is None:
+                        # Explicit None = REPLACE (multi-step filter)
+                        final_expression = new_subset_expression
+                    else:
+                        if not combine_operator:
+                            combine_operator = 'AND'
                         self.log_info(f"🔗 Préservation du filtre existant avec {combine_operator}")
-                    self.log_info(f"  → Ancien subset: '{old_subset[:80]}...' (longueur: {len(old_subset)})")
-                    final_expression = f"({old_subset}) {combine_operator} ({new_subset_expression})"
-                    self.log_info(f"  → Expression combinée: longueur {len(final_expression)} chars")
+                        self.log_info(f"  → Ancien subset: '{old_subset[:80]}...' (longueur: {len(old_subset)})")
+                        final_expression = f"({old_subset}) {combine_operator} ({new_subset_expression})"
+                        self.log_info(f"  → Expression combinée: longueur {len(final_expression)} chars")
                 else:
                     final_expression = new_subset_expression
                 
@@ -3055,12 +3185,17 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 memory_layer.removeSelection()
                 
                 # Combine with old subset if needed (but not if it contains invalid patterns)
+                # CRITICAL FIX v2.9.42: Respect combine_operator=None as REPLACE signal
                 if old_subset and not self._should_clear_old_subset(old_subset):
-                    if not combine_operator:
-                        combine_operator = 'AND'
+                    if combine_operator is None:
+                        # Explicit None = REPLACE (multi-step filter)
+                        final_expression = new_subset_expression
+                    else:
+                        if not combine_operator:
+                            combine_operator = 'AND'
                         self.log_info(f"🔗 Préservation du filtre existant avec {combine_operator}")
-                    self.log_info(f"  → Ancien subset: '{old_subset[:80]}...'")
-                    final_expression = f"({old_subset}) {combine_operator} ({new_subset_expression})"
+                        self.log_info(f"  → Ancien subset: '{old_subset[:80]}...'")
+                        final_expression = f"({old_subset}) {combine_operator} ({new_subset_expression})"
                 else:
                     final_expression = new_subset_expression
                 
