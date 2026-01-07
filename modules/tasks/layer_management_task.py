@@ -659,15 +659,27 @@ class LayersManagementEngineTask(QgsTask):
         # - psycopg2_connection_available: True only if psycopg2 can connect (for advanced features)
         postgresql_connection_available = False
         psycopg2_connection_available = False
-        
-        if layer_provider_type == PROVIDER_POSTGRES and POSTGRESQL_AVAILABLE:
+
+        # v3.0.5: CRITICAL FIX - PostgreSQL layers are ALWAYS filterable via QGIS native API
+        # psycopg2 is only needed for ADVANCED features (materialized views, indexes)
+        # Basic filtering via setSubsetString() works without psycopg2
+        if layer_provider_type == PROVIDER_POSTGRES:
             # PostgreSQL layer is valid and loaded in QGIS = basic filtering ALWAYS works
             # via setSubsetString() which uses QGIS native PostgreSQL provider
             postgresql_connection_available = True
-            logger.debug(f"PostgreSQL layer {layer.name()}: basic filtering available via QGIS native API")
-            
+            logger.debug(f"PostgreSQL layer {layer.name()}: basic filtering available via QGIS native API (psycopg2 not required)")
+
+            # Warn user if psycopg2 is not available (advanced features disabled)
+            if not POSTGRESQL_AVAILABLE:
+                logger.info(
+                    f"⚠️ PostgreSQL layer '{layer.name()}': psycopg2 not installed.\n"
+                    f"   Basic filtering works, but for MUCH faster performance:\n"
+                    f"   → Install: pip install psycopg2-binary\n"
+                    f"   → Enables materialized views (10-100x faster for large datasets)"
+                )
+
             # Only test psycopg2 connection for advanced features (if psycopg2 is available)
-            if PSYCOPG2_AVAILABLE:
+            if POSTGRESQL_AVAILABLE and PSYCOPG2_AVAILABLE:
                 try:
                     from qgis.core import QgsDataSourceUri
                     uri = QgsDataSourceUri(layer.source())
