@@ -1,0 +1,65 @@
+fix: Reconnect IDENTIFY/ZOOM signals after layer change (v3.0.4)
+
+CRITICAL FIX - Exploring buttons signal reconnection after filter + layer change
+
+## Problem
+pushButton_exploring_identify and pushButton_exploring_zoom became non-functional
+after applying a filter then changing to another layer. The buttons' signals were
+disconnected during layer changes but never reconnected, leaving them permanently
+disabled.
+
+## Root Cause
+Signal management inconsistency across three functions:
+1. _disconnect_layer_signals() - IDENTIFY/ZOOM not in disconnect list
+2. _reload_exploration_widgets() - IDENTIFY/ZOOM signals not reconnected
+3. _reconnect_layer_signals() - IDENTIFY/ZOOM not in widgets_to_reconnect list
+
+Result: Buttons remained disconnected after layer changes.
+
+## Solution
+Three-part fix ensuring complete signal lifecycle:
+
+1. filter_mate_dockwidget.py::_disconnect_layer_signals()
+   - Added ["EXPLORING", "IDENTIFY"] to widgets_to_stop
+   - Added ["EXPLORING", "ZOOM"] to widgets_to_stop
+   - Ensures explicit disconnect tracking
+
+2. filter_mate_dockwidget.py::_reload_exploration_widgets()
+   - Added manageSignal(["EXPLORING","IDENTIFY"], 'connect', 'clicked')
+   - Added manageSignal(["EXPLORING","ZOOM"], 'connect', 'clicked')
+   - Guarantees reconnection after widget reload
+
+3. filter_mate_dockwidget.py::_reconnect_layer_signals()
+   - Added ["EXPLORING", "IDENTIFY"] to exploring_signal_prefixes
+   - Added ["EXPLORING", "ZOOM"] to exploring_signal_prefixes
+   - Prevents double-reconnection errors
+
+## Impact
+✅ IDENTIFY button functional after filter + layer change
+✅ ZOOM button functional after filter + layer change
+✅ No double-reconnection errors
+✅ All backends supported (PostgreSQL/Spatialite/OGR)
+✅ Complete signal lifecycle symmetry
+
+## Testing
+- Manual: Filter → Layer change → Buttons work ✅
+- Backends: PostgreSQL, Spatialite, OGR (GeoPackage, Shapefile) ✅
+- Edge cases: Rapid layer switching, multi-step filters ✅
+
+## Files Changed
+- filter_mate_dockwidget.py (3 functions updated)
+  - _disconnect_layer_signals() - Line ~9446
+  - _reload_exploration_widgets() - Line ~9711
+  - _reconnect_layer_signals() - Line ~10036
+
+## Documentation
+- docs/FIX_EXPLORING_BUTTONS_SIGNAL_RECONNECTION_v3.0.4.md (comprehensive analysis)
+
+## Related
+- v2.9.18: Fixed layerChanged signal reconnection
+- v2.9.41: Fixed button state updates after filtering
+- v3.0.3: Fixed multi-step distant layers
+
+Version: 3.0.4
+Severity: CRITICAL
+Status: RESOLVED

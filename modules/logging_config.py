@@ -62,6 +62,9 @@ def setup_logger(name, log_file, level=logging.INFO):
     logger = logging.getLogger(name)
     logger.setLevel(level)
     
+    # Disable propagation to avoid duplicate messages in parent loggers
+    logger.propagate = False
+    
     # Avoid adding handlers multiple times
     if logger.handlers:
         return logger

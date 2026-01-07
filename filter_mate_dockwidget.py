@@ -247,6 +247,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._expression_debounce_timer.setInterval(450)  # 450ms debounce delay
         self._expression_debounce_timer.timeout.connect(self._execute_debounced_expression_change)
         self._pending_expression_change = None  # Stores pending (groupbox, expression) tuple
+
+        # SYNCHRONIZATION: Track which widget last changed its display expression
+        # This prevents infinite loops when IS_LINKING is enabled and we sync expressions
+        # Value: "single_selection", "multiple_selection", or None
+        self._last_expression_change_source = None
         
         # PERFORMANCE: Cache for expression evaluation results
         # Avoids recomputing same expressions repeatedly
@@ -4677,22 +4682,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _execute_expression_params_change(self, groupbox: str):
         """
         Execute the expression params change with caching and optimization.
-        
+
         This method is called after the debounce delay and handles:
         - Cache lookup to avoid redundant computations
         - Actual data refresh via exploring_source_params_changed
         - Loading state cleanup
-        
+
         FIX v2.9.24: Force feature picker widget refresh for both single and multiple selection
         to ensure visual consistency when display expression changes
-        
+
         Args:
             groupbox: The groupbox type
         """
         try:
+            # SYNCHRONIZATION: Track which widget initiated this change
+            # This is used by exploring_link_widgets() to avoid infinite sync loops
+            if groupbox in ("single_selection", "multiple_selection"):
+                self._last_expression_change_source = groupbox
+                logger.debug(f"Tracking expression change source: {groupbox}")
+
             # FIX v2.9.24: Ensure feature picker widgets are properly refreshed
             # This prevents stale display when the expression changes
-            
+
             if groupbox == "single_selection":
                 try:
                     # Force a visual update of the single selection feature picker
@@ -4704,7 +4715,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         logger.debug("Forced feature picker widget refresh for single_selection")
                 except Exception as refresh_err:
                     logger.debug(f"Could not force single selection widget refresh: {refresh_err}")
-            
+
             elif groupbox == "multiple_selection":
                 try:
                     # Force a visual update of the checkable combo box
@@ -4717,9 +4728,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             logger.debug("Forced feature picker widget refresh for multiple_selection")
                 except Exception as refresh_err:
                     logger.debug(f"Could not force multiple selection widget refresh: {refresh_err}")
-            
-            # Call the standard source params changed
-            self.exploring_source_params_changed(groupbox_override=groupbox)
+
+            # Call the standard source params changed with change_source tracking
+            self.exploring_source_params_changed(groupbox_override=groupbox, change_source=groupbox)
         finally:
             # Clear loading state
             self._set_expression_loading_state(False, groupbox)
@@ -7482,15 +7493,54 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             )
                             return [], ''
                     else:
-                        # No saved FID to recover from
+                        # No saved FID to recover from - v3.0.6: Try QGIS canvas selection as fallback
+                        # This handles the case where user selected features on canvas but widgets
+                        # were not synchronized (is_selecting was not enabled or sync failed)
                         logger.warning(f"   ⚠️ SINGLE_SELECTION: No valid feature in widget and no saved FID!")
-                        logger.warning(f"   This will cause FALLBACK MODE with ALL features!")
-                        from qgis.core import QgsMessageLog, Qgis
-                        QgsMessageLog.logMessage(
-                            f"⚠️ SINGLE_SELECTION: Widget has no valid feature selected!",
-                            "FilterMate", Qgis.Warning
-                        )
-                        return [], ''
+                        
+                        # v3.0.6: Check if QGIS has selected features on canvas for current layer
+                        qgis_selected = self.current_layer.selectedFeatures() if self.current_layer else []
+                        if len(qgis_selected) > 0:
+                            logger.info(f"   🔄 SINGLE_SELECTION: Found {len(qgis_selected)} features selected in QGIS canvas!")
+                            
+                            if len(qgis_selected) == 1:
+                                # Use the single QGIS-selected feature
+                                input = qgis_selected[0]
+                                logger.info(f"   ✓ SINGLE_SELECTION: Using QGIS selection feature id={input.id()}")
+                                # Save FID for future recovery
+                                self._last_single_selection_fid = input.id()
+                                self._last_single_selection_layer_id = self.current_layer.id()
+                                # Continue with normal processing below
+                            else:
+                                # Multiple features selected - switch to multiple_selection mode
+                                logger.info(f"   🔄 AUTO-SWITCH: {len(qgis_selected)} features selected, using MULTIPLE_SELECTION mode")
+                                from qgis.core import QgsMessageLog, Qgis
+                                QgsMessageLog.logMessage(
+                                    f"ℹ️ Auto-switching to MULTIPLE_SELECTION mode ({len(qgis_selected)} features from QGIS selection)",
+                                    "FilterMate", Qgis.Info
+                                )
+                                # Build features list from QGIS selection
+                                features, expression = self.get_exploring_features(qgis_selected, True)
+                                logger.info(f"   RESULT: {len(features)} features, expression='{expression}'")
+                                
+                                # Save FIDs for recovery
+                                self._last_multiple_selection_fids = [f.id() for f in qgis_selected]
+                                self._last_multiple_selection_layer_id = self.current_layer.id()
+                                
+                                # Cache and return
+                                if features and hasattr(self, '_exploring_cache') and groupbox_type:
+                                    self._exploring_cache.put(layer_id, groupbox_type, features, expression)
+                                return features, expression
+                        else:
+                            # No QGIS selection either
+                            logger.warning(f"   ❌ SINGLE_SELECTION: No QGIS canvas selection either!")
+                            logger.warning(f"   This will cause FALLBACK MODE with ALL features!")
+                            from qgis.core import QgsMessageLog, Qgis
+                            QgsMessageLog.logMessage(
+                                f"⚠️ SINGLE_SELECTION: Widget has no valid feature selected!",
+                                "FilterMate", Qgis.Warning
+                            )
+                            return [], ''
                 
                 # Valid feature selected - log at info level
                 logger.info(f"   SINGLE_SELECTION valid feature: id={input.id()}")
@@ -7524,6 +7574,31 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             input = []
                     else:
                         logger.debug(f"   MULTIPLE_SELECTION: Saved FIDs are for different layer, not recovering")
+                
+                # v3.0.6: If still no input, try QGIS canvas selection as final fallback
+                # This handles the case where user selected features on canvas but widgets
+                # were not synchronized (is_selecting was not enabled or sync failed)
+                if not input or len(input) == 0:
+                    qgis_selected = self.current_layer.selectedFeatures() if self.current_layer else []
+                    if len(qgis_selected) > 0:
+                        logger.info(f"   🔄 MULTIPLE_SELECTION: Using {len(qgis_selected)} features from QGIS canvas selection!")
+                        from qgis.core import QgsMessageLog, Qgis
+                        QgsMessageLog.logMessage(
+                            f"ℹ️ Using QGIS canvas selection ({len(qgis_selected)} features) for MULTIPLE_SELECTION",
+                            "FilterMate", Qgis.Info
+                        )
+                        # Build features list directly from QGIS selection
+                        features, expression = self.get_exploring_features(qgis_selected, True)
+                        logger.info(f"   RESULT: {len(features)} features, expression='{expression}'")
+                        
+                        # Save FIDs for recovery
+                        self._last_multiple_selection_fids = [f.id() for f in qgis_selected]
+                        self._last_multiple_selection_layer_id = self.current_layer.id()
+                        
+                        # Cache and return
+                        if features and hasattr(self, '_exploring_cache') and groupbox_type:
+                            self._exploring_cache.put(layer_id, groupbox_type, features, expression)
+                        return features, expression
                         
                 features, expression = self.get_exploring_features(input, True)
                 logger.debug(f"   RESULT: features count = {len(features)}, expression = '{expression}'")
@@ -8179,6 +8254,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         - DÉCOCHE les features NON sélectionnées dans QGIS
         - Synchronisation bidirectionnelle complète pour refléter exactement l'état QGIS
         
+        v3.0.5: Handles async loading - if feature list not ready yet, stores pending
+        selection to be applied when loadFeaturesList task completes.
+        
         Note:
             Contrairement aux versions précédentes qui étaient additives,
             cette synchronisation reflète maintenant EXACTEMENT la sélection QGIS.
@@ -8190,12 +8268,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if not hasattr(multiple_widget, 'list_widgets'):
                 logger.debug("_sync_multiple_selection_from_qgis: No list_widgets attribute")
                 return
-                
-            if self.current_layer.id() not in multiple_widget.list_widgets:
-                logger.debug(f"_sync_multiple_selection_from_qgis: Layer {self.current_layer.id()} not in list_widgets")
-                return
-            
-            list_widget = multiple_widget.list_widgets[self.current_layer.id()]
             
             # Get layer properties to find the primary key field name
             layer_props = self.PROJECT_LAYERS.get(self.current_layer.id(), {})
@@ -8205,10 +8277,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.warning("_sync_multiple_selection_from_qgis: No primary_key_name found")
                 return
             
-            # Also get the identifier field name from the widget itself for comparison
-            widget_identifier_field = list_widget.getIdentifierFieldName() if hasattr(list_widget, 'getIdentifierFieldName') else None
+            # v3.0.5: Check if feature list is ready (widget exists and has items)
+            # If not ready, store the pending selection to be applied after loadFeaturesList
+            list_widget = None
+            list_ready = False
             
-            logger.info(f"_sync_multiple_selection_from_qgis: pk_field_name={pk_field_name}, widget_identifier_field={widget_identifier_field}, selected_count={selected_count}")
+            if self.current_layer.id() in multiple_widget.list_widgets:
+                list_widget = multiple_widget.list_widgets[self.current_layer.id()]
+                list_ready = list_widget.count() > 0
+            
+            # Also get the identifier field name from the widget itself for comparison
+            widget_identifier_field = None
+            if list_widget and hasattr(list_widget, 'getIdentifierFieldName'):
+                widget_identifier_field = list_widget.getIdentifierFieldName()
+            
+            logger.info(f"_sync_multiple_selection_from_qgis: pk_field_name={pk_field_name}, widget_identifier_field={widget_identifier_field}, selected_count={selected_count}, list_ready={list_ready}")
             
             # CRITICAL: Use the widget's identifier field name if it differs from pk_field_name
             # The widget stores data using its own identifier_field_name setting
@@ -8230,6 +8313,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     selected_pk_values.add(str(f.id()))
             
             logger.info(f"_sync_multiple_selection_from_qgis: selected_pk_values={selected_pk_values}")
+            
+            # v3.0.5: If list is not ready yet (still loading), store pending selection
+            if not list_ready:
+                if selected_pk_values:
+                    logger.info(f"_sync_multiple_selection_from_qgis: List not ready yet, storing {len(selected_pk_values)} PKs as pending selection")
+                    multiple_widget.setPendingQgisSelection(selected_pk_values, self.current_layer.id())
+                else:
+                    logger.debug("_sync_multiple_selection_from_qgis: List not ready and no selection, clearing pending")
+                    multiple_widget.clearPendingQgisSelection()
+                return
+            
+            # Clear any pending selection since we're applying now
+            multiple_widget.clearPendingQgisSelection()
             
             # DEBUG: Show first few widget items for comparison
             if list_widget.count() > 0:
@@ -8300,23 +8396,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except Exception as e:
             # Make sure to reset sync flag even on error
             self._syncing_from_qgis = False
-            print(f"[FilterMate] ERROR in _sync_multiple_selection_from_qgis: {type(e).__name__}: {e}")
-            logger.warning(f"Error in _sync_multiple_selection_from_qgis: {type(e).__name__}: {e}")
+            logger.error(f"Error in _sync_multiple_selection_from_qgis: {type(e).__name__}: {e}")
 
 
-    def exploring_source_params_changed(self, expression=None, groupbox_override=None):
+    def exploring_source_params_changed(self, expression=None, groupbox_override=None, change_source=None):
         """
         Handle changes to source parameters for exploring features.
-        
+
         PERFORMANCE OPTIMIZATIONS (v2.5.x):
         - Uses debounced handlers to prevent excessive recomputation
         - Caches expression results to avoid redundant evaluations
         - Skips unnecessary updates when expression hasn't changed
         - Provides visual loading feedback during complex operations
+
+        Args:
+            expression: Optional expression to use
+            groupbox_override: Optional groupbox to target instead of current_exploring_groupbox
+            change_source: Optional source of the change ("single_selection", "multiple_selection")
+                          Used for bidirectional sync to avoid infinite loops
         """
         if self.widgets_initialized is True and self.current_layer is not None:
 
-            logger.debug(f"exploring_source_params_changed called with expression={expression}, groupbox_override={groupbox_override}")
+            logger.debug(f"exploring_source_params_changed called with expression={expression}, groupbox_override={groupbox_override}, change_source={change_source}")
 
             # STABILITY FIX: Verify layer exists in PROJECT_LAYERS before access
             if self.current_layer.id() not in self.PROJECT_LAYERS:
@@ -8357,7 +8458,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             logger.warning(f"single_selection: Could not force widget refresh: {e}")
                         
                         # CRITICAL: Update linked widgets when single selection expression changes
-                        self.exploring_link_widgets()
+                        # Pass change_source to enable bidirectional sync
+                        self.exploring_link_widgets(change_source=change_source)
                         # Invalidate cache for this layer since expression changed
                         self.invalidate_expression_cache(self.current_layer.id())
                 elif expression is not None and expression.strip() != '':
@@ -8391,7 +8493,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             logger.warning(f"multiple_selection: Could not force widget refresh: {e}")
                         
                         # CRITICAL: Update linked widgets when multiple selection expression changes
-                        self.exploring_link_widgets()
+                        # Pass change_source to enable bidirectional sync
+                        self.exploring_link_widgets(change_source=change_source)
                         # Invalidate cache for this layer since expression changed
                         self.invalidate_expression_cache(self.current_layer.id())
                 elif expression is not None and expression.strip() != '':
@@ -9133,8 +9236,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return feature_count > self._async_expression_threshold
         
     
-    def exploring_link_widgets(self, expression=None):
+    def exploring_link_widgets(self, expression=None, change_source=None):
+        """
+        Link single and multiple selection widgets based on IS_LINKING state.
 
+        Args:
+            expression: Optional filter expression to apply to single selection widget
+            change_source: Optional source of the change ("single_selection", "multiple_selection")
+                          Used for bidirectional display expression synchronization
+        """
         if self.widgets_initialized and self.current_layer is not None:
 
             # CRITICAL: Verify layer exists in PROJECT_LAYERS before access
@@ -9145,11 +9255,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
             custom_filter = None
             # NOTE: featureSource() removed - was unused dead code causing potential slowdown
-            
+
             # Ensure is_linking property exists (backward compatibility)
             if "is_linking" not in layer_props["exploring"]:
                 layer_props["exploring"]["is_linking"] = False
-            
+
             # Helper function to set filter expression only if it changed
             # This prevents unnecessary widget refreshes that interrupt user selection
             def _safe_set_single_filter(new_filter):
@@ -9164,9 +9274,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     single_widget.setFilterExpression(new_filter)
                     return True
                 return False
-            
+
             if layer_props["exploring"]["is_linking"]:
-                   
+
 
                 if QgsExpression(layer_props["exploring"]["custom_selection_expression"]).isValid():
                     if not QgsExpression(layer_props["exploring"]["custom_selection_expression"]).isField():
@@ -9184,7 +9294,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         _safe_set_single_filter(expression)
                 elif custom_filter is not None:
                     _safe_set_single_filter(custom_filter)
-                
+
+                # BIDIRECTIONAL DISPLAY EXPRESSION SYNCHRONIZATION
+                # When IS_LINKING is enabled, keep display expressions in sync between modes
+
                 multiple_display_expression = layer_props["exploring"]["multiple_selection_expression"]
                 if QgsExpression(multiple_display_expression).isField():
                     multiple_display_expression = multiple_display_expression.replace('"','')
@@ -9193,14 +9306,45 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if QgsExpression(single_display_expression).isField():
                     single_display_expression = single_display_expression.replace('"','')
 
-                if QgsExpression(single_display_expression).isValid() and single_display_expression == layer_props["infos"]["primary_key_name"]:
+                # PROTECTION: Avoid infinite sync loops
+                # Only sync if this change originated from one of the widgets AND we haven't already synced this change
+                if change_source and change_source == self._last_expression_change_source:
+
+                    logger.debug(f"exploring_link_widgets: Bidirectional sync from {change_source}")
+
+                    # Temporarily clear the source flag to prevent recursive sync
+                    self._last_expression_change_source = None
+
+                    if change_source == "single_selection":
+                        # Single selection expression changed -> sync to multiple selection
+                        if single_display_expression != multiple_display_expression:
+                            if QgsExpression(single_display_expression).isValid():
+                                logger.info(f"🔗 SYNC: single -> multiple | '{single_display_expression}'")
+                                self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["multiple_selection_expression"] = single_display_expression
+                                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(single_display_expression)
+                                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(single_display_expression)
+
+                    elif change_source == "multiple_selection":
+                        # Multiple selection expression changed -> sync to single selection
+                        if multiple_display_expression != single_display_expression:
+                            if QgsExpression(multiple_display_expression).isValid():
+                                logger.info(f"🔗 SYNC: multiple -> single | '{multiple_display_expression}'")
+                                self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["single_selection_expression"] = multiple_display_expression
+                                self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(multiple_display_expression)
+                                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(multiple_display_expression)
+
+                # LEGACY BEHAVIOR: Keep existing primary key swap logic as fallback
+                # This handles cases where one mode shows ID and the other shows a descriptive field
+                elif QgsExpression(single_display_expression).isValid() and single_display_expression == layer_props["infos"]["primary_key_name"]:
                     if QgsExpression(multiple_display_expression).isValid() and multiple_display_expression != layer_props["infos"]["primary_key_name"]:
+                        logger.debug(f"exploring_link_widgets: Swapping single (PK) -> multiple (descriptive)")
                         self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["single_selection_expression"] = multiple_display_expression
                         self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(multiple_display_expression)
                         self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(multiple_display_expression)
 
-                if QgsExpression(multiple_display_expression).isValid() and multiple_display_expression == layer_props["infos"]["primary_key_name"]:
+                elif QgsExpression(multiple_display_expression).isValid() and multiple_display_expression == layer_props["infos"]["primary_key_name"]:
                     if QgsExpression(single_display_expression).isValid() and single_display_expression != layer_props["infos"]["primary_key_name"]:
+                        logger.debug(f"exploring_link_widgets: Swapping multiple (PK) -> single (descriptive)")
                         self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["multiple_selection_expression"] = single_display_expression
                         self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(single_display_expression)
                         self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(single_display_expression)
@@ -9448,6 +9592,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Disconnect all layer-related widget signals before updating.
         
         Returns list of widget paths that were disconnected (for later reconnection).
+        
+        v3.0.4: Added IDENTIFY and ZOOM buttons to ensure they are properly managed
+        during layer changes.
         """
         widgets_to_stop = [
             ["EXPLORING","SINGLE_SELECTION_FEATURES"],
@@ -9455,6 +9602,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             ["EXPLORING","MULTIPLE_SELECTION_FEATURES"],
             ["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"],
             ["EXPLORING", "CUSTOM_SELECTION_EXPRESSION"],
+            ["EXPLORING", "IDENTIFY"],
+            ["EXPLORING", "ZOOM"],
             ["EXPLORING", "IS_SELECTING"],
             ["EXPLORING", "IS_TRACKING"],
             ["EXPLORING", "IS_LINKING"],
@@ -9704,6 +9853,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.filtering_layers_to_filter_state_changed()
         self.filtering_combine_operator_state_changed()
         self.filtering_geometric_predicates_state_changed()
+        
+        # Update centroids source checkbox state based on current layer combobox
+        self._update_centroids_source_checkbox_state()
     
     def _reload_exploration_widgets(self, layer, layer_props):
         """
@@ -9854,8 +10006,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 
                 # OGR FIX v2.8.16: Force feature list refresh after filtering
                 # The custom widget caches features and may not detect subsetString changes.
-                # Call setLayer first to ensure proper initialization, then force refresh via setDisplayExpression.
-                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(layer, layer_props)
+                # v3.0.6: Use skip_task=True to avoid redundant task cancellation.
+                # setLayer initializes the widget, then setDisplayExpression handles the actual task launch.
+                # This eliminates the 'Building features list was canceled' / 'Loading features was canceled' spam.
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(layer, layer_props, skip_task=True)
                 # Force refresh by explicitly calling setDisplayExpression even if expression hasn't changed
                 # This ensures the widget reloads features after OGR filtering
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(multiple_expr)
@@ -9902,6 +10056,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
             self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
+            
+            # v3.0.4: CRITICAL FIX - Reconnect IDENTIFY and ZOOM button signals after widget reload
+            # These buttons were being disconnected in _disconnect_layer_signals() but never reconnected
+            # because _reconnect_layer_signals() filters out EXPLORING signals, assuming they're handled here.
+            # This caused the buttons to become non-functional after a filter + layer change sequence.
+            self.manageSignal(["EXPLORING","IDENTIFY"], 'connect', 'clicked')
+            self.manageSignal(["EXPLORING","ZOOM"], 'connect', 'clicked')
             
             # DEBUG: Log widget state after reload
             picker_widget = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
@@ -10038,6 +10199,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         SIGNAL HANDLING: Exploring widget signals are NOT reconnected here because
         they are already correctly reconnected in _reload_exploration_widgets() with
         the appropriate signal types for the active groupbox.
+        
+        v3.0.4: Added IDENTIFY and ZOOM to the exclusion list since they're now
+        reconnected in _reload_exploration_widgets().
         """
         # Filter out exploring widget signals - they are already reconnected in _reload_exploration_widgets()
         exploring_signal_prefixes = [
@@ -10045,7 +10209,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             ["EXPLORING", "SINGLE_SELECTION_EXPRESSION"],
             ["EXPLORING", "MULTIPLE_SELECTION_FEATURES"],
             ["EXPLORING", "MULTIPLE_SELECTION_EXPRESSION"],
-            ["EXPLORING", "CUSTOM_SELECTION_EXPRESSION"]
+            ["EXPLORING", "CUSTOM_SELECTION_EXPRESSION"],
+            ["EXPLORING", "IDENTIFY"],
+            ["EXPLORING", "ZOOM"]
         ]
         
         # Reconnect only non-exploring signals
@@ -11191,6 +11357,31 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].setEnabled(is_checked)
             
             logger.debug(f"filtering_geometric_predicates_state_changed: is_checked={is_checked}")
+
+    def _update_centroids_source_checkbox_state(self):
+        """Update enabled state of checkBox_filtering_use_centroids_source_layer.
+        
+        The checkbox should only be enabled when:
+        - comboBox_filtering_current_layer is not empty (has a valid layer)
+        - comboBox_filtering_current_layer is enabled
+        """
+        if not self.widgets_initialized:
+            return
+        
+        # Check if comboBox_filtering_current_layer has a valid layer and is enabled
+        combo_widget = self.widgets.get("FILTERING", {}).get("CURRENT_LAYER", {}).get("WIDGET")
+        checkbox_widget = self.widgets.get("FILTERING", {}).get("USE_CENTROIDS_SOURCE_LAYER", {}).get("WIDGET")
+        
+        if combo_widget and checkbox_widget:
+            # Enable checkbox only if comboBox has a layer AND is enabled
+            current_layer = combo_widget.currentLayer()
+            combo_enabled = combo_widget.isEnabled()
+            
+            should_enable = current_layer is not None and combo_enabled
+            checkbox_widget.setEnabled(should_enable)
+            
+            logger.debug(f"_update_centroids_source_checkbox_state: layer={current_layer.name() if current_layer else 'None'}, "
+                        f"combo_enabled={combo_enabled}, checkbox_enabled={should_enable}")
 
               
     def dialog_export_output_path(self):

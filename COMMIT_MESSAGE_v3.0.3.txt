@@ -1,0 +1,90 @@
+fix(multi-step): combine FID filters in step 2 for distant layers (v3.0.3)
+
+🔴 CRITICAL BUG FIXED
+-------------------
+Multi-step filtering with source geometry change (step 1 → step 2) failed to filter 
+distant layers correctly. Step 2 returned ALL features instead of intersection of 
+step 1 AND step 2 results.
+
+Example:
+- Step 1 (batiment): demand_points → 319 features ✅
+- Step 2 (ducts): demand_points → 9231 features ❌ (should be ~50-100)
+
+Root Cause:
+----------
+Spatialite backend (`_apply_filter_direct_sql` and `_apply_filter_with_source_table`) 
+incorrectly SKIPPED FID filters from step 1 when `is_fid_only=True`, treating them 
+as "invalid from different source" when they are actually "valid results from step 1".
+
+Old Logic (v2.9.34-v3.0.2):
+```python
+if not is_fid_only:
+    old_subset_sql_filter = f"({old_subset}) AND "  # Combine
+elif is_fid_only:
+    old_subset_sql_filter = ""  # ❌ SKIP - WRONG!
+```
+
+Result:
+```sql
+-- Step 2 query WITHOUT step 1 filter (WRONG):
+SELECT "fid" FROM "demand_points" WHERE ST_Intersects(...)
+-- Returns ALL features matching spatial predicate, not intersection!
+```
+
+✅ FIX Applied (v3.0.3)
+---------------------
+
+New Logic:
+```python
+# v3.0.3: FID filters MUST be combined in multi-step!
+if not has_source_alias and not has_exists and not has_spatial_predicate:
+    # Combine BOTH attribute filters AND FID filters
+    old_subset_sql_filter = f"({old_subset}) AND "
+    
+    if is_fid_only:
+        log("✅ Combining FID filter from step 1 (MULTI-STEP)")
+        log("  → This ensures intersection of step 1 AND step 2 results")
+```
+
+Result:
+```sql
+-- Step 2 query WITH step 1 filter (CORRECT):
+SELECT "fid" FROM "demand_points" 
+WHERE (fid IN (1771, 1772, ...)) AND ST_Intersects(...)
+-- Returns only features matching BOTH step 1 AND step 2 = intersection!
+```
+
+Impact:
+------
+- ✅ Distant layers now correctly show intersection of step 1 AND step 2
+- ✅ Multi-step filtering works as expected
+- ✅ No more "all features selected" bug in step 2
+- ✅ Enhanced logging clearly shows FID filter combination
+
+Technical Details:
+----------------
+FID filters represent "results from previous step", not "invalid filters from 
+different source". They must ALWAYS be combined in multi-step filtering, regardless 
+of source geometry changes.
+
+Only SPATIAL filters (ST_*, EXISTS, __source) should be replaced when source changes.
+
+Files Modified:
+-------------
+- modules/backends/spatialite_backend.py
+  * _apply_filter_direct_sql() (line ~3315)
+  * _apply_filter_with_source_table() (line ~4110)
+  * Removed `and not is_fid_only` condition
+  * Added enhanced logging for FID filter combination
+
+Testing:
+-------
+1. Apply step 1 filter (batiment + buffer 1m)
+2. Check distant layer feature counts (e.g., demand_points: 319)
+3. Apply step 2 filter (ducts + buffer 1m, different source)
+4. Verify distant layers show INTERSECTION, not ALL features
+5. Check logs show "✅ Combining FID filter from step 1 (MULTI-STEP)"
+
+Version: 3.0.3
+Date: 2026-01-07
+See: docs/FIX_MULTI_STEP_DISTANT_LAYERS_v3.0.3.md

@@ -1,0 +1,63 @@
+fix(spatialite): improve second filter list loading diagnostics and auto-retry (v3.0.2)
+
+🐛 Problem Fixed
+--------------
+Second filter in multi-step Spatialite filtering would sometimes fail to load 
+the feature list, leaving the widget empty with no clear error message.
+
+Affected:
+- Spatialite/OGR backends in multi-step filtering mode
+- Second filter with selection tool active
+- Layers where buildFeaturesList task failed silently
+
+✅ Solutions Implemented
+-----------------------
+
+1. Enhanced Diagnostic Logging (modules/widgets.py)
+   - loadFeaturesList: Detailed logging when list is empty
+   - Distinguishes between "0 features in layer" vs "list load failed"
+   - Shows layer feature count, provider type, and subset string
+   - CRITICAL alert when layer has features but list is empty
+
+2. Automatic Retry for Spatialite/OGR (modules/widgets.py)
+   - Detects empty widget 500ms after task launch
+   - Auto-triggers layer reload + setDisplayExpression retry
+   - Resolves temporary DB lock issues without user intervention
+   - Smart: only retries when layer has features but list is empty
+
+3. Multi-Step Filter Logging (modules/backends/spatialite_backend.py)
+   - Clarifies FID filter replacement behavior in multi-step mode
+   - Visual indicators (✅/⚠️) for filter combination vs replacement
+   - Detailed logging of why old_subset is skipped or combined
+   - Documents expected behavior when source geometry changes
+
+4. buildFeaturesList Enhanced Logging (modules/widgets.py)
+   - Shows layer feature count vs features_list length
+   - Displays subset string and filter expression
+   - Helps diagnose why list construction failed
+
+📊 Impact
+--------
+- Better diagnostics: Clear logs explain exactly what went wrong
+- Auto-recovery: Spatialite/OGR layers retry automatically on failure
+- User experience: Fewer manual layer reloads needed
+- Developer: Easier to debug multi-step filter issues
+
+🔍 Technical Details
+------------------
+Multi-step Spatialite behavior clarified:
+- Step 1: Filter batiment → FID filter "fid IN (...)" on distant layers
+- Step 2: Filter ducts (different source) → Cache invalidated, FID filter REPLACED
+- This is CORRECT behavior (not a bug) - now clearly logged
+
+Files Modified:
+- modules/widgets.py (3 improvements)
+- modules/backends/spatialite_backend.py (2 improvements)
+- docs/FIX_SECOND_FILTER_LIST_LOAD_v2.9.44.md (new documentation)
+
+Related Issues:
+- docs/BUG_SPATIALITE_MULTI_STEP_FILTERING_v2.9.33.md
+- docs/FIX_WIDGET_LIST_REFRESH_v2.9.33.md
+
+Version: 3.0.2
+Date: 2026-01-07

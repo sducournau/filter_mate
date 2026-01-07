@@ -633,9 +633,13 @@ class PopulateListEngineTask(QgsTask):
                     
                     # Handle empty result
                     if len(features_list) == 0:
-                        logger.debug(f"buildFeaturesList: No features available for layer '{self._cached_layer_name}'")
-                        self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
-                        return
+                            # v2.9.44: Enhanced logging for empty feature list
+                            layer_feature_count = self.layer.featureCount() if self.layer else 0
+                            subset_str = self.layer.subsetString() if self.layer else 'N/A'
+                            logger.warning(f"buildFeaturesList: No features available for layer '{self._cached_layer_name}'")
+                            logger.warning(f"  → Layer reports {layer_feature_count} features")
+                            logger.warning(f"  → Subset: {subset_str[:80] if subset_str else '(none)'}...")
+                            logger.warning(f"  → Filter: {filter_txt_string_final[:80] if filter_txt_splitted is not None else 'None'}...")
                 else:
                     display_expression = QgsExpression(self.display_expression)
 
@@ -770,7 +774,23 @@ class PopulateListEngineTask(QgsTask):
         
         # CRITICAL FIX: Prevent division by zero when list is empty
         if total_count == 0:
+            # v2.9.44: Enhanced diagnostic for empty feature list
+            layer_feature_count = self.layer.featureCount() if self.layer else 0
+            provider_type = self.layer.providerType() if self.layer else 'unknown'
+            subset_string = self.layer.subsetString() if self.layer else 'N/A'
+            
             logger.warning(f"loadFeaturesList: No features to load for layer '{self._cached_layer_name}'")
+            logger.warning(f"  → Layer feature count: {layer_feature_count}")
+            logger.warning(f"  → Provider type: {provider_type}")
+            logger.warning(f"  → Current subset: {subset_string[:100] if subset_string else '(none)'}...")
+            
+            # v2.9.44: If layer has features but list is empty, this indicates
+            # buildFeaturesList failed or didn't run - log this as potential bug
+            if layer_feature_count > 0:
+                logger.error(f"⚠️ CRITICAL: Layer has {layer_feature_count} features but feature list is EMPTY!")
+                logger.error(f"  This indicates buildFeaturesList task may have failed or was skipped.")
+                logger.error(f"  Consider forcing layer reload or checking for task cancellation.")
+            
             self.updateFeatures()
             return
         
@@ -807,6 +827,19 @@ class PopulateListEngineTask(QgsTask):
             # PERFORMANCE: Use batched progress updates
             self._update_progress_batched(index, total_count)
 
+        # v3.0.5: After loading features, apply any pending QGIS selection
+        # This handles the case where user selected features from canvas during layer change
+        # while the feature list was still loading asynchronously
+        try:
+            if hasattr(self.parent, 'hasPendingQgisSelection') and self.parent.hasPendingQgisSelection(layer_id):
+                logger.info(f"loadFeaturesList: Applying pending QGIS selection for layer {self._cached_layer_name}")
+                checked_count = self.parent.applyPendingQgisSelection()
+                if checked_count >= 0:
+                    logger.info(f"loadFeaturesList: Applied pending selection, {checked_count} items checked")
+                    # Skip updateFeatures call since applyPendingQgisSelection already emits the signal
+                    return
+        except Exception as e:
+            logger.debug(f"loadFeaturesList: Error applying pending selection: {e}")
 
         self.updateFeatures()
 
@@ -1190,6 +1223,12 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         self._filter_debounce_timer.setSingleShot(True)
         self._filter_debounce_timer.setInterval(300)  # 300ms debounce delay
         self._filter_debounce_timer.timeout.connect(self._execute_filter)
+        
+        # v3.0.5: Pending QGIS selection to apply after feature list loads
+        # When layer changes and QGIS has a selection, the feature list may not be ready yet
+        # (async loadFeaturesList task). Store the selection PKs here to apply them later.
+        self._pending_qgis_selection_pks = None  # Set of PK values to check once list loads
+        self._pending_qgis_selection_layer_id = None  # Layer ID for the pending selection
 
     def setSortOrder(self, order='ASC', field=None):
         """
@@ -1218,6 +1257,118 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             tuple: (order, field) where order is 'ASC' or 'DESC'
         """
         return (self._sort_order, self._sort_field)
+    
+    def setPendingQgisSelection(self, pk_values_set, layer_id):
+        """
+        v3.0.5: Store a pending QGIS selection to be applied after the feature list loads.
+        
+        When changing layers while QGIS has selected features, the feature list 
+        widget may not be ready yet (async loadFeaturesList task). This method stores
+        the selection to be applied once the list is populated.
+        
+        Args:
+            pk_values_set: Set of primary key values (as strings) to check
+            layer_id: Layer ID this selection belongs to
+        """
+        self._pending_qgis_selection_pks = pk_values_set
+        self._pending_qgis_selection_layer_id = layer_id
+        logger.debug(f"setPendingQgisSelection: Stored {len(pk_values_set)} PKs for layer {layer_id[:8]}...")
+    
+    def clearPendingQgisSelection(self):
+        """Clear any pending QGIS selection."""
+        self._pending_qgis_selection_pks = None
+        self._pending_qgis_selection_layer_id = None
+    
+    def hasPendingQgisSelection(self, layer_id=None):
+        """
+        Check if there's a pending QGIS selection for the specified layer.
+        
+        Args:
+            layer_id: Optional layer ID to check. If None, checks current layer.
+            
+        Returns:
+            bool: True if there's a pending selection for this layer
+        """
+        if layer_id is None:
+            layer_id = self.layer.id() if self.layer else None
+        return (
+            self._pending_qgis_selection_pks is not None 
+            and self._pending_qgis_selection_layer_id == layer_id
+        )
+    
+    def applyPendingQgisSelection(self):
+        """
+        v3.0.5: Apply a pending QGIS selection to the now-loaded feature list.
+        
+        Called after loadFeaturesList completes to sync checked items with QGIS selection.
+        
+        Returns:
+            int: Number of items checked, or -1 if no pending selection or error
+        """
+        if not self._pending_qgis_selection_pks:
+            return -1
+        
+        if self.layer is None:
+            self.clearPendingQgisSelection()
+            return -1
+        
+        # Verify this pending selection is for the current layer
+        if self._pending_qgis_selection_layer_id != self.layer.id():
+            logger.debug(f"applyPendingQgisSelection: Layer mismatch, clearing pending selection")
+            self.clearPendingQgisSelection()
+            return -1
+        
+        if self.layer.id() not in self.list_widgets:
+            logger.debug(f"applyPendingQgisSelection: No list widget for layer")
+            self.clearPendingQgisSelection()
+            return -1
+        
+        list_widget = self.list_widgets[self.layer.id()]
+        if list_widget.count() == 0:
+            logger.debug(f"applyPendingQgisSelection: List still empty, keeping pending selection")
+            return -1
+        
+        selected_pk_values = self._pending_qgis_selection_pks
+        logger.info(f"applyPendingQgisSelection: Applying {len(selected_pk_values)} pending selections to list with {list_widget.count()} items")
+        
+        checked_count = 0
+        unchecked_count = 0
+        
+        for i in range(list_widget.count()):
+            item = list_widget.item(i)
+            item_pk_value = item.data(3)
+            item_pk_str = str(item_pk_value) if item_pk_value is not None else item_pk_value
+            
+            if item_pk_str in selected_pk_values:
+                if item.checkState() != Qt.Checked:
+                    item.setCheckState(Qt.Checked)
+                    checked_count += 1
+            else:
+                if item.checkState() == Qt.Checked:
+                    item.setCheckState(Qt.Unchecked)
+                    unchecked_count += 1
+        
+        logger.info(f"applyPendingQgisSelection: Checked {checked_count}, unchecked {unchecked_count}")
+        
+        # Update display and emit signal
+        if checked_count > 0 or unchecked_count > 0:
+            selection_data = []
+            for i in range(list_widget.count()):
+                item = list_widget.item(i)
+                if item.checkState() == Qt.Checked:
+                    selection_data.append([item.data(0), item.data(3), bool(item.data(4))])
+            
+            selection_data.sort(key=lambda k: k[0])
+            self.items_le.setText(', '.join([data[0] for data in selection_data]))
+            list_widget.setSelectedFeaturesList(selection_data)
+            
+            # Emit signal to notify FilterMate
+            self.updatingCheckedItemList.emit(selection_data, True)
+        
+        # Clear the pending selection
+        self.clearPendingQgisSelection()
+        
+        return checked_count
 
     def checkedItems(self):
         selection = []
@@ -1264,8 +1415,17 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         else:
             return False
         
-    def setLayer(self, layer, layer_props):
-
+    def setLayer(self, layer, layer_props, skip_task=False):
+        """
+        Set the layer for this widget.
+        
+        Args:
+            layer: The QgsVectorLayer to set
+            layer_props: Layer properties dictionary
+            skip_task: If True, don't launch loadFeaturesList task.
+                       Use when setDisplayExpression will be called immediately after
+                       to avoid redundant task cancellation.
+        """
         try:
 
             if layer is not None:
@@ -1331,12 +1491,17 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                     # Force update if expression is different OR if widget was just created/reused
                     if current_expression != expected_expression or not current_expression:
                         logger.debug(f"Updating display expression from '{current_expression}' to '{expected_expression}' for layer {self._cached_layer_name}")
-                        self.setDisplayExpression(expected_expression)
+                        # Only call setDisplayExpression if skip_task is False
+                        # When skip_task=True, caller will handle setDisplayExpression separately
+                        if not skip_task:
+                            self.setDisplayExpression(expected_expression)
                     else:
-                        description = 'Loading features'
-                        action = 'loadFeaturesList'
-                        self.build_task(description, action, True)
-                        self.launch_task(action)
+                        # Only launch task if skip_task is False
+                        if not skip_task:
+                            description = 'Loading features'
+                            action = 'loadFeaturesList'
+                            self.build_task(description, action, True)
+                            self.launch_task(action)
                 else:
                     logger.error(f"Failed to create list widget for layer {self.layer.id()}")
 
@@ -1493,9 +1658,29 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                     
                     widget = self.list_widgets[self.layer.id()]
                     count = widget.count()
+                    layer_feature_count = self.layer.featureCount() if self.layer else 0
                     
-                    # If list is empty, log warning and suggest retry
-                    if count == 0:
+                    # If list is empty but layer has features, something went wrong
+                    # v2.9.44: Enhanced detection and retry logic
+                    if count == 0 and layer_feature_count > 0:
+                        logger.warning(f"Feature list remains EMPTY 500ms after task launch!")
+                        logger.warning(f"Expression: {working_expression[:50]}...")
+                        logger.warning(f"Layer has {layer_feature_count} features but widget shows 0")
+                        
+                        # v2.9.44: For Spatialite multi-step filters, force layer reload
+                        # This ensures the feature list rebuilds from the current subset
+                        provider_type = self.layer.providerType() if self.layer else None
+                        if provider_type in ('spatialite', 'ogr'):
+                            logger.info(f"🔄 Triggering automatic retry for {provider_type} layer...")
+                            try:
+                                # Force a complete refresh by rebuilding the feature list
+                                self.layer.reload()
+                                # Re-trigger the display expression to rebuild list
+                                from qgis.PyQt.QtCore import QTimer
+                                QTimer.singleShot(200, lambda: self.setDisplayExpression(working_expression))
+                            except Exception as retry_err:
+                                logger.error(f"Failed to trigger retry: {retry_err}")
+                    elif count == 0:
                         logger.warning(f"Feature list remains EMPTY 500ms after task launch!")
                         logger.warning(f"Expression: {working_expression[:50]}...")
                         logger.warning(f"Layer: {self.layer.name()}, features: {self.layer.featureCount()}")

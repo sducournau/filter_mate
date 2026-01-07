@@ -11828,7 +11828,7 @@ class FilterEngineTask(QgsTask):
                 # FIX v2.5.21: Single delayed refresh with adaptive timing
                 # Check if any filter is complex (EXISTS, large IN clause, ST_*)
                 # We need to check before clearing _pending_subset_requests
-                from qgis.core import QgsProject
+                # QgsProject already imported at top of file
                 has_complex_filter = False
                 for layer_id, layer in QgsProject.instance().mapLayers().items():
                     if layer.type() == 0:  # Vector layer
