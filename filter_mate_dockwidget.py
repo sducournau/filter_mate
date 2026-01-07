@@ -11809,6 +11809,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             backend_text = "Spatialite"
             custom = "color: white; background-color: #9b59b6;"
             tooltip = "Backend: Spatialite (Good Performance)"
+        elif backend_type == 'spatialite_fallback':
+            # v2.9.25: Spatialite backend with OGR fallback (complex geometry or MakeValid error)
+            backend_text = "Spatialite*"
+            custom = "color: white; background-color: #8e44ad;"  # Darker purple for fallback
+            tooltip = "Backend: Spatialite → OGR fallback\n(Complex geometry handled by OGR)"
         elif backend_type == 'ogr':
             backend_text = "OGR"
             custom = "color: white; background-color: #3498db;"
@@ -11823,6 +11828,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             backend_text = "OGR*"
             custom = "color: white; background-color: #e67e22;"  # Orange for fallback
             tooltip = "Backend: OGR (Fallback - PostgreSQL connection unavailable)"
+        elif backend_type == 'postgresql_fallback':
+            # v2.9.25: PostgreSQL backend with OGR fallback
+            backend_text = "PostgreSQL*"
+            custom = "color: white; background-color: #1e8449;"  # Darker green for fallback
+            tooltip = "Backend: PostgreSQL → OGR fallback\n(Complex geometry handled by OGR)"
         else:
             backend_text = provider_type[:6].upper() if provider_type else "..."
             custom = "color: #7f8c8d; background-color: #ecf0f1;"

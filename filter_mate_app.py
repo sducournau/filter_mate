@@ -4059,11 +4059,20 @@ class FilterMateApp:
         self._show_task_completion_message(task_name, source_layer, display_backend, layer_count, is_fallback=is_fallback)
         
         # Update backend indicator with actual backend used
+        # v2.9.25: Pass is_fallback flag to show "Spatialite*" when OGR fallback was used
         if hasattr(self.dockwidget, '_update_backend_indicator'):
             if actual_backends:
                 # Get PostgreSQL connection status
                 postgresql_conn = task_parameters.get('infos', {}).get('postgresql_connection_available')
-                self.dockwidget._update_backend_indicator(provider_type, postgresql_conn, display_backend)
+                # v2.9.25: If fallback was used, show the original provider with fallback indicator
+                if is_fallback:
+                    # Show original provider type with fallback flag
+                    self.dockwidget._update_backend_indicator(
+                        provider_type, postgresql_conn, 
+                        actual_backend=f"{provider_type}_fallback"
+                    )
+                else:
+                    self.dockwidget._update_backend_indicator(provider_type, postgresql_conn, display_backend)
         
         # Zoom to filtered extent only if is_tracking (auto extent) is enabled in exploring
         # Check if is_tracking is enabled for this layer

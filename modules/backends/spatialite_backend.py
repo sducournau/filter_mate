@@ -1165,33 +1165,88 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             
             # v2.9.7: CRITICAL - Convert GeometryCollection to homogeneous geometry
             # RTTOPO in Spatialite cannot properly handle GeometryCollection with MakeValid()
+            # v2.9.25: Improved extraction logic for GeometryCollection containing MultiPolygon
             if is_geometry_collection:
-                self.log_info(f"🔧 Converting GeometryCollection to homogeneous geometry")
+                from qgis.core import QgsMessageLog, Qgis
+                QgsMessageLog.logMessage(
+                    f"🔧 Converting GeometryCollection to homogeneous geometry (type: {QgsWkbTypes.displayString(geom.wkbType())})",
+                    "FilterMate", Qgis.Info
+                )
                 
-                # Extract all polygon parts from the GeometryCollection
-                polygons = []
-                for part in geom.parts():
-                    part_geom = QgsGeometry(part.clone())
-                    geom_type = QgsWkbTypes.geometryType(part_geom.wkbType())
+                # v2.9.26: CRITICAL FIX - If GeometryCollection contains only one part that is already
+                # a valid MultiPolygon or Polygon, use it directly instead of re-collecting
+                parts_list = list(geom.parts())
+                
+                if len(parts_list) == 1:
+                    # GeometryCollection contains single element - extract it directly
+                    single_part = QgsGeometry(parts_list[0].clone())
+                    single_type = QgsWkbTypes.geometryType(single_part.wkbType())
                     
-                    if geom_type == QgsWkbTypes.PolygonGeometry:
-                        # It's a polygon or multipolygon
-                        if part_geom.isMultipart():
-                            for sub_part in part_geom.parts():
-                                polygons.append(QgsGeometry(sub_part.clone()))
-                        else:
-                            polygons.append(part_geom)
-                
-                if polygons:
-                    # Combine all polygons into a single MultiPolygon
-                    combined = QgsGeometry.collectGeometry(polygons)
-                    if not combined.isNull() and not combined.isEmpty():
-                        geom = combined
-                        self.log_info(f"  ✓ Extracted {len(polygons)} polygon parts from GeometryCollection")
-                    else:
-                        self.log_warning(f"  Could not combine polygons, using original geometry")
+                    if single_type == QgsWkbTypes.PolygonGeometry:
+                        # It's already a valid polygon/multipolygon - use it directly
+                        geom = single_part
+                        QgsMessageLog.logMessage(
+                            f"  ✓ Extracted single {QgsWkbTypes.displayString(geom.wkbType())} from GeometryCollection",
+                            "FilterMate", Qgis.Info
+                        )
                 else:
-                    self.log_warning(f"  No polygon parts found in GeometryCollection")
+                    # Multiple parts - need to combine them
+                    QgsMessageLog.logMessage(
+                        f"  → GeometryCollection has {len(parts_list)} parts, combining...",
+                        "FilterMate", Qgis.Info
+                    )
+                    
+                    # Extract all polygon parts from the GeometryCollection
+                    polygons = []
+                    for part in parts_list:
+                        part_geom = QgsGeometry(part.clone())
+                        part_wkb_type = part_geom.wkbType()
+                        geom_type = QgsWkbTypes.geometryType(part_wkb_type)
+                        
+                        if geom_type == QgsWkbTypes.PolygonGeometry:
+                            # It's a polygon or multipolygon
+                            if part_geom.isMultipart():
+                                # v2.9.25: For MultiPolygon, extract individual polygons
+                                for sub_part in part_geom.parts():
+                                    sub_geom = QgsGeometry(sub_part.clone())
+                                    if not sub_geom.isNull() and not sub_geom.isEmpty():
+                                        polygons.append(sub_geom)
+                            else:
+                                polygons.append(part_geom)
+                        elif QgsWkbTypes.isMultiType(part_wkb_type):
+                            # v2.9.25: Handle other multi-types (MultiLineString, etc.)
+                            for sub_part in part_geom.parts():
+                                sub_geom = QgsGeometry(sub_part.clone())
+                                if not sub_geom.isNull() and not sub_geom.isEmpty():
+                                    polygons.append(sub_geom)
+                    
+                    QgsMessageLog.logMessage(
+                        f"  → Extracted {len(polygons)} geometry parts from GeometryCollection",
+                        "FilterMate", Qgis.Info
+                    )
+                    
+                    if polygons:
+                        # v2.9.25: Use unaryUnion for more robust combination
+                        # collectGeometry can fail with complex geometries
+                        try:
+                            combined = QgsGeometry.unaryUnion(polygons)
+                            if combined.isNull() or combined.isEmpty():
+                                # Fallback to collectGeometry
+                                combined = QgsGeometry.collectGeometry(polygons)
+                        except Exception as union_err:
+                            self.log_warning(f"  → unaryUnion failed: {union_err}, trying collectGeometry...")
+                            combined = QgsGeometry.collectGeometry(polygons)
+                        
+                        if not combined.isNull() and not combined.isEmpty():
+                            geom = combined
+                            QgsMessageLog.logMessage(
+                                f"  ✓ Combined to {QgsWkbTypes.displayString(geom.wkbType())} ({len(polygons)} parts)",
+                                "FilterMate", Qgis.Info
+                            )
+                        else:
+                            self.log_warning(f"  Could not combine polygons, using original geometry")
+                    else:
+                        self.log_warning(f"  No polygon parts found in GeometryCollection")
             
             # v2.8.12: Make geometry valid first to avoid issues during simplification
             if not geom.isGeosValid():
@@ -1920,9 +1975,37 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         wkt_length = len(source_geom)
         self.log_debug(f"Source WKT length: {wkt_length} chars")
         
+        # v2.9.26: CRITICAL - Always simplify GeometryCollection to avoid RTTOPO MakeValid errors
+        # Check for GeometryCollection BEFORE the size threshold check
+        is_geometry_collection = source_geom.strip().upper().startswith('GEOMETRYCOLLECTION')
+        if is_geometry_collection:
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(
+                f"🔧 GeometryCollection detected ({wkt_length} chars) - converting before SQL",
+                "FilterMate", Qgis.Info
+            )
+            simplified_wkt = self._simplify_wkt_if_needed(source_geom)
+            # v2.9.26: Check if WKT type changed, not just if content changed
+            simplified_is_gc = simplified_wkt.strip().upper().startswith('GEOMETRYCOLLECTION')
+            if simplified_wkt != source_geom or not simplified_is_gc:
+                old_len = wkt_length
+                old_type = "GeometryCollection"
+                source_geom = simplified_wkt
+                wkt_length = len(source_geom)
+                new_type = simplified_wkt.split('(')[0].strip() if '(' in simplified_wkt else "Unknown"
+                QgsMessageLog.logMessage(
+                    f"  ✓ Converted: {old_type}({old_len:,} chars) → {new_type}({wkt_length:,} chars)",
+                    "FilterMate", Qgis.Info
+                )
+            else:
+                QgsMessageLog.logMessage(
+                    f"  ⚠️ Conversion failed - still GeometryCollection ({wkt_length} chars)",
+                    "FilterMate", Qgis.Warning
+                )
+        
         # v2.8.12: Apply WKT simplification BEFORE building SQL expression
         # This prevents MakeValid errors on complex geometries (e.g., detailed commune boundaries)
-        if wkt_length >= SPATIALITE_WKT_SIMPLIFY_THRESHOLD:
+        elif wkt_length >= SPATIALITE_WKT_SIMPLIFY_THRESHOLD:
             self.log_info(f"🔧 Large WKT detected ({wkt_length:,} chars) - applying simplification before SQL")
             simplified_wkt = self._simplify_wkt_if_needed(source_geom)
             if simplified_wkt != source_geom:
