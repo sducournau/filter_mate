@@ -1650,6 +1650,15 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             # Schedule a check 500ms after task launch to verify list was populated
             from qgis.PyQt.QtCore import QTimer
             
+            # v3.0.8: Initialize retry counter to prevent infinite retry loops
+            # The counter is layer+expression specific to allow retries for different expressions
+            retry_key = f"{self.layer.id()}_{hash(working_expression)}"
+            if not hasattr(self, '_retry_counts'):
+                self._retry_counts = {}
+            # Reset counter if expression changed
+            if retry_key not in self._retry_counts:
+                self._retry_counts = {retry_key: 0}  # Clear old keys, start fresh for new expression
+            
             def check_list_populated():
                 """Verify that feature list was successfully populated."""
                 try:
@@ -1671,15 +1680,24 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                         # This ensures the feature list rebuilds from the current subset
                         provider_type = self.layer.providerType() if self.layer else None
                         if provider_type in ('spatialite', 'ogr'):
-                            logger.info(f"🔄 Triggering automatic retry for {provider_type} layer...")
-                            try:
-                                # Force a complete refresh by rebuilding the feature list
-                                self.layer.reload()
-                                # Re-trigger the display expression to rebuild list
-                                from qgis.PyQt.QtCore import QTimer
-                                QTimer.singleShot(200, lambda: self.setDisplayExpression(working_expression))
-                            except Exception as retry_err:
-                                logger.error(f"Failed to trigger retry: {retry_err}")
+                            # v3.0.8: Limit retries to prevent infinite loop
+                            current_retries = self._retry_counts.get(retry_key, 0)
+                            max_retries = 2  # Maximum 2 retries (3 total attempts)
+                            
+                            if current_retries < max_retries:
+                                self._retry_counts[retry_key] = current_retries + 1
+                                logger.info(f"🔄 Triggering automatic retry {current_retries + 1}/{max_retries} for {provider_type} layer...")
+                                try:
+                                    # Force a complete refresh by rebuilding the feature list
+                                    self.layer.reload()
+                                    # Re-trigger the display expression to rebuild list
+                                    from qgis.PyQt.QtCore import QTimer
+                                    QTimer.singleShot(200, lambda: self.setDisplayExpression(working_expression))
+                                except Exception as retry_err:
+                                    logger.error(f"Failed to trigger retry: {retry_err}")
+                            else:
+                                logger.warning(f"⚠️ Max retries ({max_retries}) reached for {provider_type} layer - stopping automatic retry")
+                                logger.warning(f"   User may need to manually refresh the layer or change expression")
                     elif count == 0:
                         logger.warning(f"Feature list remains EMPTY 500ms after task launch!")
                         logger.warning(f"Expression: {working_expression[:50]}...")

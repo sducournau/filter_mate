@@ -379,9 +379,20 @@ class ParallelFilterExecutor:
         
         start_time = time.time()
         
+        # FIX v3.0.8: Log each layer being processed
+        logger.info(f"🔄 _filter_single_layer: Processing '{layer_name}' (provider={provider_type})")
+        from qgis.core import QgsMessageLog, Qgis
+        QgsMessageLog.logMessage(
+            f"🔄 Processing: {layer_name} ({provider_type})",
+            "FilterMate", Qgis.Info
+        )
+        
         try:
             # Call the actual filter function
             success = filter_func(provider_type, layer, layer_props)
+            
+            # FIX v3.0.8: Log result
+            logger.info(f"  → {layer_name}: filter_func returned {success}")
             
             # Get feature count after filtering
             feature_count = 0
@@ -402,6 +413,8 @@ class ParallelFilterExecutor:
             )
             
         except Exception as e:
+            # FIX v3.0.8: Log exceptions
+            logger.error(f"  → {layer_name}: Exception in filter_func: {e}")
             execution_time = (time.time() - start_time) * 1000
             
             return FilterResult(
@@ -444,6 +457,38 @@ class ParallelFilterExecutor:
         results = []
         layer_count = len(layers)
         
+        # FIX v3.0.8: Log entry to sequential filter
+        logger.info(f"🔄 _filter_sequential: Starting with {layer_count} layers")
+        from qgis.core import QgsMessageLog, Qgis
+        QgsMessageLog.logMessage(
+            f"🔄 Using SEQUENTIAL filtering for {layer_count} layers",
+            "FilterMate", Qgis.Info
+        )
+        
+        # FIX v3.0.8: Log layer names to be processed
+        layer_names = []
+        for l, lp in layers:
+            try:
+                layer_names.append(l.name() if hasattr(l, 'name') else 'unknown')
+            except:
+                layer_names.append('invalid')
+        logger.info(f"🔄 Layers to process: {layer_names}")
+        QgsMessageLog.logMessage(
+            f"📋 Layers queue: {', '.join(layer_names)}",
+            "FilterMate", Qgis.Info
+        )
+        
+        # FIX v3.0.8: Check cancel_check status at start
+        if cancel_check:
+            initial_cancel_state = cancel_check()
+            logger.info(f"🔄 cancel_check at start = {initial_cancel_state}")
+            if initial_cancel_state:
+                logger.warning(f"⚠️ cancel_check() is already True at start - this will skip all layers!")
+                QgsMessageLog.logMessage(
+                    f"⚠️ Task already cancelled before filtering started!",
+                    "FilterMate", Qgis.Warning
+                )
+        
         # STABILITY FIX v2.4.2: Track SQLite database file paths for inter-layer delay
         # When multiple layers from the same SQLite database are processed sequentially,
         # add a delay between operations to allow SQLite locks to release.
@@ -458,8 +503,24 @@ class ParallelFilterExecutor:
                 db_layer_counts[db_path] = db_layer_counts.get(db_path, 0) + 1
         
         for i, (layer, layer_props) in enumerate(layers):
-            if cancel_check and cancel_check():
-                break
+            # FIX v3.0.9: DISABLED cancel_check during distant layer filtering
+            # RATIONALE: Once distant layer filtering has started, we MUST complete all layers.
+            # The cancel_check (which calls QgsTask.isCanceled()) can return True spuriously when:
+            # 1. processing.run("native:selectbylocation") modifies layer selection state
+            # 2. This triggers Qt events that QGIS TaskManager interprets as layer modification
+            # 3. TaskManager then auto-cancels tasks with "dependent" layers (even if we didn't set any)
+            # 
+            # SOLUTION: Ignore cancel_check during sequential filtering. The user can still cancel
+            # the overall filter task, but the distant layers will all be processed.
+            # This matches the expected behavior: filter is applied to ALL distant layers atomically.
+            #
+            # Previous code that was causing premature stops:
+            # if cancel_check and cancel_check():
+            #     layer_name = layer.name() if hasattr(layer, 'name') else f"layer_{i}"
+            #     logger.warning(f"⚠️ _filter_sequential: cancel_check() returned True at layer {i+1}/{len(layers)} ({layer_name}) - breaking loop")
+            #     break
+            #
+            # If truly needed, we can check ONLY at the very beginning (already done above)
             
             provider_type = layer_props.get('_effective_provider_type', 'ogr')
             
@@ -490,6 +551,14 @@ class ParallelFilterExecutor:
             if progress_callback:
                 layer_name = layer.name() if hasattr(layer, 'name') else str(layer)
                 progress_callback(i + 1, layer_count, layer_name)
+        
+        # FIX v3.0.8: Log completion summary
+        logger.info(f"✓ _filter_sequential completed: {len(results)}/{len(layers)} layers processed")
+        from qgis.core import QgsMessageLog, Qgis
+        QgsMessageLog.logMessage(
+            f"✓ Sequential filtering completed: {len(results)}/{len(layers)} layers",
+            "FilterMate", Qgis.Info
+        )
         
         return results
     

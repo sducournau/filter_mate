@@ -542,6 +542,9 @@ class FilterEngineTask(QgsTask):
         For 'unfilter' and 'reset': processes all layers in the list regardless of flag
         (to clean up filters that were applied previously)
         """
+        # FIX v3.0.8: Import QgsMessageLog for visible diagnostic logs
+        from qgis.core import QgsMessageLog, Qgis as QgisLevel
+        
         logger.info(f"🔍 _organize_layers_to_filter() called for action: {self.task_action}")
         logger.info(f"  has_layers_to_filter: {self.task_parameters['filtering']['has_layers_to_filter']}")
         logger.info(f"  task['layers'] count: {len(self.task_parameters['task'].get('layers', []))}")
@@ -578,6 +581,12 @@ class FilterEngineTask(QgsTask):
             provider_type = layer_props["layer_provider_type"]
             layer_name = layer_props.get("layer_name", "unknown")
             layer_id = layer_props.get("layer_id", "unknown")
+            
+            # FIX v3.0.8: Log each layer being processed to QGIS message panel
+            QgsMessageLog.logMessage(
+                f"🔄 Processing layer: {layer_name} ({provider_type})",
+                "FilterMate", QgisLevel.Info
+            )
             
             # DIAGNOSTIC: Log initial provider type
             logger.debug(f"  📋 Layer '{layer_name}' initial provider_type='{provider_type}'")
@@ -632,25 +641,45 @@ class FilterEngineTask(QgsTask):
             # STABILITY FIX v2.3.9: Validate layers before adding to prevent access violations
             # Find layer by name and ID (preferred method)
             layers = []
-            for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"]):
+            layers_by_name = self.PROJECT.mapLayersByName(layer_props["layer_name"])
+            logger.debug(f"    Found {len(layers_by_name)} layers by name '{layer_props['layer_name']}'")
+            
+            for layer in layers_by_name:
                 if is_sip_deleted(layer):
+                    logger.debug(f"    Skipping sip-deleted layer")
                     continue
-                if layer.id() == layer_props["layer_id"] and is_valid_layer(layer):
-                    layers.append(layer)
+                if layer.id() == layer_props["layer_id"]:
+                    if is_valid_layer(layer):
+                        layers.append(layer)
+                    else:
+                        logger.warning(f"    Layer '{layer_name}' found by name+ID but is_valid_layer=False!")
+                        QgsMessageLog.logMessage(
+                            f"⚠️ Layer invalid: {layer_name}",
+                            "FilterMate", QgisLevel.Warning
+                        )
             
             # Fallback: If not found by name, try by ID only (layer may have been renamed)
             if not layers:
                 logger.debug(f"    Layer not found by name '{layer_name}', trying by ID...")
                 layer_by_id = self.PROJECT.mapLayer(layer_id)
-                if layer_by_id and is_valid_layer(layer_by_id):
-                    layers = [layer_by_id]
-                    try:
-                        logger.info(f"    Found layer by ID (name may have changed to '{layer_by_id.name()}')")
-                        # Update layer_props with current name
-                        layer_props["layer_name"] = layer_by_id.name()
-                    except RuntimeError:
-                        logger.warning(f"    Layer {layer_id} became invalid during access")
-                        layers = []
+                if layer_by_id:
+                    if is_valid_layer(layer_by_id):
+                        layers = [layer_by_id]
+                        try:
+                            logger.info(f"    Found layer by ID (name may have changed to '{layer_by_id.name()}')")
+                            # Update layer_props with current name
+                            layer_props["layer_name"] = layer_by_id.name()
+                        except RuntimeError:
+                            logger.warning(f"    Layer {layer_id} became invalid during access")
+                            layers = []
+                    else:
+                        logger.warning(f"    Layer found by ID but is_valid_layer=False for '{layer_name}'!")
+                        QgsMessageLog.logMessage(
+                            f"⚠️ Layer invalid (by ID): {layer_name}",
+                            "FilterMate", QgisLevel.Warning
+                        )
+                else:
+                    logger.warning(f"    Layer not found by ID: {layer_id[:16]}...")
             
             if layers:
                 self.layers[provider_type].append([layers[0], layer_props])
@@ -658,12 +687,31 @@ class FilterEngineTask(QgsTask):
                 logger.info(f"    ✓ Added to filter list (total: {self.layers_count})")
             else:
                 logger.warning(f"    ⚠️ Layer not found in project: {layer_name} (id: {layer_id})")
+                # FIX v3.0.8: Log to QGIS message panel for visibility
+                QgsMessageLog.logMessage(
+                    f"⚠️ Layer not found: {layer_name} (id: {layer_id[:16]}...)",
+                    "FilterMate", QgisLevel.Warning
+                )
                 # Log all layer IDs in project for debugging
                 all_layer_ids = list(self.PROJECT.mapLayers().keys())
                 logger.debug(f"    Available layer IDs in project: {all_layer_ids[:10]}{'...' if len(all_layer_ids) > 10 else ''}")
         
         self.provider_list = list(self.layers.keys())
         logger.info(f"  📊 Final organized layers count: {self.layers_count}, providers: {self.provider_list}")
+        
+        # FIX v3.0.8: Log organized layers to QGIS message panel for visibility
+        organized_count = sum(len(v) for v in self.layers.values())
+        input_count = len(self.task_parameters['task'].get('layers', []))
+        if organized_count < input_count:
+            QgsMessageLog.logMessage(
+                f"⚠️ Only {organized_count}/{input_count} distant layers found in project!",
+                "FilterMate", QgisLevel.Warning
+            )
+        else:
+            QgsMessageLog.logMessage(
+                f"✓ {organized_count} distant layers organized for filtering",
+                "FilterMate", QgisLevel.Info
+            )
         
         # DIAGNOSTIC: Afficher les couches organisées pour debug
         if self.layers_count > 0:
@@ -2661,19 +2709,30 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if all layers processed (some may fail), False if canceled
         """
+        # FIX v3.0.8: Import QgsMessageLog for visible diagnostic logs
+        from qgis.core import QgsMessageLog, Qgis as QgisLevel
+        
         # DIAGNOSTIC: Log all layers that will be filtered
         logger.info("=" * 70)
         logger.info("📋 LISTE DES COUCHES À FILTRER GÉOMÉTRIQUEMENT")
         logger.info("=" * 70)
         total_layers = 0
+        layer_names_list = []
         for provider_type in self.layers:
             layer_list = self.layers[provider_type]
             logger.info(f"  Provider: {provider_type} → {len(layer_list)} couche(s)")
             for idx, (layer, layer_props) in enumerate(layer_list, 1):
                 logger.info(f"    {idx}. {layer.name()} (id={layer.id()[:8]}...)")
+                layer_names_list.append(layer.name())
             total_layers += len(layer_list)
         logger.info(f"  TOTAL: {total_layers} couches à filtrer")
         logger.info("=" * 70)
+        
+        # FIX v3.0.8: Log to QGIS message panel for visibility
+        QgsMessageLog.logMessage(
+            f"🔍 Filtering {total_layers} distant layers: {', '.join(layer_names_list[:5])}{'...' if len(layer_names_list) > 5 else ''}",
+            "FilterMate", QgisLevel.Info
+        )
         
         # Check if parallel filtering is enabled
         parallel_config = self.task_parameters.get('config', {}).get('APP', {}).get('OPTIONS', {}).get('PARALLEL_FILTERING', {})
@@ -2862,6 +2921,9 @@ class FilterEngineTask(QgsTask):
             failed_filters: Number of layers that failed to filter
             failed_layer_names: Optional list of names of layers that failed
         """
+        # FIX v3.0.8: Import QgsMessageLog for visible diagnostic logs
+        from qgis.core import QgsMessageLog, Qgis as QgisLevel
+        
         if failed_layer_names is None:
             failed_layer_names = []
         logger.info("")
@@ -2871,6 +2933,19 @@ class FilterEngineTask(QgsTask):
         logger.info(f"  Total couches: {self.layers_count}")
         logger.info(f"  ✅ Succès: {successful_filters}")
         logger.info(f"  ❌ Échecs: {failed_filters}")
+        
+        # FIX v3.0.8: Log summary to QGIS message panel for visibility
+        if failed_filters > 0:
+            QgsMessageLog.logMessage(
+                f"📊 Filter summary: {successful_filters} OK, {failed_filters} failed ({', '.join(failed_layer_names[:3])})",
+                "FilterMate", QgisLevel.Warning
+            )
+        else:
+            QgsMessageLog.logMessage(
+                f"📊 Filter summary: {successful_filters} layers filtered successfully",
+                "FilterMate", QgisLevel.Info
+            )
+        
         if failed_filters > 0:
             logger.info("")
             if failed_layer_names:
@@ -7344,11 +7419,18 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if filtering succeeded, False otherwise
         """
-        # CANCELLATION FIX v2.3.22: Check if task was canceled before processing layer
-        # This prevents continuing to filter layers after user cancels the task
-        if self.isCanceled():
-            logger.info(f"⚠️ Skipping layer {layer.name() if hasattr(layer, 'name') else 'unknown'} - task was canceled")
-            return False
+        # FIX v3.0.9: DISABLED isCanceled() check at start of layer processing
+        # RATIONALE: Same as parallel_executor fix - once distant layer filtering has started,
+        # we MUST complete all layers. The isCanceled() can return True spuriously when
+        # processing.run("native:selectbylocation") modifies layer selection state and Qt
+        # events are processed. This caused only 2-3 of 7 layers to be filtered.
+        # 
+        # The check was:
+        # if self.isCanceled():
+        #     logger.info(f"⚠️ Skipping layer {layer.name() if hasattr(layer, 'name') else 'unknown'} - task was canceled")
+        #     return False
+        #
+        # User can still cancel the overall task, but individual layers will be processed.
         
         # THREAD SAFETY FIX: Pass queue_subset_request callback to backends
         # This allows backends to defer setSubsetString() calls to the main thread
@@ -7845,9 +7927,10 @@ class FilterEngineTask(QgsTask):
                                 
                                 if result:
                                     logger.info(f"✓ OGR fallback SUCCEEDED for {layer.name()}")
-                                    # v2.6.11: Log OGR success to QGIS MessageLog
+                                    # v3.0.8: Don't log featureCount here - subset is queued and not yet applied
+                                    # The count would be misleading (shows all features, not filtered count)
                                     QgsMessageLog.logMessage(
-                                        f"✓ OGR fallback SUCCEEDED for {layer.name()} → {layer.featureCount()} features",
+                                        f"✓ OGR fallback SUCCEEDED for {layer.name()} (subset queued for main thread)",
                                         "FilterMate", Qgis.Info
                                     )
                                     # Update actual backend used
@@ -8401,12 +8484,23 @@ class FilterEngineTask(QgsTask):
         has_layers_to_filter = self.task_parameters["filtering"]["has_layers_to_filter"]
         has_layers_in_params = len(self.task_parameters['task'].get('layers', [])) > 0
         
+        # FIX v3.0.7: Log to QGIS message panel for visibility
+        from qgis.core import QgsMessageLog, Qgis as QgisLevel
+        
         logger.info(f"\n🔍 Checking if distant layers should be filtered...")
         logger.info(f"  has_geometric_predicates: {has_geom_predicates}")
         logger.info(f"  has_layers_to_filter: {has_layers_to_filter}")
         logger.info(f"  has_layers_in_params: {has_layers_in_params}")
         logger.info(f"  self.layers_count: {self.layers_count}")
-        logger.info(f"  task['layers'] content: {[l.get('layer_name', 'unknown') for l in self.task_parameters['task'].get('layers', [])]}")
+        
+        # Log layer names to QGIS message panel for visibility
+        layer_names = [l.get('layer_name', 'unknown') for l in self.task_parameters['task'].get('layers', [])]
+        QgsMessageLog.logMessage(
+            f"📋 Distant layers to filter ({len(layer_names)}): {', '.join(layer_names[:5])}{'...' if len(layer_names) > 5 else ''}",
+            "FilterMate", QgisLevel.Info
+        )
+        
+        logger.info(f"  task['layers'] content: {layer_names}")
         logger.info(f"  self.layers content: {list(self.layers.keys())} with {sum(len(v) for v in self.layers.values())} total layers")
         
         # Process if geometric predicates enabled AND (has_layers_to_filter OR layers in params) AND layers were organized
@@ -11625,8 +11719,13 @@ class FilterEngineTask(QgsTask):
             self.warning_messages = []  # Clear after display
         
         # CANCELLATION FIX v2.3.22: Don't apply pending subset requests if task was canceled
-        # This prevents duplicate filter applications when user cancels during parallel execution
-        if self.isCanceled():
+        # v3.0.8: IMPORTANT - Only skip subset application if TRULY canceled (not just marked as canceled)
+        # Check if we have pending requests AND if the task actually returned False (failed)
+        # If the task succeeded (result=True), we should still apply the subsets even if isCanceled()
+        # returns True (which can happen due to race conditions in QGIS task manager)
+        truly_canceled = self.isCanceled() and not (hasattr(self, '_pending_subset_requests') and self._pending_subset_requests and result is not False)
+        
+        if truly_canceled and hasattr(self, '_pending_subset_requests') and not self._pending_subset_requests:
             logger.info("Task was canceled - skipping pending subset requests to prevent partial filter application")
             if hasattr(self, '_pending_subset_requests'):
                 self._pending_subset_requests = []  # Clear to prevent any application
@@ -11635,7 +11734,13 @@ class FilterEngineTask(QgsTask):
         # This is called from the main Qt thread (unlike run() which is on a worker thread).
         # Process all pending subset requests stored during run()
         if hasattr(self, '_pending_subset_requests') and self._pending_subset_requests:
-            logger.debug(f"finished(): Applying {len(self._pending_subset_requests)} pending subset requests on main thread")
+            # FIX v3.0.7: Log at INFO level for visibility in QGIS message panel
+            from qgis.core import QgsMessageLog, Qgis as QgisLevel
+            QgsMessageLog.logMessage(
+                f"📥 Applying {len(self._pending_subset_requests)} pending subset requests on main thread",
+                "FilterMate", QgisLevel.Info
+            )
+            logger.info(f"finished(): Applying {len(self._pending_subset_requests)} pending subset requests on main thread")
             
             # v2.7.9: Log all pending requests details
             for idx, (lyr, expr) in enumerate(self._pending_subset_requests):
@@ -11666,12 +11771,13 @@ class FilterEngineTask(QgsTask):
                             continue
                         
                         if current_subset.strip() == expression_str.strip():
-                            # Filter already applied - force reload for PostgreSQL/Spatialite layers
+                            # Filter already applied - force reload for PostgreSQL/Spatialite/OGR layers
                             # FIX v2.5.16: Use layer.reload() for PostgreSQL to force data refresh
                             # This is less aggressive than dataProvider().reloadData() but more
                             # effective than just triggerRepaint()
                             # FIX v2.9.24: Also force reload for Spatialite to fix second filter display
-                            if layer.providerType() in ('postgres', 'spatialite'):
+                            # FIX v3.0.8: Also reload OGR layers for correct feature count
+                            if layer.providerType() in ('postgres', 'spatialite', 'ogr'):
                                 layer.reload()
                             # v2.6.5: Skip updateExtents for large layers
                             feature_count = layer.featureCount()
@@ -11700,7 +11806,10 @@ class FilterEngineTask(QgsTask):
                                 # For PostgreSQL layers with MV-based filters (IN SELECT queries),
                                 # the provider cache may not refresh automatically
                                 # FIX v2.9.24: Also force reload for Spatialite to fix second filter display
-                                if layer.providerType() in ('postgres', 'spatialite'):
+                                # FIX v3.0.8: CRITICAL - Also reload OGR layers (GeoPackage processed by Spatialite backend)
+                                # Without reload(), featureCount() returns stale data for OGR/GeoPackage layers
+                                # causing "Filter APPLIED: batiment → 1164986 features" instead of actual filtered count
+                                if layer.providerType() in ('postgres', 'spatialite', 'ogr'):
                                     layer.reload()
                                 # v2.6.5: Skip updateExtents for large layers
                                 feature_count = layer.featureCount()
@@ -11722,6 +11831,11 @@ class FilterEngineTask(QgsTask):
                                 feature_count = layer.featureCount()
                                 if feature_count >= 0:
                                     count_str = f"{feature_count} features"
+                                    # FIX v3.0.7: Log applied filter result at INFO level for visibility
+                                    QgsMessageLog.logMessage(
+                                        f"✓ Filter APPLIED: {layer.name()} → {feature_count} features",
+                                        "FilterMate", Qgis.Info
+                                    )
                                     # v2.5.11: Additional diagnostic for layers with 0 features
                                     if feature_count == 0:
                                         logger.warning(f"  ⚠️ Layer {layer.name()} has 0 features after filtering!")
@@ -11733,6 +11847,10 @@ class FilterEngineTask(QgsTask):
                                         )
                                 else:
                                     count_str = "(count pending)"
+                                    QgsMessageLog.logMessage(
+                                        f"✓ Filter APPLIED: {layer.name()} → (count pending)",
+                                        "FilterMate", Qgis.Info
+                                    )
                                 
                                 logger.debug(f"finished() ✓ Applied: {layer.name()} → {count_str}")
                             else:
@@ -11874,17 +11992,29 @@ class FilterEngineTask(QgsTask):
             self.ogr_source_geom = None
 
         if self.exception is None:
+            # v3.0.8: CRITICAL FIX - Only show error message if task was TRULY canceled by user
+            # When a new filter task starts, it cancels previous tasks. Those tasks call finished()
+            # with result=False and message="Filter task was canceled by user". We should NOT
+            # display this as a critical error since it's expected behavior when starting a new filter.
+            # However, we must NOT return early here as it would skip cleanup and signal reconnection.
+            task_was_canceled = self.isCanceled()
+            
             if result is None:
                 # Task was likely canceled by user - log only, no message bar notification
                 logger.info('Task completed with no result (likely canceled by user)')
             elif result is False:
-                # Task failed without exception - display error message
-                error_msg = self.message if hasattr(self, 'message') and self.message else 'Task failed'
-                logger.error(f"Task finished with failure: {error_msg}")
-                iface.messageBar().pushMessage(
-                    message_category,
-                    error_msg,
-                    Qgis.Critical)
+                # Task failed without exception - only display error if NOT canceled
+                if task_was_canceled:
+                    # Task was canceled - don't show error message
+                    logger.info('Task was canceled - no error message displayed')
+                else:
+                    # Task really failed - display error message
+                    error_msg = self.message if hasattr(self, 'message') and self.message else 'Task failed'
+                    logger.error(f"Task finished with failure: {error_msg}")
+                    iface.messageBar().pushMessage(
+                        message_category,
+                        error_msg,
+                        Qgis.Critical)
             else:
                 # Task succeeded
                 if message_category == 'FilterLayers':

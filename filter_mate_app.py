@@ -2125,7 +2125,16 @@ class FilterMateApp:
             elif task_name == 'reset':
                 show_backend_info(iface, provider_type, layer_count, operation='reset', is_fallback=is_fallback)
 
-            self.appTasks[task_name].setDependentLayers(layers + [current_layer])
+            # v3.0.8: CRITICAL FIX - Do NOT set any dependent layers for filter tasks
+            # PROBLEM: QGIS QgsTaskManager automatically cancels tasks when dependent layers are modified.
+            # Even with only source_layer as dependent, when OGR fallback uses processing.run
+            # ('native:selectbylocation'), the processing modifies layer selection state in the main thread.
+            # If source and target layers are from the same GeoPackage file, modifications to ANY layer
+            # in that file can trigger signals that make QGIS think the source changed.
+            # This causes "Filter task was canceled by user" errors without user action.
+            # SOLUTION: Don't set ANY dependent layers. The filter task manages its own data access
+            # and doesn't need QGIS to cancel it when layers change.
+            # self.appTasks[task_name].setDependentLayers([current_layer])  # DISABLED - causes auto-cancel
             self.appTasks[task_name].taskCompleted.connect(lambda task_name=task_name, current_layer=current_layer, task_parameters=task_parameters: self.filter_engine_task_completed(task_name, current_layer, task_parameters))
             
         else:

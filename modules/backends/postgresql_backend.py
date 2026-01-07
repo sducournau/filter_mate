@@ -1836,16 +1836,29 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             # If old_subset is still set (was determined to be an attribute filter),
             # combine it with the geometric expression using AND operator
             # 
-            # CRITICAL FIX v2.9.42: Respect combine_operator=None as REPLACE signal
-            # When combine_operator is explicitly None (not just missing), it means:
-            # "Replace old_subset, don't combine" - used for FID filters in multi-step filtering
+            # v3.0.7: FID filters from previous step MUST be combined (not replaced)
+            # This fixes the 2nd filter issue where FID filters were incorrectly replaced
             if old_subset:
-                # Check if combine_operator is explicitly None (REPLACE signal)
-                if combine_operator is None:
-                    # Explicit None = REPLACE the old filter
-                    self.log_info(f"🔄 combine_operator=None → REPLACING old subset (multi-step filter)")
+                # v3.0.7: Check if old_subset is a FID-only filter from previous step
+                import re
+                is_fid_only = bool(re.match(
+                    r'^\s*\(?\s*(["\']?)fid\1\s+(IN\s*\(|=\s*-?\d+|BETWEEN\s+)',
+                    old_subset,
+                    re.IGNORECASE
+                ))
+                
+                if is_fid_only:
+                    # FID filter from previous step - ALWAYS combine (ignore combine_operator=None)
+                    self.log_info(f"✅ Combining FID filter from step 1 with new filter (MULTI-STEP)")
+                    self.log_info(f"  → FID filter: {old_subset[:100]}...")
+                    self.log_info(f"  → This ensures intersection of step 1 AND step 2 results")
+                    final_expression = f"({old_subset}) AND ({expression})"
+                elif combine_operator is None:
+                    # combine_operator=None with non-FID old_subset = use default AND
+                    # v3.0.7: Changed from REPLACE to AND to fix 2nd filter issues
+                    self.log_info(f"🔗 combine_operator=None → using default AND (preserving filter)")
                     self.log_info(f"  → Old subset: '{old_subset[:100]}...'")
-                    final_expression = expression
+                    final_expression = f"({old_subset}) AND ({expression})"
                 else:
                     # Use provided operator or default to AND
                     op = combine_operator if combine_operator else 'AND'

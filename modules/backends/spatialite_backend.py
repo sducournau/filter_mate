@@ -2096,26 +2096,43 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             centroid_mode = getattr(self, 'CENTROID_MODE', 'point_on_surface')
             geometry_type = layer_props.get("layer_geometry_type", None)
             
+            # v3.0.7: CRITICAL FIX - ST_PointOnSurface() returns NULL on line geometries in Spatialite
+            # Always check geometry type before applying centroid functions
+            # - Polygons: Use ST_PointOnSurface() (guaranteed point inside)
+            # - Lines/Points: Use ST_Centroid() (works correctly on all geometry types)
+            from qgis.core import QgsWkbTypes
+            is_polygon = geometry_type in (QgsWkbTypes.PolygonGeometry, 2) if geometry_type is not None else False
+            is_line = geometry_type in (QgsWkbTypes.LineGeometry, 1) if geometry_type is not None else False
+            
             if centroid_mode == 'auto':
                 # Auto mode: Use PointOnSurface for polygons, Centroid for lines
-                if geometry_type is not None:
-                    from qgis.core import QgsWkbTypes
-                    is_polygon = geometry_type in (QgsWkbTypes.PolygonGeometry, 2)
-                    if is_polygon:
-                        geom_expr = f"ST_PointOnSurface({geom_expr})"
-                        self.log_info(f"✓ Spatialite: Using ST_PointOnSurface for polygon layer (guaranteed inside)")
-                    else:
-                        geom_expr = f"ST_Centroid({geom_expr})"
-                        self.log_info(f"✓ Spatialite: Using ST_Centroid for line layer (faster)")
-                else:
+                if is_polygon:
                     geom_expr = f"ST_PointOnSurface({geom_expr})"
-                    self.log_info(f"✓ Spatialite: Using ST_PointOnSurface (default)")
+                    self.log_info(f"✓ Spatialite: Using ST_PointOnSurface for polygon layer (guaranteed inside)")
+                elif is_line:
+                    geom_expr = f"ST_Centroid({geom_expr})"
+                    self.log_info(f"✓ Spatialite: Using ST_Centroid for line layer (ST_PointOnSurface returns NULL on lines)")
+                else:
+                    # Unknown or point geometry - use ST_Centroid as safe fallback
+                    geom_expr = f"ST_Centroid({geom_expr})"
+                    self.log_info(f"✓ Spatialite: Using ST_Centroid (safe fallback for unknown geometry type)")
             elif centroid_mode == 'point_on_surface':
-                geom_expr = f"ST_PointOnSurface({geom_expr})"
-                self.log_info(f"✓ Spatialite: Using ST_PointOnSurface for distant layer (guaranteed inside)")
+                # v3.0.7: point_on_surface mode should ALSO check geometry type
+                # ST_PointOnSurface returns NULL on line geometries in Spatialite!
+                if is_polygon:
+                    geom_expr = f"ST_PointOnSurface({geom_expr})"
+                    self.log_info(f"✓ Spatialite: Using ST_PointOnSurface for polygon layer (guaranteed inside)")
+                elif is_line:
+                    geom_expr = f"ST_Centroid({geom_expr})"
+                    self.log_info(f"✓ Spatialite: Using ST_Centroid for line layer (ST_PointOnSurface returns NULL on lines)")
+                else:
+                    # Unknown geometry - try ST_PointOnSurface but log warning
+                    geom_expr = f"ST_PointOnSurface({geom_expr})"
+                    self.log_info(f"✓ Spatialite: Using ST_PointOnSurface for distant layer (guaranteed inside)")
             else:
+                # 'centroid' mode - always use ST_Centroid (works on all geometry types)
                 geom_expr = f"ST_Centroid({geom_expr})"
-                self.log_info(f"✓ Spatialite: Using ST_Centroid for distant layer geometry (faster queries)")
+                self.log_info(f"✓ Spatialite: Using ST_Centroid for distant layer geometry (works on all geometry types)")
         
         self.log_info(f"Geometry column detected: '{geom_field}' for layer {layer_props.get('layer_name', 'unknown')}")
         
@@ -2592,18 +2609,36 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 ]
                 has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
                 
+                # v3.0.7: Check if old_subset is a FID-only filter from previous step
+                # FID filters MUST be combined in multi-step filtering (same as DIRECT_SQL mode)
+                import re
+                is_fid_only = bool(re.match(
+                    r'^\s*\(?\s*(["\']?)fid\1\s+(IN\s*\(|=\s*-?\d+|BETWEEN\s+)',
+                    old_subset,
+                    re.IGNORECASE
+                ))
+                
                 # If old_subset contains geometric filter patterns, replace instead of combine
                 if has_source_alias or has_exists or has_spatial_predicate:
                     self.log_info(f"🔄 Old subset contains geometric filter - replacing instead of combining")
                     self.log_info(f"  → Old subset: '{old_subset[:80]}...'")
                     final_expression = expression
-                # CRITICAL FIX v2.9.42: Respect combine_operator=None as REPLACE signal
-                # When combine_operator is explicitly None (not just missing), it means:
-                # "Replace old_subset, don't combine" - used for FID filters in multi-step filtering
+                # v3.0.7: CRITICAL FIX - FID filters MUST be combined in multi-step filtering!
+                # Previously, combine_operator=None caused FID filters to be replaced,
+                # but FID filters from step 1 must be combined with step 2 spatial filters.
+                # This aligns NATIVE mode behavior with DIRECT_SQL and SOURCE_TABLE modes.
+                elif is_fid_only:
+                    # FID filter from previous step - ALWAYS combine (ignore combine_operator=None)
+                    self.log_info(f"✅ Combining FID filter from step 1 with new filter (MULTI-STEP)")
+                    self.log_info(f"  → FID filter: {old_subset[:80]}...")
+                    self.log_info(f"  → This ensures intersection of step 1 AND step 2 results")
+                    final_expression = f"({old_subset}) AND ({expression})"
                 elif combine_operator is None:
-                    self.log_info(f"🔄 combine_operator=None → REPLACING old subset (multi-step filter)")
+                    # combine_operator=None with non-FID old_subset = use default AND
+                    # v3.0.7: Changed from REPLACE to AND to fix 2nd filter issues
+                    self.log_info(f"🔗 combine_operator=None → using default AND (preserving filter)")
                     self.log_info(f"  → Old subset: '{old_subset[:80]}...'")
-                    final_expression = expression
+                    final_expression = f"({old_subset}) AND ({expression})"
                 else:
                     if not combine_operator:
                         combine_operator = 'AND'

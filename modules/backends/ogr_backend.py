@@ -637,11 +637,22 @@ class OGRGeometricFilter(GeometricFilterBackend):
                         new_expression = 'fid = -1'  # No valid FID is -1
                 
                 # Combine with old subset if needed
-                # CRITICAL FIX v2.9.42: Respect combine_operator=None as REPLACE signal
+                # v3.0.7: FID filters from previous step MUST be combined (not replaced)
                 if old_subset and not self._should_clear_old_subset(old_subset):
-                    if combine_operator is None:
-                        # Explicit None = REPLACE (multi-step filter)
-                        final_expression = new_expression
+                    # v3.0.7: Check if old_subset is a FID-only filter from previous step
+                    import re
+                    is_fid_only = bool(re.match(
+                        r'^\s*\(?\s*(["\']?)fid\1\s+(IN\s*\(|=\s*-?\d+|BETWEEN\s+)',
+                        old_subset,
+                        re.IGNORECASE
+                    ))
+                    
+                    if is_fid_only:
+                        # FID filter from previous step - ALWAYS combine
+                        final_expression = f"({old_subset}) AND ({new_expression})"
+                    elif combine_operator is None:
+                        # v3.0.7: Use default AND instead of REPLACE
+                        final_expression = f"({old_subset}) AND ({new_expression})"
                     else:
                         if not combine_operator:
                             combine_operator = 'AND'
@@ -2501,10 +2512,10 @@ class OGRGeometricFilter(GeometricFilterBackend):
                                 selected_ids = matching_fids  # Update for expression building
                                 self.log_info(f"  🔄 Multi-step intersection: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)}")
                                 from qgis.core import QgsMessageLog, Qgis
-                            QgsMessageLog.logMessage(
-                                f"  → OGR Multi-step step {step_number}: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)} FIDs",
-                                "FilterMate", Qgis.Info  # DEBUG
-                            )
+                                QgsMessageLog.logMessage(
+                                    f"  → OGR Multi-step step {step_number}: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)} FIDs",
+                                    "FilterMate", Qgis.Info  # DEBUG
+                                )
                     
                     # v2.8.11: Store result in cache for future multi-step filtering
                     if SPATIALITE_CACHE_AVAILABLE and store_filter_fids and matching_fids:
@@ -2595,12 +2606,12 @@ class OGRGeometricFilter(GeometricFilterBackend):
                                     fid_to_value = dict(zip([f.id() for f in layer.selectedFeatures()], selected_values))
                                     selected_values = [fid_to_value[fid] for fid in matching_fids if fid in fid_to_value]
                             
-                            self.log_info(f"  🔄 Multi-step intersection: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)}")
-                            from qgis.core import QgsMessageLog, Qgis
-                            QgsMessageLog.logMessage(
-                                f"  → OGR Multi-step step {step_number}: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)} FIDs",
-                                "FilterMate", Qgis.Info  # DEBUG
-                            )
+                                self.log_info(f"  🔄 Multi-step intersection: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)}")
+                                from qgis.core import QgsMessageLog, Qgis
+                                QgsMessageLog.logMessage(
+                                    f"  → OGR Multi-step step {step_number}: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)} FIDs",
+                                    "FilterMate", Qgis.Info  # DEBUG
+                                )
                     
                     # v2.8.11: Store result in cache for future multi-step filtering
                     if SPATIALITE_CACHE_AVAILABLE and store_filter_fids and matching_fids:
@@ -2630,11 +2641,28 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 self.log_debug(f"Generated subset expression using key '{pk_field}'")
                 
                 # Combine with old subset if needed (but not if it contains invalid patterns)
-                # CRITICAL FIX v2.9.42: Respect combine_operator=None as REPLACE signal
+                # v3.0.7: FID filters from previous step MUST be combined (not replaced)
                 if old_subset and not self._should_clear_old_subset(old_subset):
-                    if combine_operator is None:
-                        # Explicit None = REPLACE (multi-step filter)
-                        final_expression = new_subset_expression
+                    # v3.0.7: Check if old_subset is a FID-only filter from previous step
+                    import re
+                    is_fid_only = bool(re.match(
+                        r'^\s*\(?\s*(["\']?)fid\1\s+(IN\s*\(|=\s*-?\d+|BETWEEN\s+)',
+                        old_subset,
+                        re.IGNORECASE
+                    ))
+                    
+                    if is_fid_only:
+                        # FID filter from previous step - ALWAYS combine (ignore combine_operator=None)
+                        self.log_info(f"✅ Combining FID filter from step 1 with new filter (MULTI-STEP)")
+                        self.log_info(f"  → FID filter: {old_subset[:80]}...")
+                        self.log_info(f"  → This ensures intersection of step 1 AND step 2 results")
+                        final_expression = f"({old_subset}) AND ({new_subset_expression})"
+                    elif combine_operator is None:
+                        # combine_operator=None with non-FID old_subset = use default AND
+                        # v3.0.7: Changed from REPLACE to AND to fix 2nd filter issues
+                        self.log_info(f"🔗 combine_operator=None → using default AND (preserving filter)")
+                        self.log_info(f"  → Old subset: '{old_subset[:80]}...'")
+                        final_expression = f"({old_subset}) AND ({new_subset_expression})"
                     else:
                         if not combine_operator:
                             combine_operator = 'AND'
@@ -2671,12 +2699,21 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     except (RuntimeError, AttributeError):
                         final_count = -1  # Unknown
                     
-                    QgsMessageLog.logMessage(
-                        f"✓ Subset applied on {layer.name()}: {final_count} features",
-                        "FilterMate", Qgis.Info  # DEBUG
-                    )
+                    # FIX v3.0.7: Show correct message based on queue_callback
+                    # When queue_callback is used, subset is QUEUED, not applied yet
+                    # So featureCount() still returns the pre-filter count
+                    if queue_callback:
+                        QgsMessageLog.logMessage(
+                            f"✓ Subset QUEUED for {layer.name()}: {selected_count} features selected (will be applied on main thread)",
+                            "FilterMate", Qgis.Info
+                        )
+                    else:
+                        QgsMessageLog.logMessage(
+                            f"✓ Subset applied on {layer.name()}: {final_count} features",
+                            "FilterMate", Qgis.Info
+                        )
                     
-                    self.log_info(f"✓ {layer.name()}: {final_count if not queue_callback else '(pending)'} features")
+                    self.log_info(f"✓ {layer.name()}: {selected_count if queue_callback else final_count} features{' (pending)' if queue_callback else ''}")
                     
                     # Clear selection safely
                     try:
@@ -3012,11 +3049,24 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 new_subset_expression = f'{escaped_temp} = 1'
                 
                 # Combine with old subset if needed (but not if it contains invalid patterns)
-                # CRITICAL FIX v2.9.42: Respect combine_operator=None as REPLACE signal
+                # v3.0.7: FID filters from previous step MUST be combined (not replaced)
                 if old_subset and not self._should_clear_old_subset(old_subset):
-                    if combine_operator is None:
-                        # Explicit None = REPLACE (multi-step filter)
-                        final_expression = new_subset_expression
+                    # v3.0.7: Check if old_subset is a FID-only filter from previous step
+                    import re
+                    is_fid_only = bool(re.match(
+                        r'^\s*\(?\s*(["\']?)fid\1\s+(IN\s*\(|=\s*-?\d+|BETWEEN\s+)',
+                        old_subset,
+                        re.IGNORECASE
+                    ))
+                    
+                    if is_fid_only:
+                        # FID filter from previous step - ALWAYS combine
+                        self.log_info(f"✅ Combining FID filter from step 1 with new filter (MULTI-STEP)")
+                        final_expression = f"({old_subset}) AND ({new_subset_expression})"
+                    elif combine_operator is None:
+                        # v3.0.7: Use default AND instead of REPLACE
+                        self.log_info(f"🔗 combine_operator=None → using default AND (preserving filter)")
+                        final_expression = f"({old_subset}) AND ({new_subset_expression})"
                     else:
                         if not combine_operator:
                             combine_operator = 'AND'
@@ -3185,11 +3235,24 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 memory_layer.removeSelection()
                 
                 # Combine with old subset if needed (but not if it contains invalid patterns)
-                # CRITICAL FIX v2.9.42: Respect combine_operator=None as REPLACE signal
+                # v3.0.7: FID filters from previous step MUST be combined (not replaced)
                 if old_subset and not self._should_clear_old_subset(old_subset):
-                    if combine_operator is None:
-                        # Explicit None = REPLACE (multi-step filter)
-                        final_expression = new_subset_expression
+                    # v3.0.7: Check if old_subset is a FID-only filter from previous step
+                    import re
+                    is_fid_only = bool(re.match(
+                        r'^\s*\(?\s*(["\']?)fid\1\s+(IN\s*\(|=\s*-?\d+|BETWEEN\s+)',
+                        old_subset,
+                        re.IGNORECASE
+                    ))
+                    
+                    if is_fid_only:
+                        # FID filter from previous step - ALWAYS combine
+                        self.log_info(f"✅ Combining FID filter from step 1 with new filter (MULTI-STEP)")
+                        final_expression = f"({old_subset}) AND ({new_subset_expression})"
+                    elif combine_operator is None:
+                        # v3.0.7: Use default AND instead of REPLACE
+                        self.log_info(f"🔗 combine_operator=None → using default AND (preserving filter)")
+                        final_expression = f"({old_subset}) AND ({new_subset_expression})"
                     else:
                         if not combine_operator:
                             combine_operator = 'AND'

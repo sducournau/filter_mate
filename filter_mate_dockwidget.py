@@ -7496,7 +7496,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         # No saved FID to recover from - v3.0.6: Try QGIS canvas selection as fallback
                         # This handles the case where user selected features on canvas but widgets
                         # were not synchronized (is_selecting was not enabled or sync failed)
-                        logger.warning(f"   ⚠️ SINGLE_SELECTION: No valid feature in widget and no saved FID!")
+                        # v3.0.7: Log at debug level to reduce noise
+                        logger.debug(f"   SINGLE_SELECTION: No valid feature in widget and no saved FID, checking QGIS canvas...")
                         
                         # v3.0.6: Check if QGIS has selected features on canvas for current layer
                         qgis_selected = self.current_layer.selectedFeatures() if self.current_layer else []
@@ -7532,14 +7533,33 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                     self._exploring_cache.put(layer_id, groupbox_type, features, expression)
                                 return features, expression
                         else:
-                            # No QGIS selection either
-                            logger.warning(f"   ❌ SINGLE_SELECTION: No QGIS canvas selection either!")
-                            logger.warning(f"   This will cause FALLBACK MODE with ALL features!")
-                            from qgis.core import QgsMessageLog, Qgis
-                            QgsMessageLog.logMessage(
-                                f"⚠️ SINGLE_SELECTION: Widget has no valid feature selected!",
-                                "FilterMate", Qgis.Warning
-                            )
+                            # No QGIS selection either - log at DEBUG level to reduce noise
+                            # v3.0.7: Throttle warnings to avoid log spam when user rapidly changes layers
+                            # The warning is only shown once per layer, not on every call
+                            layer_id_short = self.current_layer.id()[:8] if self.current_layer else 'unknown'
+                            throttle_key = f"single_selection_warning_{layer_id_short}"
+                            
+                            # Check if we already warned for this layer recently
+                            if not hasattr(self, '_warning_throttle'):
+                                self._warning_throttle = {}
+                            
+                            import time
+                            current_time = time.time()
+                            last_warning_time = self._warning_throttle.get(throttle_key, 0)
+                            
+                            # Only log warning if more than 5 seconds since last warning for this layer
+                            if current_time - last_warning_time > 5.0:
+                                logger.debug(f"   ❌ SINGLE_SELECTION: No QGIS canvas selection either!")
+                                from qgis.core import QgsMessageLog, Qgis
+                                QgsMessageLog.logMessage(
+                                    f"⚠️ SINGLE_SELECTION: Widget has no valid feature selected!",
+                                    "FilterMate", Qgis.Warning
+                                )
+                                self._warning_throttle[throttle_key] = current_time
+                            else:
+                                # Log at debug level only
+                                logger.debug(f"   SINGLE_SELECTION: No feature selected (throttled)")
+                            
                             return [], ''
                 
                 # Valid feature selected - log at info level
@@ -8072,11 +8092,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Note:
             La synchronisation QGIS → widgets n'est active QUE si is_selecting est coché.
             Cela garantit une synchronisation bidirectionnelle cohérente.
+            
+        v3.0.9: Added _filtering_in_progress protection to prevent selection sync
+        during filtering operations, which can cause UI glitches and task cancellation.
         """
         try:
             # CRITICAL: Prevent infinite recursion - skip if we're the ones updating QGIS
             if self._syncing_from_qgis:
                 logger.debug("on_layer_selection_changed: Skipping (sync in progress)")
+                return
+            
+            # v3.0.9: CRITICAL - Block selection sync during filtering operations
+            # processing.run("native:selectbylocation") modifies layer selection,
+            # which can trigger this handler and cause UI issues or task cancellation
+            if getattr(self, '_filtering_in_progress', False):
+                logger.debug("on_layer_selection_changed: Skipping (filtering in progress)")
                 return
             
             if self.widgets_initialized is True and self.current_layer is not None:

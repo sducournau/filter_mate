@@ -2,11 +2,41 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [3.0.8] - 2026-01-07
+
+### 🐛 Critical Bug Fixes
+
+**Infinite Loop Prevention in Feature List Retry (v3.0.8):**
+
+- CRITICAL FIX: Tasks no longer run in infinite loop when feature list fails to populate
+- **Symptom**: "Building features list was canceled" and "Loading features was canceled" messages repeating endlessly in logs
+- **User Impact**:
+  - Background tasks consuming CPU in infinite loop
+  - "SINGLE_SELECTION: Widget has no valid feature selected!" warnings spamming log
+  - High CPU usage and potential UI slowdown
+- Root cause: Automatic retry logic for empty feature lists had no iteration limit
+  - When Spatialite/OGR layer feature list was empty 500ms after task launch, code triggered a retry
+  - Retry called `setDisplayExpression()` which cancelled the current task and started a new one
+  - New task would also be checked after 500ms → empty list → retry → infinite loop
+  - Logs showed: "🔄 Triggering automatic retry for spatialite layer..." repeating forever
+- Fix applied (`modules/widgets.py`):
+  - Added retry counter per layer/expression combination
+  - Maximum 2 retries (3 total attempts) before stopping
+  - Clear log message when max retries reached
+  - Counter resets when expression changes
+- Impact:
+  - ✅ No more infinite retry loops
+  - ✅ Still retries up to 2 times for legitimate Spatialite/OGR loading issues
+  - ✅ Clear warning when retries exhausted
+
+---
+
 ## [3.0.5] - 2026-01-07
 
 ### 🐛 Critical Bug Fixes
 
 **Dynamic FID Regex for Any Primary Key Name (v3.0.5):**
+
 - CRITICAL FIX: Multi-step filtering now works with ANY primary key column name
 - **Symptom**: Multi-step filtering failed for layers with PK names other than "fid" (e.g., "id", "ogc_fid", "node_id")
 - **Example Failure**:
@@ -34,6 +64,7 @@ All notable changes to FilterMate will be documented in this file.
 ### ⚡ Performance Improvements
 
 **PostgreSQL Layers No Longer Fall Back to OGR Without psycopg2 (v3.0.5):**
+
 - HIGH PRIORITY: PostgreSQL filtering now works at full speed without psycopg2 installed
 - **Symptom**: 30x slower filtering for PostgreSQL layers when psycopg2 not available
 - **Performance Impact**:
@@ -59,6 +90,7 @@ All notable changes to FilterMate will be documented in this file.
 - Commits: `af757d8`
 
 **Lower WKT Bbox Pre-filter Threshold to Prevent Mid-Range Freezes (v3.0.5):**
+
 - MEDIUM PRIORITY: Reduced risk of QGIS freezes with complex geometries
 - **Symptom**: WKT between 150-500KB with high vertex count could freeze QGIS for 5-30 seconds
 - Root cause: Bbox pre-filter only activated for WKT >500KB
@@ -83,6 +115,7 @@ All notable changes to FilterMate will be documented in this file.
 ### 📚 Documentation
 
 **New Files:**
+
 - `CLAUDE.md` - Comprehensive guide for Claude Code when working with FilterMate
 - `docs/BUG_FIXES_2026-01-07.md` - Detailed bug analysis and fix proposals for v3.0.5
 
@@ -93,6 +126,7 @@ All notable changes to FilterMate will be documented in this file.
 ### 🐛 Critical Bug Fixes
 
 **Exploring Buttons Signal Reconnection (v3.0.4):**
+
 - CRITICAL FIX: Identify and Zoom buttons now work correctly after applying a filter then changing layers
 - **Symptom**: `pushButton_exploring_identify` and `pushButton_exploring_zoom` became non-functional after filter + layer change sequence
 - **Reproduction**: Apply filter → Change to different layer → Click Identify/Zoom → Nothing happens
@@ -116,6 +150,7 @@ All notable changes to FilterMate will be documented in this file.
 ### 🐛 Critical Bug Fixes
 
 **Multi-Step Filter - Distant Layers Not Filtered (v3.0.3):**
+
 - CRITICAL FIX: Step 2 in multi-step filtering now correctly filters distant layers with intersection of step 1 AND step 2
 - **Symptom**: Second filter with different source geometry (e.g., step 1: batiment, step 2: ducts) returned ALL features for distant layers instead of intersection
 - **Example**:
@@ -136,12 +171,12 @@ All notable changes to FilterMate will be documented in this file.
   - After: `SELECT "fid" FROM "table" WHERE (fid IN (...)) AND ST_Intersects(...)` (intersection)
 - Enhanced logging:
   - "✅ Combining FID filter from step 1 with new spatial filter (MULTI-STEP)"
-  - "  → This ensures intersection of step 1 AND step 2 results"
+  - " → This ensures intersection of step 1 AND step 2 results"
 - Impact:
   - ✅ Distant layers correctly show intersection of both steps
   - ✅ Multi-step filtering works as designed
   - ✅ No more "all features" bug in step 2
-- Technical note: Only SPATIAL filters (ST_*, EXISTS, __source) should be replaced when source changes, FID filters must always be combined
+- Technical note: Only SPATIAL filters (ST\_\*, EXISTS, \_\_source) should be replaced when source changes, FID filters must always be combined
 - See: `docs/FIX_MULTI_STEP_DISTANT_LAYERS_v3.0.3.md` for complete technical analysis
 
 ## [3.0.2] - 2025-01-07
@@ -149,6 +184,7 @@ All notable changes to FilterMate will be documented in this file.
 ### 🐛 Bug Fixes
 
 **Second Filter List Loading - Enhanced Diagnostics & Auto-Retry (v3.0.2):**
+
 - FIX: Improved diagnostics and automatic recovery when feature list fails to load during second multi-step filter
 - **Symptom**: Empty feature list widget after applying second filter with selection tool active
 - **Affects**: Spatialite/OGR backends in multi-step filtering mode
@@ -178,7 +214,7 @@ All notable changes to FilterMate will be documented in this file.
   - ✅ Fewer manual layer reloads needed
   - ✅ Easier debugging of multi-step filter issues
 - Technical note: FID filter replacement in multi-step mode is CORRECT behavior (not a bug) when source geometry changes
-- Affected files: 
+- Affected files:
   - `modules/widgets.py` (3 improvements)
   - `modules/backends/spatialite_backend.py` (2 improvements)
 - See: `docs/FIX_SECOND_FILTER_LIST_LOAD_v2.9.44.md` for detailed analysis
@@ -188,6 +224,7 @@ All notable changes to FilterMate will be documented in this file.
 ### 🐛 Critical Bug Fixes
 
 **OGR Fallback - Qt Garbage Collection Protection (v2.9.43):**
+
 - CRITICAL FIX: GEOS-safe intersect layers destroyed by Qt GC before processing.run() causing OGR fallback failures
 - **Symptom**: "wrapped C/C++ object of type QgsVectorLayer has been deleted" after 5-7 multi-layer filtering iterations
 - **Affects**: OGR backend fallback in `_safe_select_by_location()` for all layer types
@@ -202,12 +239,12 @@ All notable changes to FilterMate will be documented in this file.
   - Project registry reference survives `QCoreApplication.processEvents()` calls
   - `finally` block guarantees cleanup even on errors (no layer accumulation)
   - Variable `safe_intersect_to_cleanup` tracks layer for cleanup
-- Impact: 
+- Impact:
   - ✅ Eliminates intermittent OGR fallback failures (zone_distribution, zone_mro, etc.)
   - ✅ Stable multi-layer filtering (tested 20+ iterations)
   - ✅ No temporary layer accumulation in project
 - Performance: Minimal overhead (addMapLayer/removeMapLayer ~1ms total)
-- Affected files: `modules/backends/ogr_backend.py` (_safe_select_by_location method)
+- Affected files: `modules/backends/ogr_backend.py` (\_safe_select_by_location method)
 - See: `docs/FIX_QT_GC_GEOS_SAFE_LAYERS_v2.9.43.md` for detailed technical analysis
 
 ## [3.0.0] - 2025-01-06
@@ -215,6 +252,7 @@ All notable changes to FilterMate will be documented in this file.
 ### 🐛 Bug Fixes
 
 **Multi-Step Filter Cache Validation for OR/NOT AND (v2.9.43):**
+
 - CRITICAL FIX: Added validation to prevent incorrect results when using OR/NOT AND operators in multi-step filtering
 - **Affects**: Spatialite and OGR backends with FID cache enabled
 - Root cause: Cache intersection logic only supports AND operator (set intersection), but was being applied to OR and NOT AND
@@ -228,8 +266,8 @@ All notable changes to FilterMate will be documented in this file.
   - OR: Skip cache, perform full filter with warning ⚠️
   - NOT AND: Skip cache, perform full filter with warning ⚠️
 - Backends updated with validation checks (4 locations):
-  - Spatialite: _apply_filter_direct_sql (1)
-  - OGR: build_expression, _apply_subset_filter, _apply_with_temp_field (3)
+  - Spatialite: \_apply_filter_direct_sql (1)
+  - OGR: build_expression, \_apply_subset_filter, \_apply_with_temp_field (3)
 - New task_params field: `_current_combine_operator` transmitted from filter_task to backends
 - User receives warning: "⚠️ Multi-step filtering with OR/NOT AND - cache intersection not supported (only AND)"
 - Impact: Prevents silent incorrect results for OR/NOT AND multi-step filters, maintains performance for AND (most common)
@@ -238,6 +276,7 @@ All notable changes to FilterMate will be documented in this file.
 - See: `docs/ANALYSIS_MULTI_STEP_OR_NOT_OPERATORS_v2.9.43.md`
 
 **Multi-Step Filter Combine Operator Handling (v2.9.42):**
+
 - CRITICAL FIX: `combine_operator=None` ignored by all backends, causing incorrect filter combination in multi-step filtering
 - **Affects**: ALL backends (PostgreSQL, Spatialite, OGR, Memory) - systematic bug across entire codebase
 - Root cause: When `filter_task.py` set `combine_operator=None` to signal "REPLACE filter", backends treated it as missing and defaulted to 'AND'
@@ -249,15 +288,16 @@ All notable changes to FilterMate will be documented in this file.
 - New logic: `if combine_operator is None: final = expression` (REPLACE) vs `else: op = combine_operator or 'AND'` (COMBINE)
 - Corrections applied to 8 occurrences across 4 backends:
   - PostgreSQL: 1 fix (apply_filter)
-  - Spatialite: 1 fix (apply_filter)  
-  - OGR: 4 fixes (build_expression, _apply_subset_filter, _apply_with_temp_field, _apply_filter_with_memory_optimization)
-  - Memory: 2 fixes (build_expression, _apply_attribute_filter)
+  - Spatialite: 1 fix (apply_filter)
+  - OGR: 4 fixes (build_expression, \_apply_subset_filter, \_apply_with_temp_field, \_apply_filter_with_memory_optimization)
+  - Memory: 2 fixes (build_expression, \_apply_attribute_filter)
 - Improved logs: "🔄 combine_operator=None → REPLACING old subset (multi-step filter)" for clarity
 - Impact: Multi-step filtering now works correctly on all backends, FID cache intersection functions as designed
 - Affected files: `modules/backends/{postgresql,spatialite,ogr,memory}_backend.py`
 - See: `docs/FIX_MULTI_STEP_COMBINE_OPERATOR_v2.9.42.md`
 
 **Exploring Buttons State after Layer Change (v2.9.41):**
+
 - CRITICAL FIX: Zoom/Identify buttons stuck disabled after filter + layer change or groupbox switch
 - **Affects**: ALL backends (PostgreSQL, Spatialite, OGR) - not backend-specific
 - Root cause: `_update_exploring_buttons_state()` only called in `_handle_exploring_features_result()`
@@ -274,6 +314,7 @@ All notable changes to FilterMate will be documented in this file.
 - See: `docs/FIX_EXPLORING_BUTTONS_SPATIALITE_LAYER_CHANGE_v2.9.41.md`
 
 **Spatialite Zero Features Fallback (v2.9.40):**
+
 - CRITICAL FIX: Spatialite returning 0 features without triggering OGR fallback
 - Root cause: When Spatialite SQL query succeeds but returns 0 FIDs (incorrect result), `apply_filter()` returned `True` → no fallback
 - Example: Query with complex MultiPolygon succeeds but returns 0 features, while same query with OGR finds 268 features
@@ -284,10 +325,11 @@ All notable changes to FilterMate will be documented in this file.
 - All other 0-feature results now trigger OGR fallback for verification
 - Flag `_spatialite_zero_result_fallback` signals to filter_task.py that this is a zero-result fallback
 - Improved robustness: False negatives detected and corrected automatically
-- Affected files: `modules/backends/spatialite_backend.py` (_apply_filter_direct_sql, _apply_filter_with_source_table)
+- Affected files: `modules/backends/spatialite_backend.py` (\_apply_filter_direct_sql, \_apply_filter_with_source_table)
 - See: `docs/FIX_SPATIALITE_ZERO_FEATURES_FALLBACK_v2.9.40.md`
 
 **Multi-Step Filtering with FID Filters (v2.9.34):**
+
 - CRITICAL FIX: Second spatial filter returning 0 features for all non-source layers
 - Root cause: FID filters from step 1 were eliminated, preventing cache intersection at step 2
 - Example: Step 1 creates `fid IN (1771, ...)` and caches 319 FIDs. Step 2 set `old_subset=None` → no cache trigger → query all features
@@ -300,6 +342,7 @@ All notable changes to FilterMate will be documented in this file.
 - See: `docs/FIX_SPATIALITE_MULTI_STEP_FID_FILTERS_v2.9.34.md`
 
 **Multi-Step Filtering Cache (v2.9.30):**
+
 - Fixed: Second filter with different buffer value returning 0 features on distant layers
 - Root cause: Cache intersection was only checking `source_geom_hash`, ignoring `buffer_value` and `predicates`
 - When buffer changed (0m → 1m), the same source geometry hash caused wrong cache intersection
@@ -329,6 +372,7 @@ All notable changes to FilterMate will be documented in this file.
 ### 🛡️ Stability & Reliability
 
 **Signal & UI Management:**
+
 - Fixed: Action buttons not triggering after filter (v2.9.18-v2.9.24)
 - Fixed: Signal connection cache desynchronization with Qt state
 - Fixed: UI lockup during transient states when PROJECT_LAYERS temporarily empty
@@ -336,12 +380,14 @@ All notable changes to FilterMate will be documented in this file.
 - Fixed: Exploring panel (Multiple Selection) not refreshing after filtering
 
 **Memory & Thread Safety:**
+
 - Fixed: "wrapped C/C++ object has been deleted" errors in multi-layer OGR filtering
 - Fixed: Temporary layer references garbage collected prematurely
 - Fixed: Windows fatal access violation during QGIS shutdown
 - Fixed: Task cancellation using Python logger instead of QgsMessageLog
 
 **Backend Robustness:**
+
 - Fixed: 2nd filter in single_selection mode using ALL source features
 - Fixed: Spatialite rendering interruptions with large datasets
 - Fixed: GEOS-safe intersect layer name conflicts after 7+ iterations
@@ -350,23 +396,27 @@ All notable changes to FilterMate will be documented in this file.
 ### ⚡ Performance Optimizations
 
 **99% Match Optimization:**
+
 - When 99%+ of features match, FID filter is skipped entirely
 - Prevents applying huge filter expressions (millions of FIDs)
 - Example: 1,164,979/1,164,986 features matched → filter skipped
 
 **Geometry Processing:**
+
 - Adaptive simplification: tolerance = buffer × 0.1 (clamped 0.5-10m)
 - Post-buffer simplification for vertex reduction
 - ST_PointOnSurface() for accurate polygon centroids
 - WKT coordinate precision optimized by CRS (60-70% smaller)
 
 **PostgreSQL MV Optimizations:**
+
 - INCLUDE clause for covering indexes (10-30% faster spatial queries)
 - Bbox pre-filter with && operator (2-5x faster)
 - Async CLUSTER for medium datasets (50k-100k features)
 - Extended statistics for better query plans
 
 **Caching & Parallelism:**
+
 - LRU caching with automatic eviction and TTL support
 - Cache hit rate up to 80%
 - Strategy selection 6x faster
@@ -375,18 +425,21 @@ All notable changes to FilterMate will be documented in this file.
 ### 🔧 Backend Improvements
 
 **Spatialite/GeoPackage:**
+
 - NULL-safe predicates with explicit `= 1` comparison
 - Large dataset support (≥20K features) with range-based filters
 - Conditional stopRendering() for file-based layers
 - UUID filtering with primary key detection
 
 **PostgreSQL:**
+
 - Advanced materialized view management
 - Session isolation with session_id prefix
 - Automatic ::numeric casting for varchar/numeric comparisons
 - MV status widget with quick cleanup actions
 
 **OGR:**
+
 - Robust multi-layer filtering
 - GEOS-safe operations
 - Proper detection and fallback for WFS/HTTP services
