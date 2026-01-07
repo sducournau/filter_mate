@@ -1121,8 +1121,11 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
     # v2.6.5: Lowered threshold for large WKT - use source table to avoid inline WKT freezing
     # Previously 100KB, now 50KB - triggers R-tree optimization more aggressively
     LARGE_WKT_THRESHOLD = 50000  # WKT chars - above this, inline SQL can freeze QGIS
-    # v2.6.5: Very large WKT threshold - use bounding box pre-filter for extreme cases
-    VERY_LARGE_WKT_THRESHOLD = 500000  # WKT chars - above this, use bbox pre-filter
+    # v2.6.5/v3.0.5: Very large WKT threshold - use bounding box pre-filter for extreme cases
+    # v3.0.5: PERFORMANCE FIX - Lowered from 500KB to 150KB to prevent freezes with complex
+    # geometries in 150-500KB range. Bbox pre-filter adds minimal overhead but provides
+    # much better safety margin for complex geometries (many vertices, holes, multi-parts).
+    VERY_LARGE_WKT_THRESHOLD = 150000  # WKT chars - above this, use bbox pre-filter
     SOURCE_TABLE_PREFIX = "_fm_source_"  # Prefix for permanent source tables
     
     def _simplify_wkt_if_needed(self, wkt: str, max_points: int = None) -> str:
@@ -3311,21 +3314,44 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
                 
                 # v2.9.34: Check if old_subset is ONLY a FID filter (from previous spatial step)
-                # Pattern: starts with optional "(" then "fid IN (" or "fid = -1" or '"fid" IN ('
-                # This should be REPLACED, not combined (different source geometry)
+                # v3.0.5: CRITICAL FIX - Dynamic FID regex to support any primary key name
+                # The regex now uses pk_col variable instead of hardcoded 'fid'
+                # Supports: fid, id, ogc_fid, gid, node_id, AGG_ID, etc.
                 import re
-                is_fid_only = bool(re.match(r'^\s*\(?\s*(["\']?)fid\1\s+(IN\s*\(|=\s*-?\d+)', old_subset, re.IGNORECASE))
+                # Escape pk_col for regex safety (prevent injection)
+                pk_col_escaped = re.escape(pk_col)
+                # Build regex pattern dynamically: matches quoted or unquoted pk_col with IN/=/BETWEEN
+                is_fid_only = bool(re.match(
+                    rf'^\s*\(?\s*(["\']?){pk_col_escaped}\1\s+(IN\s*\(|=\s*-?\d+|BETWEEN\s+)',
+                    old_subset,
+                    re.IGNORECASE
+                ))
                 
-                if not has_source_alias and not has_exists and not has_spatial_predicate and not is_fid_only:
-                    # old_subset is a true user attribute filter (not just FID) - include it in SQL
+                # v3.0.3: CRITICAL FIX - FID filters from step 1 MUST be combined in multi-step filtering!
+                # Previously, is_fid_only caused replacement which lost the step 1 filter results.
+                # This meant distant layers showed ALL features instead of intersection of step 1 AND step 2.
+                if not has_source_alias and not has_exists and not has_spatial_predicate:
+                    # old_subset is either:
+                    # 1. A true user attribute filter (not FID) - ALWAYS combine
+                    # 2. A FID filter from step 1 (is_fid_only=True) - MUST combine for multi-step!
                     old_subset_sql_filter = f"({old_subset}) AND "
-                    self.log_info(f"  → Including previous attribute filter in SQL query")
-                elif is_fid_only:
-                    # v2.9.34: FID-only filter from previous spatial step - don't combine
-                    self.log_info(f"  → Old subset is FID filter from previous spatial step - will be REPLACED")
+                    # v2.9.44/v3.0.3: Enhanced logging
+                    if is_fid_only:
+                        self.log_info(f"✅ Combining FID filter from step 1 with new spatial filter (MULTI-STEP)")
+                        self.log_info(f"  → FID filter: {old_subset[:80]}...")
+                        self.log_info(f"  → This ensures intersection of step 1 AND step 2 results")
+                    else:
+                        self.log_info(f"✅ Combining old attribute filter with new spatial filter")
+                        self.log_info(f"  → Old filter: {old_subset[:80]}...")
                 else:
                     # old_subset contains spatial predicates - will be replaced, not combined
-                    self.log_info(f"  → Old subset has spatial predicates - will be replaced")
+                    # v2.9.44: Enhanced logging for debugging
+                    self.log_info(f"⚠️ Old subset has spatial predicates - will be replaced")
+                    self.log_info(f"  → has_source_alias={has_source_alias}")
+                    self.log_info(f"  → has_exists={has_exists}")
+                    self.log_info(f"  → has_spatial_predicate={has_spatial_predicate}")
+                    if old_subset:
+                        self.log_info(f"  → Old subset: {old_subset[:80]}...")
             
             # v2.9.33: Log old_subset_sql_filter for debugging
             QgsMessageLog.logMessage(
@@ -4088,21 +4114,44 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
                 
                 # v2.9.34: Check if old_subset is ONLY a FID filter (from previous spatial step)
-                # Pattern: starts with optional "(" then "fid IN (" or "fid = -1" or '"fid" IN ('
-                # This should be REPLACED, not combined (different source geometry)
+                # v3.0.5: CRITICAL FIX - Dynamic FID regex to support any primary key name
+                # The regex now uses pk_col variable instead of hardcoded 'fid'
+                # Supports: fid, id, ogc_fid, gid, node_id, AGG_ID, etc.
                 import re
-                is_fid_only = bool(re.match(r'^\s*\(?\s*(["\']{0,1})fid\1\s+(IN\s*\(|=\s*-?\d+)', old_subset, re.IGNORECASE))
+                # Escape pk_col for regex safety (prevent injection)
+                pk_col_escaped = re.escape(pk_col)
+                # Build regex pattern dynamically: matches quoted or unquoted pk_col with IN/=/BETWEEN
+                is_fid_only = bool(re.match(
+                    rf'^\s*\(?\s*(["\']?){pk_col_escaped}\1\s+(IN\s*\(|=\s*-?\d+|BETWEEN\s+)',
+                    old_subset,
+                    re.IGNORECASE
+                ))
                 
-                if not has_source_alias and not has_exists and not has_spatial_predicate and not is_fid_only:
-                    # old_subset is a true user attribute filter (not just FID) - include it in SQL
+                # v3.0.3: CRITICAL FIX - FID filters from step 1 MUST be combined in multi-step filtering!
+                # Previously, is_fid_only caused replacement which lost the step 1 filter results.
+                # This meant distant layers showed ALL features instead of intersection of step 1 AND step 2.
+                if not has_source_alias and not has_exists and not has_spatial_predicate:
+                    # old_subset is either:
+                    # 1. A true user attribute filter (not FID) - ALWAYS combine
+                    # 2. A FID filter from step 1 (is_fid_only=True) - MUST combine for multi-step!
                     old_subset_sql_filter = f"({old_subset}) AND "
-                    self.log_info(f"  → Including previous attribute filter in SQL query")
-                elif is_fid_only:
-                    # v2.9.34: FID-only filter from previous spatial step - don't combine
-                    self.log_info(f"  → Old subset is FID filter from previous spatial step - will be REPLACED")
+                    # v2.9.44/v3.0.3: Enhanced logging
+                    if is_fid_only:
+                        self.log_info(f"✅ Combining FID filter from step 1 with new spatial filter (MULTI-STEP)")
+                        self.log_info(f"  → FID filter: {old_subset[:80]}...")
+                        self.log_info(f"  → This ensures intersection of step 1 AND step 2 results")
+                    else:
+                        self.log_info(f"✅ Combining old attribute filter with new spatial filter")
+                        self.log_info(f"  → Old filter: {old_subset[:80]}...")
                 else:
                     # old_subset contains spatial predicates - will be replaced, not combined
-                    self.log_info(f"  → Old subset has spatial predicates - will be replaced")
+                    # v2.9.44: Enhanced logging for debugging
+                    self.log_info(f"⚠️ Old subset has spatial predicates - will be replaced")
+                    self.log_info(f"  → has_source_alias={has_source_alias}")
+                    self.log_info(f"  → has_exists={has_exists}")
+                    self.log_info(f"  → has_spatial_predicate={has_spatial_predicate}")
+                    if old_subset:
+                        self.log_info(f"  → Old subset: {old_subset[:80]}...")
             
             # Build EXISTS query with optional bbox pre-filter
             # The bbox filter uses target R-tree index for O(log n) initial filtering
