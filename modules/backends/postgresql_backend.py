@@ -2494,11 +2494,16 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                     except Exception:
                         pass
             # CRITICAL FIX v3.0.10: Protect against None/invalid feature count
-            count = layer.featureCount()
-            if count is None or count < 0:
-                self.log_warning(f"layer.featureCount() returned {count} in exception handler, using 0")
+            # CRITICAL FIX v3.0.18: Wrap featureCount() in try/except to prevent unhandled exception
+            try:
+                count = layer.featureCount()
+                if count is None or count < 0:
+                    self.log_warning(f"layer.featureCount() returned {count} in exception handler, using 0")
+                    return 0
+                return count
+            except Exception as fc_error:
+                self.log_warning(f"layer.featureCount() raised exception: {fc_error}, using 0")
                 return 0
-            return count
     
     def _apply_direct(self, layer: QgsVectorLayer, expression: str) -> bool:
         """
@@ -2767,6 +2772,11 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             
             # 5. CLUSTER - optional, can be slow for large datasets
             # v2.9.1: For large datasets, schedule async CLUSTER instead of skipping
+            # CRITICAL FIX v3.0.18: Protect against None feature_count from _get_fast_feature_count
+            # This can happen if PostgreSQL connection fails during feature count estimation
+            if feature_count is None:
+                self.log_warning("feature_count is None before CLUSTER decision, using 0")
+                feature_count = 0
             if self.ENABLE_MV_CLUSTER:
                 if feature_count < self.ASYNC_CLUSTER_THRESHOLD:
                     # Small dataset: synchronous CLUSTER

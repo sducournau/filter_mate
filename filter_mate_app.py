@@ -12,15 +12,6 @@ FilterMate Application Orchestrator
     This module is kept for backward compatibility. See docs/architecture.md.
 """
 
-import warnings
-warnings.warn(
-    "filter_mate_app.py is a legacy module (5,900+ lines). "
-    "New features should use core/services/ and adapters/ instead. "
-    "See docs/architecture.md for the v3.0 hexagonal architecture.",
-    DeprecationWarning,
-    stacklevel=2
-)
-
 from qgis.PyQt.QtCore import Qt, QTimer
 import weakref
 import sip
@@ -103,6 +94,42 @@ from .modules.circuit_breaker import (
 from .modules.logging_config import get_app_logger
 from .resources import *  # Qt resources must be imported with wildcard
 import uuid
+
+# v3.0: Hexagonal architecture services bridge
+# Provides access to new architecture while maintaining backward compatibility
+try:
+    from .adapters.app_bridge import (
+        initialize_services as _init_hexagonal_services,
+        cleanup_services as _cleanup_hexagonal_services,
+        is_initialized as _hexagonal_initialized,
+        get_filter_service,
+        get_history_service,
+        get_expression_service,
+        validate_expression,
+        parse_expression,
+    )
+    HEXAGONAL_AVAILABLE = True
+except ImportError:
+    HEXAGONAL_AVAILABLE = False
+
+    def _init_hexagonal_services(config=None):
+        """Fallback when hexagonal services unavailable."""
+        pass
+
+    def _cleanup_hexagonal_services():
+        """Fallback cleanup."""
+        pass
+
+    def _hexagonal_initialized():
+        """Fallback initialization check."""
+        return False
+
+    # Fallback stubs for optional services
+    get_filter_service = None
+    get_history_service = None
+    get_expression_service = None
+    validate_expression = None
+    parse_expression = None
 
 # Get FilterMate logger with SafeStreamHandler to prevent "--- Logging error ---" on shutdown
 logger = get_app_logger()
@@ -420,6 +447,14 @@ class FilterMateApp:
         # Réinitialiser les structures de données de l'app
         self.PROJECT_LAYERS.clear()
         self.project_datasources.clear()
+        
+        # v3.0: Cleanup hexagonal architecture services
+        if HEXAGONAL_AVAILABLE:
+            try:
+                _cleanup_hexagonal_services()
+                logger.debug("FilterMate: Hexagonal services cleaned up")
+            except Exception as e:
+                logger.debug(f"FilterMate: Hexagonal services cleanup error: {e}")
 
 
     def _cleanup_postgresql_session_views(self):
@@ -586,6 +621,17 @@ class FilterMateApp:
                 "Plugin will work with local files (Shapefile, GeoPackage, Spatialite) only. "
                 "For PostgreSQL layers, install psycopg2."
             )
+        
+        # v3.0: Initialize hexagonal architecture services
+        if HEXAGONAL_AVAILABLE:
+            try:
+                _init_hexagonal_services({
+                    'history': {'max_depth': history_max_size},
+                    'backends': {'postgresql_available': POSTGRESQL_AVAILABLE}
+                })
+                logger.info("FilterMate: Hexagonal architecture services initialized")
+            except Exception as e:
+                logger.warning(f"FilterMate: Hexagonal services initialization failed: {e}")
         
         init_env_vars()
         

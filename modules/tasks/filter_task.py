@@ -28,15 +28,6 @@ Performance: Uses geometry caching and backend-specific optimizations.
     This module is kept for backward compatibility. See docs/architecture.md.
 """
 
-import warnings
-warnings.warn(
-    "modules/tasks/filter_task.py is a legacy module (12,000+ lines). "
-    "New features should use adapters/qgis/tasks/ instead. "
-    "See docs/architecture.md for the v3.0 hexagonal architecture.",
-    DeprecationWarning,
-    stacklevel=2
-)
-
 import logging
 import os
 import uuid

@@ -32,16 +32,6 @@
     controllers progressively. See docs/architecture.md for migration guide.
 """
 
-import warnings
-warnings.warn(
-    "filter_mate_dockwidget.py is a legacy module (12,000+ lines). "
-    "New features should use ui/controllers/ instead. "
-    "See docs/architecture.md for the v3.0 hexagonal architecture.",
-    DeprecationWarning,
-    stacklevel=2
-)
-
-
 from .config.config import ENV_VARS
 import os
 import json
@@ -194,6 +184,14 @@ try:
 except ImportError:
     UI_CONFIG_AVAILABLE = False
 
+# Import MVC Controllers for gradual migration (v3.0)
+try:
+    from .ui.controllers.integration import ControllerIntegration
+    CONTROLLERS_AVAILABLE = True
+except ImportError as e:
+    CONTROLLERS_AVAILABLE = False
+    logger.debug(f"Controllers not available: {e}")
+
 class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     closingPlugin = pyqtSignal()
@@ -337,6 +335,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Cache stores selected features and pre-computed bounding boxes per groupbox
         self._exploring_cache = ExploringFeaturesCache(max_layers=50, max_age_seconds=300.0)
         logger.debug("Initialized exploring features cache")
+        
+        # v3.0: Initialize MVC Controller Integration (Strangler Fig pattern)
+        # Controllers are created but legacy code still handles most operations
+        # Gradually delegate functionality to controllers over time
+        self._controller_integration = None
+        if CONTROLLERS_AVAILABLE:
+            try:
+                self._controller_integration = ControllerIntegration(
+                    dockwidget=self,
+                    enabled=True  # Enable controllers for migration
+                )
+                logger.info("Controller integration initialized (v3.0 migration)")
+            except Exception as e:
+                logger.warning(f"Could not initialize controller integration: {e}")
+                self._controller_integration = None
         
         # v2.9.20: Track last selected feature ID for single_selection mode
         # This allows recovery when QgsFeaturePickerWidget loses its selection after layer refresh
@@ -5163,6 +5176,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         self.widgets_initialized = True
         logger.info(f"✓ Widgets fully initialized with {len(self.PROJECT_LAYERS)} layers")
+        
+        # v3.0: Setup MVC controllers now that widgets are ready
+        if self._controller_integration is not None:
+            try:
+                if self._controller_integration.setup():
+                    self._controller_integration.sync_from_dockwidget()
+                    logger.info("✓ Controller integration setup complete")
+                else:
+                    logger.debug("Controller integration setup returned False")
+            except Exception as e:
+                logger.warning(f"Controller integration setup failed: {e}")
         
         # CRITICAL FIX: Connect selectionChanged signal for initial current_layer
         # This ensures tracking/selecting works even without changing layers first
@@ -12615,6 +12639,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     logger.debug("Theme watcher callback removed")
             except Exception as e:
                 logger.debug(f"FilterMate: Error cleaning up theme watcher: {e}")
+            
+            # v3.0: Teardown MVC controllers
+            try:
+                if self._controller_integration is not None:
+                    self._controller_integration.teardown()
+                    logger.debug("Controller integration teardown complete")
+            except Exception as e:
+                logger.debug(f"FilterMate: Error during controller teardown: {e}")
             
             self.closingPlugin.emit()
             event.accept()

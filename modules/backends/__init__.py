@@ -1,8 +1,24 @@
 # -*- coding: utf-8 -*-
 """
-FilterMate Backend Architecture
+FilterMate Backend Architecture (LEGACY)
 
-This package contains the backend implementations for different data providers:
+.. deprecated:: 3.0.0
+    This package is deprecated and will be removed in a future version.
+    
+    NEW CODE SHOULD USE THE HEXAGONAL ARCHITECTURE:
+    
+    - For backends: ``adapters.backends``
+    - For factory: ``adapters.backends.BackendFactory``
+    - For optimizer: ``core.services.auto_optimizer.AutoOptimizer``
+    - For filter optimizer: ``adapters.qgis.filter_optimizer.QgisFilterOptimizer``
+    
+    Example of new imports::
+    
+        from adapters.backends import BackendFactory, create_backend_factory
+        from adapters.backends.memory.backend import MemoryBackend
+        from core.services.auto_optimizer import AutoOptimizer
+
+This package contains the legacy backend implementations for different data providers:
 - PostgreSQL (optimized for performance with large datasets)
 - Spatialite (good performance for small to medium datasets)
 - OGR (fallback for various file formats)

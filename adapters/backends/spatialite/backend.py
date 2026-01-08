@@ -162,6 +162,22 @@ class SpatialiteBackend(BackendPort):
         """Get backend metrics."""
         return self._metrics.copy()
 
+    def get_statistics(self) -> Dict[str, Any]:
+        """Get backend execution statistics."""
+        stats = self.metrics
+        # Add cache statistics
+        stats['cache_stats'] = self._cache.get_stats()
+        return stats
+
+    def reset_statistics(self) -> None:
+        """Reset backend execution statistics."""
+        self._metrics = {
+            'executions': 0,
+            'cache_hits': 0,
+            'total_time_ms': 0.0,
+            'errors': 0
+        }
+
     def set_connection(self, connection: sqlite3.Connection) -> None:
         """
         Set database connection.

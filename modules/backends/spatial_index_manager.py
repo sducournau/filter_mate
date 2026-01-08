@@ -231,11 +231,17 @@ class SpatialIndexManager:
         
         exists = self.has_index(layer)
         
+        # CRITICAL FIX v3.0.18: Protect against None/invalid feature count
+        # featureCount() can return None if layer is invalid or -1 if unknown
+        feature_count = layer.featureCount()
+        if feature_count is None or feature_count < 0:
+            feature_count = 0
+        
         info = IndexInfo(
             file_path=file_path,
             index_type=index_type,
             exists=exists,
-            feature_count=layer.featureCount()
+            feature_count=feature_count
         )
         
         # Cache the result
@@ -267,7 +273,11 @@ class SpatialIndexManager:
             return True
         
         # Check minimum feature threshold
+        # CRITICAL FIX v3.0.18: Protect against None/invalid feature count
+        # featureCount() can return None if layer is invalid or -1 if unknown
         feature_count = layer.featureCount()
+        if feature_count is None or feature_count < 0:
+            feature_count = 0
         if feature_count < SPATIAL_INDEX_MIN_FEATURES and not force:
             logger.debug(
                 f"Skipping index creation for {layer.name()} "

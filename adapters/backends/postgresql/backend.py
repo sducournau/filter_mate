@@ -115,6 +115,24 @@ class PostgreSQLBackend(BackendPort):
         """Get backend metrics."""
         return self._metrics.copy()
 
+    def get_statistics(self) -> Dict[str, Any]:
+        """Get backend execution statistics."""
+        stats = self.metrics
+        # Add MV manager statistics
+        if self._mv_manager:
+            stats['mv_stats'] = self._mv_manager.get_stats() if hasattr(self._mv_manager, 'get_stats') else {}
+        return stats
+
+    def reset_statistics(self) -> None:
+        """Reset backend execution statistics."""
+        self._metrics = {
+            'executions': 0,
+            'mv_executions': 0,
+            'direct_executions': 0,
+            'total_time_ms': 0.0,
+            'errors': 0
+        }
+
     def execute(
         self,
         expression: FilterExpression,

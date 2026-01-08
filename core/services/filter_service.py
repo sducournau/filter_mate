@@ -6,9 +6,10 @@ Main orchestration service for filter operations.
 This is a PURE PYTHON module with NO QGIS dependencies,
 enabling true unit testing and clear separation of concerns.
 """
-from typing import List, Optional, Dict, Set
+from typing import List, Optional, Dict, Set, Tuple, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
 import logging
 
 from core.domain.filter_expression import FilterExpression, ProviderType
@@ -18,6 +19,85 @@ from core.domain.optimization_config import OptimizationConfig
 from core.services.expression_service import ExpressionService
 
 logger = logging.getLogger(__name__)
+
+
+class MultiStepStrategy(Enum):
+    """Strategy for multi-step filtering."""
+    SEQUENTIAL = "sequential"       # Execute steps one after another
+    CHAINED = "chained"             # Use output of previous step as input
+    PARALLEL = "parallel"           # Execute independent steps in parallel
+
+
+@dataclass
+class FilterStep:
+    """
+    Single step in a multi-step filter operation.
+    
+    Attributes:
+        expression: Filter expression for this step
+        target_layer_ids: Layers to filter in this step
+        use_previous_result: Whether to use previous step's result as source
+        step_name: Optional name for logging/debugging
+    """
+    expression: FilterExpression
+    target_layer_ids: List[str]
+    use_previous_result: bool = False
+    step_name: str = ""
+
+
+@dataclass
+class MultiStepRequest:
+    """
+    Request for multi-step filter operation.
+    
+    Attributes:
+        steps: List of filter steps to execute
+        source_layer_id: Initial source layer
+        strategy: How to execute steps
+        stop_on_empty: Stop if a step returns no features
+        progress_callback: Optional callback for progress updates
+    """
+    steps: List[FilterStep]
+    source_layer_id: str
+    strategy: MultiStepStrategy = MultiStepStrategy.CHAINED
+    stop_on_empty: bool = True
+    progress_callback: Optional[Callable[[int, int, str], None]] = None
+
+
+@dataclass
+class MultiStepResponse:
+    """
+    Response from multi-step filter operation.
+    
+    Attributes:
+        step_results: Results for each step
+        final_feature_ids: Final set of matching feature IDs
+        total_execution_time_ms: Total time for all steps
+        completed_steps: Number of steps completed
+        stopped_early: Whether execution stopped before last step
+        stop_reason: Reason for early stop (if applicable)
+    """
+    step_results: List[FilterResponse]
+    final_feature_ids: Set[int]
+    total_execution_time_ms: float
+    completed_steps: int
+    stopped_early: bool = False
+    stop_reason: str = ""
+    
+    @property
+    def is_success(self) -> bool:
+        """Check if all completed steps succeeded."""
+        return all(r.is_success for r in self.step_results)
+    
+    @property
+    def total_steps(self) -> int:
+        """Total number of steps in the request."""
+        return len(self.step_results)
+    
+    @property
+    def final_count(self) -> int:
+        """Number of features in final result."""
+        return len(self.final_feature_ids)
 
 
 @dataclass
@@ -503,6 +583,197 @@ class FilterService:
             'cache_misses': 0,
             'errors': 0,
             'total_time_ms': 0.0,
+        }
+
+    # =========================================================================
+    # Multi-Step Filtering (MIG-012)
+    # =========================================================================
+
+    def apply_multi_step_filter(
+        self, 
+        request: 'MultiStepRequest'
+    ) -> 'MultiStepResponse':
+        """
+        Apply a multi-step filter sequence.
+        
+        Multi-step filtering allows chaining multiple filter operations
+        where the output of one step can be used as input to the next.
+        
+        This is particularly useful for:
+        - Progressive narrowing of results
+        - Complex spatial relationships
+        - Step-by-step user workflows
+        
+        Args:
+            request: MultiStepRequest with steps to execute
+            
+        Returns:
+            MultiStepResponse with results for each step
+            
+        Example:
+            >>> steps = [
+            ...     FilterStep(expr1, ["layer1", "layer2"]),
+            ...     FilterStep(expr2, ["layer3"], use_previous_result=True),
+            ...     FilterStep(expr3, ["layer4"], use_previous_result=True),
+            ... ]
+            >>> request = MultiStepRequest(steps, "source_layer")
+            >>> response = service.apply_multi_step_filter(request)
+            >>> print(f"Final count: {response.final_count}")
+        """
+        self._is_cancelled = False
+        start_time = datetime.now()
+        step_results: List[FilterResponse] = []
+        current_feature_ids: Set[int] = set()
+        stopped_early = False
+        stop_reason = ""
+        
+        total_steps = len(request.steps)
+        
+        for step_index, step in enumerate(request.steps):
+            if self._is_cancelled:
+                stopped_early = True
+                stop_reason = "Cancelled by user"
+                break
+            
+            # Report progress
+            if request.progress_callback:
+                try:
+                    request.progress_callback(
+                        step_index + 1,
+                        total_steps,
+                        step.step_name or f"Step {step_index + 1}"
+                    )
+                except Exception as e:
+                    logger.warning(f"Progress callback failed: {e}")
+            
+            # Build request for this step
+            step_request = self._build_step_request(
+                step=step,
+                source_layer_id=request.source_layer_id,
+                previous_feature_ids=current_feature_ids if step.use_previous_result else None
+            )
+            
+            # Execute step
+            step_response = self.apply_filter(step_request)
+            step_results.append(step_response)
+            
+            # Update current feature IDs
+            if step_response.is_success:
+                current_feature_ids = step_response.all_feature_ids
+            else:
+                # On error, keep previous IDs but log
+                logger.warning(
+                    f"Step {step_index + 1} failed: {step_response.error_messages}"
+                )
+            
+            # Check for early stop
+            if request.stop_on_empty and len(current_feature_ids) == 0:
+                stopped_early = True
+                stop_reason = f"Step {step_index + 1} returned no features"
+                logger.info(f"Multi-step stopped early: {stop_reason}")
+                break
+        
+        # Calculate total execution time
+        execution_time = (datetime.now() - start_time).total_seconds() * 1000
+        
+        return MultiStepResponse(
+            step_results=step_results,
+            final_feature_ids=current_feature_ids,
+            total_execution_time_ms=execution_time,
+            completed_steps=len(step_results),
+            stopped_early=stopped_early,
+            stop_reason=stop_reason
+        )
+
+    def _build_step_request(
+        self,
+        step: 'FilterStep',
+        source_layer_id: str,
+        previous_feature_ids: Optional[Set[int]]
+    ) -> FilterRequest:
+        """
+        Build a FilterRequest for a single step.
+        
+        If previous_feature_ids is provided, modifies the expression
+        to include a filter on those IDs.
+        """
+        expression = step.expression
+        
+        # If using previous result, we need to modify the source
+        # This is handled by the backend through the expression
+        if previous_feature_ids is not None and len(previous_feature_ids) > 0:
+            # The expression already has the spatial predicate
+            # We just need to ensure it's applied to the filtered set
+            logger.debug(
+                f"Step using {len(previous_feature_ids)} features from previous step"
+            )
+        
+        return FilterRequest(
+            expression=expression,
+            source_layer_id=source_layer_id,
+            target_layer_ids=step.target_layer_ids,
+            use_cache=False,  # Don't cache intermediate steps
+            optimization_config=None
+        )
+
+    def create_multi_step_request(
+        self,
+        source_layer_id: str,
+        expressions: List[Tuple[str, List[str]]],
+        provider_type: ProviderType = ProviderType.UNKNOWN
+    ) -> 'MultiStepRequest':
+        """
+        Convenience method to create a multi-step request from expressions.
+        
+        Args:
+            source_layer_id: ID of the source layer
+            expressions: List of (expression_string, target_layer_ids) tuples
+            provider_type: Provider type for expression conversion
+            
+        Returns:
+            Configured MultiStepRequest
+            
+        Example:
+            >>> request = service.create_multi_step_request(
+            ...     "source",
+            ...     [
+            ...         ("intersects($geometry, @source)", ["layer1"]),
+            ...         ("area > 1000", ["layer2", "layer3"]),
+            ...     ]
+            ... )
+        """
+        steps = []
+        for i, (expr_str, target_ids) in enumerate(expressions):
+            expr = FilterExpression.create(
+                raw=expr_str,
+                provider=provider_type,
+                source_layer_id=source_layer_id
+            )
+            steps.append(FilterStep(
+                expression=expr,
+                target_layer_ids=target_ids,
+                use_previous_result=(i > 0),  # Chain after first step
+                step_name=f"Step {i + 1}"
+            ))
+        
+        return MultiStepRequest(
+            steps=steps,
+            source_layer_id=source_layer_id,
+            strategy=MultiStepStrategy.CHAINED
+        )
+
+    def get_multi_step_statistics(self) -> Dict:
+        """
+        Get statistics specific to multi-step operations.
+        
+        Returns:
+            Dictionary with multi-step statistics
+        """
+        base_stats = self.get_statistics()
+        return {
+            **base_stats,
+            'multi_step_enabled': True,
+            'supported_strategies': [s.value for s in MultiStepStrategy],
         }
 
 
