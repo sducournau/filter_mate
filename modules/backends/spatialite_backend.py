@@ -102,6 +102,22 @@ except ImportError:
     intersect_filter_fids = None
     SpatialiteCacheDB = None
 
+# v2.8.8: Import cache helpers for shared cache logic
+try:
+    from .cache_helpers import (
+        perform_cache_intersection,
+        store_filter_result,
+        get_cache_parameters_from_task,
+        get_combine_operator_from_task,
+        CACHE_AVAILABLE
+    )
+except ImportError:
+    perform_cache_intersection = None
+    store_filter_result = None
+    get_cache_parameters_from_task = None
+    get_combine_operator_from_task = None
+    CACHE_AVAILABLE = False
+
 
 # Cache for mod_spatialite availability (tested once per session)
 _MOD_SPATIALITE_AVAILABLE: Optional[bool] = None
@@ -3401,91 +3417,48 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             )
             self.log_info(f"  → Found {len(matching_fids)} matching features via direct SQL")
             
-            # v2.9.19: Get source WKT BEFORE cache intersection check
-            # This is needed to verify if the source geometry matches the cached one
+            # v2.8.8: Use shared cache_helpers for consistent behavior
             source_wkt = ""
             predicates_list = []
             buffer_val = 0.0
             if hasattr(self, 'task_params') and self.task_params:
-                infos = self.task_params.get('infos', {})
-                source_wkt = infos.get('source_geom_wkt', '')
-                # v2.8.12: FIX - geometric_predicates can be list or dict
-                geom_preds = self.task_params.get('filtering', {}).get('geometric_predicates', [])
-                if isinstance(geom_preds, dict):
-                    predicates_list = list(geom_preds.keys())
-                elif isinstance(geom_preds, list):
-                    predicates_list = geom_preds
-                else:
-                    predicates_list = []
-                # FIX v3.0.12: Clean buffer value from float precision errors
-                buffer_val = clean_buffer_value(self.task_params.get('filtering', {}).get('buffer_value', 0.0))
+                source_wkt, buffer_val, predicates_list = get_cache_parameters_from_task(self.task_params) if get_cache_parameters_from_task else ("", 0.0, [])
             
-            # v2.8.11: MULTI-STEP FILTERING - Intersect with previous cache if exists
-            # v2.9.19: FIX - Pass source_wkt to only intersect if geometry matches
-            # v2.9.30: FIX - Also pass buffer_val and predicates_list to avoid wrong intersection
-            # v2.9.43: CRITICAL - Cache multi-step only supports AND operator
-            # OR and NOT AND require different logic (union/difference) not yet implemented
+            # v2.8.8: Use cache_helpers for multi-step intersection (supports AND/OR/NOT AND)
             step_number = 1
-            if SPATIALITE_CACHE_AVAILABLE and old_subset:
-                # Get combine_operator from task_params if available
-                cache_operator = None
-                if hasattr(self, 'task_params') and self.task_params:
-                    cache_operator = self.task_params.get('_current_combine_operator')
-                
-                # Validate operator support for cache intersection
-                if cache_operator in ('OR', 'NOT AND'):
-                    self.log_warning(
-                        f"⚠️ Multi-step filtering with {cache_operator} - "
-                        f"cache intersection not supported (only AND), performing full filter"
-                    )
-                    QgsMessageLog.logMessage(
-                        f"⚠️ Cache multi-step: {cache_operator} not supported, skipping intersection",
-                        "FilterMate", Qgis.Warning
-                    )
-                    # Skip cache intersection for OR/NOT AND
-                else:
-                    # AND or None → use cache intersection
-                    # Check if this is a re-filter (multi-step) with SAME source geometry AND parameters
-                    previous_fids = get_previous_filter_fids(layer, source_wkt, buffer_val, predicates_list)
-                    if previous_fids is not None:
-                        original_count = len(matching_fids)
-                        # Intersect new results with previous (only if same source geom AND params)
-                        matching_fids_set, step_number = intersect_filter_fids(
-                            layer, set(matching_fids), source_wkt, buffer_val, predicates_list
-                        )
-                        matching_fids = list(matching_fids_set)
-                        self.log_info(f"  🔄 Multi-step intersection: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)}")
-                        QgsMessageLog.logMessage(
-                            f"  → Multi-step step {step_number}: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)} FIDs",
-                            "FilterMate", Qgis.Info
-                        )
+            if CACHE_AVAILABLE and perform_cache_intersection and old_subset:
+                cache_operator = get_combine_operator_from_task(self.task_params) if get_combine_operator_from_task else None
+                cache_result = perform_cache_intersection(
+                    layer=layer,
+                    matching_fids=matching_fids,
+                    source_wkt=source_wkt,
+                    buffer_value=buffer_val,
+                    predicates_list=predicates_list,
+                    old_subset=old_subset,
+                    combine_operator=cache_operator,
+                    logger=self,
+                    backend_name="Spatialite Direct SQL"
+                )
+                if cache_result.was_intersected:
+                    matching_fids = cache_result.fid_list
+                    step_number = cache_result.step_number
             
-            # v2.8.11: Store result in cache for future multi-step filtering
+            # v2.8.8: Store result using cache_helpers
             QgsMessageLog.logMessage(
-                f"  📦 Cache check: AVAILABLE={SPATIALITE_CACHE_AVAILABLE}, fids_count={len(matching_fids)}",
+                f"  📦 Cache check: AVAILABLE={CACHE_AVAILABLE}, fids_count={len(matching_fids)}",
                 "FilterMate", Qgis.Info
             )
-            if SPATIALITE_CACHE_AVAILABLE and matching_fids:
-                try:
-                    cache_key = store_filter_fids(
-                        layer=layer,
-                        fids=matching_fids,
-                        source_geom_wkt=source_wkt,
-                        predicates=predicates_list,
-                        buffer_value=buffer_val,
-                        step_number=step_number
-                    )
-                    QgsMessageLog.logMessage(
-                        f"  💾 Direct SQL cached {len(matching_fids)} FIDs (key={cache_key[:8] if cache_key else 'None'}, step={step_number})",
-                        "FilterMate", Qgis.Info
-                    )
-                except Exception as cache_err:
-                    QgsMessageLog.logMessage(
-                        f"  ⚠️ Cache storage failed: {cache_err}",
-                        "FilterMate", Qgis.Warning
-                    )
-                    import traceback
-                    self.log_debug(f"Cache storage traceback: {traceback.format_exc()}")
+            if CACHE_AVAILABLE and store_filter_result and matching_fids:
+                store_filter_result(
+                    layer=layer,
+                    matching_fids=matching_fids,
+                    source_wkt=source_wkt,
+                    buffer_value=buffer_val,
+                    predicates_list=predicates_list,
+                    step_number=step_number,
+                    logger=self,
+                    backend_name="Spatialite Direct SQL"
+                )
             
             if len(matching_fids) == 0:
                 # v2.9.40: FALLBACK - When Spatialite returns 0 features, trigger OGR fallback
@@ -4335,71 +4308,43 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 "FilterMate", Qgis.Info
             )
             
-            # v2.8.11: MULTI-STEP FILTERING - Intersect with previous cache if exists
-            # v2.9.19: FIX - Pass source_wkt to only intersect if geometry matches
-            # v2.9.30: FIX - Also pass buffer_value and predicates to avoid wrong intersection
-            # v2.9.43: CRITICAL - Cache multi-step only supports AND operator
+            # v2.8.8: Use cache_helpers for multi-step intersection (supports AND/OR/NOT AND)
             step_number = 1
-            if SPATIALITE_CACHE_AVAILABLE and old_subset:
-                # Get combine_operator from task_params if available
-                cache_operator = None
-                if hasattr(self, 'task_params') and self.task_params:
-                    cache_operator = self.task_params.get('_current_combine_operator')
-                
-                # Validate operator support for cache intersection
-                if cache_operator in ('OR', 'NOT AND'):
-                    self.log_warning(
-                        f"⚠️ Multi-step filtering with {cache_operator} - "
-                        f"cache intersection not supported (only AND), performing full filter"
-                    )
-                    # Skip cache intersection for OR/NOT AND
-                elif True:  # AND or None → use cache intersection
-                    # Check if this is a re-filter (multi-step) with SAME source geometry AND parameters
-                    # Get predicates as list for comparison
-                    if isinstance(predicates, dict):
-                        predicates_for_cache = list(predicates.keys())
-                    elif isinstance(predicates, list):
-                        predicates_for_cache = predicates
-                    else:
-                        predicates_for_cache = []
-                        
-                    previous_fids = get_previous_filter_fids(layer, source_wkt, buffer_value, predicates_for_cache)
-                    if previous_fids is not None:
-                        original_count = len(matching_fids)
-                        # Intersect new results with previous (only if same source geom AND params)
-                        matching_fids_set, step_number = intersect_filter_fids(
-                            layer, set(matching_fids), source_wkt, buffer_value, predicates_for_cache
-                        )
-                        matching_fids = list(matching_fids_set)
-                        self.log_info(f"  🔄 Multi-step intersection: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)}")
-                        QgsMessageLog.logMessage(
-                            f"  → Multi-step step {step_number}: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)} FIDs",
-                            "FilterMate", Qgis.Info
-                        )
+            predicates_for_cache = []
+            if isinstance(predicates, dict):
+                predicates_for_cache = list(predicates.keys())
+            elif isinstance(predicates, list):
+                predicates_for_cache = predicates
             
-            # v2.8.11: Store result in cache for future multi-step filtering
-            if SPATIALITE_CACHE_AVAILABLE and matching_fids:
-                try:
-                    source_wkt = source_wkt if 'source_wkt' in dir() else ""
-                    # v2.8.12: FIX - predicates can be list or dict
-                    if isinstance(predicates, dict):
-                        predicates_list = list(predicates.keys())
-                    elif isinstance(predicates, list):
-                        predicates_list = predicates
-                    else:
-                        predicates_list = []
-                    
-                    cache_key = store_filter_fids(
-                        layer=layer,
-                        fids=matching_fids,
-                        source_geom_wkt=source_wkt,
-                        predicates=predicates_list,
-                        buffer_value=buffer_value,
-                        step_number=step_number
-                    )
-                    self.log_info(f"  💾 Cached {len(matching_fids)} FIDs (key={cache_key[:8]}, step={step_number})")
-                except Exception as cache_err:
-                    self.log_debug(f"Cache storage failed (non-fatal): {cache_err}")
+            if CACHE_AVAILABLE and perform_cache_intersection and old_subset:
+                cache_operator = get_combine_operator_from_task(self.task_params) if get_combine_operator_from_task else None
+                cache_result = perform_cache_intersection(
+                    layer=layer,
+                    matching_fids=matching_fids,
+                    source_wkt=source_wkt,
+                    buffer_value=buffer_value,
+                    predicates_list=predicates_for_cache,
+                    old_subset=old_subset,
+                    combine_operator=cache_operator,
+                    logger=self,
+                    backend_name="Spatialite Native"
+                )
+                if cache_result.was_intersected:
+                    matching_fids = cache_result.fid_list
+                    step_number = cache_result.step_number
+            
+            # v2.8.8: Store result using cache_helpers
+            if CACHE_AVAILABLE and store_filter_result and matching_fids:
+                store_filter_result(
+                    layer=layer,
+                    matching_fids=matching_fids,
+                    source_wkt=source_wkt,
+                    buffer_value=buffer_value,
+                    predicates_list=predicates_for_cache,
+                    step_number=step_number,
+                    logger=self,
+                    backend_name="Spatialite Native"
+                )
             
             # v2.6.5: Build optimized FID-based filter expression
             if len(matching_fids) == 0:
