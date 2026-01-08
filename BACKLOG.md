@@ -419,13 +419,13 @@ cursor.execute("SELECT ST_Extent(ST_GeomFromText(?))", (wkt,))
 
 **✅ Solution implémentée (v2.3.9):**  
 Le code détecte automatiquement quand l'exécution parallèle n'est pas thread-safe et bascule en mode séquentiel:
+
 - **OGR layers**: Toujours séquentiel (QGIS layer objects non thread-safe)
 - **Shared SQLite databases**: Séquentiel (single-writer limitation)
 - **Geometric filtering**: Séquentiel (selectByLocation non thread-safe)
 - **Database backends (PostgreSQL/Spatialite)**: Parallèle OK quand pas partagés
 
 Documentation complète au début du fichier avec règles de Thread Safety.
-
 
 ---
 
@@ -644,16 +644,16 @@ def temp_table_context(self, db_path, table_name):
 
 ### HIGH-011 à HIGH-018: Issues Diverses Haute Priorité
 
-| ID       | Issue                             | Fichier            | Effort                  |
-| -------- | --------------------------------- | ------------------ | ----------------------- |
-| HIGH-011 | Type hints manquants              | Tous backends      | 3 jours                 |
-| HIGH-012 | Docstrings absentes               | Méthodes publiques | 2 jours                 |
-| HIGH-013 | Magic numbers hardcodés           | Multiples          | ✅ constants.py         |
-| HIGH-014 | Validation géométrie redondante   | spatialite_backend | ✅ geometry_safety.py   |
+| ID       | Issue                             | Fichier            | Effort                                 |
+| -------- | --------------------------------- | ------------------ | -------------------------------------- |
+| HIGH-011 | Type hints manquants              | Tous backends      | 3 jours                                |
+| HIGH-012 | Docstrings absentes               | Méthodes publiques | 2 jours                                |
+| HIGH-013 | Magic numbers hardcodés           | Multiples          | ✅ constants.py                        |
+| HIGH-014 | Validation géométrie redondante   | spatialite_backend | ✅ geometry_safety.py                  |
 | HIGH-015 | Simplification WKT redondante     | filter_task        | ⚠️ Intentionnel (contextes différents) |
-| HIGH-016 | Pas de cache unifié               | Tous backends      | ✅ 6 caches spécialisés |
-| HIGH-017 | Messages d'erreur peu informatifs | Multiples          | ✅ customExceptions.py  |
-| HIGH-018 | Tests multi-step < 10% couverture | tests/             | 3-4 jours               |
+| HIGH-016 | Pas de cache unifié               | Tous backends      | ✅ 6 caches spécialisés                |
+| HIGH-017 | Messages d'erreur peu informatifs | Multiples          | ✅ customExceptions.py                 |
+| HIGH-018 | Tests multi-step < 10% couverture | tests/             | 3-4 jours                              |
 
 ---
 
