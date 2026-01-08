@@ -5938,18 +5938,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # Log the error without storing in self.exception
                 logger.warning(f"Error in filtering_populate_layers_chekableCombobox: {type(e).__name__}: {e}")
                 
-                # Check if layer is still valid (not deleted)
-                try:
-                    if layer is not None and not sip.isdeleted(layer):
-                        # Pass explicitly typed empty list for properties parameter
-                        empty_properties = []
-                        self.resetLayerVariableOnErrorEvent(layer, empty_properties)
-                    else:
-                        # Layer has been deleted
-                        logger.debug("Cannot reset layer variable - layer has been deleted")
-                except RuntimeError as runtime_err:
-                    # Layer C++ object is deleted
-                    logger.debug(f"Cannot reset layer variable - layer C++ object deleted: {runtime_err}")
+                # v3.0.14: CRITICAL - Check if layer is still valid (not deleted) using centralized method
+                if not self._is_layer_truly_deleted(layer):
+                    # Pass explicitly typed empty list for properties parameter
+                    empty_properties = []
+                    self.resetLayerVariableOnErrorEvent(layer, empty_properties)
+                else:
+                    # Layer has been deleted
+                    logger.debug("Cannot reset layer variable - layer has been deleted")
 
     def exporting_populate_combobox(self):
 
@@ -7422,17 +7418,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         if self.widgets_initialized is True and self.current_layer is not None:
 
-            # CRITICAL: Check if layer C++ object has been deleted
-            # v2.9.25: But NOT during filtering - layer may appear deleted temporarily
-            try:
-                if sip.isdeleted(self.current_layer):
-                    logger.debug("exploring_identify_clicked: current_layer C++ object deleted")
-                    if not self._filtering_in_progress:
-                        self.current_layer = None
-                    return
-            except (RuntimeError, TypeError):
-                if not self._filtering_in_progress:
-                    self.current_layer = None
+            # v3.0.14: Use centralized deletion check with filtering protection
+            if self._is_layer_truly_deleted(self.current_layer):
+                logger.debug("exploring_identify_clicked: current_layer C++ object truly deleted")
+                self.current_layer = None
                 return
 
             layer_id = self.current_layer.id()
@@ -7502,17 +7491,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         if self.widgets_initialized is True and self.current_layer is not None:
 
-            # CRITICAL: Check if layer C++ object has been deleted
-            # v2.9.25: But NOT during filtering - layer may appear deleted temporarily
-            try:
-                if sip.isdeleted(self.current_layer):
-                    logger.debug("get_current_features: current_layer C++ object deleted")
-                    if not self._filtering_in_progress:
-                        self.current_layer = None
-                    return [], ''
-            except (RuntimeError, TypeError):
-                if not self._filtering_in_progress:
-                    self.current_layer = None
+            # v3.0.14: Use centralized deletion check with filtering protection
+            if self._is_layer_truly_deleted(self.current_layer):
+                logger.debug("get_current_features: current_layer C++ object truly deleted")
+                self.current_layer = None
                 return [], ''
 
             layer_id = self.current_layer.id()
@@ -7776,17 +7758,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         if self.widgets_initialized is True and self.current_layer is not None:
 
-            # CRITICAL: Check if layer C++ object has been deleted
-            # v2.9.25: But NOT during filtering - layer may appear deleted temporarily
-            try:
-                if sip.isdeleted(self.current_layer):
-                    logger.debug("exploring_zoom_clicked: current_layer C++ object deleted")
-                    if not self._filtering_in_progress:
-                        self.current_layer = None
-                    return
-            except (RuntimeError, TypeError):
-                if not self._filtering_in_progress:
-                    self.current_layer = None
+            # v3.0.14: Use centralized deletion check with filtering protection
+            if self._is_layer_truly_deleted(self.current_layer):
+                logger.debug("exploring_zoom_clicked: current_layer C++ object truly deleted")
+                self.current_layer = None
                 return
 
             layer_id = self.current_layer.id()
@@ -8024,17 +7999,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         if self.widgets_initialized is True and self.current_layer is not None:
 
-            # CRITICAL: Check if layer C++ object has been deleted
-            # v2.9.25: But NOT during filtering - layer may appear deleted temporarily
-            try:
-                if sip.isdeleted(self.current_layer):
-                    logger.debug("zooming_to_features: current_layer C++ object deleted")
-                    if not self._filtering_in_progress:
-                        self.current_layer = None
-                    return
-            except (RuntimeError, TypeError):
-                if not self._filtering_in_progress:
-                    self.current_layer = None
+            # v3.0.14: CRITICAL - Use centralized deletion check with full protection
+            if self._is_layer_truly_deleted(self.current_layer):
+                logger.debug("zooming_to_features: current_layer C++ object truly deleted")
+                self.current_layer = None
                 return
 
             # DIAGNOSTIC: Log incoming features
@@ -8716,19 +8684,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         if self.widgets_initialized is True and self.current_layer is not None:
 
-            # CRITICAL: Check if layer C++ object has been deleted
-            # v2.9.25: But NOT during filtering - layer may appear deleted temporarily
-            try:
-                if sip.isdeleted(self.current_layer):
-                    logger.debug("exploring_deselect_features: current_layer C++ object deleted")
-                    if not self._filtering_in_progress:
-                        self.current_layer = None
-                    return
-            except (RuntimeError, TypeError):
-                if not self._filtering_in_progress:
-                    self.current_layer = None
+            # v3.0.14: CRITICAL - Use centralized deletion check with full protection
+            if self._is_layer_truly_deleted(self.current_layer):
+                logger.debug("exploring_deselect_features: current_layer C++ object truly deleted")
+                self.current_layer = None
                 return
-            
+
             self.current_layer.removeSelection()
         
 
@@ -8743,19 +8704,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         if self.widgets_initialized is True and self.current_layer is not None:
             
-            # CRITICAL: Check if layer C++ object has been deleted
-            # v2.9.25: But NOT during filtering - layer may appear deleted temporarily
-            try:
-                if sip.isdeleted(self.current_layer):
-                    logger.debug("exploring_select_features: current_layer C++ object deleted")
-                    if not self._filtering_in_progress:
-                        self.current_layer = None
-                    return
-            except (RuntimeError, TypeError):
-                if not self._filtering_in_progress:
-                    self.current_layer = None
+            # v3.0.14: CRITICAL - Use centralized deletion check with full protection
+            if self._is_layer_truly_deleted(self.current_layer):
+                logger.debug("exploring_select_features: current_layer C++ object truly deleted")
+                self.current_layer = None
                 return
-            
+
             # Activate QGIS selection tool on canvas
             try:
                 self.iface.actionSelectRectangle().trigger()
@@ -8832,19 +8786,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             except Exception as e:
                 logger.debug(f"Could not update buffer validation: {e}")
             
-            # CRITICAL: Check if layer C++ object has been deleted
-            # v2.9.25: But NOT during filtering - layer may appear deleted temporarily
-            try:
-                if sip.isdeleted(self.current_layer):
-                    logger.debug("exploring_features_changed: current_layer C++ object deleted")
-                    if not self._filtering_in_progress:
-                        self.current_layer = None
-                    return []
-            except (RuntimeError, TypeError):
-                if not self._filtering_in_progress:
-                    self.current_layer = None
+            # v3.0.14: CRITICAL - Use centralized deletion check with full protection
+            if self._is_layer_truly_deleted(self.current_layer):
+                logger.debug("exploring_features_changed: current_layer C++ object truly deleted")
+                self.current_layer = None
                 return []
-            
+
             # Guard: Check if current_layer is in PROJECT_LAYERS
             if self.current_layer.id() not in self.PROJECT_LAYERS:
                 logger.warning(f"exploring_features_changed: Layer {self.current_layer.name()} not in PROJECT_LAYERS")
@@ -8985,17 +8932,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         if self.widgets_initialized and self.current_layer is not None:
 
-            # CRITICAL: Check if layer C++ object has been deleted
-            # v2.9.25: But NOT during filtering - layer may appear deleted temporarily
-            try:
-                if sip.isdeleted(self.current_layer):
-                    logger.debug("get_exploring_features: current_layer C++ object deleted")
-                    if not self._filtering_in_progress:
-                        self.current_layer = None
-                    return [], None
-            except (RuntimeError, TypeError):
-                if not self._filtering_in_progress:
-                    self.current_layer = None
+            # v3.0.14: CRITICAL - Use centralized deletion check with full protection
+            if self._is_layer_truly_deleted(self.current_layer):
+                logger.debug("get_exploring_features: current_layer C++ object truly deleted")
+                self.current_layer = None
                 return [], None
 
             if self.current_layer is None:
@@ -10497,6 +10437,69 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return None
 
 
+    def _is_layer_truly_deleted(self, layer):
+        """
+        Check if a layer is truly deleted, accounting for filtering operations.
+
+        v3.0.14: CRITICAL FIX - During and immediately after filtering, layers can
+        temporarily appear as "deleted" to sip.isdeleted() even though they're still
+        valid. This causes current_layer to be set to None prematurely, breaking the
+        comboBox and UI signals.
+
+        This method provides a centralized check that respects:
+        1. Active filtering operations (_filtering_in_progress flag)
+        2. Post-filtering protection window (2 seconds after filtering completes)
+        3. Actual C++ object deletion status
+
+        Args:
+            layer: The QgsVectorLayer to check (can be None)
+
+        Returns:
+            bool: True if layer is truly deleted and should be cleared, False otherwise
+
+        Usage:
+            # OLD (unsafe during filtering):
+            if sip.isdeleted(self.current_layer):
+                self.current_layer = None
+
+            # NEW (safe during filtering):
+            if self._is_layer_truly_deleted(self.current_layer):
+                self.current_layer = None
+        """
+        # If layer is None, it's already "deleted" in a sense
+        if layer is None:
+            return True
+
+        # v3.0.14: CRITICAL - During filtering, NEVER consider layer as deleted
+        # The layer may appear deleted temporarily due to setSubsetString() operations
+        if getattr(self, '_filtering_in_progress', False):
+            logger.debug(f"v3.0.14: 🛡️ _is_layer_truly_deleted BLOCKED - filtering in progress (layer={layer.name() if hasattr(layer, 'name') else 'unknown'})")
+            return False
+
+        # v3.0.14: CRITICAL - Within 2 seconds after filtering, NEVER consider layer as deleted
+        # Canvas refresh and layer tree updates can make the layer appear deleted temporarily
+        import time
+        POST_FILTER_PROTECTION_WINDOW = 2.0  # seconds - must cover all delayed canvas refresh timers
+        if getattr(self, '_filter_completed_time', 0) > 0:
+            elapsed = time.time() - self._filter_completed_time
+            if elapsed < POST_FILTER_PROTECTION_WINDOW:
+                logger.debug(f"v3.0.14: 🛡️ _is_layer_truly_deleted BLOCKED - within {POST_FILTER_PROTECTION_WINDOW}s protection window (elapsed={elapsed:.3f}s, layer={layer.name() if hasattr(layer, 'name') else 'unknown'})")
+                return False
+
+        # Now perform the actual deletion check
+        try:
+            import sip
+            if sip.isdeleted(layer):
+                logger.debug(f"v3.0.14: ✅ Layer C++ object is truly deleted")
+                return True
+            else:
+                return False
+        except (RuntimeError, TypeError, AttributeError) as e:
+            # If we can't check, assume it's deleted
+            logger.debug(f"v3.0.14: Layer deletion check failed with {type(e).__name__}: {e}")
+            return True
+
+
     def current_layer_changed(self, layer):
         """
         Handle current layer change event.
@@ -11414,19 +11417,32 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Initialize the property button with the layer context
             self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].init(0, property, property_definition, self.current_layer)
             
+            # CRITICAL FIX: Check if HAS_BUFFER_VALUE button is checked
+            # The spinbox should only be enabled if this button is checked
+            has_buffer_value_checked = layer_props["filtering"].get("has_buffer_value", False)
+            
             # Check if property button is active AND has valid expression
             is_active = layer_props["filtering"]["buffer_value_property"]
             
-            # Spinbox disabled only when property button is active AND has valid expression
-            spinbox_enabled = not (is_active and has_valid_expression)
+            # Spinbox enabled only when:
+            # 1. HAS_BUFFER_VALUE button is checked
+            # 2. Property button is NOT active with valid expression
+            spinbox_enabled = has_buffer_value_checked and not (is_active and has_valid_expression)
             self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(spinbox_enabled)
+            
+            # Also enable/disable the property override button based on HAS_BUFFER_VALUE state
+            self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setEnabled(has_buffer_value_checked)
 
 
     def filtering_buffer_property_changed(self):
-        """Handle changes to the buffer property override button.
+        """Handle changes to the buffer property override button and HAS_BUFFER_VALUE state.
         
-        When active (True): Use expression from property button
-        When inactive (False): Use static value from spinbox
+        The spinbox is enabled when:
+        - HAS_BUFFER_VALUE button is checked AND
+        - Property button is NOT active with a valid expression
+        
+        When property override is active (True): Use expression from property button
+        When property override is inactive (False): Use static value from spinbox
         """
         if self.widgets_initialized is True and self.has_loaded_layers is True:
 
@@ -11434,6 +11450,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             for widget_path in widgets_to_stop:
                 self.manageSignal(widget_path, 'disconnect')
+
+            # CRITICAL FIX: Check if HAS_BUFFER_VALUE button is checked
+            # The spinbox should only be enabled if this button is checked
+            has_buffer_value_checked = self.widgets["FILTERING"]["HAS_BUFFER_VALUE"]["WIDGET"].isChecked()
 
             # Use widget state directly instead of stored value (which may not be updated yet)
             is_active = self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].isActive()
@@ -11465,15 +11485,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setToProperty(QgsProperty())
                 logger.debug("Property override INACTIVE - spinbox will be used")
 
-            # Enable/disable spinbox based on property button state and expression validity
-            # Spinbox disabled ONLY when property button is active AND has valid expression
-            spinbox_enabled = not (is_active and has_valid_expression)
+            # Enable/disable spinbox based on:
+            # 1. HAS_BUFFER_VALUE button must be checked
+            # 2. Property button must NOT be active with valid expression
+            spinbox_enabled = has_buffer_value_checked and not (is_active and has_valid_expression)
             self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(spinbox_enabled)
             
+            # Also enable/disable the property override button based on HAS_BUFFER_VALUE state
+            self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setEnabled(has_buffer_value_checked)
+            
             if spinbox_enabled:
-                logger.debug("✓ Spinbox ENABLED (property inactive or no valid expression)")
+                logger.debug(f"✓ Spinbox ENABLED (has_buffer_value={has_buffer_value_checked}, property_override={is_active and has_valid_expression})")
             else:
-                logger.debug("✓ Spinbox DISABLED (property active with valid expression)")
+                logger.debug(f"✓ Spinbox DISABLED (has_buffer_value={has_buffer_value_checked}, property_override={is_active and has_valid_expression})")
 
             for widget_path in widgets_to_stop:
                 self.manageSignal(widget_path, 'connect')
@@ -12084,22 +12108,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if layer is None:
                 layer = self.current_layer
             
-            # Double-check layer is valid before emitting signal
-            try:
-                if layer is not None and not sip.isdeleted(layer):
+            # v3.0.14: CRITICAL - Double-check layer is valid before emitting signal using centralized method
+            if not self._is_layer_truly_deleted(layer):
+                try:
                     # Ensure properties is a list type for PyQt signal
                     if not isinstance(properties, list):
                         logger.debug(f"Properties is {type(properties)}, converting to list")
                         properties = []
                     self.resettingLayerVariableOnError.emit(layer, properties)
-                else:
-                    logger.debug("Cannot emit resettingLayerVariableOnError - layer is None or deleted")
-            except RuntimeError as e:
-                # Layer C++ object is deleted
-                logger.debug(f"Cannot emit resettingLayerVariableOnError - layer object deleted: {e}")
-            except TypeError as e:
-                # Signal emission failed due to type mismatch
-                logger.warning(f"Signal emission failed - type error: {e}")
+                except TypeError as e:
+                    # Signal emission failed due to type mismatch
+                    logger.warning(f"Signal emission failed - type error: {e}")
+            else:
+                logger.debug("Cannot emit resettingLayerVariableOnError - layer is None or deleted")
 
 
     def resetLayerVariableEvent(self, layer=None, properties=None):
