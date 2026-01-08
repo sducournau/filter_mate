@@ -28,7 +28,6 @@ import json
 import re
 import sip
 import weakref
-from functools import partial
 from osgeo import ogr
 
 # Import logging for error handling
@@ -45,9 +44,6 @@ from qgis.PyQt.QtCore import (
 )
 from qgis.PyQt.QtGui import QColor, QFont
 from qgis.PyQt.QtWidgets import (
-    QAction,
-    QActionGroup,
-    QApplication,
     QComboBox,
     QDockWidget,
     QDoubleSpinBox,
@@ -61,9 +57,7 @@ from qgis.PyQt.QtWidgets import (
     QSpacerItem,
     QSpinBox,
     QSplitter,
-    QToolButton,
-    QVBoxLayout,
-    QWidgetAction
+    QVBoxLayout
 )
 from qgis.core import (
     Qgis,
@@ -125,15 +119,10 @@ import webbrowser
 from .modules.widgets import QgsCheckableComboBoxFeaturesListPickerWidget, QgsCheckableComboBoxLayer
 from .modules.qt_json_view.model import JsonModel
 from .modules.qt_json_view.view import JsonView
-from .modules.object_safety import is_valid_layer, is_sip_deleted
+from .modules.object_safety import is_valid_layer
 from .modules.appUtils import (
     get_datasource_connexion_from_layer,
-    get_primary_key_name,
     get_best_display_field,
-    get_value_relation_info,
-    get_field_display_expression,
-    get_layer_display_expression,
-    get_fields_with_value_relations,
     POSTGRESQL_AVAILABLE,
     is_layer_source_available
 )
