@@ -2,7 +2,7 @@
 
 **Epic:** Migration Architecture Hexagonale  
 **Sprint Actuel:** Sprint 2 - Intégration Controllers  
-**Dernière MAJ:** 2026-01-08 (MIG-024 TaskParameterBuilder + MIG-025 Controllers connectés)
+**Dernière MAJ:** 2026-01-08 (MIG-024 LayerValidator extrait - 80 tests passant)
 
 ---
 
@@ -30,9 +30,9 @@
 
 ### 🔄 IN PROGRESS
 
-| ID      | Story                   | Priorité | Assigné | Progression | Notes                                                                      |
-| ------- | ----------------------- | -------- | ------- | ----------- | -------------------------------------------------------------------------- |
-| MIG-024 | Réduction FilterMateApp | 🟠 P1    | Dev     | 80%         | TaskParameterBuilder + VariablesManager + UndoRedoHandler + RefreshManager |
+| ID      | Story                   | Priorité | Assigné | Progression | Notes                                                                                         |
+| ------- | ----------------------- | -------- | ------- | ----------- | --------------------------------------------------------------------------------------------- |
+| MIG-024 | Réduction FilterMateApp | 🟠 P1    | Dev     | 85%         | TaskBuilder + VariablesManager + UndoRedoHandler + RefreshManager + LayerValidator (80 tests) |
 
 ---
 
