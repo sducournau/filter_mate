@@ -18,7 +18,7 @@ Date: January 2026
 
 import logging
 import hashlib
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, List, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 

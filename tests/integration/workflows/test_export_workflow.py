@@ -11,7 +11,7 @@ Author: FilterMate Team
 Date: January 2026
 """
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import MagicMock
 import tempfile
 from pathlib import Path
 import sys

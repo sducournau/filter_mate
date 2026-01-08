@@ -19,7 +19,7 @@ Date: January 2026
 import logging
 from typing import Optional, List, Dict, Any, Callable
 
-from .base_task import BaseFilterMateTask, TaskResult, TaskStatus
+from .base_task import BaseFilterMateTask, TaskResult
 
 logger = logging.getLogger('FilterMate.Tasks.Layer')
 

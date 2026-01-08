@@ -21,7 +21,7 @@ Date: January 2025
 """
 
 import logging
-from typing import Optional, List, Tuple, Any
+from typing import Optional, List, Tuple
 from datetime import datetime
 
 logger = logging.getLogger('FilterMate.Cleanup.PostgreSQL')

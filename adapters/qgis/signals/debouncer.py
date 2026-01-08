@@ -4,7 +4,7 @@ FilterMate Debouncer Utility.
 Debounce function calls with configurable delay.
 Replaces scattered QTimer debouncing logic throughout the codebase.
 """
-from typing import Callable, Optional, Any
+from typing import Callable, Optional
 
 try:
     from qgis.PyQt.QtCore import QTimer, QObject

@@ -41,23 +41,27 @@
 **FilterMate 3.0 represents a major milestone** consolidating 40+ fixes and improvements from the 2.9.x series into a rock-solid, production-ready release.
 
 #### 🛡️ Stability & Reliability
+
 - **40+ bug fixes** addressing edge cases across all backends
 - **Signal management overhaul** - UI always responsive after filtering
 - **Memory safety** - No more "wrapped C/C++ object deleted" errors
 - **Safe QGIS shutdown** - No crashes on Windows during close
 
 #### ⚡ Performance Optimizations
+
 - **99% match optimization** - Skip redundant filters automatically
 - **Adaptive geometry simplification** - 2-10x faster buffer operations
 - **Smart caching** - Up to 80% cache hit rate on repeated queries
 - **Parallel processing** - 2x speedup on datasets with 1M+ features
 
 #### 🔧 Backend Improvements
+
 - **Spatialite/GeoPackage** - NULL-safe predicates, large dataset support
 - **PostgreSQL** - Advanced MV optimizations, INCLUDE clause indexes
 - **OGR** - Robust multi-layer filtering, GEOS-safe operations
 
 #### 🎨 User Experience
+
 - **Complete undo/redo** - Full filter history with context-aware restore
 - **Filter favorites** - Save, organize and share configurations
 - **21 languages** - Full internationalization support

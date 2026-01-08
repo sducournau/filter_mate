@@ -9,8 +9,7 @@ Part of Phase 5 Integration & Release.
 Author: FilterMate Team
 Date: January 2026
 """
-from typing import List, Any, Optional, Callable
-from unittest.mock import MagicMock
+from typing import List, Optional, Callable
 import time
 
 

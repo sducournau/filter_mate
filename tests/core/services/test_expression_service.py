@@ -5,7 +5,7 @@ Part of Phase 3 Core Domain Layer implementation.
 """
 import pytest
 from core.services.expression_service import (
-    ExpressionService, ValidationResult, ParsedExpression
+    ExpressionService
 )
 from core.domain.filter_expression import ProviderType, SpatialPredicate
 

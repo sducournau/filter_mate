@@ -4,7 +4,7 @@ FilterMate Exploring Controller.
 Controller for the Exploring tab, managing layer selection, field selection,
 feature listing, and spatial navigation (flash, zoom, identify).
 """
-from typing import Optional, List, Dict, Any, Callable
+from typing import Optional, List, Dict, Any
 import logging
 
 try:
@@ -13,7 +13,6 @@ try:
         QgsProject,
         QgsFeature,
         QgsFeatureRequest,
-        QgsGeometry,
         QgsRectangle
     )
     from qgis.PyQt.QtCore import pyqtSignal, QObject

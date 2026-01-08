@@ -4,9 +4,9 @@ FilterMate Signal Manager.
 Centralized signal management with tracking and cleanup.
 Reduces coupling and prevents memory leaks from untracked connections.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, Callable, Optional, List, Any
-from weakref import ref, WeakMethod
+from weakref import ref
 import logging
 
 logger = logging.getLogger(__name__)

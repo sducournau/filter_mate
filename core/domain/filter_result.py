@@ -8,7 +8,7 @@ This is a PURE PYTHON module with NO QGIS dependencies,
 enabling true unit testing and clear separation of concerns.
 """
 from dataclasses import dataclass, field
-from typing import Optional, Tuple, FrozenSet, Sequence
+from typing import Optional, FrozenSet, Sequence
 from datetime import datetime
 from enum import Enum
 

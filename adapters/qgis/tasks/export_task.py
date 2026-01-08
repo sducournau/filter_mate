@@ -193,8 +193,7 @@ class ExportTask(BaseFilterMateTask):
         Creates a temporary subset and exports.
         """
         from qgis.core import (
-            QgsVectorFileWriter, QgsCoordinateTransformContext,
-            QgsFeatureRequest
+            QgsVectorFileWriter, QgsCoordinateTransformContext
         )
 
         # Save original subset string

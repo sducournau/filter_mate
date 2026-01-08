@@ -8,7 +8,6 @@ This is a PURE PYTHON module with NO QGIS dependencies,
 enabling true unit testing and clear separation of concerns.
 """
 from dataclasses import dataclass
-from typing import Optional
 from enum import Enum
 
 from .filter_expression import ProviderType

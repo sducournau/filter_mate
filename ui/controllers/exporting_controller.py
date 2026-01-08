@@ -13,7 +13,6 @@ from pathlib import Path
 from .base_controller import BaseController
 
 if TYPE_CHECKING:
-    from qgis.core import QgsVectorLayer, QgsCoordinateReferenceSystem
     from filter_mate_dockwidget import FilterMateDockWidget
     from core.services.filter_service import FilterService
     from adapters.qgis.signals.signal_manager import SignalManager

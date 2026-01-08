@@ -11,8 +11,8 @@ Author: FilterMate Team
 Date: January 2026
 """
 import pytest
-from unittest.mock import Mock, MagicMock
-from typing import Optional, List, Dict, Any, Generator
+from unittest.mock import MagicMock
+from typing import Optional, List, Dict
 import uuid
 
 

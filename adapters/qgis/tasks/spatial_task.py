@@ -19,7 +19,7 @@ Date: January 2026
 import logging
 from typing import Optional, List, Tuple, Callable
 
-from .base_task import BaseFilterMateTask, TaskResult, TaskStatus
+from .base_task import BaseFilterMateTask, TaskResult
 
 logger = logging.getLogger('FilterMate.Tasks.Spatial')
 
@@ -80,8 +80,7 @@ class SpatialFilterTask(BaseFilterMateTask):
         """Execute spatial filter."""
         try:
             from qgis.core import (
-                QgsProject, QgsVectorLayer, QgsFeatureRequest,
-                QgsSpatialIndex, QgsGeometry
+                QgsProject, QgsVectorLayer
             )
 
             self.report_progress(0, 100, "Loading source layer...")
@@ -165,7 +164,7 @@ class SpatialFilterTask(BaseFilterMateTask):
 
     def _filter_target(self, layer, source_geom) -> List[int]:
         """Filter target layer by spatial predicate."""
-        from qgis.core import QgsSpatialIndex, QgsFeatureRequest
+        from qgis.core import QgsFeatureRequest
 
         matches = []
 
@@ -254,7 +253,7 @@ class BufferFilterTask(BaseFilterMateTask):
     def _execute(self) -> TaskResult:
         """Execute buffer filter."""
         try:
-            from qgis.core import QgsProject, QgsVectorLayer, QgsFeatureRequest
+            from qgis.core import QgsProject, QgsVectorLayer
 
             self.report_progress(0, 100, "Loading source layer...")
 
@@ -319,7 +318,7 @@ class BufferFilterTask(BaseFilterMateTask):
 
     def _create_buffer(self, layer):
         """Create buffered geometry from source features."""
-        from qgis.core import QgsFeatureRequest, QgsGeometry
+        from qgis.core import QgsFeatureRequest
 
         if self._source_feature_ids:
             request = QgsFeatureRequest()

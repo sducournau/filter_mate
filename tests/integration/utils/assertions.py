@@ -9,9 +9,7 @@ Part of Phase 5 Integration & Release.
 Author: FilterMate Team
 Date: January 2026
 """
-from typing import Any, Optional, List, Set, Callable
-from unittest.mock import MagicMock
-import re
+from typing import Optional, List
 
 
 class AssertionError(Exception):

@@ -19,8 +19,8 @@ import logging
 
 from .registry import ControllerRegistry, TabIndex
 from .exploring_controller import ExploringController
-from .filtering_controller import FilteringController, PredicateType
-from .exporting_controller import ExportingController, ExportFormat
+from .filtering_controller import FilteringController
+from .exporting_controller import ExportingController
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget

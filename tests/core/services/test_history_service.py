@@ -4,9 +4,8 @@ Tests for HistoryService.
 Part of Phase 3 Core Domain Layer implementation.
 """
 import pytest
-from datetime import datetime
 from core.services.history_service import (
-    HistoryService, HistoryEntry, HistoryState
+    HistoryService, HistoryEntry
 )
 
 

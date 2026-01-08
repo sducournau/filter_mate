@@ -5,8 +5,7 @@ Part of Phase 3 Core Domain Layer implementation.
 These tests use mocks to isolate the service from external dependencies.
 """
 import pytest
-from unittest.mock import Mock, MagicMock, patch
-from datetime import datetime
+from unittest.mock import Mock
 
 from core.services.filter_service import (
     FilterService, FilterRequest, FilterResponse

@@ -29,7 +29,7 @@ from core.domain.layer_info import LayerInfo
 
 from .mv_manager import MaterializedViewManager, MVConfig, create_mv_manager
 from .optimizer import QueryOptimizer, create_optimizer
-from .cleanup import PostgreSQLCleanupService, create_cleanup_service
+from .cleanup import create_cleanup_service
 
 logger = logging.getLogger('FilterMate.Backend.PostgreSQL')
 

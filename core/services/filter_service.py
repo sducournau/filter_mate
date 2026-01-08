@@ -12,7 +12,7 @@ from datetime import datetime
 import logging
 
 from core.domain.filter_expression import FilterExpression, ProviderType
-from core.domain.filter_result import FilterResult, FilterStatus
+from core.domain.filter_result import FilterResult
 from core.domain.layer_info import LayerInfo
 from core.domain.optimization_config import OptimizationConfig
 from core.services.expression_service import ExpressionService

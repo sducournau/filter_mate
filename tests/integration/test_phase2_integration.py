@@ -6,7 +6,7 @@ workflow execution, and performance requirements.
 """
 import pytest
 import time
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock
 
 
 # === Test Fixtures ===
@@ -332,7 +332,7 @@ class TestExportingWorkflow:
     def test_export_configuration_serialization(self, integration):
         """Test export configuration serialization."""
         exporting = integration.exporting_controller
-        from ui.controllers.exporting_controller import ExportFormat, ExportConfiguration
+        from ui.controllers.exporting_controller import ExportConfiguration
         
         # Setup
         exporting.set_layers_to_export(["l1", "l2"])
