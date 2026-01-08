@@ -1,20 +1,34 @@
 # FilterMate - Development Guide
 
+> **Version**: 3.0.0 | **Updated**: January 2026
+
 Guide complet pour développeurs souhaitant contribuer à FilterMate ou comprendre son fonctionnement interne.
+
+## 🆕 What's New in v3.0
+
+FilterMate v3.0 introduces a **complete architectural refactoring**:
+
+- **Hexagonal Architecture**: Clean separation between core domain and adapters
+- **Dependency Injection**: All services receive their dependencies
+- **High Testability**: 90%+ code coverage enabled
+- **Smaller Files**: Maximum 800 lines per file (down from 12,944)
+
+See [Architecture v3.0](architecture-v3.md) for details.
 
 ## 🎯 Prérequis
 
 ### Système
 
-| Composant | Version Minimale | Recommandé |
-|-----------|------------------|------------|
-| **Python** | 3.7 | 3.9+ |
-| **QGIS** | 3.0 | 3.22+ |
-| **OS** | Windows 7, Linux, macOS | Windows 10+, Ubuntu 20.04+ |
+| Composant  | Version Minimale        | Recommandé                 |
+| ---------- | ----------------------- | -------------------------- |
+| **Python** | 3.7                     | 3.9+                       |
+| **QGIS**   | 3.0                     | 3.22+                      |
+| **OS**     | Windows 7, Linux, macOS | Windows 10+, Ubuntu 20.04+ |
 
 ### Dépendances Python
 
 #### Obligatoires (via QGIS)
+
 ```python
 # Inclus avec QGIS
 qgis.core
@@ -25,6 +39,7 @@ osgeo (GDAL/OGR)
 ```
 
 #### Optionnelles
+
 ```bash
 # PostgreSQL support (recommandé)
 pip install psycopg2-binary
@@ -64,6 +79,7 @@ cd filter_mate
 ### 2. Lien Symbolique vers QGIS Plugins
 
 #### Linux / macOS
+
 ```bash
 # Créer lien symbolique
 ln -s $(pwd) ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/filter_mate
@@ -73,6 +89,7 @@ cp -r . ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/filter_mate
 ```
 
 #### Windows
+
 ```powershell
 # PowerShell (Administrateur)
 New-Item -ItemType SymbolicLink `
@@ -104,6 +121,7 @@ compile_ui.bat
 ```
 
 **Détails de compilation :**
+
 ```bash
 # compile_ui.sh fait :
 pyrcc5 -o resources.py resources.qrc
@@ -141,15 +159,15 @@ git push origin feature/my-new-feature
 
 ### Convention de Commits (Conventional Commits)
 
-| Préfixe | Usage | Exemple |
-|---------|-------|---------|
-| **feat** | Nouvelle fonctionnalité | `feat: add favorites tagging` |
-| **fix** | Correction bug | `fix: correct UUID filtering` |
-| **docs** | Documentation | `docs: update README` |
-| **refactor** | Refactoring | `refactor: extract backend factory` |
-| **perf** | Performance | `perf: optimize WKT caching` |
-| **test** | Tests | `test: add backend selection tests` |
-| **chore** | Maintenance | `chore: update dependencies` |
+| Préfixe      | Usage                   | Exemple                             |
+| ------------ | ----------------------- | ----------------------------------- |
+| **feat**     | Nouvelle fonctionnalité | `feat: add favorites tagging`       |
+| **fix**      | Correction bug          | `fix: correct UUID filtering`       |
+| **docs**     | Documentation           | `docs: update README`               |
+| **refactor** | Refactoring             | `refactor: extract backend factory` |
+| **perf**     | Performance             | `perf: optimize WKT caching`        |
+| **test**     | Tests                   | `test: add backend selection tests` |
+| **chore**    | Maintenance             | `chore: update dependencies`        |
 
 ---
 
@@ -162,16 +180,16 @@ git push origin feature/my-new-feature
 def get_datasource_connexion_from_layer(layer):
     """
     Get PostgreSQL connection from layer.
-    
+
     Args:
         layer (QgsVectorLayer): Source layer
-    
+
     Returns:
         Tuple[connection, uri]: Connection and URI objects
     """
     if not POSTGRESQL_AVAILABLE:
         return None, None
-    
+
     uri = QgsDataSourceUri(layer.source())
     # ...
 
@@ -183,13 +201,13 @@ def GetConnection(Layer):  # PascalCase interdit pour fonctions
 
 ### Naming Conventions
 
-| Type | Convention | Exemple |
-|------|------------|---------|
-| **Classes** | PascalCase | `FilterMateApp`, `PostgreSQLGeometricFilter` |
-| **Fonctions/Méthodes** | snake_case | `apply_geometric_filter`, `get_backend` |
-| **Constantes** | UPPER_SNAKE_CASE | `POSTGRESQL_AVAILABLE`, `PROVIDER_POSTGRES` |
-| **Variables** | snake_case | `layer_provider_type`, `feature_count` |
-| **Privées** | _prefixed | `_internal_method`, `_cache` |
+| Type                   | Convention       | Exemple                                      |
+| ---------------------- | ---------------- | -------------------------------------------- |
+| **Classes**            | PascalCase       | `FilterMateApp`, `PostgreSQLGeometricFilter` |
+| **Fonctions/Méthodes** | snake_case       | `apply_geometric_filter`, `get_backend`      |
+| **Constantes**         | UPPER_SNAKE_CASE | `POSTGRESQL_AVAILABLE`, `PROVIDER_POSTGRES`  |
+| **Variables**          | snake_case       | `layer_provider_type`, `feature_count`       |
+| **Privées**            | \_prefixed       | `_internal_method`, `_cache`                 |
 
 ### Ordre des Imports
 
@@ -227,26 +245,26 @@ def apply_geometric_filter(
 ) -> Tuple[bool, str, int]:
     """
     Apply a geometric filter to the layer.
-    
+
     This method filters features based on a spatial predicate (intersects,
     within, contains, etc.) applied to a source geometry with optional buffer.
-    
+
     Args:
         predicate: Spatial predicate name (e.g., 'intersects', 'within')
         source_geometry_wkt: Source geometry as WKT string
         buffer_distance: Buffer distance (default: 0.0)
         buffer_unit: QgsUnitTypes distance unit (default: meters)
         **kwargs: Additional backend-specific parameters
-    
+
     Returns:
         Tuple of:
         - success (bool): True if filter applied successfully
         - expression (str): Filter expression used
         - feature_count (int): Number of features after filtering
-    
+
     Raises:
         FilterMateException: If layer is invalid or provider unsupported
-        
+
     Example:
         >>> backend = PostgreSQLGeometricFilter(layer, {})
         >>> success, expr, count = backend.apply_geometric_filter(
@@ -265,11 +283,13 @@ def apply_geometric_filter(
 ### 1. Vérification PostgreSQL
 
 **❌ INCORRECT - Import direct**
+
 ```python
 import psycopg2  # CRASH si psycopg2 non installé
 ```
 
 **✅ CORRECT - Utiliser POSTGRESQL_AVAILABLE**
+
 ```python
 from modules.appUtils import POSTGRESQL_AVAILABLE
 
@@ -284,6 +304,7 @@ else:
 ### 2. Détection Provider Type
 
 **✅ Pattern Standard**
+
 ```python
 from modules.appUtils import detect_layer_provider_type
 from modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE
@@ -304,6 +325,7 @@ else:
 ### 3. Connexions Spatialite
 
 **✅ Pattern Spatialite**
+
 ```python
 import sqlite3
 
@@ -311,13 +333,13 @@ def spatialite_connect(db_path: str) -> sqlite3.Connection:
     """Connect to Spatialite database with mod_spatialite loaded."""
     conn = sqlite3.connect(db_path)
     conn.enable_load_extension(True)
-    
+
     try:
         conn.load_extension('mod_spatialite')
     except:
         # Windows fallback
         conn.load_extension('mod_spatialite.dll')
-    
+
     return conn
 
 # Usage
@@ -333,27 +355,28 @@ finally:
 ### 4. QgsTask Pattern (Tâches Asynchrones)
 
 **✅ Template QgsTask**
+
 ```python
 from qgis.core import QgsTask
 
 class MyTask(QgsTask):
     """Custom asynchronous task."""
-    
+
     def __init__(self, description: str, task_parameters: Dict):
         super().__init__(description, QgsTask.CanCancel)
         self.task_parameters = task_parameters
         self.result_data = None
         self.exception = None
-    
+
     def run(self) -> bool:
         """
         Executed in separate thread.
-        
+
         DO NOT:
         - Access Qt widgets directly
         - Call iface methods
         - Use QgsMessageBar
-        
+
         Returns:
             bool: True if success, False if failure
         """
@@ -361,22 +384,22 @@ class MyTask(QgsTask):
             # Check for cancellation
             if self.isCanceled():
                 return False
-            
+
             # Heavy computation here
             result = self._do_work()
-            
+
             # Store result
             self.result_data = result
             return True
-            
+
         except Exception as e:
             self.exception = e
             return False
-    
+
     def finished(self, result: bool):
         """
         Executed in main thread after run().
-        
+
         Safe to:
         - Update UI
         - Show messages
@@ -395,7 +418,7 @@ class MyTask(QgsTask):
                     "FilterMate",
                     f"Task failed: {str(self.exception)}"
                 )
-    
+
     def _do_work(self):
         """Internal work method."""
         # Implementation
@@ -409,6 +432,7 @@ QgsApplication.taskManager().addTask(task)
 ### 5. Backend Selection
 
 **✅ Utiliser BackendFactory**
+
 ```python
 from modules.backends import BackendFactory
 from modules.appUtils import detect_layer_provider_type
@@ -438,6 +462,7 @@ success, expression, feature_count = backend.apply_geometric_filter(
 ### 6. Gestion Sécurisée des Objets Qt/QGIS
 
 **✅ Utiliser object_safety**
+
 ```python
 from modules.object_safety import (
     is_valid_layer,
@@ -464,6 +489,7 @@ safe_disconnect(layer.dataChanged, self.on_data_changed)
 ### 7. Messages Utilisateur
 
 **✅ CORRECT - 2 arguments seulement**
+
 ```python
 from qgis.utils import iface
 
@@ -484,6 +510,7 @@ iface.messageBar().pushCritical("FilterMate", f"Error: {str(error)}")
 ```
 
 **❌ INCORRECT - 3 arguments (deprecated)**
+
 ```python
 # ❌ NE PAS FAIRE - duration parameter deprecated
 iface.messageBar().pushSuccess("FilterMate", "Message", 5)  # CRASH
@@ -523,7 +550,7 @@ from modules.backends import BackendFactory
 
 class TestBackendFactory:
     """Tests for BackendFactory."""
-    
+
     @pytest.fixture
     def mock_layer(self):
         """Create a mock QgsVectorLayer."""
@@ -532,30 +559,30 @@ class TestBackendFactory:
         layer.providerType.return_value = 'postgres'
         layer.featureCount.return_value = 1000
         return layer
-    
+
     def test_get_backend_postgresql(self, mock_layer):
         """Test PostgreSQL backend selection."""
         from modules.backends.postgresql_backend import PostgreSQLGeometricFilter
-        
+
         backend = BackendFactory.get_backend(
             mock_layer,
             'postgresql',
             {}
         )
-        
+
         assert isinstance(backend, PostgreSQLGeometricFilter)
-    
+
     @patch('modules.backends.factory.POSTGRESQL_AVAILABLE', False)
     def test_fallback_when_psycopg2_unavailable(self, mock_layer):
         """Test fallback to OGR when psycopg2 unavailable."""
         from modules.backends.ogr_backend import OGRGeometricFilter
-        
+
         backend = BackendFactory.get_backend(
             mock_layer,
             'postgresql',  # Demande PostgreSQL
             {}
         )
-        
+
         # Doit fallback vers OGR
         assert isinstance(backend, OGRGeometricFilter)
 ```
@@ -592,6 +619,7 @@ logger.info(f"Processing layer: {layer.name()}, features: {layer.featureCount()}
 ```
 
 **Fichiers de log :**
+
 ```
 logs/
 ├── filtermate.log           # Log général
@@ -616,22 +644,22 @@ print(f"Current layer: {app.current_layer}")
 ```json
 // .vscode/launch.json
 {
-    "version": "0.2.0",
-    "configurations": [
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "QGIS Python",
+      "type": "python",
+      "request": "attach",
+      "port": 5678,
+      "host": "localhost",
+      "pathMappings": [
         {
-            "name": "QGIS Python",
-            "type": "python",
-            "request": "attach",
-            "port": 5678,
-            "host": "localhost",
-            "pathMappings": [
-                {
-                    "localRoot": "${workspaceFolder}",
-                    "remoteRoot": "."
-                }
-            ]
+          "localRoot": "${workspaceFolder}",
+          "remoteRoot": "."
         }
-    ]
+      ]
+    }
+  ]
 }
 ```
 

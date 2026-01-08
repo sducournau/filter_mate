@@ -1,0 +1,55 @@
+name: dev-story-phase3
+description: "Execute Phase 3 stories implementing pure Python domain objects (VOs, Entities, Services) with zero QGIS dependencies"
+author: "BMad/Bob SM"
+version: "1.0.0"
+
+# Phase 3 Specific Context
+phase_info:
+  phase_number: 3
+  phase_name: "Core Domain & Services"
+  epic_id: "ARCH-EPIC-003"
+  goal: "Establish pure Python core domain layer with value objects, entities, and services"
+  total_story_points: 42
+  duration: "2 weeks"
+  prerequisite: "Phase 2 completed (Controllers extracted)"
+
+# Critical variables from config
+config_source: "{project-root}/_bmad/bmm/config.yaml"
+output_folder: "{config_source}:output_folder"
+user_name: "{config_source}:user_name"
+communication_language: "{config_source}:communication_language"
+user_skill_level: "{config_source}:user_skill_level"
+document_output_language: "{config_source}:document_output_language"
+story_dir: "{config_source}:implementation_artifacts"
+date: system-generated
+
+# Workflow components
+installed_path: "{project-root}/_bmad/bmm/workflows/4-implementation/dev-story-phase3"
+instructions: "{installed_path}/instructions.xml"
+validation: "{installed_path}/checklist.md"
+
+# Phase 3 specific resources
+phase3_tickets: "{project-root}/_bmad-output/planning-artifacts/phase3-tickets.md"
+architecture_doc: "{project-root}/_bmad-output/planning-artifacts/architecture-refactoring-v3.md"
+domain_package: "{project-root}/core/domain"
+tests_package: "{project-root}/tests/core/domain"
+
+story_file: "" # Explicit story path; auto-discovered if empty
+implementation_artifacts: "{config_source}:implementation_artifacts"
+sprint_status: "{implementation_artifacts}/sprint-status.yaml"
+project_context: "**/project-context.md"
+
+# Phase 3 story patterns
+story_pattern: "3-*"
+story_key_format: "3-{number}-{name}"
+
+# Quality gates specific to Phase 3
+quality_gates:
+  no_qgis_imports: true
+  frozen_dataclass: true
+  factory_methods: true
+  test_coverage_minimum: 95
+  type_hints_required: true
+  pure_python: true
+
+standalone: true

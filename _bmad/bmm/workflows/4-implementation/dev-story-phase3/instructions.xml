@@ -1,0 +1,325 @@
+<workflow>
+  <critical>The workflow execution engine is governed by: {project-root}/_bmad/core/tasks/workflow.xml</critical>
+  <critical>You MUST have already loaded and processed: {installed_path}/workflow.yaml</critical>
+  <critical>Communicate all responses in {communication_language} and language MUST be tailored to {user_skill_level}</critical>
+  <critical>Generate all documents in {document_output_language}</critical>
+  <critical>Phase 3 RULE: ALL code must be PURE PYTHON with ZERO QGIS dependencies</critical>
+  <critical>Phase 3 RULE: Domain objects MUST use frozen dataclasses for immutability</critical>
+  <critical>Execute ALL steps in exact order; do NOT skip steps</critical>
+
+  <phase3_context>
+    <principle>Domain-Driven Design (DDD) - Pure domain layer</principle>
+    <packages>
+      <domain>core/domain/</domain>
+      <services>core/services/</services>
+      <ports>core/ports/</ports>
+      <tests>tests/core/domain/</tests>
+    </packages>
+    <patterns>
+      <value_objects>Immutable, defined by attributes, frozen=True</value_objects>
+      <entities>Objects with identity</entities>
+      <services>Business logic orchestration</services>
+      <ports>Abstract interfaces for adapters</ports>
+    </patterns>
+  </phase3_context>
+
+  <step n="1" goal="Find next Phase 3 story and load it" tag="sprint-status">
+    <critical>Only process stories matching pattern 3-* for Phase 3</critical>
+
+    <check if="{{story_path}} is provided">
+      <action>Use {{story_path}} directly</action>
+      <action>Verify story_key starts with "3-" (Phase 3 story)</action>
+      <action>Read COMPLETE story file</action>
+      <goto anchor="task_check" />
+    </check>
+
+    <check if="{{sprint_status}} file exists">
+      <action>Load the FULL file: {{sprint_status}}</action>
+      <action>Parse the development_status section</action>
+      
+      <action>Find the FIRST story (by reading in order from top to bottom) where:
+        - Key matches pattern: 3-*-* (Phase 3 stories only)
+        - Status value equals "ready-for-dev" OR "in-progress"
+        - NOT a Phase 2/4/5 story
+      </action>
+
+      <check if="no Phase 3 ready-for-dev or in-progress story found">
+        <output>📋 **Phase 3 Sprint Status**
+          
+          **Current Phase 3 Stories:**
+          {{list_phase3_stories_with_status}}
+          
+          **Available Options:**
+          1. Specify a Phase 3 story file to develop (3-X-*.md)
+          2. Review sprint-status.yaml to see all Phase 3 stories
+          3. Check phase3-tickets.md for full story details
+          
+          💡 **Rappel Phase 3:** Tous les objets domaine doivent être du Python pur, SANS dépendances QGIS.
+        </output>
+        <ask>Quelle story Phase 3 souhaitez-vous développer ? (ex: 3-2-filter-result-vo)</ask>
+      </check>
+    </check>
+
+    <action>Store the found story_key (e.g., "3-2-filter-result-vo") for later status updates</action>
+    <action>Find matching story file in {story_dir} using story_key pattern: {{story_key}}.md</action>
+    <action>Read COMPLETE story file from discovered path</action>
+
+    <anchor id="task_check" />
+
+    <action>Parse sections: Story, Acceptance Criteria, Tasks/Subtasks, Dev Notes, Dev Agent Record, File List, Change Log, Status</action>
+    <action>Verify Phase 3 compliance in Dev Notes (pure Python, frozen dataclass, etc.)</action>
+    <action>Identify first incomplete task (unchecked [ ]) in Tasks/Subtasks</action>
+
+    <action if="no incomplete tasks">
+      <goto step="7">Phase 3 Completion sequence</goto>
+    </action>
+  </step>
+
+  <step n="2" goal="Load Phase 3 context and validate domain architecture">
+    <critical>Load Phase 3 specific context for pure Python domain implementation</critical>
+
+    <action>Load {phase3_tickets} to understand full ticket requirements</action>
+    <action>Load story's Dev Notes for architecture context and technical specifications</action>
+    <action>Check if story depends on previous Phase 3 stories (e.g., 3-2 depends on 3-1)</action>
+    
+    <validation>
+      <rule>Verify target files are in core/domain/, core/services/, or core/ports/</rule>
+      <rule>Confirm NO imports from qgis.*, qgis.core, qgis.gui, qgis.PyQt</rule>
+      <rule>Check if story requires frozen dataclass pattern</rule>
+    </validation>
+
+    <output>✅ **Phase 3 Context Loaded**
+      
+      📦 **Story:** {{story_key}}
+      🏗️ **Type:** {{story_type}} (Value Object / Entity / Service / Port)
+      📋 **Acceptance Criteria:** {{ac_count}} items
+      ✅ **Tasks:** {{completed_tasks}}/{{total_tasks}} complete
+      
+      **Architecture Requirements:**
+      - Pure Python: ✓
+      - Frozen Dataclass: {{requires_frozen}}
+      - Factory Methods: {{requires_factory}}
+      - Min Test Coverage: 95%
+    </output>
+  </step>
+
+  <step n="3" goal="Validate Phase 3 constraints before implementation">
+    <critical>Ensure compliance with Phase 3 architecture before writing code</critical>
+
+    <validation_checklist>
+      <check id="no_qgis">
+        <rule>File contains NO imports from: qgis.core, qgis.gui, qgis.PyQt, PyQt5</rule>
+        <fail_action>HALT: Phase 3 objects MUST be pure Python</fail_action>
+      </check>
+      
+      <check id="correct_package">
+        <rule>Files created in correct package: core/domain/, core/services/, core/ports/, or tests/core/</rule>
+        <fail_action>ASK: Confirm target package location</fail_action>
+      </check>
+      
+      <check id="immutability" if="story_type is ValueObject or Entity">
+        <rule>Dataclass uses frozen=True</rule>
+        <rule>Uses FrozenSet instead of set for collections</rule>
+        <rule>Uses tuple instead of list for sequences</rule>
+        <fail_action>HALT: Value objects must be immutable</fail_action>
+      </check>
+      
+      <check id="type_hints">
+        <rule>All function parameters have type hints</rule>
+        <rule>All return values have type hints</rule>
+        <fail_action>WARN: Type hints required for Phase 3</fail_action>
+      </check>
+    </validation_checklist>
+
+    <output>🔍 **Pre-Implementation Validation**
+      
+      ✅ No QGIS imports
+      ✅ Correct package: {{target_package}}
+      ✅ Immutability pattern: {{immutability_status}}
+      ✅ Type hints ready
+      
+      🚀 Ready to implement: {{next_task}}
+    </output>
+  </step>
+
+  <step n="4" goal="Mark story in-progress and begin implementation" tag="sprint-status">
+    <check if="{{sprint_status}} file exists">
+      <action>Update the story status in sprint-status.yaml to "in-progress"</action>
+      <output>🚀 **Début de l'implémentation:** {{story_key}}
+        Status: ready-for-dev → in-progress
+      </output>
+    </check>
+
+    <implementation_loop>
+      <action>For each incomplete task in Tasks/Subtasks:</action>
+      
+      <task_execution>
+        <action>Read task description</action>
+        <action>Implement the task following Phase 3 patterns</action>
+        
+        <phase3_patterns>
+          <value_object_pattern>
+            <imports>from dataclasses import dataclass, field
+from typing import Optional, List, Tuple, FrozenSet
+from enum import Enum</imports>
+            <class_decorator>@dataclass(frozen=True)</class_decorator>
+            <factory_method>@classmethod
+def create(cls, ...) -> 'ClassName':
+    """Factory method with validation."""</factory_method>
+            <with_methods>def with_X(self, new_value) -> 'ClassName':
+    """Return new instance with updated value."""
+    return dataclasses.replace(self, x=new_value)</with_methods>
+          </value_object_pattern>
+          
+          <service_pattern>
+            <imports>from abc import ABC, abstractmethod
+from typing import Protocol</imports>
+            <dependency_injection>Use constructor injection</dependency_injection>
+            <interface_pattern>Define Protocols for dependencies</interface_pattern>
+          </service_pattern>
+          
+          <port_pattern>
+            <imports>from abc import ABC, abstractmethod
+from typing import Protocol</imports>
+            <abstract_methods>All methods must be abstract</abstract_methods>
+          </port_pattern>
+        </phase3_patterns>
+        
+        <action>Write unit tests for the implemented code</action>
+        <action>Run tests: pytest tests/core/domain/test_{{module}}.py -v</action>
+        <action>Mark task checkbox as [x] in story file</action>
+        <action>Update File List section with changed files</action>
+      </task_execution>
+      
+      <continue_condition>Continue until all tasks are [x]</continue_condition>
+    </implementation_loop>
+  </step>
+
+  <step n="5" goal="Phase 3 Quality Gates">
+    <critical>Validate Phase 3 specific quality requirements</critical>
+
+    <quality_gate id="pure_python">
+      <action>Scan all modified files for QGIS imports</action>
+      <command>grep -r "from qgis\|import qgis\|from PyQt5" core/domain/ core/services/ core/ports/</command>
+      <expected>No matches found</expected>
+      <fail_action>HALT: Remove QGIS dependencies from core layer</fail_action>
+    </quality_gate>
+
+    <quality_gate id="test_coverage">
+      <action>Run coverage for modified domain files</action>
+      <command>pytest tests/core/domain/test_{{module}}.py -v --cov=core/domain/{{module}} --cov-report=term-missing</command>
+      <threshold>95%</threshold>
+      <fail_action>WARN: Add more tests to reach 95% coverage</fail_action>
+    </quality_gate>
+
+    <quality_gate id="frozen_dataclass" if="story creates Value Object">
+      <action>Verify frozen=True in dataclass decorator</action>
+      <action>Verify FrozenSet used for collection attributes</action>
+      <fail_action>HALT: Value objects must be immutable</fail_action>
+    </quality_gate>
+
+    <quality_gate id="type_checking">
+      <action>Run type checker if available</action>
+      <command>python -m mypy core/domain/{{module}}.py --ignore-missing-imports</command>
+      <fail_action>WARN: Fix type errors</fail_action>
+    </quality_gate>
+
+    <output>🎯 **Phase 3 Quality Gates**
+      
+      | Gate | Status |
+      |------|--------|
+      | Pure Python | {{pure_python_status}} |
+      | Test Coverage | {{coverage}}% |
+      | Frozen Dataclass | {{frozen_status}} |
+      | Type Hints | {{type_status}} |
+      
+      {{quality_summary}}
+    </output>
+  </step>
+
+  <step n="6" goal="Run all Phase 3 tests">
+    <action>Run complete test suite for core domain</action>
+    <command>pytest tests/core/domain/ -v --tb=short</command>
+    
+    <check if="tests fail">
+      <action>Debug and fix failing tests</action>
+      <action>Update Debug Log in Dev Agent Record</action>
+      <goto step="4">Resume implementation</goto>
+    </check>
+
+    <output>🧪 **Test Results**
+      
+      {{test_summary}}
+      - Tests passed: {{passed_count}}
+      - Tests failed: {{failed_count}}
+      - Coverage: {{coverage}}%
+    </output>
+  </step>
+
+  <step n="7" goal="Phase 3 story completion" tag="sprint-status">
+    <critical>Validate ALL Phase 3 Definition of Done criteria</critical>
+
+    <action>Load {{validation}} checklist</action>
+    <action>Verify each DoD item is satisfied</action>
+
+    <dod_checklist>
+      <item>All tasks and subtasks marked [x]</item>
+      <item>All acceptance criteria satisfied</item>
+      <item>Pure Python - NO QGIS imports in core/</item>
+      <item>Frozen dataclass used (if Value Object)</item>
+      <item>Factory methods implemented</item>
+      <item>Unit tests created with 95%+ coverage</item>
+      <item>Type hints on all functions</item>
+      <item>File List updated</item>
+      <item>Dev Agent Record updated</item>
+      <item>Change Log updated</item>
+    </dod_checklist>
+
+    <check if="all DoD items pass">
+      <action>Update story Status to "completed"</action>
+      <action>Update sprint-status.yaml: {{story_key}} = "completed"</action>
+      <action>Calculate new completed_story_points</action>
+      
+      <output>✅ **Story Completed: {{story_key}}**
+        
+        📊 **Phase 3 Progress:**
+        - Story Points: {{story_points}} completed
+        - Phase Progress: {{completed_points}}/{{total_points}} ({{percentage}}%)
+        
+        🎯 **Next Phase 3 Story:** {{next_story}}
+        
+        **Rappel:** Pour continuer avec la prochaine story:
+        `dev-story-phase3` ou spécifiez `{{next_story}}`
+      </output>
+    </check>
+
+    <check if="DoD items fail">
+      <output>❌ **Definition of Done - INCOMPLETE**
+        
+        **Failed Items:**
+        {{failed_items_list}}
+        
+        **Action Required:** Address failed items before marking complete.
+      </output>
+      <ask>Souhaitez-vous corriger ces éléments maintenant ?</ask>
+    </check>
+  </step>
+
+  <step n="8" goal="Update documentation and prepare next story">
+    <action>Update core/domain/__init__.py exports if new domain objects created</action>
+    <action>Add any learnings to Dev Agent Record for future stories</action>
+    
+    <check if="story is last in Phase 3">
+      <output>🎉 **Phase 3 Complete!**
+        
+        **Summary:**
+        - All 12 stories completed
+        - Total story points: 42
+        - Core domain layer established
+        
+        **Next Phase:** Phase 4 - Backend Adapters
+      </output>
+    </check>
+  </step>
+
+</workflow>
