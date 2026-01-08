@@ -13,7 +13,23 @@ Date: January 2026
 import pytest
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
+
+
+# ============================================================================
+# Pytest Configuration
+# ============================================================================
+
+def pytest_configure(config):
+    """Register custom markers."""
+    config.addinivalue_line("markers", "integration: Integration tests")
+    config.addinivalue_line("markers", "e2e: End-to-end tests")
+    config.addinivalue_line("markers", "postgresql: PostgreSQL backend tests")
+    config.addinivalue_line("markers", "spatialite: Spatialite backend tests")
+    config.addinivalue_line("markers", "ogr: OGR backend tests")
+    config.addinivalue_line("markers", "benchmark: Performance benchmark tests")
+    config.addinivalue_line("markers", "regression: Regression tests for known issues")
+    config.addinivalue_line("markers", "slow: Slow running tests")
+from unittest.mock import Mock, MagicMock, patch
 from typing import Dict, Any, Optional, List
 import uuid
 import time
