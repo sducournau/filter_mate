@@ -39,6 +39,44 @@ from .constants import (
 )
 
 
+def clean_buffer_value(value, decimals=6):
+    """
+    Clean buffer value from floating point precision errors.
+    
+    Rounds float values intelligently:
+    - If very close to an integer (within 1e-9), returns the integer as float
+    - Otherwise rounds to specified decimal places
+    
+    Examples:
+        0.9999999999999999 → 1.0
+        1.0000000000000002 → 1.0
+        1.5 → 1.5
+        0.123456789 → 0.123457 (with decimals=6)
+    
+    Args:
+        value: The buffer value (float, int, or None)
+        decimals: Number of decimal places to round to (default: 6)
+    
+    Returns:
+        float: Cleaned buffer value, or 0.0 if input is None/invalid
+    """
+    if value is None:
+        return 0.0
+    
+    try:
+        float_val = float(value)
+    except (ValueError, TypeError):
+        return 0.0
+    
+    # Check if very close to an integer
+    rounded_int = round(float_val)
+    if abs(float_val - rounded_int) < 1e-9:
+        return float(rounded_int)
+    
+    # Otherwise round to specified decimals
+    return round(float_val, decimals)
+
+
 def get_primary_key_name(layer):
     """
     Get the primary key field name for a layer.

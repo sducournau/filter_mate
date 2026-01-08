@@ -461,68 +461,25 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
     def _build_st_buffer_with_style(self, geom_expr: str, buffer_value: float) -> str:
         """
         Build ST_Buffer expression with endcap style from task_params.
-        
+
+        FIX v3.0.12: Now delegates to unified _build_buffer_expression() in base_backend.py
+        to eliminate code duplication between PostgreSQL and Spatialite backends.
+
         Supports both positive buffers (expansion) and negative buffers (erosion/shrinking).
         Negative buffers only work on polygon geometries - they shrink the polygon inward.
-        
-        v2.6.x: Optionally applies ST_SimplifyPreserveTopology before buffer to reduce
-        vertex count and improve performance for complex geometries.
-        
+
         Args:
             geom_expr: Geometry expression to buffer
             buffer_value: Buffer distance (positive=expand, negative=shrink/erode)
-            
+
         Returns:
             PostGIS ST_Buffer expression with style parameter
-            
+
         Note:
-            - Negative buffer on a polygon shrinks it inward
-            - Negative buffer on a point or line returns empty geometry
-            - Very large negative buffers may collapse the polygon entirely
-            - Negative buffers are wrapped in ST_MakeValid() to prevent invalid geometries
-            - Returns NULL if buffer produces empty geometry (v2.4.23 fix for negative buffers)
-            - Simplification uses ST_SimplifyPreserveTopology to maintain topology
+            All buffer logic is now centralized in GeometricFilterBackend._build_buffer_expression()
+            This method is a thin wrapper that specifies 'postgresql' dialect.
         """
-        endcap_style = self._get_buffer_endcap_style()
-        quad_segs = self._get_buffer_segments()
-        simplify_tolerance = self._get_simplify_tolerance()
-        
-        # Log negative buffer usage for visibility
-        if buffer_value < 0:
-            self.log_debug(f"📐 Using negative buffer (erosion): {buffer_value}m")
-        
-        # v2.6.x: Apply geometry simplification before buffer if tolerance is set
-        # ST_SimplifyPreserveTopology maintains valid topology (no self-intersections)
-        working_geom = geom_expr
-        if simplify_tolerance > 0:
-            working_geom = f"ST_SimplifyPreserveTopology({geom_expr}, {simplify_tolerance})"
-            self.log_info(f"  📐 Applying ST_SimplifyPreserveTopology({simplify_tolerance}m) before buffer")
-        
-        # Build base buffer expression with quad_segs and endcap style
-        # PostGIS ST_Buffer syntax: ST_Buffer(geom, distance, 'quad_segs=N endcap=style')
-        style_params = f"quad_segs={quad_segs}"
-        if endcap_style != 'round':
-            style_params += f" endcap={endcap_style}"
-        
-        buffer_expr = f"ST_Buffer({working_geom}, {buffer_value}, '{style_params}')"
-        self.log_debug(f"Buffer expression: {buffer_expr}")
-        
-        # CRITICAL FIX v2.3.9: Wrap negative buffers in ST_MakeValid()
-        # CRITICAL FIX v2.4.23: Use ST_IsEmpty() to detect ALL empty geometry types
-        # CRITICAL FIX v2.5.4: Fixed bug where NULLIF only detected GEOMETRYCOLLECTION EMPTY
-        #                      but not POLYGON EMPTY, MULTIPOLYGON EMPTY, etc.
-        # Negative buffers (erosion/shrinking) can produce invalid or empty geometries,
-        # especially on complex polygons or when buffer is too large.
-        # ST_MakeValid() ensures the result is always geometrically valid.
-        # ST_IsEmpty() detects ALL empty geometry types (POLYGON EMPTY, MULTIPOLYGON EMPTY, etc.)
-        if buffer_value < 0:
-            self.log_info(f"  🛡️ Wrapping negative buffer in ST_MakeValid() + ST_IsEmpty check for empty geometry handling")
-            # Use CASE WHEN to return NULL if buffer produces empty geometry
-            # This ensures empty results from negative buffers don't match spatial predicates
-            validated_expr = f"ST_MakeValid({buffer_expr})"
-            return f"CASE WHEN ST_IsEmpty({validated_expr}) THEN NULL ELSE {validated_expr} END"
-        else:
-            return buffer_expr
+        return self._build_buffer_expression(geom_expr, buffer_value, dialect='postgresql')
     
     def supports_layer(self, layer: QgsVectorLayer) -> bool:
         """
@@ -1051,48 +1008,19 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         # v2.4.22: Handle geographic CRS by transforming to EPSG:3857 for metric buffer
         if buffer_value is not None and buffer_value != 0:
             self.log_debug(f"  ✓ Applying buffer: {buffer_value}m")
-            
-            # Check if source CRS is geographic (SRID 4326 or similar)
-            # Geographic CRS use degrees, so buffer in meters requires transformation
-            is_geographic = source_srid == 4326 or (
-                hasattr(self, 'task_params') and 
-                self.task_params and 
-                self.task_params.get('infos', {}).get('layer_crs_authid', '').startswith('EPSG:4') and
-                source_srid < 5000  # Heuristic: low SRID numbers are often geographic
+
+            # FIX v3.0.12: Use unified geographic CRS transformation helper
+            # This replaces 40+ lines of duplicated transformation logic with single method call
+            source_geom_sql = self._apply_geographic_buffer_transform(
+                source_geom_sql,
+                source_srid=source_srid,
+                target_srid=source_srid,  # Buffer in place, return to same CRS
+                buffer_value=buffer_value,
+                dialect='postgresql'
             )
-            
-            if is_geographic:
-                # Geographic CRS: transform to EPSG:3857 for metric buffer, then back
-                self.log_info(f"  🌍 Geographic CRS (SRID={source_srid}) - applying buffer via EPSG:3857")
-                endcap_style = self._get_buffer_endcap_style()
-                buffer_style_param = "" if endcap_style == 'round' else f", 'endcap={endcap_style}'"
-                
-                # Transform -> Buffer -> Transform back
-                buffer_expr_3857 = (
-                    f"ST_Transform("
-                    f"ST_Buffer("
-                    f"ST_Transform({source_geom_sql}, 3857), "
-                    f"{buffer_value}{buffer_style_param}), "
-                    f"{source_srid})"
-                )
-                
-                # CRITICAL FIX v2.3.9: Wrap negative buffers in ST_MakeValid()
-                # CRITICAL FIX v2.4.23: Use ST_IsEmpty() to detect ALL empty geometry types
-                # CRITICAL FIX v2.5.4: Fixed bug where NULLIF only detected GEOMETRYCOLLECTION EMPTY
-                if buffer_value < 0:
-                    self.log_info(f"  🛡️ Wrapping negative buffer in ST_MakeValid() + ST_IsEmpty check for empty geometry handling")
-                    validated_expr = f"ST_MakeValid({buffer_expr_3857})"
-                    source_geom_sql = f"CASE WHEN ST_IsEmpty({validated_expr}) THEN NULL ELSE {validated_expr} END"
-                else:
-                    source_geom_sql = buffer_expr_3857
-                
-                buffer_type_str = "expansion" if buffer_value > 0 else "erosion (shrink)"
-                self.log_info(f"  ✓ Applied ST_Buffer({buffer_value}m, {buffer_type_str}) via EPSG:3857 reprojection")
-            else:
-                # Projected CRS: buffer directly in native units
-                source_geom_sql = self._build_st_buffer_with_style(source_geom_sql, buffer_value)
-                buffer_type_str = "expansion" if buffer_value > 0 else "erosion (shrink)"
-                self.log_debug(f"📐 Buffer APPLIED: {buffer_value}m ({buffer_type_str}) for SRID={source_srid}")
+
+            buffer_type_str = "expansion" if buffer_value > 0 else "erosion (shrink)"
+            self.log_debug(f"📐 Buffer APPLIED: {buffer_value}m ({buffer_type_str}) for SRID={source_srid}")
         else:
             self.log_debug(f"  ℹ️ No buffer applied (buffer_value={buffer_value})")
         
@@ -1354,52 +1282,28 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                         source_srid_value = None
                         is_geographic = False
                         
+                        # Get source SRID for geographic CRS detection
+                        source_srid_value = source_srid  # Default to layer's SRID
                         if hasattr(self, 'task_params') and self.task_params:
                             source_crs_authid = self.task_params.get('infos', {}).get('source_layer_crs_authid', '')
                             if source_crs_authid.startswith('EPSG:'):
                                 try:
                                     source_srid_value = int(source_crs_authid.split(':')[1])
-                                    # Check if SRID indicates geographic CRS (e.g., 4326)
-                                    is_geographic = source_srid_value == 4326 or (
-                                        source_crs_authid.startswith('EPSG:4') and
-                                        source_srid_value < 5000  # Heuristic: low SRID numbers are often geographic
-                                    )
                                 except (ValueError, IndexError):
                                     pass
-                        
-                        if is_geographic:
-                            # Geographic CRS: transform to EPSG:3857 for metric buffer, then back
-                            self.log_info(f"  🌍 Geographic CRS detected (SRID={source_srid_value}) - applying buffer via EPSG:3857")
-                            endcap_style = self._get_buffer_endcap_style()
-                            buffer_style_param = "" if endcap_style == 'round' else f", 'endcap={endcap_style}'"
-                            
-                            # Transform -> Buffer -> Transform back
-                            buffer_expr_3857 = (
-                                f"ST_Transform("
-                                f"ST_Buffer("
-                                f"ST_Transform({source_geom_in_subquery}, 3857), "
-                                f"{actual_buffer_value}{buffer_style_param}), "
-                                f"{source_srid_value})"
-                            )
-                            
-                            # CRITICAL FIX v2.3.9: Wrap negative buffers in ST_MakeValid()
-                            # CRITICAL FIX v2.4.23: Use ST_IsEmpty() to detect ALL empty geometry types
-                            # CRITICAL FIX v2.5.4: Fixed bug where NULLIF only detected GEOMETRYCOLLECTION EMPTY
-                            if actual_buffer_value < 0:
-                                self.log_info(f"  🛡️ Wrapping negative buffer in ST_MakeValid() + ST_IsEmpty check for empty geometry handling")
-                                validated_expr = f"ST_MakeValid({buffer_expr_3857})"
-                                source_geom_in_subquery = f"CASE WHEN ST_IsEmpty({validated_expr}) THEN NULL ELSE {validated_expr} END"
-                            else:
-                                source_geom_in_subquery = buffer_expr_3857
-                            
-                            buffer_type_str = "expansion" if actual_buffer_value > 0 else "erosion (shrink)"
-                            self.log_info(f"  ✓ Applied ST_Buffer({actual_buffer_value}m, {buffer_type_str}) via EPSG:3857 reprojection")
-                        else:
-                            # Projected CRS: buffer directly in native units
-                            source_geom_in_subquery = self._build_st_buffer_with_style(
-                                source_geom_in_subquery, 
-                                actual_buffer_value
-                            )
+
+                        # FIX v3.0.12: Use unified geographic CRS transformation helper
+                        # This replaces 45+ lines of duplicated transformation logic
+                        source_geom_in_subquery = self._apply_geographic_buffer_transform(
+                            source_geom_in_subquery,
+                            source_srid=source_srid_value,
+                            target_srid=source_srid_value,  # Buffer in place, return to same CRS
+                            buffer_value=actual_buffer_value,
+                            dialect='postgresql'
+                        )
+
+                        buffer_type_str = "expansion" if actual_buffer_value > 0 else "erosion (shrink)"
+                        self.log_debug(f"  ✓ Applied buffer in EXISTS: {actual_buffer_value}m ({buffer_type_str})")
                     else:
                         self.log_info(f"  ℹ️ No buffer to apply in EXISTS (buffer_value={actual_buffer_value})")
                     

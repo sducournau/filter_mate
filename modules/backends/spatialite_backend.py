@@ -46,7 +46,7 @@ from qgis.core import QgsVectorLayer, QgsDataSourceUri
 from .base_backend import GeometricFilterBackend
 from ..logging_config import get_tasks_logger
 from ..constants import PROVIDER_SPATIALITE
-from ..appUtils import safe_set_subset_string
+from ..appUtils import safe_set_subset_string, clean_buffer_value
 from ..object_safety import is_valid_layer  # v2.9.24: For selection clearing
 
 logger = get_tasks_logger()
@@ -357,69 +357,25 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
     def _build_st_buffer_with_style(self, geom_expr: str, buffer_value: float) -> str:
         """
         Build ST_Buffer expression with endcap style from task_params.
-        
+
+        FIX v3.0.12: Now delegates to unified _build_buffer_expression() in base_backend.py
+        to eliminate code duplication between PostgreSQL and Spatialite backends.
+
         Supports both positive buffers (expansion) and negative buffers (erosion/shrinking).
         Negative buffers only work on polygon geometries - they shrink the polygon inward.
-        
-        v2.6.x: Optionally applies SimplifyPreserveTopology before buffer to reduce
-        vertex count and improve performance for complex geometries.
-        
+
         Args:
             geom_expr: Geometry expression to buffer
             buffer_value: Buffer distance (positive=expand, negative=shrink/erode)
-            
+
         Returns:
             Spatialite ST_Buffer expression with style parameter
-            
+
         Note:
-            - Negative buffer on a polygon shrinks it inward
-            - Negative buffer on a point or line returns empty geometry
-            - Very large negative buffers may collapse the polygon entirely
-            - Negative buffers are wrapped in MakeValid() to prevent invalid geometries
-            - Returns NULL if buffer produces empty geometry (v2.4.23 fix for negative buffers)
-            - Simplification uses SimplifyPreserveTopology to maintain topology
+            All buffer logic is now centralized in GeometricFilterBackend._build_buffer_expression()
+            This method is a thin wrapper that specifies 'spatialite' dialect.
         """
-        endcap_style = self._get_buffer_endcap_style()
-        quad_segs = self._get_buffer_segments()
-        simplify_tolerance = self._get_simplify_tolerance()
-        
-        # Log negative buffer usage for visibility
-        if buffer_value < 0:
-            self.log_info(f"📐 Using negative buffer (erosion): {buffer_value}m")
-        
-        # v2.6.x: Apply geometry simplification before buffer if tolerance is set
-        # SimplifyPreserveTopology maintains valid topology (no self-intersections)
-        working_geom = geom_expr
-        if simplify_tolerance > 0:
-            working_geom = f"SimplifyPreserveTopology({geom_expr}, {simplify_tolerance})"
-            self.log_info(f"  📐 Applying SimplifyPreserveTopology({simplify_tolerance}m) before buffer")
-        
-        # Build base buffer expression with quad_segs and endcap style
-        # Spatialite ST_Buffer syntax: ST_Buffer(geom, distance, 'quad_segs=N endcap=style')
-        style_params = f"quad_segs={quad_segs}"
-        if endcap_style != 'round':
-            style_params += f" endcap={endcap_style}"
-        
-        buffer_expr = f"ST_Buffer({working_geom}, {buffer_value}, '{style_params}')"
-        self.log_debug(f"Buffer expression: {buffer_expr}")
-        
-        # CRITICAL FIX v2.3.9: Wrap negative buffers in MakeValid()
-        # CRITICAL FIX v2.4.23: Use ST_IsEmpty() to detect ALL empty geometry types
-        # CRITICAL FIX v2.5.5: Fixed bug where NULLIF only detected GEOMETRYCOLLECTION EMPTY
-        #                      but not POLYGON EMPTY, MULTIPOLYGON EMPTY, etc.
-        # Negative buffers (erosion/shrinking) can produce invalid or empty geometries,
-        # especially on complex polygons or when buffer is too large.
-        # MakeValid() ensures the result is always geometrically valid.
-        # ST_IsEmpty() detects ALL empty geometry types (POLYGON EMPTY, MULTIPOLYGON EMPTY, etc.)
-        # Note: Spatialite uses MakeValid() instead of ST_MakeValid()
-        if buffer_value < 0:
-            self.log_info(f"  🛡️ Wrapping negative buffer in MakeValid() + ST_IsEmpty check for empty geometry handling")
-            # Use CASE WHEN to return NULL if buffer produces empty geometry
-            # This ensures empty results from negative buffers don't match spatial predicates
-            validated_expr = f"MakeValid({buffer_expr})"
-            return f"CASE WHEN ST_IsEmpty({validated_expr}) = 1 THEN NULL ELSE {validated_expr} END"
-        else:
-            return buffer_expr
+        return self._build_buffer_expression(geom_expr, buffer_value, dialect='spatialite')
     
     def supports_layer(self, layer: QgsVectorLayer) -> bool:
         """
@@ -1747,6 +1703,16 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             self.log_error(f"Error creating permanent source table: {e}")
             import traceback
             self.log_debug(f"Traceback: {traceback.format_exc()}")
+
+            # FIX v3.0.12: Clean up partially created table on failure
+            # If CREATE TABLE succeeded but subsequent operations failed (insert, index creation, etc.),
+            # we need to remove the orphaned table to prevent database bloat
+            from .base_backend import TemporaryTableManager
+            cleanup_manager = TemporaryTableManager(db_path, table_name, logger=self.logger)
+            cleanup_manager.mark_created()  # Mark as created to enable cleanup
+            cleanup_manager._cleanup()  # Immediate cleanup
+            self.log_info(f"  → Cleaned up partially created table '{table_name}' after error")
+
             if conn:
                 try:
                     conn.close()
@@ -2308,40 +2274,15 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             buffer_type_str = "expansion" if buffer_value > 0 else "erosion (shrink)"
             
             if is_target_geographic:
-                # Geographic CRS: buffer is in degrees, which is problematic
-                # Use ST_Transform to project to Web Mercator (EPSG:3857) for metric buffer
-                # Then transform back to target CRS
-                # 
-                # CRITICAL v2.4.22 FIX: Build complete transformation chain:
-                # 1. Start with source geometry in source_srid
-                # 2. Transform to 3857 for metric buffer
-                # 3. Apply buffer in meters
-                # 4. Transform result to target_srid
-                self.log_info(f"🌍 Geographic CRS (target SRID={target_srid}, source SRID={source_srid}) - applying buffer in EPSG:3857")
-                
-                # Build transformation chain
-                if source_srid == 3857:
-                    # Source already in 3857, just buffer and transform to target
-                    buffered_geom = f"ST_Buffer({source_geom_expr}, {buffer_value}{buffer_style_param})"
-                elif source_srid == target_srid:
-                    # Source and target are same geographic CRS, transform to 3857 for buffer then back
-                    buffered_geom = f"ST_Buffer(ST_Transform({source_geom_expr}, 3857), {buffer_value}{buffer_style_param})"
-                else:
-                    # Source is different from target, transform source to 3857 for buffer
-                    buffered_geom = f"ST_Buffer(ST_Transform({source_geom_expr}, 3857), {buffer_value}{buffer_style_param})"
-                
-                # CRITICAL FIX v2.3.9: Wrap negative buffers in MakeValid()
-                # CRITICAL FIX v2.4.23: Use ST_IsEmpty() to detect ALL empty geometry types
-                # CRITICAL FIX v2.5.5: Fixed bug where NULLIF only detected GEOMETRYCOLLECTION EMPTY
-                #                      but not POLYGON EMPTY, MULTIPOLYGON EMPTY, etc.
-                # Note: Spatialite uses MakeValid() instead of ST_MakeValid()
-                if buffer_value < 0:
-                    self.log_info(f"  🛡️ Wrapping negative buffer in MakeValid() + ST_IsEmpty check for empty geometry handling")
-                    validated_expr = f"MakeValid({buffered_geom})"
-                    buffered_geom = f"CASE WHEN ST_IsEmpty({validated_expr}) = 1 THEN NULL ELSE {validated_expr} END"
-                
-                # Transform buffered result to target SRID
-                source_geom_expr = f"ST_Transform({buffered_geom}, {target_srid})"
+                # FIX v3.0.12: Use unified geographic CRS transformation helper
+                # This replaces 35+ lines of duplicated transformation logic
+                source_geom_expr = self._apply_geographic_buffer_transform(
+                    source_geom_expr,
+                    source_srid=source_srid,
+                    target_srid=target_srid,
+                    buffer_value=buffer_value,
+                    dialect='spatialite'
+                )
                 self.log_info(f"✓ Applied ST_Buffer({buffer_value}m, {buffer_type_str}, endcap={endcap_style}) via EPSG:3857 reprojection")
             else:
                 # Projected CRS: buffer value is directly in map units (usually meters)
@@ -3502,7 +3443,8 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                     predicates_list = geom_preds
                 else:
                     predicates_list = []
-                buffer_val = self.task_params.get('filtering', {}).get('buffer_value', 0.0)
+                # FIX v3.0.12: Clean buffer value from float precision errors
+                buffer_val = clean_buffer_value(self.task_params.get('filtering', {}).get('buffer_value', 0.0))
             
             # v2.8.11: MULTI-STEP FILTERING - Intersect with previous cache if exists
             # v2.9.19: FIX - Pass source_wkt to only intersect if geometry matches
@@ -3591,7 +3533,8 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                             predicates_list_for_cache = list(geom_preds.keys())
                         elif isinstance(geom_preds, list):
                             predicates_list_for_cache = geom_preds
-                        buffer_val_for_cache = self.task_params.get('filtering', {}).get('buffer_value', 0.0)
+                        # FIX v3.0.12: Clean buffer value from float precision errors
+                        buffer_val_for_cache = clean_buffer_value(self.task_params.get('filtering', {}).get('buffer_value', 0.0))
                     
                     previous_fids = get_previous_filter_fids(layer, source_wkt_for_cache, buffer_val_for_cache, predicates_list_for_cache)
                     is_multistep_continuation = (previous_fids is not None and len(previous_fids) > 0)
@@ -3813,9 +3756,22 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 
                 # Get buffer value
                 # v2.6.11 FIX: buffer_value is nested under 'filtering' in task_params
+                # FIX v3.0.12: Clean buffer value from float precision errors
+                # FIX v3.0.10: Check buffer_state for multi-step filter preservation
                 filtering_params = self.task_params.get('filtering', {})
-                buffer_value = filtering_params.get('buffer_value', 0) or 0
-                
+                buffer_state = infos.get('buffer_state', {})
+
+                # Check if buffer is already applied from previous step
+                is_pre_buffered = buffer_state.get('is_pre_buffered', False)
+                buffer_column = buffer_state.get('buffer_column', 'geom')
+                previous_buffer_value = buffer_state.get('previous_buffer_value')
+                buffer_value = clean_buffer_value(buffer_state.get('buffer_value', filtering_params.get('buffer_value', 0)))
+
+                if is_pre_buffered and buffer_value != 0:
+                    self.log_info(f"  ✓ Multi-step filter: Buffer already applied ({buffer_value}m) - will use {buffer_column} column")
+                elif previous_buffer_value is not None and previous_buffer_value != buffer_value:
+                    self.log_warning(f"  ⚠️  Multi-step filter: Buffer changed ({previous_buffer_value}m → {buffer_value}m) - will recompute source table")
+
                 # Get predicates
                 predicates = self.task_params.get('predicates', {})
             
@@ -3850,30 +3806,64 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                     "FilterMate", Qgis.Info
                 )
             
-            # Create permanent source table with geometry (and buffer if needed)
-            # For geographic CRS with buffer, we need to handle projection
-            effective_buffer = 0
-            if buffer_value != 0 and not is_geographic:
-                # Projected CRS: can apply buffer directly in source SRID
-                effective_buffer = buffer_value
-            # For geographic CRS, we'll handle buffer in the SQL query itself
-            
-            source_table, has_buffer = self._create_permanent_source_table(
-                db_path=source_path,
-                source_wkt=source_wkt,
-                source_srid=source_srid,
-                buffer_value=effective_buffer,
-                source_features=None  # Single geometry for now
-            )
-            
+            # FIX v3.0.10: Check if source table already exists from previous step (multi-step filter)
+            # If buffer is pre-applied and matches current buffer, reuse existing source table
+            existing_source_table = infos.get('source_table_name')
+            source_table = None
+            has_buffer = False
+
+            if is_pre_buffered and existing_source_table:
+                # Verify table still exists in database
+                try:
+                    import sqlite3
+                    conn = sqlite3.connect(source_path, check_same_thread=False)
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (existing_source_table,))
+                    table_exists = cursor.fetchone() is not None
+                    conn.close()
+
+                    if table_exists:
+                        source_table = existing_source_table
+                        has_buffer = buffer_value != 0
+                        self.log_info(f"  ✓ Reusing existing source table '{source_table}' from previous step (with {buffer_value}m buffer)")
+                    else:
+                        self.log_warning(f"  ⚠️  Previous source table '{existing_source_table}' no longer exists - will create new one")
+                except Exception as e:
+                    self.log_warning(f"  ⚠️  Could not verify existing source table: {e} - will create new one")
+
+            # Create new source table if not reusing existing one
             if not source_table:
-                from qgis.core import QgsMessageLog, Qgis
-                self.log_warning("Could not create source table - falling back to inline WKT")
-                QgsMessageLog.logMessage(
-                    f"Source table creation failed for {layer.name()} - WKT may be too large ({len(source_wkt) if source_wkt else 0:,} chars)",
-                    "FilterMate", Qgis.Warning
+                # Create permanent source table with geometry (and buffer if needed)
+                # For geographic CRS with buffer, we need to handle projection
+                effective_buffer = 0
+                if buffer_value != 0 and not is_geographic:
+                    # Projected CRS: can apply buffer directly in source SRID
+                    effective_buffer = buffer_value
+                # For geographic CRS, we'll handle buffer in the SQL query itself
+
+                source_table, has_buffer = self._create_permanent_source_table(
+                    db_path=source_path,
+                    source_wkt=source_wkt,
+                    source_srid=source_srid,
+                    buffer_value=effective_buffer,
+                    source_features=None  # Single geometry for now
                 )
-                return False
+
+                if not source_table:
+                    from qgis.core import QgsMessageLog, Qgis
+                    self.log_warning("Could not create source table - falling back to inline WKT")
+                    QgsMessageLog.logMessage(
+                        f"Source table creation failed for {layer.name()} - WKT may be too large ({len(source_wkt) if source_wkt else 0:,} chars)",
+                        "FilterMate", Qgis.Warning
+                    )
+                    return False
+
+                # Store source table name in infos for potential reuse in next step
+                if hasattr(self, 'task_params') and self.task_params:
+                    if 'infos' not in self.task_params:
+                        self.task_params['infos'] = {}
+                    self.task_params['infos']['source_table_name'] = source_table
+                    self.log_info(f"  ✓ Stored source table name '{source_table}' for potential reuse in multi-step filter")
             
             # Get mod_spatialite extension
             mod_available, ext_name = _test_mod_spatialite_available()
@@ -4001,21 +3991,15 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             
             # Build source geometry expression with any needed transformations
             if is_geographic and buffer_value != 0 and not has_buffer:
-                # Geographic CRS with buffer but not pre-computed
-                # Apply buffer via projection to 3857
-                endcap_style = self._get_buffer_endcap_style()
-                buffer_style = f", 'endcap={endcap_style}'" if endcap_style != 'round' else ''
-                
-                if buffer_value < 0:
-                    # Negative buffer needs MakeValid
-                    source_expr = f"""
-                        CASE WHEN ST_IsEmpty(MakeValid(ST_Buffer(ST_Transform(s.geom, 3857), {buffer_value}{buffer_style}))) = 1 
-                        THEN NULL 
-                        ELSE ST_Transform(MakeValid(ST_Buffer(ST_Transform(s.geom, 3857), {buffer_value}{buffer_style})), {target_srid})
-                        END
-                    """
-                else:
-                    source_expr = f"ST_Transform(ST_Buffer(ST_Transform(s.geom, 3857), {buffer_value}{buffer_style}), {target_srid})"
+                # FIX v3.0.12: Use unified geographic CRS transformation helper
+                # Geographic CRS with buffer but not pre-computed - apply buffer via projection to 3857
+                source_expr = self._apply_geographic_buffer_transform(
+                    's.geom',  # Source column from permanent source table
+                    source_srid=source_srid,
+                    target_srid=target_srid,
+                    buffer_value=buffer_value,
+                    dialect='spatialite'
+                )
             elif source_srid != target_srid:
                 # Need CRS transformation
                 # v2.8.10: Handle empty geometries from negative buffer
@@ -4325,7 +4309,8 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                             if is_empty:
                                 # Check if negative buffer was used
                                 filtering_params = self.task_params.get('filtering', {}) if hasattr(self, 'task_params') and self.task_params else {}
-                                buf_val = filtering_params.get('buffer_value', 0) or 0
+                                # FIX v3.0.12: Clean buffer value from float precision errors
+                                buf_val = clean_buffer_value(filtering_params.get('buffer_value', 0))
                                 if buf_val < 0:
                                     QgsMessageLog.logMessage(
                                         f"ℹ️ {layer.name()}: Source geometry empty after negative buffer ({buf_val}m) - normal for thin features",
@@ -4452,7 +4437,8 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 is_negative_buffer_empty = False
                 if hasattr(self, 'task_params') and self.task_params:
                     filtering_params = self.task_params.get('filtering', {})
-                    buf_val = filtering_params.get('buffer_value', 0) or 0
+                    # FIX v3.0.12: Clean buffer value from float precision errors
+                    buf_val = clean_buffer_value(filtering_params.get('buffer_value', 0))
                     if buf_val < 0 and has_buffer:
                         # Check if source geometry is empty
                         try:

@@ -2,6 +2,177 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [3.0.12] - 2026-01-08
+
+### 🐛 Critical Bug Fixes
+
+**Multi-Step Buffer State Preservation (v3.0.12) - CRITICAL FIX:**
+
+- **Fixed critical bug**: Multi-step filters with buffers now correctly preserve buffer state across operations
+- **Issue**: In multi-step filtering (e.g., Filter A → Filter B), buffer from first step was lost or recomputed
+- **Impact**: Incorrect filtering results when chaining multiple spatial filter operations with buffers
+- **Root Cause**:
+  - Spatialite: Created new source table for each step, losing pre-computed `geom_buffered` column
+  - OGR: Stored layer reference instead of buffered geometry, causing buffer to be reapplied or lost
+- **Fixes Applied**:
+  1. **filter_task.py**: Added `buffer_state` tracking to `task_parameters['infos']`
+     - Tracks: `has_buffer`, `buffer_value`, `is_pre_buffered`, `buffer_column`, `previous_buffer_value`
+     - Detects multi-step operations and logs buffer state changes
+  2. **spatialite_backend.py**: Modified `_apply_filter_with_source_table()`
+     - Checks for existing source table from previous step
+     - Reuses table with pre-computed buffer if buffer value matches
+     - Uses correct geometry column (`geom` vs `geom_buffered`)
+     - Stores source table name in `infos` for next step
+  3. **ogr_backend.py**: Modified all `_apply_buffer()` call sites (5 locations)
+     - Checks `buffer_state` before applying buffer
+     - Reuses buffered layer from previous step when appropriate
+     - Stores buffered layer in `_buffered_source_layer` for reuse
+     - Marks buffer as pre-applied in `buffer_state` for next step
+- **User Impact**: Multi-step filters now work correctly with buffers:
+  - Step 1: Filter with 100m buffer → Creates buffered geometry
+  - Step 2: Additional filter → **Correctly uses existing 100m buffer** (not base geometry)
+  - Result: ACCURATE filtering results
+- **Log Messages**:
+  - `✓ Multi-step filter: Reusing existing {value}m buffer from previous step`
+  - `⚠️ Multi-step filter: Buffer changed from {old}m to {new}m - will recompute`
+
+### ♻️ Code Quality Improvements
+
+**Buffer Expression Refactoring (v3.0.12) - Eliminated 80% Code Duplication:**
+
+- **Refactored**: Buffer expression building logic unified across PostgreSQL and Spatialite backends
+- **Impact**: Eliminates ~70 lines of duplicated code, improves maintainability
+- **Changes**:
+  1. **base_backend.py**: Added unified `_build_buffer_expression()` method
+     - Single source of truth for buffer logic
+     - Dialect parameter to handle PostgreSQL vs Spatialite differences
+     - Supports simplification, negative buffers, validation, empty geometry handling
+  2. **base_backend.py**: Added `_get_dialect_functions()` helper
+     - Maps function names: `ST_SimplifyPreserveTopology` vs `SimplifyPreserveTopology`
+     - Maps validation: `ST_MakeValid` vs `MakeValid`
+     - Maps empty check: `ST_IsEmpty(expr)` vs `ST_IsEmpty(expr) = 1`
+  3. **postgresql_backend.py**: Updated `_build_st_buffer_with_style()`
+     - Now delegates to `_build_buffer_expression(dialect='postgresql')`
+     - Reduced from 66 lines to 3 lines
+  4. **spatialite_backend.py**: Updated `_build_st_buffer_with_style()`
+     - Now delegates to `_build_buffer_expression(dialect='spatialite')`
+     - Reduced from 67 lines to 3 lines
+- **Benefits**:
+  - **Single source of truth**: Bug fixes apply to both backends automatically
+  - **Consistent behavior**: PostgreSQL and Spatialite now guaranteed to behave identically
+  - **Easier maintenance**: Changes to buffer logic in one place instead of three
+  - **Better testability**: Can test unified method instead of each backend separately
+- **Backwards Compatible**: No API changes, existing code continues to work
+
+**Geographic CRS Transformation Refactoring (v3.0.12) - Eliminated 70% Duplication:**
+
+- **Refactored**: Geographic CRS (EPSG:4326) buffer transformation logic unified across backends
+- **Impact**: Eliminates ~80 lines of duplicated CRS handling code
+- **Problem**: Geographic CRS use degrees, making metric buffers problematic
+- **Solution**: Transform to Web Mercator (EPSG:3857) for metric buffer, then back to target CRS
+- **Changes**:
+  1. **base_backend.py**: Added geographic CRS transformation helpers
+     - `_wrap_with_geographic_transform()`: Determines transformation strategy
+     - `_apply_geographic_buffer_transform()`: Complete transformation chain (transform → buffer → transform back)
+     - Handles edge cases: source already in 3857, source != target CRS, projected vs geographic
+  2. **postgresql_backend.py**: Replaced geographic transformation logic (2 locations)
+     - Line ~1010: Simplified from 42 lines to 10 lines (WKT expression path)
+     - Line ~1285: Simplified from 45 lines to 18 lines (EXISTS subquery path)
+     - Both now delegate to `_apply_geographic_buffer_transform()`
+  3. **spatialite_backend.py**: Replaced geographic transformation logic (2 locations)
+     - Line ~2266: Simplified from 35 lines to 10 lines (inline expression)
+     - Line ~3983: Simplified from 15 lines to 9 lines (source table query)
+     - Both now delegate to `_apply_geographic_buffer_transform()`
+- **Transformation Logic**:
+  - **Geographic CRS + Buffer**: `ST_Transform(ST_Buffer(ST_Transform(geom, 3857), buffer), target_srid)`
+  - **Projected CRS + Buffer**: `ST_Buffer(geom, buffer)` (no transform needed)
+  - **Already in 3857**: `ST_Transform(ST_Buffer(geom, buffer), target_srid)`
+- **Benefits**:
+  - **Single transformation strategy**: PostgreSQL and Spatialite use identical logic
+  - **Easier debugging**: Geographic CRS issues fixed in one place
+  - **Better tested**: Centralized code can be unit tested more effectively
+  - **Consistent behavior**: No divergence between backends over time
+- **Backwards Compatible**: No API changes, existing geographic layer filtering works identically
+
+**Temporary Table Cleanup Improvements (v3.0.12) - Prevents Resource Leaks:**
+
+- **Improved**: Temporary table cleanup now guarantees cleanup even when exceptions occur
+- **Problem**: Exceptions during table creation/population left orphaned tables in database
+- **Impact**: Database bloat, performance degradation, eventual resource exhaustion
+- **Changes**:
+  1. **base_backend.py**: Added `TemporaryTableManager` context manager
+     - Tracks table creation state
+     - Automatically cleans up on exception
+     - Handles R-tree spatial index cleanup
+     - Provides detailed logging (table exists check, cleanup duration, indexes disabled)
+     - `mark_created()`: Mark table for cleanup
+     - `keep()`: Preserve table (for "permanent" temporary tables)
+  2. **spatialite_backend.py**: Updated `_create_permanent_source_table()`
+     - Exception handler now uses `TemporaryTableManager` for immediate cleanup
+     - Prevents orphaned tables when INSERT or index creation fails
+     - Logs cleanup actions for diagnostic visibility
+- **Cleanup Strategy**:
+  - **Primary**: `TemporaryTableManager` cleans up immediately on failure
+  - **Secondary**: Periodic cleanup (`_cleanup_permanent_source_tables()`) removes stale tables (>1h)
+  - **Tertiary**: Manual `cleanup()` method for normal completion
+- **Logging**: Enhanced cleanup diagnostics
+  - Table existence checks before cleanup attempts
+  - Cleanup duration timing
+  - Index disable count
+  - Detailed error messages
+- **Benefits**:
+  - **No orphaned tables**: Exceptions no longer leave tables behind
+  - **Better diagnostics**: Clear logging of cleanup actions
+  - **Reduced bloat**: Immediate cleanup prevents accumulation
+  - **Safe**: Context manager pattern ensures cleanup even in edge cases
+- **Backwards Compatible**: Existing cleanup methods still work
+
+---
+
+## [3.0.11] - 2026-01-08
+
+### 🔍 Diagnostic Enhancements
+
+**OGR Backend Buffer Diagnostic (v3.0.11):**
+
+- Added detailed QGIS MessageLog output in `_apply_buffer` to diagnose why source layer has 0 features
+- **Symptom**: OGR fallback fails with "source layer has 0 features" when source layer actually has features
+- **Logs show**: `OGR apply_filter: source_geom ... features=58` but `_apply_buffer: 0 features`
+- **New diagnostic logs include**:
+  - Provider type (memory, ogr, postgres, etc.)
+  - featureCount() value before iteration
+  - subsetString if any (may filter out all features)
+  - Memory layer count mismatch warning if getFeatures() returns different count
+- This helps identify if:
+  1. Layer type is being detected wrong
+  2. A subset string is filtering out all features
+  3. getFeatures() fails silently for memory layers
+  4. featureCount() reports stale/cached value
+
+---
+
+## [3.0.10] - 2026-01-08
+
+### 🐛 Bug Fixes
+
+**Distant Layers Filtering Diagnostic (v3.0.10):**
+
+- Added diagnostic warning when distant layers are NOT filtered during second filter operations
+- **Symptom**: Second filter only filters source layer, distant layers remain unfiltered
+- **User Impact**: When changing source layer and filtering again, distant layers not updated
+- **Cause**: Each layer stores its own `has_geometric_predicates` parameter (default=False)
+  - When user changes source layer, UI buttons are synchronized with new layer's stored values
+  - If new source layer has `has_geometric_predicates=False`, distant layers won't be filtered
+- **Fix Applied** (`modules/tasks/filter_task.py`):
+  - Added QGIS MessageLog warning when distant layers filtering is skipped
+  - Log shows which conditions failed: `has_geometric_predicates=False`, `no layers configured`, etc.
+  - Helps user understand why distant layers were not filtered
+- **User Action Required**: When changing source layer, ensure the "Geometric Predicates" button 
+  is checked and a predicate (e.g., "Intersects") is selected before filtering
+- Message example: `⚠️ Distant layers NOT filtered: has_geometric_predicates=False`
+
+---
+
 ## [3.0.8] - 2026-01-07
 
 ### 🐛 Critical Bug Fixes

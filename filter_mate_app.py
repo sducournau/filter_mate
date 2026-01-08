@@ -53,6 +53,7 @@ from .modules.appUtils import (
     detect_layer_provider_type,
     cleanup_corrupted_layer_filters,
     validate_and_cleanup_postgres_layers,  # v2.8.1: Orphaned MV cleanup on project load
+    clean_buffer_value,  # v3.0.12: Clean buffer values from float precision errors
 )
 from .modules.type_utils import can_cast, return_typed_value
 from .modules.feedback_utils import (
@@ -3329,8 +3330,9 @@ class FilterMateApp:
             # CRITICAL FIX v2.5.x: Synchronize buffer spinbox value to PROJECT_LAYERS
             # The spinbox valueChanged signal may not have updated PROJECT_LAYERS yet
             # Read the current spinbox value directly and sync it before creating task params
+            # FIX v3.0.12: Clean buffer value from float precision errors (0.9999999 → 1.0)
             if self.dockwidget and hasattr(self.dockwidget, 'mQgsDoubleSpinBox_filtering_buffer_value'):
-                current_spinbox_buffer = self.dockwidget.mQgsDoubleSpinBox_filtering_buffer_value.value()
+                current_spinbox_buffer = clean_buffer_value(self.dockwidget.mQgsDoubleSpinBox_filtering_buffer_value.value())
                 stored_buffer = task_parameters.get("filtering", {}).get("buffer_value", 0.0)
                 if current_spinbox_buffer != stored_buffer:
                     logger.info(f"SYNC buffer_value: spinbox={current_spinbox_buffer}, stored={stored_buffer} → updating")

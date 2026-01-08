@@ -55,7 +55,7 @@ from qgis.core import (
 from qgis import processing
 from .base_backend import GeometricFilterBackend
 from ..logging_config import get_tasks_logger
-from ..appUtils import safe_set_subset_string
+from ..appUtils import safe_set_subset_string, clean_buffer_value
 
 # Import geometry safety module (v2.3.9 - stability fix)
 from ..geometry_safety import (
@@ -512,9 +512,34 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 
                 # Step 3: Apply spatial filter on reduced set
                 # Apply buffer if needed
-                intersect_layer = self._apply_buffer(source_layer, buffer_value)
-                if intersect_layer is None:
-                    return False
+                # FIX v3.0.10: Check if buffer is already applied from previous step
+                if hasattr(self, 'task_params') and self.task_params:
+                    infos = self.task_params.get('infos', {})
+                    buffer_state = infos.get('buffer_state', {})
+                    is_pre_buffered = buffer_state.get('is_pre_buffered', False)
+
+                    if is_pre_buffered and buffer_value != 0:
+                        # Buffer already applied - use source layer directly
+                        self.log_info(f"  ✓ Multi-step filter: Using pre-buffered source ({buffer_value}m)")
+                        intersect_layer = source_layer
+                    else:
+                        # Apply buffer fresh
+                        intersect_layer = self._apply_buffer(source_layer, buffer_value)
+                        if intersect_layer is None:
+                            return False
+
+                        # Store buffered layer for potential reuse in next step
+                        if buffer_value != 0:
+                            self._buffered_source_layer = intersect_layer
+                            # Also update infos to mark buffer as pre-applied for next step
+                            if 'buffer_state' in infos:
+                                infos['buffer_state']['is_pre_buffered'] = True
+                                self.log_info(f"  ✓ Stored buffered layer for potential reuse in multi-step filter")
+                else:
+                    # No task_params - apply buffer normally
+                    intersect_layer = self._apply_buffer(source_layer, buffer_value)
+                    if intersect_layer is None:
+                        return False
                 
                 # Map predicates
                 predicate_codes = self._map_predicates(predicates)
@@ -550,7 +575,8 @@ class OGRGeometricFilter(GeometricFilterBackend):
                         predicates_list = geom_preds
                     else:
                         predicates_list = []
-                    buffer_val = self.task_params.get('filtering', {}).get('buffer_value', 0.0)
+                    # FIX v3.0.12: Clean buffer value from float precision errors
+                    buffer_val = clean_buffer_value(self.task_params.get('filtering', {}).get('buffer_value', 0.0))
                 
                 if SPATIALITE_CACHE_AVAILABLE and intersect_filter_fids and old_subset:
                     # v2.9.43: CRITICAL - Cache multi-step only supports AND operator
@@ -731,7 +757,24 @@ class OGRGeometricFilter(GeometricFilterBackend):
         
         # Store source_geom for later use in apply_filter
         self.source_geom = source_geom
-        
+
+        # FIX v3.0.10: Check for pre-buffered layer from previous multi-step operation
+        # If buffer is already applied, store the buffered layer reference instead
+        if hasattr(self, 'task_params') and self.task_params:
+            infos = self.task_params.get('infos', {})
+            buffer_state = infos.get('buffer_state', {})
+            is_pre_buffered = buffer_state.get('is_pre_buffered', False)
+
+            if is_pre_buffered and buffer_value != 0:
+                # Check if we have a stored buffered layer from previous step
+                buffered_layer = getattr(self, '_buffered_source_layer', None)
+                if buffered_layer and isinstance(buffered_layer, QgsVectorLayer) and buffered_layer.isValid():
+                    self.log_info(f"  ✓ Multi-step filter: Reusing buffered layer from previous step ({buffer_value}m buffer)")
+                    # Use buffered layer as source
+                    self.source_geom = buffered_layer
+                else:
+                    self.log_warning(f"  ⚠️  Multi-step filter: Buffered layer not found or invalid - will recompute")
+
         # For OGR, we'll use QGIS processing, so we return predicate names and buffer params
         # The actual filtering will be done in apply_filter()
         # CRITICAL FIX: Pass buffer_value to apply_filter for application there
@@ -801,7 +844,8 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 
                 params = json.loads(expression) if expression else {}
                 predicates = params.get('predicates', [])
-                buffer_value = params.get('buffer_value')
+                # FIX v3.0.12: Clean buffer value from float precision errors
+                buffer_value = clean_buffer_value(params.get('buffer_value'))
                 
                 # Check if using memory optimization for PostgreSQL
                 use_memory_opt = getattr(self, '_use_memory_optimization', False)
@@ -1028,12 +1072,13 @@ class OGRGeometricFilter(GeometricFilterBackend):
         if not source_layer or simplify_tolerance <= 0:
             return source_layer
         
-        from qgis.core import QgsProcessingContext, QgsFeatureRequest
+        from qgis.core import QgsProcessingContext, QgsFeatureRequest, QgsProcessingFeedback
         
         try:
             context = QgsProcessingContext()
             context.setInvalidGeometryCheck(QgsFeatureRequest.GeometrySkipInvalid)
-            feedback = self._create_cancellable_feedback()
+            # FIX v3.0.12: Use standard feedback to avoid cancellation issues during OGR fallback
+            feedback = QgsProcessingFeedback()
             
             # Check cancellation before simplification
             if self._is_task_canceled():
@@ -1127,7 +1172,17 @@ class OGRGeometricFilter(GeometricFilterBackend):
         # even if features were added. We need to force a refresh/recount.
         # Try to get actual feature count by iterating (more reliable for memory layers)
         actual_feature_count = 0
-        if source_layer.providerType() == 'memory':
+        provider_type = source_layer.providerType()
+        
+        # FIX v3.0.11: DIAGNOSTIC - Log detailed feature counting info to QGIS MessagePanel
+        QgsMessageLog.logMessage(
+            f"OGR _apply_buffer: source layer '{source_layer.name()}' - "
+            f"provider={provider_type}, featureCount()={source_layer.featureCount()}, "
+            f"subsetString='{source_layer.subsetString()[:50] if source_layer.subsetString() else '(none)'}'",
+            "FilterMate", Qgis.Info
+        )
+        
+        if provider_type == 'memory':
             # For memory layers, force extent update and iterate to get real count
             source_layer.updateExtents()
             
@@ -1137,14 +1192,22 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 actual_feature_count = sum(1 for _ in source_layer.getFeatures())
             except Exception as e:
                 self.log_warning(f"Failed to iterate features: {e}, using featureCount()")
+                QgsMessageLog.logMessage(
+                    f"OGR _apply_buffer: getFeatures() iteration FAILED: {e}",
+                    "FilterMate", Qgis.Warning
+                )
                 actual_feature_count = reported_count
             
             if reported_count != actual_feature_count:
                 self.log_warning(f"⚠️ Memory layer count mismatch: featureCount()={reported_count}, actual={actual_feature_count}")
+                QgsMessageLog.logMessage(
+                    f"OGR _apply_buffer: Memory layer count MISMATCH - featureCount()={reported_count}, actual={actual_feature_count}",
+                    "FilterMate", Qgis.Warning
+                )
         else:
             actual_feature_count = source_layer.featureCount()
         
-        self.log_debug(f"Source layer '{source_layer.name()}': provider={source_layer.providerType()}, features={actual_feature_count}")
+        self.log_debug(f"Source layer '{source_layer.name()}': provider={provider_type}, features={actual_feature_count}")
         
         if actual_feature_count == 0:
             self.log_error(f"⚠️ Source layer has no features: {source_layer.name()}")
@@ -1197,15 +1260,28 @@ class OGRGeometricFilter(GeometricFilterBackend):
                               f"Features: {source_layer.featureCount()}")
                 
                 # v2.6.2: Use cancellable feedback for interruptible processing
-                from qgis.core import QgsProcessingContext, QgsFeatureRequest
+                # FIX v3.0.12: Use standard feedback for OGR fallback to avoid cancellation issues
+                # The CancellableFeedback can cause processing to fail if parent task state is inconsistent
+                from qgis.core import QgsProcessingContext, QgsFeatureRequest, QgsProcessingFeedback
                 context = QgsProcessingContext()
                 context.setInvalidGeometryCheck(QgsFeatureRequest.GeometrySkipInvalid)
-                feedback = self._create_cancellable_feedback()
+                
+                # Use standard feedback instead of cancellable for more reliable processing
+                # The parent task cancellation is checked separately before each operation
+                feedback = QgsProcessingFeedback()
                 
                 # v2.6.2: Check cancellation before buffer
                 if self._is_task_canceled():
                     self.log_info("Filter cancelled before buffer processing")
                     return None
+                
+                # FIX v3.0.12: DIAGNOSTIC - Log detailed state before processing
+                QgsMessageLog.logMessage(
+                    f"OGR _apply_buffer: BEFORE processing - layer={source_layer.name()}, "
+                    f"valid={source_layer.isValid()}, features={source_layer.featureCount()}, "
+                    f"feedback_canceled={feedback.isCanceled()}",
+                    "FilterMate", Qgis.Info
+                )
                 
                 try:
                     # First run fixgeometries to repair any invalid geometries
@@ -1215,6 +1291,13 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     }, context=context, feedback=feedback)
                     fixed_layer = fix_result['OUTPUT']
                     self.log_debug(f"Fixed geometries: {fixed_layer.featureCount()} features")
+                    
+                    # FIX v3.0.12: DIAGNOSTIC - Check feedback state after fixgeometries
+                    if feedback.isCanceled():
+                        QgsMessageLog.logMessage(
+                            f"OGR _apply_buffer: fixgeometries completed but feedback is CANCELED",
+                            "FilterMate", Qgis.Warning
+                        )
                     
                     # v2.6.x: Apply geometry simplification before buffer if tolerance is set
                     simplify_tolerance = self._get_simplify_tolerance()
@@ -1301,10 +1384,17 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 self.log_debug("Buffer applied successfully")
                 return buffered_layer
             except Exception as buffer_error:
+                # FIX v3.0.12: Enhanced error logging to QGIS MessagePanel
                 self.log_error(f"Buffer operation failed: {str(buffer_error)}")
                 self.log_error(f"  - Buffer value: {buffer_value} (type: {type(buffer_value).__name__})")
                 self.log_error(f"  - Source layer: {source_layer.name()}")
                 self.log_error(f"  - CRS: {source_layer.crs().authid()} (Geographic: {source_layer.crs().isGeographic()})")
+                
+                # Log to QGIS MessagePanel for visibility
+                QgsMessageLog.logMessage(
+                    f"OGR _apply_buffer: EXCEPTION - {str(buffer_error)[:200]}",
+                    "FilterMate", Qgis.Critical
+                )
                 
                 # Check for common error causes
                 if source_layer.crs().isGeographic() and abs(float(buffer_value)) > 1:
@@ -1316,7 +1406,12 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     )
                 
                 import traceback
-                self.log_debug(f"Buffer traceback: {traceback.format_exc()}")
+                error_traceback = traceback.format_exc()
+                self.log_debug(f"Buffer traceback: {error_traceback}")
+                QgsMessageLog.logMessage(
+                    f"OGR _apply_buffer: Traceback - {error_traceback[:500]}",
+                    "FilterMate", Qgis.Warning
+                )
                 return None
         return source_layer
     
@@ -1927,7 +2022,10 @@ class OGRGeometricFilter(GeometricFilterBackend):
             context.setInvalidGeometryCheck(QgsFeatureRequest.GeometrySkipInvalid)
             
             # v2.6.2: Use cancellable feedback for interruptible processing
-            feedback = self._create_cancellable_feedback()
+            # FIX v3.0.12: Use standard feedback to avoid cancellation issues during OGR fallback
+            # The CancellableFeedback can cause processing to fail if parent task state is inconsistent
+            from qgis.core import QgsProcessingFeedback
+            feedback = QgsProcessingFeedback()
             
             # v2.6.2: Check cancellation before starting
             if self._is_task_canceled():
@@ -2393,7 +2491,28 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     break
         
         # Apply buffer
-        intersect_layer = self._apply_buffer(source_layer, buffer_value)
+        # FIX v3.0.10: Check if buffer is already applied from previous step
+        if hasattr(self, 'task_params') and self.task_params:
+            infos = self.task_params.get('infos', {})
+            buffer_state = infos.get('buffer_state', {})
+            is_pre_buffered = buffer_state.get('is_pre_buffered', False)
+
+            if is_pre_buffered and buffer_value != 0:
+                # Buffer already applied - use source layer directly
+                self.log_info(f"  ✓ Multi-step filter: Using pre-buffered source ({buffer_value}m)")
+                intersect_layer = source_layer
+            else:
+                # Apply buffer fresh
+                intersect_layer = self._apply_buffer(source_layer, buffer_value)
+                # Store buffered layer for potential reuse in next step
+                if intersect_layer and buffer_value != 0:
+                    self._buffered_source_layer = intersect_layer
+                    if 'buffer_state' in infos:
+                        infos['buffer_state']['is_pre_buffered'] = True
+        else:
+            # No task_params - apply buffer normally
+            intersect_layer = self._apply_buffer(source_layer, buffer_value)
+
         if intersect_layer is None:
             # FIX v2.4.18: Restore original subset if buffer failed
             # FIX v2.6.13: Add QGIS MessagePanel logging for visibility
@@ -2486,7 +2605,8 @@ class OGRGeometricFilter(GeometricFilterBackend):
                             predicates_list = geom_preds
                         else:
                             predicates_list = []
-                        buffer_val = self.task_params.get('filtering', {}).get('buffer_value', 0.0)
+                        # FIX v3.0.12: Clean buffer value from float precision errors
+                        buffer_val = clean_buffer_value(self.task_params.get('filtering', {}).get('buffer_value', 0.0))
                     
                     if SPATIALITE_CACHE_AVAILABLE and intersect_filter_fids and old_subset:
                         # v2.9.43: CRITICAL - Cache multi-step only supports AND operator
@@ -2575,7 +2695,8 @@ class OGRGeometricFilter(GeometricFilterBackend):
                             predicates_list = geom_preds
                         else:
                             predicates_list = []
-                        buffer_val = self.task_params.get('filtering', {}).get('buffer_value', 0.0)
+                        # FIX v3.0.12: Clean buffer value from float precision errors
+                        buffer_val = clean_buffer_value(self.task_params.get('filtering', {}).get('buffer_value', 0.0))
                     
                     if SPATIALITE_CACHE_AVAILABLE and intersect_filter_fids and old_subset:
                         # v2.9.43: CRITICAL - Cache multi-step only supports AND operator
@@ -2835,7 +2956,28 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     old_subset = existing_subset
             
             # Apply buffer
-            intersect_layer = self._apply_buffer(source_layer, buffer_value)
+            # FIX v3.0.10: Check if buffer is already applied from previous step
+            if hasattr(self, 'task_params') and self.task_params:
+                infos = self.task_params.get('infos', {})
+                buffer_state = infos.get('buffer_state', {})
+                is_pre_buffered = buffer_state.get('is_pre_buffered', False)
+
+                if is_pre_buffered and buffer_value != 0:
+                    # Buffer already applied - use source layer directly
+                    self.log_info(f"  ✓ Multi-step filter: Using pre-buffered source ({buffer_value}m)")
+                    intersect_layer = source_layer
+                else:
+                    # Apply buffer fresh
+                    intersect_layer = self._apply_buffer(source_layer, buffer_value)
+                    # Store buffered layer for potential reuse in next step
+                    if intersect_layer and buffer_value != 0:
+                        self._buffered_source_layer = intersect_layer
+                        if 'buffer_state' in infos:
+                            infos['buffer_state']['is_pre_buffered'] = True
+            else:
+                # No task_params - apply buffer normally
+                intersect_layer = self._apply_buffer(source_layer, buffer_value)
+
             if intersect_layer is None:
                 # Restore original subset if buffer failed
                 if existing_subset:
@@ -3168,10 +3310,31 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 self.log_error("No source layer/geometry provided for geometric filtering")
                 return False
             
-            intersect_layer = self._apply_buffer(source_layer, buffer_value)
+            # FIX v3.0.10: Check if buffer is already applied from previous step
+            if hasattr(self, 'task_params') and self.task_params:
+                infos = self.task_params.get('infos', {})
+                buffer_state = infos.get('buffer_state', {})
+                is_pre_buffered = buffer_state.get('is_pre_buffered', False)
+
+                if is_pre_buffered and buffer_value != 0:
+                    # Buffer already applied - use source layer directly
+                    self.log_info(f"  ✓ Multi-step filter: Using pre-buffered source ({buffer_value}m)")
+                    intersect_layer = source_layer
+                else:
+                    # Apply buffer fresh
+                    intersect_layer = self._apply_buffer(source_layer, buffer_value)
+                    # Store buffered layer for potential reuse in next step
+                    if intersect_layer and buffer_value != 0:
+                        self._buffered_source_layer = intersect_layer
+                        if 'buffer_state' in infos:
+                            infos['buffer_state']['is_pre_buffered'] = True
+            else:
+                # No task_params - apply buffer normally
+                intersect_layer = self._apply_buffer(source_layer, buffer_value)
+
             if intersect_layer is None:
                 return False
-            
+
             # Map predicates
             predicate_codes = self._map_predicates(predicates)
             

@@ -94,7 +94,8 @@ from ..appUtils import (
     detect_layer_provider_type,
     geometry_type_to_string,
     sanitize_sql_identifier,
-    sanitize_filename
+    sanitize_filename,
+    clean_buffer_value,  # v3.0.12: Clean buffer values from float precision errors
 )
 
 # Import object safety utilities (v2.3.9 - stability fix)
@@ -2360,7 +2361,8 @@ class FilterEngineTask(QgsTask):
         if has_buffer is True:
             buffer_property = self.task_parameters["filtering"]["buffer_value_property"]
             buffer_expr = self.task_parameters["filtering"]["buffer_value_expression"]
-            buffer_val = self.task_parameters["filtering"]["buffer_value"]
+            # FIX v3.0.12: Clean buffer value from float precision errors (0.9999999 → 1.0)
+            buffer_val = clean_buffer_value(self.task_parameters["filtering"]["buffer_value"])
             
             logger.info(f"  buffer_value_property (override active): {buffer_property}")
             logger.info(f"  buffer_value_expression: '{buffer_expr}'")
@@ -2372,7 +2374,8 @@ class FilterEngineTask(QgsTask):
             if buffer_expr != '' and buffer_expr is not None:
                 # Try to convert to float - if successful, it's a static value
                 try:
-                    numeric_value = float(buffer_expr)
+                    # FIX v3.0.12: Clean buffer value from float precision errors
+                    numeric_value = clean_buffer_value(float(buffer_expr))
                     self.param_buffer_value = numeric_value
                     logger.info(f"  ✓ Buffer from property override (numeric): {self.param_buffer_value}m")
                     logger.info(f"  ℹ️  Expression '{buffer_expr}' converted to static value")
@@ -4328,6 +4331,32 @@ class FilterEngineTask(QgsTask):
                 self.task_parameters['infos'] = {}
             self.task_parameters['infos']['source_geom_wkt'] = wkt_escaped
             logger.info(f"  ✓ WKT stored in task_parameters for backend optimization ({len(wkt_escaped)} chars)")
+
+            # FIX v3.0.10: Add buffer state tracking for multi-step filter preservation
+            # This allows backends to detect and reuse pre-buffered geometries from previous steps
+            # instead of recomputing or losing buffer state
+            buffer_value = getattr(self, 'param_buffer_value', 0)
+            existing_buffer_state = self.task_parameters['infos'].get('buffer_state', {})
+
+            # Detect if we're in a multi-step operation and buffer state already exists
+            is_multi_step = existing_buffer_state.get('is_pre_buffered', False)
+            previous_buffer_value = existing_buffer_state.get('buffer_value', 0)
+
+            self.task_parameters['infos']['buffer_state'] = {
+                'has_buffer': buffer_value != 0,
+                'buffer_value': buffer_value,
+                'is_pre_buffered': is_multi_step and previous_buffer_value == buffer_value,
+                'buffer_column': 'geom_buffered' if (is_multi_step and previous_buffer_value == buffer_value) else 'geom',
+                'previous_buffer_value': previous_buffer_value if is_multi_step else None
+            }
+
+            if is_multi_step:
+                if previous_buffer_value == buffer_value and buffer_value != 0:
+                    logger.info(f"  ✓ Multi-step filter: Reusing existing {buffer_value}m buffer from previous step")
+                elif buffer_value != previous_buffer_value:
+                    logger.warning(f"  ⚠️  Multi-step filter: Buffer changed from {previous_buffer_value}m to {buffer_value}m - will recompute")
+            elif buffer_value != 0:
+                logger.info(f"  ✓ First-step filter with {buffer_value}m buffer - will be applied")
         
         # Store in cache for future use (includes layer_id and subset_string)
         self.geom_cache.put(
@@ -8502,6 +8531,22 @@ class FilterEngineTask(QgsTask):
         
         logger.info(f"  task['layers'] content: {layer_names}")
         logger.info(f"  self.layers content: {list(self.layers.keys())} with {sum(len(v) for v in self.layers.values())} total layers")
+        
+        # FIX v3.0.10: Log conditions to QGIS message panel for debugging
+        # This helps diagnose why distant layers may not be filtered
+        if not has_geom_predicates or (not has_layers_to_filter and not has_layers_in_params) or self.layers_count == 0:
+            missing_conditions = []
+            if not has_geom_predicates:
+                missing_conditions.append("has_geometric_predicates=False")
+            if not has_layers_to_filter and not has_layers_in_params:
+                missing_conditions.append("no layers configured")
+            if self.layers_count == 0:
+                missing_conditions.append("layers_count=0")
+            QgsMessageLog.logMessage(
+                f"⚠️ Distant layers NOT filtered: {', '.join(missing_conditions)}",
+                "FilterMate", QgisLevel.Warning
+            )
+            logger.warning(f"⚠️ Distant layers NOT filtered: {', '.join(missing_conditions)}")
         
         # Process if geometric predicates enabled AND (has_layers_to_filter OR layers in params) AND layers were organized
         if has_geom_predicates and (has_layers_to_filter or has_layers_in_params) and self.layers_count > 0:
