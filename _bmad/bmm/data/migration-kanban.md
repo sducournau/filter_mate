@@ -2,7 +2,7 @@
 
 **Epic:** Migration Architecture Hexagonale  
 **Sprint Actuel:** Sprint 2 - Intégration Controllers  
-**Dernière MAJ:** 2026-01-08 (MIG-025 Délégation Controllers implémentée)
+**Dernière MAJ:** 2026-01-08 (MIG-024 TaskParameterBuilder + MIG-025 Controllers connectés)
 
 ---
 
@@ -30,10 +30,10 @@
 
 ### 🔄 IN PROGRESS
 
-| ID      | Story                   | Priorité | Assigné | Progression | Notes                                     |
-| ------- | ----------------------- | -------- | ------- | ----------- | ----------------------------------------- |
-| MIG-024 | Réduction FilterMateApp | 🟠 P1    | Dev     | 30%         | manage_task() délègue aux controllers     |
-| MIG-025 | Intégration Controllers | 🔴 P0    | Dev     | 80%         | Délégation filter implémentée, tests TODO |
+| ID      | Story                   | Priorité | Assigné | Progression | Notes                                       |
+| ------- | ----------------------- | -------- | ------- | ----------- | ------------------------------------------- |
+| MIG-024 | Réduction FilterMateApp | 🟠 P1    | Dev     | 40%         | TaskParameterBuilder créé, intégration TODO |
+| MIG-025 | Intégration Controllers | 🔴 P0    | Dev     | 90%         | Services connectés, tests TODO              |
 
 ---
 
