@@ -406,6 +406,113 @@ class TaskBridge:
             return (expression, 'qgis')
     
     # ========================================================================
+    # Multi-Step Filtering
+    # ========================================================================
+    
+    def execute_multi_step_filter(
+        self,
+        source_layer: 'QgsVectorLayer',
+        steps: List[Dict[str, Any]],
+        progress_callback: Optional[callable] = None
+    ) -> BridgeResult:
+        """
+        Execute multi-step filter using v3 FilterService.
+        
+        Multi-step filtering chains multiple filter operations where
+        the output of one step can be used as input to the next.
+        
+        Args:
+            source_layer: Source layer for filtering
+            steps: List of step configurations, each containing:
+                - expression: Filter expression
+                - target_layer_ids: List of target layer IDs
+                - predicates: Optional spatial predicates
+                - use_previous_result: Whether to use previous step's output
+            progress_callback: Optional callback(step, total, name)
+            
+        Returns:
+            BridgeResult with multi-step status and data
+        """
+        if not self.is_available():
+            return BridgeResult.not_available()
+        
+        self._metrics['operations'] += 1
+        start_time = time.time()
+        
+        try:
+            from adapters.app_bridge import get_filter_service, layer_info_from_qgis_layer
+            from core.services.filter_service import MultiStepRequest, FilterStep
+            from core.domain.filter_expression import FilterExpression
+            
+            filter_service = get_filter_service()
+            source_info = layer_info_from_qgis_layer(source_layer)
+            
+            # Convert step configs to FilterStep objects
+            filter_steps = []
+            for step_config in steps:
+                expr_raw = step_config.get('expression', '')
+                target_ids = step_config.get('target_layer_ids', [])
+                use_prev = step_config.get('use_previous_result', False)
+                step_name = step_config.get('name', '')
+                
+                filter_expr = FilterExpression.create(
+                    raw=expr_raw,
+                    provider=source_info.provider_type,
+                    source_layer_id=source_layer.id()
+                )
+                
+                filter_steps.append(FilterStep(
+                    expression=filter_expr,
+                    target_layer_ids=target_ids,
+                    use_previous_result=use_prev,
+                    step_name=step_name
+                ))
+            
+            # Create and execute multi-step request
+            request = MultiStepRequest(
+                steps=filter_steps,
+                source_layer_id=source_layer.id(),
+                progress_callback=progress_callback,
+                stop_on_empty=True
+            )
+            
+            response = filter_service.apply_multi_step_filter(request)
+            
+            elapsed_ms = (time.time() - start_time) * 1000
+            self._metrics['successes'] += 1
+            self._metrics['total_time_ms'] += elapsed_ms
+            
+            return BridgeResult(
+                status=BridgeStatus.SUCCESS,
+                success=not response.stopped_early or response.stop_reason == "",
+                feature_ids=list(response.final_feature_ids),
+                feature_count=len(response.final_feature_ids),
+                expression=f"multi-step ({response.completed_steps} steps)",
+                execution_time_ms=elapsed_ms,
+                backend_used='multi_step_v3',
+                error_message=response.stop_reason if response.stopped_early else ""
+            )
+            
+        except Exception as e:
+            elapsed_ms = (time.time() - start_time) * 1000
+            self._metrics['errors'] += 1
+            self._metrics['total_time_ms'] += elapsed_ms
+            
+            logger.warning(f"TaskBridge.execute_multi_step_filter failed: {e}")
+            return BridgeResult.fallback(str(e))
+    
+    def supports_multi_step(self) -> bool:
+        """Check if multi-step filtering is available."""
+        if not self.is_available():
+            return False
+        
+        try:
+            from core.services.filter_service import MultiStepRequest
+            return True
+        except ImportError:
+            return False
+    
+    # ========================================================================
     # Backend Selection
     # ========================================================================
     

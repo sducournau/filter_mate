@@ -1187,6 +1187,107 @@ class FilterEngineTask(QgsTask):
             logger.warning(f"TaskBridge spatial delegation failed: {e}")
             return None
 
+    def _try_v3_multi_step_filter(self, layers_dict, progress_callback=None):
+        """
+        Try to execute multi-step geometric filtering using v3 backends via TaskBridge.
+        
+        This is part of the Strangler Fig migration pattern for filtering all distant
+        layers in a single orchestrated operation.
+        
+        Args:
+            layers_dict: Dict of provider_type -> list of (layer, layer_props) tuples
+            progress_callback: Optional callback for progress reporting
+            
+        Returns:
+            bool: True if v3 handled all layers successfully
+            None: If v3 cannot handle (fallback to legacy)
+        """
+        if not self._task_bridge:
+            return None
+        
+        # Check if TaskBridge supports multi-step
+        if not self._task_bridge.supports_multi_step():
+            logger.debug("TaskBridge: multi-step not supported - using legacy code")
+            return None
+        
+        # Skip multi-step for complex scenarios
+        # Check for buffers which require special handling
+        buffer_value = self.task_parameters.get("task", {}).get("buffer_value", 0)
+        if buffer_value and buffer_value > 0:
+            logger.debug("TaskBridge: buffer active - using legacy multi-step code")
+            return None
+        
+        # Count total layers
+        total_layers = sum(len(layer_list) for layer_list in layers_dict.values())
+        if total_layers == 0:
+            return True  # Nothing to filter
+        
+        try:
+            logger.info("=" * 70)
+            logger.info("🚀 V3 TASKBRIDGE: Attempting multi-step filter")
+            logger.info("=" * 70)
+            logger.info(f"   Total distant layers: {total_layers}")
+            
+            # Build step configurations for each layer
+            steps = []
+            for provider_type, layer_list in layers_dict.items():
+                for layer, layer_props in layer_list:
+                    # Get predicates from layer_props or default to intersects
+                    predicates = layer_props.get('predicates', ['intersects'])
+                    
+                    step_config = {
+                        'target_layer_ids': [layer.id()],
+                        'predicates': predicates,
+                        'step_name': f"Filter {layer.name()}",
+                        'use_previous_result': False  # Each layer filtered independently
+                    }
+                    steps.append(step_config)
+                    logger.debug(f"   Step for {layer.name()}: predicates={predicates}")
+            
+            # Define progress callback adapter
+            def bridge_progress(step_num, total_steps, step_name):
+                if progress_callback:
+                    progress_callback(step_num, total_steps, step_name)
+                self.setDescription(f"V3 Multi-step: {step_name}")
+                self.setProgress(int((step_num / total_steps) * 100))
+            
+            # Execute via TaskBridge
+            bridge_result = self._task_bridge.execute_multi_step_filter(
+                source_layer=self.source_layer,
+                steps=steps,
+                progress_callback=bridge_progress
+            )
+            
+            if bridge_result.status == BridgeStatus.SUCCESS and bridge_result.success:
+                logger.info("=" * 70)
+                logger.info(f"✅ V3 TaskBridge MULTI-STEP SUCCESS")
+                logger.info(f"   Backend used: {bridge_result.backend_used}")
+                logger.info(f"   Final feature count: {bridge_result.feature_count}")
+                logger.info(f"   Total execution time: {bridge_result.execution_time_ms:.1f}ms")
+                logger.info("=" * 70)
+                
+                # Store metrics
+                if 'actual_backends' not in self.task_parameters:
+                    self.task_parameters['actual_backends'] = {}
+                self.task_parameters['actual_backends']['_multi_step'] = f"v3_{bridge_result.backend_used}"
+                
+                return True
+                
+            elif bridge_result.status == BridgeStatus.FALLBACK:
+                logger.info(f"⚠️ V3 TaskBridge MULTI-STEP: FALLBACK requested")
+                logger.info(f"   Reason: {bridge_result.error_message}")
+                return None
+                
+            else:
+                logger.debug(f"TaskBridge multi-step: status={bridge_result.status}, falling back")
+                return None
+                
+        except Exception as e:
+            logger.warning(f"TaskBridge multi-step delegation failed: {e}")
+            import traceback
+            logger.debug(f"Traceback: {traceback.format_exc()}")
+            return None
+
     def _initialize_source_filtering_parameters(self):
         """Extract and initialize all parameters needed for source layer filtering"""
         self.param_source_old_subset = ''
@@ -2959,6 +3060,20 @@ class FilterEngineTask(QgsTask):
             f"🔍 Filtering {total_layers} distant layers: {', '.join(layer_names_list[:5])}{'...' if len(layer_names_list) > 5 else ''}",
             "FilterMate", QgisLevel.Info
         )
+        
+        # =====================================================================
+        # MIG-023: STRANGLER FIG PATTERN - Try v3 multi-step first
+        # =====================================================================
+        v3_result = self._try_v3_multi_step_filter(self.layers)
+        if v3_result is True:
+            logger.info("✅ V3 multi-step completed successfully - skipping legacy code")
+            return True
+        elif v3_result is False:
+            logger.error("❌ V3 multi-step failed - falling back to legacy")
+            # Continue with legacy code below
+        else:
+            logger.debug("V3 multi-step not applicable - using legacy code")
+        # =====================================================================
         
         # Check if parallel filtering is enabled
         parallel_config = self.task_parameters.get('config', {}).get('APP', {}).get('OPTIONS', {}).get('PARALLEL_FILTERING', {})
