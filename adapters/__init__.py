@@ -61,4 +61,28 @@ __all__ = [
     'redo_filter',
     'can_undo',
     'can_redo',
+    
+    # Task parameter building (v3.0)
+    'TaskParameterBuilder',
+    'TaskParameters',
+    'FilteringConfig',
+    'LayerInfo',
+    'TaskType',
 ]
+
+# Task parameter builder for MIG-024
+try:
+    from .task_builder import (
+        TaskParameterBuilder,
+        TaskParameters,
+        FilteringConfig,
+        LayerInfo,
+        TaskType,
+    )
+except ImportError:
+    # Fallback if not yet available
+    TaskParameterBuilder = None
+    TaskParameters = None
+    FilteringConfig = None
+    LayerInfo = None
+    TaskType = None
