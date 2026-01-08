@@ -71,7 +71,8 @@ from ..geometry_safety import (
 )
 
 # Import GDAL error handler for suppressing transient SQLite warnings (v2.3.11)
-from ..object_safety import GdalErrorHandler
+# v3.0.15: Added is_valid_layer, is_sip_deleted for crash protection in _preflight_layer_check
+from ..object_safety import GdalErrorHandler, is_valid_layer, is_sip_deleted
 
 # Import Spatial Index Manager for automatic index creation (v2.4.0)
 try:
@@ -142,6 +143,64 @@ logger = get_tasks_logger()
 # Thread safety tracking (v2.3.9)
 _ogr_operations_lock = threading.Lock()
 _last_operation_thread = None
+
+
+def _safe_qgs_log(message: str, level: str = "Info") -> None:
+    """
+    v3.0.17: Thread-safe wrapper for QgsMessageLog.logMessage().
+    
+    QgsMessageLog.logMessage() can cause access violations when called from
+    a secondary thread while the main thread is refreshing the canvas.
+    This wrapper catches any exceptions and falls back to the Python logger.
+    
+    Args:
+        message: The log message
+        level: Log level ("Info", "Warning", "Critical")
+    """
+    try:
+        from qgis.core import QgsMessageLog, Qgis
+        level_map = {
+            "Info": Qgis.Info,
+            "Warning": Qgis.Warning,
+            "Critical": Qgis.Critical
+        }
+        qgis_level = level_map.get(level, Qgis.Info)
+        QgsMessageLog.logMessage(message, "FilterMate", qgis_level)
+    except (RuntimeError, OSError, SystemError, AttributeError) as e:
+        # Fallback to Python logger if QgsMessageLog fails
+        logger.debug(f"QgsMessageLog failed ({e}), message was: {message}")
+
+
+def _safe_layer_name(layer) -> str:
+    """
+    v3.0.17: Safely get layer name without risking access violation.
+    
+    Returns layer name or a safe placeholder if the layer is invalid/deleted.
+    """
+    if layer is None:
+        return "(None)"
+    try:
+        if is_sip_deleted(layer):
+            return "(deleted)"
+        return layer.name()
+    except (RuntimeError, OSError, SystemError, AttributeError):
+        return "(access error)"
+
+
+def _safe_feature_count(layer) -> int:
+    """
+    v3.0.17: Safely get feature count without risking access violation.
+    
+    Returns feature count or -1 if the layer is invalid/deleted.
+    """
+    if layer is None:
+        return -1
+    try:
+        if is_sip_deleted(layer):
+            return -1
+        return layer.featureCount()
+    except (RuntimeError, OSError, SystemError, AttributeError):
+        return -1
 
 
 def cleanup_ogr_temp_layers(backend_instance):
@@ -385,7 +444,9 @@ class OGRGeometricFilter(GeometricFilterBackend):
             return None  # Fall back to standard
         
         try:
-            feature_count = layer.featureCount()
+            # CRITICAL FIX v3.0.19: Protect against None/invalid feature count
+            raw_feature_count = layer.featureCount()
+            feature_count = raw_feature_count if raw_feature_count is not None and raw_feature_count >= 0 else 0
             
             # Only use multi-step for medium-large datasets
             if feature_count < 5000:
@@ -902,7 +963,9 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     return False
                 
                 # Check feature count and decide on strategy
-                feature_count = layer.featureCount()
+                # CRITICAL FIX v3.0.19: Protect against None/invalid feature count
+                raw_feature_count = layer.featureCount()
+                feature_count = raw_feature_count if raw_feature_count is not None and raw_feature_count >= 0 else 0
                 
                 # FIX v2.8.13: Log target layer details
                 QgsMessageLog.logMessage(
@@ -912,6 +975,19 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 
                 # Ensure spatial index exists (performance boost)
                 self._ensure_spatial_index(layer)
+                
+                # FIX v3.0.20 (HIGH-006): Warn user about large OGR datasets
+                # OGR single-phase processing is 3-10x slower than PostgreSQL/Spatialite
+                if feature_count >= 50000:
+                    from qgis.utils import iface
+                    iface.messageBar().pushWarning(
+                        "FilterMate",
+                        f"Grand jeu de données ({feature_count:,} entités) avec OGR. "
+                        "Considérez PostgreSQL ou Spatialite pour de meilleures performances."
+                    )
+                    self.log_info(
+                        f"⚠️ HIGH-006: Large OGR dataset warning issued for {layer.name()} ({feature_count:,} features)"
+                    )
                 
                 # Only log for large datasets
                 if feature_count >= 100000:
@@ -1586,6 +1662,9 @@ class OGRGeometricFilter(GeometricFilterBackend):
         during checkParameterValues(). If any of these fail, we abort before
         calling processing.run() to prevent C++ level crashes.
         
+        v3.0.15: Added is_valid_layer() check at the very start to prevent
+        access violations from sip-deleted layer objects.
+        
         Args:
             layer: Layer to validate
             param_name: Parameter name for logging (e.g., "INPUT", "INTERSECT")
@@ -1594,6 +1673,28 @@ class OGRGeometricFilter(GeometricFilterBackend):
             True if layer passes all pre-flight checks, False otherwise
         """
         from qgis.core import QgsMessageLog, Qgis
+        
+        # v3.0.15: CRITICAL - Use is_valid_layer FIRST to catch sip-deleted objects
+        # This prevents "Windows fatal exception: access violation" crashes
+        # that occur when accessing methods on a deleted C++ object
+        if not is_valid_layer(layer):
+            error_msg = f"Pre-flight check: {param_name} failed is_valid_layer() check"
+            if layer is None:
+                error_msg += " (layer is None)"
+            elif is_sip_deleted(layer):
+                error_msg += " (layer is sip deleted - C++ object destroyed)"
+            else:
+                try:
+                    error_msg += f" (isValid={layer.isValid() if hasattr(layer, 'isValid') else 'N/A'})"
+                except Exception:
+                    error_msg += " (cannot access layer properties)"
+            
+            self.log_error(error_msg)
+            QgsMessageLog.logMessage(
+                f"_preflight_layer_check: FAILED at step 0 (is_valid_layer) for {param_name}",
+                "FilterMate", Qgis.Critical
+            )
+            return False
         
         if layer is None:
             self.log_error(f"Pre-flight check: {param_name} layer is None")
@@ -1893,6 +1994,9 @@ class OGRGeometricFilter(GeometricFilterBackend):
         Uses create_geos_safe_layer() to filter out geometries that would crash GEOS
         at the C++ level (cannot be caught by Python try/except).
         
+        v3.0.17: Uses thread-safe logging to prevent access violations when
+        main thread is refreshing canvas concurrently.
+        
         Args:
             input_layer: Layer to select features from
             intersect_layer: Layer containing geometries to intersect with
@@ -1901,57 +2005,56 @@ class OGRGeometricFilter(GeometricFilterBackend):
         Returns:
             True if selection completed successfully, False on error
         """
-        from qgis.core import QgsMessageLog, Qgis, QgsProject
+        from qgis.core import QgsProject
         
         # FIX v2.9.43: Track safe_intersect layer for cleanup
         safe_intersect_to_cleanup = None
         
         try:
+            # v3.0.17: Use thread-safe layer name/count accessors
+            input_name = _safe_layer_name(input_layer)
+            input_count = _safe_feature_count(input_layer)
+            intersect_name = _safe_layer_name(intersect_layer)
+            intersect_count = _safe_feature_count(intersect_layer)
+            
             # Validate both layers before processing
-            QgsMessageLog.logMessage(
-                f"_safe_select_by_location: input={input_layer.name() if input_layer else 'None'} ({input_layer.featureCount() if input_layer else 0}), "
-                f"intersect={intersect_layer.name() if intersect_layer else 'None'} ({intersect_layer.featureCount() if intersect_layer else 0})",
-                "FilterMate", Qgis.Info  # DEBUG
+            _safe_qgs_log(
+                f"_safe_select_by_location: input={input_name} ({input_count}), "
+                f"intersect={intersect_name} ({intersect_count})",
+                "Info"
             )
             
             self.log_info(f"🔍 Validating layers for selectbylocation...")
-            self.log_info(f"  → Input layer: {input_layer.name() if input_layer else 'None'}")
+            self.log_info(f"  → Input layer: {input_name}")
             if input_layer:
-                self.log_info(f"    - Valid: {input_layer.isValid()}")
-                self.log_info(f"    - Feature count: {input_layer.featureCount()}")
-            self.log_info(f"  → Intersect layer: {intersect_layer.name() if intersect_layer else 'None'}")
+                try:
+                    self.log_info(f"    - Valid: {input_layer.isValid()}")
+                    self.log_info(f"    - Feature count: {input_count}")
+                except (RuntimeError, OSError, SystemError):
+                    self.log_error("    - Layer access error")
+            self.log_info(f"  → Intersect layer: {intersect_name}")
             if intersect_layer:
-                self.log_info(f"    - Valid: {intersect_layer.isValid()}")
-                self.log_info(f"    - Feature count: {intersect_layer.featureCount()}")
+                try:
+                    self.log_info(f"    - Valid: {intersect_layer.isValid()}")
+                    self.log_info(f"    - Feature count: {intersect_count}")
+                except (RuntimeError, OSError, SystemError):
+                    self.log_error("    - Layer access error")
             
-            # FIX v2.8.14: Log validation steps to QGIS MessageLog for visibility
-            QgsMessageLog.logMessage(
-                f"_safe_select_by_location: validating input layer '{input_layer.name() if input_layer else 'None'}'...",
-                "FilterMate", Qgis.Info  # DEBUG
-            )
+            # FIX v2.8.14: Log validation steps (thread-safe)
+            _safe_qgs_log(f"_safe_select_by_location: validating input layer '{input_name}'...", "Info")
             
             if not self._validate_input_layer(input_layer):
                 self.log_error("Input layer validation failed - see details above")
-                # FIX v2.8.13: Log to QGIS MessagePanel for visibility
-                QgsMessageLog.logMessage(
-                    f"OGR _safe_select_by_location: INPUT layer validation FAILED for '{input_layer.name() if input_layer else 'None'}'",
-                    "FilterMate", Qgis.Critical
-                )
+                _safe_qgs_log(f"OGR _safe_select_by_location: INPUT layer validation FAILED for '{input_name}'", "Critical")
                 return False
             
-            # FIX v2.8.14: Log validation steps to QGIS MessageLog for visibility
-            QgsMessageLog.logMessage(
-                f"_safe_select_by_location: input layer OK, validating intersect layer '{intersect_layer.name() if intersect_layer else 'None'}'...",
-                "FilterMate", Qgis.Info  # DEBUG
-            )
+            # FIX v2.8.14: Log validation steps (thread-safe)
+            _safe_qgs_log(f"_safe_select_by_location: input layer OK, validating intersect layer '{intersect_name}'...", "Info")
             
             if not self._validate_intersect_layer(intersect_layer):
                 self.log_error("Intersect layer validation failed - see details above")
-                # FIX v2.8.13: Log to QGIS MessagePanel for visibility
-                QgsMessageLog.logMessage(
-                    f"OGR _safe_select_by_location: INTERSECT layer validation FAILED for '{intersect_layer.name() if intersect_layer else 'None'}'",
-                    "FilterMate", Qgis.Critical
-                )
+                # FIX v2.8.13: Log to QGIS MessagePanel for visibility (thread-safe)
+                _safe_qgs_log(f"OGR _safe_select_by_location: INTERSECT layer validation FAILED for '{intersect_name}'", "Critical")
                 return False
             
             # FIX v3.1.0: CRITICAL - Reproject intersect layer to target CRS if different
@@ -1966,10 +2069,7 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 self.log_info(f"🔄 CRS mismatch detected - reprojecting intersect layer")
                 self.log_info(f"  → Input CRS: {input_crs.authid()}")
                 self.log_info(f"  → Intersect CRS: {intersect_crs.authid()}")
-                QgsMessageLog.logMessage(
-                    f"_safe_select_by_location: CRS MISMATCH - reprojecting from {intersect_crs.authid()} to {input_crs.authid()}",
-                    "FilterMate", Qgis.Info
-                )
+                _safe_qgs_log(f"_safe_select_by_location: CRS MISMATCH - reprojecting from {intersect_crs.authid()} to {input_crs.authid()}", "Info")
                 
                 try:
                     from qgis.core import QgsProcessingContext as ctx, QgsFeatureRequest as req, QgsProcessingFeedback as fb
@@ -1994,26 +2094,17 @@ class OGRGeometricFilter(GeometricFilterBackend):
                         self._temp_layers_keep_alive.append(reprojected_layer)
                     else:
                         self.log_warning(f"  ⚠️ Reprojection returned invalid/empty layer - using original")
-                        QgsMessageLog.logMessage(
-                            f"_safe_select_by_location: Reprojection failed - using original intersect layer",
-                            "FilterMate", Qgis.Warning
-                        )
+                        _safe_qgs_log(f"_safe_select_by_location: Reprojection failed - using original intersect layer", "Warning")
                 except Exception as reproject_err:
                     self.log_warning(f"  ⚠️ Reprojection failed: {reproject_err} - using original layer")
-                    QgsMessageLog.logMessage(
-                        f"_safe_select_by_location: Reprojection exception: {reproject_err}",
-                        "FilterMate", Qgis.Warning
-                    )
+                    _safe_qgs_log(f"_safe_select_by_location: Reprojection exception: {reproject_err}", "Warning")
             elif not input_crs.isValid() or not intersect_crs.isValid():
                 self.log_warning(f"  ⚠️ Invalid CRS detected - input: {input_crs.isValid()}, intersect: {intersect_crs.isValid()}")
             else:
                 self.log_debug(f"  ✓ CRS match: {input_crs.authid()}")
             
-            # FIX v2.8.14: Log progress to QGIS MessageLog
-            QgsMessageLog.logMessage(
-                f"_safe_select_by_location: both layers validated, configuring processing context...",
-                "FilterMate", Qgis.Info  # DEBUG
-            )
+            # FIX v2.8.14: Log progress (thread-safe)
+            _safe_qgs_log(f"_safe_select_by_location: both layers validated, configuring processing context...", "Info")
             
             # Configure processing context to handle invalid geometries gracefully
             from qgis.core import QgsProcessingContext, QgsFeatureRequest
@@ -2073,11 +2164,8 @@ class OGRGeometricFilter(GeometricFilterBackend):
             # NOTE: _temp_layers_keep_alive is NO LONGER cleared between layers (v2.9.24 fix)
             # NOTE: _source_layer_keep_alive is initialized ONCE in apply_filter() and NEVER cleared
             
-            # FIX v2.8.14: Log to QGIS MessageLog before create_geos_safe_layer
-            QgsMessageLog.logMessage(
-                f"_safe_select_by_location: creating GEOS-safe intersect layer for '{intersect_layer.name()}'...",
-                "FilterMate", Qgis.Info  # DEBUG
-            )
+            # FIX v2.8.14: Log before create_geos_safe_layer (thread-safe)
+            _safe_qgs_log(f"_safe_select_by_location: creating GEOS-safe intersect layer for '{intersect_name}'...", "Info")
             
             # FIX v2.9.15: Add unique ID to layer name to prevent conflicts when creating multiple GEOS-safe layers
             # Each target layer creates a new safe_intersect, but they all have the same base name
@@ -2128,19 +2216,13 @@ class OGRGeometricFilter(GeometricFilterBackend):
                         self.log_debug(f"🔒 Added '{layer_name}' to project registry for GC protection")
                     except RuntimeError as name_err:
                         # If even basic access fails after adding to list, the layer is already dead
-                        QgsMessageLog.logMessage(
-                            f"_safe_select_by_location: safe_intersect materialization FAILED immediately after creation: {name_err}",
-                            "FilterMate", Qgis.Critical
-                        )
+                        _safe_qgs_log(f"_safe_select_by_location: safe_intersect materialization FAILED immediately after creation: {name_err}", "Critical")
                         self.log_error(f"GEOS-safe intersect layer wrapper destroyed immediately: {name_err}")
                         return False
                 # NO NEED to retain intersect_layer here - it's the source_geom which is already
                 # retained in _source_layer_keep_alive (persistent)
             except Exception as geos_err:
-                QgsMessageLog.logMessage(
-                    f"_safe_select_by_location: create_geos_safe_layer FAILED for intersect: {geos_err}",
-                    "FilterMate", Qgis.Critical
-                )
+                _safe_qgs_log(f"_safe_select_by_location: create_geos_safe_layer FAILED for intersect: {geos_err}", "Critical")
                 return False
             
             # create_geos_safe_layer now returns the original layer as fallback, never None for valid input
@@ -2150,22 +2232,19 @@ class OGRGeometricFilter(GeometricFilterBackend):
             
             if not safe_intersect.isValid() or safe_intersect.featureCount() == 0:
                 self.log_error("No valid geometries in intersect layer")
-                # FIX v2.8.13: Log to QGIS MessagePanel for visibility
-                QgsMessageLog.logMessage(
+                # FIX v2.8.13: Log to QGIS MessagePanel for visibility (thread-safe)
+                _safe_qgs_log(
                     f"OGR _safe_select_by_location: GEOS-safe intersect layer is invalid or empty "
                     f"(valid={safe_intersect.isValid() if safe_intersect else False}, "
-                    f"features={safe_intersect.featureCount() if safe_intersect else 0})",
-                    "FilterMate", Qgis.Critical
+                    f"features={_safe_feature_count(safe_intersect)})",
+                    "Critical"
                 )
                 return False
             
             self.log_info(f"✓ Safe intersect layer: {safe_intersect.featureCount()} features")
             
-            # FIX v2.8.14: Log to QGIS MessageLog
-            QgsMessageLog.logMessage(
-                f"_safe_select_by_location: GEOS-safe intersect layer OK ({safe_intersect.featureCount()} features)",
-                "FilterMate", Qgis.Info  # DEBUG
-            )
+            # FIX v2.8.14: Log (thread-safe)
+            _safe_qgs_log(f"_safe_select_by_location: GEOS-safe intersect layer OK ({_safe_feature_count(safe_intersect)} features)", "Info")
             
             # Also process input layer if not too large
             # FIX v2.9.14: DISABLED - GEOS-safe input layer causes false negatives in spatial selection
@@ -2183,9 +2262,24 @@ class OGRGeometricFilter(GeometricFilterBackend):
             # STABILITY FIX v2.3.9.3: Pre-flight validation of layers before processing.run()
             # This catches issues that would cause checkParameterValues to crash at C++ level
             actual_input = input_layer if not use_safe_input else safe_input
+            
+            # v3.0.15: CRITICAL - Use is_valid_layer FIRST to prevent access violations
+            # The is_valid_layer check detects sip-deleted objects that would cause
+            # "Windows fatal exception: access violation" when any method is called
+            if not is_valid_layer(actual_input):
+                self.log_error(f"_safe_select_by_location: actual_input failed is_valid_layer check")
+                _safe_qgs_log(f"_safe_select_by_location: INPUT LAYER INVALID (sip deleted or not valid)", "Critical")
+                return False
+            
+            if not is_valid_layer(safe_intersect):
+                self.log_error(f"_safe_select_by_location: safe_intersect failed is_valid_layer check")
+                _safe_qgs_log(f"_safe_select_by_location: INTERSECT LAYER INVALID (sip deleted or not valid)", "Critical")
+                return False
+            
             # FIX v2.9.14: CRITICAL - Validate C++ wrapper BEFORE any property access
             # The C++ object can be deleted even if we have a Python reference
             # This must be done BEFORE accessing .name() in log messages
+            # v3.0.15: Also catch OSError and SystemError for Windows compatibility
             try:
                 # Test if C++ objects are still valid by accessing their properties
                 # This will raise RuntimeError if the C++ object has been deleted
@@ -2193,55 +2287,34 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 safe_intersect_name = safe_intersect.name()  # Force access to C++ object
                 _ = actual_input.dataProvider().name()  # Test provider
                 _ = safe_intersect.dataProvider().name()  # Test provider
-            except RuntimeError as wrapper_error:
+            except (RuntimeError, OSError, SystemError) as wrapper_error:
                 self.log_error(f"C++ wrapper validation failed - object has been deleted: {wrapper_error}")
-                QgsMessageLog.logMessage(
-                    f"_safe_select_by_location: C++ WRAPPER VALIDATION FAILED - {wrapper_error}",
-                    "FilterMate", Qgis.Critical
-                )
+                _safe_qgs_log(f"_safe_select_by_location: C++ WRAPPER VALIDATION FAILED - {wrapper_error}", "Critical")
                 return False
             except AttributeError as attr_error:
                 self.log_error(f"C++ wrapper attribute error: {attr_error}")
-                QgsMessageLog.logMessage(
-                    f"_safe_select_by_location: C++ WRAPPER ATTRIBUTE ERROR - {attr_error}",
-                    "FilterMate", Qgis.Critical
-                )
+                _safe_qgs_log(f"_safe_select_by_location: C++ WRAPPER ATTRIBUTE ERROR - {attr_error}", "Critical")
                 return False
             
             # Now safe to use layer names in log messages (already validated above)
-            # FIX v2.8.14: Log pre-flight checks to QGIS MessageLog
-            QgsMessageLog.logMessage(
-                f"_safe_select_by_location: running pre-flight check for INPUT layer '{actual_input_name}'...",
-                "FilterMate", Qgis.Info  # DEBUG
-            )
+            # FIX v2.8.14: Log pre-flight checks (thread-safe)
+            _safe_qgs_log(f"_safe_select_by_location: running pre-flight check for INPUT layer '{actual_input_name}'...", "Info")
             
             if not self._preflight_layer_check(actual_input, "INPUT"):
                 self.log_error("Pre-flight check failed for INPUT layer")
-                QgsMessageLog.logMessage(
-                    f"_safe_select_by_location: PRE-FLIGHT CHECK FAILED for INPUT layer '{actual_input_name}'",
-                    "FilterMate", Qgis.Critical
-                )
+                _safe_qgs_log(f"_safe_select_by_location: PRE-FLIGHT CHECK FAILED for INPUT layer '{actual_input_name}'", "Critical")
                 return False
             
-            # FIX v2.8.14: Log pre-flight checks to QGIS MessageLog
-            QgsMessageLog.logMessage(
-                f"_safe_select_by_location: running pre-flight check for INTERSECT layer '{safe_intersect_name}'...",
-                "FilterMate", Qgis.Info  # DEBUG
-            )
+            # FIX v2.8.14: Log pre-flight checks (thread-safe)
+            _safe_qgs_log(f"_safe_select_by_location: running pre-flight check for INTERSECT layer '{safe_intersect_name}'...", "Info")
                 
             if not self._preflight_layer_check(safe_intersect, "INTERSECT"):
                 self.log_error("Pre-flight check failed for INTERSECT layer")
-                QgsMessageLog.logMessage(
-                    f"_safe_select_by_location: PRE-FLIGHT CHECK FAILED for INTERSECT layer '{safe_intersect_name}'",
-                    "FilterMate", Qgis.Critical
-                )
+                _safe_qgs_log(f"_safe_select_by_location: PRE-FLIGHT CHECK FAILED for INTERSECT layer '{safe_intersect_name}'", "Critical")
                 return False
             
-            # FIX v2.8.14: Log before executing selectbylocation
-            QgsMessageLog.logMessage(
-                f"_safe_select_by_location: executing processing.run('native:selectbylocation') for '{input_layer.name()}'...",
-                "FilterMate", Qgis.Info  # DEBUG
-            )
+            # FIX v2.8.14: Log before executing selectbylocation (thread-safe)
+            _safe_qgs_log(f"_safe_select_by_location: executing processing.run('native:selectbylocation') for '{_safe_layer_name(input_layer)}'...", "Info")
             
             # Execute with error handling - use safe layers
             # FIX v2.9.11: Wrap processing.run in try-except to catch C++ level errors
@@ -2266,10 +2339,7 @@ class OGRGeometricFilter(GeometricFilterBackend):
             except RuntimeError as cpp_error:
                 # C++ level error (access violation, memory error, etc.)
                 self.log_error(f"C++ error in processing.run: {cpp_error}")
-                QgsMessageLog.logMessage(
-                    f"_safe_select_by_location: C++ ERROR in processing.run - {cpp_error}",
-                    "FilterMate", Qgis.Critical
-                )
+                _safe_qgs_log(f"_safe_select_by_location: C++ ERROR in processing.run - {cpp_error}", "Critical")
                 # Try to clear selection safely before returning
                 try:
                     input_layer.removeSelection()
@@ -2279,10 +2349,7 @@ class OGRGeometricFilter(GeometricFilterBackend):
             except Exception as proc_error:
                 # Other processing errors
                 self.log_error(f"Processing error: {proc_error}")
-                QgsMessageLog.logMessage(
-                    f"_safe_select_by_location: PROCESSING ERROR - {proc_error}",
-                    "FilterMate", Qgis.Critical
-                )
+                _safe_qgs_log(f"_safe_select_by_location: PROCESSING ERROR - {proc_error}", "Critical")
                 try:
                     input_layer.removeSelection()
                 except (RuntimeError, AttributeError):
@@ -2345,28 +2412,25 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 self.log_error(f"Failed to get selected feature count: {e}")
                 return False
             
-            QgsMessageLog.logMessage(
-                f"selectbylocation result: {selected_count} features selected on {input_layer.name()}",
-                "FilterMate", Qgis.Info  # DEBUG
-            )
+            _safe_qgs_log(f"selectbylocation result: {selected_count} features selected on {_safe_layer_name(input_layer)}", "Info")
             
-            # DIAGNOSTIC v2.4.17: Log intersect layer geometry extent
+            # DIAGNOSTIC v2.4.17: Log intersect layer geometry extent (thread-safe)
             if intersect_layer and intersect_layer.isValid():
-                extent = intersect_layer.extent()
-                QgsMessageLog.logMessage(
-                    f"  Intersect layer '{intersect_layer.name()}' extent: ({extent.xMinimum():.1f},{extent.yMinimum():.1f})-({extent.xMaximum():.1f},{extent.yMaximum():.1f})",
-                    "FilterMate", Qgis.Info  # DEBUG
-                )
-                # Log first geometry WKT preview
-                for feat in intersect_layer.getFeatures():
-                    geom = feat.geometry()
-                    if geom and not geom.isEmpty():
-                        wkt_preview = geom.asWkt()[:200] if geom.asWkt() else "EMPTY"
-                        QgsMessageLog.logMessage(
-                            f"  First intersect geom: {wkt_preview}...",
-                            "FilterMate", Qgis.Info  # DEBUG
-                        )
-                    break
+                try:
+                    extent = intersect_layer.extent()
+                    _safe_qgs_log(
+                        f"  Intersect layer '{_safe_layer_name(intersect_layer)}' extent: ({extent.xMinimum():.1f},{extent.yMinimum():.1f})-({extent.xMaximum():.1f},{extent.yMaximum():.1f})",
+                        "Info"
+                    )
+                    # Log first geometry WKT preview
+                    for feat in intersect_layer.getFeatures():
+                        geom = feat.geometry()
+                        if geom and not geom.isEmpty():
+                            wkt_preview = geom.asWkt()[:200] if geom.asWkt() else "EMPTY"
+                            _safe_qgs_log(f"  First intersect geom: {wkt_preview}...", "Info")
+                        break
+                except (RuntimeError, OSError, SystemError):
+                    pass  # Layer may have become invalid
             
             self.log_info(f"✓ Selection complete: {selected_count} features selected")
             return True
@@ -2377,16 +2441,10 @@ class OGRGeometricFilter(GeometricFilterBackend):
             self.log_error(f"selectbylocation failed: {str(e)}")
             self.log_debug(f"Traceback: {tb_str}")
             
-            # FIX v2.8.14: Enhanced error logging to QGIS MessagePanel for visibility
-            QgsMessageLog.logMessage(
-                f"selectbylocation FAILED on {input_layer.name() if input_layer else 'Unknown'}: {str(e)}",
-                "FilterMate", Qgis.Critical
-            )
-            # Log full traceback to MessageLog for debugging
-            QgsMessageLog.logMessage(
-                f"selectbylocation traceback:\n{tb_str}",
-                "FilterMate", Qgis.Warning
-            )
+            # FIX v2.8.14: Enhanced error logging (thread-safe)
+            _safe_qgs_log(f"selectbylocation FAILED on {_safe_layer_name(input_layer)}: {str(e)}", "Critical")
+            # Log full traceback for debugging
+            _safe_qgs_log(f"selectbylocation traceback:\n{tb_str}", "Warning")
             
             # Clear any partial selection to avoid inconsistent state
             try:
@@ -2553,21 +2611,21 @@ class OGRGeometricFilter(GeometricFilterBackend):
         predicate_codes = self._map_predicates(predicates)
         
         # STABILITY FIX v2.3.9: Use safe wrapper for selectbylocation
-        # FIX v2.8.13: Add detailed logging before selectbylocation for debugging
-        QgsMessageLog.logMessage(
-            f"OGR selectbylocation: target={layer.name()} ({layer.featureCount()} features), "
-            f"intersect={intersect_layer.name()} ({intersect_layer.featureCount()} features), "
+        # FIX v2.8.13: Add detailed logging (thread-safe)
+        _safe_qgs_log(
+            f"OGR selectbylocation: target={_safe_layer_name(layer)} ({_safe_feature_count(layer)} features), "
+            f"intersect={_safe_layer_name(intersect_layer)} ({_safe_feature_count(intersect_layer)} features), "
             f"predicates={predicate_codes}",
-            "FilterMate", Qgis.Info  # DEBUG
+            "Info"
         )
         
         if not self._safe_select_by_location(layer, intersect_layer, predicate_codes):
             self.log_error("Safe select by location failed - cannot proceed")
-            # FIX v2.8.13: Add QGIS MessageLog for visibility
-            QgsMessageLog.logMessage(
-                f"OGR _apply_filter_standard: selectbylocation FAILED for '{layer.name()}' - "
-                f"intersect layer '{intersect_layer.name()}' ({intersect_layer.featureCount()} features)",
-                "FilterMate", Qgis.Critical
+            # FIX v2.8.13: Add QGIS MessageLog for visibility (thread-safe)
+            _safe_qgs_log(
+                f"OGR _apply_filter_standard: selectbylocation FAILED for '{_safe_layer_name(layer)}' - "
+                f"intersect layer '{_safe_layer_name(intersect_layer)}' ({_safe_feature_count(intersect_layer)} features)",
+                "Critical"
             )
             # FIX v2.4.18: Restore original subset if selectbylocation failed
             if existing_subset:

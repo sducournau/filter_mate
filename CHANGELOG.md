@@ -2,9 +2,118 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [3.0.20] - 2026-01-08
+
+### 🐛 Bug Fixes from Backlog
+
+**HIGH-002: Fixed bare except clauses (v3.0.20):**
+
+- **widgets.py**: Replaced 2 bare `except:` clauses with `except Exception:` in `finished()` method
+- **parallel_executor.py**: Replaced 1 bare `except:` clause with `except Exception:` in `execute_filter_parallel()`
+- **Impact**: Better exception handling, clearer code intent, and no silent swallowing of system exceptions
+
+**CRIT-002: Fixed SQL Injection Risk (v3.0.20):**
+
+- **progressive_filter.py**: Changed f-string SQL query to parameterized query in `_parse_bbox_from_wkt()`
+- **Before**: `cursor.execute(f"SELECT ST_Extent(ST_GeomFromText('{wkt}'))")`
+- **After**: `cursor.execute("SELECT ST_Extent(ST_GeomFromText(%s))", (wkt,))`
+- **Impact**: Prevents potential SQL injection via malformed WKT input
+
+**HIGH-006: Added large OGR dataset warning (v3.0.20):**
+
+- **ogr_backend.py**: Added user warning for datasets ≥50k features
+- **Message**: "Grand jeu de données (X entités) avec OGR. Considérez PostgreSQL ou Spatialite pour de meilleures performances."
+- **Impact**: Users are now informed when OGR performance may be suboptimal vs other backends
+
+### 🔧 Code Style Improvements
+
+**MED-001: Converted .format() to f-strings (partial):**
+
+- **customExceptions.py**: Converted exception message formatting to f-string
+- **widgets.py**: Converted task cancellation log message to f-string
+- **Note**: Remaining .format() calls are in i18n `tr()` contexts (required for translation)
+
+### ✅ Backlog Verification (v3.0.20)
+
+**Verified as already implemented:**
+
+- **HIGH-004**: Buffer code duplication - Fixed in v3.0.12 via `_build_buffer_expression()` in base_backend.py
+- **HIGH-005**: CRS transformation duplication - Centralized in `crs_utils.py` (CRSTransformer class)
+- **HIGH-009**: Exception handlers vides - Verified OK (graceful degradations with appropriate comments)
+- **HIGH-013**: Magic numbers - Already centralized in `constants.py` (PERFORMANCE*THRESHOLD*\*)
+- **HIGH-014**: Geometry validation - Centralized in `geometry_safety.py`
+- **HIGH-016**: Cache unifié - 6 specialized caches (Query, Geometry, WKT, Spatialite, Exploring, PreparedStatement)
+- **HIGH-017**: Error messages - Custom exceptions in `customExceptions.py`
+- **MED-005**: TODO/FIXME - Only 1 remaining (ogr_backend.py:701 - legitimate future feature)
+- **MED-010**: .gitignore - Properly configured for **pycache**
+- **MED-016**: Factory pattern - Complete with auto-selection, forced backends, fallbacks
+- **MED-018**: Logging incohérent - All backends use `get_tasks_logger()` consistently
+- **MED-020**: Health checks - Implemented in `connection_pool.py` with periodic thread
+- **MED-023**: Cache invalidation - TTL + `invalidate_layer()` in QueryExpressionCache
+- **MED-024**: Connection pooling - Full implementation in `connection_pool.py`
+- **MED-025**: Lazy loading - `LazyResultIterator` in progressive_filter.py
+- **MED-026**: Spatial indexes - `spatial_index_manager.py` (QIX, SBN, R-tree)
+- **LOW-002**: Print statements debug - Only in docstrings/bootstrap code (legitimate)
+- **LOW-005**: Empty `__init__.py` files - All contain proper exports
+
+---
+
+## [3.0.19] - 2026-01-08
+
+### 🐛 Critical Bug Fixes
+
+**CRIT-006: Comprehensive feature_count None Protection (v3.0.19) - COMPLETE FIX:**
+
+- **Fixed persistent issue**: 2nd/3rd filter on PostgreSQL distant layers still crashed with TypeError
+- **Issue**: Additional `layer.featureCount()` calls without None protection in multiple files
+- **Root Cause**: Several backend files called `featureCount()` and compared without None check
+- **Additional Fixes Applied**:
+  1. **multi_step_optimizer.py**: `_compute_layer_stats()` now protects `featureCount()` before storing in `LayerStats`
+  2. **factory.py**: `should_use_memory_optimization()` now checks `feature_count is None` before comparison
+  3. **spatialite_backend.py**: `apply_filter()` (line 2452) and `_apply_filter_with_source_table()` (line 3665) now protect
+  4. **ogr_backend.py**: `_try_multi_step_filter()` (line 447) and `apply_filter()` (line 963) now protect
+- **Impact**: All `featureCount()` calls in filtering pipeline now protected against None/invalid values
+- **Pattern Used**: `raw = layer.featureCount(); count = raw if raw is not None and raw >= 0 else 0`
+
+**CRIT-005: Enhanced ComboBox Protection (v3.0.18):**
+
+- **Fixed timing issue**: `_saved_layer_id_before_filter` is now set at START of filtering, not in `finally` block
+- **Issue**: canvas.refresh() and layer.reload() in `FilterEngineTask.finished()` triggered signals before protection was set
+- **Impact**: OGR (first filter) and Spatialite (step 2) combobox loss now prevented
+- **Fixes Applied**:
+  1. **filter_mate_app.py**: Added `_saved_layer_id_before_filter = _current_layer_id_before_filter` at START of `manage_task('filter')`
+  2. **filter_mate_dockwidget.py**: `_synchronize_layer_widgets()` now blocks if layer is None during protection window
+  3. **filter_mate_dockwidget.py**: `current_layer_changed()` now falls back to current_layer or combobox layer when saved_layer_id unavailable
+
+---
+
 ## [3.0.12] - 2026-01-08
 
 ### 🐛 Critical Bug Fixes
+
+**CRIT-006: TypeError in Multi-Step PostgreSQL Filtering (v3.0.12) - CRITICAL FIX:**
+
+- **Fixed critical bug**: 3rd+ filter on PostgreSQL distant layers no longer crashes with TypeError
+- **Issue**: `'<' not supported between instances of 'int' and 'NoneType'`
+- **Impact**: ALL distant layers failed at 3rd filter, blocking multi-step workflows
+- **Root Cause**: `layer.featureCount()` can return `None` when layer becomes invalid between steps
+- **Fixes Applied**:
+  1. **postgresql_backend.py**: `_get_fast_feature_count()` now returns `0` instead of propagating `None`
+  2. **postgresql_backend.py**: `apply_filter()` validates `feature_count` before threshold comparisons
+  3. **filter_task.py**: Added `None` protection before `layer_feature_count > 100000` comparison
+  4. **auto_optimizer.py**: Added `None` checks in `analyze_layer()`, `_estimate_complexity()`, `_check_buffer_segments()`
+  5. **filter_task.py**: Protected 4 occurrences of `feature_count >= 0 and feature_count < MAX_FEATURES`
+
+**CRIT-005: ComboBox Loss After Filter (v3.0.12) - STABILITY FIX:**
+
+- **Fixed critical bug**: `comboBox_filtering_current_layer` no longer loses value after filtering
+- **Issue**: ComboBox became empty after 1st filter (OGR), step 2 (Spatialite), or 2nd filter (PostgreSQL)
+- **Impact**: Plugin unusable - signals disconnected, action buttons stopped working
+- **Root Cause**: `layer.reload()` triggers async `currentLayerChanged` signals AFTER protection window
+- **Fixes Applied**:
+  1. **filter_mate_dockwidget.py**: Extended `POST_FILTER_PROTECTION_WINDOW` from 2.0s to 5.0s (3 locations)
+  2. **filter_mate_app.py**: Extended delayed combobox checks from 5 to 9 (up to 5000ms)
+  3. **filter_task.py**: Added `layer.blockSignals(True/False)` around ALL `layer.reload()` and `dataProvider().reloadData()` calls in `finished()` to prevent async signal emission
 
 **Multi-Step Buffer State Preservation (v3.0.12) - CRITICAL FIX:**
 
@@ -167,7 +276,7 @@ All notable changes to FilterMate will be documented in this file.
   - Added QGIS MessageLog warning when distant layers filtering is skipped
   - Log shows which conditions failed: `has_geometric_predicates=False`, `no layers configured`, etc.
   - Helps user understand why distant layers were not filtered
-- **User Action Required**: When changing source layer, ensure the "Geometric Predicates" button 
+- **User Action Required**: When changing source layer, ensure the "Geometric Predicates" button
   is checked and a predicate (e.g., "Intersects") is selected before filtering
 - Message example: `⚠️ Distant layers NOT filtered: has_geometric_predicates=False`
 

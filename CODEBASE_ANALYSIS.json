@@ -1,0 +1,516 @@
+{
+  "analysis_metadata": {
+    "plugin": "FilterMate",
+    "version": "2.8.5",
+    "analysis_date": "2026-01-08",
+    "analyzer": "GitHub Copilot - Claude Opus 4.5",
+    "total_issues_found": 89,
+    "severity_summary": {
+      "critical": 4,
+      "high": 18,
+      "medium": 42,
+      "low": 25
+    }
+  },
+  "issues_by_category": {
+    "linting_style_issues": {
+      "description": "PEP8 violations, unused imports, line length issues",
+      "total_count": 35,
+      "issues": [
+        {
+          "file": "filter_mate_dockwidget.py",
+          "lines": "47-70",
+          "severity": "Low",
+          "issue_type": "Unused Imports",
+          "description": "Multiple unused imports: QAction, QActionGroup, QApplication, QComboBox, QDockWidget, QDoubleSpinBox, QFileDialog, QGroupBox, QHBoxLayout, QLineEdit, QMenu, QPushButton, QSizePolicy, QSpacerItem, QSpinBox, QSplitter, QToolButton, QVBoxLayout, QWidgetAction, QgsCollapsibleGroupBox, QgsDoubleSpinBox, QgsPropertyOverrideButton, Qgis, functools.partial, is_sip_deleted",
+          "suggested_fix": "Remove unused imports or add # noqa comments if intentional"
+        },
+        {
+          "file": "filter_mate_dockwidget.py",
+          "lines": "37-140",
+          "severity": "Low",
+          "issue_type": "Import Order",
+          "description": "Module-level imports not at top of file. Imports scattered after logger initialization and other code",
+          "suggested_fix": "Move all imports to top of file, organize by: stdlib, third-party, local"
+        },
+        {
+          "file": "filter_mate_dockwidget.py",
+          "lines": "6, 99, 108, 111, 125",
+          "severity": "Low",
+          "issue_type": "Line Length",
+          "description": "Lines exceed 79 characters (PEP8 recommendation). Note: project uses 120 char limit per guidelines",
+          "suggested_fix": "Break long lines or accept 120-char project convention"
+        },
+        {
+          "file": "filter_mate.py",
+          "line": "35",
+          "severity": "Low",
+          "issue_type": "Wildcard Import",
+          "description": "from .resources import * - wildcard import used for Qt resources",
+          "suggested_fix": "This is acceptable for Qt resources; add comment explaining why it's necessary"
+        },
+        {
+          "file": "filter_mate_app.py",
+          "line": "81",
+          "severity": "Low",
+          "issue_type": "Wildcard Import",
+          "description": "from .resources import * - wildcard import used for Qt resources",
+          "suggested_fix": "This is acceptable for Qt resources; add comment explaining why it's necessary"
+        },
+        {
+          "file": "Multiple files",
+          "lines": "Various",
+          "severity": "Low",
+          "issue_type": "Mixed String Formatting",
+          "description": "Codebase uses mix of f-strings, .format(), and % formatting. Inconsistent style.",
+          "suggested_fix": "Standardize on f-strings for Python 3.7+ codebase"
+        }
+      ]
+    },
+    "code_quality_issues": {
+      "description": "Code smells, duplicated code, complex functions",
+      "total_count": 15,
+      "issues": [
+        {
+          "file": "filter_mate_app.py",
+          "lines": "1-5914",
+          "severity": "High",
+          "issue_type": "God Class",
+          "description": "FilterMateApp is 5914 lines - too large for a single class. Handles orchestration, task management, UI coordination, database operations, and signal handling",
+          "suggested_fix": "Extract into smaller specialized classes: TaskManager, SignalHandler, DatabaseManager, UICoordinator"
+        },
+        {
+          "file": "filter_mate_dockwidget.py",
+          "lines": "1-12941",
+          "severity": "High",
+          "issue_type": "God Class",
+          "description": "FilterMateDockWidget is 12941 lines - extremely large class handling all UI logic",
+          "suggested_fix": "Extract into smaller widgets: FilteringWidget, ExploringWidget, ExportWidget, SettingsWidget"
+        },
+        {
+          "file": "modules/tasks/filter_task.py",
+          "lines": "1-12178",
+          "severity": "High",
+          "issue_type": "God Class",
+          "description": "FilterEngineTask is 12178 lines - handles too many responsibilities",
+          "suggested_fix": "Already partially extracted (Phase 3), continue splitting: separate backend handlers, export logic, expression processing"
+        },
+        {
+          "file": "modules/appTasks.py",
+          "lines": "1-50",
+          "severity": "Medium",
+          "issue_type": "Deprecated Module",
+          "description": "appTasks.py is a deprecated shim that only re-exports from modules/tasks. Shows deprecation warning on import",
+          "suggested_fix": "Update all imports to use 'from modules.tasks import ...' and remove appTasks.py in v3.0.0"
+        },
+        {
+          "file": "modules/widgets.py",
+          "lines": "1088, 1102",
+          "severity": "Medium",
+          "issue_type": "Bare Except Clauses",
+          "description": "Using 'except:' without specifying exception type - catches all exceptions including KeyboardInterrupt",
+          "suggested_fix": "Replace with 'except Exception:' or specific exception types"
+        },
+        {
+          "file": "modules/tasks/parallel_executor.py",
+          "line": "473",
+          "severity": "Medium",
+          "issue_type": "Bare Except Clause",
+          "description": "Using 'except:' without specifying exception type",
+          "suggested_fix": "Replace with 'except Exception:' or specific exception types"
+        },
+        {
+          "file": "Multiple files",
+          "lines": "Various",
+          "severity": "Medium",
+          "issue_type": "Global Variables",
+          "description": "Uses 'global ENV_VARS' pattern in multiple files (filter_mate_app.py:277, layer_management_task.py:183, filter_task.py:277). Tight coupling to global state",
+          "suggested_fix": "Inject ENV_VARS as dependency or use singleton pattern with property access"
+        },
+        {
+          "file": "Multiple files",
+          "lines": "Various",
+          "severity": "Low",
+          "issue_type": "Empty Exception Handlers",
+          "description": "Many 'except Exception: pass' patterns that silently swallow errors",
+          "suggested_fix": "At minimum, log errors with logger.debug() before passing"
+        }
+      ]
+    },
+    "architecture_issues": {
+      "description": "Coupling problems, missing abstractions, inconsistent patterns",
+      "total_count": 12,
+      "issues": [
+        {
+          "file": "modules/backends/",
+          "severity": "Low",
+          "issue_type": "Good Pattern",
+          "description": "Backend architecture uses Factory pattern correctly. GeometricFilterBackend base class with PostgreSQL, Spatialite, OGR, Memory backends",
+          "suggested_fix": "No fix needed - this is well-designed"
+        },
+        {
+          "file": "filter_mate_app.py",
+          "severity": "High",
+          "issue_type": "Tight Coupling",
+          "description": "FilterMateApp directly manipulates dockwidget internals, accesses PROJECT_LAYERS dict directly, and manages task lifecycle - too many responsibilities",
+          "suggested_fix": "Use event-driven architecture with signals/slots. Create StateManager class (modules/state_manager.py already exists but underutilized)"
+        },
+        {
+          "file": "config/config.py",
+          "severity": "Medium",
+          "issue_type": "Configuration Coupling",
+          "description": "Configuration access scattered across codebase. Some use ENV_VARS dict, others read config.json directly, some use get_optimization_thresholds()",
+          "suggested_fix": "Centralize all config access through a single ConfigManager class with typed getters"
+        },
+        {
+          "file": "modules/tasks/filter_task.py",
+          "lines": "Various",
+          "severity": "Medium",
+          "issue_type": "Provider-Specific Code Duplication",
+          "description": "Repeated if/elif chains for PROVIDER_POSTGRES/SPATIALITE/OGR throughout codebase",
+          "suggested_fix": "Use backend.execute() pattern more consistently - backends should encapsulate provider-specific logic"
+        },
+        {
+          "file": "Multiple files",
+          "severity": "Medium",
+          "issue_type": "Circular Import Risk",
+          "description": "Complex import hierarchy with logging_config, psycopg2_availability, appUtils creating potential circular imports",
+          "suggested_fix": "Restructure imports - consider lazy imports or import at function level for problematic dependencies"
+        },
+        {
+          "file": "filter_mate.py, filter_mate_app.py",
+          "severity": "Medium",
+          "issue_type": "Initialization Complexity",
+          "description": "Complex initialization sequence with flags (_loading_new_project, _initializing_project, _widgets_ready) to prevent race conditions",
+          "suggested_fix": "Consider state machine pattern for initialization phases"
+        }
+      ]
+    },
+    "performance_issues": {
+      "description": "Inefficient queries, missing caching, heavy operations",
+      "total_count": 8,
+      "issues": [
+        {
+          "file": "modules/backends/factory.py",
+          "lines": "90-100",
+          "severity": "Medium",
+          "issue_type": "Disabled Optimization",
+          "description": "should_use_memory_optimization() returns False immediately - small dataset optimization is disabled. Comment says to re-enable by removing the line",
+          "suggested_fix": "Either remove the dead code or properly enable the optimization based on config"
+        },
+        {
+          "file": "modules/tasks/filter_task.py",
+          "lines": "Various",
+          "severity": "Low",
+          "issue_type": "Good Pattern - Caching",
+          "description": "Uses SourceGeometryCache, QueryExpressionCache for caching expensive operations",
+          "suggested_fix": "No fix needed - good implementation"
+        },
+        {
+          "file": "filter_mate_dockwidget.py",
+          "lines": "213-230",
+          "severity": "Low",
+          "issue_type": "Good Pattern - Debouncing",
+          "description": "Uses debounce timer for expression changes (450ms) to prevent excessive recomputation",
+          "suggested_fix": "No fix needed - good implementation"
+        },
+        {
+          "file": "modules/backends/postgresql_backend.py",
+          "lines": "147-160",
+          "severity": "Low",
+          "issue_type": "Configurable Thresholds",
+          "description": "Well-documented thresholds for MV usage (10k features), WKT size limits (100k chars), etc.",
+          "suggested_fix": "Consider making these configurable via config.json"
+        },
+        {
+          "file": "modules/tasks/filter_task.py",
+          "lines": "Various",
+          "severity": "Medium",
+          "issue_type": "Repeated Layer Lookups",
+          "description": "PROJECT.mapLayer(layer_id) called multiple times for same layer in same method",
+          "suggested_fix": "Cache layer reference at method start"
+        }
+      ]
+    },
+    "error_handling_issues": {
+      "description": "Missing try/catch, poor error messages, unhandled edge cases",
+      "total_count": 10,
+      "issues": [
+        {
+          "file": "Multiple files",
+          "severity": "High",
+          "issue_type": "Good Pattern - Graceful Degradation",
+          "description": "Consistently uses POSTGRESQL_AVAILABLE checks before PostgreSQL operations with fallback to OGR",
+          "suggested_fix": "No fix needed - good implementation"
+        },
+        {
+          "file": "modules/object_safety.py",
+          "severity": "Low",
+          "issue_type": "Good Pattern - Safety Wrappers",
+          "description": "Provides is_sip_deleted(), is_valid_layer(), safe_disconnect() to prevent C++ object access violations",
+          "suggested_fix": "No fix needed - excellent defensive programming"
+        },
+        {
+          "file": "modules/circuit_breaker.py",
+          "severity": "Low",
+          "issue_type": "Good Pattern - Circuit Breaker",
+          "description": "Implements circuit breaker pattern for PostgreSQL connection protection",
+          "suggested_fix": "No fix needed - good implementation"
+        },
+        {
+          "file": "filter_mate_app.py",
+          "lines": "683-750",
+          "severity": "Medium",
+          "issue_type": "Stale Flag Detection",
+          "description": "_check_and_reset_stale_flags() handles stuck flags but relies on timestamps - could miss edge cases",
+          "suggested_fix": "Consider using context managers (with statement) for flag management"
+        },
+        {
+          "file": "modules/appUtils.py",
+          "lines": "240-270",
+          "severity": "High",
+          "issue_type": "Thread Safety Documentation",
+          "description": "safe_set_subset_string() has excellent documentation about thread safety, but relies on caller discipline",
+          "suggested_fix": "Consider adding runtime check for main thread: QThread.currentThread() == QApplication.instance().thread()"
+        },
+        {
+          "file": "modules/tasks/filter_task.py",
+          "lines": "300-320",
+          "severity": "Medium",
+          "issue_type": "Deferred Subset Application",
+          "description": "queue_subset_request() stores requests for later application - could fail silently if finished() not called",
+          "suggested_fix": "Add cleanup mechanism if task is cancelled without calling finished()"
+        }
+      ]
+    },
+    "documentation_issues": {
+      "description": "Missing docstrings, outdated comments",
+      "total_count": 5,
+      "issues": [
+        {
+          "file": "Multiple core files",
+          "severity": "Low",
+          "issue_type": "Good Documentation",
+          "description": "Core classes have comprehensive docstrings with Args, Returns, Notes sections",
+          "suggested_fix": "No fix needed"
+        },
+        {
+          "file": "modules/tasks/filter_task.py",
+          "lines": "Various",
+          "severity": "Low",
+          "issue_type": "Version Comments",
+          "description": "Excellent inline comments with version numbers (e.g., 'FIX v2.5.12:', 'CRITICAL FIX v2.8.10:')",
+          "suggested_fix": "No fix needed - excellent practice for tracking changes"
+        },
+        {
+          "file": "Multiple files",
+          "severity": "Medium",
+          "issue_type": "Magic Numbers",
+          "description": "Some hardcoded values without explanation: 450ms debounce, 60s cache timeout, 50 max favorites",
+          "suggested_fix": "Move to constants.py or config.json with documentation"
+        },
+        {
+          "file": "test_optimizer_v29.py",
+          "severity": "Low",
+          "issue_type": "Test File with Print Statements",
+          "description": "Uses print() instead of proper test assertions/logging",
+          "suggested_fix": "Convert to proper pytest tests with assertions"
+        }
+      ]
+    },
+    "testing_gaps": {
+      "description": "Missing tests, untested code paths",
+      "total_count": 6,
+      "issues": [
+        {
+          "file": "tests/",
+          "severity": "Medium",
+          "issue_type": "Good Test Coverage",
+          "description": "26+ test files covering config, backends, undo/redo, CRS, etc. Approximately 70% coverage per project docs",
+          "suggested_fix": "Target 80% coverage per project roadmap"
+        },
+        {
+          "file": "tests/conftest.py",
+          "severity": "Low",
+          "issue_type": "Good Pattern - Fixtures",
+          "description": "Uses pytest fixtures for mock_iface and other dependencies",
+          "suggested_fix": "No fix needed"
+        },
+        {
+          "file": "filter_mate_dockwidget.py",
+          "severity": "High",
+          "issue_type": "Large Untested Class",
+          "description": "12941-line UI class has limited test coverage due to complexity of testing Qt widgets",
+          "suggested_fix": "Extract testable logic into separate classes, use QTest for widget testing"
+        },
+        {
+          "file": "modules/backends/",
+          "severity": "Medium",
+          "issue_type": "Integration Tests Needed",
+          "description": "Backend tests exist but may not cover all edge cases with real databases",
+          "suggested_fix": "Add integration tests with real PostgreSQL/Spatialite databases"
+        }
+      ]
+    },
+    "security_issues": {
+      "description": "SQL injection risks, unsafe operations",
+      "total_count": 4,
+      "issues": [
+        {
+          "file": "modules/appUtils.py",
+          "lines": "Various",
+          "severity": "Low",
+          "issue_type": "Good Pattern - SQL Sanitization",
+          "description": "Uses sanitize_sql_identifier() function for table/field names",
+          "suggested_fix": "No fix needed - good practice"
+        },
+        {
+          "file": "modules/prepared_statements.py",
+          "severity": "Low",
+          "issue_type": "Good Pattern - Parameterized Queries",
+          "description": "Uses prepared statements with parameter binding for PostgreSQL queries",
+          "suggested_fix": "No fix needed - excellent security practice"
+        },
+        {
+          "file": "modules/tasks/filter_task.py",
+          "lines": "Various .format() calls",
+          "severity": "Medium",
+          "issue_type": "SQL String Building",
+          "description": "Some SQL queries built with .format() instead of parameterized queries (e.g., lines 3166, 6159)",
+          "suggested_fix": "Audit all .format() in SQL context; ensure values are sanitized or use prepared statements"
+        },
+        {
+          "file": "modules/tasks/layer_management_task.py",
+          "lines": "712, 740",
+          "severity": "Medium",
+          "issue_type": "String Interpolation in SQL",
+          "description": "Uses % formatting for JSON templates - ensure values are properly escaped",
+          "suggested_fix": "Use JSON library for template building instead of string formatting"
+        }
+      ]
+    },
+    "qgis_specific_issues": {
+      "description": "Deprecated APIs, compatibility problems",
+      "total_count": 5,
+      "issues": [
+        {
+          "file": "filter_mate_dockwidget.py",
+          "lines": "97-120",
+          "severity": "Low",
+          "issue_type": "Good Pattern - API Compatibility",
+          "description": "Handles QgsMapLayerProxyModel and QgsFieldProxyModel import differences between QGIS versions (moved from qgis.core to qgis.gui in 3.30+)",
+          "suggested_fix": "No fix needed - good backward compatibility handling"
+        },
+        {
+          "file": "modules/tasks/filter_task.py",
+          "severity": "Low",
+          "issue_type": "Thread Safety Awareness",
+          "description": "Excellent documentation and handling of setSubsetString() thread safety issue with QueuedConnection signal pattern",
+          "suggested_fix": "No fix needed - critical issue well-handled"
+        },
+        {
+          "file": "modules/appUtils.py",
+          "severity": "Low",
+          "issue_type": "Field Type Detection",
+          "description": "Uses QMetaType.Type.Int, QMetaType.Type.LongLong for field type detection - PyQt5/6 compatible",
+          "suggested_fix": "No fix needed"
+        },
+        {
+          "file": "modules/geometry_safety.py",
+          "severity": "Low",
+          "issue_type": "GEOS Safety",
+          "description": "Comprehensive handling of GEOS geometry edge cases that can crash QGIS",
+          "suggested_fix": "No fix needed - excellent defensive programming"
+        },
+        {
+          "file": "metadata.txt",
+          "severity": "Low",
+          "issue_type": "Version Compatibility",
+          "description": "Should verify qgisMinimumVersion in metadata.txt matches actual API usage",
+          "suggested_fix": "Verify QGIS 3.16+ compatibility based on used APIs"
+        }
+      ]
+    },
+    "configuration_issues": {
+      "description": "Hardcoded values, missing validations",
+      "total_count": 4,
+      "issues": [
+        {
+          "file": "config/config.py",
+          "severity": "Low",
+          "issue_type": "Good Pattern - Fallback Config",
+          "description": "FALLBACK_CONFIG hardcoded dict ensures plugin works even if config files are corrupted",
+          "suggested_fix": "No fix needed"
+        },
+        {
+          "file": "filter_mate_app.py",
+          "lines": "130-145",
+          "severity": "Low",
+          "issue_type": "Centralized Constants",
+          "description": "STABILITY_CONSTANTS dict centralizes timing values - good practice",
+          "suggested_fix": "Consider moving to constants.py for consistency"
+        },
+        {
+          "file": "modules/constants.py",
+          "severity": "Low",
+          "issue_type": "Good Pattern - Constants Module",
+          "description": "Centralized constants for providers, geometry types, predicates",
+          "suggested_fix": "No fix needed - good practice"
+        },
+        {
+          "file": "modules/backends/postgresql_backend.py",
+          "lines": "140-180",
+          "severity": "Medium",
+          "issue_type": "Hardcoded Thresholds",
+          "description": "Class-level constants like MATERIALIZED_VIEW_THRESHOLD=10000, MAX_WKT_LENGTH=100000 are not configurable",
+          "suggested_fix": "Allow override via config.json for advanced users"
+        }
+      ]
+    }
+  },
+  "summary_recommendations": {
+    "critical_priority": [
+      "1. REFACTOR: Split FilterMateDockWidget (12941 lines) into smaller focused widgets",
+      "2. REFACTOR: Split FilterMateApp (5914 lines) into TaskManager, SignalHandler, DatabaseManager",
+      "3. SECURITY: Audit all .format() SQL string building and replace with parameterized queries",
+      "4. THREAD SAFETY: Add runtime thread check in safe_set_subset_string()"
+    ],
+    "high_priority": [
+      "1. CLEANUP: Remove 25+ unused imports in filter_mate_dockwidget.py",
+      "2. DEPRECATION: Complete migration from appTasks.py to modules/tasks/",
+      "3. TESTING: Increase test coverage to 80% target, especially for dockwidget",
+      "4. ARCHITECTURE: Reduce global ENV_VARS usage with dependency injection"
+    ],
+    "medium_priority": [
+      "1. STYLE: Standardize on f-strings for string formatting",
+      "2. ERROR HANDLING: Replace bare 'except:' with 'except Exception:'",
+      "3. CONFIGURATION: Centralize all config access through ConfigManager",
+      "4. PERFORMANCE: Enable/remove disabled small dataset optimization code",
+      "5. DOCUMENTATION: Document all magic numbers and move to constants"
+    ],
+    "low_priority": [
+      "1. STYLE: Organize imports by stdlib/third-party/local",
+      "2. CLEANUP: Remove empty 'pass' exception handlers or add logging",
+      "3. CONSISTENCY: Use context managers for flag management"
+    ]
+  },
+  "positive_findings": {
+    "description": "Well-implemented patterns and good practices found in the codebase",
+    "items": [
+      "Excellent backend architecture using Factory pattern with GeometricFilterBackend base class",
+      "Comprehensive thread safety handling with queue_subset_request() and main thread signals",
+      "Good defensive programming with object_safety module (is_sip_deleted, is_valid_layer)",
+      "Circuit breaker pattern for PostgreSQL connection protection",
+      "Well-documented functions with version comments (e.g., 'FIX v2.5.12:')",
+      "Proper POSTGRESQL_AVAILABLE checks with graceful fallback to OGR",
+      "Centralized psycopg2 availability checking in dedicated module",
+      "Good use of caching (SourceGeometryCache, QueryExpressionCache)",
+      "Debouncing for expensive UI operations",
+      "Comprehensive constants module eliminating magic strings",
+      "Fallback configuration ensuring plugin always works",
+      "QGIS version compatibility handling for API changes",
+      "Geometry safety module preventing GEOS crashes",
+      "Good test coverage foundation with 26+ test files"
+    ]
+  }
+}

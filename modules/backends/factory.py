@@ -115,7 +115,8 @@ def should_use_memory_optimization(layer: QgsVectorLayer, layer_provider_type: s
     # Check feature count
     try:
         feature_count = layer.featureCount()
-        if feature_count < 0:
+        # CRITICAL FIX v3.0.19: Protect against None/invalid feature count
+        if feature_count is None or feature_count < 0:
             # Unknown feature count, don't optimize
             return False
         

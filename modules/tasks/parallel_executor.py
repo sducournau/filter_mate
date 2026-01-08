@@ -470,7 +470,7 @@ class ParallelFilterExecutor:
         for l, lp in layers:
             try:
                 layer_names.append(l.name() if hasattr(l, 'name') else 'unknown')
-            except:
+            except Exception:  # FIX v3.0.20: Avoid bare except clause
                 layer_names.append('invalid')
         logger.info(f"🔄 Layers to process: {layer_names}")
         QgsMessageLog.logMessage(

@@ -32,8 +32,7 @@ class SignalStateChangeError(Exception):
                 self.input_message = "Signal doesn't exists"
             else:
                 self.input_message = "Cannot change signal state"
-        
 
-        self.message = "{widget_name} : {message}".format(widget_name='.'.join(self.widget_path), message=self.input_message)
-        
+        self.message = f"{'.'.join(self.widget_path)} : {self.input_message}"
+
         super().__init__(self.message)

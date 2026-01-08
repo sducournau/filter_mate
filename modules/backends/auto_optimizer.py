@@ -356,8 +356,9 @@ class LayerAnalyzer:
         location_type = cls._determine_location_type(layer, qgis_provider)
         
         # Get feature count safely
+        # CRITICAL FIX v3.0.10: Protect against None/invalid feature count
         feature_count = layer.featureCount()
-        if feature_count < 0:
+        if feature_count is None or feature_count < 0:
             feature_count = 0  # Unknown
         
         # Check spatial index
@@ -445,7 +446,8 @@ class LayerAnalyzer:
             Tuple of (avg_vertices, complexity_factor)
         """
         feature_count = layer.featureCount()
-        if feature_count == 0:
+        # CRITICAL FIX v3.0.10: Protect against None/invalid feature count
+        if feature_count is None or feature_count <= 0:
             return (0.0, 1.0)
         
         try:
@@ -1076,6 +1078,11 @@ class AutoOptimizer:
             return None
         
         if not has_buffer:
+            return None
+        
+        # CRITICAL FIX v3.0.10: Protect against None/invalid feature count
+        # This fixes TypeError '<' not supported between 'int' and 'NoneType'
+        if target.feature_count is None or target.feature_count < 0:
             return None
         
         # Check if feature count exceeds threshold for segment reduction

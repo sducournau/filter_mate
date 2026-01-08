@@ -2449,7 +2449,9 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             
             # v2.6.1: Check for large dataset optimization with source table
             # For large datasets with geometric filters, use permanent source table
-            feature_count = layer.featureCount()
+            # CRITICAL FIX v3.0.19: Protect against None/invalid feature count
+            raw_feature_count = layer.featureCount()
+            feature_count = raw_feature_count if raw_feature_count is not None and raw_feature_count >= 0 else 0
             use_source_table = False
             
             # v2.6.5: Enhanced WKT detection - check task_params first, then extract from expression
@@ -3662,7 +3664,9 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         #     return False
         
         # v2.6.10: Get feature count for progress estimation
-        feature_count = layer.featureCount()
+        # CRITICAL FIX v3.0.19: Protect against None/invalid feature count
+        raw_feature_count = layer.featureCount()
+        feature_count = raw_feature_count if raw_feature_count is not None and raw_feature_count >= 0 else 0
         
         try:
             # Get file path

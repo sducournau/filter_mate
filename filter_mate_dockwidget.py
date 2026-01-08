@@ -9790,17 +9790,23 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         import time
         skip_combobox_sync = False
         # v3.0.12: Extended protection window from 500ms to 2000ms
+        # v3.0.10: CRITICAL FIX - Extended to 5000ms to cover all async refresh timers
         # The canvas refresh can be scheduled up to 1500ms after filter completion
-        # (see _single_canvas_refresh in filter_task.py), so we need to protect
-        # against layer changes triggered by these delayed refreshes
-        POST_FILTER_PROTECTION_WINDOW = 2.0  # seconds
+        # (see _single_canvas_refresh in filter_task.py), plus layer.reload() can
+        # trigger async provider refresh that takes longer on large datasets
+        POST_FILTER_PROTECTION_WINDOW = 5.0  # seconds
         if getattr(self, '_filter_completed_time', 0) > 0:
             elapsed = time.time() - self._filter_completed_time
             if elapsed < POST_FILTER_PROTECTION_WINDOW:
                 saved_layer_id = getattr(self, '_saved_layer_id_before_filter', None)
-                if saved_layer_id and layer and layer.id() != saved_layer_id:
-                    skip_combobox_sync = True
-                    logger.info(f"v3.0.12: 🛡️ _synchronize_layer_widgets BLOCKED combobox sync - within {POST_FILTER_PROTECTION_WINDOW}s protection window (elapsed={elapsed:.3f}s)")
+                # v3.0.17: CRITICAL FIX - Also block if layer is None during protection window
+                # Previously only blocked if layer was different from saved_layer_id,
+                # but if layer=None, this check failed and combobox could be changed
+                if saved_layer_id:
+                    if layer is None or layer.id() != saved_layer_id:
+                        skip_combobox_sync = True
+                        layer_name = layer.name() if layer else "(None)"
+                        logger.info(f"v3.0.17: 🛡️ _synchronize_layer_widgets BLOCKED combobox sync - layer={layer_name} during protection window (elapsed={elapsed:.3f}s)")
         
         # Always synchronize comboBox_filtering_current_layer with current_layer
         # v2.9.42: Skip if within post-filter protection window
@@ -10478,10 +10484,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.debug(f"v3.0.14: 🛡️ _is_layer_truly_deleted BLOCKED - filtering in progress (layer={layer.name() if hasattr(layer, 'name') else 'unknown'})")
             return False
 
-        # v3.0.14: CRITICAL - Within 2 seconds after filtering, NEVER consider layer as deleted
+        # v3.0.14: CRITICAL - Within 5 seconds after filtering, NEVER consider layer as deleted
         # Canvas refresh and layer tree updates can make the layer appear deleted temporarily
+        # v3.0.10: Extended to 5s to cover layer.reload() async operations on large datasets
         import time
-        POST_FILTER_PROTECTION_WINDOW = 2.0  # seconds - must cover all delayed canvas refresh timers
+        POST_FILTER_PROTECTION_WINDOW = 5.0  # seconds - must cover all delayed canvas refresh timers
         if getattr(self, '_filter_completed_time', 0) > 0:
             elapsed = time.time() - self._filter_completed_time
             if elapsed < POST_FILTER_PROTECTION_WINDOW:
@@ -10518,6 +10525,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         v2.9.26: Added filtering protection - ignore layer changes during filtering.
         v3.0.12: Extended time-based protection from 500ms to 2000ms to cover delayed canvas refresh.
         """
+        # v3.0.17: DEBUG - Log every call to QGIS MessageLog for debugging
+        layer_name = layer.name() if layer else "(None)"
+        from qgis.core import QgsMessageLog, Qgis
+        import traceback
+        # Get abbreviated stack trace to identify caller
+        stack = traceback.extract_stack()
+        caller_info = " <- ".join([f"{frame.name}:{frame.lineno}" for frame in stack[-4:-1]])
+        QgsMessageLog.logMessage(
+            f"v3.0.17: ⚡ current_layer_changed CALLED with layer='{layer_name}' | caller: {caller_info}",
+            "FilterMate", Qgis.Warning
+        )
+        
         # CRITICAL: Check lock BEFORE any processing
         if self._updating_current_layer:
             return
@@ -10534,7 +10553,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # up to 1500ms after filter completion (_single_canvas_refresh in filter_task.py),
         # so we need a 2000ms protection window to prevent unwanted layer changes.
         import time
-        POST_FILTER_PROTECTION_WINDOW = 2.0  # seconds - must cover refresh_delay (1500ms) + margin
+        # v3.0.10: CRITICAL FIX - Extended to 5.0s to cover all async operations
+        # layer.reload() and canvas.refresh() can trigger signals >2s after filter completion
+        POST_FILTER_PROTECTION_WINDOW = 5.0  # seconds - must cover refresh_delay (1500ms) + layer.reload() + margin
         if getattr(self, '_filter_completed_time', 0) > 0:
             elapsed = time.time() - self._filter_completed_time
             if elapsed < POST_FILTER_PROTECTION_WINDOW:
@@ -10547,18 +10568,49 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
                 # Case 1: layer=None - BLOCK to prevent auto-selection of wrong layer
                 if layer is None:
-                    logger.info(f"v3.0.14: 🛡️ current_layer_changed BLOCKED - layer=None during protection window (elapsed={elapsed:.3f}s)")
+                    logger.info(f"v3.0.15: 🛡️ current_layer_changed BLOCKED - layer=None during protection window (elapsed={elapsed:.3f}s)")
                     # Ensure combobox and current_layer stay on saved layer
+                    from qgis.core import QgsProject
+                    restore_layer = None
+                    
+                    # Try saved_layer_id first
                     if saved_layer_id:
-                        from qgis.core import QgsProject
-                        saved_layer = QgsProject.instance().mapLayer(saved_layer_id)
-                        if saved_layer and saved_layer.isValid():
-                            if not self.current_layer or self.current_layer.id() != saved_layer_id:
+                        restore_layer = QgsProject.instance().mapLayer(saved_layer_id)
+                    
+                    # v3.0.15: CRITICAL FIX - Fallback to current_layer if saved_layer_id unavailable
+                    # This fixes the OGR filtering bug where combobox becomes empty
+                    if not restore_layer and self.current_layer:
+                        try:
+                            if not sip.isdeleted(self.current_layer) and self.current_layer.isValid():
+                                restore_layer = self.current_layer
+                                logger.info(f"v3.0.15: 🔄 Using current_layer '{self.current_layer.name()}' as fallback (saved_layer_id unavailable)")
+                        except (RuntimeError, AttributeError):
+                            pass
+                    
+                    # v3.0.15: Last resort - get current combobox layer
+                    if not restore_layer:
+                        combo_layer = self.comboBox_filtering_current_layer.currentLayer()
+                        if combo_layer and combo_layer.isValid():
+                            restore_layer = combo_layer
+                            logger.info(f"v3.0.15: 🔄 Using combobox layer '{combo_layer.name()}' as last resort")
+                    
+                    if restore_layer and restore_layer.isValid():
+                        if not self.current_layer or self.current_layer.id() != restore_layer.id():
+                            self.comboBox_filtering_current_layer.blockSignals(True)
+                            self.comboBox_filtering_current_layer.setLayer(restore_layer)
+                            self.comboBox_filtering_current_layer.blockSignals(False)
+                            self.current_layer = restore_layer
+                            logger.info(f"v3.0.15: ✅ Restored to '{restore_layer.name()}' after blocking layer=None")
+                        else:
+                            # Just ensure combobox shows the correct layer
+                            current_combo = self.comboBox_filtering_current_layer.currentLayer()
+                            if not current_combo or current_combo.id() != self.current_layer.id():
                                 self.comboBox_filtering_current_layer.blockSignals(True)
-                                self.comboBox_filtering_current_layer.setLayer(saved_layer)
+                                self.comboBox_filtering_current_layer.setLayer(self.current_layer)
                                 self.comboBox_filtering_current_layer.blockSignals(False)
-                                self.current_layer = saved_layer
-                                logger.info(f"v3.0.14: ✅ Restored to '{saved_layer.name()}' after blocking layer=None")
+                                logger.info(f"v3.0.15: ✅ Synced combobox to existing current_layer '{self.current_layer.name()}'")
+                    else:
+                        logger.warning(f"v3.0.15: ⚠️ No valid layer to restore during protection window")
                     return
 
                 # Case 2: layer is different from saved layer - BLOCK to prevent unwanted change

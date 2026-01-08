@@ -127,8 +127,13 @@ class BackendSelectivityEstimator:
     @classmethod
     def _compute_layer_stats(cls, layer: QgsVectorLayer) -> LayerStats:
         """Compute statistics for a layer by sampling."""
+        # CRITICAL FIX v3.0.19: Protect against None/invalid feature count
+        # layer.featureCount() can return None if layer is invalid or -1 if unknown
+        raw_feature_count = layer.featureCount()
+        feature_count = raw_feature_count if raw_feature_count is not None and raw_feature_count >= 0 else 0
+        
         stats = LayerStats(
-            feature_count=layer.featureCount(),
+            feature_count=feature_count,
             extent=layer.extent() if layer.extent() and not layer.extent().isNull() else None,
             has_spatial_index=layer.hasSpatialIndex() if hasattr(layer, 'hasSpatialIndex') else False,
             geometry_type=layer.geometryType()

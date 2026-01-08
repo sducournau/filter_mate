@@ -2028,6 +2028,17 @@ class FilterMateApp:
                 self._current_layer_id_before_filter = None
                 logger.warning("v2.9.19: ⚠️ No current_layer to save before filtering")
             
+            # v3.0.18: CRITICAL FIX - Set _saved_layer_id_before_filter IMMEDIATELY at start of filtering
+            # Previously, this was only set in filter_engine_task_completed's finally block.
+            # BUT: canvas.refresh() and layer.reload() calls in FilterEngineTask.finished() can trigger
+            # currentLayerChanged signals BEFORE filter_engine_task_completed runs.
+            # This caused comboBox to lose its value for OGR (after first filter) and 
+            # Spatialite (during multistep step2) because the protection in current_layer_changed
+            # was checking _saved_layer_id_before_filter which wasn't set yet.
+            if self.dockwidget and self._current_layer_id_before_filter:
+                self.dockwidget._saved_layer_id_before_filter = self._current_layer_id_before_filter
+                logger.info(f"v3.0.18: 💾 Set _saved_layer_id_before_filter at START of filtering")
+            
             # v2.9.25: CRITICAL - Set filtering flag to prevent current_layer reset during filtering
             if self.dockwidget:
                 self.dockwidget._filtering_in_progress = True
@@ -3868,8 +3879,49 @@ class FilterMateApp:
             self.update_undo_redo_buttons()
         
         finally:
-            # v2.9.29: ALWAYS reset filtering protection
+            # v3.0.15: CRITICAL - Set time-based protection BEFORE resetting filtering flag
+            # This ensures delayed canvas refresh signals don't reset the combobox
             if self.dockwidget:
+                import time
+                self.dockwidget._filter_completed_time = time.time()
+                # Save current layer ID for protection window
+                if self.dockwidget.current_layer:
+                    self.dockwidget._saved_layer_id_before_filter = self.dockwidget.current_layer.id()
+                    saved_layer_id = self.dockwidget.current_layer.id()
+                    
+                    # v3.0.17: CRITICAL - Add delayed combobox verification checks
+                    # Same as in filter_engine_task_completed() to catch async changes
+                    def restore_combobox_if_needed():
+                        """Check and restore combobox to saved layer if it was changed."""
+                        try:
+                            if not self.dockwidget:
+                                return
+                            saved_layer = QgsProject.instance().mapLayer(saved_layer_id)
+                            if saved_layer and saved_layer.isValid():
+                                current_combo = self.dockwidget.comboBox_filtering_current_layer.currentLayer()
+                                current_name = current_combo.name() if current_combo else "(None)"
+                                if not current_combo or current_combo.id() != saved_layer.id():
+                                    from qgis.core import QgsMessageLog, Qgis
+                                    QgsMessageLog.logMessage(
+                                        f"v3.0.17: 🔧 UNDO DELAYED CHECK - Restoring from '{current_name}' to '{saved_layer.name()}'",
+                                        "FilterMate", Qgis.Warning
+                                    )
+                                    self.dockwidget.comboBox_filtering_current_layer.blockSignals(True)
+                                    self.dockwidget.comboBox_filtering_current_layer.setLayer(saved_layer)
+                                    self.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
+                                    self.dockwidget.current_layer = saved_layer
+                        except Exception as e:
+                            logger.debug(f"v3.0.17: Error in delayed undo combobox check: {e}")
+                    
+                    # Schedule multiple checks to catch async signal-triggered changes
+                    from qgis.PyQt.QtCore import QTimer
+                    for delay in [200, 600, 1000, 1500, 2000]:
+                        QTimer.singleShot(delay, restore_combobox_if_needed)
+                    logger.info(f"v3.0.17: 📋 handle_undo - Scheduled 5 delayed combobox verification checks")
+                    
+                logger.info("v3.0.15: ⏱️ handle_undo - 2000ms protection window enabled")
+                
+                # v2.9.29: ALWAYS reset filtering protection
                 self.dockwidget._filtering_in_progress = False
                 logger.info("v2.9.29: 🔓 handle_undo - Filtering protection disabled")
     
@@ -3988,8 +4040,49 @@ class FilterMateApp:
             self.update_undo_redo_buttons()
         
         finally:
-            # v2.9.29: ALWAYS reset filtering protection
+            # v3.0.15: CRITICAL - Set time-based protection BEFORE resetting filtering flag
+            # This ensures delayed canvas refresh signals don't reset the combobox
             if self.dockwidget:
+                import time
+                self.dockwidget._filter_completed_time = time.time()
+                # Save current layer ID for protection window
+                if self.dockwidget.current_layer:
+                    self.dockwidget._saved_layer_id_before_filter = self.dockwidget.current_layer.id()
+                    saved_layer_id = self.dockwidget.current_layer.id()
+                    
+                    # v3.0.17: CRITICAL - Add delayed combobox verification checks
+                    # Same as in filter_engine_task_completed() to catch async changes
+                    def restore_combobox_if_needed():
+                        """Check and restore combobox to saved layer if it was changed."""
+                        try:
+                            if not self.dockwidget:
+                                return
+                            saved_layer = QgsProject.instance().mapLayer(saved_layer_id)
+                            if saved_layer and saved_layer.isValid():
+                                current_combo = self.dockwidget.comboBox_filtering_current_layer.currentLayer()
+                                current_name = current_combo.name() if current_combo else "(None)"
+                                if not current_combo or current_combo.id() != saved_layer.id():
+                                    from qgis.core import QgsMessageLog, Qgis
+                                    QgsMessageLog.logMessage(
+                                        f"v3.0.17: 🔧 REDO DELAYED CHECK - Restoring from '{current_name}' to '{saved_layer.name()}'",
+                                        "FilterMate", Qgis.Warning
+                                    )
+                                    self.dockwidget.comboBox_filtering_current_layer.blockSignals(True)
+                                    self.dockwidget.comboBox_filtering_current_layer.setLayer(saved_layer)
+                                    self.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
+                                    self.dockwidget.current_layer = saved_layer
+                        except Exception as e:
+                            logger.debug(f"v3.0.17: Error in delayed redo combobox check: {e}")
+                    
+                    # Schedule multiple checks to catch async signal-triggered changes
+                    from qgis.PyQt.QtCore import QTimer
+                    for delay in [200, 600, 1000, 1500, 2000]:
+                        QTimer.singleShot(delay, restore_combobox_if_needed)
+                    logger.info(f"v3.0.17: 📋 handle_redo - Scheduled 5 delayed combobox verification checks")
+                    
+                logger.info("v3.0.15: ⏱️ handle_redo - 2000ms protection window enabled")
+                
+                # v2.9.29: ALWAYS reset filtering protection
                 self.dockwidget._filtering_in_progress = False
                 logger.info("v2.9.29: 🔓 handle_redo - Filtering protection disabled")
     
@@ -4313,13 +4406,26 @@ class FilterMateApp:
                     # and BEFORE resetting the filtering flag
                     if hasattr(self, '_current_layer_id_before_filter') and self._current_layer_id_before_filter:
                         restored_layer = QgsProject.instance().mapLayer(self._current_layer_id_before_filter)
+                        # v3.0.16: DEBUG - Log current combobox state to QGIS MessageLog
+                        current_combo_layer = self.dockwidget.comboBox_filtering_current_layer.currentLayer()
+                        combo_name = current_combo_layer.name() if current_combo_layer else "(None)"
+                        restored_name = restored_layer.name() if restored_layer else "(None)"
+                        from qgis.core import QgsMessageLog, Qgis
+                        QgsMessageLog.logMessage(
+                            f"v3.0.16: 🔍 Combobox state: current='{combo_name}', should_be='{restored_name}'",
+                            "FilterMate", Qgis.Info
+                        )
+                        
                         if restored_layer and restored_layer.isValid():
-                            current_combo_layer = self.dockwidget.comboBox_filtering_current_layer.currentLayer()
                             if not current_combo_layer or current_combo_layer.id() != restored_layer.id():
                                 # Block signals to prevent triggering during setLayer
                                 self.dockwidget.comboBox_filtering_current_layer.blockSignals(True)
                                 self.dockwidget.comboBox_filtering_current_layer.setLayer(restored_layer)
                                 self.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
+                                QgsMessageLog.logMessage(
+                                    f"v3.0.16: ✅ FORCED combobox to '{restored_layer.name()}'",
+                                    "FilterMate", Qgis.Info
+                                )
                                 logger.info(f"v2.9.26: ✅ FINALLY - Forced combobox to '{restored_layer.name()}'")
                             # v3.0.10: Also ensure current_layer is set correctly BEFORE signal reconnection
                             if self.dockwidget.current_layer is None or self.dockwidget.current_layer.id() != restored_layer.id():
@@ -4398,8 +4504,19 @@ class FilterMateApp:
                                 saved_layer = QgsProject.instance().mapLayer(saved_layer_id)
                                 if saved_layer and saved_layer.isValid():
                                     current_combo = self.dockwidget.comboBox_filtering_current_layer.currentLayer()
+                                    current_name = current_combo.name() if current_combo else "(None)"
+                                    # v3.0.16: Log every check to QGIS MessageLog
+                                    from qgis.core import QgsMessageLog, Qgis
+                                    QgsMessageLog.logMessage(
+                                        f"v3.0.16: 🔄 DELAYED CHECK - combobox='{current_name}', expected='{saved_layer.name()}'",
+                                        "FilterMate", Qgis.Info
+                                    )
                                     if not current_combo or current_combo.id() != saved_layer.id():
                                         logger.info(f"v3.0.13: 🔧 DELAYED CHECK - Combobox was changed, restoring to '{saved_layer.name()}'")
+                                        QgsMessageLog.logMessage(
+                                            f"v3.0.16: 🔧 RESTORING combobox from '{current_name}' to '{saved_layer.name()}'",
+                                            "FilterMate", Qgis.Warning
+                                        )
                                         self.dockwidget.comboBox_filtering_current_layer.blockSignals(True)
                                         self.dockwidget.comboBox_filtering_current_layer.setLayer(saved_layer)
                                         self.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
@@ -4408,10 +4525,12 @@ class FilterMateApp:
                                 logger.debug(f"v3.0.13: Error in delayed combobox check: {e}")
                         
                         # Schedule multiple checks to catch async signal-triggered changes
+                        # v3.0.10: CRITICAL FIX - Extended delayed checks to cover 5s protection window
+                        # layer.reload() can trigger async signals that arrive after 2s
                         from qgis.PyQt.QtCore import QTimer
-                        for delay in [200, 600, 1000, 1500, 2000]:
+                        for delay in [200, 600, 1000, 1500, 2000, 2500, 3000, 4000, 5000]:
                             QTimer.singleShot(delay, restore_combobox_if_needed)
-                        logger.info(f"v3.0.13: 📋 Scheduled 5 delayed combobox verification checks")
+                        logger.info(f"v3.0.10: 📋 Scheduled 9 delayed combobox verification checks (up to 5s)")
                     
                     # v2.9.26: CRITICAL - Reset filtering flag LAST to ensure all operations complete
                     # while the flag is still protecting against unwanted signal emissions

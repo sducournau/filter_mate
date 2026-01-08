@@ -1065,7 +1065,7 @@ class PopulateListEngineTask(QgsTask):
         # Task cancellation is normal user behavior (switching layers, changing selection, etc.)
         # Log at Info level to reduce noise in the log panel
         QgsMessageLog.logMessage(
-            '"{name}" was canceled'.format(name=self.description()),
+            f'"{self.description()}" was canceled',
             'FilterMate', Qgis.Info)
         super().cancel()
 
@@ -1085,7 +1085,7 @@ class PopulateListEngineTask(QgsTask):
                         layer_name = self._cached_layer_name
                     else:
                         layer_name = 'Unknown (layer deleted)'
-                except:
+                except Exception:  # FIX v3.0.20: Avoid bare except clause
                     layer_name = 'Unknown (unable to access layer)'
                 
                 QgsMessageLog.logMessage(
@@ -1099,7 +1099,7 @@ class PopulateListEngineTask(QgsTask):
                         layer_name = self._cached_layer_name
                     else:
                         layer_name = 'Unknown (layer deleted)'
-                except:
+                except Exception:  # FIX v3.0.20: Avoid bare except clause
                     layer_name = 'Unknown (unable to access layer)'
                 
                 error_details = f'Task "{self.action}" failed for layer "{layer_name}": {str(self.exception)}'

@@ -7856,6 +7856,11 @@ class FilterEngineTask(QgsTask):
                 # OGR fallback downloads ALL features from PostgreSQL which is impractical
                 # for tables with millions of rows.
                 layer_feature_count = layer.featureCount()
+                # CRITICAL FIX v3.0.10: Protect against None/invalid feature count
+                # This fixes TypeError '<' not supported between 'int' and 'NoneType'
+                if layer_feature_count is None or layer_feature_count < 0:
+                    logger.warning(f"layer.featureCount() returned {layer_feature_count} for {layer.name()}, using 0")
+                    layer_feature_count = 0
                 is_large_pg_table = (backend_name == 'postgresql' and 
                                      layer.providerType() == 'postgres' and 
                                      layer_feature_count > 100000)
@@ -11487,10 +11492,14 @@ class FilterEngineTask(QgsTask):
                     # For OGR/Spatialite, reloadData() can block for a long time
                     # on large FID IN (...) filters, causing QGIS to freeze.
                     # triggerRepaint() is sufficient for file-based providers.
+                    # 
+                    # v3.0.10: CRITICAL FIX - Block signals during reload() to prevent
+                    # currentLayerChanged signals from triggering combobox changes
                     if provider_type == 'postgres':
                         # PostgreSQL: Force reload for complex filters (MV-based)
                         if self._is_complex_filter(subset, provider_type):
                             try:
+                                layer.blockSignals(True)  # v3.0.10: Block async signals
                                 layer.dataProvider().reloadData()
                                 layers_reloaded += 1
                             except Exception as reload_err:
@@ -11499,28 +11508,37 @@ class FilterEngineTask(QgsTask):
                                     layer.reload()
                                 except Exception:
                                     pass
+                            finally:
+                                layer.blockSignals(False)  # v3.0.10: Always unblock
                         else:
                             try:
+                                layer.blockSignals(True)  # v3.0.10: Block async signals
                                 layer.reload()
                             except Exception:
                                 pass
+                            finally:
+                                layer.blockSignals(False)  # v3.0.10: Always unblock
                     # v2.9.24: For Spatialite, use reload() to ensure features display correctly on second filter
                     # For OGR without FID filters, just triggerRepaint() is enough
                     elif provider_type == 'spatialite':
                         try:
+                            layer.blockSignals(True)  # v3.0.10: Block async signals
                             layer.reload()
                             layers_reloaded += 1
                             logger.debug(f"Forced reload() for Spatialite layer {layer.name()}")
                         except Exception as reload_err:
                             logger.debug(f"reload() failed for {layer.name()}: {reload_err}")
+                        finally:
+                            layer.blockSignals(False)  # v3.0.10: Always unblock
                     # v2.6.6: For OGR, just triggerRepaint() - NO reloadData()
                     # This prevents the freeze caused by re-evaluating large FID IN filters
                     
                     # v2.6.5: Skip updateExtents for large layers to prevent freeze
+                    # v3.0.10: Also protect against None feature_count
                     feature_count = layer.featureCount()
-                    if feature_count >= 0 and feature_count < MAX_FEATURES_FOR_UPDATE_EXTENTS:
+                    if feature_count is not None and feature_count >= 0 and feature_count < MAX_FEATURES_FOR_UPDATE_EXTENTS:
                         layer.updateExtents()
-                    # else: skip expensive updateExtents for very large layers
+                    # else: skip expensive updateExtents for very large layers or unknown count
                     
                     layer.triggerRepaint()
                     layers_repainted += 1
@@ -11619,8 +11637,9 @@ class FilterEngineTask(QgsTask):
                         # This prevents freeze on large FID IN filters
                         
                         # v2.6.6: Skip updateExtents for large layers to prevent freeze
+                        # v3.0.10: Protect against None feature_count
                         feature_count = layer.featureCount()
-                        if feature_count >= 0 and feature_count < MAX_FEATURES_FOR_UPDATE_EXTENTS:
+                        if feature_count is not None and feature_count >= 0 and feature_count < MAX_FEATURES_FOR_UPDATE_EXTENTS:
                             layer.updateExtents()
                         layer.triggerRepaint()
                         
@@ -11857,8 +11876,9 @@ class FilterEngineTask(QgsTask):
                             if layer.providerType() in ('postgres', 'spatialite', 'ogr'):
                                 layer.reload()
                             # v2.6.5: Skip updateExtents for large layers
+                            # v3.0.10: Protect against None feature_count
                             feature_count = layer.featureCount()
-                            if feature_count >= 0 and feature_count < MAX_FEATURES_FOR_UPDATE_EXTENTS:
+                            if feature_count is not None and feature_count >= 0 and feature_count < MAX_FEATURES_FOR_UPDATE_EXTENTS:
                                 layer.updateExtents()
                             layer.triggerRepaint()
                             
@@ -11889,8 +11909,9 @@ class FilterEngineTask(QgsTask):
                                 if layer.providerType() in ('postgres', 'spatialite', 'ogr'):
                                     layer.reload()
                                 # v2.6.5: Skip updateExtents for large layers
+                                # v3.0.10: Protect against None feature_count
                                 feature_count = layer.featureCount()
-                                if feature_count >= 0 and feature_count < MAX_FEATURES_FOR_UPDATE_EXTENTS:
+                                if feature_count is not None and feature_count >= 0 and feature_count < MAX_FEATURES_FOR_UPDATE_EXTENTS:
                                     layer.updateExtents()
                                 layer.triggerRepaint()
                                 

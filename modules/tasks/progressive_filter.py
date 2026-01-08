@@ -570,9 +570,10 @@ class TwoPhaseFilter:
             logger.debug(f"Could not parse bbox from WKT: {e}")
             
             # Fallback: use database to compute bbox
+            # FIX v3.0.20 (CRIT-002): Use parameterized query to prevent SQL injection
             try:
                 with self.connection.cursor() as cursor:
-                    cursor.execute(f"SELECT ST_Extent(ST_GeomFromText('{wkt}'))")
+                    cursor.execute("SELECT ST_Extent(ST_GeomFromText(%s))", (wkt,))
                     result = cursor.fetchone()
                     if result and result[0]:
                         # Parse BOX(xmin ymin, xmax ymax) format

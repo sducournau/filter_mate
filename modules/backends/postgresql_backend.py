@@ -1642,7 +1642,12 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                 old_subset = self._apply_numeric_type_casting(old_subset, layer)
             
             # Get feature count to determine strategy
+            # CRITICAL FIX v3.0.10: Protect against None/invalid feature count
+            # This fixes TypeError in multi-step filtering when featureCount() returns None
             feature_count = layer.featureCount()
+            if feature_count is None or feature_count < 0:
+                self.log_warning(f"layer.featureCount() returned {feature_count} for {layer.name()}, using 0")
+                feature_count = 0
             
             # Check if layer uses ctid (no primary key)
             from ..appUtils import get_primary_key_name
@@ -2464,7 +2469,13 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             else:
                 # Fallback: use QGIS feature count (slower but accurate)
                 self.log_debug("PostgreSQL statistics unavailable, using layer.featureCount()")
-                return layer.featureCount()
+                count = layer.featureCount()
+                # CRITICAL FIX v3.0.10: Protect against None/invalid feature count
+                # featureCount() can return None if layer is invalid or -1 if unknown
+                if count is None or count < 0:
+                    self.log_warning(f"layer.featureCount() returned {count}, using 0 as fallback")
+                    return 0
+                return count
                 
         except Exception as e:
             self.log_debug(f"Error getting fast count: {e}, falling back to featureCount()")
@@ -2482,7 +2493,12 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                         cursor.close()
                     except Exception:
                         pass
-            return layer.featureCount()
+            # CRITICAL FIX v3.0.10: Protect against None/invalid feature count
+            count = layer.featureCount()
+            if count is None or count < 0:
+                self.log_warning(f"layer.featureCount() returned {count} in exception handler, using 0")
+                return 0
+            return count
     
     def _apply_direct(self, layer: QgsVectorLayer, expression: str) -> bool:
         """
