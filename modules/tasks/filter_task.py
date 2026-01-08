@@ -1116,6 +1116,77 @@ class FilterEngineTask(QgsTask):
             logger.warning(f"TaskBridge delegation failed: {e}")
             return None  # Fallback to legacy
 
+    def _try_v3_spatial_filter(self, layer, layer_props, predicates):
+        """
+        Try to execute spatial filter using v3 backends via TaskBridge.
+        
+        This is part of the Strangler Fig migration pattern for geometric filtering.
+        Complex filters or failures fall back to legacy code.
+        
+        Args:
+            layer: Target QgsVectorLayer to filter
+            layer_props: Dict containing layer properties
+            predicates: List of spatial predicates (e.g., ['intersects'])
+            
+        Returns:
+            bool: True/False if v3 handled the filter
+            None: If v3 cannot handle (fallback to legacy)
+        """
+        if not self._task_bridge or not self._task_bridge.is_available():
+            return None
+        
+        # v3 spatial filter is experimental - only enable for simple cases
+        # Skip for now: complex predicates, buffers, multi-step
+        buffer_value = self.task_parameters.get("task", {}).get("buffer_value", 0)
+        if buffer_value and buffer_value > 0:
+            logger.debug("TaskBridge: buffer active - using legacy spatial code")
+            return None
+        
+        if len(predicates) > 1:
+            logger.debug("TaskBridge: multiple predicates - using legacy spatial code")
+            return None
+        
+        try:
+            logger.info("=" * 60)
+            logger.info("🚀 V3 TASKBRIDGE: Attempting spatial filter")
+            logger.info("=" * 60)
+            logger.info(f"   Layer: '{layer.name()}'")
+            logger.info(f"   Predicates: {predicates}")
+            
+            bridge_result = self._task_bridge.execute_spatial_filter(
+                source_layer=self.source_layer,
+                target_layers=[layer],
+                predicates=predicates,
+                buffer_value=0.0,
+                combine_operator=self._get_combine_operator() or 'AND'
+            )
+            
+            if bridge_result.status == BridgeStatus.SUCCESS and bridge_result.success:
+                logger.info(f"✅ V3 TaskBridge SPATIAL SUCCESS")
+                logger.info(f"   Backend used: {bridge_result.backend_used}")
+                logger.info(f"   Feature count: {bridge_result.feature_count}")
+                logger.info(f"   Execution time: {bridge_result.execution_time_ms:.1f}ms")
+                
+                # Store in task_parameters for metrics
+                if 'actual_backends' not in self.task_parameters:
+                    self.task_parameters['actual_backends'] = {}
+                self.task_parameters['actual_backends'][layer.id()] = f"v3_{bridge_result.backend_used}"
+                
+                return True
+                
+            elif bridge_result.status == BridgeStatus.FALLBACK:
+                logger.info(f"⚠️ V3 TaskBridge SPATIAL: FALLBACK requested")
+                logger.info(f"   Reason: {bridge_result.error_message}")
+                return None
+                
+            else:
+                logger.debug(f"TaskBridge spatial: status={bridge_result.status}")
+                return None
+                
+        except Exception as e:
+            logger.warning(f"TaskBridge spatial delegation failed: {e}")
+            return None
+
     def _initialize_source_filtering_parameters(self):
         """Extract and initialize all parameters needed for source layer filtering"""
         self.param_source_old_subset = ''
@@ -7681,6 +7752,21 @@ class FilterEngineTask(QgsTask):
             )
             if not layer_name:
                 return False
+            
+            # ================================================================
+            # V3 TASKBRIDGE SPATIAL DELEGATION (Strangler Fig Pattern)
+            # ================================================================
+            # Try v3 backend via TaskBridge for simple spatial filters.
+            # This progressively migrates filtering logic to hexagonal architecture.
+            # Fallback to legacy code if TaskBridge fails or is not available.
+            # ================================================================
+            if self._task_bridge and hasattr(self, 'current_predicates') and self.current_predicates:
+                v3_result = self._try_v3_spatial_filter(layer, layer_props, self.current_predicates)
+                if v3_result is not None:
+                    # v3 backend handled the filter
+                    return v3_result
+                # v3_result is None means fallback to legacy code
+                logger.debug("TaskBridge: Falling back to legacy spatial filter")
             
             # Verify spatial index exists before filtering - critical for performance
             self._verify_and_create_spatial_index(layer, layer_name)
