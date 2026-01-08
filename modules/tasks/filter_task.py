@@ -12548,3 +12548,11 @@ class FilterEngineTask(QgsTask):
                         logger.debug(f"Cleaned up temp layers for backend: {type(backend).__name__}")
         except Exception as cleanup_err:
             logger.debug(f"OGR temp layer cleanup failed (non-critical): {cleanup_err}")
+        
+        # MIG-023: Log TaskBridge metrics for migration validation
+        if hasattr(self, '_task_bridge') and self._task_bridge:
+            try:
+                metrics_report = self._task_bridge.get_metrics_report()
+                logger.info(metrics_report)
+            except Exception as metrics_err:
+                logger.debug(f"TaskBridge metrics logging failed: {metrics_err}")

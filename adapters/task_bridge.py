@@ -144,6 +144,12 @@ class TaskBridge:
             'fallbacks': 0,
             'errors': 0,
             'total_time_ms': 0.0,
+            # Per-operation type metrics for migration validation
+            'by_type': {
+                'attribute': {'count': 0, 'success': 0, 'time_ms': 0.0},
+                'spatial': {'count': 0, 'success': 0, 'time_ms': 0.0},
+                'multi_step': {'count': 0, 'success': 0, 'time_ms': 0.0},
+            }
         }
         
         if auto_initialize:
@@ -191,7 +197,59 @@ class TaskBridge:
             'fallbacks': 0,
             'errors': 0,
             'total_time_ms': 0.0,
+            'by_type': {
+                'attribute': {'count': 0, 'success': 0, 'time_ms': 0.0},
+                'spatial': {'count': 0, 'success': 0, 'time_ms': 0.0},
+                'multi_step': {'count': 0, 'success': 0, 'time_ms': 0.0},
+            }
         }
+    
+    def _update_type_metrics(self, op_type: str, success: bool, time_ms: float) -> None:
+        """Update metrics for a specific operation type."""
+        if op_type in self._metrics['by_type']:
+            self._metrics['by_type'][op_type]['count'] += 1
+            self._metrics['by_type'][op_type]['time_ms'] += time_ms
+            if success:
+                self._metrics['by_type'][op_type]['success'] += 1
+    
+    def get_metrics_report(self) -> str:
+        """
+        Generate a formatted metrics report for migration validation.
+        
+        Returns:
+            str: Multi-line formatted report
+        """
+        m = self._metrics
+        lines = [
+            "=" * 60,
+            "📊 TASKBRIDGE V3 MIGRATION METRICS",
+            "=" * 60,
+            f"Total Operations: {m['operations']}",
+            f"  ✅ Successes: {m['successes']} ({self._pct(m['successes'], m['operations'])})",
+            f"  ⚠️ Fallbacks: {m['fallbacks']} ({self._pct(m['fallbacks'], m['operations'])})",
+            f"  ❌ Errors: {m['errors']} ({self._pct(m['errors'], m['operations'])})",
+            f"Total V3 Time: {m['total_time_ms']:.1f}ms",
+            "",
+            "By Operation Type:",
+        ]
+        
+        for op_type, stats in m['by_type'].items():
+            if stats['count'] > 0:
+                avg_time = stats['time_ms'] / stats['count'] if stats['count'] > 0 else 0
+                success_rate = self._pct(stats['success'], stats['count'])
+                lines.append(
+                    f"  {op_type}: {stats['count']} ops, {success_rate} success, "
+                    f"avg {avg_time:.1f}ms"
+                )
+        
+        lines.append("=" * 60)
+        return "\n".join(lines)
+    
+    def _pct(self, part: int, total: int) -> str:
+        """Calculate percentage string."""
+        if total == 0:
+            return "0%"
+        return f"{(part / total) * 100:.1f}%"
     
     # ========================================================================
     # Spatial Filtering Operations
@@ -262,6 +320,7 @@ class TaskBridge:
             elapsed_ms = (time.time() - start_time) * 1000
             self._metrics['successes'] += 1
             self._metrics['total_time_ms'] += elapsed_ms
+            self._update_type_metrics('spatial', True, elapsed_ms)
             
             return BridgeResult(
                 status=BridgeStatus.SUCCESS,
@@ -277,6 +336,7 @@ class TaskBridge:
             elapsed_ms = (time.time() - start_time) * 1000
             self._metrics['errors'] += 1
             self._metrics['total_time_ms'] += elapsed_ms
+            self._update_type_metrics('spatial', False, elapsed_ms)
             
             logger.warning(f"TaskBridge.execute_spatial_filter failed: {e}")
             return BridgeResult.fallback(str(e))
@@ -322,6 +382,7 @@ class TaskBridge:
             elapsed_ms = (time.time() - start_time) * 1000
             self._metrics['successes'] += 1
             self._metrics['total_time_ms'] += elapsed_ms
+            self._update_type_metrics('attribute', result.is_success, elapsed_ms)
             
             return BridgeResult(
                 status=BridgeStatus.SUCCESS,
@@ -338,6 +399,7 @@ class TaskBridge:
             elapsed_ms = (time.time() - start_time) * 1000
             self._metrics['errors'] += 1
             self._metrics['total_time_ms'] += elapsed_ms
+            self._update_type_metrics('attribute', False, elapsed_ms)
             
             logger.warning(f"TaskBridge.execute_attribute_filter failed: {e}")
             return BridgeResult.fallback(str(e))
@@ -479,12 +541,14 @@ class TaskBridge:
             response = filter_service.apply_multi_step_filter(request)
             
             elapsed_ms = (time.time() - start_time) * 1000
+            success = not response.stopped_early or response.stop_reason == ""
             self._metrics['successes'] += 1
             self._metrics['total_time_ms'] += elapsed_ms
+            self._update_type_metrics('multi_step', success, elapsed_ms)
             
             return BridgeResult(
                 status=BridgeStatus.SUCCESS,
-                success=not response.stopped_early or response.stop_reason == "",
+                success=success,
                 feature_ids=list(response.final_feature_ids),
                 feature_count=len(response.final_feature_ids),
                 expression=f"multi-step ({response.completed_steps} steps)",
@@ -497,6 +561,7 @@ class TaskBridge:
             elapsed_ms = (time.time() - start_time) * 1000
             self._metrics['errors'] += 1
             self._metrics['total_time_ms'] += elapsed_ms
+            self._update_type_metrics('multi_step', False, elapsed_ms)
             
             logger.warning(f"TaskBridge.execute_multi_step_filter failed: {e}")
             return BridgeResult.fallback(str(e))
