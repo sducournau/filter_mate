@@ -30,17 +30,17 @@
 
 ### 🔄 IN PROGRESS
 
-| ID      | Story                   | Priorité | Assigné | Progression | Notes                                         |
-| ------- | ----------------------- | -------- | ------- | ----------- | --------------------------------------------- |
-| MIG-024 | Réduction FilterMateApp | 🟠 P1    | Dev     | 50%         | TaskParameterBuilder intégré, extraction TODO |
+| ID      | Story                   | Priorité | Assigné | Progression | Notes                                                   |
+| ------- | ----------------------- | -------- | ------- | ----------- | ------------------------------------------------------- |
+| MIG-024 | Réduction FilterMateApp | 🟠 P1    | Dev     | 60%         | TaskParameterBuilder + VariablesPersistenceManager done |
 
 ---
 
 ### 👀 REVIEW
 
-| ID      | Story                   | Priorité | Reviewer | PR/Branch |
-| ------- | ----------------------- | -------- | -------- | --------- |
-| MIG-025 | Intégration Controllers | 🔴 P0    | Dev      | main      |
+| ID  | Story | Priorité | Reviewer | PR/Branch |
+| --- | ----- | -------- | -------- | --------- |
+| -   | -     | -        | -        | -         |
 
 ---
 
@@ -64,6 +64,7 @@
 | MIG-031 | DI Container             | 🟠 P1    | 2026-01-08 | `infrastructure/di/container.py`              |
 | MIG-032 | App Bridge               | 🟠 P1    | 2026-01-08 | `adapters/app_bridge.py` (18KB)               |
 | MIG-023 | Réduction appTasks.py    | 🔴 P0    | 2026-01-08 | `adapters/qgis/tasks/` (multi_step, progress) |
+| MIG-025 | Intégration Controllers  | 🔴 P0    | 2026-01-08 | Délégation manage_task + FilterService DI     |
 
 ---
 

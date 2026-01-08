@@ -77,7 +77,7 @@ class MultiStepResponse:
         stopped_early: Whether execution stopped before last step
         stop_reason: Reason for early stop (if applicable)
     """
-    step_results: List[FilterResponse]
+    step_results: List['FilterResponse']  # Forward reference - defined below
     final_feature_ids: Set[int]
     total_execution_time_ms: float
     completed_steps: int
