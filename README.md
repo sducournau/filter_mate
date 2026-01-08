@@ -224,7 +224,38 @@
 
 ## 🏗️ Architecture
 
-FilterMate uses a **factory pattern** for automatic backend selection:
+FilterMate v3.0 uses a **hexagonal architecture** (ports & adapters) for maintainability and testability:
+
+```
+filter_mate/
+├── core/                    # Pure Python - Business Logic
+│   ├── domain/              # Value Objects & Entities
+│   ├── ports/               # Interfaces (Abstract Base Classes)
+│   └── services/            # Business Logic Services
+│
+├── adapters/                # External World Integration
+│   ├── backends/            # Filter Backends (PostgreSQL, Spatialite, OGR, Memory)
+│   │   ├── postgresql/      # PostgreSQL package (MV, optimizer)
+│   │   ├── spatialite/      # Spatialite package (cache, index)
+│   │   ├── ogr/             # OGR universal fallback
+│   │   └── memory/          # In-memory operations
+│   ├── qgis/                # QGIS-specific adapters
+│   │   ├── tasks/           # QgsTask hierarchy
+│   │   └── signals/         # Signal management
+│   └── repositories/        # Data access layer
+│
+├── ui/                      # User Interface Layer
+│   ├── controllers/         # UI Controllers (MVC pattern)
+│   ├── widgets/             # Custom widgets
+│   └── dialogs/             # Dialog windows
+│
+└── infrastructure/          # Cross-cutting concerns
+    ├── cache/               # Caching infrastructure
+    ├── config/              # Configuration management
+    └── logging/             # Logging infrastructure
+```
+
+### Legacy Backend Structure (for reference)
 
 ```
 modules/backends/
