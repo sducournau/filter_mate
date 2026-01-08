@@ -583,9 +583,10 @@ class FilterEngineTask(QgsTask):
             layer_name = layer_props.get("layer_name", "unknown")
             layer_id = layer_props.get("layer_id", "unknown")
             
-            # FIX v3.0.8: Log each layer being processed to QGIS message panel
+            # FIX v3.0.8: Log each layer being organized (NOT filtered yet)
+            # Note: Use different emoji to distinguish from actual filtering phase
             QgsMessageLog.logMessage(
-                f"🔄 Processing layer: {layer_name} ({provider_type})",
+                f"📂 Organizing layer: {layer_name} ({provider_type})",
                 "FilterMate", QgisLevel.Info
             )
             

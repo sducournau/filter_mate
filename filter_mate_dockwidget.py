@@ -5115,7 +5115,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                     "HAS_COMBINE_OPERATOR":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_current_layer_combine_operator, "SIGNALS":[("clicked", lambda state, x='has_combine_operator', custom_functions={"ON_CHANGE": lambda x: self.filtering_combine_operator_state_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
                                     "HAS_GEOMETRIC_PREDICATES":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_geometric_predicates, "SIGNALS":[("clicked", lambda state, x='has_geometric_predicates', custom_functions={"ON_CHANGE": lambda x: self.filtering_geometric_predicates_state_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
                                     "HAS_BUFFER_VALUE":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_buffer_value, "SIGNALS":[("clicked", lambda state, x='has_buffer_value', custom_functions={"ON_CHANGE": lambda x: self.filtering_buffer_property_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "HAS_BUFFER_TYPE":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_buffer_type, "SIGNALS":[("clicked", lambda state, x='has_buffer_type', custom_functions={"ON_CHANGE": lambda x: self.filtering_buffer_property_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
+                                    "HAS_BUFFER_TYPE":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_buffer_type, "SIGNALS":[("clicked", lambda state, x='has_buffer_type', custom_functions={"ON_CHANGE": lambda x: self.filtering_buffer_type_state_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
                                     "CURRENT_LAYER":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_current_layer, "SIGNALS":[("layerChanged", self.current_layer_changed)]},
                                     "LAYERS_TO_FILTER":{"TYPE":"CustomCheckableLayerComboBox", "WIDGET":self.checkableComboBoxLayer_filtering_layers_to_filter, "CUSTOM_LOAD_FUNCTION": lambda x: self.get_layers_to_filter(), "SIGNALS":[("checkedItemsChanged", lambda state, custom_functions={"CUSTOM_DATA": lambda x: self.get_layers_to_filter()}, x='layers_to_filter': self.layer_property_changed(x, state, custom_functions))]},
                                     "SOURCE_LAYER_COMBINE_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_source_layer_combine_operator, "SIGNALS":[("currentIndexChanged", lambda index, x='source_layer_combine_operator': self.layer_property_changed(x, self._index_to_combine_operator(index)))]},
@@ -9937,6 +9937,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.filtering_layers_to_filter_state_changed()
         self.filtering_combine_operator_state_changed()
         self.filtering_geometric_predicates_state_changed()
+        self.filtering_buffer_property_changed()
+        self.filtering_buffer_type_state_changed()
         
         # Update centroids source checkbox state based on current layer combobox
         self._update_centroids_source_checkbox_state()
@@ -10526,7 +10528,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.debug(f"v2.9.26: 🛡️ current_layer_changed BLOCKED - filtering in progress")
             return
         
-        # v3.0.12: CRITICAL - Block layer changes for 2000ms after filtering completes
+        # v3.0.14: CRITICAL - Block layer changes for 2000ms after filtering completes
         # Signals can be emitted asynchronously (e.g., from canvas refresh, layer tree updates)
         # after _filtering_in_progress is set to False. The canvas refresh can be scheduled
         # up to 1500ms after filter completion (_single_canvas_refresh in filter_task.py),
@@ -10536,10 +10538,32 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if getattr(self, '_filter_completed_time', 0) > 0:
             elapsed = time.time() - self._filter_completed_time
             if elapsed < POST_FILTER_PROTECTION_WINDOW:
-                # Check if the requested layer is different from the saved layer
                 saved_layer_id = getattr(self, '_saved_layer_id_before_filter', None)
-                if saved_layer_id and layer and layer.id() != saved_layer_id:
-                    logger.info(f"v3.0.12: 🛡️ current_layer_changed BLOCKED - within {POST_FILTER_PROTECTION_WINDOW}s of filter completion (elapsed={elapsed:.3f}s, requested={layer.name()})")
+
+                # v3.0.14: CRITICAL FIX - Block ALL layer change attempts during protection window
+                # Previously, we only blocked if layer was not None and different from saved_layer_id.
+                # But if layer=None, _ensure_valid_current_layer(None) could select wrong layer!
+                # Now we block ANY attempt to change layers during this window.
+
+                # Case 1: layer=None - BLOCK to prevent auto-selection of wrong layer
+                if layer is None:
+                    logger.info(f"v3.0.14: 🛡️ current_layer_changed BLOCKED - layer=None during protection window (elapsed={elapsed:.3f}s)")
+                    # Ensure combobox and current_layer stay on saved layer
+                    if saved_layer_id:
+                        from qgis.core import QgsProject
+                        saved_layer = QgsProject.instance().mapLayer(saved_layer_id)
+                        if saved_layer and saved_layer.isValid():
+                            if not self.current_layer or self.current_layer.id() != saved_layer_id:
+                                self.comboBox_filtering_current_layer.blockSignals(True)
+                                self.comboBox_filtering_current_layer.setLayer(saved_layer)
+                                self.comboBox_filtering_current_layer.blockSignals(False)
+                                self.current_layer = saved_layer
+                                logger.info(f"v3.0.14: ✅ Restored to '{saved_layer.name()}' after blocking layer=None")
+                    return
+
+                # Case 2: layer is different from saved layer - BLOCK to prevent unwanted change
+                if saved_layer_id and layer.id() != saved_layer_id:
+                    logger.info(f"v3.0.14: 🛡️ current_layer_changed BLOCKED - requested '{layer.name()}' != saved during protection window (elapsed={elapsed:.3f}s)")
                     # Restore the combobox to the saved layer
                     from qgis.core import QgsProject
                     saved_layer = QgsProject.instance().mapLayer(saved_layer_id)
@@ -10547,10 +10571,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         self.comboBox_filtering_current_layer.blockSignals(True)
                         self.comboBox_filtering_current_layer.setLayer(saved_layer)
                         self.comboBox_filtering_current_layer.blockSignals(False)
-                        # v3.0.12: Also ensure current_layer reference stays correct
                         self.current_layer = saved_layer
-                        logger.info(f"v3.0.12: ✅ Restored combobox and current_layer to '{saved_layer.name()}'")
+                        logger.info(f"v3.0.14: ✅ Restored combobox and current_layer to '{saved_layer.name()}'")
                     return
+
+                # Case 3: layer is same as saved layer - ALLOW but log
+                logger.debug(f"v3.0.14: ✓ current_layer_changed ALLOWED - same layer '{layer.name()}' during protection window (elapsed={elapsed:.3f}s)")
         
         # v2.9.19: CRITICAL - Ensure we have a valid layer when layers exist in project
         # Never allow current_layer to be None if PROJECT_LAYERS has layers
@@ -11552,6 +11578,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].setEnabled(is_checked)
             
             logger.debug(f"filtering_geometric_predicates_state_changed: is_checked={is_checked}")
+
+
+    def filtering_buffer_type_state_changed(self):
+        """Handle changes to the has_buffer_type checkable button.
+        
+        When checked (True): Enable buffer type combobox and buffer segments spinbox
+        When unchecked (False): Disable these widgets
+        """
+        if self.widgets_initialized is True and self.has_loaded_layers is True:
+            is_checked = self.widgets["FILTERING"]["HAS_BUFFER_TYPE"]["WIDGET"].isChecked()
+            
+            # Enable/disable the associated widgets
+            self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].setEnabled(is_checked)
+            self.widgets["FILTERING"]["BUFFER_SEGMENTS"]["WIDGET"].setEnabled(is_checked)
+            
+            logger.debug(f"filtering_buffer_type_state_changed: is_checked={is_checked}")
 
     def _update_centroids_source_checkbox_state(self):
         """Update enabled state of checkBox_filtering_use_centroids_source_layer.

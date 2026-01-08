@@ -379,11 +379,11 @@ class ParallelFilterExecutor:
         
         start_time = time.time()
         
-        # FIX v3.0.8: Log each layer being processed
-        logger.info(f"🔄 _filter_single_layer: Processing '{layer_name}' (provider={provider_type})")
+        # FIX v3.0.8: Log each layer being filtered
+        logger.info(f"🔄 _filter_single_layer: Filtering '{layer_name}' (provider={provider_type})")
         from qgis.core import QgsMessageLog, Qgis
         QgsMessageLog.logMessage(
-            f"🔄 Processing: {layer_name} ({provider_type})",
+            f"🔄 Filtering: {layer_name} ({provider_type})",
             "FilterMate", Qgis.Info
         )
         
