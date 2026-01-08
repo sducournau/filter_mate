@@ -12,6 +12,15 @@ from enum import Enum
 from .base_controller import BaseController
 from .mixins.layer_selection_mixin import LayerSelectionMixin
 
+# Import TaskParameterBuilder for clean parameter construction (v3.0 MIG-024)
+try:
+    from adapters.task_builder import TaskParameterBuilder, TaskParameters
+    TASK_BUILDER_AVAILABLE = True
+except ImportError:
+    TASK_BUILDER_AVAILABLE = False
+    TaskParameterBuilder = None
+    TaskParameters = None
+
 if TYPE_CHECKING:
     from qgis.core import QgsVectorLayer
     from filter_mate_dockwidget import FilterMateDockWidget
@@ -474,6 +483,19 @@ class FilteringController(BaseController, LayerSelectionMixin):
                 f"source={config.source_layer_id}, targets={len(config.target_layer_ids)}, "
                 f"predicate={config.predicate.value}"
             )
+            
+            # v3.0 MIG-024: Build task parameters using TaskParameterBuilder
+            if TASK_BUILDER_AVAILABLE:
+                task_params = self.build_task_parameters()
+                if task_params:
+                    logger.info(
+                        f"FilteringController: TaskParameters built successfully. "
+                        f"targets={len(task_params.target_layers)}, "
+                        f"buffer={task_params.filtering_config.buffer_value if task_params.filtering_config else 0}"
+                    )
+                else:
+                    logger.debug("FilteringController: TaskParameters build returned None")
+            
             # TODO Phase 2: Actually use FilterService here
             # For now, return False to use legacy path while we verify integration
             # The controller is connected and config is valid - legacy will handle execution
@@ -482,6 +504,68 @@ class FilteringController(BaseController, LayerSelectionMixin):
         else:
             logger.debug("FilteringController: No FilterService, using legacy path")
             return False
+    
+    def build_task_parameters(self) -> Optional['TaskParameters']:
+        """
+        Build TaskParameters using TaskParameterBuilder.
+        
+        This provides a clean way to construct filter parameters
+        without directly accessing PROJECT_LAYERS.
+        
+        v3.0 MIG-024: Part of God Class reduction strategy.
+        
+        Returns:
+            TaskParameters or None if building failed
+        """
+        if not TASK_BUILDER_AVAILABLE:
+            return None
+        
+        if not self._dockwidget or not self._source_layer:
+            return None
+        
+        try:
+            # Get PROJECT_LAYERS from dockwidget
+            project_layers = getattr(self._dockwidget, 'PROJECT_LAYERS', {})
+            
+            # Create builder
+            builder = TaskParameterBuilder(
+                dockwidget=self._dockwidget,
+                project_layers=project_layers
+            )
+            
+            # Get target layers from QGIS project
+            from qgis.core import QgsProject
+            project = QgsProject.instance()
+            
+            target_layers = []
+            for layer_id in self._target_layer_ids:
+                layer = project.mapLayer(layer_id)
+                if layer and layer.isValid():
+                    target_layers.append(layer)
+            
+            # Get current features and expression from dockwidget
+            features = []
+            expression = ""
+            if hasattr(self._dockwidget, 'get_current_features'):
+                features_list, expression = self._dockwidget.get_current_features()
+                features = [f.id() for f in features_list] if features_list else []
+            
+            # Build parameters
+            params = builder.build_filter_params(
+                source_layer=self._source_layer,
+                target_layers=target_layers,
+                features=features,
+                expression=expression
+            )
+            
+            return params
+            
+        except Exception as e:
+            import logging
+            logging.getLogger('FilterMate.FilteringController').warning(
+                f"Failed to build task parameters: {e}"
+            )
+            return None
     
     def _on_filter_success(self, config: FilterConfiguration) -> None:
         """Handle successful filter execution."""
