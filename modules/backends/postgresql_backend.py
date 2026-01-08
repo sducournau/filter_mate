@@ -1174,7 +1174,7 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             self.log_info(f"  - Source features: {source_feature_count} (≤ {self.SIMPLE_WKT_THRESHOLD} threshold)")
             self.log_info(f"  - WKT length: {wkt_length} chars")
             self.log_info(f"  - SRID: {source_srid}")
-        elif wkt_too_long and source_feature_count <= self.SIMPLE_WKT_THRESHOLD:
+        elif wkt_too_long and source_feature_count is not None and source_feature_count <= self.SIMPLE_WKT_THRESHOLD:
             # WKT exceeds size limit even with few features (complex buffer geometry)
             self.log_info(f"⚠️ WKT too long ({wkt_length} chars > {self.MAX_WKT_LENGTH} max)")
             self.log_info(f"  → Switching from SIMPLE WKT to EXISTS subquery for better performance")
