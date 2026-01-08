@@ -328,62 +328,8 @@ class OGRGeometricFilter(GeometricFilterBackend):
             self.log_warning(f"Error checking spatial index: {str(e)}. Continuing anyway.")
             return False
     
-    def _should_clear_old_subset(self, old_subset: Optional[str]) -> bool:
-        """
-        Check if old_subset contains patterns that indicate it should be cleared.
-        
-        This prevents combining with corrupted or incompatible previous filters.
-        
-        Invalid patterns:
-        1. __source alias (PostgreSQL EXISTS subquery internal alias)
-        2. EXISTS subquery (would create nested subqueries)
-        3. Spatial predicates (likely from previous geometric filter)
-        
-        Args:
-            old_subset: The existing subset string to check
-            
-        Returns:
-            True if old_subset should be cleared (not combined with)
-        """
-        if not old_subset:
-            return False
-        
-        old_subset_upper = old_subset.upper()
-        
-        # Pattern 1: __source alias (only valid inside PostgreSQL EXISTS subqueries)
-        has_source_alias = '__source' in old_subset.lower()
-        
-        # Pattern 2: EXISTS subquery (avoid nested EXISTS)
-        has_exists = 'EXISTS (' in old_subset_upper or 'EXISTS(' in old_subset_upper
-        
-        # Pattern 3: Spatial predicates from various backends
-        # These indicate a previous geometric filter that should be replaced
-        spatial_predicates = [
-            # PostGIS/Spatialite predicates
-            'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
-            'ST_OVERLAPS', 'ST_CROSSES', 'ST_DISJOINT', 'ST_EQUALS',
-            'ST_DWITHIN', 'ST_COVERS', 'ST_COVEREDBY',
-            # Spatialite-specific
-            'INTERSECTS', 'CONTAINS', 'WITHIN'
-        ]
-        has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
-        
-        should_clear = has_source_alias or has_exists or has_spatial_predicate
-        
-        if should_clear:
-            reason = []
-            if has_source_alias:
-                reason.append("contains __source alias")
-            if has_exists:
-                reason.append("contains EXISTS subquery")
-            if has_spatial_predicate:
-                reason.append("contains spatial predicate")
-            
-            self.log_warning(f"⚠️ Invalid old_subset detected - {', '.join(reason)}")
-            self.log_warning(f"  → Subset: '{old_subset[:100]}...'")
-            self.log_info(f"  → Will replace instead of combine")
-        
-        return should_clear
+    # NOTE: _should_clear_old_subset() and _is_fid_only_filter() are inherited from
+    # GeometricFilterBackend (base_backend.py) - v2.8.6 harmonization
 
     def _try_multi_step_filter(
         self,
@@ -664,14 +610,9 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 
                 # Combine with old subset if needed
                 # v3.0.7: FID filters from previous step MUST be combined (not replaced)
+                # v2.8.6: Use shared _is_fid_only_filter() from base_backend
                 if old_subset and not self._should_clear_old_subset(old_subset):
-                    # v3.0.7: Check if old_subset is a FID-only filter from previous step
-                    import re
-                    is_fid_only = bool(re.match(
-                        r'^\s*\(?\s*(["\']?)fid\1\s+(IN\s*\(|=\s*-?\d+|BETWEEN\s+)',
-                        old_subset,
-                        re.IGNORECASE
-                    ))
+                    is_fid_only = self._is_fid_only_filter(old_subset)
                     
                     if is_fid_only:
                         # FID filter from previous step - ALWAYS combine
@@ -2762,36 +2703,24 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 self.log_debug(f"Generated subset expression using key '{pk_field}'")
                 
                 # Combine with old subset if needed (but not if it contains invalid patterns)
-                # v3.0.7: FID filters from previous step MUST be combined (not replaced)
+                # v3.0.7/v2.8.6: Use shared methods from base_backend for harmonization
                 if old_subset and not self._should_clear_old_subset(old_subset):
-                    # v3.0.7: Check if old_subset is a FID-only filter from previous step
-                    import re
-                    is_fid_only = bool(re.match(
-                        r'^\s*\(?\s*(["\']?)fid\1\s+(IN\s*\(|=\s*-?\d+|BETWEEN\s+)',
-                        old_subset,
-                        re.IGNORECASE
-                    ))
+                    is_fid_only = self._is_fid_only_filter(old_subset)
                     
                     if is_fid_only:
                         # FID filter from previous step - ALWAYS combine (ignore combine_operator=None)
                         self.log_info(f"✅ Combining FID filter from step 1 with new filter (MULTI-STEP)")
                         self.log_info(f"  → FID filter: {old_subset[:80]}...")
-                        self.log_info(f"  → This ensures intersection of step 1 AND step 2 results")
                         final_expression = f"({old_subset}) AND ({new_subset_expression})"
                     elif combine_operator is None:
-                        # combine_operator=None with non-FID old_subset = use default AND
-                        # v3.0.7: Changed from REPLACE to AND to fix 2nd filter issues
+                        # v3.0.7: combine_operator=None → use default AND
                         self.log_info(f"🔗 combine_operator=None → using default AND (preserving filter)")
-                        self.log_info(f"  → Old subset: '{old_subset[:80]}...'")
                         final_expression = f"({old_subset}) AND ({new_subset_expression})"
                     else:
                         if not combine_operator:
                             combine_operator = 'AND'
                         self.log_info(f"🔗 Préservation du filtre existant avec {combine_operator}")
-                        self.log_info(f"  → Ancien subset: '{old_subset[:80]}...' (longueur: {len(old_subset)})")
-                        self.log_info(f"  → Nouveau filtre: '{new_subset_expression[:80]}...'")
                         final_expression = f"({old_subset}) {combine_operator} ({new_subset_expression})"
-                        self.log_info(f"  → Expression combinée: longueur {len(final_expression)} chars")
                 else:
                     final_expression = new_subset_expression
                 
@@ -3191,15 +3120,9 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 new_subset_expression = f'{escaped_temp} = 1'
                 
                 # Combine with old subset if needed (but not if it contains invalid patterns)
-                # v3.0.7: FID filters from previous step MUST be combined (not replaced)
+                # v3.0.7/v2.8.6: Use shared methods from base_backend for harmonization
                 if old_subset and not self._should_clear_old_subset(old_subset):
-                    # v3.0.7: Check if old_subset is a FID-only filter from previous step
-                    import re
-                    is_fid_only = bool(re.match(
-                        r'^\s*\(?\s*(["\']?)fid\1\s+(IN\s*\(|=\s*-?\d+|BETWEEN\s+)',
-                        old_subset,
-                        re.IGNORECASE
-                    ))
+                    is_fid_only = self._is_fid_only_filter(old_subset)
                     
                     if is_fid_only:
                         # FID filter from previous step - ALWAYS combine
@@ -3213,9 +3136,7 @@ class OGRGeometricFilter(GeometricFilterBackend):
                         if not combine_operator:
                             combine_operator = 'AND'
                         self.log_info(f"🔗 Préservation du filtre existant avec {combine_operator}")
-                        self.log_info(f"  → Ancien subset: '{old_subset[:80]}...' (longueur: {len(old_subset)})")
                         final_expression = f"({old_subset}) {combine_operator} ({new_subset_expression})"
-                        self.log_info(f"  → Expression combinée: longueur {len(final_expression)} chars")
                 else:
                     final_expression = new_subset_expression
                 
@@ -3398,15 +3319,9 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 memory_layer.removeSelection()
                 
                 # Combine with old subset if needed (but not if it contains invalid patterns)
-                # v3.0.7: FID filters from previous step MUST be combined (not replaced)
+                # v3.0.7/v2.8.6: Use shared methods from base_backend for harmonization
                 if old_subset and not self._should_clear_old_subset(old_subset):
-                    # v3.0.7: Check if old_subset is a FID-only filter from previous step
-                    import re
-                    is_fid_only = bool(re.match(
-                        r'^\s*\(?\s*(["\']?)fid\1\s+(IN\s*\(|=\s*-?\d+|BETWEEN\s+)',
-                        old_subset,
-                        re.IGNORECASE
-                    ))
+                    is_fid_only = self._is_fid_only_filter(old_subset)
                     
                     if is_fid_only:
                         # FID filter from previous step - ALWAYS combine
@@ -3420,7 +3335,6 @@ class OGRGeometricFilter(GeometricFilterBackend):
                         if not combine_operator:
                             combine_operator = 'AND'
                         self.log_info(f"🔗 Préservation du filtre existant avec {combine_operator}")
-                        self.log_info(f"  → Ancien subset: '{old_subset[:80]}...'")
                         final_expression = f"({old_subset}) {combine_operator} ({new_subset_expression})"
                 else:
                     final_expression = new_subset_expression

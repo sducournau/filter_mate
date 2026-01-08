@@ -2530,53 +2530,27 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             self.log_debug(f"Current feature count: {layer.featureCount()}")
             
             # Combine with existing filter if specified
-            # CRITICAL FIX: Check for invalid old_subset patterns that should NOT be combined
-            # These patterns indicate a previous geometric filter that should be replaced
+            # v2.8.6: Use shared methods from base_backend for harmonization
             if old_subset:
-                old_subset_upper = old_subset.upper()
+                # Check if old_subset should be cleared (contains spatial predicates, EXISTS, etc.)
+                should_clear = self._should_clear_old_subset(old_subset)
                 
-                # Pattern 1: __source alias (only valid inside EXISTS subqueries)
-                has_source_alias = '__source' in old_subset.lower()
+                # Check if old_subset is a FID-only filter from previous multi-step
+                is_fid_only = self._is_fid_only_filter(old_subset)
                 
-                # Pattern 2: EXISTS subquery (avoid nested EXISTS)
-                has_exists = 'EXISTS (' in old_subset_upper or 'EXISTS(' in old_subset_upper
-                
-                # Pattern 3: Spatial predicates (likely from previous geometric filter)
-                # Spatialite uses same names as PostGIS for most functions
-                spatial_predicates = [
-                    'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
-                    'ST_OVERLAPS', 'ST_CROSSES', 'ST_DISJOINT', 'ST_EQUALS',
-                    'INTERSECTS', 'CONTAINS', 'WITHIN'  # Spatialite-specific
-                ]
-                has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
-                
-                # v3.0.7: Check if old_subset is a FID-only filter from previous step
-                # FID filters MUST be combined in multi-step filtering (same as DIRECT_SQL mode)
-                import re
-                is_fid_only = bool(re.match(
-                    r'^\s*\(?\s*(["\']?)fid\1\s+(IN\s*\(|=\s*-?\d+|BETWEEN\s+)',
-                    old_subset,
-                    re.IGNORECASE
-                ))
-                
-                # If old_subset contains geometric filter patterns, replace instead of combine
-                if has_source_alias or has_exists or has_spatial_predicate:
+                if should_clear:
+                    # Old subset contains geometric filter patterns - replace instead of combine
                     self.log_info(f"🔄 Old subset contains geometric filter - replacing instead of combining")
                     self.log_info(f"  → Old subset: '{old_subset[:80]}...'")
                     final_expression = expression
-                # v3.0.7: CRITICAL FIX - FID filters MUST be combined in multi-step filtering!
-                # Previously, combine_operator=None caused FID filters to be replaced,
-                # but FID filters from step 1 must be combined with step 2 spatial filters.
-                # This aligns NATIVE mode behavior with DIRECT_SQL and SOURCE_TABLE modes.
                 elif is_fid_only:
-                    # FID filter from previous step - ALWAYS combine (ignore combine_operator=None)
+                    # v3.0.7: FID filter from previous step - ALWAYS combine (ignore combine_operator=None)
+                    # This ensures intersection of step 1 AND step 2 results in multi-step filtering
                     self.log_info(f"✅ Combining FID filter from step 1 with new filter (MULTI-STEP)")
                     self.log_info(f"  → FID filter: {old_subset[:80]}...")
-                    self.log_info(f"  → This ensures intersection of step 1 AND step 2 results")
                     final_expression = f"({old_subset}) AND ({expression})"
                 elif combine_operator is None:
-                    # combine_operator=None with non-FID old_subset = use default AND
-                    # v3.0.7: Changed from REPLACE to AND to fix 2nd filter issues
+                    # v3.0.7: combine_operator=None with non-FID old_subset = use default AND
                     self.log_info(f"🔗 combine_operator=None → using default AND (preserving filter)")
                     self.log_info(f"  → Old subset: '{old_subset[:80]}...'")
                     final_expression = f"({old_subset}) AND ({expression})"

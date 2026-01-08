@@ -135,6 +135,100 @@ class GeometricFilterBackend(ABC):
             self.logger.debug(f"[{self.get_backend_name()}] {message}")
 
     # =========================================================================
+    # Shared Filter Combination Methods (v2.8.6 - harmonization)
+    # =========================================================================
+    
+    def _should_clear_old_subset(self, old_subset: Optional[str]) -> bool:
+        """
+        Check if old_subset contains patterns that indicate it should be cleared.
+        
+        v2.8.6: Extracted to base class for harmonization across all backends.
+        
+        This prevents combining with corrupted or incompatible previous filters.
+        
+        Invalid patterns:
+        1. __source alias (PostgreSQL EXISTS subquery internal alias)
+        2. EXISTS subquery (would create nested subqueries)
+        3. Spatial predicates (likely from previous geometric filter)
+        
+        Args:
+            old_subset: The existing subset string to check
+            
+        Returns:
+            True if old_subset should be cleared (not combined with)
+        """
+        if not old_subset:
+            return False
+        
+        old_subset_upper = old_subset.upper()
+        
+        # Pattern 1: __source alias (only valid inside PostgreSQL EXISTS subqueries)
+        has_source_alias = '__source' in old_subset.lower()
+        
+        # Pattern 2: EXISTS subquery (avoid nested EXISTS)
+        has_exists = 'EXISTS (' in old_subset_upper or 'EXISTS(' in old_subset_upper
+        
+        # Pattern 3: Spatial predicates from various backends
+        # These indicate a previous geometric filter that should be replaced
+        spatial_predicates = [
+            # PostGIS/Spatialite predicates
+            'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
+            'ST_OVERLAPS', 'ST_CROSSES', 'ST_DISJOINT', 'ST_EQUALS',
+            'ST_DWITHIN', 'ST_COVERS', 'ST_COVEREDBY',
+            # Spatialite-specific (without ST_ prefix)
+            'INTERSECTS', 'CONTAINS', 'WITHIN'
+        ]
+        has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
+        
+        should_clear = has_source_alias or has_exists or has_spatial_predicate
+        
+        if should_clear:
+            reason = []
+            if has_source_alias:
+                reason.append("contains __source alias")
+            if has_exists:
+                reason.append("contains EXISTS subquery")
+            if has_spatial_predicate:
+                reason.append("contains spatial predicate")
+            
+            self.log_warning(f"⚠️ Invalid old_subset detected - {', '.join(reason)}")
+            self.log_debug(f"  → Subset: '{old_subset[:100]}...'")
+            self.log_info(f"  → Will replace instead of combine")
+        
+        return should_clear
+
+    def _is_fid_only_filter(self, subset: Optional[str]) -> bool:
+        """
+        Check if a subset string is a FID-only filter from previous multi-step.
+        
+        v2.8.6: Extracted to base class for harmonization.
+        
+        FID filters from previous steps should be combined with AND,
+        not replaced, to maintain multi-step filter chain.
+        
+        Matches patterns like:
+        - fid IN (1, 2, 3)
+        - "fid" IN (1, 2, 3)
+        - fid = 123
+        - fid BETWEEN 1 AND 100
+        
+        Args:
+            subset: Subset string to check
+            
+        Returns:
+            True if subset is a FID-only filter
+        """
+        if not subset:
+            return False
+        
+        import re
+        return bool(re.match(
+            r'^\s*\(?\s*(["\']?)fid\1\s+(IN\s*\(|=\s*-?\d+|BETWEEN\s+)',
+            subset,
+            re.IGNORECASE
+        ))
+
+    # =========================================================================
     # Shared Buffer/Geometry Methods (v2.8.6 - extracted from backends)
     # =========================================================================
     
