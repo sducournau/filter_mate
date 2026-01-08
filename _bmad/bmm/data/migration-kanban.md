@@ -22,20 +22,18 @@
 
 ### 📋 TODO (Sprint Courant)
 
-| ID      | Story                        | Priorité | Assigné | Notes                         |
-| ------- | ---------------------------- | -------- | ------- | ----------------------------- |
-| MIG-023 | Réduction appTasks.py        | 🔴 P0    | Dev     | Extraire vers multi_step_task |
-| MIG-024 | Réduction FilterMateApp      | 🟠 P1    | Dev     | Utiliser controllers          |
-| MIG-025 | Intégration Controllers → UI | 🔴 P0    | Dev     | Connecter au dockwidget       |
-| MIG-040 | Tests Intégration E2E        | 🟠 P1    | Dev     | Valider la chaîne complète    |
+| ID      | Story                   | Priorité | Assigné | Notes                      |
+| ------- | ----------------------- | -------- | ------- | -------------------------- |
+| MIG-024 | Réduction FilterMateApp | 🟠 P1    | Dev     | Utiliser controllers       |
+| MIG-040 | Tests Intégration E2E   | 🟠 P1    | Dev     | Valider la chaîne complète |
 
 ---
 
 ### 🔄 IN PROGRESS
 
-| ID      | Story                   | Priorité | Assigné | Progression    | Notes                            |
-| ------- | ----------------------- | -------- | ------- | -------------- | -------------------------------- |
-| MIG-025 | Intégration Controllers | 🔴 P0    | Dev     | ██░░░░░░░░ 20% | Controllers créés, pas connectés |
+| ID  | Story | Priorité | Assigné | Progression | Notes |
+| --- | ----- | -------- | ------- | ----------- | ----- |
+| -   | -     | -        | -       | -           | -     |
 
 ---
 
@@ -49,23 +47,25 @@
 
 ### ✅ DONE
 
-| ID      | Story                    | Priorité | Complété   | Notes                                     |
-| ------- | ------------------------ | -------- | ---------- | ----------------------------------------- |
-| MIG-001 | Branche Migration        | 🔴 P0    | 2026-01-08 | Travail sur main directement              |
-| MIG-002 | Tests Régression CRIT    | 🔴 P0    | 2026-01-08 | 24 tests (CRIT-005 + CRIT-006)            |
-| MIG-003 | Mapping Dépendances      | 🔴 P0    | 2026-01-08 | `architecture.md` documenté               |
-| MIG-010 | Interface BackendPort    | 🔴 P0    | 2026-01-08 | `core/ports/backend_port.py` (280 lines)  |
-| MIG-011 | Adaptateur Compatibilité | 🔴 P0    | 2026-01-08 | `adapters/compat.py`, `legacy_adapter.py` |
-| MIG-012 | FilterService Complet    | 🟠 P1    | 2026-01-08 | `core/services/filter_service.py` (785L)  |
-| MIG-013 | HistoryService           | 🟡 P2    | 2026-01-06 | `core/services/history_service.py`        |
-| MIG-014 | ExpressionService        | 🟡 P2    | 2026-01-08 | `core/services/expression_service.py`     |
-| MIG-015 | AutoOptimizer            | 🟡 P2    | 2026-01-08 | `core/services/auto_optimizer.py`         |
-| MIG-020 | FilteringController      | 🟠 P1    | 2026-01-08 | `ui/controllers/filtering_controller.py`  |
-| MIG-021 | ExploringController      | 🟠 P1    | 2026-01-08 | `ui/controllers/exploring_controller.py`  |
-| MIG-022 | ExportingController      | 🟠 P1    | 2026-01-08 | `ui/controllers/exporting_controller.py`  |
-| MIG-030 | Backend Factory          | 🟠 P1    | 2026-01-08 | `adapters/backends/factory.py` (393L)     |
-| MIG-031 | DI Container             | 🟠 P1    | 2026-01-08 | `infrastructure/di/container.py`          |
-| MIG-032 | App Bridge               | 🟠 P1    | 2026-01-08 | `adapters/app_bridge.py` (18KB)           |
+| ID      | Story                    | Priorité | Complété   | Notes                                         |
+| ------- | ------------------------ | -------- | ---------- | --------------------------------------------- |
+| MIG-001 | Branche Migration        | 🔴 P0    | 2026-01-08 | Travail sur main directement                  |
+| MIG-002 | Tests Régression CRIT    | 🔴 P0    | 2026-01-08 | 24 tests (CRIT-005 + CRIT-006)                |
+| MIG-003 | Mapping Dépendances      | 🔴 P0    | 2026-01-08 | `architecture.md` documenté                   |
+| MIG-010 | Interface BackendPort    | 🔴 P0    | 2026-01-08 | `core/ports/backend_port.py` (280 lines)      |
+| MIG-011 | Adaptateur Compatibilité | 🔴 P0    | 2026-01-08 | `adapters/compat.py`, `legacy_adapter.py`     |
+| MIG-012 | FilterService Complet    | 🟠 P1    | 2026-01-08 | `core/services/filter_service.py` (785L)      |
+| MIG-013 | HistoryService           | 🟡 P2    | 2026-01-06 | `core/services/history_service.py`            |
+| MIG-014 | ExpressionService        | 🟡 P2    | 2026-01-08 | `core/services/expression_service.py`         |
+| MIG-015 | AutoOptimizer            | 🟡 P2    | 2026-01-08 | `core/services/auto_optimizer.py`             |
+| MIG-020 | FilteringController      | 🟠 P1    | 2026-01-08 | `ui/controllers/filtering_controller.py`      |
+| MIG-021 | ExploringController      | 🟠 P1    | 2026-01-08 | `ui/controllers/exploring_controller.py`      |
+| MIG-022 | ExportingController      | 🟠 P1    | 2026-01-08 | `ui/controllers/exporting_controller.py`      |
+| MIG-030 | Backend Factory          | 🟠 P1    | 2026-01-08 | `adapters/backends/factory.py` (393L)         |
+| MIG-031 | DI Container             | 🟠 P1    | 2026-01-08 | `infrastructure/di/container.py`              |
+| MIG-032 | App Bridge               | 🟠 P1    | 2026-01-08 | `adapters/app_bridge.py` (18KB)               |
+| MIG-023 | Réduction appTasks.py    | 🔴 P0    | 2026-01-08 | `adapters/qgis/tasks/` (multi_step, progress) |
+| MIG-025 | Intégration Controllers  | 🔴 P0    | 2026-01-08 | ControllerIntegration dans dockwidget         |
 
 ---
 
@@ -74,11 +74,11 @@
 ```
 Phase 1: Stabilisation     [██████████] 100%  (4/4 stories)
 Phase 2: Core Domain       [██████████] 100%  (6/6 stories)
-Phase 3: God Classes       [████░░░░░░] 40%   (3/5 stories - Controllers créés)
+Phase 3: God Classes       [████████░░] 80%   (4/5 stories - Controllers intégrés)
 Phase 4: Backends          [██████████] 100%  (4/4 stories - Factory done)
 Phase 5: Validation        [██░░░░░░░░] 20%   (1/5 stories)
 ─────────────────────────────────────────────
-TOTAL                      [███████░░░] 73%   (18/24 stories)
+TOTAL                      [████████░░] 83%   (20/24 stories)
 ```
 
 ---

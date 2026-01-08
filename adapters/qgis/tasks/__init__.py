@@ -13,6 +13,12 @@ Task Categories:
 - SpatialTask: Spatial filter operations
 - ExportTask: Data export operations
 - LayerTask: Layer management operations
+- MultiStepTask: Multi-step progressive filtering
+- ProgressHandler: Centralized progress reporting
+
+Migration from modules/appTasks.py:
+    OLD: from modules.appTasks import FilterEngineTask
+    NEW: from adapters.qgis.tasks import FilterTask
 """
 
 from .base_task import (
@@ -42,6 +48,17 @@ from .layer_task import (
     CreateSpatialIndexTask,
 )
 
+from .multi_step_task import (
+    MultiStepFilterTask,
+)
+
+from .progress_handler import (
+    ProgressHandler,
+    ProgressAggregator,
+    ProgressEvent,
+    ProgressPhase,
+)
+
 __all__ = [
     # Base
     'BaseFilterMateTask',
@@ -60,4 +77,11 @@ __all__ = [
     'GatherLayerInfoTask',
     'ValidateExpressionsTask',
     'CreateSpatialIndexTask',
+    # Multi-step (MIG-023)
+    'MultiStepFilterTask',
+    # Progress (MIG-023)
+    'ProgressHandler',
+    'ProgressAggregator',
+    'ProgressEvent',
+    'ProgressPhase',
 ]
