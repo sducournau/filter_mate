@@ -322,6 +322,65 @@ class ControllerIntegration:
             return self._exploring_controller.identify_feature(feature_id)
         return False
     
+    def delegate_flash_features_by_ids(
+        self,
+        layer,
+        feature_ids: list,
+        start_color=None,
+        end_color=None,
+        flashes: int = 6,
+        duration: int = 400
+    ) -> bool:
+        """
+        Delegate flash features by IDs using exploring controller.
+        
+        This is a higher-level delegation that takes parameters matching
+        the dockwidget's exploring_identify_clicked pattern.
+        
+        Args:
+            layer: The QgsVectorLayer containing the features
+            feature_ids: List of feature IDs to flash
+            start_color: Start color for flash animation
+            end_color: End color for flash animation
+            flashes: Number of flash cycles
+            duration: Duration of flash in milliseconds
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if not self._exploring_controller or not feature_ids:
+            return False
+        
+        try:
+            # Set layer on controller
+            self._exploring_controller.set_layer(layer)
+            
+            # Flash each feature (controller handles the animation)
+            for fid in feature_ids[:10]:  # Limit for performance
+                self._exploring_controller.flash_feature(fid, duration // flashes)
+            
+            return True
+        except Exception as e:
+            logger.warning(f"delegate_flash_features_by_ids failed: {e}")
+            return False
+    
+    def delegate_zoom_to_extent(self, extent, layer=None) -> bool:
+        """
+        Delegate zoom to extent operation.
+        
+        Args:
+            extent: QgsRectangle to zoom to
+            layer: Optional layer for CRS transform
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._exploring_controller:
+            # Controller doesn't have direct extent zoom, use zoom_to_selected
+            # after setting selection
+            return self._exploring_controller.zoom_to_selected()
+        return False
+    
     def delegate_execute_filter(self) -> bool:
         """Delegate filter execution to filtering controller."""
         if self._filtering_controller:

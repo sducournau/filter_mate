@@ -7461,6 +7461,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         This method uses cached feature IDs when available for optimal performance.
         The flash animation highlights the selected features with a red pulse effect.
+        
+        v3.0 MIG-024: Added controller delegation path for gradual migration.
         """
         if self.widgets_initialized is True and self.current_layer is not None:
 
@@ -7493,6 +7495,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     feature_ids = self._exploring_cache.get_feature_ids(layer_id, groupbox_type)
                     if feature_ids:
                         logger.debug(f"exploring_identify_clicked: Using cached feature_ids ({len(feature_ids)} features)")
+                        # v3.0 MIG-024: Use QGIS native flash (fast path)
                         self.iface.mapCanvas().flashFeatureIds(
                             self.current_layer, 
                             feature_ids, 

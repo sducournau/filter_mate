@@ -450,3 +450,41 @@ if TYPE_CHECKING:
     class GeometryData:
         """Placeholder for geometry cache data."""
         pass
+
+
+class NullCache(CachePort):
+    """
+    Null Object pattern implementation of CachePort.
+    
+    A cache that does nothing - useful for testing or when
+    caching is disabled.
+    """
+    
+    def get(self, key, default=None):
+        """Always returns default (cache miss)."""
+        return default
+    
+    def set(self, key, value, ttl_seconds=None) -> bool:
+        """Does nothing, returns True."""
+        return True
+    
+    def delete(self, key) -> bool:
+        """Does nothing, returns False."""
+        return False
+    
+    def has(self, key) -> bool:
+        """Always returns False."""
+        return False
+    
+    def clear(self) -> int:
+        """Does nothing, returns 0."""
+        return 0
+    
+    def get_stats(self) -> CacheStats:
+        """Returns empty stats."""
+        return CacheStats(hits=0, misses=0, size=0, max_size=0)
+    
+    def get_or_compute(self, key, compute_fn, ttl_seconds=None):
+        """Always computes, never caches."""
+        return compute_fn()
+

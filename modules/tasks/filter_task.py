@@ -179,6 +179,17 @@ from .result_streaming import StreamingExporter, StreamingConfig
 # Import combined query optimizer (Phase 5 optimization - v2.8.0)
 from .combined_query_optimizer import get_combined_query_optimizer, optimize_combined_filter
 
+# v3.0 MIG-023: Import TaskBridge for Strangler Fig migration
+# TaskBridge allows using new v3 backends while keeping legacy code as fallback
+try:
+    from adapters.task_bridge import get_task_bridge, BridgeStatus
+    TASK_BRIDGE_AVAILABLE = True
+except ImportError:
+    get_task_bridge = None
+    BridgeStatus = None
+    TASK_BRIDGE_AVAILABLE = False
+    logger.debug("TaskBridge not available - using legacy backends only")
+
 class FilterEngineTask(QgsTask):
     """Main QgsTask class which filter and unfilter data"""
     
@@ -294,6 +305,17 @@ class FilterEngineTask(QgsTask):
         
         # Track active database connections for cleanup on cancellation
         self.active_connections = []
+        
+        # v3.0 MIG-023: TaskBridge for Strangler Fig migration
+        # Allows using new v3 backends while keeping legacy code as fallback
+        self._task_bridge = None
+        if TASK_BRIDGE_AVAILABLE:
+            try:
+                self._task_bridge = get_task_bridge()
+                if self._task_bridge:
+                    logger.debug("TaskBridge initialized - v3 backends available")
+            except Exception as e:
+                logger.debug(f"TaskBridge not available: {e}")
         
         # THREAD SAFETY FIX v2.3.21: Store subset string requests to apply on main thread
         # Instead of calling setSubsetString directly from background thread (which causes
@@ -989,6 +1011,110 @@ class FilterEngineTask(QgsTask):
             safe_log(logger, logging.ERROR, f'FilterEngineTask run() failed: {e}', exc_info=True)
             return False
 
+    # ========================================================================
+    # V3 TaskBridge Delegation Methods (Strangler Fig Pattern)
+    # ========================================================================
+    
+    def _try_v3_attribute_filter(self, task_expression, task_features):
+        """
+        Try to execute attribute filter using v3 backends via TaskBridge.
+        
+        This is part of the Strangler Fig migration pattern. It attempts to
+        use the new hexagonal architecture backends for simple attribute filters.
+        Complex filters or failures fall back to legacy code.
+        
+        Args:
+            task_expression: QGIS expression string
+            task_features: List of selected features
+            
+        Returns:
+            bool: True/False if v3 handled the filter
+            None: If v3 cannot handle (fallback to legacy)
+        """
+        if not self._task_bridge:
+            return None
+            
+        # Only handle simple expression-based filters for now
+        # Skip: field-only expressions, skip_source_filter, feature lists
+        skip_source_filter = self.task_parameters["task"].get("skip_source_filter", False)
+        
+        if skip_source_filter:
+            logger.debug("TaskBridge: skip_source_filter mode - using legacy code")
+            return None
+        
+        if not task_expression or not task_expression.strip():
+            logger.debug("TaskBridge: no expression - using legacy code")
+            return None
+            
+        # Check if expression is just a field name (no operators)
+        qgs_expr = QgsExpression(task_expression)
+        task_expr_upper = task_expression.upper()
+        is_simple_field = qgs_expr.isField() and not any(
+            op in task_expr_upper for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']
+        )
+        
+        if is_simple_field:
+            logger.debug("TaskBridge: field-only expression - using legacy code")
+            return None
+        
+        # Try v3 attribute filter
+        try:
+            logger.info("=" * 60)
+            logger.info("🚀 V3 TASKBRIDGE: Attempting attribute filter")
+            logger.info("=" * 60)
+            logger.info(f"   Expression: '{task_expression}'")
+            logger.info(f"   Layer: '{self.source_layer.name()}'")
+            
+            bridge_result = self._task_bridge.execute_attribute_filter(
+                layer=self.source_layer,
+                expression=task_expression,
+                combine_with_existing=True
+            )
+            
+            if bridge_result.status == BridgeStatus.SUCCESS and bridge_result.success:
+                # V3 succeeded - apply the result
+                logger.info(f"✅ V3 TaskBridge SUCCESS")
+                logger.info(f"   Backend used: {bridge_result.backend_used}")
+                logger.info(f"   Feature count: {bridge_result.feature_count}")
+                logger.info(f"   Execution time: {bridge_result.execution_time_ms:.1f}ms")
+                
+                # Apply the filter to the layer
+                self.expression = task_expression
+                if bridge_result.feature_ids:
+                    # Build expression from feature IDs
+                    pk = self.primary_key_name or '$id'
+                    ids_str = ', '.join(str(fid) for fid in bridge_result.feature_ids[:1000])
+                    if len(bridge_result.feature_ids) > 1000:
+                        logger.warning("TaskBridge: Truncating feature IDs to 1000 for expression")
+                    self.expression = f'"{pk}" IN ({ids_str})'
+                
+                # Apply subset string
+                result = safe_set_subset_string(self.source_layer, self.expression)
+                if result:
+                    logger.info(f"   ✓ Filter applied successfully")
+                    return True
+                else:
+                    logger.warning(f"   ✗ Failed to apply filter expression")
+                    return None  # Fallback to legacy
+                    
+            elif bridge_result.status == BridgeStatus.FALLBACK:
+                logger.info(f"⚠️ V3 TaskBridge: FALLBACK requested")
+                logger.info(f"   Reason: {bridge_result.error_message}")
+                return None  # Use legacy code
+                
+            elif bridge_result.status == BridgeStatus.NOT_AVAILABLE:
+                logger.debug("TaskBridge: not available - using legacy code")
+                return None
+                
+            else:
+                # Error occurred
+                logger.warning(f"⚠️ V3 TaskBridge: ERROR")
+                logger.warning(f"   Error: {bridge_result.error_message}")
+                return None  # Fallback to legacy
+                
+        except Exception as e:
+            logger.warning(f"TaskBridge delegation failed: {e}")
+            return None  # Fallback to legacy
 
     def _initialize_source_filtering_parameters(self):
         """Extract and initialize all parameters needed for source layer filtering"""
@@ -2109,6 +2235,21 @@ class FilterEngineTask(QgsTask):
         result = False
         task_expression = self.task_parameters["task"]["expression"]
         task_features = self.task_parameters["task"]["features"]
+        
+        # ================================================================
+        # V3 TASKBRIDGE DELEGATION (Strangler Fig Pattern)
+        # ================================================================
+        # Try v3 backend via TaskBridge for simple attribute filters.
+        # This progressively migrates filtering logic to hexagonal architecture.
+        # Fallback to legacy code if TaskBridge fails or is not available.
+        # ================================================================
+        if self._task_bridge and self._task_bridge.is_available():
+            bridge_result = self._try_v3_attribute_filter(task_expression, task_features)
+            if bridge_result is not None:
+                # v3 backend succeeded, return its result
+                return bridge_result
+            # bridge_result is None means fallback to legacy code
+            logger.debug("TaskBridge: Falling back to legacy attribute filter")
         
         # DIAGNOSTIC: Log incoming parameters
         logger.info("=" * 60)

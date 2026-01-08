@@ -68,6 +68,11 @@ __all__ = [
     'FilteringConfig',
     'LayerInfo',
     'TaskType',
+    
+    # Task bridge for Strangler Fig migration (v3.0 MIG-023)
+    'TaskBridge',
+    'BridgeResult',
+    'get_task_bridge',
 ]
 
 # Task parameter builder for MIG-024
@@ -86,3 +91,17 @@ except ImportError:
     FilteringConfig = None
     LayerInfo = None
     TaskType = None
+
+# Task bridge for MIG-023 (Strangler Fig pattern)
+try:
+    from .task_bridge import (
+        TaskBridge,
+        BridgeResult,
+        get_task_bridge,
+    )
+except ImportError:
+    # Fallback if not yet available
+    TaskBridge = None
+    BridgeResult = None
+    get_task_bridge = None
+
