@@ -2,7 +2,7 @@
 
 **Epic:** Migration Architecture Hexagonale  
 **Sprint Actuel:** Sprint 2 - Intégration Controllers  
-**Dernière MAJ:** 2026-01-08 (Mise à jour auto par BMAD Master)
+**Dernière MAJ:** 2026-01-08 (MIG-025 Délégation Controllers implémentée)
 
 ---
 
@@ -22,18 +22,18 @@
 
 ### 📋 TODO (Sprint Courant)
 
-| ID      | Story                   | Priorité | Assigné | Notes                      |
-| ------- | ----------------------- | -------- | ------- | -------------------------- |
-| MIG-024 | Réduction FilterMateApp | 🟠 P1    | Dev     | Utiliser controllers       |
-| MIG-040 | Tests Intégration E2E   | 🟠 P1    | Dev     | Valider la chaîne complète |
+| ID      | Story                 | Priorité | Assigné | Notes                      |
+| ------- | --------------------- | -------- | ------- | -------------------------- |
+| MIG-040 | Tests Intégration E2E | 🟠 P1    | Dev     | Valider la chaîne complète |
 
 ---
 
 ### 🔄 IN PROGRESS
 
-| ID  | Story | Priorité | Assigné | Progression | Notes |
-| --- | ----- | -------- | ------- | ----------- | ----- |
-| -   | -     | -        | -       | -           | -     |
+| ID      | Story                   | Priorité | Assigné | Progression | Notes                                     |
+| ------- | ----------------------- | -------- | ------- | ----------- | ----------------------------------------- |
+| MIG-024 | Réduction FilterMateApp | 🟠 P1    | Dev     | 30%         | manage_task() délègue aux controllers     |
+| MIG-025 | Intégration Controllers | 🔴 P0    | Dev     | 80%         | Délégation filter implémentée, tests TODO |
 
 ---
 
@@ -65,7 +65,6 @@
 | MIG-031 | DI Container             | 🟠 P1    | 2026-01-08 | `infrastructure/di/container.py`              |
 | MIG-032 | App Bridge               | 🟠 P1    | 2026-01-08 | `adapters/app_bridge.py` (18KB)               |
 | MIG-023 | Réduction appTasks.py    | 🔴 P0    | 2026-01-08 | `adapters/qgis/tasks/` (multi_step, progress) |
-| MIG-025 | Intégration Controllers  | 🔴 P0    | 2026-01-08 | ControllerIntegration dans dockwidget         |
 
 ---
 

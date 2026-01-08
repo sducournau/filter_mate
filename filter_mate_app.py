@@ -2012,6 +2012,15 @@ class FilterMateApp:
             self.force_reload_layers()
             return
 
+        # v3.0: MIG-025 - Try delegating to hexagonal controllers (Strangler Fig pattern)
+        # If delegation succeeds, skip legacy code path
+        if task_name in ('filter', 'unfilter', 'reset'):
+            if self._try_delegate_to_controller(task_name, data):
+                logger.info(f"v3.0: Task '{task_name}' delegated to controller successfully")
+                return
+            # Fallback to legacy code path if delegation fails
+            logger.debug(f"v3.0: Task '{task_name}' using legacy code path")
+
         task_parameters = self.get_task_parameters(task_name, data)
         
         # Guard: task_parameters can be None if layer is not in PROJECT_LAYERS
@@ -2568,6 +2577,74 @@ class FilterMateApp:
         
         self.dockwidget.disconnect_widgets_signals()
         self.dockwidget.reset_multiple_checkable_combobox()
+    
+    # ========================================
+    # CONTROLLER DELEGATION (v3.0 MIG-025)
+    # ========================================
+    
+    def _try_delegate_to_controller(self, task_name: str, data=None) -> bool:
+        """
+        Try to delegate filter task to hexagonal architecture controllers.
+        
+        Implements the Strangler Fig pattern: new code path via controllers
+        with automatic fallback to legacy if delegation fails.
+        
+        Args:
+            task_name: Name of the task ('filter', 'unfilter', 'reset')
+            data: Optional task data
+            
+        Returns:
+            True if delegation succeeded, False to use legacy path
+        """
+        # Check prerequisites
+        if not HEXAGONAL_AVAILABLE:
+            logger.debug("Controller delegation skipped: hexagonal architecture not available")
+            return False
+        
+        if self.dockwidget is None:
+            logger.debug("Controller delegation skipped: dockwidget not available")
+            return False
+        
+        # Get controller integration from dockwidget
+        integration = getattr(self.dockwidget, '_controller_integration', None)
+        if integration is None or not integration.enabled:
+            logger.debug("Controller delegation skipped: controller integration not enabled")
+            return False
+        
+        try:
+            # Delegate based on task type
+            if task_name == 'filter':
+                # Sync controller state from current UI before execution
+                integration.sync_from_dockwidget()
+                
+                # Execute through controller
+                success = integration.delegate_execute_filter()
+                if success:
+                    logger.info("v3.0: Filter executed via FilteringController")
+                    return True
+                else:
+                    logger.debug("v3.0: FilteringController.execute_filter() returned False")
+                    return False
+            
+            elif task_name == 'unfilter':
+                # Unfilter is currently handled by legacy code
+                # TODO: Implement delegate_unfilter() in controllers
+                logger.debug("Controller delegation for 'unfilter' not yet implemented")
+                return False
+            
+            elif task_name == 'reset':
+                # Reset is currently handled by legacy code
+                # TODO: Implement delegate_reset() in controllers
+                logger.debug("Controller delegation for 'reset' not yet implemented")
+                return False
+            
+            else:
+                logger.debug(f"Controller delegation not available for task: {task_name}")
+                return False
+            
+        except Exception as e:
+            logger.warning(f"v3.0: Controller delegation failed, falling back to legacy: {e}")
+            return False
     
     # ========================================
     # AUTO-OPTIMIZATION METHODS
