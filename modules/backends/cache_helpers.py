@@ -100,16 +100,24 @@ def perform_cache_intersection(
     backend_name: str = "Backend"
 ) -> CacheOperationResult:
     """
-    Perform multi-step cache intersection for a filter operation.
+    Perform multi-step cache operation for filter chaining.
     
     v2.8.6: Shared implementation extracted from OGR and Spatialite backends.
+    v2.8.7: Full operator support (AND, OR, NOT AND).
     
-    This function handles the complete cache intersection workflow:
+    This function handles the complete cache operation workflow:
     1. Check if cache is available
-    2. Validate operator support (only AND supported for intersection)
-    3. Get previous FIDs from cache
-    4. Intersect new FIDs with previous (if applicable)
-    5. Return result with step tracking
+    2. Get previous FIDs from cache
+    3. Apply operator-specific set operation
+    4. Return result with step tracking
+    
+    Supported operators:
+        - AND (default): Intersection - keep FIDs matching BOTH filters
+          Result = new_fids ∩ previous_fids
+        - OR: Union - keep FIDs matching EITHER filter
+          Result = new_fids ∪ previous_fids
+        - NOT AND: Difference - keep previous FIDs NOT matching new filter
+          Result = previous_fids - new_fids (excludes new matches)
     
     Args:
         layer: Target QGIS layer
@@ -123,15 +131,10 @@ def perform_cache_intersection(
         backend_name: Name of calling backend for log messages
     
     Returns:
-        CacheOperationResult with intersection results
-    
-    Notes:
-        - Only AND operator supports cache intersection (set intersection)
-        - OR would require set union (not implemented yet)
-        - NOT AND would require set difference (not implemented yet)
-        - Returns original FIDs if cache unavailable or intersection not applicable
+        CacheOperationResult with operation results
     
     Example:
+        # AND intersection
         result = perform_cache_intersection(
             layer=target_layer,
             matching_fids=[1, 2, 3, 4, 5],
@@ -180,21 +183,11 @@ def perform_cache_intersection(
     # Clean buffer value for consistent cache matching
     buffer_val = clean_buffer_value(buffer_value)
     
-    # v2.9.43: Check operator support for cache intersection
-    if combine_operator in ('OR', 'NOT AND'):
-        log_warning(
-            f"⚠️ {backend_name} Multi-step with {combine_operator} - "
-            f"cache intersection not supported (only AND), performing full filter"
-        )
-        if QGIS_AVAILABLE and QgsMessageLog:
-            QgsMessageLog.logMessage(
-                f"⚠️ Cache multi-step: {combine_operator} not supported, skipping intersection",
-                "FilterMate", Qgis.Warning
-            )
-        result.operator_used = combine_operator
-        return result
+    # v2.8.7: Full operator support for multi-step cache operations
+    # AND: intersection (new ∩ previous) - keep only FIDs that match both
+    # OR: union (new ∪ previous) - keep FIDs that match either
+    # NOT AND: difference (previous - new) - keep previous FIDs that don't match new filter
     
-    # AND or None → attempt cache intersection
     try:
         previous_fids = get_previous_filter_fids(
             layer, source_wkt, buffer_val, predicates_list
@@ -202,31 +195,56 @@ def perform_cache_intersection(
         
         if previous_fids is not None:
             original_count = len(matching_fids)
+            new_fids_set = set(matching_fids)
             
-            # Perform intersection
-            matching_fids_set, step_number = intersect_filter_fids(
-                layer, set(matching_fids), source_wkt, buffer_val, predicates_list
-            )
+            # Apply operator-specific set operation
+            if combine_operator == 'OR':
+                # Union: keep FIDs matching either filter
+                combined_fids = new_fids_set | previous_fids
+                operation_symbol = "∪"
+                log_info(
+                    f"  🔄 Multi-step UNION: {original_count} ∪ "
+                    f"{len(previous_fids)} = {len(combined_fids)}"
+                )
+                
+            elif combine_operator == 'NOT AND':
+                # Difference: keep previous FIDs that DON'T match new filter
+                # This is "A AND NOT B" logic
+                combined_fids = previous_fids - new_fids_set
+                operation_symbol = "-"
+                log_info(
+                    f"  🔄 Multi-step DIFFERENCE: {len(previous_fids)} - "
+                    f"{original_count} = {len(combined_fids)}"
+                )
+                
+            else:
+                # Default AND: Intersection - keep only FIDs matching both
+                matching_fids_set, step_number_cache = intersect_filter_fids(
+                    layer, new_fids_set, source_wkt, buffer_val, predicates_list
+                )
+                combined_fids = matching_fids_set
+                operation_symbol = "∩"
+                result.step_number = step_number_cache
+                log_info(
+                    f"  🔄 Multi-step INTERSECTION: {original_count} ∩ "
+                    f"{len(previous_fids)} = {len(combined_fids)}"
+                )
             
-            result.matching_fids = matching_fids_set
-            result.step_number = step_number
+            result.matching_fids = combined_fids
             result.was_intersected = True
+            result.operator_used = combine_operator
             
-            log_info(
-                f"  🔄 Multi-step intersection: {original_count} ∩ "
-                f"{len(previous_fids)} = {len(matching_fids_set)}"
-            )
             if QGIS_AVAILABLE and QgsMessageLog:
                 QgsMessageLog.logMessage(
-                    f"  → {backend_name} Multi-step step {step_number}: "
-                    f"{original_count} ∩ {len(previous_fids)} = {len(matching_fids_set)} FIDs",
+                    f"  → {backend_name} Multi-step step {result.step_number}: "
+                    f"{original_count} {operation_symbol} {len(previous_fids)} = {len(combined_fids)} FIDs",
                     "FilterMate", Qgis.Info
                 )
         else:
-            log_debug(f"[{backend_name}] No previous cache found for intersection")
+            log_debug(f"[{backend_name}] No previous cache found for multi-step operation")
             
     except Exception as e:
-        log_debug(f"[{backend_name}] Cache intersection failed (non-fatal): {e}")
+        log_debug(f"[{backend_name}] Cache operation failed (non-fatal): {e}")
         result.error = str(e)
     
     return result
