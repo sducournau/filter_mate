@@ -1,3 +1,26 @@
+"""
+FilterMate Application Orchestrator
+
+.. deprecated:: 3.0.0
+    This module is a legacy God Class (5,900+ lines) and will be progressively
+    refactored in future versions. New code should use the hexagonal architecture:
+    
+    - For filtering logic: core/services/filter_service.py
+    - For task management: adapters/qgis/tasks/
+    - For backend operations: adapters/backends/
+    
+    This module is kept for backward compatibility. See docs/architecture.md.
+"""
+
+import warnings
+warnings.warn(
+    "filter_mate_app.py is a legacy module (5,900+ lines). "
+    "New features should use core/services/ and adapters/ instead. "
+    "See docs/architecture.md for the v3.0 hexagonal architecture.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 from qgis.PyQt.QtCore import Qt, QTimer
 import weakref
 import sip

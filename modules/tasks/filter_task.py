@@ -16,7 +16,26 @@ Supports multiple backends:
 - OGR (fallback for shapefiles, GeoPackage, etc.)
 
 Performance: Uses geometry caching and backend-specific optimizations.
+
+.. deprecated:: 3.0.0
+    This module is a legacy God Class (12,000+ lines) and will be progressively
+    refactored in future versions. New code should use the hexagonal architecture:
+    
+    - For task hierarchy: adapters/qgis/tasks/ (BaseTask, FilterTask, ExportTask, etc.)
+    - For filtering logic: core/services/filter_service.py
+    - For backend operations: adapters/backends/
+    
+    This module is kept for backward compatibility. See docs/architecture.md.
 """
+
+import warnings
+warnings.warn(
+    "modules/tasks/filter_task.py is a legacy module (12,000+ lines). "
+    "New features should use adapters/qgis/tasks/ instead. "
+    "See docs/architecture.md for the v3.0 hexagonal architecture.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 import logging
 import os

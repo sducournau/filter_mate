@@ -19,7 +19,27 @@
  *   (at your option) any later version.                                   *
  *                                                                         *
  ***************************************************************************/
+
+.. deprecated:: 3.0.0
+    This module is a legacy God Class (12,000+ lines) and will be progressively
+    refactored in future versions. New code should use the hexagonal architecture:
+    
+    - For UI logic: ui/controllers/ (FilteringController, ExploringController, ExportingController)
+    - For filtering: core/services/filter_service.py
+    - For domain objects: core/domain/
+    
+    This module is kept for backward compatibility and will delegate to new
+    controllers progressively. See docs/architecture.md for migration guide.
 """
+
+import warnings
+warnings.warn(
+    "filter_mate_dockwidget.py is a legacy module (12,000+ lines). "
+    "New features should use ui/controllers/ instead. "
+    "See docs/architecture.md for the v3.0 hexagonal architecture.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 
 from .config.config import ENV_VARS
