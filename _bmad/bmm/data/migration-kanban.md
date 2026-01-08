@@ -30,9 +30,9 @@
 
 ### 🔄 IN PROGRESS
 
-| ID      | Story                   | Priorité | Assigné | Progression | Notes                                                               |
-| ------- | ----------------------- | -------- | ------- | ----------- | ------------------------------------------------------------------- |
-| MIG-024 | Réduction FilterMateApp | 🟠 P1    | Dev     | 75%         | TaskParameterBuilder + VariablesManager + UndoRedoHandler (590 LOC) |
+| ID      | Story                   | Priorité | Assigné | Progression | Notes                                                                      |
+| ------- | ----------------------- | -------- | ------- | ----------- | -------------------------------------------------------------------------- |
+| MIG-024 | Réduction FilterMateApp | 🟠 P1    | Dev     | 80%         | TaskParameterBuilder + VariablesManager + UndoRedoHandler + RefreshManager |
 
 ---
 
