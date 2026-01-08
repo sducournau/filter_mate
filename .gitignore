@@ -54,6 +54,7 @@ website/package-lock.json
 diagnose_*.py
 test_*.py
 !tests/test_*.py
+!tests/**/test_*.py
 
 # BMAD output (artifacts d'implémentation)
 _bmad-output/
@@ -64,3 +65,21 @@ _bmad-output/
 
 # Compiled translations (keep .ts source files)
 # Note: .qm files are compiled from .ts and should be versioned
+
+# Logs (keep structure with .gitkeep)
+logs/*.log
+!logs/.gitkeep
+
+# Serena cache
+.serena/cache/
+
+# Config backups
+config/backups/*.backup
+
+# Type checking and linting cache
+.mypy_cache/
+.ruff_cache/
+
+# Coverage reports
+coverage/
+*.coverage
