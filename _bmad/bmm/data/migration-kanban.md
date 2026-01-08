@@ -30,18 +30,17 @@
 
 ### 🔄 IN PROGRESS
 
-| ID      | Story                   | Priorité | Assigné | Progression | Notes                                       |
-| ------- | ----------------------- | -------- | ------- | ----------- | ------------------------------------------- |
-| MIG-024 | Réduction FilterMateApp | 🟠 P1    | Dev     | 40%         | TaskParameterBuilder créé, intégration TODO |
-| MIG-025 | Intégration Controllers | 🔴 P0    | Dev     | 90%         | Services connectés, tests TODO              |
+| ID      | Story                   | Priorité | Assigné | Progression | Notes                                         |
+| ------- | ----------------------- | -------- | ------- | ----------- | --------------------------------------------- |
+| MIG-024 | Réduction FilterMateApp | 🟠 P1    | Dev     | 50%         | TaskParameterBuilder intégré, extraction TODO |
 
 ---
 
 ### 👀 REVIEW
 
-| ID  | Story | Priorité | Reviewer | PR/Branch |
-| --- | ----- | -------- | -------- | --------- |
-| -   | -     | -        | -        | -         |
+| ID      | Story                   | Priorité | Reviewer | PR/Branch |
+| ------- | ----------------------- | -------- | -------- | --------- |
+| MIG-025 | Intégration Controllers | 🔴 P0    | Dev      | main      |
 
 ---
 
