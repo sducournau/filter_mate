@@ -3888,8 +3888,12 @@ class FilterEngineTask(QgsTask):
                 if len(features) == 0 and self.source_layer and self.source_layer.selectedFeatureCount() > 0:
                     logger.info(f"  → Attempting recovery from source layer selection")
                     try:
-                        features = list(self.source_layer.selectedFeatures())
-                        logger.info(f"  ✓ Recovered {len(features)} features from source layer selection")
+                        # FIX v3.1.3: Use thread-safe selectedFeatureIds() + getFeatures()
+                        selected_fids = list(self.source_layer.selectedFeatureIds())
+                        if selected_fids:
+                            request = QgsFeatureRequest().setFilterFids(selected_fids)
+                            features = list(self.source_layer.getFeatures(request))
+                            logger.info(f"  ✓ Recovered {len(features)} features from source layer selection")
                     except Exception as e:
                         logger.error(f"  ❌ Could not recover selection: {e}")
                 
@@ -3916,9 +3920,19 @@ class FilterEngineTask(QgsTask):
             logger.debug(f"  Retrieved {len(features)} features from getFeatures()")
         elif has_selection:
             # Multi-selection mode - use selected features
+            # FIX v3.1.3: Use thread-safe selectedFeatureIds() + getFeatures()
             logger.info(f"=== prepare_spatialite_source_geom (MULTI-SELECTION MODE) ===")
             logger.info(f"  Using {self.source_layer.selectedFeatureCount()} selected features from source layer")
-            features = list(self.source_layer.selectedFeatures())
+            try:
+                selected_fids = list(self.source_layer.selectedFeatureIds())
+                if selected_fids:
+                    request = QgsFeatureRequest().setFilterFids(selected_fids)
+                    features = list(self.source_layer.getFeatures(request))
+                else:
+                    features = []
+            except Exception as e:
+                logger.error(f"Failed to get selected features: {e}")
+                features = []
         elif is_field_based_mode:
             # FIELD-BASED MODE: Use ALL features from filtered source layer
             # The source layer keeps its current filter (subset string)
@@ -4508,11 +4522,18 @@ class FilterEngineTask(QgsTask):
         # STABILITY FIX v2.3.9: Validate AND REPAIR geometries during copy
         # Virtual layers and some OGR sources may have corrupted geometries
         # that pass validation but crash GEOS
+        # FIX v3.1.3: Use thread-safe selectedFeatureIds() + getFeatures()
         features_to_copy = []
         skipped_invalid = 0
         repaired_count = 0
         
-        for feature in layer.selectedFeatures():
+        selected_fids = list(layer.selectedFeatureIds())
+        if not selected_fids:
+            logger.warning(f"No selected features to copy for {layer_name}")
+            return memory_layer
+        
+        request = QgsFeatureRequest().setFilterFids(selected_fids)
+        for feature in layer.getFeatures(request):
             geom = feature.geometry()
             
             # CRITICAL: First check if geometry exists
@@ -6362,7 +6383,8 @@ class FilterEngineTask(QgsTask):
         # Helper function to map selection back to original layer if we used safe layer
         def map_selection_to_original():
             if use_safe_current and safe_current_layer is not current_layer:
-                selected_fids = [f.id() for f in safe_current_layer.selectedFeatures()]
+                # FIX v3.1.3: Use thread-safe selectedFeatureIds()
+                selected_fids = list(safe_current_layer.selectedFeatureIds())
                 if selected_fids:
                     current_layer.selectByIds(selected_fids)
                     logger.debug(f"Mapped {len(selected_fids)} features back to original layer")
@@ -6454,12 +6476,16 @@ class FilterEngineTask(QgsTask):
         # Extract feature IDs from selection
         # CRITICAL FIX: Handle ctid (PostgreSQL internal identifier)
         # ctid is not accessible via feature[field_name], use feature.id() instead
+        # FIX v3.1.3: Use thread-safe selectedFeatureIds() + getFeatures()
         features_ids = []
-        for feature in current_layer.selectedFeatures():
-            if param_distant_primary_key_name == 'ctid':
-                features_ids.append(str(feature.id()))
-            else:
-                features_ids.append(str(feature[param_distant_primary_key_name]))
+        selected_fids = list(current_layer.selectedFeatureIds())
+        if selected_fids:
+            request = QgsFeatureRequest().setFilterFids(selected_fids)
+            for feature in current_layer.getFeatures(request):
+                if param_distant_primary_key_name == 'ctid':
+                    features_ids.append(str(feature.id()))
+                else:
+                    features_ids.append(str(feature[param_distant_primary_key_name]))
         
         if len(features_ids) == 0:
             return False, None
@@ -7950,6 +7976,11 @@ class FilterEngineTask(QgsTask):
                             
                             if ogr_expression:
                                 logger.info(f"  → OGR expression built: {ogr_expression[:100]}...")
+                                
+                                # FIX v3.1.1: Set fallback flag to skip spurious cancellation checks
+                                # When OGR is used as fallback after Spatialite failure, parent task
+                                # may incorrectly report isCanceled()=True. Set flag to bypass check.
+                                ogr_backend._is_ogr_fallback = True
                                 
                                 # Apply OGR filter
                                 result = ogr_backend.apply_filter(layer, ogr_expression, old_subset, combine_operator)

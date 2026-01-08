@@ -1013,10 +1013,15 @@ class OGRGeometricFilter(GeometricFilterBackend):
             # FIX v3.0.12: Use standard feedback to avoid cancellation issues during OGR fallback
             feedback = QgsProcessingFeedback()
             
-            # Check cancellation before simplification
-            if self._is_task_canceled():
-                self.log_info("Filter cancelled before simplification")
-                return source_layer
+            # FIX v3.1.2: DISABLE cancellation check before simplification
+            # RATIONALE: Same issue as in _safe_select_by_location - processing.run() operations
+            # can cause isCanceled() to return True spuriously. Cancellation is checked at the
+            # layer boundary in _filter_all_layers_sequential(), not during individual operations.
+            # 
+            # PREVIOUS CODE (DISABLED):
+            # if self._is_task_canceled():
+            #     self.log_info("Filter cancelled before simplification")
+            #     return source_layer
             
             self.log_info(f"📐 Applying geometry simplification (tolerance={simplify_tolerance}m)")
             
@@ -1203,10 +1208,16 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 # The parent task cancellation is checked separately before each operation
                 feedback = QgsProcessingFeedback()
                 
-                # v2.6.2: Check cancellation before buffer
-                if self._is_task_canceled():
-                    self.log_info("Filter cancelled before buffer processing")
-                    return None
+                # FIX v3.1.2: DISABLE cancellation check before buffer processing
+                # RATIONALE: Same issue as in _safe_select_by_location - processing.run() operations
+                # can cause isCanceled() to return True spuriously after CRS reprojection or other
+                # processing steps. User cancellation is checked at the layer boundary in 
+                # _filter_all_layers_sequential(), not during individual operations.
+                # 
+                # PREVIOUS CODE (DISABLED):
+                # if self._is_task_canceled():
+                #     self.log_info("Filter cancelled before buffer processing")
+                #     return None
                 
                 # FIX v3.0.12: DIAGNOSTIC - Log detailed state before processing
                 QgsMessageLog.logMessage(
@@ -1943,6 +1954,61 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 )
                 return False
             
+            # FIX v3.1.0: CRITICAL - Reproject intersect layer to target CRS if different
+            # When source (intersect) and target (input) layers have different CRS,
+            # native:selectbylocation is supposed to handle this automatically, but it can
+            # fail silently for certain CRS combinations or when transformations are unavailable.
+            # Explicit reprojection ensures consistent results for "distant" layers.
+            input_crs = input_layer.crs()
+            intersect_crs = intersect_layer.crs()
+            
+            if input_crs.isValid() and intersect_crs.isValid() and input_crs != intersect_crs:
+                self.log_info(f"🔄 CRS mismatch detected - reprojecting intersect layer")
+                self.log_info(f"  → Input CRS: {input_crs.authid()}")
+                self.log_info(f"  → Intersect CRS: {intersect_crs.authid()}")
+                QgsMessageLog.logMessage(
+                    f"_safe_select_by_location: CRS MISMATCH - reprojecting from {intersect_crs.authid()} to {input_crs.authid()}",
+                    "FilterMate", Qgis.Info
+                )
+                
+                try:
+                    from qgis.core import QgsProcessingContext as ctx, QgsFeatureRequest as req, QgsProcessingFeedback as fb
+                    reproject_context = ctx()
+                    reproject_context.setInvalidGeometryCheck(req.GeometrySkipInvalid)
+                    reproject_feedback = fb()
+                    
+                    reproject_result = processing.run("native:reprojectlayer", {
+                        'INPUT': intersect_layer,
+                        'TARGET_CRS': input_crs,
+                        'OUTPUT': 'memory:'
+                    }, context=reproject_context, feedback=reproject_feedback)
+                    
+                    reprojected_layer = reproject_result['OUTPUT']
+                    
+                    if reprojected_layer and reprojected_layer.isValid() and reprojected_layer.featureCount() > 0:
+                        self.log_info(f"  ✓ Reprojected intersect layer: {reprojected_layer.featureCount()} features")
+                        intersect_layer = reprojected_layer
+                        # Keep reference to prevent GC
+                        if not hasattr(self, '_temp_layers_keep_alive') or self._temp_layers_keep_alive is None:
+                            self._temp_layers_keep_alive = []
+                        self._temp_layers_keep_alive.append(reprojected_layer)
+                    else:
+                        self.log_warning(f"  ⚠️ Reprojection returned invalid/empty layer - using original")
+                        QgsMessageLog.logMessage(
+                            f"_safe_select_by_location: Reprojection failed - using original intersect layer",
+                            "FilterMate", Qgis.Warning
+                        )
+                except Exception as reproject_err:
+                    self.log_warning(f"  ⚠️ Reprojection failed: {reproject_err} - using original layer")
+                    QgsMessageLog.logMessage(
+                        f"_safe_select_by_location: Reprojection exception: {reproject_err}",
+                        "FilterMate", Qgis.Warning
+                    )
+            elif not input_crs.isValid() or not intersect_crs.isValid():
+                self.log_warning(f"  ⚠️ Invalid CRS detected - input: {input_crs.isValid()}, intersect: {intersect_crs.isValid()}")
+            else:
+                self.log_debug(f"  ✓ CRS match: {input_crs.authid()}")
+            
             # FIX v2.8.14: Log progress to QGIS MessageLog
             QgsMessageLog.logMessage(
                 f"_safe_select_by_location: both layers validated, configuring processing context...",
@@ -1960,10 +2026,28 @@ class OGRGeometricFilter(GeometricFilterBackend):
             from qgis.core import QgsProcessingFeedback
             feedback = QgsProcessingFeedback()
             
-            # v2.6.2: Check cancellation before starting
-            if self._is_task_canceled():
-                self.log_info("Filter cancelled before selectbylocation")
-                return False
+            # FIX v3.1.2: COMPLETELY DISABLE cancellation check in _safe_select_by_location
+            # RATIONALE: processing.run() operations (native:reprojectlayer, native:selectbylocation)
+            # modify Qt event loop state and can cause isCanceled() to return True spuriously.
+            # This was observed when:
+            # - First layer (same CRS) succeeds
+            # - Second layer (different CRS) triggers reprojection
+            # - After reprojection, isCanceled() returns True (false positive)
+            # - All subsequent layers fail with "user cancelled" even though user did NOT cancel
+            # 
+            # The cancellation check was already disabled in:
+            # - filter_task.py execute_geometric_filtering() (FIX v3.0.9)
+            # - filter_task.py _filter_all_layers_sequential() (checks after each layer, not during)
+            # 
+            # Removing this check allows all layers to complete their selectbylocation operations.
+            # User can still cancel via the task manager, but cancellation will be checked at
+            # the layer boundary in _filter_all_layers_sequential(), not mid-operation.
+            #
+            # PREVIOUS CODE (DISABLED):
+            # is_fallback_mode = getattr(self, '_is_ogr_fallback', False)
+            # if not is_fallback_mode and self._is_task_canceled():
+            #     self.log_info("Filter cancelled before selectbylocation")
+            #     return False
             
             self.log_info(f"🔍 Preparing selectbylocation: input={input_layer.name()} ({input_layer.featureCount()} features), "
                          f"intersect={intersect_layer.name()} ({intersect_layer.featureCount()} features), "
@@ -2513,12 +2597,15 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 
                 if pk_field == "$id":
                     # Use QGIS feature IDs
-                    # STABILITY FIX v2.3.9: Wrap in try-except to catch access violations
+                    # FIX v3.1.3: Use thread-safe selectedFeatureIds() instead of selectedFeatures()
+                    # selectedFeatures() iterates over C++ objects that can be garbage collected
+                    # during iteration when the main thread refreshes the map canvas.
+                    # selectedFeatureIds() returns a copy of the FID list which is safe.
                     try:
-                        selected_ids = [f.id() for f in layer.selectedFeatures()]
+                        selected_ids = list(layer.selectedFeatureIds())  # Thread-safe copy
                         matching_fids = selected_ids  # FIDs are the same
                     except (RuntimeError, AttributeError) as e:
-                        self.log_error(f"Failed to get selected features: {e}")
+                        self.log_error(f"Failed to get selected feature IDs: {e}")
                         return False
                     
                     # v2.8.11: MULTI-STEP FILTERING - Intersect with previous cache if exists
@@ -2576,13 +2663,22 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     field_type = layer.fields()[field_idx].type()
                     
                     # Extract values from the primary key field AND collect QGIS FIDs for cache
-                    # STABILITY FIX v2.3.9: Wrap in try-except to catch access violations
+                    # FIX v3.1.3: Use thread-safe approach with selectedFeatureIds() + getFeatures()
+                    # selectedFeatures() is not thread-safe - C++ objects can be deleted during iteration
+                    # when main thread refreshes map canvas, causing access violations.
                     try:
                         selected_values = []
-                        matching_fids = []  # QGIS feature IDs for cache
-                        for f in layer.selectedFeatures():
-                            selected_values.append(f.attribute(pk_field))
-                            matching_fids.append(f.id())  # Collect QGIS FID for cache
+                        matching_fids = list(layer.selectedFeatureIds())  # Thread-safe copy of FIDs
+                        
+                        if matching_fids:
+                            # Use QgsFeatureRequest with filter FIDs for safe feature access
+                            from qgis.core import QgsFeatureRequest
+                            request = QgsFeatureRequest().setFilterFids(matching_fids)
+                            request.setFlags(QgsFeatureRequest.NoGeometry)  # Faster - only need attributes
+                            
+                            # Create a mapping of FID to PK value
+                            for f in layer.getFeatures(request):
+                                selected_values.append(f.attribute(pk_field))
                     except (RuntimeError, AttributeError) as e:
                         self.log_error(f"Failed to get selected features for PK extraction: {e}")
                         return False
@@ -2599,6 +2695,12 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     if CACHE_AVAILABLE and perform_cache_intersection and old_subset:
                         cache_operator = get_combine_operator_from_task(self.task_params) if get_combine_operator_from_task else None
                         original_count = len(matching_fids)
+                        
+                        # FIX v3.1.3: Build FID-to-value mapping BEFORE cache intersection
+                        # This avoids calling selectedFeatures() again after intersection
+                        # which is not thread-safe and can cause access violations
+                        fid_to_value = dict(zip(matching_fids, selected_values))
+                        
                         cache_result = perform_cache_intersection(
                             layer=layer,
                             matching_fids=matching_fids,
@@ -2613,9 +2715,8 @@ class OGRGeometricFilter(GeometricFilterBackend):
                         if cache_result.was_intersected:
                             matching_fids = cache_result.fid_list
                             step_number = cache_result.step_number
-                            # Re-map FIDs to PK values after intersection
+                            # Re-map FIDs to PK values after intersection using pre-built mapping
                             if len(matching_fids) < original_count:
-                                fid_to_value = dict(zip([f.id() for f in layer.selectedFeatures()], selected_values))
                                 selected_values = [fid_to_value[fid] for fid in matching_fids if fid in fid_to_value]
                     
                     # v2.8.8: Store result using cache_helpers
@@ -3007,11 +3108,12 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 # Mark selected features in temp field
                 # STABILITY FIX v2.3.12: Use data provider directly instead of edit mode
                 # This prevents access violations caused by layer signals from background threads
+                # FIX v3.1.3: Use thread-safe selectedFeatureIds() instead of selectedFeatures()
                 try:
                     with GdalErrorHandler():
-                        selected_features = list(layer.selectedFeatures())
+                        selected_fids = list(layer.selectedFeatureIds())  # Thread-safe copy
                 except (RuntimeError, AttributeError) as e:
-                    self.log_error(f"Failed to get selected features: {e}")
+                    self.log_error(f"Failed to get selected feature IDs: {e}")
                     return False
                 
                 # Use data provider to update attribute values (thread-safe, no signals)
@@ -3022,7 +3124,7 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 for attempt in range(max_retries):
                     try:
                         # Build attribute changes dict: {fid: {field_idx: value}}
-                        attr_changes = {f.id(): {field_idx: 1} for f in selected_features}
+                        attr_changes = {fid: {field_idx: 1} for fid in selected_fids}
                         with GdalErrorHandler():
                             if data_provider.changeAttributeValues(attr_changes):
                                 mark_success = True
@@ -3232,9 +3334,17 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 field_type = memory_layer.fields()[field_idx].type()
                 
                 # Extract primary key values from selected features
-                # STABILITY FIX v2.3.9: Wrap in try-except to catch access violations
+                # FIX v3.1.3: Use thread-safe selectedFeatureIds() instead of selectedFeatures()
+                # Although memory_layer is local, this is a safer pattern for consistency
                 try:
-                    selected_values = [f.attribute(pk_field) for f in memory_layer.selectedFeatures()]
+                    selected_fids = list(memory_layer.selectedFeatureIds())
+                    if selected_fids:
+                        from qgis.core import QgsFeatureRequest
+                        request = QgsFeatureRequest().setFilterFids(selected_fids)
+                        request.setFlags(QgsFeatureRequest.NoGeometry)  # Only need attributes
+                        selected_values = [f.attribute(pk_field) for f in memory_layer.getFeatures(request)]
+                    else:
+                        selected_values = []
                 except (RuntimeError, AttributeError) as e:
                     self.log_error(f"Failed to get selected features from memory layer: {e}")
                     try:

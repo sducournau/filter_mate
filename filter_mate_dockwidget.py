@@ -229,6 +229,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._plugin_busy = False  # Global flag to block operations during critical changes (project load, etc.)
         self._syncing_from_qgis = False  # Flag to prevent infinite recursion in QGIS ↔ widgets synchronization
         self._filtering_in_progress = False  # v2.9.25: CRITICAL - Protect current_layer during filtering operations
+        self._filter_completed_time = 0  # v2.9.42: Timestamp when filtering completed (for delayed protection)
+        self._saved_layer_id_before_filter = None  # v2.9.42: Layer ID to restore after filtering
         
         # Flag to track if LAYER_TREE_VIEW signal is connected (for bidirectional sync)
         self._layer_tree_view_signal_connected = False
@@ -6621,6 +6623,97 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         logger.info(f"v2.9.24: Reconnected {reconnected_count} ACTION signals")
 
+    def force_reconnect_exploring_signals(self):
+        """
+        Force reconnection of EXPLORING widget signals, bypassing the cache.
+        
+        v3.0.11: CRITICAL FIX for "exploring widgets don't reload on layer change after filter" bug.
+        
+        The signal connection cache (_signal_connection_states) can become desynchronized
+        with the actual signal state during filtering. This method bypasses the cache and 
+        forces direct reconnection of EXPLORING signals.
+        
+        This ensures that after a filter operation:
+        - Single selection features picker responds to featureChanged
+        - Multiple selection widget responds to updatingCheckedItemList/filteringCheckedItemList
+        - Expression widgets respond to fieldChanged
+        - Identify and Zoom buttons respond to clicked
+        
+        Called after filter/unfilter/reset operations complete to ensure widgets work.
+        
+        Notes:
+            - Clears EXPLORING signal cache entries before reconnecting
+            - Uses changeSignalState directly for actual signal state check
+            - Safe to call multiple times (idempotent)
+            - Logs reconnection status for debugging
+        """
+        logger.info("v3.0.11: Force reconnecting EXPLORING signals (bypassing cache)")
+        
+        if 'EXPLORING' not in self.widgets:
+            logger.warning("v3.0.11: EXPLORING widget group not found")
+            return
+        
+        # Define which widgets and their expected signals need reconnection
+        exploring_widgets_signals = {
+            'SINGLE_SELECTION_FEATURES': ['featureChanged'],
+            'SINGLE_SELECTION_EXPRESSION': ['fieldChanged'],
+            'MULTIPLE_SELECTION_FEATURES': ['updatingCheckedItemList', 'filteringCheckedItemList'],
+            'MULTIPLE_SELECTION_EXPRESSION': ['fieldChanged'],
+            'CUSTOM_SELECTION_EXPRESSION': ['fieldChanged'],
+            'IDENTIFY': ['clicked'],
+            'ZOOM': ['clicked'],
+            'IS_SELECTING': ['clicked'],
+            'IS_TRACKING': ['clicked'],
+            'IS_LINKING': ['clicked'],
+            'RESET_ALL_LAYER_PROPERTIES': ['clicked'],
+        }
+        
+        reconnected_count = 0
+        
+        for widget_name, expected_signals in exploring_widgets_signals.items():
+            if widget_name not in self.widgets['EXPLORING']:
+                continue
+                
+            widget_obj = self.widgets['EXPLORING'][widget_name]
+            
+            for signal_tuple in widget_obj.get("SIGNALS", []):
+                if signal_tuple[-1] is None:
+                    continue  # Skip signals with no handler
+                    
+                signal_name = signal_tuple[0]
+                handler = signal_tuple[-1]
+                
+                # Only reconnect expected signals for this widget
+                if signal_name not in expected_signals:
+                    continue
+                
+                # Clear cache entry to force re-evaluation
+                cache_key = f"EXPLORING.{widget_name}.{signal_name}"
+                if cache_key in self._signal_connection_states:
+                    del self._signal_connection_states[cache_key]
+                
+                try:
+                    # Use changeSignalState which checks actual signal state
+                    state = self.changeSignalState(
+                        ['EXPLORING', widget_name],
+                        signal_name,
+                        handler,
+                        'connect'
+                    )
+                    
+                    # Update cache with actual state
+                    self._signal_connection_states[cache_key] = state
+                    
+                    if state is True:
+                        reconnected_count += 1
+                        logger.debug(f"v3.0.11: ✅ {widget_name}.{signal_name} connected")
+                    else:
+                        logger.warning(f"v3.0.11: ⚠️ {widget_name}.{signal_name} state={state}")
+                        
+                except (AttributeError, RuntimeError, TypeError, SignalStateChangeError) as e:
+                    logger.error(f"v3.0.11: ❌ Failed to reconnect {widget_name}.{signal_name}: {e}")
+        
+        logger.info(f"v3.0.11: Reconnected {reconnected_count} EXPLORING signals")
 
     def manage_interactions(self):
         """
@@ -9746,16 +9839,37 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Synchronize all widgets with the new current layer.
         
         Updates comboboxes, field expression widgets, and backend indicator.
+        
+        v2.9.42: Added protection to prevent combobox changes during post-filter window.
         """
         # Detect multi-step filter: auto-enable additive filter if existing subsets detected
         self._detect_multi_step_filter(layer, layer_props)
         
+        # v2.9.42: Check if we're within the post-filter protection window
+        # Skip combobox synchronization if we're protecting the layer selection
+        import time
+        skip_combobox_sync = False
+        # v3.0.12: Extended protection window from 500ms to 2000ms
+        # The canvas refresh can be scheduled up to 1500ms after filter completion
+        # (see _single_canvas_refresh in filter_task.py), so we need to protect
+        # against layer changes triggered by these delayed refreshes
+        POST_FILTER_PROTECTION_WINDOW = 2.0  # seconds
+        if getattr(self, '_filter_completed_time', 0) > 0:
+            elapsed = time.time() - self._filter_completed_time
+            if elapsed < POST_FILTER_PROTECTION_WINDOW:
+                saved_layer_id = getattr(self, '_saved_layer_id_before_filter', None)
+                if saved_layer_id and layer and layer.id() != saved_layer_id:
+                    skip_combobox_sync = True
+                    logger.info(f"v3.0.12: 🛡️ _synchronize_layer_widgets BLOCKED combobox sync - within {POST_FILTER_PROTECTION_WINDOW}s protection window (elapsed={elapsed:.3f}s)")
+        
         # Always synchronize comboBox_filtering_current_layer with current_layer
-        lastLayer = self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].currentLayer()
-        if lastLayer is None or lastLayer.id() != self.current_layer.id():
-            self.manageSignal(["FILTERING","CURRENT_LAYER"], 'disconnect')
-            self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].setLayer(self.current_layer)
-            self.manageSignal(["FILTERING","CURRENT_LAYER"], 'connect', 'layerChanged')
+        # v2.9.42: Skip if within post-filter protection window
+        if not skip_combobox_sync:
+            lastLayer = self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].currentLayer()
+            if lastLayer is None or lastLayer.id() != self.current_layer.id():
+                self.manageSignal(["FILTERING","CURRENT_LAYER"], 'disconnect')
+                self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].setLayer(self.current_layer)
+                self.manageSignal(["FILTERING","CURRENT_LAYER"], 'connect', 'layerChanged')
         
         # Update backend indicator with PostgreSQL connection availability flag
         # CRITICAL: Pass forced backend if set to show the actual backend being used
@@ -10397,6 +10511,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         to prevent crashes during project load operations.
         
         v2.9.26: Added filtering protection - ignore layer changes during filtering.
+        v3.0.12: Extended time-based protection from 500ms to 2000ms to cover delayed canvas refresh.
         """
         # CRITICAL: Check lock BEFORE any processing
         if self._updating_current_layer:
@@ -10407,6 +10522,32 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if getattr(self, '_filtering_in_progress', False):
             logger.debug(f"v2.9.26: 🛡️ current_layer_changed BLOCKED - filtering in progress")
             return
+        
+        # v3.0.12: CRITICAL - Block layer changes for 2000ms after filtering completes
+        # Signals can be emitted asynchronously (e.g., from canvas refresh, layer tree updates)
+        # after _filtering_in_progress is set to False. The canvas refresh can be scheduled
+        # up to 1500ms after filter completion (_single_canvas_refresh in filter_task.py),
+        # so we need a 2000ms protection window to prevent unwanted layer changes.
+        import time
+        POST_FILTER_PROTECTION_WINDOW = 2.0  # seconds - must cover refresh_delay (1500ms) + margin
+        if getattr(self, '_filter_completed_time', 0) > 0:
+            elapsed = time.time() - self._filter_completed_time
+            if elapsed < POST_FILTER_PROTECTION_WINDOW:
+                # Check if the requested layer is different from the saved layer
+                saved_layer_id = getattr(self, '_saved_layer_id_before_filter', None)
+                if saved_layer_id and layer and layer.id() != saved_layer_id:
+                    logger.info(f"v3.0.12: 🛡️ current_layer_changed BLOCKED - within {POST_FILTER_PROTECTION_WINDOW}s of filter completion (elapsed={elapsed:.3f}s, requested={layer.name()})")
+                    # Restore the combobox to the saved layer
+                    from qgis.core import QgsProject
+                    saved_layer = QgsProject.instance().mapLayer(saved_layer_id)
+                    if saved_layer and saved_layer.isValid():
+                        self.comboBox_filtering_current_layer.blockSignals(True)
+                        self.comboBox_filtering_current_layer.setLayer(saved_layer)
+                        self.comboBox_filtering_current_layer.blockSignals(False)
+                        # v3.0.12: Also ensure current_layer reference stays correct
+                        self.current_layer = saved_layer
+                        logger.info(f"v3.0.12: ✅ Restored combobox and current_layer to '{saved_layer.name()}'")
+                    return
         
         # v2.9.19: CRITICAL - Ensure we have a valid layer when layers exist in project
         # Never allow current_layer to be None if PROJECT_LAYERS has layers

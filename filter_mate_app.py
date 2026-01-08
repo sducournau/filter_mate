@@ -2014,7 +2014,13 @@ class FilterMateApp:
             if self._current_layer_before_filter:
                 try:
                     self._current_layer_id_before_filter = self._current_layer_before_filter.id()
-                    logger.info(f"v2.9.19: 💾 Saved current_layer '{self._current_layer_before_filter.name()}' before filtering")
+                    logger.info(f"v3.0.13: 💾 Saved current_layer '{self._current_layer_before_filter.name()}' (ID: {self._current_layer_id_before_filter[:8]}...) before filtering")
+                    # v3.0.13: Log to QGIS message panel for visibility
+                    from qgis.core import QgsMessageLog, Qgis
+                    QgsMessageLog.logMessage(
+                        f"🔒 Filter protection ACTIVE - Layer '{self._current_layer_before_filter.name()}' will be preserved",
+                        "FilterMate", Qgis.Info
+                    )
                 except (RuntimeError, AttributeError):
                     self._current_layer_id_before_filter = None
                     logger.warning("v2.9.19: ⚠️ Could not save current_layer ID (layer invalid)")
@@ -4204,31 +4210,34 @@ class FilterMateApp:
         # Any backend can cause the combobox to reset to None and exploring widgets to not refresh properly
         # This is because layers may reload their data provider after filtering, invalidating widget references
         # v2.9.19: CRITICAL - finally block MUST be outside the if to guarantee execution
+        # v3.0.10: Use restored_layer directly to avoid issues if current_layer is modified by async signals
+        target_layer = restored_layer if restored_layer and restored_layer.isValid() else self.dockwidget.current_layer
         try:
-            if self.dockwidget.current_layer:
+            if target_layer:
                 # 1. Ensure combobox still shows the current layer (CRITICAL for UX)
                 # v2.9.19: This should now be the EXACT same layer as before filtering
                 current_combo_layer = self.dockwidget.comboBox_filtering_current_layer.currentLayer()
-                if not current_combo_layer or current_combo_layer.id() != self.dockwidget.current_layer.id():
-                    logger.info(f"v2.9.19: 🔄 Combobox reset detected - restoring to '{self.dockwidget.current_layer.name()}'")
+                if not current_combo_layer or current_combo_layer.id() != target_layer.id():
+                    logger.info(f"v2.9.19: 🔄 Combobox reset detected - restoring to '{target_layer.name()}'")
                     # Temporarily disconnect to prevent signal during setLayer
                     self.dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'disconnect')
-                    self.dockwidget.comboBox_filtering_current_layer.setLayer(self.dockwidget.current_layer)
+                    self.dockwidget.comboBox_filtering_current_layer.setLayer(target_layer)
                     # Note: Don't reconnect here - let the finally block handle it for consistency
                 else:
-                    logger.info(f"v2.9.19: ✅ Combobox already shows correct layer '{self.dockwidget.current_layer.name()}'")
+                    logger.info(f"v2.9.19: ✅ Combobox already shows correct layer '{target_layer.name()}'")
                 
                 # 2. Force reload of exploring widgets to refresh feature lists after filtering
                 # This ensures the multiple selection widget displays the filtered features
                 # v2.9.20: CRITICAL - ALWAYS reload exploring widgets, even if current_layer didn't change
                 # The features have changed due to filtering, so widgets MUST be refreshed
+                # v3.0.10: Use target_layer to ensure we use the saved layer, not a potentially modified current_layer
                 try:
-                    if self.dockwidget.current_layer.id() in self.PROJECT_LAYERS:
-                        layer_props = self.PROJECT_LAYERS[self.dockwidget.current_layer.id()]
-                        logger.info(f"v2.9.20: 🔄 Reloading exploring widgets for '{self.dockwidget.current_layer.name()}' after {display_backend} filter")
+                    if target_layer.id() in self.PROJECT_LAYERS:
+                        layer_props = self.PROJECT_LAYERS[target_layer.id()]
+                        logger.info(f"v2.9.20: 🔄 Reloading exploring widgets for '{target_layer.name()}' after {display_backend} filter")
                         
-                        # FORCE complete reload of exploring widgets
-                        self.dockwidget._reload_exploration_widgets(self.dockwidget.current_layer, layer_props)
+                        # FORCE complete reload of exploring widgets with the saved layer
+                        self.dockwidget._reload_exploration_widgets(target_layer, layer_props)
                         
                         # v2.9.28: CRITICAL FIX - Always restore groupbox UI state after filtering
                         # Use saved groupbox from layer_props if available, fallback to current or default
@@ -4252,7 +4261,7 @@ class FilterMateApp:
                         
                         logger.info(f"v2.9.20: ✅ Exploring widgets reloaded successfully")
                     else:
-                        logger.warning(f"v2.9.20: ⚠️ current_layer ID {self.dockwidget.current_layer.id()} not in PROJECT_LAYERS - cannot reload exploring widgets")
+                        logger.warning(f"v2.9.20: ⚠️ target_layer ID {target_layer.id()} not in PROJECT_LAYERS - cannot reload exploring widgets")
                 except Exception as exploring_error:
                     logger.error(f"v2.9.20: ❌ Error reloading exploring widgets: {exploring_error}")
                     import traceback
@@ -4261,12 +4270,13 @@ class FilterMateApp:
                 # 3. v2.8.16: Force explicit layer repaint to ensure canvas displays filtered features
                 # All backends may require explicit triggerRepaint() on BOTH source and current layer
                 # v2.9.20: Isolated try-catch to ensure this always attempts to run
+                # v3.0.10: Use target_layer to ensure we repaint the correct layer
                 try:
                     logger.debug(f"v2.9.20: {display_backend} filter completed - triggering layer repaint")
                     if source_layer and source_layer.isValid():
                         source_layer.triggerRepaint()
-                    if self.dockwidget.current_layer.isValid():
-                        self.dockwidget.current_layer.triggerRepaint()
+                    if target_layer.isValid():
+                        target_layer.triggerRepaint()
                     # Force canvas refresh with stopRendering first to prevent conflicts
                     canvas = self.iface.mapCanvas()
                     canvas.stopRendering()
@@ -4277,7 +4287,7 @@ class FilterMateApp:
                     import traceback
                     logger.error(f"Traceback: {traceback.format_exc()}")
             else:
-                logger.warning(f"v2.9.19: ⚠️ current_layer is None after filtering - skipping UI refresh")
+                logger.warning(f"v2.9.19: ⚠️ target_layer is None after filtering - skipping UI refresh")
                     
         except (AttributeError, RuntimeError) as e:
             logger.error(f"v2.9.19: ❌ Error refreshing UI after {display_backend} filter: {e}")
@@ -4288,6 +4298,17 @@ class FilterMateApp:
             # This ensures signal reconnection happens even if current_layer is None
             if self.dockwidget:
                 try:
+                    # v3.0.12: CRITICAL FIX - Set time-based protection BEFORE reconnecting signals
+                    # Reconnecting signals can trigger pending events that would change the combobox.
+                    # The protection must be active BEFORE any signals are reconnected.
+                    # This protection will be REFRESHED after the combobox is restored to ensure
+                    # the 2-second window covers delayed canvas refresh timers (up to 1500ms).
+                    import time
+                    self.dockwidget._filter_completed_time = time.time()
+                    if hasattr(self, '_current_layer_id_before_filter') and self._current_layer_id_before_filter:
+                        self.dockwidget._saved_layer_id_before_filter = self._current_layer_id_before_filter
+                        logger.info(f"v3.0.12: ⏱️ Initial protection set for layer '{self._current_layer_id_before_filter[:8]}...'")
+                    
                     # v2.9.26: CRITICAL - Ensure combobox shows correct layer BEFORE reconnecting signal
                     # and BEFORE resetting the filtering flag
                     if hasattr(self, '_current_layer_id_before_filter') and self._current_layer_id_before_filter:
@@ -4300,6 +4321,10 @@ class FilterMateApp:
                                 self.dockwidget.comboBox_filtering_current_layer.setLayer(restored_layer)
                                 self.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
                                 logger.info(f"v2.9.26: ✅ FINALLY - Forced combobox to '{restored_layer.name()}'")
+                            # v3.0.10: Also ensure current_layer is set correctly BEFORE signal reconnection
+                            if self.dockwidget.current_layer is None or self.dockwidget.current_layer.id() != restored_layer.id():
+                                self.dockwidget.current_layer = restored_layer
+                                logger.info(f"v3.0.10: ✅ FINALLY - Ensured current_layer is '{restored_layer.name()}'")
                     
                     # v2.9.20: ALWAYS reconnect signal
                     self.dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
@@ -4320,11 +4345,73 @@ class FilterMateApp:
                     if hasattr(self.dockwidget, 'force_reconnect_action_signals'):
                         self.dockwidget.force_reconnect_action_signals()
                     
+                    # v3.0.11: CRITICAL FIX - Force reconnect EXPLORING signals after filtering
+                    # The signal cache can become desynchronized, causing exploring widgets 
+                    # (single selection, distant layers, etc.) to not reload on layer change.
+                    # This bypasses the cache and forces direct reconnection of EXPLORING signals.
+                    if hasattr(self.dockwidget, 'force_reconnect_exploring_signals'):
+                        self.dockwidget.force_reconnect_exploring_signals()
+                    
                     # v2.9.20: FORCE invalidation of exploring cache after filtering
                     # This ensures the panel shows fresh, filtered features
                     if hasattr(self.dockwidget, 'invalidate_exploring_cache') and self.dockwidget.current_layer:
                         self.dockwidget.invalidate_exploring_cache(self.dockwidget.current_layer.id())
                         logger.info(f"v2.9.20: ✅ Invalidated exploring cache for '{self.dockwidget.current_layer.name()}'")
+                    
+                    # v3.0.12: CRITICAL - Final combobox protection BEFORE resetting filtering flag
+                    # The reconnected signals can trigger currentLayerChanged which may change the combobox.
+                    # We MUST ensure the combobox shows the saved layer BEFORE allowing signals through.
+                    if hasattr(self, '_current_layer_id_before_filter') and self._current_layer_id_before_filter:
+                        final_layer = QgsProject.instance().mapLayer(self._current_layer_id_before_filter)
+                        if final_layer and final_layer.isValid():
+                            current_combo = self.dockwidget.comboBox_filtering_current_layer.currentLayer()
+                            if not current_combo or current_combo.id() != final_layer.id():
+                                # Block and restore combobox to correct layer
+                                self.dockwidget.comboBox_filtering_current_layer.blockSignals(True)
+                                self.dockwidget.comboBox_filtering_current_layer.setLayer(final_layer)
+                                self.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
+                                # Also update current_layer reference in dockwidget
+                                self.dockwidget.current_layer = final_layer
+                                logger.info(f"v3.0.12: ✅ FINAL - Restored combobox to '{final_layer.name()}' BEFORE signal unlock")
+                    
+                    # v3.0.12: CRITICAL - Update protection time AFTER restoring combobox
+                    # This ensures the 2-second protection window starts AFTER the combobox is correctly set.
+                    # The delayed canvas refresh timers (up to 1500ms) will be blocked by this protection.
+                    import time
+                    self.dockwidget._filter_completed_time = time.time()
+                    if hasattr(self, '_current_layer_id_before_filter') and self._current_layer_id_before_filter:
+                        self.dockwidget._saved_layer_id_before_filter = self._current_layer_id_before_filter
+                    logger.info(f"v3.0.12: ⏱️ Updated 2000ms protection window AFTER combobox restoration")
+                    
+                    # v3.0.13: CRITICAL - Schedule multiple delayed combobox verification checks
+                    # The canvas refresh timers (up to 1500ms) can trigger layer changes AFTER
+                    # our protection is set. By scheduling checks at 200ms, 600ms, 1000ms, 1500ms, and 2000ms,
+                    # we ensure the combobox is restored even if async signals change it.
+                    if hasattr(self, '_current_layer_id_before_filter') and self._current_layer_id_before_filter:
+                        saved_layer_id = self._current_layer_id_before_filter
+                        
+                        def restore_combobox_if_needed():
+                            """Check and restore combobox to saved layer if it was changed."""
+                            try:
+                                if not self.dockwidget:
+                                    return
+                                saved_layer = QgsProject.instance().mapLayer(saved_layer_id)
+                                if saved_layer and saved_layer.isValid():
+                                    current_combo = self.dockwidget.comboBox_filtering_current_layer.currentLayer()
+                                    if not current_combo or current_combo.id() != saved_layer.id():
+                                        logger.info(f"v3.0.13: 🔧 DELAYED CHECK - Combobox was changed, restoring to '{saved_layer.name()}'")
+                                        self.dockwidget.comboBox_filtering_current_layer.blockSignals(True)
+                                        self.dockwidget.comboBox_filtering_current_layer.setLayer(saved_layer)
+                                        self.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
+                                        self.dockwidget.current_layer = saved_layer
+                            except Exception as e:
+                                logger.debug(f"v3.0.13: Error in delayed combobox check: {e}")
+                        
+                        # Schedule multiple checks to catch async signal-triggered changes
+                        from qgis.PyQt.QtCore import QTimer
+                        for delay in [200, 600, 1000, 1500, 2000]:
+                            QTimer.singleShot(delay, restore_combobox_if_needed)
+                        logger.info(f"v3.0.13: 📋 Scheduled 5 delayed combobox verification checks")
                     
                     # v2.9.26: CRITICAL - Reset filtering flag LAST to ensure all operations complete
                     # while the flag is still protecting against unwanted signal emissions

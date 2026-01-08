@@ -1918,7 +1918,7 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                     db_path = self._get_spatialite_db_path(layer)
                     
                     if db_path:
-                        import sqlite3
+                        # FIX v3.1.1: Use global sqlite3 import (line 40) instead of local import
                         try:
                             conn = sqlite3.connect(db_path)
                             cursor = conn.cursor()
@@ -3648,15 +3648,18 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             "FilterMate", Qgis.Info
         )
         
-        # v2.6.2: Check cancellation before starting
-        if self._is_task_canceled():
-            self.log_info("Filter cancelled before starting source table optimization")
-            from qgis.core import QgsMessageLog, Qgis
-            QgsMessageLog.logMessage(
-                f"{layer.name()}: Filter cancelled before starting source table optimization",
-                "FilterMate", Qgis.Warning
-            )
-            return False
+        # FIX v3.1.1: DISABLED early cancellation check
+        # This check can return spurious True after exceptions in previous layers,
+        # causing subsequent layers to be skipped incorrectly.
+        # The user did NOT actually cancel - we MUST continue filtering.
+        # if self._is_task_canceled():
+        #     self.log_info("Filter cancelled before starting source table optimization")
+        #     from qgis.core import QgsMessageLog, Qgis
+        #     QgsMessageLog.logMessage(
+        #         f"{layer.name()}: Filter cancelled before starting source table optimization",
+        #         "FilterMate", Qgis.Warning
+        #     )
+        #     return False
         
         # v2.6.10: Get feature count for progress estimation
         feature_count = layer.featureCount()
@@ -3762,7 +3765,8 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             if is_pre_buffered and existing_source_table:
                 # Verify table still exists in database
                 try:
-                    import sqlite3
+                    # FIX v3.1.1: Use global sqlite3 import (line 40) instead of local import
+                    # Local imports inside conditionals cause Python UnboundLocalError
                     conn = sqlite3.connect(source_path, check_same_thread=False)
                     cursor = conn.cursor()
                     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (existing_source_table,))
