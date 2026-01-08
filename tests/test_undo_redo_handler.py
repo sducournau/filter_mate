@@ -236,6 +236,79 @@ class TestUndoRedoHandler(unittest.TestCase):
         
         self.mock_history.clear.assert_called_once()
         self.mock_history_manager.clear_global_history.assert_called_once()
+        
+    def test_push_filter_to_history(self):
+        """Test push_filter_to_history pushes state correctly."""
+        handler = self._create_handler()
+        
+        mock_layer = MagicMock()
+        mock_layer.id.return_value = "layer_123"
+        mock_layer.subsetString.return_value = "population > 1000"
+        
+        # Mock get_or_create_history
+        mock_new_history = MagicMock()
+        mock_new_history._current_index = 0
+        mock_new_history._states = [MagicMock()]
+        self.mock_history_manager.get_or_create_history.return_value = mock_new_history
+        
+        task_parameters = {
+            "task": {"layers": []}
+        }
+        
+        handler.push_filter_to_history(
+            source_layer=mock_layer,
+            task_parameters=task_parameters,
+            feature_count=100,
+            provider_type="spatialite",
+            layer_count=1
+        )
+        
+        mock_new_history.push_state.assert_called_once()
+        
+    def test_push_filter_with_remote_layers(self):
+        """Test push_filter_to_history with remote layers."""
+        # Update PROJECT_LAYERS to include remote layer
+        self.mock_project_layers["remote_layer_1"] = {
+            "infos": {"is_already_subset": False},
+            "filtering": {}
+        }
+        
+        handler = self._create_handler()
+        
+        mock_layer = MagicMock()
+        mock_layer.id.return_value = "layer_123"
+        mock_layer.subsetString.return_value = "population > 1000"
+        
+        # Mock remote layer in project
+        mock_remote = MagicMock()
+        mock_remote.subsetString.return_value = "related_filter"
+        mock_remote.featureCount.return_value = 50
+        self.mock_project.mapLayer.return_value = mock_remote
+        
+        # Mock history
+        mock_new_history = MagicMock()
+        mock_new_history._current_index = 0
+        mock_new_history._states = [MagicMock()]
+        self.mock_history_manager.get_or_create_history.return_value = mock_new_history
+        
+        task_parameters = {
+            "task": {
+                "layers": [
+                    {"layer_id": "remote_layer_1", "layer_name": "Remote1"}
+                ]
+            }
+        }
+        
+        handler.push_filter_to_history(
+            source_layer=mock_layer,
+            task_parameters=task_parameters,
+            feature_count=100,
+            provider_type="spatialite",
+            layer_count=2
+        )
+        
+        # Should push global state
+        self.mock_history_manager.push_global_state.assert_called_once()
 
 
 class TestUndoRedoHandlerGlobal(unittest.TestCase):

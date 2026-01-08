@@ -473,3 +473,115 @@ class UndoRedoHandler:
         # Clear global history
         self._history_manager.clear_global_history()
         logger.info("Cleared global filter history")
+    
+    def push_filter_to_history(
+        self,
+        source_layer: 'QgsVectorLayer',
+        task_parameters: Dict,
+        feature_count: int,
+        provider_type: str,
+        layer_count: int
+    ) -> None:
+        """
+        Push filter state to history for source and associated layers.
+        
+        Extracted from FilterMateApp._push_filter_to_history().
+        
+        Args:
+            source_layer: Source layer being filtered
+            task_parameters: Task parameters containing layers info
+            feature_count: Number of features in filtered result
+            provider_type: Backend provider type
+            layer_count: Number of layers affected
+        """
+        # Save source layer state to history
+        history = self._history_manager.get_or_create_history(source_layer.id())
+        filter_expression = source_layer.subsetString()
+        
+        if len(filter_expression) > 60:
+            description = f"Filter: {filter_expression[:60]}..."
+        else:
+            description = f"Filter: {filter_expression}"
+        
+        history.push_state(
+            expression=filter_expression,
+            feature_count=feature_count,
+            description=description,
+            metadata={"backend": provider_type, "operation": "filter", "layer_count": layer_count}
+        )
+        
+        history_pos = history._current_index + 1 if hasattr(history, '_current_index') else '?'
+        history_len = len(history._states) if hasattr(history, '_states') else '?'
+        logger.info(f"Pushed filter state to history for source layer (position {history_pos}/{history_len})")
+        
+        # Collect and save remote layers state
+        remote_layers_info = self._collect_remote_layers_history(task_parameters, provider_type)
+        
+        # Push global state if we have remote layers
+        if remote_layers_info:
+            self._history_manager.push_global_state(
+                source_layer_id=source_layer.id(),
+                source_expression=filter_expression,
+                source_feature_count=feature_count,
+                remote_layers=remote_layers_info,
+                description=f"Global filter: {len(remote_layers_info) + 1} layers",
+                metadata={"backend": provider_type, "operation": "filter"}
+            )
+            logger.info(f"Pushed global filter state ({len(remote_layers_info) + 1} layers)")
+    
+    def _collect_remote_layers_history(
+        self,
+        task_parameters: Dict,
+        provider_type: str
+    ) -> Dict[str, tuple]:
+        """
+        Collect and save history for remote layers.
+        
+        Args:
+            task_parameters: Task parameters containing layers info
+            provider_type: Default provider type
+            
+        Returns:
+            Dict mapping layer_id to (filter_expression, feature_count) tuple
+        """
+        remote_layers_info = {}
+        project = self._get_project()
+        project_layers = self._get_project_layers()
+        
+        for layer_props in task_parameters.get("task", {}).get("layers", []):
+            layer_id = layer_props.get("layer_id")
+            layer_name = layer_props.get("layer_name")
+            
+            if not layer_id or layer_id not in project_layers:
+                continue
+            
+            # Find the layer in the project
+            assoc_layer = project.mapLayer(layer_id)
+            if not assoc_layer:
+                continue
+            
+            # Push state to layer history
+            assoc_history = self._history_manager.get_or_create_history(layer_id)
+            assoc_filter = assoc_layer.subsetString()
+            assoc_count = assoc_layer.featureCount()
+            
+            if len(assoc_filter) > 60:
+                assoc_desc = f"Filter: {assoc_filter[:60]}..."
+            else:
+                assoc_desc = f"Filter: {assoc_filter}"
+            
+            assoc_history.push_state(
+                expression=assoc_filter,
+                feature_count=assoc_count,
+                description=assoc_desc,
+                metadata={
+                    "backend": layer_props.get("layer_provider_type", provider_type),
+                    "operation": "filter"
+                }
+            )
+            logger.info(f"Pushed filter state to history for layer {layer_name}")
+            
+            # Add to remote layers info for global history
+            remote_layers_info[layer_id] = (assoc_filter, assoc_count)
+        
+        return remote_layers_info
