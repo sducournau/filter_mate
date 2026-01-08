@@ -445,34 +445,43 @@ class FilteringController(BaseController, LayerSelectionMixin):
         """
         Execute the current filter.
         
+        v3.0 Migration: This method is part of the Strangler Fig pattern.
+        Currently it validates the configuration and prepares for execution,
+        but returns False to let the legacy code path handle actual filtering.
+        
+        Future: When FilterService is fully integrated, this will:
+        1. Build FilterRequest from configuration
+        2. Call FilterService.apply_filter()
+        3. Handle async completion
+        
         Returns:
-            True if execution started, False otherwise
+            True if execution handled by controller, False to use legacy
         """
+        import logging
+        logger = logging.getLogger('FilterMate.FilteringController')
+        
         if not self.can_execute():
+            logger.debug("FilteringController: cannot execute - validation failed")
             return False
         
-        self._is_executing = True
-        
-        # Save state for undo before execution
-        self._save_to_undo_stack()
-        
-        # Build configuration
+        # Build configuration for logging/debugging
         config = self.build_configuration()
         
-        # Delegate to filter service if available
+        # Check if FilterService is available
         if self._filter_service:
-            try:
-                # Filter service would handle async execution
-                # This is a simplified synchronous version
-                self._on_filter_success(config)
-                return True
-            except Exception as e:
-                self._on_filter_error(str(e))
-                return False
-        
-        # Fallback: emit signal for dockwidget to handle
-        self._is_executing = False
-        return True
+            logger.info(
+                f"FilteringController: FilterService available, config valid. "
+                f"source={config.source_layer_id}, targets={len(config.target_layer_ids)}, "
+                f"predicate={config.predicate.value}"
+            )
+            # TODO Phase 2: Actually use FilterService here
+            # For now, return False to use legacy path while we verify integration
+            # The controller is connected and config is valid - legacy will handle execution
+            logger.debug("FilteringController: Delegating to legacy (Phase 1 - verification)")
+            return False
+        else:
+            logger.debug("FilteringController: No FilterService, using legacy path")
+            return False
     
     def _on_filter_success(self, config: FilterConfiguration) -> None:
         """Handle successful filter execution."""

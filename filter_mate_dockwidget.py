@@ -187,9 +187,12 @@ except ImportError:
 # Import MVC Controllers for gradual migration (v3.0)
 try:
     from .ui.controllers.integration import ControllerIntegration
+    from .adapters.app_bridge import get_filter_service, is_initialized as is_hexagonal_initialized
     CONTROLLERS_AVAILABLE = True
 except ImportError as e:
     CONTROLLERS_AVAILABLE = False
+    get_filter_service = None
+    is_hexagonal_initialized = lambda: False
     logger.debug(f"Controllers not available: {e}")
 
 class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
@@ -342,8 +345,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._controller_integration = None
         if CONTROLLERS_AVAILABLE:
             try:
+                # v3.0: Inject FilterService from hexagonal architecture if available
+                filter_service = None
+                if is_hexagonal_initialized() and get_filter_service:
+                    try:
+                        filter_service = get_filter_service()
+                        logger.debug("FilterService obtained for controller injection")
+                    except Exception as svc_err:
+                        logger.debug(f"FilterService not available: {svc_err}")
+                
                 self._controller_integration = ControllerIntegration(
                     dockwidget=self,
+                    filter_service=filter_service,
                     enabled=True  # Enable controllers for migration
                 )
                 logger.info("Controller integration initialized (v3.0 migration)")
