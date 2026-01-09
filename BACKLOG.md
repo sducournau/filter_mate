@@ -916,7 +916,7 @@ def temp_table_context(self, db_path, table_name):
 ### Phase 3: Performance (Semaine 5-6)
 
 - [x] **HIGH-016**: Implémenter cache unifié ✅ (6 caches spécialisés)
-- [ ] **HIGH-014/15**: Éliminer validations redondantes
+- [x] **HIGH-014/15**: Éliminer validations redondantes ✅ geometry_safety.py centralise (v3.0.20)
 - [ ] **MED-021**: Corriger requêtes N+1
 - [x] **MED-024**: Implémenter connection pooling ✅ (connection_pool.py)
 
