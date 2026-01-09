@@ -92,10 +92,16 @@ try:
         parse_expression,
     )
     from .adapters.task_builder import TaskParameterBuilder  # v4.0: Task parameter extraction
+    from .core.services.layer_lifecycle_service import (  # v4.0: Layer lifecycle extraction
+        LayerLifecycleService,
+        LayerLifecycleConfig
+    )
     HEXAGONAL_AVAILABLE = True
 except ImportError:
     HEXAGONAL_AVAILABLE = False
     TaskParameterBuilder = None  # v4.0: Fallback
+    LayerLifecycleService = None  # v4.0: Fallback
+    LayerLifecycleConfig = None  # v4.0: Fallback
 
     def _init_hexagonal_services(config=None):
         """Fallback when hexagonal services unavailable."""
@@ -183,13 +189,35 @@ class FilterMateApp:
 
     PROJECT_LAYERS = {} 
 
+    def _get_layer_lifecycle_service(self):
+        """Get or create LayerLifecycleService instance (lazy initialization)."""
+        if not hasattr(self, '_lifecycle_service') or self._lifecycle_service is None:
+            if LayerLifecycleService:
+                config = LayerLifecycleConfig(
+                    postgresql_temp_schema=self.app_postgresql_temp_schema if hasattr(self, 'app_postgresql_temp_schema') else 'public',
+                    auto_cleanup_enabled=True
+                )
+                self._lifecycle_service = LayerLifecycleService(config)
+            else:
+                self._lifecycle_service = None
+        return self._lifecycle_service
+
     def _filter_usable_layers(self, layers):
         """
         Return only layers that are valid vector layers with available sources.
         
+        .. deprecated:: 4.0.0
+            Delegates to LayerLifecycleService.filter_usable_layers()
+        
         STABILITY FIX v2.3.9: Uses is_valid_layer() from object_safety module
         to prevent access violations from deleted C++ objects.
         """
+        # v4.0: Delegate to LayerLifecycleService
+        service = self._get_layer_lifecycle_service()
+        if service:
+            return service.filter_usable_layers(layers, POSTGRESQL_AVAILABLE)
+        
+        # Fallback to legacy implementation
         try:
             input_count = len(layers or [])
             usable = []
@@ -444,6 +472,9 @@ class FilterMateApp:
         """
         Clean up all PostgreSQL materialized views created by this session.
         
+        .. deprecated:: 4.0.0
+            Delegates to LayerLifecycleService.cleanup_postgresql_session_views()
+        
         Drops all materialized views and indexes prefixed with the session_id
         to prevent accumulation of orphaned views in the database.
         
@@ -452,6 +483,18 @@ class FilterMateApp:
         Uses circuit breaker pattern to prevent cascading failures if
         PostgreSQL connection is unstable.
         """
+        # v4.0: Delegate to LayerLifecycleService
+        service = self._get_layer_lifecycle_service()
+        if service:
+            service.cleanup_postgresql_session_views(
+                session_id=self.session_id,
+                temp_schema=self.app_postgresql_temp_schema,
+                project_layers=self.PROJECT_LAYERS,
+                postgresql_available=POSTGRESQL_AVAILABLE
+            )
+            return
+        
+        # Fallback to legacy implementation
         if not POSTGRESQL_AVAILABLE:
             return
         

@@ -35,6 +35,7 @@ Extraire les méthodes de construction de paramètres de tâches depuis FilterMa
 ### Fichiers modifiés
 
 1. **adapters/task_builder.py** (+150 lignes)
+
    - Ajouté `build_common_task_params()` (120 lignes)
    - Ajouté `build_layer_management_params()` (30 lignes)
 
@@ -90,7 +91,7 @@ def test_build_common_task_params():
         layers_to_filter=[mock_layer_info],
         session_id="test-session"
     )
-    
+
     assert "features" in params
     assert "expression" in params
     assert "layers" in params
@@ -105,7 +106,7 @@ def test_build_layer_management_params():
         project_layers=mock_project_layers,
         config_data=mock_config
     )
-    
+
     assert "task" in params
     assert params["task"]["reset_all_layers_variables_flag"] == True
 ```
@@ -114,19 +115,19 @@ def test_build_layer_management_params():
 
 ### Avant MIG-100
 
-| Métrique | Valeur |
-|----------|--------|
-| FilterMateApp lignes | 6,075 |
-| Méthodes FilterMateApp | 101 |
-| TaskParameterBuilder lignes | 366 |
+| Métrique                    | Valeur |
+| --------------------------- | ------ |
+| FilterMateApp lignes        | 6,075  |
+| Méthodes FilterMateApp      | 101    |
+| TaskParameterBuilder lignes | 366    |
 
 ### Après MIG-100
 
-| Métrique | Valeur | Variation |
-|----------|--------|-----------|
-| FilterMateApp lignes | ~5,825 | **-250 lignes** |
-| Méthodes FilterMateApp | 101 | 0 (délégation) |
-| TaskParameterBuilder lignes | 516 | **+150 lignes** |
+| Métrique                    | Valeur | Variation       |
+| --------------------------- | ------ | --------------- |
+| FilterMateApp lignes        | ~5,825 | **-250 lignes** |
+| Méthodes FilterMateApp      | 101    | 0 (délégation)  |
+| TaskParameterBuilder lignes | 516    | **+150 lignes** |
 
 **Gain net**: -250 lignes dans god class FilterMateApp
 
@@ -165,6 +166,7 @@ def test_build_layer_management_params():
 ### Rétrocompatibilité
 
 Maintenue à 100% via pattern de délégation:
+
 - FilterMateApp continue d'exposer les méthodes publiques
 - Méthodes privées délèguent au builder
 - Fallback legacy si TaskParameterBuilder indisponible
