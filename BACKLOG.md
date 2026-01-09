@@ -810,18 +810,18 @@ def temp_table_context(self, db_path, table_name):
 
 ### MED-021 à MED-030: Performance
 
-| ID      | Issue                    | Impact          | Fix                         |
-| ------- | ------------------------ | --------------- | --------------------------- |
-| MED-021 | Requêtes N+1             | Lenteur         | Batch queries               |
-| MED-022 | Pas de pagination        | Mémoire         | Implement pagination        |
-| MED-023 | Cache non invalidé       | Données stales  | ✅ TTL + invalidate_layer() |
-| MED-024 | Connexions non poolées   | Overhead        | ✅ connection_pool.py       |
-| MED-025 | Lazy loading absent      | Startup lent    | ✅ LazyResultIterator       |
-| MED-026 | Index manquants          | Requêtes lentes | ✅ spatial_index_manager.py |
-| MED-027 | Sérialisation inefficace | CPU             | Optimize                    |
-| MED-028 | Mémoire non libérée      | Leaks           | Explicit cleanup            |
-| MED-029 | Profiling absent         | Blind spots     | Add profiling               |
-| MED-030 | Benchmarks manquants     | Regression      | Add benchmarks              |
+| ID      | Issue                    | Impact          | Fix                                   |
+| ------- | ------------------------ | --------------- | ------------------------------------- |
+| MED-021 | Requêtes N+1             | Lenteur         | ✅ batch_size + single-pass iteration |
+| MED-022 | Pas de pagination        | Mémoire         | Implement pagination                  |
+| MED-023 | Cache non invalidé       | Données stales  | ✅ TTL + invalidate_layer()           |
+| MED-024 | Connexions non poolées   | Overhead        | ✅ connection_pool.py                 |
+| MED-025 | Lazy loading absent      | Startup lent    | ✅ LazyResultIterator                 |
+| MED-026 | Index manquants          | Requêtes lentes | ✅ spatial_index_manager.py           |
+| MED-027 | Sérialisation inefficace | CPU             | Optimize                              |
+| MED-028 | Mémoire non libérée      | Leaks           | Explicit cleanup                      |
+| MED-029 | Profiling absent         | Blind spots     | Add profiling                         |
+| MED-030 | Benchmarks manquants     | Regression      | Add benchmarks                        |
 
 ### MED-031 à MED-042: Tests et Documentation
 
@@ -917,7 +917,7 @@ def temp_table_context(self, db_path, table_name):
 
 - [x] **HIGH-016**: Implémenter cache unifié ✅ (6 caches spécialisés)
 - [x] **HIGH-014/15**: Éliminer validations redondantes ✅ geometry_safety.py centralise (v3.0.20)
-- [ ] **MED-021**: Corriger requêtes N+1
+- [x] **MED-021**: Corriger requêtes N+1 ✅ (batch_size configurable, single-pass iteration)
 - [x] **MED-024**: Implémenter connection pooling ✅ (connection_pool.py)
 
 ### Phase 4: Refactoring (Semaine 7-8)
