@@ -28,7 +28,21 @@
 
 ## 🔴 CRITIQUES (6 issues)
 
-### 🆕 CRIT-005: Perte de Couche Courante Après Filtre (BLOQUANT)
+### ✅ CRIT-005: Perte de Couche Courante Après Filtre (RÉSOLU)
+
+**Statut:** ✅ Corrigé le 2026-01-10 (commit `0dc2961`)  
+**Fichiers:** `modules/tasks/filter_task.py`  
+**Solution:** Wrap tous les `layer.reload()` avec `blockSignals(True/False)` pour empêcher les émissions `currentLayerChanged` asynchrones
+
+**Correction appliquée à 3 emplacements:**
+
+1. `_delayed_canvas_refresh()` - dataProvider().reloadData()
+2. `finished()` pending subset - cas filtre déjà appliqué (ligne ~12330)
+3. `finished()` pending subset - cas nouveau filtre (ligne ~12370)
+
+---
+
+### 🆕 CRIT-005-OLD: Perte de Couche Courante Après Filtre (ARCHIVÉ)
 
 **Fichiers:** `filter_mate_app.py`, `filter_mate_dockwidget.py`, `filter_task.py`  
 **Impact:** Plugin inutilisable - Déconnexion totale des signaux et widgets  
