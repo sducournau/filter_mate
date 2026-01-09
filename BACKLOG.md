@@ -825,20 +825,20 @@ def temp_table_context(self, db_path, table_name):
 
 ### MED-031 à MED-042: Tests et Documentation
 
-| ID      | Issue                        | Description   |
-| ------- | ---------------------------- | ------------- |
-| MED-031 | Couverture PostgreSQL ~60%   | Ajouter tests |
-| MED-032 | Couverture Spatialite ~50%   | Ajouter tests |
-| MED-033 | Couverture OGR ~40%          | Ajouter tests |
-| MED-034 | Tests d'intégration absents  | Créer suite   |
-| MED-035 | Tests E2E absents            | Créer suite   |
-| MED-036 | Mocks incomplets             | Améliorer     |
-| MED-037 | Fixtures non réutilisables   | Refactorer    |
-| MED-038 | Documentation API incomplète | Compléter     |
-| MED-039 | Guide utilisateur manquant   | Créer         |
-| MED-040 | Changelog non automatisé     | Automatiser   |
-| MED-041 | README.md à jour?            | Réviser       |
-| MED-042 | Exemples de code absents     | Ajouter       |
+| ID      | Issue                        | Description                                          |
+| ------- | ---------------------------- | ---------------------------------------------------- |
+| MED-031 | Couverture PostgreSQL ~60%   | ✅ 383 lignes tests (test_postgresql_integration.py) |
+| MED-032 | Couverture Spatialite ~50%   | ✅ 401 lignes tests (test_spatialite_integration.py) |
+| MED-033 | Couverture OGR ~40%          | ✅ 306 lignes tests (test_ogr_integration.py)        |
+| MED-034 | Tests d'intégration absents  | ✅ 6 suites workflows (2426 lignes)                  |
+| MED-035 | Tests E2E absents            | ✅ test_e2e_complete_workflow.py (665 lignes)        |
+| MED-036 | Mocks incomplets             | Améliorer                                            |
+| MED-037 | Fixtures non réutilisables   | ✅ conftest.py dans tests/                           |
+| MED-038 | Documentation API incomplète | Compléter                                            |
+| MED-039 | Guide utilisateur manquant   | Créer                                                |
+| MED-040 | Changelog non automatisé     | Automatiser                                          |
+| MED-041 | README.md à jour?            | Réviser                                              |
+| MED-042 | Exemples de code absents     | Ajouter                                              |
 
 ---
 
@@ -929,8 +929,8 @@ def temp_table_context(self, db_path, table_name):
 
 ### Phase 5: Tests & Documentation (Semaine 9-10)
 
-- [ ] **MED-031-033**: Augmenter couverture tests
-- [ ] **MED-034-035**: Ajouter tests intégration/E2E
+- [x] **MED-031-033**: Augmenter couverture tests ✅ (144 fichiers, 46362 lignes, ~70%)
+- [x] **MED-034-035**: Ajouter tests intégration/E2E ✅ (6 suites workflows, test_e2e_complete_workflow.py)
 - [ ] **MED-038-039**: Compléter documentation
 
 ---
