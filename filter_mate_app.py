@@ -427,6 +427,9 @@ class FilterMateApp:
         """
         Clean up plugin resources on unload or reload.
         
+        .. deprecated:: 4.0.2
+            Delegates to LayerLifecycleService.cleanup()
+        
         Safely removes widgets, clears data structures, and prevents memory leaks.
         Called when plugin is disabled or QGIS is closing.
         
@@ -442,7 +445,37 @@ class FilterMateApp:
             - Safe to call multiple times
             - Prevents KeyError on plugin reload
         """
-        # Clean up PostgreSQL materialized views for this session (if auto-cleanup is enabled)
+        # v4.0.2: Delegate to LayerLifecycleService
+        service = self._get_layer_lifecycle_service()
+        if service:
+            # Get auto-cleanup setting
+            auto_cleanup_enabled = True  # Default to enabled
+            if self.dockwidget and hasattr(self.dockwidget, '_pg_auto_cleanup_enabled'):
+                auto_cleanup_enabled = self.dockwidget._pg_auto_cleanup_enabled
+            
+            service.cleanup(
+                session_id=self.session_id,
+                temp_schema=self.app_postgresql_temp_schema,
+                project_layers=self.PROJECT_LAYERS,
+                dockwidget=self.dockwidget,
+                auto_cleanup_enabled=auto_cleanup_enabled,
+                postgresql_available=POSTGRESQL_AVAILABLE
+            )
+            
+            # Clear app-level structures
+            self.PROJECT_LAYERS.clear()
+            self.project_datasources.clear()
+            
+            # v3.0: Cleanup hexagonal architecture services
+            if HEXAGONAL_AVAILABLE:
+                try:
+                    _cleanup_hexagonal_services()
+                    logger.debug("FilterMate: Hexagonal services cleaned up")
+                except Exception as e:
+                    logger.debug(f"FilterMate: Hexagonal services cleanup error: {e}")
+            return
+        
+        # Fallback to legacy implementation
         auto_cleanup_enabled = True  # Default to enabled
         if self.dockwidget and hasattr(self.dockwidget, '_pg_auto_cleanup_enabled'):
             auto_cleanup_enabled = self.dockwidget._pg_auto_cleanup_enabled
@@ -888,6 +921,9 @@ class FilterMateApp:
         """
         Force a complete reload of all layers in the current project.
         
+        .. deprecated:: 4.0.2
+            Delegates to LayerLifecycleService.force_reload_layers()
+        
         This method is useful when the dockwidget gets out of sync with the
         current project, or when switching projects doesn't properly reload layers.
         
@@ -900,6 +936,33 @@ class FilterMateApp:
         
         Can be called from UI (refresh button) or programmatically.
         """
+        # v4.0.2: Delegate to LayerLifecycleService
+        service = self._get_layer_lifecycle_service()
+        if service:
+            # Update project reference
+            init_env_vars()
+            global ENV_VARS
+            self.PROJECT = ENV_VARS["PROJECT"]
+            self.MapLayerStore = self.PROJECT.layerStore()
+            
+            service.force_reload_layers(
+                cancel_tasks_callback=self._safe_cancel_all_tasks,
+                reset_flags_callback=lambda: (
+                    self._check_and_reset_stale_flags(),
+                    self._set_loading_flag(False),
+                    self._set_initializing_flag(False),
+                    setattr(self, '_add_layers_queue', []),
+                    setattr(self, '_pending_add_layers_tasks', 0)
+                ),
+                init_db_callback=self.init_filterMate_db,
+                manage_task_callback=lambda layers: self.manage_task('add_layers', layers),
+                project_layers=self.PROJECT_LAYERS,
+                dockwidget=self.dockwidget,
+                stability_constants=STABILITY_CONSTANTS
+            )
+            return
+        
+        # Fallback to legacy implementation
         from qgis.PyQt.QtCore import QTimer
         
         logger.info("FilterMate: Force reload layers requested")
@@ -1580,10 +1643,23 @@ class FilterMateApp:
     def _handle_remove_all_layers(self):
         """Handle remove all layers task.
         
+        .. deprecated:: 4.0.2
+            Delegates to LayerLifecycleService.handle_remove_all_layers()
+        
         Safely cleans up all layer state when all layers are removed from project.
         STABILITY FIX: Properly resets current_layer and has_loaded_layers to prevent
         crashes when accessing invalid layer references.
         """
+        # v4.0.2: Delegate to LayerLifecycleService
+        service = self._get_layer_lifecycle_service()
+        if service:
+            service.handle_remove_all_layers(
+                cancel_tasks_callback=self._safe_cancel_all_tasks,
+                dockwidget=self.dockwidget
+            )
+            return
+        
+        # Fallback to legacy implementation
         self._safe_cancel_all_tasks()
         
         # CRITICAL: Check if dockwidget exists before accessing its methods
@@ -1645,9 +1721,67 @@ class FilterMateApp:
     def _handle_project_initialization(self, task_name):
         """Handle project read/new project initialization.
         
+        .. deprecated:: 4.0.2
+            Delegates to LayerLifecycleService.handle_project_initialization()
+        
         Args:
             task_name: 'project_read' or 'new_project'
         """
+        # v4.0.2: Delegate to LayerLifecycleService
+        service = self._get_layer_lifecycle_service()
+        if service:
+            # Handle signal reconnection logic (app-specific, not in service)
+            old_layer_store = self.MapLayerStore
+            new_layer_store = self.PROJECT.layerStore() if hasattr(self, 'PROJECT') and self.PROJECT else None
+            
+            if new_layer_store and self._signals_connected:
+                logger.info(f"FilterMate: Disconnecting old layer store signals for {task_name}")
+                try:
+                    old_layer_store.layersAdded.disconnect()
+                    old_layer_store.layersWillBeRemoved.disconnect()
+                    old_layer_store.allLayersRemoved.disconnect()
+                    logger.info("FilterMate: Old layer store signals disconnected")
+                except (TypeError, RuntimeError) as e:
+                    logger.debug(f"Could not disconnect old signals (expected): {e}")
+                
+                self.MapLayerStore = new_layer_store
+                self.MapLayerStore.layersAdded.connect(self._on_layers_added)
+                self.MapLayerStore.layersWillBeRemoved.connect(lambda layers: self.manage_task('remove_layers', layers))
+                self.MapLayerStore.allLayersRemoved.connect(lambda: self.manage_task('remove_all_layers'))
+                logger.info("FilterMate: Layer store signals reconnected to new project")
+            elif new_layer_store:
+                logger.debug("FilterMate: Updating MapLayerStore reference (signals not yet connected)")
+                self.MapLayerStore = new_layer_store
+            
+            # Clear old PROJECT_LAYERS and reset datasources
+            self.PROJECT_LAYERS = {}
+            self.project_datasources = {'postgresql': {}, 'spatialite': {}, 'ogr': {}}
+            self.app_postgresql_temp_schema_setted = False
+            
+            # Load favorites from new project
+            if hasattr(self, 'favorites_manager'):
+                self.favorites_manager.load_from_project()
+                logger.info(f"FilterMate: Favorites loaded for {task_name} ({self.favorites_manager.count} favorites)")
+            
+            service.handle_project_initialization(
+                task_name=task_name,
+                is_initializing=self._initializing_project,
+                is_loading=self._loading_new_project,
+                dockwidget=self.dockwidget,
+                check_reset_flags_callback=self._check_and_reset_stale_flags,
+                set_initializing_flag_callback=self._set_initializing_flag,
+                set_loading_flag_callback=self._set_loading_flag,
+                cancel_tasks_callback=self._safe_cancel_all_tasks,
+                init_env_vars_callback=lambda: (init_env_vars(), setattr(self, 'PROJECT', ENV_VARS["PROJECT"])),
+                get_project_callback=lambda: self.PROJECT,
+                init_db_callback=self.init_filterMate_db,
+                manage_task_callback=lambda layers: self.manage_task('add_layers', layers),
+                temp_schema=self.app_postgresql_temp_schema,
+                stability_constants=STABILITY_CONSTANTS
+            )
+            return
+        
+        # Fallback to legacy implementation
         logger.debug(f"_handle_project_initialization called with task_name={task_name}")
         
         # STABILITY FIX: Check and reset stale flags that might block operations

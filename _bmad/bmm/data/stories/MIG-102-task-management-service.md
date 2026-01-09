@@ -35,6 +35,7 @@ Créer un service dédié pour la gestion des tâches asynchrones (annulation, f
 ### Fichiers créés
 
 1. **core/services/task_management_service.py** (216 lignes)
+
    - `TaskManagementService` classe principale
    - `TaskManagementConfig` dataclass configuration
    - `safe_cancel_all_tasks()` - annule toutes les tâches
@@ -98,22 +99,22 @@ TaskManagementService (core/services/)
 
 ### Après MIG-102
 
-| Métrique | Valeur | Variation |
-|----------|--------|-----------|
-| FilterMateApp lignes | ~6,223 | +49 lignes* |
-| Méthodes extraites | 3/4 | 75% |
-| TaskManagementService | 216 lignes | Nouveau |
+| Métrique              | Valeur     | Variation    |
+| --------------------- | ---------- | ------------ |
+| FilterMateApp lignes  | ~6,223     | +49 lignes\* |
+| Méthodes extraites    | 3/4        | 75%          |
+| TaskManagementService | 216 lignes | Nouveau      |
 
-*Note: L'augmentation vient des fallbacks de sécurité. Le code actif a bien été extrait.
+\*Note: L'augmentation vient des fallbacks de sécurité. Le code actif a bien été extrait.
 
 ### Impact cumulatif MIG-100 à MIG-102
 
-| Service | Lignes extraites |
-|---------|------------------|
-| TaskParameterBuilder | 150 lignes |
-| LayerLifecycleService | 384 lignes |
-| TaskManagementService | 216 lignes |
-| **Total** | **750 lignes** |
+| Service               | Lignes extraites |
+| --------------------- | ---------------- |
+| TaskParameterBuilder  | 150 lignes       |
+| LayerLifecycleService | 384 lignes       |
+| TaskManagementService | 216 lignes       |
+| **Total**             | **750 lignes**   |
 
 ## 🧪 Tests
 
@@ -143,6 +144,7 @@ TaskManagementService (core/services/)
 ### Méthode non extraite
 
 `_handle_layer_task_terminated()` (71 lignes) n'a pas été extraite car :
+
 - Trop couplée avec UI (backend_indicator_label, dockwidget)
 - Logique de récupération complexe
 - Sera extraite avec UIController (MIG-103-105)
@@ -150,6 +152,7 @@ TaskManagementService (core/services/)
 ### Rétrocompatibilité
 
 Maintenue à 100% :
+
 - Méthodes FilterMateApp inchangées (signature)
 - Délégation transparente au service
 - Fallback legacy si service indisponible

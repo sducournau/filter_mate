@@ -382,3 +382,374 @@ class LayerLifecycleService:
             # Record failure for circuit breaker
             pg_breaker.record_failure()
             logger.debug(f"Error during PostgreSQL session cleanup: {e}")
+    
+    def cleanup(
+        self,
+        session_id: str,
+        temp_schema: str,
+        project_layers: Dict[str, Any],
+        dockwidget: Any,
+        auto_cleanup_enabled: bool,
+        postgresql_available: bool
+    ) -> None:
+        """
+        Clean up plugin resources on unload or reload.
+        
+        Safely removes widgets, clears data structures, and prevents memory leaks.
+        Called when plugin is disabled or QGIS is closing.
+        
+        Args:
+            session_id: Session ID for PostgreSQL cleanup
+            temp_schema: PostgreSQL temp schema
+            project_layers: Dictionary of layers to cleanup
+            dockwidget: Reference to dockwidget for UI cleanup
+            auto_cleanup_enabled: Whether PostgreSQL auto-cleanup is enabled
+            postgresql_available: Whether PostgreSQL is available
+            
+        Cleanup steps:
+            1. Clean up PostgreSQL materialized views for this session
+            2. Clear list_widgets from multiple selection widget
+            3. Reset async tasks
+            4. Clear PROJECT_LAYERS dictionary
+            5. Clear datasource connections
+        """
+        # Clean up PostgreSQL materialized views for this session (if auto-cleanup is enabled)
+        if auto_cleanup_enabled:
+            self.cleanup_postgresql_session_views(
+                session_id=session_id,
+                temp_schema=temp_schema,
+                project_layers=project_layers,
+                postgresql_available=postgresql_available
+            )
+        else:
+            logger.info("PostgreSQL auto-cleanup disabled - session views not cleaned")
+        
+        if dockwidget is not None:
+            # Clean all list_widgets to avoid KeyError
+            if hasattr(dockwidget, 'widgets'):
+                try:
+                    multiple_selection_widget = dockwidget.widgets.get("EXPLORING", {}).get("MULTIPLE_SELECTION_FEATURES", {}).get("WIDGET")
+                    if multiple_selection_widget and hasattr(multiple_selection_widget, 'list_widgets'):
+                        # Clean all list_widgets
+                        multiple_selection_widget.list_widgets.clear()
+                        # Reset tasks
+                        if hasattr(multiple_selection_widget, 'tasks'):
+                            multiple_selection_widget.tasks.clear()
+                except (KeyError, AttributeError, RuntimeError) as e:
+                    # Widgets may already be deleted
+                    pass
+            
+            # Clean PROJECT_LAYERS
+            if hasattr(dockwidget, 'PROJECT_LAYERS'):
+                dockwidget.PROJECT_LAYERS.clear()
+        
+        logger.info("Layer lifecycle cleanup completed")
+    
+    def force_reload_layers(
+        self,
+        cancel_tasks_callback: Callable,
+        reset_flags_callback: Callable,
+        init_db_callback: Callable,
+        manage_task_callback: Callable,
+        project_layers: Dict[str, Any],
+        dockwidget: Any,
+        stability_constants: Dict[str, int]
+    ) -> None:
+        """
+        Force a complete reload of all layers in the current project.
+        
+        This method is useful when the dockwidget gets out of sync with the
+        current project, or when switching projects doesn't properly reload layers.
+        
+        Args:
+            cancel_tasks_callback: Callback to cancel all tasks
+            reset_flags_callback: Callback to reset state flags
+            init_db_callback: Callback to reinitialize database
+            manage_task_callback: Callback to manage add_layers task (layer_list)
+            project_layers: Dictionary to be cleared
+            dockwidget: Reference to dockwidget for UI updates
+            stability_constants: Timing constants dictionary
+            
+        Workflow:
+            1. Cancel all pending tasks
+            2. Reset all state flags
+            3. Clear PROJECT_LAYERS
+            4. Reinitialize the database
+            5. Reload all vector layers from current project
+        """
+        logger.info("FilterMate: Force reload layers requested")
+        
+        # 1. Reset all protection flags immediately
+        reset_flags_callback()
+        
+        # 2. Cancel all pending tasks
+        cancel_tasks_callback()
+        
+        # 3. Clear PROJECT_LAYERS
+        project_layers.clear()
+        
+        # 4. Reset dockwidget state
+        if dockwidget:
+            dockwidget.current_layer = None
+            dockwidget.has_loaded_layers = False
+            dockwidget.PROJECT_LAYERS = {}
+            dockwidget._plugin_busy = False
+            dockwidget._updating_layers = False
+            
+            # Reset combobox to no selection (do NOT call clear() - it breaks the proxy model sync)
+            try:
+                if hasattr(dockwidget, 'comboBox_filtering_current_layer'):
+                    dockwidget.comboBox_filtering_current_layer.setLayer(None)
+                    # CRITICAL: Do NOT call clear() on QgsMapLayerComboBox!
+                    # It uses QgsMapLayerProxyModel which auto-syncs with project layers.
+                    # Calling clear() breaks this synchronization and the combobox stays empty.
+            except Exception as e:
+                logger.debug(f"Error resetting layer combobox during reload: {e}")
+            
+            # CRITICAL: Clear QgsFeaturePickerWidget to prevent access violation
+            # The widget has an internal timer that triggers scheduledReload which
+            # creates QgsVectorLayerFeatureSource - if the layer is invalid/destroyed,
+            # this causes a Windows fatal exception (access violation).
+            try:
+                if hasattr(dockwidget, 'mFeaturePickerWidget_exploring_single_selection'):
+                    dockwidget.mFeaturePickerWidget_exploring_single_selection.setLayer(None)
+            except Exception as e:
+                logger.debug(f"Error resetting FeaturePickerWidget during reload: {e}")
+            
+            # Update indicator to show reloading state
+            if hasattr(dockwidget, 'backend_indicator_label') and dockwidget.backend_indicator_label:
+                dockwidget.backend_indicator_label.setText("⟳")
+                dockwidget.backend_indicator_label.setStyleSheet("""
+                    QLabel#label_backend_indicator {
+                        color: #3498db;
+                        font-size: 9pt;
+                        font-weight: 600;
+                        padding: 3px 10px;
+                        border-radius: 12px;
+                        border: none;
+                        background-color: #e8f4fc;
+                    }
+                """)
+        
+        # 5. Reinitialize database
+        try:
+            init_db_callback()
+        except Exception as e:
+            logger.error(f"Error reinitializing database during reload: {e}")
+        
+        # 6. Get all current vector layers and add them
+        project = QgsProject.instance()
+        current_layers = self.filter_usable_layers(
+            list(project.mapLayers().values()),
+            postgresql_available=True  # Assume PostgreSQL may be available
+        )
+        
+        if current_layers:
+            logger.info(f"FilterMate: Reloading {len(current_layers)} layers")
+            
+            # Check if any PostgreSQL layers - need longer delay
+            has_postgres = any(
+                layer.providerType() == 'postgres' 
+                for layer in current_layers
+            )
+            delay = stability_constants.get('UI_REFRESH_DELAY_MS', 300)
+            if has_postgres:
+                delay += stability_constants.get('POSTGRESQL_EXTRA_DELAY_MS', 1500)
+            
+            # Use weakref to prevent access violations on plugin unload
+            weak_callback = weakref.ref(manage_task_callback)
+            def safe_add_layers():
+                strong_callback = weak_callback()
+                if strong_callback is not None and callable(strong_callback):
+                    strong_callback(current_layers)
+            
+            QTimer.singleShot(delay, safe_add_layers)
+        else:
+            logger.info("FilterMate: No usable layers to reload")
+    
+    def handle_remove_all_layers(
+        self,
+        cancel_tasks_callback: Callable,
+        dockwidget: Any
+    ) -> None:
+        """
+        Handle remove all layers event.
+        
+        Safely cleans up all layer state when all layers are removed from project.
+        STABILITY FIX: Properly resets current_layer and has_loaded_layers to prevent
+        crashes when accessing invalid layer references.
+        
+        Args:
+            cancel_tasks_callback: Callback to cancel tasks
+            dockwidget: Reference to dockwidget for UI cleanup
+        """
+        cancel_tasks_callback()
+        
+        # CRITICAL: Check if dockwidget exists before accessing its methods
+        if dockwidget is not None:
+            # CRITICAL: Reset layer combo box to prevent access violations
+            # NOTE: Do NOT call clear() - it breaks the proxy model synchronization
+            try:
+                if hasattr(dockwidget, 'comboBox_filtering_current_layer'):
+                    dockwidget.comboBox_filtering_current_layer.setLayer(None)
+                    logger.debug("FilterMate: Layer combo reset during remove_all_layers")
+            except Exception as e:
+                logger.debug(f"FilterMate: Error resetting layer combo during remove_all_layers: {e}")
+            
+            # CRITICAL: Reset QgsFeaturePickerWidget to prevent access violation
+            # The widget has an internal timer that triggers scheduledReload
+            try:
+                if hasattr(dockwidget, 'mFeaturePickerWidget_exploring_single_selection'):
+                    dockwidget.mFeaturePickerWidget_exploring_single_selection.setLayer(None)
+                    logger.debug("FilterMate: FeaturePickerWidget reset during remove_all_layers")
+            except Exception as e:
+                logger.debug(f"FilterMate: Error resetting FeaturePickerWidget during remove_all_layers: {e}")
+            
+            # STABILITY FIX: Disconnect LAYER_TREE_VIEW signal to prevent callbacks to invalid layers
+            try:
+                if hasattr(iface, 'layerTreeView') and iface.layerTreeView():
+                    iface.layerTreeView().currentLayerChanged.disconnect(dockwidget.on_layerTreeView_currentLayerChanged)
+                    logger.debug("FilterMate: Disconnected layerTreeView signal during remove_all_layers")
+            except Exception as e:
+                logger.debug(f"FilterMate: Error disconnecting layerTreeView signal during remove_all_layers: {e}")
+        
+        logger.info("Handle remove all layers completed")
+    
+    def handle_project_initialization(
+        self,
+        task_name: str,
+        is_initializing: bool,
+        is_loading: bool,
+        dockwidget: Any,
+        check_reset_flags_callback: Callable,
+        set_initializing_flag_callback: Callable,
+        set_loading_flag_callback: Callable,
+        cancel_tasks_callback: Callable,
+        init_env_vars_callback: Callable,
+        get_project_callback: Callable,
+        init_db_callback: Callable,
+        manage_task_callback: Callable,
+        temp_schema: str,
+        stability_constants: Dict[str, int]
+    ) -> None:
+        """
+        Handle project read/new project initialization.
+        
+        Args:
+            task_name: 'project_read' or 'new_project'
+            is_initializing: Current initializing flag state
+            is_loading: Current loading flag state
+            dockwidget: Reference to dockwidget
+            check_reset_flags_callback: Callback to check/reset stale flags
+            set_initializing_flag_callback: Callback to set initializing flag
+            set_loading_flag_callback: Callback to set loading flag
+            cancel_tasks_callback: Callback to cancel tasks
+            init_env_vars_callback: Callback to init environment variables
+            get_project_callback: Callback to get current project
+            init_db_callback: Callback to initialize database
+            manage_task_callback: Callback to manage add_layers task
+            temp_schema: PostgreSQL temp schema
+            stability_constants: Timing constants dictionary
+        """
+        logger.debug(f"_handle_project_initialization called with task_name={task_name}")
+        
+        # STABILITY FIX: Check and reset stale flags that might block operations
+        check_reset_flags_callback()
+        
+        # CRITICAL: Skip if already initializing to prevent recursive calls
+        if is_initializing:
+            logger.debug(f"Skipping {task_name} - already initializing project")
+            return
+        
+        # CRITICAL: Skip if currently loading a new project (add_layers in progress)
+        if is_loading:
+            logger.debug(f"Skipping {task_name} - already loading new project")
+            return
+        
+        # CRITICAL: Skip if dockwidget doesn't exist yet - run() handles initial setup
+        if dockwidget is None:
+            logger.debug(f"Skipping {task_name} - dockwidget not created yet (run() will handle)")
+            return
+        
+        # Use timestamp-tracked flag setter
+        set_initializing_flag_callback(True)
+        
+        # CRITICAL: Reset layer combo box before project change to prevent access violations
+        # NOTE: Do NOT call clear() - it breaks the proxy model synchronization
+        if dockwidget is not None:
+            try:
+                if hasattr(dockwidget, 'comboBox_filtering_current_layer'):
+                    dockwidget.comboBox_filtering_current_layer.setLayer(None)
+                    logger.debug(f"FilterMate: Layer combo reset before {task_name}")
+            except Exception as e:
+                logger.debug(f"FilterMate: Error resetting layer combo before {task_name}: {e}")
+            
+            # CRITICAL: Reset QgsFeaturePickerWidget to prevent access violation
+            try:
+                if hasattr(dockwidget, 'mFeaturePickerWidget_exploring_single_selection'):
+                    dockwidget.mFeaturePickerWidget_exploring_single_selection.setLayer(None)
+                    logger.debug(f"FilterMate: FeaturePickerWidget reset before {task_name}")
+            except Exception as e:
+                logger.debug(f"FilterMate: Error resetting FeaturePickerWidget before {task_name}: {e}")
+        
+        # STABILITY FIX: Set dockwidget busy flag to prevent concurrent layer changes
+        if dockwidget is not None:
+            dockwidget._plugin_busy = True
+        
+        try:
+            # Verify project is valid
+            project = QgsProject.instance()
+            if not project:
+                logger.warning(f"Project not available for {task_name}, skipping")
+                return
+            
+            # Callback to reset temp schema flag and cancel tasks
+            cancel_tasks_callback()
+            
+            # Callback to init environment variables
+            init_env_vars_callback()
+            
+            # Get project from callback
+            current_project = get_project_callback()
+            
+            # Verify project is still valid after init
+            if not current_project:
+                logger.warning(f"Project became invalid during {task_name}, skipping")
+                set_loading_flag_callback(False)
+                return
+            
+            # Initialize database
+            try:
+                init_db_callback()
+            except Exception as e:
+                logger.error(f"Error initializing database during {task_name}: {e}")
+            
+            # Use timestamp-tracked flag setter for loading
+            set_loading_flag_callback(True)
+            
+            # Get all vector layers
+            all_layers = list(current_project.mapLayers().values())
+            usable_layers = self.filter_usable_layers(all_layers, postgresql_available=True)
+            
+            if usable_layers:
+                logger.info(f"FilterMate: {task_name} - loading {len(usable_layers)} layers")
+                
+                # Schedule add_layers with delay for project load
+                delay = stability_constants.get('PROJECT_LOAD_DELAY_MS', 2500)
+                
+                # Use weakref to prevent access violations
+                weak_callback = weakref.ref(manage_task_callback)
+                def safe_add_layers():
+                    strong_callback = weak_callback()
+                    if strong_callback is not None and callable(strong_callback):
+                        strong_callback(usable_layers)
+                
+                QTimer.singleShot(delay, safe_add_layers)
+            else:
+                logger.info(f"FilterMate: {task_name} - no usable layers found")
+                set_loading_flag_callback(False)
+        finally:
+            set_initializing_flag_callback(False)
+            if dockwidget is not None:
+                dockwidget._plugin_busy = False
+
