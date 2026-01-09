@@ -910,8 +910,8 @@ def temp_table_context(self, db_path, table_name):
 - [x] **HIGH-005**: Standardiser transformation CRS ✅ (centralisé dans crs_utils.py)
 - [x] **HIGH-009**: Exception handlers vides ✅ (vérifié OK - graceful degradations)
 - [x] **HIGH-011**: Ajouter type hints ✅ **v3.1.1** (89% nouvelle archi, 1439/1605 fonctions)
-- [ ] **HIGH-017**: Améliorer messages d'erreur
-- [ ] **MED-001**: Standardiser f-strings
+- [x] **HIGH-017**: Améliorer messages d'erreur ✅ **v3.0.20** (customExceptions.py + feedback_utils.py)
+- [x] **MED-001**: Standardiser f-strings ✅ **v3.1.1** (861 f-strings, 4 .format SQL legacy = 99.5%)
 
 ### Phase 3: Performance (Semaine 5-6)
 
