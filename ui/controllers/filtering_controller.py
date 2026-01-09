@@ -49,6 +49,87 @@ class BufferType(Enum):
     BOTH = "both"
 
 
+class CombineOperator(Enum):
+    """
+    SQL combine operators for multi-layer filtering.
+    
+    v3.1 STORY-2.4: Centralized operator management with i18n support.
+    """
+    AND = "AND"
+    AND_NOT = "AND NOT"
+    OR = "OR"
+    
+    @classmethod
+    def from_index(cls, index: int) -> 'CombineOperator':
+        """
+        Convert combobox index to CombineOperator.
+        
+        Args:
+            index: Combobox index (0=AND, 1=AND NOT, 2=OR)
+        
+        Returns:
+            CombineOperator enum value
+        """
+        mapping = {0: cls.AND, 1: cls.AND_NOT, 2: cls.OR}
+        return mapping.get(index, cls.AND)
+    
+    def to_index(self) -> int:
+        """
+        Convert CombineOperator to combobox index.
+        
+        Returns:
+            Combobox index (0=AND, 1=AND NOT, 2=OR)
+        """
+        mapping = {CombineOperator.AND: 0, CombineOperator.AND_NOT: 1, CombineOperator.OR: 2}
+        return mapping.get(self, 0)
+    
+    @classmethod
+    def from_string(cls, operator: str) -> 'CombineOperator':
+        """
+        Convert string (including translations) to CombineOperator.
+        
+        v3.1 STORY-2.4: Handles translated operator values (ET, OU, etc.)
+        from older project files or when QGIS locale is non-English.
+        
+        Args:
+            operator: SQL operator or translated equivalent
+        
+        Returns:
+            CombineOperator enum value
+        """
+        if not operator:
+            return cls.AND
+        
+        op_upper = operator.upper().strip()
+        
+        # Map of all possible operator values (including translations) to enum
+        operator_map = {
+            # English (canonical)
+            'AND': cls.AND,
+            'AND NOT': cls.AND_NOT,
+            'OR': cls.OR,
+            # French
+            'ET': cls.AND,
+            'ET NON': cls.AND_NOT,
+            'OU': cls.OR,
+            # German
+            'UND': cls.AND,
+            'UND NICHT': cls.AND_NOT,
+            'ODER': cls.OR,
+            # Spanish
+            'Y': cls.AND,
+            'Y NO': cls.AND_NOT,
+            'O': cls.OR,
+            # Italian
+            'E': cls.AND,
+            'E NON': cls.AND_NOT,
+            # Portuguese
+            'E NÃO': cls.AND_NOT,
+        }
+        
+        return operator_map.get(op_upper, cls.AND)
+
+
 @dataclass
 class FilterConfiguration:
     """
@@ -151,6 +232,14 @@ class FilteringController(BaseController, LayerSelectionMixin):
         self._buffer_value: float = 0.0
         self._buffer_type: BufferType = BufferType.NONE
         self._current_expression: str = ""
+        
+        # v3.1 STORY-2.4: State change handler flags
+        self._has_layers_to_filter: bool = False
+        self._has_combine_operator: bool = False
+        self._has_geometric_predicates: bool = False
+        self._has_buffer_type: bool = False
+        self._has_buffer_value: bool = False
+        self._buffer_property_active: bool = False
         
         # History for undo/redo
         self._undo_manager = undo_manager
@@ -750,6 +839,214 @@ class FilteringController(BaseController, LayerSelectionMixin):
         self._notify_config_changed()
         self._notify_expression_changed("")
     
+    # === Combine Operator Utilities (v3.1 STORY-2.4) ===
+    
+    def index_to_combine_operator(self, index: int) -> str:
+        """
+        Convert combobox index to SQL combine operator.
+        
+        v3.1 STORY-2.4: Centralized operator management.
+        
+        Args:
+            index: Combobox index
+            
+        Returns:
+            SQL operator string ('AND', 'AND NOT', 'OR')
+        """
+        return CombineOperator.from_index(index).value
+    
+    def combine_operator_to_index(self, operator: str) -> int:
+        """
+        Convert SQL combine operator to combobox index.
+        
+        v3.1 STORY-2.4: Handles translated operator values (ET, OU, NON)
+        from older project files or when QGIS locale is non-English.
+        
+        Args:
+            operator: SQL operator or translated equivalent
+            
+        Returns:
+            Combobox index (0=AND, 1=AND NOT, 2=OR)
+        """
+        return CombineOperator.from_string(operator).to_index()
+    
+    # === State Change Handlers (v3.1 STORY-2.4) ===
+    
+    def on_layers_to_filter_state_changed(self, is_checked: bool) -> None:
+        """
+        Handle changes to the has_layers_to_filter checkable button.
+        
+        v3.1 STORY-2.4: Centralized state management.
+        
+        Args:
+            is_checked: True if layers to filter option is enabled
+        """
+        import logging
+        logger = logging.getLogger('FilterMate.FilteringController')
+        logger.debug(f"on_layers_to_filter_state_changed: is_checked={is_checked}")
+        
+        # Store state for configuration
+        self._has_layers_to_filter = is_checked
+        self._notify_config_changed()
+    
+    def on_combine_operator_state_changed(self, is_checked: bool) -> None:
+        """
+        Handle changes to the has_combine_operator checkable button.
+        
+        v3.1 STORY-2.4: Centralized state management.
+        
+        Args:
+            is_checked: True if combine operator option is enabled
+        """
+        import logging
+        logger = logging.getLogger('FilterMate.FilteringController')
+        logger.debug(f"on_combine_operator_state_changed: is_checked={is_checked}")
+        
+        self._has_combine_operator = is_checked
+        self._notify_config_changed()
+    
+    def on_geometric_predicates_state_changed(self, is_checked: bool) -> None:
+        """
+        Handle changes to the has_geometric_predicates checkable button.
+        
+        v3.1 STORY-2.4: Centralized state management.
+        
+        Args:
+            is_checked: True if geometric predicates option is enabled
+        """
+        import logging
+        logger = logging.getLogger('FilterMate.FilteringController')
+        logger.debug(f"on_geometric_predicates_state_changed: is_checked={is_checked}")
+        
+        self._has_geometric_predicates = is_checked
+        self._notify_config_changed()
+    
+    def on_buffer_type_state_changed(self, is_checked: bool) -> None:
+        """
+        Handle changes to the has_buffer_type checkable button.
+        
+        v3.1 STORY-2.4: Centralized state management.
+        
+        Args:
+            is_checked: True if buffer type option is enabled
+        """
+        import logging
+        logger = logging.getLogger('FilterMate.FilteringController')
+        logger.debug(f"on_buffer_type_state_changed: is_checked={is_checked}")
+        
+        self._has_buffer_type = is_checked
+        self._notify_config_changed()
+
+    def on_has_buffer_value_state_changed(self, is_checked: bool) -> None:
+        """
+        Handle changes to the has_buffer_value checkable button.
+        
+        v3.1 STORY-2.4: Centralized state management for buffer value option.
+        
+        Args:
+            is_checked: True if buffer value option is enabled
+        """
+        import logging
+        logger = logging.getLogger('FilterMate.FilteringController')
+        logger.debug(f"on_has_buffer_value_state_changed: is_checked={is_checked}")
+        
+        self._has_buffer_value = is_checked
+        self._notify_config_changed()
+
+    def get_buffer_property_active(self) -> bool:
+        """
+        Get whether buffer property override is active.
+        
+        v3.1 STORY-2.4: Returns controller's tracking of buffer property state.
+        
+        Returns:
+            True if buffer property override is active
+        """
+        return getattr(self, '_buffer_property_active', False)
+    
+    def set_buffer_property_active(self, is_active: bool) -> None:
+        """
+        Set buffer property override active state.
+        
+        v3.1 STORY-2.4: Tracks buffer property state in controller.
+        
+        Args:
+            is_active: Whether buffer property override is active
+        """
+        import logging
+        logger = logging.getLogger('FilterMate.FilteringController')
+        logger.debug(f"set_buffer_property_active: is_active={is_active}")
+        
+        self._buffer_property_active = is_active
+        self._notify_config_changed()
+
+    def get_target_layer_ids(self) -> List[str]:
+        """
+        Get list of target layer IDs for filtering.
+        
+        v3.1 STORY-2.4: Returns the list of layers selected for filtering.
+        
+        Returns:
+            List of layer IDs selected as filter targets
+        """
+        return self._target_layer_ids.copy()
+    
+    def set_target_layer_ids(self, layer_ids: List[str]) -> None:
+        """
+        Set target layer IDs for filtering.
+        
+        v3.1 STORY-2.4: Updates the list of layers to filter.
+        
+        Args:
+            layer_ids: List of layer IDs to set as targets
+        """
+        import logging
+        logger = logging.getLogger('FilterMate.FilteringController')
+        
+        if layer_ids == self._target_layer_ids:
+            return
+        
+        self._target_layer_ids = layer_ids.copy() if layer_ids else []
+        logger.debug(f"set_target_layer_ids: {len(self._target_layer_ids)} layers")
+        
+        self._rebuild_expression()
+        self._notify_config_changed()
+
+    # === Populate Data Methods ===
+    
+    def get_available_predicates(self) -> List[str]:
+        """
+        Get list of available geometric predicates for UI population.
+        
+        v3.1 STORY-2.4: Centralized predicate list.
+        
+        Returns:
+            List of predicate display names for combobox
+        """
+        return ["Intersect", "Contain", "Disjoint", "Equal", "Touch", "Overlap", "Are within", "Cross"]
+    
+    def get_available_buffer_types(self) -> List[str]:
+        """
+        Get list of available buffer end cap types for UI population.
+        
+        v3.1 STORY-2.4: Centralized buffer type list.
+        
+        Returns:
+            List of buffer type display names for combobox
+        """
+        return ["Round", "Flat", "Square"]
+    
+    def get_available_combine_operators(self) -> List[str]:
+        """
+        Get list of available combine operators for UI population.
+        
+        v3.1 STORY-2.4: Centralized operator list.
+        
+        Returns:
+            List of operator display names for combobox
+        """
+        return ["AND", "AND NOT", "OR"]
+
     # === String Representation ===
     
     def __repr__(self) -> str:

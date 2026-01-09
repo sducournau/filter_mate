@@ -5116,6 +5116,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Convert combobox index to SQL combine operator.
         
+        v3.1 STORY-2.4: Delegates to FilteringController when available.
+        
         This ensures language-independent operator handling.
         The combobox items are:
           Index 0: AND
@@ -5128,6 +5130,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Returns:
             str: SQL operator ('AND', 'AND NOT', 'OR') or 'AND' as default
         """
+        # v3.1 STORY-2.4: Try controller delegation first
+        if self._controller_integration is not None:
+            return self._controller_integration.delegate_filtering_index_to_combine_operator(index)
+        
+        # Legacy fallback
         operators = {0: 'AND', 1: 'AND NOT', 2: 'OR'}
         return operators.get(index, 'AND')
     
@@ -5135,6 +5142,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Convert SQL combine operator to combobox index.
         
+        v3.1 STORY-2.4: Delegates to FilteringController when available.
         FIX v2.5.12: Handle translated operator values (ET, OU, NON) from
         older project files or when QGIS locale is non-English.
         
@@ -5144,6 +5152,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Returns:
             int: Combobox index (0=AND, 1=AND NOT, 2=OR) or 0 as default
         """
+        # v3.1 STORY-2.4: Try controller delegation first
+        if self._controller_integration is not None:
+            return self._controller_integration.delegate_filtering_combine_operator_to_index(operator)
+        
+        # Legacy fallback
         if not operator:
             return 0  # Default to AND
         
@@ -5965,14 +5978,30 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return icon
         
     def filtering_populate_predicates_chekableCombobox(self):
-
-        self.predicates = ["Intersect","Contain","Disjoint","Equal","Touch","Overlap","Are within","Cross"]
+        # v3.1 STORY-2.4: Get predicates from controller if available
+        if self._controller_integration is not None:
+            predicates = self._controller_integration.delegate_filtering_get_available_predicates()
+            if predicates is not None:
+                self.predicates = predicates
+            else:
+                self.predicates = ["Intersect","Contain","Disjoint","Equal","Touch","Overlap","Are within","Cross"]
+        else:
+            self.predicates = ["Intersect","Contain","Disjoint","Equal","Touch","Overlap","Are within","Cross"]
         self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].clear()
         self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].addItems(self.predicates)
 
     def filtering_populate_buffer_type_combobox(self):
-        """Initialize buffer_type combobox with end cap style options."""
-        buffer_types = ["Round", "Flat", "Square"]
+        """Initialize buffer_type combobox with end cap style options.
+        
+        v3.1 STORY-2.4: Gets buffer types from controller if available.
+        """
+        # v3.1 STORY-2.4: Get buffer types from controller if available
+        if self._controller_integration is not None:
+            buffer_types = self._controller_integration.delegate_filtering_get_available_buffer_types()
+            if buffer_types is None:
+                buffer_types = ["Round", "Flat", "Square"]
+        else:
+            buffer_types = ["Round", "Flat", "Square"]
         self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].clear()
         self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].addItems(buffer_types)
         # Set default to Round if not already set
@@ -9678,7 +9707,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def get_layers_to_filter(self):
-
+        # v3.1 STORY-2.4: Sync with controller if available
         if self.widgets_initialized is True and self.current_layer is not None:
 
             checked_list_data = []
@@ -9709,6 +9738,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             logger.info(f"  Total checked layers: {len(checked_list_data)}")
             logger.info(f"=== END get_layers_to_filter ===")
+            
+            # v3.1 STORY-2.4: Sync layer IDs to controller
+            if self._controller_integration is not None:
+                self._controller_integration.delegate_filtering_set_target_layer_ids(checked_list_data)
+            
             return checked_list_data
 
         return []
@@ -11757,6 +11791,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def filtering_buffer_property_changed(self):
         """Handle changes to the buffer property override button and HAS_BUFFER_VALUE state.
         
+        v3.1 STORY-2.4: Delegates buffer property state to controller.
+        
         The spinbox is enabled when:
         - HAS_BUFFER_VALUE button is checked AND
         - Property button is NOT active with a valid expression
@@ -11805,6 +11841,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setToProperty(QgsProperty())
                 logger.debug("Property override INACTIVE - spinbox will be used")
 
+            # v3.1 STORY-2.4: Sync buffer property state to controller
+            if self._controller_integration is not None:
+                self._controller_integration.delegate_filtering_set_buffer_property_active(is_active and has_valid_expression)
+
             # Enable/disable spinbox based on:
             # 1. HAS_BUFFER_VALUE button must be checked
             # 2. Property button must NOT be active with valid expression
@@ -11824,11 +11864,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def get_buffer_property_state(self):
+        # v3.1 STORY-2.4: Try controller delegation first
+        if self._controller_integration is not None:
+            result = self._controller_integration.delegate_filtering_get_buffer_property_active()
+            if result is not None:
+                return result
+        # Fallback to direct widget access
         return self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].isActive()
 
 
     def filtering_layers_to_filter_state_changed(self):
         """Handle changes to the has_layers_to_filter checkable button.
+        
+        v3.1 STORY-2.4: Delegates state tracking to FilteringController.
         
         When checked (True): Enable layers_to_filter combobox and use_centroids_distant_layers checkbox
         When unchecked (False): Disable these widgets
@@ -11836,7 +11884,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.widgets_initialized is True and self.has_loaded_layers is True:
             is_checked = self.widgets["FILTERING"]["HAS_LAYERS_TO_FILTER"]["WIDGET"].isChecked()
             
-            # Enable/disable the associated widgets
+            # v3.1 STORY-2.4: Delegate state change to controller
+            if self._controller_integration is not None:
+                self._controller_integration.delegate_filtering_layers_to_filter_state_changed(is_checked)
+            
+            # UI widget enable/disable stays in dockwidget (tightly coupled to PyQt)
             self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].setEnabled(is_checked)
             self.widgets["FILTERING"]["USE_CENTROIDS_DISTANT_LAYERS"]["WIDGET"].setEnabled(is_checked)
             
@@ -11846,13 +11898,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def filtering_combine_operator_state_changed(self):
         """Handle changes to the has_combine_operator checkable button.
         
+        v3.1 STORY-2.4: Delegates state tracking to FilteringController.
+        
         When checked (True): Enable combine operator comboboxes
         When unchecked (False): Disable these widgets
         """
         if self.widgets_initialized is True and self.has_loaded_layers is True:
             is_checked = self.widgets["FILTERING"]["HAS_COMBINE_OPERATOR"]["WIDGET"].isChecked()
             
-            # Enable/disable the associated widgets
+            # v3.1 STORY-2.4: Delegate state change to controller
+            if self._controller_integration is not None:
+                self._controller_integration.delegate_filtering_combine_operator_state_changed(is_checked)
+            
+            # UI widget enable/disable stays in dockwidget
             self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].setEnabled(is_checked)
             self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].setEnabled(is_checked)
             
@@ -11862,13 +11920,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def filtering_geometric_predicates_state_changed(self):
         """Handle changes to the has_geometric_predicates checkable button.
         
+        v3.1 STORY-2.4: Delegates state tracking to FilteringController.
+        
         When checked (True): Enable geometric predicates combobox
         When unchecked (False): Disable this widget
         """
         if self.widgets_initialized is True and self.has_loaded_layers is True:
             is_checked = self.widgets["FILTERING"]["HAS_GEOMETRIC_PREDICATES"]["WIDGET"].isChecked()
             
-            # Enable/disable the associated widgets
+            # v3.1 STORY-2.4: Delegate state change to controller
+            if self._controller_integration is not None:
+                self._controller_integration.delegate_filtering_geometric_predicates_state_changed(is_checked)
+            
+            # UI widget enable/disable stays in dockwidget
             self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].setEnabled(is_checked)
             
             logger.debug(f"filtering_geometric_predicates_state_changed: is_checked={is_checked}")
@@ -11877,13 +11941,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def filtering_buffer_type_state_changed(self):
         """Handle changes to the has_buffer_type checkable button.
         
+        v3.1 STORY-2.4: Delegates state tracking to FilteringController.
+        
         When checked (True): Enable buffer type combobox and buffer segments spinbox
         When unchecked (False): Disable these widgets
         """
         if self.widgets_initialized is True and self.has_loaded_layers is True:
             is_checked = self.widgets["FILTERING"]["HAS_BUFFER_TYPE"]["WIDGET"].isChecked()
             
-            # Enable/disable the associated widgets
+            # v3.1 STORY-2.4: Delegate state change to controller
+            if self._controller_integration is not None:
+                self._controller_integration.delegate_filtering_buffer_type_state_changed(is_checked)
+            
+            # UI widget enable/disable stays in dockwidget
             self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].setEnabled(is_checked)
             self.widgets["FILTERING"]["BUFFER_SEGMENTS"]["WIDGET"].setEnabled(is_checked)
             

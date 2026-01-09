@@ -11,11 +11,8 @@ from .factory import BackendFactory, BackendSelector, create_backend_factory
 try:
     from .postgresql_availability import POSTGRESQL_AVAILABLE
 except ImportError:
-    try:
-        # Fallback to legacy modules location
-        from modules.psycopg2_availability import POSTGRESQL_AVAILABLE
-    except ImportError:
-        POSTGRESQL_AVAILABLE = False
+    # Default to True (QGIS native PostgreSQL always available)
+    POSTGRESQL_AVAILABLE = True
 
 __all__ = [
     'BackendFactory',

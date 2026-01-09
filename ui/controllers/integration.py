@@ -685,6 +685,279 @@ class ControllerIntegration:
             return self._filtering_controller.redo()
         return False
     
+    # === Filtering Controller Delegation (v3.1 Phase 7 - STORY-2.4) ===
+    
+    def delegate_filtering_index_to_combine_operator(self, index: int) -> str:
+        """
+        Delegate index to combine operator conversion.
+        
+        v3.1 STORY-2.4: Centralized operator management.
+        
+        Args:
+            index: Combobox index
+        
+        Returns:
+            SQL operator string ('AND', 'AND NOT', 'OR')
+        """
+        if self._filtering_controller:
+            try:
+                return self._filtering_controller.index_to_combine_operator(index)
+            except Exception as e:
+                logger.warning(f"delegate_filtering_index_to_combine_operator failed: {e}")
+        # Fallback
+        return {0: 'AND', 1: 'AND NOT', 2: 'OR'}.get(index, 'AND')
+    
+    def delegate_filtering_combine_operator_to_index(self, operator: str) -> int:
+        """
+        Delegate combine operator to index conversion.
+        
+        v3.1 STORY-2.4: Handles translated operator values.
+        
+        Args:
+            operator: SQL operator or translated equivalent
+        
+        Returns:
+            Combobox index (0=AND, 1=AND NOT, 2=OR)
+        """
+        if self._filtering_controller:
+            try:
+                return self._filtering_controller.combine_operator_to_index(operator)
+            except Exception as e:
+                logger.warning(f"delegate_filtering_combine_operator_to_index failed: {e}")
+        return 0
+    
+    def delegate_filtering_layers_to_filter_state_changed(self, is_checked: bool) -> bool:
+        """
+        Delegate layers_to_filter state change.
+        
+        v3.1 STORY-2.4: Centralized state change handling.
+        
+        Args:
+            is_checked: True if layers to filter option is enabled
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._filtering_controller:
+            try:
+                self._filtering_controller.on_layers_to_filter_state_changed(is_checked)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_filtering_layers_to_filter_state_changed failed: {e}")
+                return False
+        return False
+    
+    def delegate_filtering_combine_operator_state_changed(self, is_checked: bool) -> bool:
+        """
+        Delegate combine_operator state change.
+        
+        v3.1 STORY-2.4: Centralized state change handling.
+        
+        Args:
+            is_checked: True if combine operator option is enabled
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._filtering_controller:
+            try:
+                self._filtering_controller.on_combine_operator_state_changed(is_checked)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_filtering_combine_operator_state_changed failed: {e}")
+                return False
+        return False
+    
+    def delegate_filtering_geometric_predicates_state_changed(self, is_checked: bool) -> bool:
+        """
+        Delegate geometric_predicates state change.
+        
+        v3.1 STORY-2.4: Centralized state change handling.
+        
+        Args:
+            is_checked: True if geometric predicates option is enabled
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._filtering_controller:
+            try:
+                self._filtering_controller.on_geometric_predicates_state_changed(is_checked)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_filtering_geometric_predicates_state_changed failed: {e}")
+                return False
+        return False
+    
+    def delegate_filtering_buffer_type_state_changed(self, is_checked: bool) -> bool:
+        """
+        Delegate buffer_type state change.
+        
+        v3.1 STORY-2.4: Centralized state change handling.
+        
+        Args:
+            is_checked: True if buffer type option is enabled
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._filtering_controller:
+            try:
+                self._filtering_controller.on_buffer_type_state_changed(is_checked)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_filtering_buffer_type_state_changed failed: {e}")
+                return False
+        return False
+
+    def delegate_filtering_has_buffer_value_state_changed(self, is_checked: bool) -> bool:
+        """
+        Delegate has_buffer_value state change.
+        
+        v3.1 STORY-2.4: Centralized state change handling.
+        
+        Args:
+            is_checked: True if buffer value option is enabled
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._filtering_controller:
+            try:
+                self._filtering_controller.on_has_buffer_value_state_changed(is_checked)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_filtering_has_buffer_value_state_changed failed: {e}")
+                return False
+        return False
+
+    def delegate_filtering_get_buffer_property_active(self) -> Optional[bool]:
+        """
+        Delegate getting buffer property active state.
+        
+        v3.1 STORY-2.4: Returns buffer property override state from controller.
+        
+        Returns:
+            True if buffer property override is active, None if delegation failed
+        """
+        if self._filtering_controller:
+            try:
+                return self._filtering_controller.get_buffer_property_active()
+            except Exception as e:
+                logger.warning(f"delegate_filtering_get_buffer_property_active failed: {e}")
+                return None
+        return None
+
+    def delegate_filtering_set_buffer_property_active(self, is_active: bool) -> bool:
+        """
+        Delegate setting buffer property active state.
+        
+        v3.1 STORY-2.4: Sets buffer property override state in controller.
+        
+        Args:
+            is_active: Whether buffer property override should be active
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._filtering_controller:
+            try:
+                self._filtering_controller.set_buffer_property_active(is_active)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_filtering_set_buffer_property_active failed: {e}")
+                return False
+        return False
+
+    def delegate_filtering_get_target_layer_ids(self) -> Optional[list]:
+        """
+        Delegate getting target layer IDs.
+        
+        v3.1 STORY-2.4: Returns list of layer IDs selected for filtering.
+        
+        Returns:
+            List of layer IDs or None if delegation failed
+        """
+        if self._filtering_controller:
+            try:
+                return self._filtering_controller.get_target_layer_ids()
+            except Exception as e:
+                logger.warning(f"delegate_filtering_get_target_layer_ids failed: {e}")
+                return None
+        return None
+
+    def delegate_filtering_set_target_layer_ids(self, layer_ids: list) -> bool:
+        """
+        Delegate setting target layer IDs.
+        
+        v3.1 STORY-2.4: Updates list of layers selected for filtering.
+        
+        Args:
+            layer_ids: List of layer IDs to set as filter targets
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._filtering_controller:
+            try:
+                self._filtering_controller.set_target_layer_ids(layer_ids)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_filtering_set_target_layer_ids failed: {e}")
+                return False
+        return False
+
+    def delegate_filtering_get_available_predicates(self) -> Optional[list]:
+        """
+        Delegate getting available predicates list.
+        
+        v3.1 STORY-2.4: Centralized predicate list from controller.
+        
+        Returns:
+            List of predicate display names or None if delegation failed
+        """
+        if self._filtering_controller:
+            try:
+                return self._filtering_controller.get_available_predicates()
+            except Exception as e:
+                logger.warning(f"delegate_filtering_get_available_predicates failed: {e}")
+                return None
+        return None
+
+    def delegate_filtering_get_available_buffer_types(self) -> Optional[list]:
+        """
+        Delegate getting available buffer types list.
+        
+        v3.1 STORY-2.4: Centralized buffer type list from controller.
+        
+        Returns:
+            List of buffer type display names or None if delegation failed
+        """
+        if self._filtering_controller:
+            try:
+                return self._filtering_controller.get_available_buffer_types()
+            except Exception as e:
+                logger.warning(f"delegate_filtering_get_available_buffer_types failed: {e}")
+                return None
+        return None
+
+    def delegate_filtering_get_available_combine_operators(self) -> Optional[list]:
+        """
+        Delegate getting available combine operators list.
+        
+        v3.1 STORY-2.4: Centralized operator list from controller.
+        
+        Returns:
+            List of operator display names or None if delegation failed
+        """
+        if self._filtering_controller:
+            try:
+                return self._filtering_controller.get_available_combine_operators()
+            except Exception as e:
+                logger.warning(f"delegate_filtering_get_available_combine_operators failed: {e}")
+                return None
+        return None
+    
     def delegate_execute_export(self) -> bool:
         """Delegate export execution to exporting controller."""
         if self._exporting_controller:
