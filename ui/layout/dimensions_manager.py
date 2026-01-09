@@ -88,7 +88,16 @@ class DimensionsManager(LayoutManagerBase):
     def _get_ui_config(self):
         """Lazy load UIConfig to avoid circular imports."""
         if self._ui_config is None:
-            from modules.ui_config import UIConfig
+            UIConfig = None
+            try:
+                # Try relative import first (package context)
+                from ...modules.ui_config import UIConfig
+            except ImportError:
+                try:
+                    # Fallback to absolute import (QGIS plugin context)
+                    from modules.ui_config import UIConfig
+                except ImportError:
+                    logger.warning("UIConfig not available, using defaults")
             self._ui_config = UIConfig
         return self._ui_config
     
@@ -139,6 +148,9 @@ class DimensionsManager(LayoutManagerBase):
         allowing better screen space management.
         """
         UIConfig = self._get_ui_config()
+        if UIConfig is None:
+            logger.warning("UIConfig not available, skipping dockwidget dimensions")
+            return
         
         # Get dockwidget dimensions from active profile
         min_width = UIConfig.get_config('dockwidget', 'min_width')
@@ -166,6 +178,9 @@ class DimensionsManager(LayoutManagerBase):
         using findChildren() for batch processing.
         """
         UIConfig = self._get_ui_config()
+        if UIConfig is None:
+            logger.warning("UIConfig not available, skipping widget dimensions")
+            return
         
         # Get dimensions from active profile
         combobox_height = UIConfig.get_config('combobox', 'height')
@@ -215,6 +230,9 @@ class DimensionsManager(LayoutManagerBase):
         - Sub-frames (filtering)
         """
         UIConfig = self._get_ui_config()
+        if UIConfig is None:
+            logger.warning("UIConfig not available, skipping frame dimensions")
+            return
         
         # Get widget_keys dimensions
         widget_keys_min_width = UIConfig.get_config('widget_keys', 'min_width')
@@ -288,7 +306,13 @@ class DimensionsManager(LayoutManagerBase):
         """
         try:
             UIConfig = self._get_ui_config()
-            from modules.ui_config import DisplayProfile
+            if UIConfig is None:
+                logger.warning("UIConfig not available, skipping checkable pushbuttons")
+                return
+            try:
+                from ...modules.ui_config import DisplayProfile
+            except ImportError:
+                from modules.ui_config import DisplayProfile
             
             # Get dynamic dimensions from key_button config
             key_button_config = UIConfig.get_config('key_button')
@@ -399,6 +423,9 @@ class DimensionsManager(LayoutManagerBase):
         """
         try:
             UIConfig = self._get_ui_config()
+            if UIConfig is None:
+                logger.warning("UIConfig not available, skipping layout spacing")
+                return
             
             # Get harmonized layout spacing from config
             layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 8
@@ -508,8 +535,15 @@ class DimensionsManager(LayoutManagerBase):
         """
         try:
             UIConfig = self._get_ui_config()
-            from modules.ui_config import DisplayProfile
-            from modules.ui_elements import get_spacer_size
+            if UIConfig is None:
+                logger.warning("UIConfig not available, skipping spacer harmonization")
+                return
+            try:
+                from ...modules.ui_config import DisplayProfile
+                from ...modules.ui_elements import get_spacer_size
+            except ImportError:
+                from modules.ui_config import DisplayProfile
+                from modules.ui_elements import get_spacer_size
             
             # Get compact mode status from UIConfig
             is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
@@ -577,6 +611,9 @@ class DimensionsManager(LayoutManagerBase):
         """
         try:
             UIConfig = self._get_ui_config()
+            if UIConfig is None:
+                logger.warning("UIConfig not available, skipping QGIS widget dimensions")
+                return
             
             # Get dimensions from config
             combobox_height = UIConfig.get_config('combobox', 'height') or 24
@@ -642,6 +679,9 @@ class DimensionsManager(LayoutManagerBase):
         """
         try:
             UIConfig = self._get_ui_config()
+            if UIConfig is None:
+                logger.warning("UIConfig not available, skipping key layout alignment")
+                return
             
             # Get key button config for harmonized spacing
             key_button_config = UIConfig.get_config('key_button')
@@ -770,8 +810,15 @@ class DimensionsManager(LayoutManagerBase):
         """
         try:
             UIConfig = self._get_ui_config()
-            from modules.ui_config import DisplayProfile
-            from modules.ui_elements import get_spacer_size
+            if UIConfig is None:
+                logger.warning("UIConfig not available, skipping row spacing adjustment")
+                return
+            try:
+                from ...modules.ui_config import DisplayProfile
+                from ...modules.ui_elements import get_spacer_size
+            except ImportError:
+                from modules.ui_config import DisplayProfile
+                from modules.ui_elements import get_spacer_size
             
             # Get compact mode status and spacer sizes
             is_compact = UIConfig._active_profile == DisplayProfile.COMPACT

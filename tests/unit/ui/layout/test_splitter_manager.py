@@ -15,6 +15,50 @@ plugin_path = Path(__file__).parents[4]
 if str(plugin_path) not in sys.path:
     sys.path.insert(0, str(plugin_path))
 
+# Mock QGIS modules before any imports that use them
+_qgis_mock = MagicMock()
+_qgis_pyqt_mock = MagicMock()
+_qgis_gui_mock = MagicMock()
+
+# Setup QSizePolicy mock with proper enum values
+class MockQSizePolicy:
+    Fixed = 0
+    Minimum = 1
+    Maximum = 4
+    Preferred = 5
+    Expanding = 7
+    MinimumExpanding = 3
+    Ignored = 13
+
+_qgis_pyqt_mock.QtWidgets.QSizePolicy = MockQSizePolicy
+_qgis_pyqt_mock.QtWidgets.QSplitter = MagicMock
+_qgis_pyqt_mock.QtCore.QSize = Mock
+_qgis_pyqt_mock.QtCore.Qt = Mock()
+
+# Patch QGIS modules in sys.modules before imports
+sys.modules['qgis'] = _qgis_mock
+sys.modules['qgis.PyQt'] = _qgis_pyqt_mock
+sys.modules['qgis.PyQt.QtWidgets'] = _qgis_pyqt_mock.QtWidgets
+sys.modules['qgis.PyQt.QtCore'] = _qgis_pyqt_mock.QtCore
+sys.modules['qgis.gui'] = _qgis_gui_mock
+sys.modules['qgis.core'] = MagicMock()
+
+# Mock modules.ui_config before import
+_mock_ui_config_module = MagicMock()
+_splitter_config = {
+    'handle_width': 6,
+    'handle_margin': 40,
+    'exploring_stretch': 2,
+    'toolset_stretch': 5,
+    'collapsible': False,
+    'opaque_resize': True,
+    'initial_exploring_ratio': 0.50,
+    'initial_toolset_ratio': 0.50,
+}
+_mock_ui_config_module.UIConfig.get_config.return_value = _splitter_config
+sys.modules['modules'] = MagicMock()
+sys.modules['modules.ui_config'] = _mock_ui_config_module
+
 
 class TestSplitterManager:
     """Tests for SplitterManager class."""
@@ -63,51 +107,47 @@ class TestSplitterManager:
         """Setup should initialize splitter from dockwidget."""
         from ui.layout.splitter_manager import SplitterManager
         
-        with patch.dict('sys.modules', {'modules.ui_config': Mock()}):
-            manager = SplitterManager(mock_dockwidget)
-            manager.setup()
-            
-            assert manager.is_initialized
-            assert manager.splitter is mock_dockwidget.splitter_main
-            assert mock_dockwidget.main_splitter is mock_dockwidget.splitter_main
+        manager = SplitterManager(mock_dockwidget)
+        manager.setup()
+        
+        assert manager.is_initialized
+        assert manager.splitter is mock_dockwidget.splitter_main
+        assert mock_dockwidget.main_splitter is mock_dockwidget.splitter_main
     
     def test_setup_applies_properties(self, mock_dockwidget):
         """Setup should apply splitter properties from config."""
         from ui.layout.splitter_manager import SplitterManager
         
-        with patch.dict('sys.modules', {'modules.ui_config': Mock()}):
-            manager = SplitterManager(mock_dockwidget)
-            manager.setup()
-            
-            splitter = mock_dockwidget.splitter_main
-            splitter.setChildrenCollapsible.assert_called()
-            splitter.setHandleWidth.assert_called()
-            splitter.setOpaqueResize.assert_called()
+        manager = SplitterManager(mock_dockwidget)
+        manager.setup()
+        
+        splitter = mock_dockwidget.splitter_main
+        splitter.setChildrenCollapsible.assert_called()
+        splitter.setHandleWidth.assert_called()
+        splitter.setOpaqueResize.assert_called()
     
     def test_setup_applies_stretch_factors(self, mock_dockwidget):
         """Setup should apply stretch factors."""
         from ui.layout.splitter_manager import SplitterManager
         
-        with patch.dict('sys.modules', {'modules.ui_config': Mock()}):
-            manager = SplitterManager(mock_dockwidget)
-            manager.setup()
-            
-            splitter = mock_dockwidget.splitter_main
-            # Check that setStretchFactor was called for both indices
-            assert splitter.setStretchFactor.call_count >= 2
+        manager = SplitterManager(mock_dockwidget)
+        manager.setup()
+        
+        splitter = mock_dockwidget.splitter_main
+        # Check that setStretchFactor was called for both indices
+        assert splitter.setStretchFactor.call_count >= 2
     
     def test_setup_applies_stylesheet(self, mock_dockwidget):
         """Setup should apply handle styling."""
         from ui.layout.splitter_manager import SplitterManager
         
-        with patch.dict('sys.modules', {'modules.ui_config': Mock()}):
-            manager = SplitterManager(mock_dockwidget)
-            manager.setup()
-            
-            splitter = mock_dockwidget.splitter_main
-            splitter.setStyleSheet.assert_called_once()
-            stylesheet = splitter.setStyleSheet.call_args[0][0]
-            assert 'QSplitter::handle:vertical' in stylesheet
+        manager = SplitterManager(mock_dockwidget)
+        manager.setup()
+        
+        splitter = mock_dockwidget.splitter_main
+        splitter.setStyleSheet.assert_called_once()
+        stylesheet = splitter.setStyleSheet.call_args[0][0]
+        assert 'QSplitter::handle:vertical' in stylesheet
     
     def test_setup_handles_missing_splitter(self):
         """Setup should handle missing splitter_main gracefully."""
@@ -116,27 +156,25 @@ class TestSplitterManager:
         mock_dockwidget = Mock(spec=['frame_exploring', 'frame_toolset'])
         # splitter_main is not in spec, so hasattr will return False
         
-        with patch.dict('sys.modules', {'modules.ui_config': Mock()}):
-            manager = SplitterManager(mock_dockwidget)
-            manager.setup()  # Should not raise
-            
-            assert not manager.is_initialized
+        manager = SplitterManager(mock_dockwidget)
+        manager.setup()  # Should not raise
+        
+        assert not manager.is_initialized
     
     def test_apply_reapplies_config(self, mock_dockwidget):
         """Apply should reload and reapply configuration."""
         from ui.layout.splitter_manager import SplitterManager
         
-        with patch.dict('sys.modules', {'modules.ui_config': Mock()}):
-            manager = SplitterManager(mock_dockwidget)
-            manager.setup()
-            
-            # Reset mock calls
-            mock_dockwidget.splitter_main.reset_mock()
-            
-            manager.apply()
-            
-            # Should reapply properties
-            mock_dockwidget.splitter_main.setChildrenCollapsible.assert_called()
+        manager = SplitterManager(mock_dockwidget)
+        manager.setup()
+        
+        # Reset mock calls
+        mock_dockwidget.splitter_main.reset_mock()
+        
+        manager.apply()
+        
+        # Should reapply properties
+        mock_dockwidget.splitter_main.setChildrenCollapsible.assert_called()
     
     def test_apply_without_init_does_not_crash(self, mock_dockwidget):
         """Apply without setup should not crash."""
@@ -151,12 +189,11 @@ class TestSplitterManager:
         
         mock_dockwidget.splitter_main.sizes.return_value = [200, 400]
         
-        with patch.dict('sys.modules', {'modules.ui_config': Mock()}):
-            manager = SplitterManager(mock_dockwidget)
-            manager.setup()
-            
-            sizes = manager.get_sizes()
-            assert sizes == [200, 400]
+        manager = SplitterManager(mock_dockwidget)
+        manager.setup()
+        
+        sizes = manager.get_sizes()
+        assert sizes == [200, 400]
     
     def test_get_sizes_before_init(self, mock_dockwidget):
         """get_sizes before init should return empty list."""
@@ -169,28 +206,26 @@ class TestSplitterManager:
         """set_sizes should update splitter sizes."""
         from ui.layout.splitter_manager import SplitterManager
         
-        with patch.dict('sys.modules', {'modules.ui_config': Mock()}):
-            manager = SplitterManager(mock_dockwidget)
-            manager.setup()
-            
-            manager.set_sizes([150, 450])
-            
-            mock_dockwidget.splitter_main.setSizes.assert_called_with([150, 450])
+        manager = SplitterManager(mock_dockwidget)
+        manager.setup()
+        
+        manager.set_sizes([150, 450])
+        
+        mock_dockwidget.splitter_main.setSizes.assert_called_with([150, 450])
     
     def test_set_sizes_invalid_length(self, mock_dockwidget):
         """set_sizes with wrong length should not crash."""
         from ui.layout.splitter_manager import SplitterManager
         
-        with patch.dict('sys.modules', {'modules.ui_config': Mock()}):
-            manager = SplitterManager(mock_dockwidget)
-            manager.setup()
-            
-            mock_dockwidget.splitter_main.reset_mock()
-            
-            manager.set_sizes([100])  # Only one size
-            
-            # setSizes should not be called with invalid length
-            mock_dockwidget.splitter_main.setSizes.assert_not_called()
+        manager = SplitterManager(mock_dockwidget)
+        manager.setup()
+        
+        mock_dockwidget.splitter_main.reset_mock()
+        
+        manager.set_sizes([100])  # Only one size
+        
+        # setSizes should not be called with invalid length
+        mock_dockwidget.splitter_main.setSizes.assert_not_called()
     
     def test_save_and_restore_sizes(self, mock_dockwidget):
         """save_sizes and restore_sizes should work together."""
@@ -198,31 +233,29 @@ class TestSplitterManager:
         
         mock_dockwidget.splitter_main.sizes.return_value = [200, 400]
         
-        with patch.dict('sys.modules', {'modules.ui_config': Mock()}):
-            manager = SplitterManager(mock_dockwidget)
-            manager.setup()
-            
-            saved = manager.save_sizes()
-            assert saved == [200, 400]
-            
-            manager.restore_sizes(saved)
-            mock_dockwidget.splitter_main.setSizes.assert_called_with([200, 400])
+        manager = SplitterManager(mock_dockwidget)
+        manager.setup()
+        
+        saved = manager.save_sizes()
+        assert saved == [200, 400]
+        
+        manager.restore_sizes(saved)
+        mock_dockwidget.splitter_main.setSizes.assert_called_with([200, 400])
     
     def test_teardown(self, mock_dockwidget):
         """Teardown should clean up resources."""
         from ui.layout.splitter_manager import SplitterManager
         
-        with patch.dict('sys.modules', {'modules.ui_config': Mock()}):
-            manager = SplitterManager(mock_dockwidget)
-            manager.setup()
-            
-            assert manager.is_initialized
-            assert manager.splitter is not None
-            
-            manager.teardown()
-            
-            assert not manager.is_initialized
-            assert manager.splitter is None
+        manager = SplitterManager(mock_dockwidget)
+        manager.setup()
+        
+        assert manager.is_initialized
+        assert manager.splitter is not None
+        
+        manager.teardown()
+        
+        assert not manager.is_initialized
+        assert manager.splitter is None
     
     def test_policy_map_has_all_policies(self):
         """POLICY_MAP should contain all Qt size policies."""

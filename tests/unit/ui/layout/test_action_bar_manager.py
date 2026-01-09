@@ -15,6 +15,39 @@ plugin_path = Path(__file__).parents[4]
 if str(plugin_path) not in sys.path:
     sys.path.insert(0, str(plugin_path))
 
+# Mock QGIS modules before any imports that use them
+_qgis_mock = MagicMock()
+_qgis_pyqt_mock = MagicMock()
+_qgis_gui_mock = MagicMock()
+
+# Setup QSizePolicy mock with proper enum values
+class MockQSizePolicy:
+    Fixed = 0
+    Minimum = 1
+    Maximum = 4
+    Preferred = 5
+    Expanding = 7
+    MinimumExpanding = 3
+    Ignored = 13
+
+_qgis_pyqt_mock.QtWidgets.QSizePolicy = MockQSizePolicy
+_qgis_pyqt_mock.QtCore.QSize = Mock
+_qgis_pyqt_mock.QtCore.Qt = Mock()
+_qgis_pyqt_mock.QtCore.Qt.AlignCenter = 0x84
+
+# Patch QGIS modules in sys.modules before imports
+sys.modules['qgis'] = _qgis_mock
+sys.modules['qgis.PyQt'] = _qgis_pyqt_mock
+sys.modules['qgis.PyQt.QtWidgets'] = _qgis_pyqt_mock.QtWidgets
+sys.modules['qgis.PyQt.QtCore'] = _qgis_pyqt_mock.QtCore
+sys.modules['qgis.gui'] = _qgis_gui_mock
+sys.modules['qgis.core'] = MagicMock()
+
+# Mock modules.ui_config before import
+sys.modules['modules'] = MagicMock()
+sys.modules['modules.ui_config'] = MagicMock()
+sys.modules['modules.ui_elements'] = MagicMock()
+
 
 class TestActionBarManager:
     """Tests for ActionBarManager class."""

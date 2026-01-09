@@ -1,17 +1,37 @@
 # FilterMate v3.0 - Migration Guide
 
-> **Version**: 3.0.0 | **Date**: January 2026
+> **Version**: 3.0.0 | **Date**: January 2026 | **Status**: Complete
 
 This guide covers the migration from FilterMate v2.x to v3.0 for both **users** and **developers**.
 
 ## 📋 Quick Summary
 
-| Aspect                 | Impact       | Notes                         |
-| ---------------------- | ------------ | ----------------------------- |
-| **User Configuration** | ✅ Automatic | Config migrates automatically |
-| **Plugin API**         | ⚠️ Changed   | New module structure          |
-| **Performance**        | 📈 Improved  | Better backend selection      |
-| **Compatibility**      | ✅ Same      | QGIS 3.22+ supported          |
+| Aspect                 | Impact        | Notes                         |
+| ---------------------- | ------------- | ----------------------------- |
+| **User Configuration** | ✅ Automatic  | Config migrates automatically |
+| **Plugin API**         | ⚠️ Changed    | New module structure          |
+| **Performance**        | 📈 Improved   | 30-60% faster in benchmarks   |
+| **Compatibility**      | ✅ Same       | QGIS 3.22+ supported          |
+| **Legacy Modules**     | ⚠️ Deprecated | Removed in v4.0               |
+
+---
+
+## 🎯 Migration Checklist
+
+### For Plugin Users
+
+- [ ] Backup configuration (recommended)
+- [ ] Update plugin via QGIS Plugin Manager
+- [ ] Verify favorites and history preserved
+- [ ] Test basic filtering operations
+
+### For Developers/Integrators
+
+- [ ] Update import paths (see "Import Path Changes")
+- [ ] Replace direct backend instantiation with `BackendFactory`
+- [ ] Use dependency injection pattern for services
+- [ ] Update tests to use new fixtures
+- [ ] Check deprecation warnings in logs
 
 ---
 

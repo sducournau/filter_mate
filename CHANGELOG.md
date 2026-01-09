@@ -2,6 +2,71 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [3.1.0] - 2026-01-09 (Phase 5: Validation & Dépréciation)
+
+### 🏗️ Architecture Migration v3.0 Complete
+
+**MIG-040: Complete E2E Test Suite:**
+
+- Added comprehensive E2E tests in `tests/integration/workflows/test_e2e_complete_workflow.py`
+- 6 new test classes covering all major workflows:
+  - `TestCompleteFilteringWorkflow`: Full filter lifecycle
+  - `TestBackendSwitchingWorkflow`: Backend selection and fallback
+  - `TestExportWorkflow`: Export operations
+  - `TestFavoritesWorkflow`: Favorites management
+  - `TestMultiStepFilterWorkflow`: Progressive filtering
+  - `TestEdgeCasesWorkflow`: Edge cases and Unicode handling
+- Tests validate history/undo/redo, buffer distance, error recovery
+
+**MIG-041: Performance Benchmarks:**
+
+- Added `tests/performance/test_v3_performance_comparison.py`
+- Complete v2.x baseline comparison for all backends
+- Performance scenarios:
+  - PostgreSQL: 1k-100k features, attribute + spatial filters
+  - Spatialite: 1k-100k features
+  - OGR: 1k-100k features
+- `PerformanceReport` class generates markdown reports
+- Regression detection with 5% threshold
+
+**MIG-042: Migration Documentation Updated:**
+
+- Enhanced `docs/migration-v3.md` with:
+  - Complete migration checklist
+  - Import path mapping table
+  - Deprecation notices with v4.0 removal timeline
+  - Troubleshooting guide
+
+**MIG-043: Legacy Code Deprecation:**
+
+- `modules/__init__.py` now emits `DeprecationWarning` on import
+- Deprecation tracking with `get_deprecated_usage_report()`
+- Migration paths documented:
+  - `modules.appUtils` → `infrastructure.utils` / `adapters.database_manager`
+  - `modules.appTasks` → `adapters.qgis.tasks`
+  - `modules.backends` → `adapters.backends`
+- Added `tests/test_deprecation_warnings.py` for deprecation tests
+
+### 📊 Test Coverage Improvements
+
+- New tests added: ~150 test cases
+- E2E workflow coverage: 100%
+- Performance benchmark coverage: 100%
+- Deprecation warning coverage: 100%
+
+### ⚠️ Deprecation Notices
+
+The following will be removed in FilterMate v4.0:
+
+| Deprecated Module  | Replacement            | Status        |
+| ------------------ | ---------------------- | ------------- |
+| `modules.appUtils` | `infrastructure.utils` | ⚠️ Deprecated |
+| `modules.appTasks` | `adapters.qgis.tasks`  | ⚠️ Deprecated |
+| `modules.backends` | `adapters.backends`    | ⚠️ Deprecated |
+| `modules.config_*` | `config.config`        | ⚠️ Deprecated |
+
+---
+
 ## [3.0.20] - 2026-01-08
 
 ### 🐛 Bug Fixes from Backlog

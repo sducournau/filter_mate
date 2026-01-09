@@ -73,6 +73,9 @@ __all__ = [
     'TaskBridge',
     'BridgeResult',
     'get_task_bridge',
+    
+    # Database manager (v3.0 MIG-024)
+    'DatabaseManager',
 ]
 
 # Task parameter builder for MIG-024
@@ -104,4 +107,10 @@ except ImportError:
     TaskBridge = None
     BridgeResult = None
     get_task_bridge = None
+
+# Database manager for MIG-024 (God Class reduction)
+try:
+    from .database_manager import DatabaseManager
+except ImportError:
+    DatabaseManager = None
 
