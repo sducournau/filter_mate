@@ -491,3 +491,61 @@ class TestEdgeCases:
         
         # Verify no crash and original types unaffected
         assert bridge.metrics['by_type']['attribute']['count'] == 0
+
+
+# ============================================================================
+# TaskBridge Export Tests
+# ============================================================================
+
+class TestTaskBridgeExport:
+    """Tests for export functionality."""
+    
+    def test_returns_not_available_when_not_initialized(self):
+        """Test returns NOT_AVAILABLE when bridge not available."""
+        from adapters.task_bridge import TaskBridge, BridgeStatus
+        
+        bridge = TaskBridge(auto_initialize=False)
+        source = create_mock_layer()
+        
+        result = bridge.execute_export(
+            source_layer=source,
+            output_path="/tmp/test.gpkg",
+            format="gpkg"
+        )
+        
+        assert result.status == BridgeStatus.NOT_AVAILABLE
+        assert result.success is False
+    
+    def test_supports_export_when_not_available(self):
+        """Test supports_export returns False when bridge not available."""
+        from adapters.task_bridge import TaskBridge
+        
+        bridge = TaskBridge(auto_initialize=False)
+        
+        assert bridge.supports_export() is False
+    
+    def test_export_metrics_type_exists(self):
+        """Test export metrics type is tracked."""
+        from adapters.task_bridge import TaskBridge
+        
+        bridge = TaskBridge(auto_initialize=False)
+        
+        # Verify export type exists in metrics
+        assert 'export' in bridge.metrics['by_type']
+        assert bridge.metrics['by_type']['export']['count'] == 0
+    
+    def test_export_updates_metrics(self):
+        """Test export operations update metrics correctly."""
+        from adapters.task_bridge import TaskBridge
+        
+        bridge = TaskBridge(auto_initialize=False)
+        
+        # Manually update export metrics
+        bridge._update_type_metrics('export', True, 1000.0)
+        bridge._update_type_metrics('export', True, 500.0)
+        bridge._update_type_metrics('export', False, 200.0)
+        
+        export_metrics = bridge.metrics['by_type']['export']
+        assert export_metrics['count'] == 3
+        assert export_metrics['success'] == 2
+        assert export_metrics['time_ms'] == 1700.0
