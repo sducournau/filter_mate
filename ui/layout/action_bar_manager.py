@@ -84,11 +84,11 @@ class ActionBarManager(LayoutManagerBase):
         """Lazy load UIConfig to avoid circular imports."""
         if self._ui_config is None:
             try:
-                from ...modules.ui_config import UIConfig
+                from ...ui.config import UIConfig
                 self._ui_config = UIConfig
             except ImportError:
                 try:
-                    from modules.ui_config import UIConfig
+                    from ui.config import UIConfig
                     self._ui_config = UIConfig
                 except ImportError:
                     self._ui_config = None

@@ -116,7 +116,7 @@ class BackendService(QObject):
         """Check if PostgreSQL backend is available (psycopg2 installed)."""
         if self._postgresql_available is None:
             try:
-                from modules.appUtils import POSTGRESQL_AVAILABLE
+                from adapters.backends import POSTGRESQL_AVAILABLE
                 self._postgresql_available = POSTGRESQL_AVAILABLE
             except ImportError:
                 self._postgresql_available = False
@@ -473,15 +473,15 @@ class BackendService(QObject):
             if backend_type == BackendType.POSTGRESQL:
                 if not self.is_postgresql_available:
                     return None
-                from modules.backends.postgresql_backend import PostgreSQLGeometricFilter
+                from adapters.backends.postgresql import PostgreSQLGeometricFilter
                 backend = PostgreSQLGeometricFilter(task_params)
                 
             elif backend_type == BackendType.SPATIALITE:
-                from modules.backends.spatialite_backend import SpatialiteGeometricFilter
+                from adapters.backends.spatialite import SpatialiteGeometricFilter
                 backend = SpatialiteGeometricFilter(task_params)
                 
             elif backend_type == BackendType.OGR:
-                from modules.backends.ogr_backend import OGRGeometricFilter
+                from adapters.backends.ogr import OGRGeometricFilter
                 backend = OGRGeometricFilter(task_params)
                 
             else:

@@ -156,7 +156,7 @@ import logging
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from modules.filter_history import HistoryManager, FilterHistory
+    from core.services.history_service import HistoryManager, FilterHistory
 
 logger = logging.getLogger('FilterMate.UI.HistoryWidget')
 

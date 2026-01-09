@@ -96,11 +96,11 @@ class SplitterManager(LayoutManagerBase):
         UIConfig = None
         try:
             # Try relative import first (package context)
-            from ...modules.ui_config import UIConfig
+            from ...ui.config import UIConfig
         except ImportError:
             try:
                 # Fallback to absolute import (QGIS plugin context)
-                from modules.ui_config import UIConfig
+                from ui.config import UIConfig
             except ImportError:
                 logger.warning("UIConfig not available, using defaults")
         
@@ -161,10 +161,10 @@ class SplitterManager(LayoutManagerBase):
         
         UIConfig = None
         try:
-            from ...modules.ui_config import UIConfig
+            from ...ui.config import UIConfig
         except ImportError:
             try:
-                from modules.ui_config import UIConfig
+                from ui.config import UIConfig
             except ImportError:
                 pass
         
@@ -245,10 +245,10 @@ class SplitterManager(LayoutManagerBase):
         """
         UIConfig = None
         try:
-            from ...modules.ui_config import UIConfig
+            from ...ui.config import UIConfig
         except ImportError:
             try:
-                from modules.ui_config import UIConfig
+                from ui.config import UIConfig
             except ImportError:
                 pass
         

@@ -70,14 +70,14 @@ from .modules.appUtils import (
     clean_buffer_value,  # v3.0.12: Clean buffer values from float precision errors
 )
 from .modules.type_utils import can_cast, return_typed_value
-from .modules.feedback_utils import (
+from .infrastructure.feedback import (
     show_backend_info, show_progress_message, show_success_with_backend,
     show_performance_warning, show_error_with_context,
     show_info, show_warning, show_error, show_success  # v2.8.6: Centralized message bar
 )
-from .modules.filter_history import HistoryManager
-from .modules.filter_favorites import FavoritesManager
-from .modules.ui_config import UIConfig, DisplayProfile
+from .core.services.history_service import HistoryManager
+from .core.services.favorites_service import FavoritesManager
+from .ui.config import UIConfig, DisplayProfile
 from .modules.config_helpers import get_optimization_thresholds
 from .modules.object_safety import (
     is_sip_deleted, is_valid_layer, is_valid_qobject, is_qgis_alive,
@@ -87,11 +87,11 @@ from .modules.object_safety import (
     require_valid_layer  # STABILITY v2.6.0: Decorator for layer validation
 )
 # STABILITY v2.6.0: Circuit breaker for PostgreSQL connection protection
-from .modules.circuit_breaker import (
+from .infrastructure.resilience import (
     get_postgresql_breaker,
     CircuitOpenError
 )
-from .modules.logging_config import get_app_logger
+from .infrastructure.logging import get_app_logger
 from .resources import *  # Qt resources must be imported with wildcard
 import uuid
 
@@ -600,7 +600,7 @@ class FilterMateApp:
         
         # v2.8.11: Initialize Spatialite cache for multi-step filtering
         try:
-            from .modules.backends.spatialite_cache import get_cache, cleanup_cache
+            from .infrastructure.cache import get_cache, cleanup_cache
             self._spatialite_cache = get_cache()
             # Cleanup expired entries on startup
             expired_count = cleanup_cache()
@@ -2206,7 +2206,7 @@ class FilterMateApp:
             # If not, OGR fallback will be used
             spatialite_fallback = False
             if provider_type == 'spatialite' and layers and not backend_was_forced:
-                from .modules.backends.spatialite_backend import SpatialiteGeometricFilter
+                from .adapters.backends.spatialite import SpatialiteGeometricFilter
                 spatialite_backend = SpatialiteGeometricFilter({})
                 # Test first layer to see if Spatialite functions work
                 test_layer = layers[0] if layers else current_layer
@@ -2695,7 +2695,7 @@ class FilterMateApp:
         
         # Analyze layers for optimization opportunities
         try:
-            from .modules.backends.auto_optimizer import (
+            from .core.services.auto_optimizer import (
                 LayerAnalyzer, AutoOptimizer, AUTO_OPTIMIZER_AVAILABLE, OptimizationType
             )
             
@@ -4321,7 +4321,7 @@ class FilterMateApp:
         # This ensures the multi-step cache doesn't interfere with subsequent filter operations
         if task_name in ('unfilter', 'reset'):
             try:
-                from modules.backends.spatialite_cache import get_cache
+                from infrastructure.cache import get_cache
                 cache = get_cache()
                 # Clear cache for source layer
                 cache.clear_layer_cache(source_layer.id())
@@ -4739,7 +4739,7 @@ class FilterMateApp:
         if task_name == 'unfilter':
             # v2.8.11: Clear Spatialite cache for this layer when unfiltering
             try:
-                from modules.backends.spatialite_cache import get_cache
+                from infrastructure.cache import get_cache
                 cache = get_cache()
                 cache.clear_layer_cache(layer.id())
                 logger.debug(f"FilterMate: Cleared Spatialite cache for {layer.name()}")

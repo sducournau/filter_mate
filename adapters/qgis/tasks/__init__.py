@@ -17,7 +17,7 @@ Task Categories:
 - ProgressHandler: Centralized progress reporting
 
 Migration from modules/appTasks.py:
-    OLD: from modules.appTasks import FilterEngineTask
+    OLD: from adapters.qgis.tasks import FilterEngineTask
     NEW: from adapters.qgis.tasks import FilterTask
 """
 

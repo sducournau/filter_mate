@@ -209,7 +209,7 @@ class BackendFactory:
     def _check_postgresql_available(self) -> bool:
         """Check if PostgreSQL backend is available."""
         try:
-            from modules.psycopg2_availability import POSTGRESQL_AVAILABLE
+            from adapters.backends import POSTGRESQL_AVAILABLE
             return POSTGRESQL_AVAILABLE
         except ImportError:
             try:

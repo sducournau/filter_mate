@@ -69,10 +69,10 @@ class SpacingManager(LayoutManagerBase):
         if self._ui_config is None:
             UIConfig = None
             try:
-                from ...modules.ui_config import UIConfig
+                from ...ui.config import UIConfig
             except ImportError:
                 try:
-                    from modules.ui_config import UIConfig
+                    from ui.config import UIConfig
                 except ImportError:
                     logger.warning("UIConfig not available, using defaults")
             self._ui_config = UIConfig
@@ -224,11 +224,11 @@ class SpacingManager(LayoutManagerBase):
                 logger.warning("UIConfig not available, skipping spacer harmonization")
                 return
             try:
-                from ...modules.ui_config import DisplayProfile
-                from ...modules.ui_elements import get_spacer_size
+                from ...ui.config import DisplayProfile
+                from ...ui.elements import get_spacer_size
             except ImportError:
-                from modules.ui_config import DisplayProfile
-                from modules.ui_elements import get_spacer_size
+                from ui.config import DisplayProfile
+                from ui.elements import get_spacer_size
             
             # Get compact mode status from UIConfig
             is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
@@ -300,11 +300,11 @@ class SpacingManager(LayoutManagerBase):
                 logger.warning("UIConfig not available, skipping row spacing adjustment")
                 return
             try:
-                from ...modules.ui_config import DisplayProfile
-                from ...modules.ui_elements import get_spacer_size
+                from ...ui.config import DisplayProfile
+                from ...ui.elements import get_spacer_size
             except ImportError:
-                from modules.ui_config import DisplayProfile
-                from modules.ui_elements import get_spacer_size
+                from ui.config import DisplayProfile
+                from ui.elements import get_spacer_size
             
             # Get compact mode status and spacer sizes
             is_compact = UIConfig._active_profile == DisplayProfile.COMPACT

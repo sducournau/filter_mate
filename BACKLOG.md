@@ -1,28 +1,122 @@
 # FilterMate Backlog - Issues & Fixes
 
 **Date de création:** 2026-01-08  
-**Version analysée:** 3.0.9  
+**Dernière mise à jour:** 2026-01-10  
+**Version analysée:** 3.1.0  
 **Généré par:** BMAD Master + Claude Opus 4.5
 
 ---
 
-## 📊 Résumé Exécutif
+## 📊 Résumé Exécutif - Migration v3.0
 
-| Sévérité        | Nombre | % du Total |
-| --------------- | ------ | ---------- |
-| 🔴 **Critique** | 6      | 6.6%       |
-| 🟠 **Haute**    | 18     | 19.8%      |
-| 🟡 **Moyenne**  | 42     | 46.2%      |
-| 🟢 **Basse**    | 25     | 27.4%      |
-| **Total**       | **91** | 100%       |
+### État de la Migration Architecture Hexagonale
 
-### Fichiers les Plus Volumineux (God Classes)
+| Composant                 | Statut         | Détails                      |
+| ------------------------- | -------------- | ---------------------------- |
+| **Nouvelle Architecture** | ✅ Créée       | 108 fichiers (38,561 lignes) |
+| **Ancienne Architecture** | ⚠️ À supprimer | 74 fichiers (68,649 lignes)  |
+| **Imports Legacy**        | ✅ Migrés      | 143 imports migrés (Phase A) |
+| **God Classes**           | ⚠️ 2 fichiers  | 19,155 lignes (hybride)      |
 
-| Fichier                        | Lignes | Recommandation         |
-| ------------------------------ | ------ | ---------------------- |
-| `filter_mate_dockwidget.py`    | 12,940 | Refactoring urgent     |
-| `modules/tasks/filter_task.py` | 12,177 | Découpage en modules   |
-| `filter_mate_app.py`           | 5,913  | Extraction de services |
+### Phase A - Migration Imports ✅ COMPLÈTE (2026-01-09)
+
+- **Script créé**: `tools/migrate_imports.py`
+- **Imports migrés**: 143 dans 35 fichiers
+- **Shims de compatibilité**: 6 modules créés
+- **Imports legacy restants**: 0 (hors shims et tests)
+
+### Phase C - Slim God Classes ⏸️ PARTIEL (2026-01-10)
+
+| Vague | Status      | Travail Effectué                                |
+| ----- | ----------- | ----------------------------------------------- |
+| 1     | ✅ Complète | BackendController, LayerSyncController intégrés |
+| 2     | ✅ Complète | flash_features, zoom_to_features délégués       |
+| 3+    | ⏸️ Bloqué   | Méthodes trop couplées à l'état interne         |
+
+**Conclusion:** Les God Classes restent car les méthodes sont fortement couplées via `PROJECT_LAYERS`, `widgets`, etc. Voir `SLIM_STRATEGY.md` pour l'analyse détaillée.
+
+### Nouvelle Architecture (prête)
+
+| Dossier           | Fichiers | Lignes | Rôle                        |
+| ----------------- | -------- | ------ | --------------------------- |
+| `core/`           | ~20      | 8,567  | Domain + Services           |
+| `adapters/`       | ~40      | 14,436 | Backends + QGIS integration |
+| `ui/`             | ~35      | 13,967 | Controllers + Widgets       |
+| `infrastructure/` | ~13      | 1,591  | DI + Utils                  |
+
+### Ancienne Architecture (à supprimer)
+
+| Dossier             | Fichiers | Lignes  | Action                   |
+| ------------------- | -------- | ------- | ------------------------ |
+| `modules/backends/` | 15       | ~11,000 | → `adapters/backends/`   |
+| `modules/tasks/`    | 12       | ~18,000 | → `adapters/qgis/tasks/` |
+| `modules/` (autres) | 47       | ~40,000 | Migrer ou supprimer      |
+
+---
+
+## 🎯 Plan de Nettoyage Final (v4.0)
+
+### Phase A: Migration des Imports ✅ COMPLÈTE
+
+**Résultat**: 143 imports migrés automatiquement  
+**Script**: `tools/migrate_imports.py`  
+**Documentation**: `_bmad-output/planning-artifacts/CLEANUP_PLAN_FINAL.md`
+
+### Phase B: Analyse dossier `modules/` ✅ COMPLÈTE (2026-01-10)
+
+**Résultat**: Analyse complète des 66,675 lignes de code legacy
+
+| Catégorie                  | Fichiers | Lignes  | Action                  |
+| -------------------------- | -------- | ------- | ----------------------- |
+| SUPPRIMER (shims)          | 2        | ~146    | Prêt à supprimer        |
+| MIGRER (équivalent existe) | 28       | ~43,000 | Migration progressive   |
+| UNIQUE/GARDER              | 27       | ~23,000 | Pas d'équivalent encore |
+
+**Décision**: Garder `modules/` comme package deprecated jusqu'à v4.0
+
+- Warnings de dépréciation actifs via `modules/__init__.py`
+- Tests utilisent encore `modules.*` (104 imports)
+- Fallbacks créés dans `adapters/backends/` et `ui/widgets/`
+- `adapters/backends/postgresql_availability.py` créé comme équivalent
+
+**Fichiers corrigés**:
+
+- `adapters/backends/__init__.py` - fallback POSTGRESQL_AVAILABLE
+- `ui/widgets/tree_view.py` - fallback JsonModel
+- `adapters/backends/postgresql_availability.py` - nouveau équivalent
+
+### Phase C: Slim God Classes ✅ PARTIELLE (2026-01-10)
+
+**Documentation**: `_bmad-output/planning-artifacts/SLIM_STRATEGY.md`
+
+| Fichier                     | Actuel | Cible   | Stratégie                       |
+| --------------------------- | ------ | ------- | ------------------------------- |
+| `filter_mate_dockwidget.py` | 13,049 | < 2,000 | Déléguer vers `ui/controllers/` |
+| `filter_mate_app.py`        | 6,063  | < 1,500 | Déléguer vers `core/services/`  |
+
+---
+
+## 📋 Issues par Sévérité
+
+| Sévérité        | Total  | Résolus | Restants |
+| --------------- | ------ | ------- | -------- |
+| 🔴 **Critique** | 6      | 5       | 1        |
+| 🟠 **Haute**    | 18     | 5       | 13       |
+| 🟡 **Moyenne**  | 42     | 3       | 39       |
+| 🟢 **Basse**    | 25     | 0       | 25       |
+| **Total**       | **91** | **13**  | **78**   |
+
+### Critiques Résolus ✅
+
+- CRIT-002: SQL Injection Risk (v3.0.20)
+- CRIT-004: Thread Safety (v2.3.9)
+- CRIT-005: Perte Couche Courante (v3.0.21)
+- CRIT-006: TypeError feature_count None (v3.0.19)
+- CRIT-003: God Classes → **Architecture créée, délégation en cours**
+
+### Critique Restant ⚠️
+
+- CRIT-001: Bug État Buffer Multi-Étapes
 
 ---
 
@@ -212,12 +306,22 @@ def test_exploring_widgets_functional_after_filter():
 
 ---
 
-### 🆕 CRIT-006: TypeError Multi-Step PostgreSQL (feature_count comparé à None)
+### ✅ CRIT-006: TypeError Multi-Step PostgreSQL (feature_count comparé à None) - **RÉSOLU v3.0.19**
 
+**Statut:** ✅ Corrigé en v3.0.19 (2026-01-09)  
 **Fichiers:** `postgresql_backend.py`, `filter_task.py`, `auto_optimizer.py`  
 **Impact:** 3ème filtre échoue TOTALEMENT pour TOUTES les couches distantes  
 **Effort:** 1 jour  
 **Backend affecté:** **PostgreSQL** (multi-step)
+
+**Correction appliquée:**
+
+- `postgresql_backend.py:1648-1650` - Protection None dans apply_filter()
+- `postgresql_backend.py:2777-2779` - Protection None avant CLUSTER
+- `auto_optimizer.py:361-362` - Protection None dans LayerAnalyzer
+- `auto_optimizer.py:1085` - Protection None dans \_check_buffer_segments()
+- `filter_task.py:8282` - Protection None dans layer_feature_count
+- Tests de régression: `tests/regression/test_crit_006_feature_count.py` (12 tests ✓)
 
 **Symptômes observés:**
 

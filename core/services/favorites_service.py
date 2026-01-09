@@ -137,7 +137,7 @@ class FavoritesService(QObject):
         """
         if self._favorites_manager is None:
             try:
-                from modules.filter_favorites import FavoritesManager
+                from core.services.favorites_service import FavoritesManager
                 self._favorites_manager = FavoritesManager(
                     db_path=db_path,
                     project_uuid=project_uuid
@@ -203,7 +203,7 @@ class FavoritesService(QObject):
             return None
         
         try:
-            from modules.filter_favorites import FilterFavorite
+            from core.services.favorites_service import FilterFavorite
             
             favorite = FilterFavorite(
                 name=name,
@@ -628,7 +628,7 @@ class FavoritesService(QObject):
         
         try:
             import json
-            from modules.filter_favorites import FilterFavorite
+            from core.services.favorites_service import FilterFavorite
             
             # Read file
             with open(file_path, 'r', encoding='utf-8') as f:

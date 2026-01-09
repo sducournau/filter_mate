@@ -3,9 +3,13 @@ FilterMate Signal Manager.
 
 Centralized signal management with tracking and cleanup.
 Reduces coupling and prevents memory leaks from untracked connections.
+
+Story: MIG-084
+Phase: 6 - God Class DockWidget Migration
 """
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Dict, Callable, Optional, List, Any
+from typing import Dict, Callable, Optional, List, Any, Iterator
 from weakref import ref
 import logging
 
@@ -371,6 +375,169 @@ class SignalManager:
         
         if self._debug:
             logger.debug("SignalManager fully cleaned up")
+    
+    def is_connected(self, connection_id: str) -> bool:
+        """
+        Check if a specific connection is still active.
+        
+        Args:
+            connection_id: The connection ID to check
+        
+        Returns:
+            True if connection exists and sender is still alive
+        """
+        if connection_id not in self._connections:
+            return False
+        
+        conn = self._connections[connection_id]
+        return conn.sender is not None
+    
+    def is_signal_connected_by_name(
+        self,
+        sender,
+        signal_name: str
+    ) -> bool:
+        """
+        Check if a signal is connected from a specific sender.
+        
+        Args:
+            sender: The sender object
+            signal_name: Name of the signal
+        
+        Returns:
+            True if any connection exists for this sender/signal
+        """
+        for conn in self._connections.values():
+            if conn.sender is sender and conn.signal_name == signal_name:
+                return True
+        return False
+    
+    def force_reconnect_context(self, context: str) -> int:
+        """
+        Force reconnect all signals in a context.
+        
+        Disconnects and reconnects to ensure clean state.
+        
+        Args:
+            context: The context to reconnect
+        
+        Returns:
+            Number of signals reconnected
+        """
+        count = 0
+        for conn in list(self._connections.values()):
+            if conn.context != context:
+                continue
+            
+            sender = conn.sender
+            if sender is None:
+                continue
+            
+            try:
+                signal = getattr(sender, conn.signal_name)
+                # Disconnect
+                try:
+                    signal.disconnect(conn.receiver)
+                except (RuntimeError, TypeError):
+                    pass
+                # Reconnect
+                signal.connect(conn.receiver)
+                count += 1
+            except (RuntimeError, AttributeError) as e:
+                if self._debug:
+                    logger.warning(f"Failed to reconnect {conn.id}: {e}")
+        
+        if self._debug:
+            logger.debug(f"Force reconnected {count} signals in '{context}'")
+        
+        return count
+    
+    def force_reconnect_action_signals(self) -> int:
+        """
+        Force reconnect all action-related signals.
+        
+        Convenience method for action buttons and toolbar items.
+        
+        Returns:
+            Number of signals reconnected
+        """
+        return self.force_reconnect_context('actions')
+    
+    def force_reconnect_exploring_signals(self) -> int:
+        """
+        Force reconnect all exploring-related signals.
+        
+        Convenience method for exploring groupboxes and widgets.
+        
+        Returns:
+            Number of signals reconnected
+        """
+        return self.force_reconnect_context('exploring')
+    
+    @contextmanager
+    def block_all_signals(self) -> Iterator[None]:
+        """
+        Context manager to temporarily block all tracked signals.
+        
+        Usage:
+            with signal_manager.block_all_signals():
+                # Do work without triggering signals
+                update_ui_elements()
+        
+        Yields:
+            None
+        """
+        disconnected = []
+        
+        try:
+            # Disconnect all signals temporarily
+            for conn in self._connections.values():
+                sender = conn.sender
+                if sender is not None:
+                    try:
+                        signal = getattr(sender, conn.signal_name)
+                        signal.disconnect(conn.receiver)
+                        disconnected.append(conn)
+                    except (RuntimeError, TypeError):
+                        pass
+            
+            if self._debug:
+                logger.debug(f"Blocked {len(disconnected)} signals")
+            
+            yield
+            
+        finally:
+            # Reconnect all signals
+            reconnected = 0
+            for conn in disconnected:
+                sender = conn.sender
+                if sender is not None:
+                    try:
+                        signal = getattr(sender, conn.signal_name)
+                        signal.connect(conn.receiver)
+                        reconnected += 1
+                    except (RuntimeError, TypeError):
+                        pass
+            
+            if self._debug:
+                logger.debug(f"Unblocked {reconnected} signals")
+    
+    @contextmanager
+    def block_context_signals(self, context: str) -> Iterator[None]:
+        """
+        Context manager to temporarily block signals for a specific context.
+        
+        Args:
+            context: The context to block
+        
+        Yields:
+            None
+        """
+        self.block_context(context)
+        try:
+            yield
+        finally:
+            self.unblock_context(context)
     
     def __len__(self) -> int:
         """Return number of active connections."""

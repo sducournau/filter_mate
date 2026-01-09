@@ -41,7 +41,7 @@ import weakref
 from osgeo import ogr
 
 # Import logging for error handling
-from .modules.logging_config import get_app_logger
+from .infrastructure.logging import get_app_logger
 logger = get_app_logger()
 from qgis.PyQt import QtGui, QtWidgets, QtCore
 from qgis.PyQt.QtCore import (
@@ -138,10 +138,10 @@ from .modules.appUtils import (
 )
 from .modules.customExceptions import SignalStateChangeError
 from .modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR, get_geometry_type_string
-from .modules.ui_styles import StyleLoader, QGISThemeWatcher
-from .modules.feedback_utils import show_info, show_warning, show_error, show_success
+from .ui.styles import StyleLoader, QGISThemeWatcher
+from .infrastructure.feedback import show_info, show_warning, show_error, show_success
 from .modules.config_helpers import set_config_value, get_optimization_thresholds
-from .modules.exploring_cache import ExploringFeaturesCache
+from .infrastructure.cache import ExploringFeaturesCache
 from .filter_mate_dockwidget_base import Ui_FilterMateDockWidgetBase
 
 # Import async expression evaluation for large layers (v2.5.10)
@@ -178,7 +178,7 @@ except ImportError:
 
 # Import UI configuration system for dynamic dimensions
 try:
-    from .modules.ui_config import UIConfig
+    from .ui.config import UIConfig
     from .modules import ui_widget_utils as ui_utils
     UI_CONFIG_AVAILABLE = True
 except ImportError:
@@ -740,7 +740,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         - Size policies for child frames
         - Initial size distribution
         """
-        from .modules.ui_config import UIConfig
+        from .ui.config import UIConfig
         from qgis.PyQt.QtWidgets import QSizePolicy
         
         try:
@@ -821,7 +821,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         - frame_exploring: Minimum policy (can shrink to min but prefers base)
         - frame_toolset: Expanding policy (takes remaining space)
         """
-        from .modules.ui_config import UIConfig
+        from .ui.config import UIConfig
         from qgis.PyQt.QtWidgets import QSizePolicy
         
         # Map string policies to Qt enum values
@@ -860,7 +860,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Uses the available height to distribute space between frames
         according to the configured ratios (50/50 by default for equal space).
         """
-        from .modules.ui_config import UIConfig
+        from .ui.config import UIConfig
         
         splitter_config = UIConfig.get_config('splitter')
         exploring_ratio = splitter_config.get('initial_exploring_ratio', 0.50)
@@ -928,7 +928,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         This ensures the dockwidget can be resized smaller in compact mode,
         allowing better screen space management.
         """
-        from .modules.ui_config import UIConfig
+        from .ui.config import UIConfig
         from qgis.PyQt.QtCore import QSize
         
         # Get dockwidget dimensions from active profile
@@ -956,7 +956,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Reads dimensions from UIConfig and applies them to all relevant widgets
         using findChildren() for batch processing.
         """
-        from .modules.ui_config import UIConfig
+        from .ui.config import UIConfig
         from qgis.PyQt.QtWidgets import QComboBox, QLineEdit, QDoubleSpinBox, QSpinBox, QGroupBox
         
         # Get dimensions from active profile
@@ -1009,7 +1009,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Size policies work in conjunction with the splitter configuration
         to ensure proper resize behavior.
         """
-        from .modules.ui_config import UIConfig
+        from .ui.config import UIConfig
         from qgis.PyQt.QtWidgets import QSizePolicy
         
         # Map string policies to Qt enum values
@@ -1097,7 +1097,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try:
             from qgis.PyQt.QtWidgets import QPushButton, QSizePolicy
             from qgis.PyQt.QtCore import QSize
-            from .modules.ui_config import UIConfig, DisplayProfile
+            from .ui.config import UIConfig, DisplayProfile
             
             # Get dynamic dimensions from key_button config
             key_button_config = UIConfig.get_config('key_button')
@@ -1206,7 +1206,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         uniform visual appearance across the entire UI.
         """
         try:
-            from .modules.ui_config import UIConfig
+            from .ui.config import UIConfig
             
             # Get harmonized layout spacing from config
             layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 8
@@ -1319,8 +1319,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         try:
             from qgis.PyQt.QtWidgets import QSpacerItem
-            from .modules.ui_elements import get_spacer_size
-            from .modules.ui_config import UIConfig, DisplayProfile
+            from .ui.elements import get_spacer_size
+            from .ui.config import UIConfig, DisplayProfile
             
             # Get compact mode status from UIConfig
             is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
@@ -1388,7 +1388,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         try:
             from qgis.PyQt.QtWidgets import QSizePolicy
-            from .modules.ui_config import UIConfig
+            from .ui.config import UIConfig
             
             # Get dimensions from config
             combobox_height = UIConfig.get_config('combobox', 'height') or 24
@@ -1456,7 +1456,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         and their parent containers. Harmonizes vertical bars of pushbuttons.
         """
         try:
-            from .modules.ui_config import UIConfig
+            from .ui.config import UIConfig
             
             # Get key button config for harmonized spacing
             key_button_config = UIConfig.get_config('key_button')
@@ -1600,8 +1600,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         try:
             from qgis.PyQt.QtWidgets import QSpacerItem
-            from .modules.ui_elements import get_spacer_size
-            from .modules.ui_config import UIConfig, DisplayProfile
+            from .ui.elements import get_spacer_size
+            from .ui.config import UIConfig, DisplayProfile
             
             # Get compact mode status and spacer sizes
             is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
@@ -1767,10 +1767,23 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         NEW: If indicator shows "..." (no layers loaded), clicking triggers
         a force reload of layers instead of showing the backend menu.
+        
+        v4.0: Delegates to BackendController when available.
         """
+        # v4.0 MIG-071: Try delegation first
+        if (self._controller_integration 
+            and self._controller_integration.backend_controller):
+            if self._controller_integration.delegate_handle_backend_click():
+                return
+        
+        # Fallback: Legacy implementation
+        self._on_backend_indicator_clicked_legacy(event)
+    
+    def _on_backend_indicator_clicked_legacy(self, event):
+        """Legacy implementation of backend indicator click - kept for fallback."""
         from qgis.PyQt.QtWidgets import QMenu
         from qgis.PyQt.QtGui import QCursor
-        from .modules.appUtils import POSTGRESQL_AVAILABLE
+        from .adapters.backends import POSTGRESQL_AVAILABLE
         from .modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
         
         # NEW: If indicator shows "..." (waiting state), trigger reload instead
@@ -2027,7 +2040,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         favorites_manager = getattr(self, '_favorites_manager', None)
         if favorites_manager is None:
             # Create temporary manager if not yet initialized
-            from .modules.filter_favorites import FavoritesManager
+            from .core.services.favorites_service import FavoritesManager
             self._favorites_manager = FavoritesManager()
             
             # Try to get database path and project UUID from project variables
@@ -2197,7 +2210,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         from qgis.PyQt.QtWidgets import QInputDialog, QLineEdit, QDialog, QVBoxLayout, QFormLayout, QDialogButtonBox, QTextEdit
         from qgis.core import QgsProject
         from datetime import datetime
-        from .modules.filter_favorites import FilterFavorite
+        from .core.services.favorites_service import FilterFavorite
         
         expression = self._get_current_filter_expression()
         if not expression:
@@ -2949,7 +2962,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Returns:
             List of tuples: (backend_type, backend_name, backend_icon)
         """
-        from .modules.appUtils import POSTGRESQL_AVAILABLE
+        from .adapters.backends import POSTGRESQL_AVAILABLE
         from .modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
         
         available = []
@@ -2984,7 +2997,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Returns:
             str: Backend type ('postgresql', 'spatialite', 'ogr')
         """
-        from .modules.appUtils import POSTGRESQL_AVAILABLE
+        from .adapters.backends import POSTGRESQL_AVAILABLE
         
         provider_type = layer.providerType()
         
@@ -3014,10 +3027,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Returns:
             bool: True if backend can support this layer
         """
-        from .modules.backends.postgresql_backend import PostgreSQLGeometricFilter
-        from .modules.backends.spatialite_backend import SpatialiteGeometricFilter
-        from .modules.backends.ogr_backend import OGRGeometricFilter
-        from .modules.appUtils import POSTGRESQL_AVAILABLE
+        from .adapters.backends.postgresql import PostgreSQLGeometricFilter
+        from .adapters.backends.spatialite import SpatialiteGeometricFilter
+        from .adapters.backends.ogr import OGRGeometricFilter
+        from .adapters.backends import POSTGRESQL_AVAILABLE
         
         if not layer or not layer.isValid():
             return False
@@ -3074,10 +3087,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         from qgis.utils import iface
         from qgis.core import QgsProject
-        from .modules.backends.postgresql_backend import PostgreSQLGeometricFilter
-        from .modules.backends.spatialite_backend import SpatialiteGeometricFilter
-        from .modules.backends.ogr_backend import OGRGeometricFilter
-        from .modules.appUtils import POSTGRESQL_AVAILABLE
+        from .adapters.backends.postgresql import PostgreSQLGeometricFilter
+        from .adapters.backends.spatialite import SpatialiteGeometricFilter
+        from .adapters.backends.ogr import OGRGeometricFilter
+        from .adapters.backends import POSTGRESQL_AVAILABLE
         
         if not backend_type:
             show_warning("FilterMate", "No backend selected to force")
@@ -3232,7 +3245,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         from qgis.core import QgsVectorLayer
         from .modules.appUtils import detect_layer_provider_type, POSTGRESQL_AVAILABLE
-        from .modules.backends.factory import should_use_memory_optimization
+        from .adapters.backends.factory import should_use_memory_optimization
         
         # Only process vector layers
         if not layer or not isinstance(layer, QgsVectorLayer) or not layer.isValid():
@@ -3311,7 +3324,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Manually cleanup all PostgreSQL materialized views for the current session.
         """
-        from .modules.appUtils import POSTGRESQL_AVAILABLE, get_datasource_connexion_from_layer
+        from .adapters.backends import POSTGRESQL_AVAILABLE, get_datasource_connexion_from_layer
         
         if not POSTGRESQL_AVAILABLE:
             show_warning("FilterMate", "PostgreSQL not available")
@@ -3389,7 +3402,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         Checks for existing materialized views from other sessions before dropping.
         """
-        from .modules.appUtils import POSTGRESQL_AVAILABLE, get_datasource_connexion_from_layer
+        from .adapters.backends import POSTGRESQL_AVAILABLE, get_datasource_connexion_from_layer
         
         if not POSTGRESQL_AVAILABLE:
             show_warning("FilterMate", "PostgreSQL not available")
@@ -3491,7 +3504,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Show information about the current PostgreSQL session and materialized views.
         """
-        from .modules.appUtils import POSTGRESQL_AVAILABLE, get_datasource_connexion_from_layer
+        from .adapters.backends import POSTGRESQL_AVAILABLE, get_datasource_connexion_from_layer
         from qgis.PyQt.QtWidgets import QMessageBox
         
         if not POSTGRESQL_AVAILABLE:
@@ -3623,7 +3636,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return
         
         try:
-            from .modules.backends.auto_optimizer import (
+            from .core.services.auto_optimizer import (
                 LayerAnalyzer, AutoOptimizer, AUTO_OPTIMIZER_AVAILABLE
             )
             
@@ -3941,7 +3954,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # Analyze the layer
         try:
-            from .modules.backends.auto_optimizer import (
+            from .core.services.auto_optimizer import (
                 LayerAnalyzer, LayerLocationType, AUTO_OPTIMIZER_AVAILABLE
             )
             
@@ -4991,7 +5004,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         layout.insertLayout(2, self.horizontalLayout_filtering_distant_layers)
         
         # Apply height constraints (these widgets are created before apply_dynamic_dimensions())
-        from .modules.ui_config import UIConfig
+        from .ui.config import UIConfig
         try:
             combobox_height = UIConfig.get_config('combobox', 'height')
             self.checkableComboBoxLayer_filtering_layers_to_filter.setMinimumHeight(combobox_height)
@@ -5025,7 +5038,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.debug("Exporting layers combobox inserted into verticalLayout_exporting_values")
         
         # Apply height constraints (these widgets are created before apply_dynamic_dimensions())
-        from .modules.ui_config import UIConfig
+        from .ui.config import UIConfig
         try:
             combobox_height = UIConfig.get_config('combobox', 'height')
             self.checkableComboBoxLayer_exporting_layers.setMinimumHeight(combobox_height)
@@ -5349,7 +5362,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.info(f"ACTIVE_THEME changed to: {new_theme_value}")
                 
                 # Apply new theme
-                from .modules.ui_styles import StyleLoader
+                from .ui.styles import StyleLoader
                 
                 if new_theme_value == 'auto':
                     # Auto-detect theme from QGIS
@@ -5397,7 +5410,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 
                 # Update UIConfig with new profile
                 if UI_CONFIG_AVAILABLE:
-                    from .modules.ui_config import UIConfig, DisplayProfile
+                    from .ui.config import UIConfig, DisplayProfile
                     
                     if new_profile_value == 'compact':
                         UIConfig.set_profile(DisplayProfile.COMPACT)
@@ -7511,6 +7524,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         The flash animation highlights the selected features with a red pulse effect.
         
         v3.0 MIG-024: Added controller delegation path for gradual migration.
+        v3.1 Vague 2: Delegate flash to ExploringController when available.
         """
         if self.widgets_initialized is True and self.current_layer is not None:
 
@@ -7543,7 +7557,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     feature_ids = self._exploring_cache.get_feature_ids(layer_id, groupbox_type)
                     if feature_ids:
                         logger.debug(f"exploring_identify_clicked: Using cached feature_ids ({len(feature_ids)} features)")
-                        # v3.0 MIG-024: Use QGIS native flash (fast path)
+                        # v3.1 Vague 2: Try controller delegation first
+                        if hasattr(self, '_controller_integration') and self._controller_integration:
+                            if self._controller_integration.delegate_flash_features(feature_ids):
+                                return
+                        # Legacy fallback: direct QGIS flash
                         self.iface.mapCanvas().flashFeatureIds(
                             self.current_layer, 
                             feature_ids, 
@@ -7560,9 +7578,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if len(features) == 0:
                 return
             else:
+                feature_ids = [feature.id() for feature in features]
+                # v3.1 Vague 2: Try controller delegation first
+                if hasattr(self, '_controller_integration') and self._controller_integration:
+                    if self._controller_integration.delegate_flash_features(feature_ids):
+                        return
+                # Legacy fallback: direct QGIS flash
                 self.iface.mapCanvas().flashFeatureIds(
                     self.current_layer, 
-                    [feature.id() for feature in features], 
+                    feature_ids, 
                     startColor=QColor(235, 49, 42, 255), 
                     endColor=QColor(237, 97, 62, 25), 
                     flashes=6, 
@@ -7849,6 +7873,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         This method uses cached bounding boxes when available for optimal performance.
         If the bounding box is cached, the zoom is nearly instantaneous.
         
+        v4.0: Can delegate to ExploringController when features are provided.
+        
         Args:
             features: Optional list of features to zoom to (if empty, uses current selection)
             expression: Optional expression string associated with the features
@@ -7860,6 +7886,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.debug("exploring_zoom_clicked: current_layer C++ object truly deleted")
                 self.current_layer = None
                 return
+
+            # v4.0 MIG-072: Try delegation if features provided
+            if features and len(features) > 0:
+                if (self._controller_integration 
+                    and self._controller_integration.exploring_controller):
+                    if self._controller_integration.delegate_zoom_to_features(features, expression):
+                        return
 
             layer_id = self.current_layer.id()
             groupbox_type = self.current_exploring_groupbox
@@ -12507,15 +12540,36 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Uses modern badge styling with colored backgrounds for visual distinction.
         Shows the REAL backend being used (not just provider type).
         
+        v4.0: Delegates to BackendController when available.
+        
         Args:
             provider_type: The provider type string ('postgresql', 'spatialite', 'ogr', etc.)
             postgresql_connection_available: For PostgreSQL layers, whether connection is available
             actual_backend: The actual backend name being used (from BackendFactory)
         """
+        # v4.0 MIG-071: Delegate to BackendController if available
+        if (self._controller_integration 
+            and self._controller_integration.backend_controller
+            and self.current_layer):
+            if self._controller_integration.delegate_update_backend_indicator(
+                self.current_layer,
+                postgresql_connection_available,
+                actual_backend
+            ):
+                # Store provider info for compatibility
+                self._current_provider_type = provider_type
+                self._current_postgresql_available = postgresql_connection_available
+                return
+        
+        # Fallback: Legacy implementation
+        self._update_backend_indicator_legacy(provider_type, postgresql_connection_available, actual_backend)
+    
+    def _update_backend_indicator_legacy(self, provider_type, postgresql_connection_available=None, actual_backend=None):
+        """Legacy implementation of backend indicator update - kept for fallback."""
         if not hasattr(self, 'backend_indicator_label') or not self.backend_indicator_label:
             return
         
-        from .modules.appUtils import POSTGRESQL_AVAILABLE
+        from .adapters.backends import POSTGRESQL_AVAILABLE
         
         # Store current provider for backend selection menu
         self._current_provider_type = provider_type
@@ -12559,8 +12613,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             feature_count = current_layer.featureCount() if current_layer else -1
             
             # Import optimization logic
-            from .modules.backends.factory import should_use_memory_optimization, get_small_dataset_config
-            from .modules.backends.spatialite_backend import SpatialiteGeometricFilter
+            from .adapters.backends.factory import should_use_memory_optimization, get_small_dataset_config
+            from .adapters.backends.spatialite import SpatialiteGeometricFilter
             
             # Normalize provider type (QGIS uses 'postgres', we use 'postgresql')
             normalized_provider = provider_type

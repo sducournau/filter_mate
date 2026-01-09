@@ -200,7 +200,7 @@ class BackendController(BaseController):
         Returns:
             List of tuples: (backend_type, backend_name, backend_icon)
         """
-        from modules.appUtils import POSTGRESQL_AVAILABLE
+        from adapters.backends import POSTGRESQL_AVAILABLE
         
         available = []
         provider_type = layer.providerType()
@@ -385,7 +385,7 @@ class BackendController(BaseController):
         provider_type = layer.providerType()
         
         try:
-            from modules.appUtils import POSTGRESQL_AVAILABLE
+            from adapters.backends import POSTGRESQL_AVAILABLE
         except ImportError:
             POSTGRESQL_AVAILABLE = False
 
@@ -466,7 +466,7 @@ class BackendController(BaseController):
         Args:
             layer: Current layer for backend selection
         """
-        from modules.feedback_utils import show_info, show_success, show_warning
+        from infrastructure.feedback import show_info, show_success, show_warning
 
         available = self.get_available_backends_for_layer(layer)
         

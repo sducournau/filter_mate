@@ -24,7 +24,7 @@ except ImportError:
     QgsVectorLayer = object
 
 try:
-    from modules.logging_config import get_logger
+    from infrastructure.logging import get_logger
 except ImportError:
     import logging
     def get_logger(name):

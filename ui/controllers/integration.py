@@ -21,6 +21,8 @@ from .registry import ControllerRegistry, TabIndex
 from .exploring_controller import ExploringController
 from .filtering_controller import FilteringController
 from .exporting_controller import ExportingController
+from .backend_controller import BackendController
+from .layer_sync_controller import LayerSyncController
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
@@ -74,6 +76,8 @@ class ControllerIntegration:
         self._exploring_controller: Optional[ExploringController] = None
         self._filtering_controller: Optional[FilteringController] = None
         self._exporting_controller: Optional[ExportingController] = None
+        self._backend_controller: Optional[BackendController] = None
+        self._layer_sync_controller: Optional[LayerSyncController] = None
         
         # Connection tracking
         self._connections: list = []
@@ -103,6 +107,16 @@ class ControllerIntegration:
     def exporting_controller(self) -> Optional[ExportingController]:
         """Get the exporting controller."""
         return self._exporting_controller
+    
+    @property
+    def backend_controller(self) -> Optional[BackendController]:
+        """Get the backend controller."""
+        return self._backend_controller
+    
+    @property
+    def layer_sync_controller(self) -> Optional[LayerSyncController]:
+        """Get the layer sync controller."""
+        return self._layer_sync_controller
     
     def setup(self) -> bool:
         """
@@ -165,6 +179,8 @@ class ControllerIntegration:
             self._exploring_controller = None
             self._filtering_controller = None
             self._exporting_controller = None
+            self._backend_controller = None
+            self._layer_sync_controller = None
             self._registry = None
             self._is_setup = False
             
@@ -197,6 +213,16 @@ class ControllerIntegration:
             signal_manager=self._signal_manager
         )
         
+        # Create BackendController
+        self._backend_controller = BackendController(
+            dockwidget=self._dockwidget
+        )
+        
+        # Create LayerSyncController
+        self._layer_sync_controller = LayerSyncController(
+            dockwidget=self._dockwidget
+        )
+        
         logger.debug("All controllers created")
     
     def _register_controllers(self) -> None:
@@ -224,6 +250,18 @@ class ControllerIntegration:
             'exporting',
             self._exporting_controller,
             tab_index=TabIndex.EXPORTING  # Tab 1
+        )
+        
+        self._registry.register(
+            'backend',
+            self._backend_controller,
+            tab_index=TabIndex.FILTERING  # Backend indicator visible on all tabs
+        )
+        
+        self._registry.register(
+            'layer_sync',
+            self._layer_sync_controller,
+            tab_index=TabIndex.FILTERING  # Layer sync active on all tabs
         )
         
         logger.debug("All controllers registered")
@@ -381,6 +419,45 @@ class ControllerIntegration:
             return self._exploring_controller.zoom_to_selected()
         return False
     
+    def delegate_zoom_to_features(self, features: list, expression: str = None) -> bool:
+        """
+        Delegate zoom to features operation.
+        
+        Args:
+            features: List of QgsFeature objects to zoom to
+            expression: Optional expression string (for logging)
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._exploring_controller and features:
+            try:
+                return self._exploring_controller.zoom_to_features(features)
+            except Exception as e:
+                logger.warning(f"delegate_zoom_to_features failed: {e}")
+                return False
+        return False
+    
+    def delegate_flash_features(self, feature_ids: list) -> bool:
+        """
+        Delegate flash features operation to ExploringController.
+        
+        v3.1 Vague 2: Supports dockwidget exploring_identify_clicked delegation.
+        
+        Args:
+            feature_ids: List of feature IDs to flash
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._exploring_controller and feature_ids:
+            try:
+                return self._exploring_controller.flash_features(feature_ids)
+            except Exception as e:
+                logger.warning(f"delegate_flash_features failed: {e}")
+                return False
+        return False
+    
     def delegate_execute_filter(self) -> bool:
         """Delegate filter execution to filtering controller."""
         if self._filtering_controller:
@@ -403,6 +480,77 @@ class ControllerIntegration:
         """Delegate export execution to exporting controller."""
         if self._exporting_controller:
             return self._exporting_controller.execute_export()
+        return False
+    
+    def delegate_update_backend_indicator(
+        self,
+        layer,
+        postgresql_connection_available=None,
+        actual_backend=None
+    ) -> bool:
+        """
+        Delegate backend indicator update to backend controller.
+        
+        Args:
+            layer: Current QgsVectorLayer
+            postgresql_connection_available: Whether PostgreSQL connection is available
+            actual_backend: Forced backend name, if any
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._backend_controller and layer:
+            try:
+                self._backend_controller.update_for_layer(
+                    layer,
+                    postgresql_connection_available,
+                    actual_backend
+                )
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_update_backend_indicator failed: {e}")
+                return False
+        return False
+    
+    def delegate_handle_backend_click(self) -> bool:
+        """Delegate backend indicator click to backend controller."""
+        if self._backend_controller:
+            try:
+                self._backend_controller.handle_indicator_clicked()
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_handle_backend_click failed: {e}")
+                return False
+        return False
+    
+    def delegate_current_layer_changed(self, layer) -> bool:
+        """
+        Delegate current layer change to layer sync controller.
+        
+        Args:
+            layer: The new current layer (or None)
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._layer_sync_controller:
+            try:
+                self._layer_sync_controller.on_current_layer_changed(layer)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_current_layer_changed failed: {e}")
+                return False
+        return False
+    
+    def delegate_set_filtering_in_progress(self, in_progress: bool) -> bool:
+        """Delegate filtering state to layer sync controller."""
+        if self._layer_sync_controller:
+            try:
+                self._layer_sync_controller.set_filtering_in_progress(in_progress)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_set_filtering_in_progress failed: {e}")
+                return False
         return False
     
     # === State Synchronization ===

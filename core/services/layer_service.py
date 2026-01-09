@@ -231,7 +231,7 @@ class LayerService(QObject):
         """
         try:
             # Try importing helper function
-            from modules.appUtils import is_layer_source_available
+            from core.services.layer_service import is_layer_source_available
             return is_layer_source_available(layer)
         except ImportError:
             # Fallback: check isValid()

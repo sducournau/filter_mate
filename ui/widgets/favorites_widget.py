@@ -337,10 +337,10 @@ class FavoritesWidget(QLabel if HAS_QGIS else object):
                        remote_layers: dict = None):
         """Save a new favorite."""
         try:
-            from modules.filter_favorites import FilterFavorite
+            from core.services.favorites_service import FilterFavorite
         except ImportError:
             try:
-                from ..modules.filter_favorites import FilterFavorite
+                from ..core.services.favorites_service import FilterFavorite
             except ImportError:
                 logger.error("Could not import FilterFavorite")
                 return

@@ -82,7 +82,7 @@ class BackendProvider:
         
         # PostgreSQL backend (conditional on psycopg2)
         try:
-            from modules.psycopg2_availability import POSTGRESQL_AVAILABLE
+            from adapters.backends import POSTGRESQL_AVAILABLE
             if POSTGRESQL_AVAILABLE:
                 from adapters.backends.postgresql.backend import PostgreSQLBackend
                 container.register_singleton(

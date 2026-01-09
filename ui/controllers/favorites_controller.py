@@ -23,7 +23,7 @@ from .base_controller import BaseController
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
-    from modules.filter_favorites import FavoritesManager, FilterFavorite
+    from core.services.favorites_service import FavoritesManager, FilterFavorite
 
 logger = logging.getLogger(__name__)
 
@@ -427,7 +427,7 @@ class FavoritesController(BaseController):
 
         # Create new manager
         try:
-            from modules.filter_favorites import FavoritesManager
+            from core.services.favorites_service import FavoritesManager
             self._favorites_manager = FavoritesManager()
 
             # Try to connect to database
@@ -600,7 +600,7 @@ class FavoritesController(BaseController):
             return False
 
         try:
-            from modules.filter_favorites import FilterFavorite
+            from core.services.favorites_service import FilterFavorite
 
             # Get layer info
             layer = self.dockwidget.current_layer
@@ -668,7 +668,7 @@ class FavoritesController(BaseController):
     def _show_success(self, message: str) -> None:
         """Show success message."""
         try:
-            from modules.feedback_utils import show_success
+            from infrastructure.feedback import show_success
             show_success("FilterMate", message)
         except ImportError:
             logger.info(f"Success: {message}")
@@ -676,7 +676,7 @@ class FavoritesController(BaseController):
     def _show_warning(self, message: str) -> None:
         """Show warning message."""
         try:
-            from modules.feedback_utils import show_warning
+            from infrastructure.feedback import show_warning
             show_warning("FilterMate", message)
         except ImportError:
             logger.warning(message)

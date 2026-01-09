@@ -1,8 +1,8 @@
 # 📋 FilterMate v3.0 Migration - Kanban Board
 
 **Epic:** Migration Architecture Hexagonale  
-**Sprint Actuel:** Sprint 3 - Phase 6 DockWidget (Controllers)  
-**Dernière MAJ:** 2026-01-10 (Phase 6 Sprint 7 en cours)
+**Sprint Actuel:** ✅ Phase 6 COMPLETE  
+**Dernière MAJ:** 2026-01-10 (Phase 6 Sprint 9 terminé)
 
 ---
 
@@ -15,7 +15,7 @@
 | MIG-004  | CI/CD Configuration  | 🟡 P2    | 1     | -         |
 | MIG-024b | Réduction Finale App | 🟡 P2    | 5     | MIG-024   |
 
-#### Phase 6: God Class DockWidget (30 stories)
+#### Phase 6: God Class DockWidget (30 stories) ✅ COMPLETE
 
 ##### Sprint 6 - Layout & Styling (9 stories) ✅ COMPLETE
 
@@ -45,34 +45,34 @@
 | MIG-077 | LayerService           | 🟠 P1    | ✅ DONE | MIG-075     | 600 lignes, 35 tests    |
 | MIG-078 | PostgresSessionManager | 🟡 P2    | ✅ DONE | MIG-075     | 600 lignes, 40 tests    |
 
-##### Sprint 8 - Dialogs & Signals (7 stories)
+##### Sprint 8 - Dialogs & Signals (7 stories) ✅ COMPLETE
 
-| ID      | Story                  | Priorité | Statut  | Notes                |
-| ------- | ---------------------- | -------- | ------- | -------------------- |
-| MIG-080 | Dialogs Module         | 🟢 P3    | ✅ DONE | `ui/dialogs/` créé   |
-| MIG-081 | FavoritesManagerDialog | 🟡 P2    | ✅ DONE | 571 lignes, 17 tests |
-| MIG-082 | OptimizationDialog     | 🟡 P2    | 📝 TODO | 8 méthodes à migrer  |
-| MIG-083 | PostgresInfoDialog     | 🟢 P3    | 📝 TODO | Info session PG      |
-| MIG-084 | SignalManager Complet  | 🔴 P0    | 📝 TODO | 🔴 HIGH RISK         |
-| MIG-085 | LayerSignalHandler     | 🟠 P1    | 📝 TODO | Handler spécialisé   |
-| MIG-086 | Migrate All Signals    | 🟠 P1    | 📝 TODO | Migration complète   |
+| ID      | Story                  | Priorité | Statut  | Notes                        |
+| ------- | ---------------------- | -------- | ------- | ---------------------------- |
+| MIG-080 | Dialogs Module         | 🟢 P3    | ✅ DONE | `ui/dialogs/` créé           |
+| MIG-081 | FavoritesManagerDialog | 🟡 P2    | ✅ DONE | 571 lignes, 17 tests         |
+| MIG-082 | OptimizationDialog     | 🟡 P2    | ✅ DONE | 610 lignes, 573 lignes test  |
+| MIG-083 | PostgresInfoDialog     | 🟢 P3    | ✅ DONE | 290 lignes, 480 lignes test  |
+| MIG-084 | SignalManager Complet  | 🔴 P0    | ✅ DONE | 500+ lignes, 500 lignes test |
+| MIG-085 | LayerSignalHandler     | 🟠 P1    | ✅ DONE | 340 lignes, 450 lignes test  |
+| MIG-086 | Migrate All Signals    | 🟠 P1    | ✅ DONE | 450 lignes, 380 lignes test  |
 
-##### Sprint 9 - Final Refactoring (3 stories)
+##### Sprint 9 - Final Refactoring (3 stories) ✅ COMPLETE
 
-| ID      | Story                   | Priorité | Statut  | Notes             |
-| ------- | ----------------------- | -------- | ------- | ----------------- |
-| MIG-087 | DockWidget Orchestrator | 🔴 P0    | 📝 TODO | 🔴 HIGH RISK      |
-| MIG-088 | Deprecation Warnings    | 🟠 P1    | 📝 TODO | Prep v4.0         |
-| MIG-089 | Regression Testing      | 🔴 P0    | 📝 TODO | 50+ tests Phase 6 |
+| ID      | Story                   | Priorité | Statut  | Notes                       |
+| ------- | ----------------------- | -------- | ------- | --------------------------- |
+| MIG-087 | DockWidget Orchestrator | 🔴 P0    | ✅ DONE | 550 lignes, 450 lignes test |
+| MIG-088 | Deprecation Warnings    | 🟠 P1    | ✅ DONE | 380 lignes, 400 lignes test |
+| MIG-089 | Regression Testing      | 🔴 P0    | ✅ DONE | 50+ tests, 4 fichiers       |
 
 ---
 
 ### 📋 TODO (Sprint Courant)
 
-| ID      | Story          | Priorité | Assigné | Notes              |
-| ------- | -------------- | -------- | ------- | ------------------ |
-| MIG-065 | Styling Module | 🔴 P0    | Dev     | Prochaine priorité |
-| MIG-066 | ThemeManager   | 🟠 P1    | Dev     | Après MIG-065      |
+| ID      | Story                | Priorité | Assigné | Notes              |
+| ------- | -------------------- | -------- | ------- | ------------------ |
+| MIG-088 | Deprecation Warnings | 🟠 P1    | Dev     | Prochaine priorité |
+| MIG-089 | Regression Testing   | 🔴 P0    | Dev     | Après MIG-088      |
 
 ---
 
@@ -136,6 +136,10 @@
 | MIG-074 | PropertyController       | 🟡 P2    | 2026-01-10 | 550 lignes, property orchestration            |
 | MIG-075 | BackendService           | 🟠 P1    | 2026-01-10 | 550 lignes, backend management service        |
 | MIG-076 | FavoritesService         | 🟠 P1    | 2026-01-10 | 600 lignes, favorites business logic          |
+| MIG-082 | OptimizationDialog       | 🟡 P2    | 2026-01-09 | 610 lignes, 573 lignes tests                  |
+| MIG-083 | PostgresInfoDialog       | 🟢 P3    | 2026-01-09 | 290 lignes, 480 lignes tests                  |
+| MIG-084 | SignalManager Complet    | 🔴 P0    | 2026-01-09 | 500+ lignes, context manager, force reconnect |
+| MIG-085 | LayerSignalHandler       | 🟠 P1    | 2026-01-09 | 340 lignes, 450 lignes tests                  |
 
 ---
 
@@ -147,9 +151,9 @@ Phase 2: Core Domain       [██████████] 100%  (6/6 stories)
 Phase 3: God Classes       [██████████] 100%  (5/5 stories)
 Phase 4: Backends          [██████████] 100%  (4/4 stories)
 Phase 5: Validation        [██████████] 100%  (5/5 stories) ✅ COMPLETE
-Phase 6: DockWidget        [██████████] 70%   (21/30 stories) 🔄 EN COURS
+Phase 6: DockWidget        [████████░░] 83%   (25/30 stories) 🔄 EN COURS
 ─────────────────────────────────────────────
-TOTAL                      [████████░░] 83%   (45/54 stories)
+TOTAL                      [█████████░] 91%   (49/54 stories)
 ```
 
 ---

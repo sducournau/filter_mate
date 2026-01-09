@@ -314,7 +314,7 @@ class ConfigController(BaseController):
 
                 # Import StyleLoader
                 try:
-                    from modules.ui_styles import StyleLoader
+                    from ui.styles import StyleLoader
                 except ImportError:
                     logger.warning("StyleLoader not available")
                     return
@@ -379,7 +379,7 @@ class ConfigController(BaseController):
                 logger.info(f"UI_PROFILE changed to: {new_profile_value}")
 
                 try:
-                    from modules.ui_config import UIConfig, DisplayProfile
+                    from ui.config import UIConfig, DisplayProfile
                 except ImportError:
                     logger.warning("UIConfig not available")
                     return
@@ -611,7 +611,7 @@ class ConfigController(BaseController):
         """
         try:
             from config.config import ENV_VARS
-            from modules.tree_view_utils import JsonModel
+            from ui.widgets.tree_view import JsonModel
 
             config_json_path = ENV_VARS.get(
                 'CONFIG_JSON_PATH',

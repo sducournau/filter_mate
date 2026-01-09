@@ -28,7 +28,7 @@ except ImportError:
     sip = None
 
 try:
-    from modules.logging_config import get_logger
+    from infrastructure.logging import get_logger
 except ImportError:
     # Fallback for testing
     import logging

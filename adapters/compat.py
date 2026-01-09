@@ -11,15 +11,15 @@ from the old modules.backends location. New code should use:
 
 Legacy imports (still supported but deprecated):
 
-    from modules.backends.factory import BackendFactory
-    from modules.backends.auto_optimizer import AutoOptimizer, LayerAnalyzer
+    from adapters.backends.factory import BackendFactory
+    from core.services.auto_optimizer import AutoOptimizer, LayerAnalyzer
 
 Part of FilterMate Hexagonal Architecture v3.0
 
 Migration Guide (MIG-011):
     
     # Old v2.x code:
-    from modules.backends.postgresql_backend import PostgreSQLBackend
+    from adapters.backends.postgresql import PostgreSQLBackend
     backend = PostgreSQLBackend(task_params)
     backend.apply_filter(layer, expression)
     

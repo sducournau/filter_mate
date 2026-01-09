@@ -37,7 +37,7 @@ import os
 import os.path
 from .filter_mate_app import FilterMateApp
 from .config.config import ENV_VARS, init_env_vars, reload_config
-from .modules.logging_config import get_logger
+from .infrastructure.logging import get_logger
 
 logger = get_logger(__name__)
 

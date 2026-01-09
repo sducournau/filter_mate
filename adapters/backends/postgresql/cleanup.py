@@ -492,7 +492,7 @@ def create_cleanup_service(
     
     if use_circuit_breaker:
         try:
-            from modules.circuit_breaker import get_postgresql_breaker
+            from infrastructure.resilience import get_postgresql_breaker
             circuit_breaker = get_postgresql_breaker()
         except ImportError:
             logger.debug("Circuit breaker not available")

@@ -329,7 +329,7 @@ class IconManager(StylerBase):
                     return
             
             # Try legacy StyleLoader
-            from modules.ui_styles import StyleLoader
+            from ui.styles import StyleLoader
             self._current_theme = StyleLoader.get_current_theme()
         except Exception:
             # Default theme

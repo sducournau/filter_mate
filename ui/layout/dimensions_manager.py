@@ -91,11 +91,11 @@ class DimensionsManager(LayoutManagerBase):
             UIConfig = None
             try:
                 # Try relative import first (package context)
-                from ...modules.ui_config import UIConfig
+                from ...ui.config import UIConfig
             except ImportError:
                 try:
                     # Fallback to absolute import (QGIS plugin context)
-                    from modules.ui_config import UIConfig
+                    from ui.config import UIConfig
                 except ImportError:
                     logger.warning("UIConfig not available, using defaults")
             self._ui_config = UIConfig
@@ -310,9 +310,9 @@ class DimensionsManager(LayoutManagerBase):
                 logger.warning("UIConfig not available, skipping checkable pushbuttons")
                 return
             try:
-                from ...modules.ui_config import DisplayProfile
+                from ...ui.config import DisplayProfile
             except ImportError:
-                from modules.ui_config import DisplayProfile
+                from ui.config import DisplayProfile
             
             # Get dynamic dimensions from key_button config
             key_button_config = UIConfig.get_config('key_button')
@@ -539,11 +539,11 @@ class DimensionsManager(LayoutManagerBase):
                 logger.warning("UIConfig not available, skipping spacer harmonization")
                 return
             try:
-                from ...modules.ui_config import DisplayProfile
-                from ...modules.ui_elements import get_spacer_size
+                from ...ui.config import DisplayProfile
+                from ...ui.elements import get_spacer_size
             except ImportError:
-                from modules.ui_config import DisplayProfile
-                from modules.ui_elements import get_spacer_size
+                from ui.config import DisplayProfile
+                from ui.elements import get_spacer_size
             
             # Get compact mode status from UIConfig
             is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
@@ -814,11 +814,11 @@ class DimensionsManager(LayoutManagerBase):
                 logger.warning("UIConfig not available, skipping row spacing adjustment")
                 return
             try:
-                from ...modules.ui_config import DisplayProfile
-                from ...modules.ui_elements import get_spacer_size
+                from ...ui.config import DisplayProfile
+                from ...ui.elements import get_spacer_size
             except ImportError:
-                from modules.ui_config import DisplayProfile
-                from modules.ui_elements import get_spacer_size
+                from ui.config import DisplayProfile
+                from ui.elements import get_spacer_size
             
             # Get compact mode status and spacer sizes
             is_compact = UIConfig._active_profile == DisplayProfile.COMPACT

@@ -4,7 +4,7 @@ FilterMate Exploring Controller.
 Controller for the Exploring tab, managing layer selection, field selection,
 feature listing, and spatial navigation (flash, zoom, identify).
 """
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 import logging
 
 try:
@@ -16,12 +16,14 @@ try:
         QgsRectangle
     )
     from qgis.PyQt.QtCore import pyqtSignal, QObject
+    from qgis.PyQt.QtGui import QColor
     from qgis.utils import iface
     QGIS_AVAILABLE = True
 except ImportError:
     QGIS_AVAILABLE = False
     pyqtSignal = None
     QObject = object
+    QColor = None
 
 from .base_controller import BaseController
 from .mixins.layer_selection_mixin import LayerSelectionMixin
@@ -70,7 +72,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
         self._features_cache = features_cache
         if self._features_cache is None:
             try:
-                from modules.exploring_cache import ExploringFeaturesCache
+                from infrastructure.cache import ExploringFeaturesCache
                 self._features_cache = ExploringFeaturesCache(
                     max_layers=50,
                     max_age_seconds=300.0
@@ -366,6 +368,56 @@ class ExploringController(BaseController, LayerSelectionMixin):
         
         return False
 
+    def flash_features(
+        self, 
+        feature_ids: List[int], 
+        start_color: Optional[Tuple[int, int, int, int]] = None,
+        end_color: Optional[Tuple[int, int, int, int]] = None,
+        flashes: int = 6, 
+        duration_ms: int = 400
+    ) -> bool:
+        """
+        Flash multiple features on the map canvas.
+        
+        v3.1 Vague 2: Delegated from dockwidget exploring_identify_clicked.
+        
+        Args:
+            feature_ids: List of feature IDs to flash
+            start_color: RGBA tuple for start color (default: red)
+            end_color: RGBA tuple for end color (default: orange fade)
+            flashes: Number of flash pulses
+            duration_ms: Total duration in milliseconds
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not QGIS_AVAILABLE or not self._current_layer:
+            return False
+        
+        if not feature_ids:
+            return False
+            
+        try:
+            # Default colors matching legacy implementation
+            if start_color is None:
+                start_color = (235, 49, 42, 255)
+            if end_color is None:
+                end_color = (237, 97, 62, 25)
+            
+            canvas = iface.mapCanvas()
+            canvas.flashFeatureIds(
+                self._current_layer,
+                feature_ids,
+                startColor=QColor(*start_color),
+                endColor=QColor(*end_color),
+                flashes=flashes,
+                duration=duration_ms
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Error flashing {len(feature_ids)} features: {e}")
+            return False
+
     def zoom_to_feature(self, feature_id: int, scale_factor: float = 1.5) -> bool:
         """
         Zoom map to a feature.
@@ -403,6 +455,55 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 return True
         except Exception as e:
             logger.error(f"Error zooming to feature {feature_id}: {e}")
+        
+        return False
+
+    def zoom_to_features(self, features: list, scale_factor: float = 1.1) -> bool:
+        """
+        Zoom map to a list of features.
+
+        Args:
+            features: List of QgsFeature objects to zoom to
+            scale_factor: Factor to scale the extent (> 1 adds padding)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if not QGIS_AVAILABLE or not features:
+            return False
+
+        try:
+            # Calculate combined extent
+            combined_extent = QgsRectangle()
+            for feature in features:
+                if feature and feature.hasGeometry():
+                    if combined_extent.isNull():
+                        combined_extent = feature.geometry().boundingBox()
+                    else:
+                        combined_extent.combineExtentWith(feature.geometry().boundingBox())
+
+            if combined_extent.isNull():
+                return False
+
+            canvas = iface.mapCanvas()
+            
+            # Add padding
+            combined_extent.scale(scale_factor)
+            
+            # Transform to canvas CRS if needed
+            if self._current_layer and self._current_layer.crs() != canvas.mapSettings().destinationCrs():
+                transform = QgsCoordinateTransform(
+                    self._current_layer.crs(),
+                    canvas.mapSettings().destinationCrs(),
+                    QgsProject.instance()
+                )
+                combined_extent = transform.transformBoundingBox(combined_extent)
+            
+            canvas.setExtent(combined_extent)
+            canvas.refresh()
+            return True
+        except Exception as e:
+            logger.error(f"Error zooming to features: {e}")
         
         return False
 

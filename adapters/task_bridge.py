@@ -617,7 +617,7 @@ class TaskBridge:
         
         try:
             # Import streaming exporter
-            from modules.tasks.result_streaming import StreamingExporter, StreamingConfig
+            from adapters.qgis.tasks import StreamingExporter, StreamingConfig
             
             logger.info("=" * 60)
             logger.info("🚀 V3 TASKBRIDGE: Executing streaming export")
@@ -692,7 +692,7 @@ class TaskBridge:
             return False
         
         try:
-            from modules.tasks.result_streaming import StreamingExporter
+            from adapters.qgis.tasks import StreamingExporter
             return True
         except ImportError:
             return False
