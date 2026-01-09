@@ -795,33 +795,33 @@ def temp_table_context(self, db_path, table_name):
 
 ### MED-011 à MED-020: Architecture
 
-| ID      | Issue                     | Description     | Effort     |
-| ------- | ------------------------- | --------------- | ---------- |
-| MED-011 | Couplage fort UI/Logic    | dockwidget.py   | 1 semaine  |
-| MED-012 | État global non encapsulé | filter_mate_app | 3 jours    |
-| MED-013 | Callbacks imbriqués       | Tasks           | 2 jours    |
-| MED-014 | Signaux Qt mal gérés      | Widgets         | 2 jours    |
-| MED-015 | Pas de pattern Observer   | État            | 3 jours    |
-| MED-016 | Factory pattern incomplet | Backends        | ✅ VÉRIFIÉ |
-| MED-017 | Configuration éparpillée  | Config          | 2 jours    |
-| MED-018 | Logging incohérent        | Multiples       | 1 jour     |
-| MED-019 | Metrics/telemetry absents | -               | 3 jours    |
-| MED-020 | Health checks manquants   | Backends        | ✅ VÉRIFIÉ |
+| ID      | Issue                     | Description     | Effort                                      |
+| ------- | ------------------------- | --------------- | ------------------------------------------- |
+| MED-011 | Couplage fort UI/Logic    | dockwidget.py   | ⚠️ Partiel (7 controllers, limite atteinte) |
+| MED-012 | État global non encapsulé | filter_mate_app | 3 jours                                     |
+| MED-013 | Callbacks imbriqués       | Tasks           | 2 jours                                     |
+| MED-014 | Signaux Qt mal gérés      | Widgets         | 2 jours                                     |
+| MED-015 | Pas de pattern Observer   | État            | 3 jours                                     |
+| MED-016 | Factory pattern incomplet | Backends        | ✅ VÉRIFIÉ                                  |
+| MED-017 | Configuration éparpillée  | Config          | 2 jours                                     |
+| MED-018 | Logging incohérent        | Multiples       | 1 jour                                      |
+| MED-019 | Metrics/telemetry absents | -               | 3 jours                                     |
+| MED-020 | Health checks manquants   | Backends        | ✅ VÉRIFIÉ                                  |
 
 ### MED-021 à MED-030: Performance
 
-| ID      | Issue                    | Impact          | Fix                                   |
-| ------- | ------------------------ | --------------- | ------------------------------------- |
-| MED-021 | Requêtes N+1             | Lenteur         | ✅ batch_size + single-pass iteration |
-| MED-022 | Pas de pagination        | Mémoire         | Implement pagination                  |
-| MED-023 | Cache non invalidé       | Données stales  | ✅ TTL + invalidate_layer()           |
-| MED-024 | Connexions non poolées   | Overhead        | ✅ connection_pool.py                 |
-| MED-025 | Lazy loading absent      | Startup lent    | ✅ LazyResultIterator                 |
-| MED-026 | Index manquants          | Requêtes lentes | ✅ spatial_index_manager.py           |
-| MED-027 | Sérialisation inefficace | CPU             | Optimize                              |
-| MED-028 | Mémoire non libérée      | Leaks           | Explicit cleanup                      |
-| MED-029 | Profiling absent         | Blind spots     | Add profiling                         |
-| MED-030 | Benchmarks manquants     | Regression      | Add benchmarks                        |
+| ID      | Issue                    | Impact          | Fix                         |
+| ------- | ------------------------ | --------------- | --------------------------- |
+| MED-021 | Requêtes N+1             | Lenteur         | Batch queries               |
+| MED-022 | Pas de pagination        | Mémoire         | Implement pagination        |
+| MED-023 | Cache non invalidé       | Données stales  | ✅ TTL + invalidate_layer() |
+| MED-024 | Connexions non poolées   | Overhead        | ✅ connection_pool.py       |
+| MED-025 | Lazy loading absent      | Startup lent    | ✅ LazyResultIterator       |
+| MED-026 | Index manquants          | Requêtes lentes | ✅ spatial_index_manager.py |
+| MED-027 | Sérialisation inefficace | CPU             | Optimize                    |
+| MED-028 | Mémoire non libérée      | Leaks           | Explicit cleanup            |
+| MED-029 | Profiling absent         | Blind spots     | Add profiling               |
+| MED-030 | Benchmarks manquants     | Regression      | Add benchmarks              |
 
 ### MED-031 à MED-042: Tests et Documentation
 
@@ -922,8 +922,8 @@ def temp_table_context(self, db_path, table_name):
 
 ### Phase 4: Refactoring (Semaine 7-8)
 
-- [ ] **CRIT-003**: Découper God Classes
-- [ ] **MED-011**: Séparer UI/Logic
+- [x] **CRIT-003**: Découper God Classes ⚠️ PARTIEL (7 controllers créés, 6578 lignes, voir SLIM_STRATEGY.md)
+- [x] **MED-011**: Séparer UI/Logic ⚠️ PARTIEL (ControllerIntegration avec délégation, limite architecturale atteinte)
 - [x] **HIGH-010**: Unifier cleanup tables temp ✅ **v3.0.12** (TemporaryTableManager existe)
 - [x] **HIGH-006**: Ajouter warnings OGR (quick fix) ✅ **v3.0.20**
 
