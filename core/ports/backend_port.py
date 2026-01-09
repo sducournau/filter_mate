@@ -113,7 +113,6 @@ class BackendPort(ABC):
             Implementations should handle cancellation appropriately
             and return FilterResult.cancelled() if interrupted.
         """
-        pass
 
     @abstractmethod
     def supports_layer(self, layer_info: 'LayerInfo') -> bool:
@@ -132,7 +131,6 @@ class BackendPort(ABC):
             >>> backend.supports_layer(shapefile_layer)
             False
         """
-        pass
 
     @abstractmethod
     def get_info(self) -> BackendInfo:
@@ -142,7 +140,6 @@ class BackendPort(ABC):
         Returns:
             BackendInfo with name, version, and capabilities
         """
-        pass
 
     @abstractmethod
     def cleanup(self) -> None:
@@ -158,7 +155,6 @@ class BackendPort(ABC):
         
         Should be idempotent and safe to call multiple times.
         """
-        pass
 
     @abstractmethod
     def estimate_execution_time(
@@ -179,7 +175,6 @@ class BackendPort(ABC):
         Returns:
             Estimated execution time in milliseconds
         """
-        pass
 
     def has_capability(self, capability: BackendCapability) -> bool:
         """
@@ -257,7 +252,6 @@ class BackendPort(ABC):
     def reset_statistics(self) -> None:
         """Reset backend execution statistics."""
         # Default implementation - no statistics to reset
-        pass
 
     def __str__(self) -> str:
         """Human-readable representation."""

@@ -37,7 +37,6 @@ class RepositoryPort(ABC, Generic[T, ID]):
         Returns:
             Entity if found, None otherwise
         """
-        pass
     
     @abstractmethod
     def get_all(self) -> List[T]:
@@ -47,7 +46,6 @@ class RepositoryPort(ABC, Generic[T, ID]):
         Returns:
             List of all entities
         """
-        pass
     
     @abstractmethod
     def save(self, entity: T) -> ID:
@@ -60,7 +58,6 @@ class RepositoryPort(ABC, Generic[T, ID]):
         Returns:
             Entity ID
         """
-        pass
     
     @abstractmethod
     def delete(self, entity_id: ID) -> bool:
@@ -73,7 +70,6 @@ class RepositoryPort(ABC, Generic[T, ID]):
         Returns:
             True if entity was deleted
         """
-        pass
     
     @abstractmethod
     def exists(self, entity_id: ID) -> bool:
@@ -86,7 +82,6 @@ class RepositoryPort(ABC, Generic[T, ID]):
         Returns:
             True if entity exists
         """
-        pass
 
 
 class LayerRepositoryPort(ABC):
@@ -109,7 +104,6 @@ class LayerRepositoryPort(ABC):
         Returns:
             LayerInfo if layer exists, None otherwise
         """
-        pass
 
     @abstractmethod
     def get_all_vector_layers(self) -> List['LayerInfo']:
@@ -119,7 +113,6 @@ class LayerRepositoryPort(ABC):
         Returns:
             List of LayerInfo for all vector layers
         """
-        pass
 
     @abstractmethod
     def get_layers_by_provider(
@@ -135,7 +128,6 @@ class LayerRepositoryPort(ABC):
         Returns:
             List of LayerInfo matching the provider type
         """
-        pass
 
     @abstractmethod
     def apply_filter(self, layer_id: str, subset_string: str) -> bool:
@@ -149,7 +141,6 @@ class LayerRepositoryPort(ABC):
         Returns:
             True if filter was applied successfully
         """
-        pass
 
     @abstractmethod
     def clear_filter(self, layer_id: str) -> bool:
@@ -162,7 +153,6 @@ class LayerRepositoryPort(ABC):
         Returns:
             True if filter was cleared successfully
         """
-        pass
 
     @abstractmethod
     def refresh_layer(self, layer_id: str) -> bool:
@@ -175,7 +165,6 @@ class LayerRepositoryPort(ABC):
         Returns:
             True if layer was refreshed successfully
         """
-        pass
 
     @abstractmethod
     def get_feature_count(self, layer_id: str) -> int:
@@ -188,7 +177,6 @@ class LayerRepositoryPort(ABC):
         Returns:
             Number of features, -1 if unknown
         """
-        pass
 
     @abstractmethod
     def get_current_filter(self, layer_id: str) -> Optional[str]:
@@ -201,7 +189,6 @@ class LayerRepositoryPort(ABC):
         Returns:
             Current filter string, None if no filter
         """
-        pass
 
     def get_filterable_layers(self) -> List['LayerInfo']:
         """
@@ -229,7 +216,6 @@ class FavoritesRepositoryPort(ABC):
         Returns:
             List of favorite dictionaries
         """
-        pass
 
     @abstractmethod
     def get_by_id(self, favorite_id: str) -> Optional[Dict[str, Any]]:
@@ -242,7 +228,6 @@ class FavoritesRepositoryPort(ABC):
         Returns:
             Favorite dictionary if found, None otherwise
         """
-        pass
 
     @abstractmethod
     def save(self, favorite: Dict[str, Any]) -> str:
@@ -255,7 +240,6 @@ class FavoritesRepositoryPort(ABC):
         Returns:
             Generated or existing ID
         """
-        pass
 
     @abstractmethod
     def delete(self, favorite_id: str) -> bool:
@@ -268,7 +252,6 @@ class FavoritesRepositoryPort(ABC):
         Returns:
             True if favorite was deleted
         """
-        pass
 
     @abstractmethod
     def update(self, favorite_id: str, data: Dict[str, Any]) -> bool:
@@ -282,7 +265,6 @@ class FavoritesRepositoryPort(ABC):
         Returns:
             True if favorite was updated
         """
-        pass
 
     def get_by_layer(self, layer_id: str) -> List[Dict[str, Any]]:
         """
@@ -329,7 +311,6 @@ class ConfigRepositoryPort(ABC):
         Returns:
             Configuration dictionary
         """
-        pass
 
     @abstractmethod
     def save(self, config: Dict[str, Any]) -> bool:
@@ -342,7 +323,6 @@ class ConfigRepositoryPort(ABC):
         Returns:
             True if configuration was saved
         """
-        pass
 
     @abstractmethod
     def get(self, key: str, default: Any = None) -> Any:
@@ -358,7 +338,6 @@ class ConfigRepositoryPort(ABC):
         Returns:
             Configuration value or default
         """
-        pass
 
     @abstractmethod
     def set(self, key: str, value: Any) -> bool:
@@ -374,7 +353,6 @@ class ConfigRepositoryPort(ABC):
         Returns:
             True if value was set
         """
-        pass
 
     def get_section(self, section: str) -> Dict[str, Any]:
         """
@@ -430,7 +408,6 @@ class HistoryRepositoryPort(ABC):
         Returns:
             Entry ID
         """
-        pass
 
     @abstractmethod
     def get_history(
@@ -448,7 +425,6 @@ class HistoryRepositoryPort(ABC):
         Returns:
             List of history entries (newest first)
         """
-        pass
 
     @abstractmethod
     def get_entry(self, entry_id: str) -> Optional[Dict[str, Any]]:
@@ -461,7 +437,6 @@ class HistoryRepositoryPort(ABC):
         Returns:
             Entry dictionary if found
         """
-        pass
 
     @abstractmethod
     def clear_history(self, layer_id: Optional[str] = None) -> int:
@@ -474,7 +449,6 @@ class HistoryRepositoryPort(ABC):
         Returns:
             Number of entries cleared
         """
-        pass
 
     @abstractmethod
     def get_undo_entry(self, layer_id: str) -> Optional[Dict[str, Any]]:
@@ -487,7 +461,6 @@ class HistoryRepositoryPort(ABC):
         Returns:
             Previous entry or None if at beginning
         """
-        pass
 
     @abstractmethod
     def get_redo_entry(self, layer_id: str) -> Optional[Dict[str, Any]]:
@@ -500,7 +473,6 @@ class HistoryRepositoryPort(ABC):
         Returns:
             Next entry or None if at end
         """
-        pass
 
 
 # Type hints for forward references

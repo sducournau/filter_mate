@@ -90,7 +90,6 @@ class BaseController(ABC):
 
         Subclasses MUST call super().setup() if they override.
         """
-        pass
 
     @abstractmethod
     def teardown(self) -> None:
@@ -102,7 +101,6 @@ class BaseController(ABC):
 
         Subclasses MUST call super().teardown() if they override.
         """
-        pass
 
     # === Tab Lifecycle Hooks ===
 

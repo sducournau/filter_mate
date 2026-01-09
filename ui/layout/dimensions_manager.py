@@ -8,7 +8,7 @@ Story: MIG-062
 Phase: 6 - God Class DockWidget Migration
 """
 
-from typing import TYPE_CHECKING, Optional, Dict, Any
+from typing import TYPE_CHECKING, Dict, Any
 import logging
 
 from qgis.PyQt.QtCore import QSize, Qt

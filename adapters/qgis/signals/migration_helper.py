@@ -12,7 +12,7 @@ import functools
 import logging
 import warnings
 from dataclasses import dataclass, field
-from typing import Dict, List, Callable, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any, Tuple
 from enum import Enum, auto
 
 logger = logging.getLogger(__name__)

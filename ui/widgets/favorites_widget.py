@@ -4,18 +4,17 @@ FilterMate FavoritesWidget.
 Widget for favorites indicator and quick access menu.
 Extracted from filter_mate_dockwidget.py for better modularity.
 """
-from typing import Optional, Callable, List
+from typing import Optional, Callable
 import logging
 
 try:
     from qgis.PyQt.QtWidgets import (
-        QLabel, QMenu, QInputDialog, QDialog, QVBoxLayout,
-        QFormLayout, QDialogButtonBox, QTextEdit, QLineEdit,
-        QWidget
+        QLabel, QMenu, QDialog, QVBoxLayout, QFormLayout,
+        QDialogButtonBox, QTextEdit, QLineEdit
     )
     from qgis.PyQt.QtCore import pyqtSignal, Qt
     from qgis.PyQt.QtGui import QCursor
-    from qgis.core import QgsProject, QgsExpressionContextUtils
+    from qgis.core import QgsProject
     HAS_QGIS = True
 except ImportError:
     HAS_QGIS = False
@@ -209,7 +208,6 @@ class FavoritesWidget(QLabel if HAS_QGIS else object):
         if not HAS_QGIS:
             return
         
-        from datetime import datetime
         
         # Get expression
         expression = ""

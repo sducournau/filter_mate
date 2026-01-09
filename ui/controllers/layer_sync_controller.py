@@ -11,12 +11,11 @@ Story: MIG-073
 Phase: 6 - God Class DockWidget Migration
 """
 
-from typing import TYPE_CHECKING, Optional, List, Dict, Any
+from typing import TYPE_CHECKING, Optional, List
 import logging
 import time
-import weakref
 
-from qgis.PyQt.QtCore import Qt, pyqtSignal, QTimer
+from qgis.PyQt.QtCore import pyqtSignal
 from qgis.core import QgsVectorLayer, QgsProject
 
 from .base_controller import BaseController

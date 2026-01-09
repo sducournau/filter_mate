@@ -188,7 +188,6 @@ class MemoryBackend(BackendPort):
 
     def cleanup(self) -> None:
         """No cleanup needed."""
-        pass
 
     def estimate_execution_time(
         self,

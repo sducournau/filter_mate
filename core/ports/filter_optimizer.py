@@ -145,7 +145,6 @@ class IFilterOptimizer(ABC):
         Returns:
             LayerStatistics with layer information
         """
-        pass
     
     @abstractmethod
     def build_filter_plan(
@@ -167,7 +166,6 @@ class IFilterOptimizer(ABC):
         Returns:
             FilterPlan with optimal strategy
         """
-        pass
     
     @abstractmethod
     def execute_attribute_prefilter(
@@ -187,7 +185,6 @@ class IFilterOptimizer(ABC):
         Returns:
             Set of matching feature IDs
         """
-        pass
     
     @abstractmethod
     def clear_cache(self, layer_id: Optional[str] = None) -> int:
@@ -200,7 +197,6 @@ class IFilterOptimizer(ABC):
         Returns:
             Number of entries cleared
         """
-        pass
 
 
 class ISelectivityEstimator(ABC):
@@ -224,7 +220,6 @@ class ISelectivityEstimator(ABC):
         Returns:
             Estimated selectivity (0.0 to 1.0)
         """
-        pass
     
     @abstractmethod
     def estimate_spatial_selectivity(
@@ -242,7 +237,6 @@ class ISelectivityEstimator(ABC):
         Returns:
             Estimated selectivity (0.0 to 1.0)
         """
-        pass
 
 
 # Configuration for plan building

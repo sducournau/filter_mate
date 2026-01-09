@@ -12,7 +12,7 @@ Phase: 6 - God Class DockWidget Migration
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 import logging
 
 if TYPE_CHECKING:
@@ -67,7 +67,6 @@ class LayoutManagerBase(ABC):
         
         After successful setup, set self._initialized = True.
         """
-        pass
     
     @abstractmethod
     def apply(self) -> None:
@@ -79,7 +78,6 @@ class LayoutManagerBase(ABC):
         
         Subclasses must implement this method.
         """
-        pass
     
     def teardown(self) -> None:
         """

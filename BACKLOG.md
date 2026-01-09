@@ -900,7 +900,7 @@ def temp_table_context(self, db_path, table_name):
 - [x] **CRIT-001**: Fix bug état buffer multi-étapes ✅ **v3.0.10** (buffer_state déjà implémenté)
 - [x] **CRIT-002**: Corriger injections SQL ✅ **v3.0.20**
 - [x] **CRIT-004**: Thread Safety ✅ **v2.3.9** (détection auto + fallback séquentiel)
-- [ ] **HIGH-001**: Supprimer imports inutilisés
+- [x] **HIGH-001**: Supprimer imports inutilisés ✅ **v3.1.1** (160 imports nettoyés dans 47 fichiers)
 - [x] **HIGH-002**: Corriger clauses except nues ✅ **v3.0.20**
 - [x] **HIGH-018**: Ajouter tests multi-step ✅ **v3.1.1** (19 tests dans test_buffer_state_multistep.py)
 

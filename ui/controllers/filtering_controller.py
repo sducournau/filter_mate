@@ -709,7 +709,6 @@ class FilteringController(BaseController, LayerSelectionMixin):
         """Initialize the controller."""
         # Connect signals would happen here
         # For now, just initialize state
-        pass
     
     def teardown(self) -> None:
         """Clean up the controller."""

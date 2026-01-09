@@ -21,7 +21,7 @@ except ImportError:
     from PyQt5.QtCore import pyqtSignal, QObject
 
 if TYPE_CHECKING:
-    from qgis.core import QgsVectorLayer, QgsProject, QgsField
+    from qgis.core import QgsVectorLayer
 
 logger = logging.getLogger(__name__)
 

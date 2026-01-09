@@ -326,7 +326,6 @@ class ExploringController(BaseController, LayerSelectionMixin):
         """
         # Implementation depends on dockwidget structure
         # This would update the checkable combo or list widget
-        pass
 
     def _clear_features_list(self) -> None:
         """Clear the features list widget."""

@@ -12,7 +12,6 @@ Pattern: Strangler Fig - Gradual extraction
 import logging
 from typing import Dict, List, Optional, Any, Callable, TYPE_CHECKING
 from dataclasses import dataclass
-from pathlib import Path
 
 try:
     from qgis.PyQt.QtCore import pyqtSignal, QObject

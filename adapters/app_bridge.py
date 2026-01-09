@@ -34,15 +34,15 @@ import logging
 from typing import Optional, Dict, Any, TYPE_CHECKING
 
 from core.domain.filter_expression import FilterExpression, ProviderType
-from core.domain.filter_result import FilterResult, FilterStatus
+from core.domain.filter_result import FilterResult
 from core.domain.layer_info import LayerInfo, GeometryType
 from core.domain.optimization_config import OptimizationConfig
-from core.services.filter_service import FilterService, FilterRequest, FilterResponse
+from core.services.filter_service import FilterService, FilterRequest
 from core.services.expression_service import ExpressionService
 from core.services.history_service import HistoryService, HistoryEntry
 from core.services.auto_optimizer import AutoOptimizer, get_auto_optimizer
 
-from adapters.backends.factory import BackendFactory, create_backend_factory, BackendSelector
+from adapters.backends.factory import BackendFactory, create_backend_factory
 
 if TYPE_CHECKING:
     from qgis.core import QgsVectorLayer
@@ -242,7 +242,6 @@ def layer_info_from_qgis_layer(layer: 'QgsVectorLayer') -> LayerInfo:
     Returns:
         LayerInfo domain object
     """
-    from qgis.core import QgsWkbTypes
     
     # Determine provider type
     provider_type = ProviderType.from_qgis_provider(layer.providerType())

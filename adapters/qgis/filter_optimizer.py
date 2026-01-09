@@ -11,7 +11,7 @@ Part of FilterMate Hexagonal Architecture v3.0
 
 import time
 import sqlite3
-from typing import Dict, List, Optional, Tuple, Set, Any, Callable, Union
+from typing import Dict, List, Optional, Tuple, Set, Any, Callable
 
 from qgis.core import (
     QgsVectorLayer,
@@ -70,7 +70,6 @@ class QgisSelectivityEstimator(ISelectivityEstimator):
     
     def __init__(self):
         """Initialize estimator."""
-        pass
     
     def get_layer_statistics(
         self, 

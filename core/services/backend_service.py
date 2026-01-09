@@ -12,7 +12,7 @@ Pattern: Strangler Fig - Gradual extraction
 import logging
 from typing import Dict, List, Optional, Tuple, Any, TYPE_CHECKING
 from dataclasses import dataclass
-from enum import Enum, auto
+from enum import Enum
 
 try:
     from qgis.PyQt.QtCore import pyqtSignal, QObject
@@ -20,7 +20,7 @@ except ImportError:
     from PyQt5.QtCore import pyqtSignal, QObject
 
 if TYPE_CHECKING:
-    from qgis.core import QgsVectorLayer, QgsProject
+    from qgis.core import QgsVectorLayer
 
 logger = logging.getLogger(__name__)
 

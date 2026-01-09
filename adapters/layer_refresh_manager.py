@@ -13,7 +13,7 @@ Author: FilterMate Team
 Version: 2.8.6
 """
 
-from typing import Optional, Callable, Any
+from typing import Optional, Callable
 
 try:
     from qgis.core import QgsVectorLayer

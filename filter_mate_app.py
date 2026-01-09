@@ -15,15 +15,11 @@ FilterMate Application Orchestrator
 from qgis.PyQt.QtCore import Qt, QTimer
 import weakref
 import sip
-from qgis.PyQt.QtWidgets import QApplication, QPushButton, QProgressBar
+from qgis.PyQt.QtWidgets import QApplication
 from qgis.core import (
-    Qgis,
     QgsApplication,
-    QgsAuthMethodConfig,
     QgsCoordinateReferenceSystem,
     QgsCoordinateTransformContext,
-    QgsDataSourceUri,
-    QgsExpression,
     QgsExpressionContextUtils,
     QgsMapLayerProxyModel,
     QgsProject,
@@ -31,27 +27,14 @@ from qgis.core import (
     QgsVectorFileWriter,
     QgsVectorLayer
 )
-from qgis.gui import QgsCheckableComboBox, QgsFeatureListComboBox, QgsFieldExpressionWidget
 from qgis.utils import iface
 from qgis import processing
 from osgeo import ogr
 
-from collections import OrderedDict
-from operator import getitem
-import zipfile
 import os.path
-from pathlib import Path
-from shutil import copyfile
-import re
 import logging
-from .config.config import ENV_VARS, init_env_vars
-from functools import partial
+from .config.config import init_env_vars
 import json
-from .modules.customExceptions import (
-    FilterMateException,
-    LayerNotFoundError,
-    InvalidExpressionError
-)
 from .modules.tasks import (
     FilterEngineTask,
     LayersManagementEngineTask,
@@ -114,11 +97,9 @@ except ImportError:
 
     def _init_hexagonal_services(config=None):
         """Fallback when hexagonal services unavailable."""
-        pass
 
     def _cleanup_hexagonal_services():
         """Fallback cleanup."""
-        pass
 
     def _hexagonal_initialized():
         """Fallback initialization check."""
@@ -858,9 +839,7 @@ class FilterMateApp:
         
         Can be called from UI (refresh button) or programmatically.
         """
-        import time
         from qgis.PyQt.QtCore import QTimer
-        from qgis.utils import iface
         
         logger.info("FilterMate: Force reload layers requested")
         
@@ -3304,7 +3283,6 @@ class FilterMateApp:
         Returns:
             dict: Common task parameters
         """
-        from qgis.core import QgsMessageLog, Qgis
         
         # DIAGNOSTIC v2.4.17: Log incoming features at DEBUG level
         feat_count = len(features) if features else 0

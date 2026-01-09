@@ -153,7 +153,6 @@ class CachePort(ABC, Generic[K, V]):
         Returns:
             Cached value or None if not found/expired
         """
-        pass
 
     @abstractmethod
     def set(
@@ -170,7 +169,6 @@ class CachePort(ABC, Generic[K, V]):
             value: Value to cache
             ttl_seconds: Optional TTL override (None = use default)
         """
-        pass
 
     @abstractmethod
     def delete(self, key: K) -> bool:
@@ -183,7 +181,6 @@ class CachePort(ABC, Generic[K, V]):
         Returns:
             True if key was found and removed
         """
-        pass
 
     @abstractmethod
     def clear(self) -> int:
@@ -193,7 +190,6 @@ class CachePort(ABC, Generic[K, V]):
         Returns:
             Number of entries cleared
         """
-        pass
 
     @abstractmethod
     def has(self, key: K) -> bool:
@@ -206,7 +202,6 @@ class CachePort(ABC, Generic[K, V]):
         Returns:
             True if key exists and is not expired
         """
-        pass
 
     @abstractmethod
     def get_stats(self) -> CacheStats:
@@ -216,7 +211,6 @@ class CachePort(ABC, Generic[K, V]):
         Returns:
             CacheStats with hits, misses, size, etc.
         """
-        pass
 
     def get_or_compute(
         self,
@@ -329,7 +323,6 @@ class CachePort(ABC, Generic[K, V]):
     def reset_stats(self) -> None:
         """Reset cache statistics to zero."""
         # Default implementation - subclasses should override
-        pass
 
 
 class ResultCachePort(CachePort[str, 'FilterResult']):
@@ -449,7 +442,6 @@ if TYPE_CHECKING:
     @dataclass
     class GeometryData:
         """Placeholder for geometry cache data."""
-        pass
 
 
 class NullCache(CachePort):

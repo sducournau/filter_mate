@@ -4,18 +4,17 @@ FilterMate FavoritesManagerDialog.
 Dialog for managing filter favorites with list, edit, delete, and search capabilities.
 Extracted from filter_mate_dockwidget.py for better modularity.
 """
-from typing import Optional, Callable, TYPE_CHECKING
+from typing import Optional
 import logging
 
 try:
     from qgis.PyQt.QtWidgets import (
         QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
-        QPushButton, QLabel, QLineEdit, QTextEdit, QMessageBox, QMenu,
-        QGroupBox, QFormLayout, QDialogButtonBox, QSplitter, QTreeWidget,
-        QTreeWidgetItem, QHeaderView, QTabWidget, QWidget, QScrollArea
+        QPushButton, QLabel, QLineEdit, QTextEdit, QMessageBox, QFormLayout,
+        QDialogButtonBox, QSplitter, QTreeWidget, QTreeWidgetItem, QHeaderView,
+        QTabWidget, QWidget
     )
     from qgis.PyQt.QtCore import Qt, pyqtSignal
-    from qgis.PyQt.QtGui import QFont, QColor
     HAS_QGIS = True
 except ImportError:
     HAS_QGIS = False

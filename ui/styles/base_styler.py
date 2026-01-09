@@ -75,7 +75,6 @@ class StylerBase(ABC):
         Called once during dockwidget initialization.
         Should configure initial state and call apply().
         """
-        pass
     
     @abstractmethod
     def apply(self) -> None:
@@ -85,7 +84,6 @@ class StylerBase(ABC):
         Called to (re)apply styling to managed widgets.
         Should be idempotent.
         """
-        pass
     
     @abstractmethod
     def on_theme_changed(self, theme: str) -> None:
@@ -97,7 +95,6 @@ class StylerBase(ABC):
         Args:
             theme: New theme name ('light', 'dark', 'default')
         """
-        pass
     
     def teardown(self) -> None:
         """

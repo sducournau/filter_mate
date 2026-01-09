@@ -641,7 +641,6 @@ class ExportingController(BaseController):
     def setup(self) -> None:
         """Initialize the controller."""
         # Connect signals would happen here
-        pass
     
     def teardown(self) -> None:
         """Clean up the controller."""

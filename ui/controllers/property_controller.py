@@ -15,9 +15,9 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 
 try:
-    from qgis.PyQt.QtCore import pyqtSignal, QObject
+    from qgis.PyQt.QtCore import pyqtSignal
 except ImportError:
-    from PyQt5.QtCore import pyqtSignal, QObject
+    from PyQt5.QtCore import pyqtSignal
 
 from .base_controller import BaseController
 

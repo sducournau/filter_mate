@@ -8,10 +8,10 @@ Story: MIG-071
 Phase: 6 - God Class DockWidget Migration
 """
 
-from typing import TYPE_CHECKING, Optional, List, Tuple, Dict, Any
+from typing import TYPE_CHECKING, Optional, List, Tuple, Dict
 import logging
 
-from qgis.PyQt.QtCore import Qt, pyqtSignal
+from qgis.PyQt.QtCore import pyqtSignal
 from qgis.PyQt.QtWidgets import QMenu, QLabel
 from qgis.PyQt.QtGui import QCursor
 from qgis.core import QgsVectorLayer

@@ -13,7 +13,7 @@ orchestration. For full UI setup, use DimensionsManager.apply().
 For spacing-only operations, use SpacingManager directly.
 """
 
-from typing import TYPE_CHECKING, Optional, Dict, Any
+from typing import TYPE_CHECKING, Dict, Any
 import logging
 
 from qgis.PyQt.QtWidgets import QSpacerItem

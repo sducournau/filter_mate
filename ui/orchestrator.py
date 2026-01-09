@@ -16,7 +16,7 @@ Components coordinated:
 - Services (via controllers and dependency injection)
 """
 
-from typing import TYPE_CHECKING, Optional, Dict, Any, List
+from typing import TYPE_CHECKING, Dict, Any, List
 import logging
 import warnings
 

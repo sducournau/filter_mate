@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, List
 import logging
 import json
 
-from qgis.PyQt.QtCore import QObject, pyqtSignal, Qt
+from qgis.PyQt.QtCore import pyqtSignal, Qt
 
 from .base_controller import BaseController
 

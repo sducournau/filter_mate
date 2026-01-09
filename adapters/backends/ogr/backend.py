@@ -225,7 +225,6 @@ class OGRBackend(BackendPort):
 
     def cleanup(self) -> None:
         """No cleanup needed for OGR backend."""
-        pass
 
     def estimate_execution_time(
         self,

@@ -12,7 +12,7 @@ Date: January 2026
 from typing import Dict, Optional
 import logging
 
-from .container import Container, Lifecycle
+from .container import Container
 
 # Ports
 from core.ports.backend_port import BackendPort

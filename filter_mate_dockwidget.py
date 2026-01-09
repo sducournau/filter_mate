@@ -53,24 +53,7 @@ from qgis.PyQt.QtCore import (
     QTimer
 )
 from qgis.PyQt.QtGui import QColor, QFont
-from qgis.PyQt.QtWidgets import (
-    QComboBox,
-    QDockWidget,
-    QDoubleSpinBox,
-    QFileDialog,
-    QGroupBox,
-    QHBoxLayout,
-    QLineEdit,
-    QMenu,
-    QPushButton,
-    QSizePolicy,
-    QSpacerItem,
-    QSpinBox,
-    QSplitter,
-    QVBoxLayout
-)
 from qgis.core import (
-    Qgis,
     QgsCoordinateReferenceSystem,
     QgsCoordinateTransform,
     QgsExpression,
@@ -86,14 +69,11 @@ from qgis.core import (
 )
 from qgis.gui import (
     QgsCheckableComboBox,
-    QgsCollapsibleGroupBox,
-    QgsDoubleSpinBox,
     QgsFeaturePickerWidget,
     QgsFieldComboBox,
     QgsFieldExpressionWidget,
     QgsMapLayerComboBox,
-    QgsProjectionSelectionWidget,
-    QgsPropertyOverrideButton
+    QgsProjectionSelectionWidget
 )
 
 # Compatibility layer for proxy model classes that may be in different modules
@@ -131,9 +111,7 @@ from .modules.qt_json_view.model import JsonModel
 from .modules.qt_json_view.view import JsonView
 from .modules.object_safety import is_valid_layer
 from .modules.appUtils import (
-    get_datasource_connexion_from_layer,
     get_best_display_field,
-    POSTGRESQL_AVAILABLE,
     is_layer_source_available
 )
 from .modules.customExceptions import SignalStateChangeError
@@ -147,7 +125,6 @@ from .filter_mate_dockwidget_base import Ui_FilterMateDockWidgetBase
 # Import async expression evaluation for large layers (v2.5.10)
 try:
     from .modules.tasks.expression_evaluation_task import (
-        ExpressionEvaluationTask,
         get_expression_manager
     )
     ASYNC_EXPRESSION_AVAILABLE = True
@@ -160,8 +137,6 @@ try:
     from .modules.crs_utils import (
         is_geographic_crs,
         get_optimal_metric_crs,
-        CRSTransformer,
-        get_crs_units,
         DEFAULT_METRIC_CRS
     )
     CRS_UTILS_AVAILABLE = True
@@ -444,7 +419,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _deferred_manage_interactions(self):
         """Deferred initialization - NOT USED during debugging."""
         # This method is not called during debugging
-        pass
         
 
     def getSignal(self, oObject : QObject, strSignalName : str):
@@ -741,7 +715,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         - Initial size distribution
         """
         from .ui.config import UIConfig
-        from qgis.PyQt.QtWidgets import QSizePolicy
         
         try:
             # The splitter already exists from the .ui file as splitter_main
@@ -1784,7 +1757,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         from qgis.PyQt.QtWidgets import QMenu
         from qgis.PyQt.QtGui import QCursor
         from .adapters.backends import POSTGRESQL_AVAILABLE
-        from .modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
         
         # NEW: If indicator shows "..." (waiting state), trigger reload instead
         if hasattr(self, 'backend_indicator_label') and self.backend_indicator_label:
@@ -2032,7 +2004,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         - Apply a saved favorite
         - Manage favorites (edit, delete)
         """
-        from qgis.PyQt.QtWidgets import QMenu, QInputDialog, QMessageBox
+        from qgis.PyQt.QtWidgets import QMenu
         from qgis.PyQt.QtGui import QCursor
         from qgis.core import QgsExpressionContextUtils
         
@@ -2207,9 +2179,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _add_current_to_favorites(self):
         """Add current filter configuration to favorites, including all filtered remote layers."""
-        from qgis.PyQt.QtWidgets import QInputDialog, QLineEdit, QDialog, QVBoxLayout, QFormLayout, QDialogButtonBox, QTextEdit
+        from qgis.PyQt.QtWidgets import QLineEdit, QDialog, QVBoxLayout, QFormLayout, QDialogButtonBox, QTextEdit
         from qgis.core import QgsProject
-        from datetime import datetime
         from .core.services.favorites_service import FilterFavorite
         
         expression = self._get_current_filter_expression()
@@ -2474,13 +2445,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """Show the favorites management dialog with list, edit, delete, and search capabilities."""
         from qgis.PyQt.QtWidgets import (
             QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
-            QPushButton, QLabel, QLineEdit, QTextEdit, QMessageBox, QMenu,
-            QGroupBox, QFormLayout, QDialogButtonBox, QSplitter, QTreeWidget,
-            QTreeWidgetItem, QHeaderView, QTabWidget, QWidget, QScrollArea,
-            QCompleter
+            QPushButton, QLabel, QLineEdit, QTextEdit, QMessageBox, QFormLayout,
+            QSplitter, QTreeWidget, QTreeWidgetItem, QHeaderView, QTabWidget,
+            QWidget
         )
-        from qgis.PyQt.QtCore import Qt, QStringListModel
-        from qgis.PyQt.QtGui import QFont, QColor
+        from qgis.PyQt.QtCore import Qt
         
         if not self._favorites_manager or self._favorites_manager.count == 0:
             QMessageBox.information(
@@ -2963,7 +2932,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             List of tuples: (backend_type, backend_name, backend_icon)
         """
         from .adapters.backends import POSTGRESQL_AVAILABLE
-        from .modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
         
         available = []
         provider_type = layer.providerType()
@@ -3085,7 +3053,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Args:
             backend_type: Backend type to force ('postgresql', 'spatialite', 'ogr', or None)
         """
-        from qgis.utils import iface
         from qgis.core import QgsProject
         from .adapters.backends.postgresql import PostgreSQLGeometricFilter
         from .adapters.backends.spatialite import SpatialiteGeometricFilter
@@ -5812,7 +5779,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Handle reload button click - save configuration and reload plugin.
         """
-        from qgis.utils import iface
         
         # First, apply any pending changes
         if self.config_changes_pending and self.pending_config_changes:
@@ -6656,7 +6622,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     except (AttributeError, RuntimeError, TypeError, SignalStateChangeError) as e:
                         # Widget may not exist, already deleted, or signal not connected
                         logger.debug(f"Could not disconnect signal for {widget_group}.{widget}: {e}")
-                        pass
 
     def force_reconnect_action_signals(self):
         """
@@ -12245,7 +12210,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         including action bar position changes.
         """
         try:
-            from qgis.utils import iface, plugins
+            from qgis.utils import plugins
             
             logger.info("Reloading FilterMate plugin...")
             
@@ -12613,7 +12578,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             feature_count = current_layer.featureCount() if current_layer else -1
             
             # Import optimization logic
-            from .adapters.backends.factory import should_use_memory_optimization, get_small_dataset_config
             from .adapters.backends.spatialite import SpatialiteGeometricFilter
             
             # Normalize provider type (QGIS uses 'postgres', we use 'postgresql')

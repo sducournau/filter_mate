@@ -15,25 +15,23 @@ Pattern: Strangler Fig - Gradual extraction
 """
 
 import logging
-from typing import Dict, Optional, Any, List, Callable
-from dataclasses import dataclass, field
+from typing import Dict, Optional, Any, List
+from dataclasses import dataclass
 from enum import Enum, auto
 
 try:
-    from qgis.PyQt.QtCore import Qt, pyqtSignal
+    from qgis.PyQt.QtCore import pyqtSignal
     from qgis.PyQt.QtWidgets import (
         QDialog, QVBoxLayout, QHBoxLayout, QGridLayout,
-        QLabel, QPushButton, QCheckBox, QSpinBox, QDoubleSpinBox,
-        QWidget, QFrame, QDialogButtonBox, QGroupBox, QTabWidget,
-        QMessageBox, QComboBox, QScrollArea
+        QLabel, QPushButton, QCheckBox, QSpinBox, QWidget,
+        QFrame, QDialogButtonBox, QGroupBox, QTabWidget
     )
 except ImportError:
-    from PyQt5.QtCore import Qt, pyqtSignal
+    from PyQt5.QtCore import pyqtSignal
     from PyQt5.QtWidgets import (
         QDialog, QVBoxLayout, QHBoxLayout, QGridLayout,
-        QLabel, QPushButton, QCheckBox, QSpinBox, QDoubleSpinBox,
-        QWidget, QFrame, QDialogButtonBox, QGroupBox, QTabWidget,
-        QMessageBox, QComboBox, QScrollArea
+        QLabel, QPushButton, QCheckBox, QSpinBox, QWidget,
+        QFrame, QDialogButtonBox, QGroupBox, QTabWidget
     )
 
 logger = logging.getLogger(__name__)

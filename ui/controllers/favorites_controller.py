@@ -8,13 +8,13 @@ Story: MIG-072
 Phase: 6 - God Class DockWidget Migration
 """
 
-from typing import TYPE_CHECKING, Optional, List, Dict, Any, Tuple
+from typing import TYPE_CHECKING, Optional, List, Any
 import logging
 
 from qgis.PyQt.QtCore import Qt, pyqtSignal
 from qgis.PyQt.QtWidgets import (
     QMenu, QInputDialog, QMessageBox, QFileDialog,
-    QLabel, QDialog, QVBoxLayout, QFormLayout, QDialogButtonBox, QTextEdit
+    QLabel
 )
 from qgis.PyQt.QtGui import QCursor
 from qgis.core import QgsExpressionContextUtils, QgsProject

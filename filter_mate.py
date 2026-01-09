@@ -23,12 +23,7 @@
 
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QApplication, QMenu, QMessageBox
-from qgis.utils import iface
-from qgis.core import QgsMessageLog, Qgis
-from functools import partial
-import shutil
-import json
+from qgis.PyQt.QtWidgets import QAction, QMessageBox
 import weakref
 
 # Initialize Qt resources from file resources.py
@@ -36,7 +31,7 @@ from .resources import *  # Qt resources must be imported with wildcard
 import os
 import os.path
 from .filter_mate_app import FilterMateApp
-from .config.config import ENV_VARS, init_env_vars, reload_config
+from .config.config import reload_config
 from .infrastructure.logging import get_logger
 
 logger = get_logger(__name__)
@@ -882,7 +877,6 @@ class FilterMate:
         
         from qgis.core import QgsProject, QgsVectorLayer
         from qgis.PyQt.QtCore import QTimer
-        from qgis.utils import iface as qgis_iface
         
         # If plugin is already active, handle project change
         if self.pluginIsActive:

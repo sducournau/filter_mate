@@ -290,7 +290,6 @@ class TaskBridge:
         
         try:
             from adapters.app_bridge import layer_info_from_qgis_layer
-            from core.domain.filter_expression import FilterExpression, ProviderType
             
             # Convert source layer to LayerInfo
             source_info = layer_info_from_qgis_layer(source_layer)
@@ -574,7 +573,6 @@ class TaskBridge:
             return False
         
         try:
-            from core.services.filter_service import MultiStepRequest
             return True
         except ImportError:
             return False
@@ -617,7 +615,7 @@ class TaskBridge:
         
         try:
             # Import streaming exporter
-            from adapters.qgis.tasks import StreamingExporter, StreamingConfig
+            from adapters.qgis.tasks import StreamingExporter
             
             logger.info("=" * 60)
             logger.info("🚀 V3 TASKBRIDGE: Executing streaming export")
@@ -692,7 +690,6 @@ class TaskBridge:
             return False
         
         try:
-            from adapters.qgis.tasks import StreamingExporter
             return True
         except ImportError:
             return False

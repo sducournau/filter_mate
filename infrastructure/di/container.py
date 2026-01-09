@@ -12,7 +12,7 @@ Author: FilterMate Team
 Date: January 2026
 """
 
-from typing import TypeVar, Generic, Dict, Callable, Optional, Type, Any
+from typing import TypeVar, Dict, Callable, Optional, Type, Any
 from enum import Enum
 from dataclasses import dataclass
 import logging

@@ -13,7 +13,7 @@ import logging
 import os
 
 from qgis.PyQt.QtGui import QIcon, QPixmap, QImage
-from qgis.PyQt.QtWidgets import QPushButton, QToolButton, QAbstractButton
+from qgis.PyQt.QtWidgets import QAbstractButton
 
 from .base_styler import StylerBase
 

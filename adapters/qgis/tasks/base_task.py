@@ -255,7 +255,6 @@ class BaseFilterMateTask(_get_qgs_task_base()):
         Returns:
             TaskResult with success/failure and data
         """
-        pass
 
     def _on_completed(self, result: TaskResult) -> None:
         """
@@ -263,7 +262,6 @@ class BaseFilterMateTask(_get_qgs_task_base()):
 
         Override for custom success handling.
         """
-        pass
 
     def _on_failed(self, result: TaskResult) -> None:
         """
@@ -271,7 +269,6 @@ class BaseFilterMateTask(_get_qgs_task_base()):
 
         Override for custom error handling.
         """
-        pass
 
     def report_progress(
         self,

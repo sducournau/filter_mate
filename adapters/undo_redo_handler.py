@@ -15,7 +15,7 @@ Version: 2.8.6
 
 import time
 import weakref
-from typing import Optional, Dict, Any, Callable, List
+from typing import Optional, Dict, Callable, List
 
 try:
     from qgis.core import QgsProject, QgsVectorLayer

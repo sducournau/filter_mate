@@ -12,7 +12,7 @@ import functools
 import warnings
 import logging
 from typing import Callable, Optional, Dict, Set, Any, List
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 
 logger = logging.getLogger(__name__)

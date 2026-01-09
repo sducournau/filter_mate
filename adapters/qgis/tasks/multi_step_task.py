@@ -21,7 +21,7 @@ import logging
 import time
 from typing import Optional, List, Dict, Callable, Any
 
-from .base_task import BaseFilterMateTask, TaskResult, TaskStatus
+from .base_task import BaseFilterMateTask, TaskResult
 
 logger = logging.getLogger('FilterMate.Tasks.MultiStep')
 

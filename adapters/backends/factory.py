@@ -12,10 +12,9 @@ Date: January 2026
 """
 
 import logging
-import time
 from typing import Dict, Optional, Tuple, TYPE_CHECKING
 
-from core.ports.backend_port import BackendPort, BackendCapability
+from core.ports.backend_port import BackendPort
 from core.domain.filter_expression import ProviderType
 from core.domain.layer_info import LayerInfo
 
@@ -213,7 +212,6 @@ class BackendFactory:
             return POSTGRESQL_AVAILABLE
         except ImportError:
             try:
-                import psycopg2
                 return True
             except ImportError:
                 return False

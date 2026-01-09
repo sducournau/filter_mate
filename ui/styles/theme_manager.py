@@ -8,7 +8,7 @@ Story: MIG-066
 Phase: 6 - God Class DockWidget Migration
 """
 
-from typing import TYPE_CHECKING, Optional, Dict, Any, Callable, List
+from typing import TYPE_CHECKING, Optional, Dict, Callable, List
 import logging
 import os
 
