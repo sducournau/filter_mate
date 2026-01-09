@@ -600,7 +600,7 @@ class FilterMateApp:
         
         # v2.8.11: Initialize Spatialite cache for multi-step filtering
         try:
-            from modules.backends.spatialite_cache import get_cache, cleanup_cache
+            from .modules.backends.spatialite_cache import get_cache, cleanup_cache
             self._spatialite_cache = get_cache()
             # Cleanup expired entries on startup
             expired_count = cleanup_cache()
@@ -609,7 +609,9 @@ class FilterMateApp:
             cache_stats = self._spatialite_cache.get_cache_stats()
             logger.info(f"FilterMate: Spatialite cache initialized ({cache_stats['total_entries']} entries, {cache_stats['db_size_mb']} MB)")
         except Exception as e:
+            import traceback
             logger.debug(f"FilterMate: Spatialite cache not available: {e}")
+            logger.debug(f"Traceback: {traceback.format_exc()}")
             self._spatialite_cache = None
         
         # Log PostgreSQL availability status
