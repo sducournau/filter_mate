@@ -195,6 +195,15 @@ except ImportError as e:
     is_hexagonal_initialized = lambda: False
     logger.debug(f"Controllers not available: {e}")
 
+# Import Layout Managers for God Class refactoring (v3.1 - Phase 6)
+try:
+    from .ui.layout import SplitterManager
+    LAYOUT_MANAGERS_AVAILABLE = True
+except ImportError as e:
+    LAYOUT_MANAGERS_AVAILABLE = False
+    SplitterManager = None
+    logger.debug(f"Layout managers not available: {e}")
+
 class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     closingPlugin = pyqtSignal()
@@ -338,6 +347,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Cache stores selected features and pre-computed bounding boxes per groupbox
         self._exploring_cache = ExploringFeaturesCache(max_layers=50, max_age_seconds=300.0)
         logger.debug("Initialized exploring features cache")
+        
+        # v3.1: Initialize Layout Managers (Phase 6 - MIG-060+)
+        # Splitter manager handles main splitter configuration
+        self._splitter_manager = None
+        if LAYOUT_MANAGERS_AVAILABLE and SplitterManager:
+            try:
+                self._splitter_manager = SplitterManager(self)
+                logger.debug("SplitterManager created (v3.1 Phase 6)")
+            except Exception as e:
+                logger.warning(f"Could not create SplitterManager: {e}")
+                self._splitter_manager = None
         
         # v3.0: Initialize MVC Controller Integration (Strangler Fig pattern)
         # Controllers are created but legacy code still handles most operations
@@ -676,7 +696,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.set_multiple_checkable_combobox()
         
         # Setup splitter between frame_exploring and frame_toolset
-        self._setup_main_splitter()
+        # v3.1: Delegate to SplitterManager if available (Phase 6 - MIG-061)
+        if self._splitter_manager is not None:
+            self._splitter_manager.setup()
+        else:
+            # Fallback to legacy method
+            self._setup_main_splitter()
         
         # Apply dynamic dimensions based on active profile
         self.apply_dynamic_dimensions()
