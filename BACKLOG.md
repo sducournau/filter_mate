@@ -909,7 +909,7 @@ def temp_table_context(self, db_path, table_name):
 - [x] **HIGH-004**: Refactorer logique buffer dupliquée ✅ **v3.0.12**
 - [x] **HIGH-005**: Standardiser transformation CRS ✅ (centralisé dans crs_utils.py)
 - [x] **HIGH-009**: Exception handlers vides ✅ (vérifié OK - graceful degradations)
-- [ ] **HIGH-011**: Ajouter type hints
+- [x] **HIGH-011**: Ajouter type hints ✅ **v3.1.1** (89% nouvelle archi, 1439/1605 fonctions)
 - [ ] **HIGH-017**: Améliorer messages d'erreur
 - [ ] **MED-001**: Standardiser f-strings
 
