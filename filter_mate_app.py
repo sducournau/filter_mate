@@ -96,12 +96,18 @@ try:
         LayerLifecycleService,
         LayerLifecycleConfig
     )
+    from .core.services.task_management_service import (  # v4.0: Task management extraction
+        TaskManagementService,
+        TaskManagementConfig
+    )
     HEXAGONAL_AVAILABLE = True
 except ImportError:
     HEXAGONAL_AVAILABLE = False
     TaskParameterBuilder = None  # v4.0: Fallback
     LayerLifecycleService = None  # v4.0: Fallback
     LayerLifecycleConfig = None  # v4.0: Fallback
+    TaskManagementService = None  # v4.0: Fallback
+    TaskManagementConfig = None  # v4.0: Fallback
 
     def _init_hexagonal_services(config=None):
         """Fallback when hexagonal services unavailable."""
@@ -201,6 +207,16 @@ class FilterMateApp:
             else:
                 self._lifecycle_service = None
         return self._lifecycle_service
+    
+    def _get_task_management_service(self):
+        """Get or create TaskManagementService instance (lazy initialization)."""
+        if not hasattr(self, '_task_mgmt_service') or self._task_mgmt_service is None:
+            if TaskManagementService:
+                config = TaskManagementConfig()
+                self._task_mgmt_service = TaskManagementService(config)
+            else:
+                self._task_mgmt_service = None
+        return self._task_mgmt_service
 
     def _filter_usable_layers(self, layers):
         """
@@ -2322,12 +2338,23 @@ class FilterMateApp:
         QgsApplication.taskManager().addTask(self.appTasks[task_name])
 
     def _safe_cancel_all_tasks(self):
-        """Safely cancel all tasks in the task manager to avoid access violations.
+        """
+        Safely cancel all tasks in the task manager to avoid access violations.
+        
+        .. deprecated:: 4.0.0
+            Delegates to TaskManagementService.safe_cancel_all_tasks()
         
         Note: We cancel tasks individually instead of using cancelAll() to avoid
         Windows access violations that occur when cancelAll() is called from Qt signals
         during project transitions.
         """
+        # v4.0: Delegate to TaskManagementService
+        service = self._get_task_management_service()
+        if service:
+            service.safe_cancel_all_tasks()
+            return
+        
+        # Fallback to legacy implementation
         try:
             task_manager = QgsApplication.taskManager()
             if not task_manager:
@@ -2345,7 +2372,11 @@ class FilterMateApp:
             logger.warning(f"Could not cancel tasks: {e}")
 
     def _cancel_layer_tasks(self, layer_id):
-        """Cancel all running tasks for a specific layer to prevent access violations.
+        """
+        Cancel all running tasks for a specific layer to prevent access violations.
+        
+        .. deprecated:: 4.0.0
+            Delegates to TaskManagementService.cancel_layer_tasks()
         
         CRASH FIX (v2.3.20): This method must be called before modifying layer variables
         (setLayerVariable) to prevent the race condition where background tasks are
@@ -2354,6 +2385,13 @@ class FilterMateApp:
         Args:
             layer_id: The ID of the layer whose tasks should be cancelled
         """
+        # v4.0: Delegate to TaskManagementService
+        service = self._get_task_management_service()
+        if service:
+            service.cancel_layer_tasks(layer_id, self.dockwidget)
+            return
+        
+        # Fallback to legacy implementation
         try:
             # Cancel tasks in exploring widgets
             if hasattr(self, 'dockwidget') and self.dockwidget:
@@ -2444,13 +2482,24 @@ class FilterMateApp:
             self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
 
     def _process_add_layers_queue(self):
-        """Process queued add_layers operations.
+        """
+        Process queued add_layers operations.
+        
+        .. deprecated:: 4.0.0
+            Delegates to TaskManagementService.process_add_layers_queue()
         
         Processes the first queued add_layers operation from self._add_layers_queue.
         Called after a previous add_layers task completes or from safety timer.
         
         Thread-safe: Uses _processing_queue flag to prevent concurrent processing.
         """
+        # v4.0: Delegate to TaskManagementService
+        service = self._get_task_management_service()
+        if service:
+            service.process_add_layers_queue(self.manage_task)
+            return
+        
+        # Fallback to legacy implementation
         # Prevent concurrent queue processing
         if self._processing_queue:
             logger.debug("Queue already being processed, skipping")

@@ -37,6 +37,7 @@ Créer un service dédié pour la gestion du cycle de vie des couches (validatio
 ### Fichiers créés
 
 1. **core/services/layer_lifecycle_service.py** (448 lignes)
+
    - `LayerLifecycleService` classe principale
    - `LayerLifecycleConfig` dataclass configuration
    - `filter_usable_layers()` - filtre couches valides
@@ -93,32 +94,34 @@ LayerLifecycleService (core/services/)
 
 ### Après MIG-101 (Partiel)
 
-| Métrique | Valeur | Variation |
-|----------|--------|-----------|
-| FilterMateApp lignes | ~6,180 | +50 lignes* |
-| Méthodes extraites | 2/7 | 28% |
-| LayerLifecycleService | 448 lignes | Nouveau |
+| Métrique              | Valeur     | Variation    |
+| --------------------- | ---------- | ------------ |
+| FilterMateApp lignes  | ~6,180     | +50 lignes\* |
+| Méthodes extraites    | 2/7        | 28%          |
+| LayerLifecycleService | 448 lignes | Nouveau      |
 
-*Note: L'augmentation temporaire vient des fallbacks. Les méthodes restantes seront extraites après refactoring.
+\*Note: L'augmentation temporaire vient des fallbacks. Les méthodes restantes seront extraites après refactoring.
 
 ### Cible finale MIG-101 (7/7 méthodes)
 
-| Métrique | Valeur cible |
-|----------|--------------|
-| FilterMateApp | ~5,350 lignes (-830) |
-| LayerLifecycleService | ~700 lignes |
+| Métrique              | Valeur cible         |
+| --------------------- | -------------------- |
+| FilterMateApp         | ~5,350 lignes (-830) |
+| LayerLifecycleService | ~700 lignes          |
 
 ## 🚧 Défis techniques
 
 ### Couplage fort avec FilterMateApp
 
 Les méthodes restantes (5/7) sont **très couplées** à FilterMateApp :
+
 - Accès direct à `self.dockwidget`
 - Accès direct à `self.PROJECT_LAYERS`
 - Appels à `self.manage_task()`
 - Modification de flags internes (`self._initializing_project`)
 
 **Solution proposée** :
+
 - Refactorer ces méthodes pour accepter tous les paramètres
 - Passer callbacks pour `manage_task` et autres actions
 - Phase 2.3 : extraire vers des services plus granulaires
@@ -129,6 +132,7 @@ Les méthodes restantes (5/7) sont **très couplées** à FilterMateApp :
 - `force_reload_layers()` : 170 lignes avec gestion UI
 
 **Solution** :
+
 - Décomposer en sous-méthodes plus petites
 - MIG-105 : extraire gestion UI vers UIController
 
@@ -151,6 +155,7 @@ Les méthodes restantes (5/7) sont **très couplées** à FilterMateApp :
 ### Extraction partielle
 
 Seules 2 méthodes sur 7 ont été extraites car :
+
 - Les 5 autres nécessitent refactoring préalable
 - Trop de couplage avec FilterMateApp
 - Nécessitent passage de nombreux callbacks
@@ -158,6 +163,7 @@ Seules 2 méthodes sur 7 ont été extraites car :
 ### Rétrocompatibilité
 
 Maintenue à 100% :
+
 - Méthodes FilterMateApp inchangées (signature)
 - Délégation transparente au service
 - Fallback legacy si service indisponible
@@ -194,7 +200,7 @@ Maintenue à 100% :
 ## 🚀 Prochaines étapes
 
 1. **MIG-102** : TaskManagementService (peut démarrer immédiatement)
-2. **MIG-103-105** : Controllers DockWidget  
+2. **MIG-103-105** : Controllers DockWidget
 3. **Phase 2.3** : Finaliser extraction lifecycle (5 méthodes restantes)
 
 ---
