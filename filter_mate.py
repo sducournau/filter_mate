@@ -214,41 +214,62 @@ class FilterMate:
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
         
-        # Install message log filter to suppress known QGIS warnings about missing form dependencies
-        self._install_message_filter()
-        
-        # Force reload configuration from disk to get latest user changes
-        reload_config()
-        
-        # Auto-migrate configuration if needed
-        self._auto_migrate_config()
-        
-        # Check and warn about invalid geometry filtering settings
-        self._check_geometry_validation_settings()
+        try:
+            # Install message log filter to suppress known QGIS warnings about missing form dependencies
+            logger.debug("FilterMate.initGui: Starting _install_message_filter")
+            self._install_message_filter()
+            
+            # Force reload configuration from disk to get latest user changes
+            logger.debug("FilterMate.initGui: Starting reload_config")
+            reload_config()
+            
+            # Auto-migrate configuration if needed
+            logger.debug("FilterMate.initGui: Starting _auto_migrate_config")
+            self._auto_migrate_config()
+            
+            # Check and warn about invalid geometry filtering settings
+            logger.debug("FilterMate.initGui: Starting _check_geometry_validation_settings")
+            self._check_geometry_validation_settings()
 
-        icon_path = ':/plugins/filter_mate/icon.png'
-        
-        # Main action to open FilterMate
-        self.add_action(
-            icon_path,
-            text=self.tr(u'FilterMate'),
-            callback=self.run,
-            parent=self.iface.mainWindow(),
-            status_tip=self.tr(u'Open FilterMate panel'))
-        
-        # Action to reset configuration and database
-        reset_icon_path = ':/plugins/filter_mate/icons/parameters.png'
-        self.add_action(
-            reset_icon_path,
-            text=self.tr(u'Reset configuration and database'),
-            callback=self.reset_configuration,
-            parent=self.iface.mainWindow(),
-            add_to_toolbar=False,
-            status_tip=self.tr(u'Reset the default configuration and delete the SQLite database'))
-        
-        # Connect signals to handle project changes and automatically reload layers
-        # Note: layersAdded signal is NOT connected to avoid freeze issues
-        self._connect_auto_activation_signals()
+            logger.debug("FilterMate.initGui: Creating actions")
+            icon_path = ':/plugins/filter_mate/icon.png'
+            
+            # Main action to open FilterMate
+            self.add_action(
+                icon_path,
+                text=self.tr(u'FilterMate'),
+                callback=self.run,
+                parent=self.iface.mainWindow(),
+                status_tip=self.tr(u'Open FilterMate panel'))
+            
+            # Action to reset configuration and database
+            reset_icon_path = ':/plugins/filter_mate/icons/parameters.png'
+            self.add_action(
+                reset_icon_path,
+                text=self.tr(u'Reset configuration and database'),
+                callback=self.reset_configuration,
+                parent=self.iface.mainWindow(),
+                add_to_toolbar=False,
+                status_tip=self.tr(u'Reset the default configuration and delete the SQLite database'))
+            
+            # Connect signals to handle project changes and automatically reload layers
+            # Note: layersAdded signal is NOT connected to avoid freeze issues
+            logger.debug("FilterMate.initGui: Connecting auto-activation signals")
+            self._connect_auto_activation_signals()
+            logger.debug("FilterMate.initGui: Completed successfully")
+            
+        except Exception as e:
+            import traceback
+            error_msg = f"Error in initGui: {str(e)}"
+            traceback_msg = traceback.format_exc()
+            logger.error(error_msg)
+            logger.error(f"Traceback: {traceback_msg}")
+            self.iface.messageBar().pushCritical(
+                "FilterMate",
+                f"Initialization error: {str(e)}"
+            )
+            # Re-raise to prevent partial initialization
+            raise
 
     #--------------------------------------------------------------------------
 
@@ -345,9 +366,23 @@ class FilterMate:
             migrator = ConfigMigration()
             
             # Pass the confirmation callback for reset operations
-            performed, warnings = migrator.auto_migrate_if_needed(
+            result = migrator.auto_migrate_if_needed(
                 confirm_reset_callback=self._confirm_config_reset
             )
+            
+            # Defensive: ensure result is a tuple with 2 elements
+            if result is None:
+                logger.warning("auto_migrate_if_needed returned None, using defaults")
+                performed, warnings = False, []
+            elif not isinstance(result, tuple) or len(result) != 2:
+                logger.warning(f"auto_migrate_if_needed returned unexpected result: {result}")
+                performed, warnings = False, []
+            else:
+                performed, warnings = result
+            
+            # Ensure warnings is a list (defensive programming)
+            if warnings is None:
+                warnings = []
             
             # Check if user declined reset
             if any("user declined" in str(w).lower() for w in warnings):
@@ -406,7 +441,9 @@ class FilterMate:
                     logger.warning(f"Config migration: {warning}")
         
         except Exception as e:
+            import traceback
             logger.error(f"Error during config migration: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             self.iface.messageBar().pushCritical(
                 "FilterMate",
                 self.tr("Error during configuration migration: {}").format(str(e))
