@@ -28,6 +28,23 @@ from .history_service import (
     HistoryState,
 )
 
+# Note: BackendService is NOT exported here because:
+# 1. It has QGIS dependencies (QObject, pyqtSignal) - not pure Python
+# 2. It has a name collision with BackendInfo from core/ports
+# Import directly: from core.services.backend_service import BackendService
+
+# Note: FavoritesService is NOT exported here because:
+# 1. It has QGIS dependencies (QObject, pyqtSignal) - not pure Python
+# Import directly: from core.services.favorites_service import FavoritesService
+
+# Note: LayerService is NOT exported here because:
+# 1. It has QGIS dependencies (QObject, pyqtSignal) - not pure Python
+# Import directly: from core.services.layer_service import LayerService
+
+# Note: PostgresSessionManager is NOT exported here because:
+# 1. It has QGIS dependencies (QObject, pyqtSignal) - not pure Python
+# Import directly: from core.services.postgres_session_manager import PostgresSessionManager
+
 __all__ = [
     # Expression Service
     'ExpressionService',

@@ -23,6 +23,10 @@ from .exporting_controller import (
     ExportMode
 )
 from .config_controller import ConfigController
+from .backend_controller import BackendController
+from .favorites_controller import FavoritesController
+from .layer_sync_controller import LayerSyncController
+from .property_controller import PropertyController, PropertyType, PropertyChange
 from .integration import ControllerIntegration
 
 __all__ = [
@@ -42,5 +46,11 @@ __all__ = [
     'ExportFormat',
     'ExportMode',
     'ConfigController',
+    'BackendController',
+    'FavoritesController',
+    'LayerSyncController',
+    'PropertyController',
+    'PropertyType',
+    'PropertyChange',
     'ControllerIntegration',
 ]

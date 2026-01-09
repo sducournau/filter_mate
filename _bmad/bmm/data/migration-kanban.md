@@ -1,8 +1,8 @@
 # 📋 FilterMate v3.0 Migration - Kanban Board
 
 **Epic:** Migration Architecture Hexagonale  
-**Sprint Actuel:** Sprint 3 - Phase 6 DockWidget  
-**Dernière MAJ:** 2026-01-09 (Phase 5 COMPLETE ✅)
+**Sprint Actuel:** Sprint 3 - Phase 6 DockWidget (Controllers)  
+**Dernière MAJ:** 2026-01-10 (Phase 6 Sprint 7 en cours)
 
 ---
 
@@ -17,33 +17,33 @@
 
 #### Phase 6: God Class DockWidget (30 stories)
 
-##### Sprint 6 - Layout & Styling (9 stories)
+##### Sprint 6 - Layout & Styling (9 stories) ✅ COMPLETE
 
-| ID      | Story                   | Priorité | Statut  | Notes                    |
-| ------- | ----------------------- | -------- | ------- | ------------------------ |
-| MIG-060 | Layout Module Structure | 🔴 P0    | ✅ DONE | `ui/layout/` créé        |
-| MIG-061 | SplitterManager         | 🟠 P1    | ✅ DONE | 370 lignes, 18 tests     |
-| MIG-062 | DimensionsManager       | 🟠 P1    | ✅ DONE | 825 lignes, 11 tests ✅  |
-| MIG-063 | SpacingManager          | 🟠 P1    | ✅ DONE | 337 lignes, 10 tests     |
-| MIG-064 | ActionBarManager        | 🟠 P1    | ✅ DONE | 582 lignes, 16 tests     |
-| MIG-065 | Styling Module          | 🔴 P0    | 📝 TODO | `ui/styles/` à compléter |
-| MIG-066 | ThemeManager            | 🟠 P1    | 📝 TODO | Migrer de ui_styles.py   |
-| MIG-067 | IconManager             | 🟠 P1    | 📝 TODO | Migrer IconThemeManager  |
-| MIG-068 | ButtonStyler            | 🟡 P2    | 📝 TODO | Styling unifié boutons   |
+| ID      | Story                   | Priorité | Statut  | Notes                           |
+| ------- | ----------------------- | -------- | ------- | ------------------------------- |
+| MIG-060 | Layout Module Structure | 🔴 P0    | ✅ DONE | `ui/layout/` créé               |
+| MIG-061 | SplitterManager         | 🟠 P1    | ✅ DONE | 370 lignes, 18 tests            |
+| MIG-062 | DimensionsManager       | 🟠 P1    | ✅ DONE | 825 lignes, 11 tests ✅         |
+| MIG-063 | SpacingManager          | 🟠 P1    | ✅ DONE | 337 lignes, 10 tests            |
+| MIG-064 | ActionBarManager        | 🟠 P1    | ✅ DONE | 582 lignes, 16 tests            |
+| MIG-065 | Styling Module          | 🔴 P0    | ✅ DONE | `ui/styles/` créé (1320 lignes) |
+| MIG-066 | ThemeManager            | 🟠 P1    | ✅ DONE | ThemeManager migré              |
+| MIG-067 | IconManager             | 🟠 P1    | ✅ DONE | IconThemeManager migré          |
+| MIG-068 | ButtonStyler            | 🟡 P2    | ✅ DONE | ButtonStyler 400 lignes         |
 
-##### Sprint 7 - Controllers & Services (9 stories)
+##### Sprint 7 - Controllers & Services (9 stories) 🔄 EN COURS
 
-| ID      | Story                  | Priorité | Statut  | Dépend de   |
-| ------- | ---------------------- | -------- | ------- | ----------- |
-| MIG-070 | ConfigController       | 🟠 P1    | ✅ DONE | MIG-060,065 |
-| MIG-071 | BackendController      | 🟠 P1    | 📝 TODO | MIG-070     |
-| MIG-072 | FavoritesController    | 🟠 P1    | 📝 TODO | MIG-070     |
-| MIG-073 | LayerSyncController    | 🟠 P1    | 📝 TODO | MIG-070     |
-| MIG-074 | PropertyController     | 🟡 P2    | 📝 TODO | MIG-070     |
-| MIG-075 | BackendService         | 🟠 P1    | 📝 TODO | MIG-070     |
-| MIG-076 | FavoritesService       | 🟠 P1    | 📝 TODO | MIG-075     |
-| MIG-077 | LayerService           | 🟠 P1    | 📝 TODO | MIG-075     |
-| MIG-078 | PostgresSessionManager | 🟡 P2    | 📝 TODO | MIG-075     |
+| ID      | Story                  | Priorité | Statut  | Dépend de   | Notes                   |
+| ------- | ---------------------- | -------- | ------- | ----------- | ----------------------- |
+| MIG-070 | ConfigController       | 🟠 P1    | ✅ DONE | MIG-060,065 | 708 lignes, intégré     |
+| MIG-071 | BackendController      | 🟠 P1    | ✅ DONE | MIG-070     | 500+ lignes, 30 tests   |
+| MIG-072 | FavoritesController    | 🟠 P1    | ✅ DONE | MIG-070     | 600+ lignes, 25 tests   |
+| MIG-073 | LayerSyncController    | 🟠 P1    | ✅ DONE | MIG-070     | 400 lignes, CRIT-005 ✅ |
+| MIG-074 | PropertyController     | 🟡 P2    | ✅ DONE | MIG-070     | 550 lignes, 25 tests    |
+| MIG-075 | BackendService         | 🟠 P1    | ✅ DONE | MIG-070     | 550 lignes, 30 tests    |
+| MIG-076 | FavoritesService       | 🟠 P1    | ✅ DONE | MIG-075     | 600 lignes, 25 tests    |
+| MIG-077 | LayerService           | 🟠 P1    | ✅ DONE | MIG-075     | 600 lignes, 35 tests    |
+| MIG-078 | PostgresSessionManager | 🟡 P2    | ✅ DONE | MIG-075     | 600 lignes, 40 tests    |
 
 ##### Sprint 8 - Dialogs & Signals (7 stories)
 
@@ -126,6 +126,16 @@
 | MIG-064 | ActionBarManager         | 🟠 P1    | 2026-01-09 | 520 lignes, 18 tests, action bar positioning  |
 | MIG-080 | Dialogs Module Structure | 🟢 P3    | 2026-01-09 | `ui/dialogs/` module créé (Phase 6)           |
 | MIG-081 | FavoritesManagerDialog   | 🟡 P2    | 2026-01-09 | 571 lignes, 17 tests                          |
+| MIG-065 | Styling Module           | 🔴 P0    | 2026-01-09 | `ui/styles/` 1320 lignes (Phase 6)            |
+| MIG-066 | ThemeManager             | 🟠 P1    | 2026-01-09 | ThemeManager migré vers ui/styles/            |
+| MIG-067 | IconManager              | 🟠 P1    | 2026-01-09 | IconThemeManager intégré                      |
+| MIG-068 | ButtonStyler             | 🟡 P2    | 2026-01-09 | ButtonStyler 400 lignes, 1068 lignes tests    |
+| MIG-071 | BackendController        | 🟠 P1    | 2026-01-10 | 500+ lignes, 30 tests, backend indicator      |
+| MIG-072 | FavoritesController      | 🟠 P1    | 2026-01-10 | 600+ lignes, 25 tests, favorites UI           |
+| MIG-073 | LayerSyncController      | 🟠 P1    | 2026-01-10 | 400 lignes, CRIT-005 protection (5s window)   |
+| MIG-074 | PropertyController       | 🟡 P2    | 2026-01-10 | 550 lignes, property orchestration            |
+| MIG-075 | BackendService           | 🟠 P1    | 2026-01-10 | 550 lignes, backend management service        |
+| MIG-076 | FavoritesService         | 🟠 P1    | 2026-01-10 | 600 lignes, favorites business logic          |
 
 ---
 
@@ -137,9 +147,9 @@ Phase 2: Core Domain       [██████████] 100%  (6/6 stories)
 Phase 3: God Classes       [██████████] 100%  (5/5 stories)
 Phase 4: Backends          [██████████] 100%  (4/4 stories)
 Phase 5: Validation        [██████████] 100%  (5/5 stories) ✅ COMPLETE
-Phase 6: DockWidget        [██████░░░░] 27%   (8/30 stories)
+Phase 6: DockWidget        [██████████] 70%   (21/30 stories) 🔄 EN COURS
 ─────────────────────────────────────────────
-TOTAL                      [██████░░░░] 59%   (32/54 stories)
+TOTAL                      [████████░░] 83%   (45/54 stories)
 ```
 
 ---
