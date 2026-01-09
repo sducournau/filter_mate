@@ -1,0 +1,1817 @@
+"""
+Layer Management Task
+
+Extracted from appTasks.py during Phase 3b (Dec 2025).
+
+This module contains the LayersManagementEngineTask class which handles:
+- Adding and removing layers from FilterMate project tracking
+- Managing layer properties and variables in Spatialite database
+- Creating spatial indexes for layers
+- Detecting and migrating legacy layer metadata
+- Saving/removing layer styles
+
+Dependencies:
+- QgsTask for asynchronous execution
+- Spatialite database for persistent layer properties
+- QGIS layer variables for runtime property access
+"""
+
+from qgis.core import (
+    Qgis,
+    QgsExpressionContextUtils,
+    QgsFeature,
+    QgsFeatureSource,
+    QgsField,
+    QgsMessageLog,
+    QgsProject,
+    QgsTask,
+    QgsVectorLayer
+)
+from qgis.PyQt.QtCore import pyqtSignal, QMetaType, QTimer
+from qgis.utils import iface
+from qgis import processing
+import logging
+import os
+import json
+import sqlite3
+import uuid
+from collections import OrderedDict
+import re
+
+# Import logging configuration
+from ..logging_config import setup_logger, safe_log
+from ...config.config import ENV_VARS
+
+# Setup logger
+logger = setup_logger(
+    'FilterMate.LayerManagementTask',
+    os.path.join(ENV_VARS.get("PATH_ABSOLUTE_PROJECT", "."), 'logs', 'filtermate_tasks.log'),
+    level=logging.INFO
+)
+
+# Import constants
+from ..constants import (
+    PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
+)
+
+# Import utilities
+from ..appUtils import (
+    get_source_table_name,
+    get_datasource_connexion_from_layer,
+    detect_layer_provider_type,
+    geometry_type_to_string,
+    escape_json_string,
+    get_best_display_field
+)
+
+# Import object safety utilities (v2.3.9 - stability fix)
+from ..object_safety import (
+    is_sip_deleted, is_valid_layer, is_layer_in_project, safe_disconnect, safe_emit,
+    safe_set_layer_variable, safe_set_layer_variables, is_qgis_alive
+)
+
+# Import sip for direct C++ object deletion check (v2.3.11 - crash fix)
+try:
+    import sip
+except ImportError:
+    sip = None
+
+# Import task utilities
+from .task_utils import (
+    spatialite_connect,
+    safe_spatialite_connect,
+    sqlite_execute_with_retry, 
+    ensure_db_directory_exists,
+    MESSAGE_TASKS_CATEGORIES
+)
+
+# Import type utilities
+from ..type_utils import can_cast, return_typed_value
+
+# Centralized psycopg2 availability (v2.8.6 refactoring)
+from ..psycopg2_availability import psycopg2, PSYCOPG2_AVAILABLE, POSTGRESQL_AVAILABLE
+
+# Import connection pool for optimized PostgreSQL operations
+try:
+    from ..connection_pool import (
+        get_pool_manager,
+        pooled_connection_from_layer,
+        POSTGRESQL_AVAILABLE as POOL_AVAILABLE
+    )
+    from ..postgresql_optimizer import BatchMetadataLoader
+    CONNECTION_POOL_AVAILABLE = POOL_AVAILABLE
+except ImportError:
+    CONNECTION_POOL_AVAILABLE = False
+    get_pool_manager = None
+    pooled_connection_from_layer = None
+    BatchMetadataLoader = None
+
+
+class LayersManagementEngineTask(QgsTask):
+    """
+    QgsTask for managing layer tracking, properties, and spatial indexes.
+    
+    This task handles the asynchronous addition and removal of layers from
+    FilterMate's tracking system, including:
+    
+    - Detecting layer metadata (provider type, geometry field, primary key)
+    - Storing layer properties in Spatialite database
+    - Setting QGIS layer variables for runtime access
+    - Creating spatial indexes (PostgreSQL GIST, QGIS spatial index)
+    - Migrating legacy property formats
+    - Saving/removing layer styles
+    
+    Signals:
+        resultingLayers (dict): Emitted on completion with updated project layers
+        savingLayerVariable (QgsVectorLayer, str, object, type): Emitted when saving a variable
+        removingLayerVariable (QgsVectorLayer, str): Emitted when removing a variable
+    """
+    
+    resultingLayers = pyqtSignal(dict)
+    savingLayerVariable = pyqtSignal(QgsVectorLayer, str, object, type)
+    removingLayerVariable = pyqtSignal(QgsVectorLayer, str)
+
+    def __init__(self, description, task_action, task_parameters):
+        """
+        Initialize layer management task.
+        
+        Args:
+            description (str): Task description for UI
+            task_action (str): Action to perform ('add_layers', 'remove_layers')
+            task_parameters (dict): Task configuration with keys:
+                - task['config_data']: Configuration data
+                - task['db_file_path']: Path to Spatialite database
+                - task['project_uuid']: Project UUID
+                - task['layers']: List of layers to process
+                - task['project_layers']: Current project layers dict
+                - task['reset_all_layers_variables_flag']: Whether to reset all variables
+        """
+        QgsTask.__init__(self, description, QgsTask.CanCancel)
+
+        self.exception = None
+        self.task_action = task_action
+        self.task_parameters = task_parameters
+        self.CONFIG_DATA = None
+        self.db_file_path = None
+        self.project_uuid = None
+
+        self.layers = None
+        self.project_layers = None
+        self.layer_properties = None
+        self.layer_all_properties_flag = False
+        self.outputs = {}
+        self.message = None
+        
+        # PERFORMANCE: Cache PostgreSQL connection availability per datasource URI
+        # This avoids opening/closing connections for each layer during init
+        self._postgresql_connection_cache = {}
+
+        # THREAD SAFETY (v2.3.10): Queue for layer variable operations
+        # QgsExpressionContextUtils calls must happen in main thread (finished() method)
+        # This queue stores: (layer_id, variable_key, value) tuples for setLayerVariable
+        # or (layer_id, None, None) for setLayerVariables({}) to clear all
+        self._deferred_layer_variables = []
+
+        # JSON templates for layer properties
+        # NOTE: has_combine_operator defaults to false - additive filter is auto-enabled
+        # when existing subsets are detected on source or distant layers (see _synchronize_layer_widgets)
+        # source_layer_combine_operator and other_layers_combine_operator default to "AND" (index 0)
+        self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_table_name":"%s","layer_id":"%s","layer_schema":"%s","is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","layer_geometry_field":"%s","primary_key_is_numeric":%s,"is_current_layer":false }'
+        self.json_template_layer_exploring = '{"is_changing_all_layer_properties":true,"is_tracking":false,"is_selecting":false,"is_linking":false,"current_exploring_groupbox":"single_selection","single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
+        self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"source_layer_combine_operator":"AND","other_layers_combine_operator":"AND","has_geometric_predicates":false,"geometric_predicates":[],"use_centroids_source_layer":false,"use_centroids_distant_layers":false,"has_buffer_value":false,"buffer_value":0.0,"buffer_value_property":false,"buffer_value_expression":"","has_buffer_type":false,"buffer_type":"Round","buffer_segments":5,"has_simplify_tolerance":false,"simplify_tolerance":0.0 }'
+        
+        global ENV_VARS
+        self.PROJECT = ENV_VARS["PROJECT"]
+
+    
+    def _ensure_db_directory_exists(self):
+        """
+        Ensure the database directory exists before connecting.
+        
+        Delegates to the centralized ensure_db_directory_exists function
+        in task_utils.py for consistent behavior across all tasks.
+        
+        Raises:
+            OSError: If directory cannot be created
+            ValueError: If db_file_path is invalid
+        """
+        ensure_db_directory_exists(self.db_file_path)
+    
+    
+    def _safe_spatialite_connect(self):
+        """
+        Safely connect to Spatialite database, ensuring directory exists.
+        
+        Delegates to centralized safe_spatialite_connect() in task_utils.py.
+        
+        Returns:
+            sqlite3.Connection: Database connection
+            
+        Raises:
+            OSError: If directory cannot be created
+            sqlite3.OperationalError: If database cannot be opened
+        """
+        return safe_spatialite_connect(self.db_file_path)
+
+
+    def run(self):
+        """
+        Execute the layer management task.
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:    
+            result = False
+
+            self.CONFIG_DATA = self.task_parameters["task"]["config_data"]
+            self.db_file_path = self.task_parameters["task"]["db_file_path"]
+            self.project_uuid = self.task_parameters["task"]["project_uuid"]
+            
+            logger.info(f"LayersManagementEngineTask.run() started: action={self.task_action}, db_path={self.db_file_path}")
+
+            if self.task_action == 'add_layers':
+                self.layers = self.task_parameters["task"]["layers"]
+                self.project_layers = self.task_parameters["task"]["project_layers"]
+                self.reset_all = self.task_parameters["task"]["reset_all_layers_variables_flag"]
+                
+                logger.info(f"add_layers task: processing {len(self.layers)} layers, current project_layers count: {len(self.project_layers)}")
+                
+                # Verify database is accessible before processing
+                try:
+                    conn = self._safe_spatialite_connect()
+                    conn.close()
+                    logger.debug("Database accessibility check: OK")
+                except Exception as db_err:
+                    logger.error(f"Database accessibility check FAILED: {db_err}", exc_info=True)
+                    raise
+                
+                result = self.manage_project_layers()
+                if self.isCanceled() or result is False:
+                    return False
+
+            elif self.task_action == 'remove_layers':
+                self.layers = self.task_parameters["task"]["layers"]
+                self.project_layers = self.task_parameters["task"]["project_layers"]
+                self.reset_all = self.task_parameters["task"]["reset_all_layers_variables_flag"]
+                result = self.manage_project_layers()
+                if self.isCanceled() or result is False:
+                    return False
+
+            return True
+    
+        except Exception as e:
+            self.exception = e
+            # Provide detailed error information for database issues
+            error_msg = f'LayerManagementEngineTask run() failed: {e}'
+            if 'unable to open database file' in str(e):
+                error_msg += f'\nDatabase path: {self.db_file_path}'
+                if self.db_file_path:
+                    db_dir = os.path.dirname(self.db_file_path)
+                    error_msg += f'\nDatabase directory: {db_dir}'
+                    error_msg += f'\nDirectory exists: {os.path.exists(db_dir) if db_dir else "N/A"}'
+            safe_log(logger, logging.ERROR, error_msg, exc_info=True)
+            return False
+
+
+    def manage_project_layers(self):
+        """
+        Manage addition/removal of layers to/from project tracking.
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        result = False
+
+        if self.reset_all is True:
+            result = self.remove_variables_from_all_layers()
+            if self.isCanceled() or result is False:
+                return False
+            
+        for layer in self.layers:
+            if self.task_action == 'add_layers':
+                if isinstance(layer, QgsVectorLayer):
+                    if layer.id() not in self.project_layers.keys():
+                        result = self.add_project_layer(layer)
+                        # FIX: Don't stop on False - just skip non-spatial layers
+                        # add_project_layer returns False for non-spatial layers, which is OK
+                        if self.isCanceled():
+                            return False
+            elif self.task_action == 'remove_layers':
+                if isinstance(layer, QgsVectorLayer):
+                    if layer.id() in self.project_layers.keys():
+                        result = self.remove_project_layer(layer)
+                        if self.isCanceled() or result is False:
+                            return False
+
+        # Sort layers once after all operations (performance optimization)
+        self.project_layers = dict(OrderedDict(sorted(
+            self.project_layers.items(), 
+            key=lambda layer: (
+                layer[1]['infos'].get('layer_geometry_type', 'Unknown'),
+                layer[1]['infos'].get('layer_name', '')
+            )
+        )))
+        
+        logger.info(f"manage_project_layers completed successfully: {len(self.project_layers)} layers in project_layers")
+        return True
+    
+    def _load_existing_layer_properties(self, layer):
+        """
+        Load existing layer properties from Spatialite database.
+        
+        Args:
+            layer (QgsVectorLayer): Layer to load properties for
+            
+        Returns:
+            dict: Dictionary with 'infos', 'exploring', 'filtering' keys, or empty dict if not found
+        """
+        spatialite_results = self.select_properties_from_spatialite(layer.id())
+        expected_count = self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["LAYERS"]["LAYER_PROPERTIES_COUNT"]
+        
+        if not spatialite_results:
+            return {}
+        
+        existing_layer_variables = {
+            "infos": {},
+            "exploring": {},
+            "filtering": {}
+        }
+        
+        for property in spatialite_results:
+            if property[0] in existing_layer_variables:
+                value_typped, type_returned = self.return_typped_value(
+                    property[2].replace("\'\'", "\'"), 
+                    'load'
+                )
+                existing_layer_variables[property[0]][property[1]] = value_typped
+                
+                # THREAD SAFETY (v2.3.10): Queue for main thread execution
+                variable_key = f"filterMate_{property[0]}_{property[1]}"
+                self._deferred_layer_variables.append((layer.id(), variable_key, value_typped))
+        
+        # If property count has changed, update it
+        actual_count = (
+            len(existing_layer_variables.get("infos", {})) +
+            len(existing_layer_variables.get("exploring", {})) +
+            len(existing_layer_variables.get("filtering", {}))
+        )
+        if actual_count > 0 and actual_count != expected_count:
+            logger.debug(f"Property count changed from {expected_count} to {actual_count} for layer {layer.id()}")
+            self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["LAYERS"]["LAYER_PROPERTIES_COUNT"] = actual_count
+        
+        return existing_layer_variables
+
+    def _migrate_legacy_geometry_field(self, layer_variables, layer):
+        """
+        Migrate legacy properties and ensure all required properties exist.
+        
+        This function handles backward compatibility for layers created with older versions
+        of the plugin. It ensures that:
+        1. Old property names are migrated to new names
+        2. All required properties exist with sensible defaults
+        3. Expression properties use the layer's primary key
+        
+        Args:
+            layer_variables (dict): Dictionary with layer properties
+            layer (QgsVectorLayer): Layer being processed
+        """
+        infos = layer_variables.get("infos", {})
+        exploring = layer_variables.get("exploring", {})
+        primary_key = infos.get("primary_key_name", "id")
+        
+        # Migrate old geometry_field to layer_geometry_field
+        if "geometry_field" in infos and "layer_geometry_field" not in infos:
+            infos["layer_geometry_field"] = infos["geometry_field"]
+            del infos["geometry_field"]
+            logger.info(f"Migrated geometry_field to layer_geometry_field for layer {layer.id()}")
+        
+        # Ensure all required exploring boolean flags exist
+        exploring_booleans = {
+            "is_linking": False,
+            "is_selecting": False,
+            "is_tracking": False,
+            "is_changing_all_layer_properties": True
+        }
+        for prop_name, default_value in exploring_booleans.items():
+            if prop_name not in exploring:
+                exploring[prop_name] = default_value
+                logger.info(f"Added missing '{prop_name}' property for layer {layer.id()}")
+        
+        # Ensure exploring groupbox property exists
+        if "current_exploring_groupbox" not in exploring:
+            exploring["current_exploring_groupbox"] = "single_selection"
+            logger.info(f"Added missing 'current_exploring_groupbox' property for layer {layer.id()}")
+        
+        # Ensure all expression properties exist with primary key as default
+        expression_properties = [
+            "single_selection_expression",
+            "multiple_selection_expression",
+            "custom_selection_expression"
+        ]
+        for prop_name in expression_properties:
+            if prop_name not in exploring:
+                exploring[prop_name] = str(primary_key)
+                logger.info(f"Added missing '{prop_name}' property for layer {layer.id()}")
+            
+            # Update database with new key name
+            try:
+                conn = self._safe_spatialite_connect()
+                cur = conn.cursor()
+                cur.execute(
+                    """UPDATE fm_project_layers_properties 
+                       SET meta_key = 'layer_geometry_field'
+                       WHERE fk_project = ? AND layer_id = ? 
+                       AND meta_type = 'infos' AND meta_key = 'geometry_field'""",
+                    (str(self.project_uuid), layer.id())
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
+                logger.debug(f"Updated database for layer {layer.id()}")
+            except Exception as e:
+                logger.warning(f"Could not update database for migration: {e}")
+        
+        # Add layer_table_name if missing
+        if "layer_table_name" not in infos:
+            source_table_name = get_source_table_name(layer)
+            infos["layer_table_name"] = source_table_name
+            logger.info(f"Added layer_table_name='{source_table_name}' for layer {layer.id()}")
+            
+            try:
+                conn = self._safe_spatialite_connect()
+                cur = conn.cursor()
+                cur.execute(
+                    """INSERT INTO fm_project_layers_properties 
+                       (fk_project, layer_id, meta_type, meta_key, meta_value)
+                       VALUES (?, ?, 'infos', 'layer_table_name', ?)""",
+                    (str(self.project_uuid), layer.id(), source_table_name)
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
+            except Exception as e:
+                logger.warning(f"Could not add layer_table_name to database: {e}")
+        
+        # Add layer_provider_type if missing
+        if "layer_provider_type" not in infos:
+            layer_provider_type = detect_layer_provider_type(layer)
+            infos["layer_provider_type"] = layer_provider_type
+            logger.info(f"Added layer_provider_type='{layer_provider_type}' for layer {layer.id()}")
+            
+            try:
+                conn = self._safe_spatialite_connect()
+                cur = conn.cursor()
+                cur.execute(
+                    """INSERT INTO fm_project_layers_properties 
+                       (fk_project, layer_id, meta_type, meta_key, meta_value)
+                       VALUES (?, ?, 'infos', 'layer_provider_type', ?)""",
+                    (str(self.project_uuid), layer.id(), layer_provider_type)
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
+            except Exception as e:
+                logger.warning(f"Could not add layer_provider_type to database: {e}")
+            
+            # THREAD SAFETY (v2.3.10): Queue for main thread execution
+            self._deferred_layer_variables.append((layer.id(), "filterMate_infos_layer_table_name", infos.get("layer_table_name", "")))
+        
+        # Add layer_geometry_type if missing
+        if "layer_geometry_type" not in infos:
+            layer_geometry_type = geometry_type_to_string(layer)
+            infos["layer_geometry_type"] = layer_geometry_type
+            logger.info(f"Added layer_geometry_type='{layer_geometry_type}' for layer {layer.id()}")
+            
+            try:
+                conn = self._safe_spatialite_connect()
+                cur = conn.cursor()
+                cur.execute(
+                    """INSERT INTO fm_project_layers_properties 
+                       (fk_project, layer_id, meta_type, meta_key, meta_value)
+                       VALUES (?, ?, 'infos', 'layer_geometry_type', ?)""",
+                    (str(self.project_uuid), layer.id(), layer_geometry_type)
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
+            except Exception as e:
+                logger.warning(f"Could not add layer_geometry_type to database: {e}")
+
+    def _detect_layer_metadata(self, layer, layer_provider_type):
+        """
+        Detect layer-specific metadata based on provider.
+        
+        Args:
+            layer (QgsVectorLayer): Layer to analyze
+            layer_provider_type (str): Provider type constant
+            
+        Returns:
+            tuple: (source_schema, geometry_field)
+        """
+        source_schema = 'NULL'
+        geometry_field = 'NULL'
+        
+        if layer_provider_type == PROVIDER_POSTGRES:
+            # IMPROVED: Use QgsDataSourceUri for reliable parsing instead of fragile regex
+            try:
+                from qgis.core import QgsDataSourceUri
+                source_uri = QgsDataSourceUri(layer.source())
+                
+                # Extract schema
+                schema = source_uri.schema()
+                if schema:
+                    source_schema = schema
+                else:
+                    # Fallback to 'public' if no schema specified
+                    source_schema = 'public'
+                
+                # Extract geometry field
+                geom_col = source_uri.geometryColumn()
+                if geom_col:
+                    geometry_field = geom_col
+                else:
+                    # Try from data provider
+                    try:
+                        geom_col = layer.dataProvider().geometryColumn()
+                        if geom_col:
+                            geometry_field = geom_col
+                        else:
+                            geometry_field = 'geom'
+                    except AttributeError:
+                        geometry_field = 'geom'
+                
+                logger.debug(f"PostgreSQL layer metadata: schema={source_schema}, geometry_field={geometry_field}")
+                
+            except Exception as e:
+                logger.warning(f"Error parsing PostgreSQL layer source: {e}, falling back to regex")
+                # Fallback to regex if QgsDataSourceUri fails
+                layer_source = layer.source()
+                regexp_match_schema = re.search(r'(?<=table=")[a-zA-Z0-9_-]*(?="\.)', layer_source)
+                if regexp_match_schema:
+                    source_schema = regexp_match_schema.group()
+                regexp_match_geom = re.search(r'(?<=\()[a-zA-Z0-9_-]*(?=\))', layer_source)
+                if regexp_match_geom:
+                    geometry_field = regexp_match_geom.group()
+        
+        elif layer_provider_type in [PROVIDER_SPATIALITE, PROVIDER_OGR]:
+            # FIX v2.4.13: Improved geometry column detection for GeoPackage/Spatialite
+            # Try multiple methods in order of reliability
+            detected_geom_field = None
+            
+            # METHOD 0: Directly ask the layer (most reliable)
+            try:
+                geom_col = layer.geometryColumn()
+                if geom_col and geom_col.strip():
+                    detected_geom_field = geom_col
+                    logger.debug(f"Geometry column from layer.geometryColumn(): '{detected_geom_field}'")
+            except Exception:
+                pass
+            
+            # METHOD 1: From data provider (fallback)
+            if not detected_geom_field:
+                try:
+                    geom_col = layer.dataProvider().geometryColumn()
+                    if geom_col and geom_col.strip():
+                        detected_geom_field = geom_col
+                        logger.debug(f"Geometry column from dataProvider(): '{detected_geom_field}'")
+                except (AttributeError, RuntimeError):
+                    pass
+            
+            # METHOD 2: Query GeoPackage metadata (for .gpkg files)
+            if not detected_geom_field:
+                try:
+                    source = layer.source()
+                    source_path = source.split('|')[0] if '|' in source else source
+                    
+                    if source_path.lower().endswith('.gpkg'):
+                        import sqlite3
+                        import os
+                        
+                        if os.path.isfile(source_path):
+                            # Extract table name from source
+                            from qgis.core import QgsDataSourceUri
+                            uri_obj = QgsDataSourceUri(layer.dataProvider().dataSourceUri())
+                            table_name = uri_obj.table()
+                            
+                            if not table_name:
+                                # Fallback: extract from source string
+                                for part in source.split('|'):
+                                    if part.startswith('layername='):
+                                        table_name = part.split('=')[1]
+                                        break
+                            
+                            if table_name:
+                                conn = sqlite3.connect(source_path)
+                                cursor = conn.cursor()
+                                cursor.execute(
+                                    "SELECT column_name FROM gpkg_geometry_columns WHERE table_name = ?",
+                                    (table_name,)
+                                )
+                                result = cursor.fetchone()
+                                if result and result[0]:
+                                    detected_geom_field = result[0]
+                                    logger.debug(f"Geometry column from gpkg_geometry_columns: '{detected_geom_field}'")
+                                conn.close()
+                except Exception as e:
+                    logger.debug(f"Could not query GeoPackage metadata: {e}")
+            
+            # Final assignment with fallback
+            if detected_geom_field:
+                geometry_field = detected_geom_field
+            else:
+                # Default fallback based on common conventions
+                geometry_field = 'geom' if layer_provider_type == PROVIDER_OGR else 'geometry'
+                logger.debug(f"Using default geometry field: '{geometry_field}'")
+        
+        return source_schema, geometry_field
+
+    def _build_new_layer_properties(self, layer, primary_key_result):
+        """
+        Build property dictionaries for a new layer.
+        
+        Args:
+            layer (QgsVectorLayer): Layer to build properties for
+            primary_key_result (tuple): Tuple from search_primary_key_from_layer
+            
+        Returns:
+            dict: Dictionary with 'infos', 'exploring', 'filtering' keys
+        """
+        primary_key_name, primary_key_idx, primary_key_type, primary_key_is_numeric = primary_key_result
+        
+        # Detect provider type and metadata
+        layer_provider_type = detect_layer_provider_type(layer)
+        source_schema, geometry_field = self._detect_layer_metadata(layer, layer_provider_type)
+        
+        # Convert geometry type
+        layer_geometry_type = geometry_type_to_string(layer)
+        
+        # Get actual source table name
+        source_table_name = get_source_table_name(layer)
+        
+        # Check PostgreSQL connection availability for PostgreSQL layers
+        # CRITICAL FIX v2.5.19: PostgreSQL layers are ALWAYS available for basic filtering
+        # via QGIS native API (setSubsetString) - this works without psycopg2!
+        # psycopg2 is only needed for ADVANCED features (materialized views, custom indexes)
+        # 
+        # Two flags:
+        # - postgresql_connection_available: True for all valid PostgreSQL layers (basic filtering works)
+        # - psycopg2_connection_available: True only if psycopg2 can connect (for advanced features)
+        postgresql_connection_available = False
+        psycopg2_connection_available = False
+
+        # v3.0.5: CRITICAL FIX - PostgreSQL layers are ALWAYS filterable via QGIS native API
+        # psycopg2 is only needed for ADVANCED features (materialized views, indexes)
+        # Basic filtering via setSubsetString() works without psycopg2
+        if layer_provider_type == PROVIDER_POSTGRES:
+            # PostgreSQL layer is valid and loaded in QGIS = basic filtering ALWAYS works
+            # via setSubsetString() which uses QGIS native PostgreSQL provider
+            postgresql_connection_available = True
+            logger.debug(f"PostgreSQL layer {layer.name()}: basic filtering available via QGIS native API (psycopg2 not required)")
+
+            # Warn user if psycopg2 is not available (advanced features disabled)
+            if not POSTGRESQL_AVAILABLE:
+                logger.info(
+                    f"⚠️ PostgreSQL layer '{layer.name()}': psycopg2 not installed.\n"
+                    f"   Basic filtering works, but for MUCH faster performance:\n"
+                    f"   → Install: pip install psycopg2-binary\n"
+                    f"   → Enables materialized views (10-100x faster for large datasets)"
+                )
+
+            # Only test psycopg2 connection for advanced features (if psycopg2 is available)
+            if POSTGRESQL_AVAILABLE and PSYCOPG2_AVAILABLE:
+                try:
+                    from qgis.core import QgsDataSourceUri
+                    uri = QgsDataSourceUri(layer.source())
+                    cache_key = f"{uri.host()}:{uri.port()}:{uri.database()}"
+                    
+                    if cache_key in self._postgresql_connection_cache:
+                        psycopg2_connection_available = self._postgresql_connection_cache[cache_key]
+                        logger.debug(f"PostgreSQL connection for {layer.name()}: using cached psycopg2 result ({psycopg2_connection_available})")
+                    else:
+                        # Test connection once per datasource
+                        conn, _ = get_datasource_connexion_from_layer(layer)
+                        if conn is not None:
+                            psycopg2_connection_available = True
+                            conn.close()
+                            logger.debug(f"PostgreSQL layer {layer.name()}: psycopg2 connection available (advanced features enabled)")
+                        else:
+                            logger.info(f"PostgreSQL layer {layer.name()}: psycopg2 connection unavailable (advanced features disabled, basic filtering still works)")
+                        # Cache the result for other layers from same database
+                        self._postgresql_connection_cache[cache_key] = psycopg2_connection_available
+                except Exception as e:
+                    logger.info(f"PostgreSQL psycopg2 connection test failed for {layer.name()}: {e} (advanced features disabled, basic filtering still works)")
+            else:
+                logger.debug(f"PostgreSQL layer {layer.name()}: psycopg2 not installed (advanced features disabled, basic filtering still works)")
+        
+        # Build properties from JSON templates
+        # CRITICAL: Escape all string values to prevent JSON parsing errors
+        # with special characters like em-dash (—), quotes, backslashes
+        new_layer_variables = {}
+        new_layer_variables["infos"] = json.loads(
+            self.json_template_layer_infos % (
+                escape_json_string(layer_geometry_type), 
+                escape_json_string(layer.name()),
+                escape_json_string(source_table_name) if source_table_name else "",
+                escape_json_string(layer.id()), 
+                escape_json_string(source_schema) if source_schema else "", 
+                escape_json_string(layer_provider_type), 
+                escape_json_string(layer.sourceCrs().authid()), 
+                escape_json_string(primary_key_name) if primary_key_name else "", 
+                primary_key_idx, 
+                escape_json_string(primary_key_type) if primary_key_type else "", 
+                escape_json_string(geometry_field) if geometry_field else "", 
+                str(primary_key_is_numeric).lower()
+            )
+        )
+        
+        # Add PostgreSQL connection availability flags
+        # postgresql_connection_available: True = basic filtering via QGIS API works
+        # psycopg2_connection_available: True = advanced features (MVs, indexes) available
+        new_layer_variables["infos"]["postgresql_connection_available"] = postgresql_connection_available
+        new_layer_variables["infos"]["psycopg2_connection_available"] = psycopg2_connection_available
+        
+        # Determine the best display field for exploring expressions
+        # Use descriptive text fields when available instead of just primary key
+        best_display_field = get_best_display_field(layer)
+        display_expression = best_display_field if best_display_field else (primary_key_name if primary_key_name else "")
+        
+        new_layer_variables["exploring"] = json.loads(
+            self.json_template_layer_exploring % (
+                escape_json_string(display_expression),
+                escape_json_string(display_expression),
+                escape_json_string(display_expression)
+            )
+        )
+        new_layer_variables["filtering"] = json.loads(self.json_template_layer_filtering)
+        
+        # VERIFICATION v2.9.32: Log default centroid checkbox values to confirm they are False
+        logger.debug(f"🔍 Default centroid values for new layer {layer.name()}: "
+                    f"use_centroids_source_layer={new_layer_variables['filtering']['use_centroids_source_layer']}, "
+                    f"use_centroids_distant_layers={new_layer_variables['filtering']['use_centroids_distant_layers']}")
+        
+        return new_layer_variables
+
+    def _set_layer_variables(self, layer, layer_variables):
+        """
+        Queue QGIS layer variables for setting in main thread.
+        
+        THREAD SAFETY (v2.3.10): This method queues variable operations
+        instead of calling QgsExpressionContextUtils directly, as those
+        calls must happen in the main GUI thread (finished() method).
+        
+        Args:
+            layer (QgsVectorLayer): Layer to set variables on
+            layer_variables (dict): Dictionary with 'infos', 'exploring', 'filtering' keys
+        """
+        for key_group in ("infos", "exploring", "filtering"):
+            for key in layer_variables[key_group]:
+                variable_key = f"filterMate_{key_group}_{key}"
+                value_typped, type_returned = self.return_typped_value(
+                    layer_variables[key_group][key], 
+                    'save'
+                )
+                if type_returned in (list, dict):
+                    value_typped = json.dumps(value_typped)
+                # THREAD SAFETY: Queue for main thread execution
+                self._deferred_layer_variables.append((layer.id(), variable_key, value_typped))
+
+    def _create_spatial_index(self, layer, layer_props):
+        """
+        Create spatial index for layer based on provider type.
+        
+        For PostgreSQL layers without connection, falls back to QGIS spatial index.
+        
+        Args:
+            layer (QgsVectorLayer): Layer to index
+            layer_props (dict): Layer properties dictionary
+        """
+        layer_provider_type = layer_props.get("infos", {}).get("layer_provider_type")
+        
+        if not layer_provider_type:
+            layer_provider_type = detect_layer_provider_type(layer)
+        
+        if layer_provider_type == PROVIDER_POSTGRES:
+            # Check if psycopg2 connection is available for creating spatial indexes
+            # Note: Spatial index creation requires direct database access via psycopg2
+            # Basic filtering via setSubsetString works without this
+            psycopg2_connection_available = layer_props.get("infos", {}).get("psycopg2_connection_available", False)
+            
+            if psycopg2_connection_available:
+                try:
+                    self.create_spatial_index_for_postgresql_layer(layer, layer_props)
+                except (AttributeError, KeyError) as e:
+                    logger.debug(f"Could not create spatial index for PostgreSQL layer {layer.id()}: {e}")
+                    # Fallback to QGIS spatial index
+                    self.create_spatial_index_for_layer(layer)
+                except Exception as e:
+                    if POSTGRESQL_AVAILABLE and psycopg2 and isinstance(e, psycopg2.Error):
+                        logger.debug(f"PostgreSQL error creating spatial index: {e}")
+                    else:
+                        logger.debug(f"Error creating spatial index: {e}")
+                    # Fallback to QGIS spatial index
+                    self.create_spatial_index_for_layer(layer)
+            else:
+                # PostgreSQL layer but no psycopg2 connection - use QGIS spatial index
+                # Note: Basic filtering via setSubsetString still works fine
+                logger.info(f"Using QGIS spatial index for PostgreSQL layer {layer.name()} (psycopg2 unavailable)")
+                self.create_spatial_index_for_layer(layer)
+        else:
+            self.create_spatial_index_for_layer(layer)
+
+    def add_project_layer(self, layer):
+        """
+        Add a spatial layer to the project with all necessary metadata and indexes.
+        
+        Args:
+            layer (QgsVectorLayer): Layer to add
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        if not isinstance(layer, QgsVectorLayer) or not layer.isSpatial():
+            # Log skipped non-spatial layers
+            layer_name = layer.name() if hasattr(layer, 'name') else 'unknown'
+            logger.debug(f"add_project_layer: Skipping non-spatial layer '{layer_name}'")
+            return False
+        
+        # Try to load existing properties from database
+        layer_variables = self._load_existing_layer_properties(layer)
+        
+        if layer_variables:
+            # CRITICAL: Validate PostgreSQL layers don't have virtual_id (legacy bug)
+            if layer.providerType() == 'postgres':
+                primary_key = layer_variables.get("infos", {}).get("primary_key_name")
+                if primary_key == "virtual_id":
+                    error_msg = (
+                        f"Couche PostgreSQL '{layer.name()}' : Données corrompues détectées.\n\n"
+                        f"Cette couche utilise 'virtual_id' qui n'existe pas dans PostgreSQL.\n"
+                        f"Cette erreur provient d'une version précédente de FilterMate.\n\n"
+                        f"Solution : Supprimez cette couche du projet FilterMate, puis rajoutez-la.\n"
+                        f"Assurez-vous que la table PostgreSQL a une PRIMARY KEY définie."
+                    )
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
+            
+            # Layer exists - apply migration if needed
+            self._migrate_legacy_geometry_field(layer_variables, layer)
+        else:
+            # New layer - search for primary key and build properties
+            result = self.search_primary_key_from_layer(layer)
+            if self.isCanceled() or result is False:
+                return False
+            
+            if not isinstance(result, tuple) or len(list(result)) != 4:
+                return False
+            
+            # Check if PostgreSQL layer using ctid (no PRIMARY KEY)
+            primary_key = result[0]
+            if layer.providerType() == 'postgres' and primary_key == 'ctid':
+                # Show warning to user about limitations
+                from qgis.core import Qgis
+                from qgis.utils import iface
+                iface.messageBar().pushMessage(
+                    "FilterMate - PostgreSQL sans clé primaire",
+                    f"La couche '{layer.name()}' n'a pas de PRIMARY KEY. "
+                    f"Fonctionnalités limitées : vues matérialisées désactivées. "
+                    f"Recommandation : ajoutez une PRIMARY KEY pour performances optimales.",
+                    Qgis.Warning,
+                    duration=10
+                )
+            
+            layer_variables = self._build_new_layer_properties(layer, result)
+            self._set_layer_variables(layer, layer_variables)
+        
+        # Update properties count if first layer
+        if self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["LAYERS"]["LAYER_PROPERTIES_COUNT"] == 0:
+            properties_count = (
+                len(layer_variables["infos"]) + 
+                len(layer_variables["exploring"]) + 
+                len(layer_variables["filtering"])
+            )
+            self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["LAYERS"]["LAYER_PROPERTIES_COUNT"] = properties_count
+        
+        # Prepare layer properties dict
+        layer_props = {
+            "infos": layer_variables["infos"],
+            "exploring": layer_variables["exploring"],
+            "filtering": layer_variables["filtering"]
+        }
+        layer_props["infos"]["layer_id"] = layer.id()
+        
+        # Save to database
+        self.insert_properties_to_spatialite(layer.id(), layer_props)
+        
+        # Create spatial index
+        self._create_spatial_index(layer, layer_props)
+        
+        # Add to project layers dictionary
+        self.project_layers[layer.id()] = layer_props
+        
+        return True
+
+    def remove_project_layer(self, layer):
+        """
+        Remove a layer from project tracking.
+        
+        Args:
+            layer: QgsVectorLayer object or layer ID string to remove
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        # Handle both QgsVectorLayer and str (layer_id) for backwards compatibility
+        if isinstance(layer, QgsVectorLayer):
+            layer_id = layer.id()
+        elif isinstance(layer, str):
+            layer_id = layer
+        else:
+            logger.warning(f"remove_project_layer: unexpected type {type(layer)}, expected QgsVectorLayer or str")
+            return False
+        
+        if layer_id not in self.project_layers:
+            logger.debug(f"remove_project_layer: layer_id '{layer_id}' not found in project_layers (may already be removed)")
+            return True  # Not an error - layer may have already been removed
+        
+        try:
+            self.save_variables_from_layer(layer_id)    
+            self.save_style_from_layer_id(layer_id)
+            del self.project_layers[layer_id]
+            logger.debug(f"remove_project_layer: successfully removed layer '{layer_id}'")
+            return True
+        except Exception as e:
+            logger.error(f"remove_project_layer: error removing layer '{layer_id}': {e}")
+            return False
+
+    def cleanup_postgresql_virtual_id_layers(self):
+        """
+        Clean up PostgreSQL layers that incorrectly use virtual_id.
+        
+        This is a migration function to fix layers affected by the virtual_id bug
+        where PostgreSQL layers were allowed to use virtual fields that don't exist
+        in the actual database.
+        
+        Returns:
+            list: List of layer IDs that were cleaned up
+        """
+        cleaned_layer_ids = []
+        
+        try:
+            conn = self._safe_spatialite_connect()
+            cur = conn.cursor()
+            
+            # Find all layers with virtual_id as primary key
+            cur.execute("""
+                SELECT DISTINCT layer_id, meta_value 
+                FROM fm_project_layers_properties 
+                WHERE fk_project = ? 
+                  AND meta_key = 'primary_key_name' 
+                  AND meta_value = 'virtual_id'
+            """, (str(self.project_uuid),))
+            
+            problematic_layers = cur.fetchall()
+            
+            for layer_id, _ in problematic_layers:
+                # Check if this is a PostgreSQL layer
+                cur.execute("""
+                    SELECT meta_value 
+                    FROM fm_project_layers_properties 
+                    WHERE fk_project = ? 
+                      AND layer_id = ? 
+                      AND meta_key = 'layer_provider'
+                """, (str(self.project_uuid), layer_id))
+                
+                provider_result = cur.fetchone()
+                if provider_result and provider_result[0] == 'postgresql':
+                    logger.warning(f"Removing corrupted PostgreSQL layer {layer_id} with virtual_id")
+                    
+                    # Delete all properties for this layer
+                    cur.execute("""
+                        DELETE FROM fm_project_layers_properties 
+                        WHERE fk_project = ? AND layer_id = ?
+                    """, (str(self.project_uuid), layer_id))
+                    
+                    cleaned_layer_ids.append(layer_id)
+            
+            conn.commit()
+            cur.close()
+            conn.close()
+            
+            if cleaned_layer_ids:
+                logger.info(f"Cleaned up {len(cleaned_layer_ids)} PostgreSQL layers with virtual_id: {cleaned_layer_ids}")
+            
+        except Exception as e:
+            logger.error(f"Error during PostgreSQL virtual_id cleanup: {e}")
+        
+        return cleaned_layer_ids
+
+    def search_primary_key_from_layer(self, layer):
+        """
+        Search for a primary key field in the layer.
+        
+        Tries in order:
+        1. Layer's declared primary key attributes
+        2. Fields with 'id' in name that have unique values
+        3. Any field with unique values
+        4. Creates a virtual 'virtual_id' field
+        
+        Args:
+            layer (QgsVectorLayer): Layer to search
+            
+        Returns:
+            tuple: (field_name, field_index, field_type, is_numeric) or False if canceled
+        """
+        feature_count = layer.featureCount()
+        layer_provider = layer.providerType()
+        
+        # CRITICAL FIX: For PostgreSQL layers, ALWAYS trust declared primary key
+        # without checking uniqueness to avoid freeze on large tables.
+        # uniqueValues() loads ALL values in memory = freeze on 100k+ rows
+        is_postgresql = (layer_provider == 'postgres')
+        
+        # For PostgreSQL or unknown feature count, trust primary key attributes
+        if feature_count == -1:
+            logger.debug(f"Layer {layer.name()} has unknown feature count (-1), using primary key attributes directly")
+        
+        primary_key_index = layer.primaryKeyAttributes()
+        if len(primary_key_index) > 0:
+            for field_id in primary_key_index:
+                if self.isCanceled():
+                    return False
+                field = layer.fields()[field_id]
+                
+                # CRITICAL: For PostgreSQL, ALWAYS trust declared PK (no uniqueValues check)
+                # PostgreSQL enforces PRIMARY KEY constraint at database level
+                if is_postgresql:
+                    logger.debug(f"PostgreSQL layer: trusting declared primary key '{field.name()}' (no uniqueness check)")
+                    return (field.name(), field_id, field.typeName(), field.isNumeric())
+                
+                # For unknown feature count, trust the declared primary key
+                if feature_count == -1:
+                    logger.debug(f"Using declared primary key: {field.name()}")
+                    return (field.name(), field_id, field.typeName(), field.isNumeric())
+                
+                # CRITICAL FIX: Trust declared primary key without uniqueValues() verification
+                # uniqueValues() is NOT thread-safe and causes access violations in QgsTask
+                # See: https://github.com/qgis/QGIS/issues - layer operations from background threads
+                # If a field is declared as primary key by the provider, trust it
+                logger.debug(f"Trusting declared primary key '{field.name()}' (avoiding thread-unsafe uniqueValues)")
+                return (field.name(), field_id, field.typeName(), field.isNumeric())
+        
+        # If no declared primary key, try to find one
+        # For PostgreSQL or unknown feature count, use first 'id' field without verification
+        logger.debug(f"PostgreSQL layer '{layer.name()}': No declared PRIMARY KEY, searching for ID field manually")
+        logger.debug(f"Available fields: {[f.name() for f in layer.fields()]}")
+        
+        for field in layer.fields():
+            if self.isCanceled():
+                return False
+            field_name_lower = str(field.name()).lower()
+            logger.debug(f"Checking field '{field.name()}' (lowercase: '{field_name_lower}')")
+            
+            # Check if field name contains 'id' or matches common ID patterns
+            if 'id' in field_name_lower:
+                # For PostgreSQL, assume 'id' field is unique (avoid freeze)
+                if is_postgresql:
+                    logger.info(f"PostgreSQL layer '{layer.name()}': Found field with 'id': '{field.name()}', using as primary key")
+                    return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
+                
+                if feature_count == -1:
+                    logger.debug(f"Using field with 'id' in name: {field.name()}")
+                    return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
+                
+                # CRITICAL FIX: Trust 'id' field without uniqueValues() verification
+                # uniqueValues() is NOT thread-safe and causes access violations in QgsTask
+                # Field with 'id' in name is a strong indicator of uniqueness
+                logger.debug(f"Trusting field '{field.name()}' as primary key (avoiding thread-unsafe uniqueValues)")
+                return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
+                
+        # For PostgreSQL without declared PK or 'id' field, use ctid immediately
+        # Don't iterate all fields (would freeze on large tables)
+        if is_postgresql:
+            logger.warning(
+                f"⚠️ Couche PostgreSQL '{layer.name()}' : Aucune clé primaire ou champ 'id' trouvé.\n"
+                f"   FilterMate utilisera 'ctid' (identifiant interne PostgreSQL) avec limitations :\n"
+                f"   - ✅ Filtrage attributaire possible\n"
+                f"   - ✅ Filtrage géométrique basique possible\n"
+                f"   - ❌ Vues matérialisées désactivées (performance réduite)\n"
+                f"   - ❌ Historique de filtres limité\n"
+                f"   Recommandation : Ajoutez une PRIMARY KEY pour performances optimales."
+            )
+            return ('ctid', -1, 'tid', False)
+        
+        # For unknown feature count, use first field
+        if feature_count == -1 and layer.fields().count() > 0:
+            field = layer.fields()[0]
+            logger.debug(f"Using first field as fallback: {field.name()}")
+            return (field.name(), 0, field.typeName(), field.isNumeric())
+        
+        # CRITICAL FIX: For non-PostgreSQL layers without declared PK or 'id' field,
+        # use the first field rather than calling uniqueValues() which is NOT thread-safe
+        # and causes access violations when called from QgsTask background thread.
+        # This is a safe fallback - the first field is often a suitable identifier.
+        if layer.fields().count() > 0:
+            field = layer.fields()[0]
+            logger.debug(f"Using first field as fallback (avoiding thread-unsafe uniqueValues): {field.name()}")
+            return (field.name(), 0, field.typeName(), field.isNumeric())
+        
+        # Should not reach here for PostgreSQL (already handled above)
+        # But keep as safety fallback
+        if is_postgresql:
+            logger.error(f"Unexpected: PostgreSQL layer '{layer.name()}' reached end of search_primary_key_from_layer")
+            return ('ctid', -1, 'tid', False)
+                
+        # For non-PostgreSQL layers (memory, shapefile, etc.), create virtual ID
+        new_field = QgsField('virtual_id', QMetaType.Type.LongLong)
+        layer.addExpressionField('@row_number', new_field)
+        logger.warning(f"Layer {layer.name()}: No unique field found, created virtual_id (only works for non-database layers)")
+        return ('virtual_id', layer.fields().indexFromName('virtual_id'), new_field.typeName(), True)
+
+    def create_spatial_index_for_postgresql_layer(self, layer, layer_props):
+        """
+        Create PostgreSQL spatial indexes (GIST + primary key) with performance optimizations.
+        
+        PERFORMANCE OPTIMIZATIONS (v2.4.0):
+        - Uses connection pooling to avoid connection overhead
+        - Check if indexes already exist before creating (avoids slow CREATE IF NOT EXISTS)
+        - Skip CLUSTER operation at init (very slow on large tables, ~minutes for 100k+ rows)
+        - Only run ANALYZE if table has no statistics (check pg_statistic first)
+        
+        Args:
+            layer (QgsVectorLayer): PostgreSQL layer
+            layer_props (dict): Layer properties with schema, table, geometry field, primary key
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        if layer is None or layer_props is None:
+            return False
+        
+        if "infos" not in layer_props:
+            logger.warning(f"layer_props missing 'infos' dictionary, skipping spatial index creation")
+            return False
+        
+        required_keys = ["layer_schema", "layer_name", "layer_geometry_field", "primary_key_name"]
+        infos = layer_props["infos"]
+        missing_keys = [k for k in required_keys if k not in infos or infos[k] is None]
+        
+        if missing_keys:
+            logger.warning(f"layer_props['infos'] missing required keys: {missing_keys}, skipping spatial index creation")
+            return False
+
+        schema = infos["layer_schema"]
+        table = infos["layer_name"]
+        geometry_field = infos["layer_geometry_field"]
+        primary_key_name = infos["primary_key_name"]
+
+        # PERFORMANCE v2.4.0: Use connection pooling if available
+        use_pooled = CONNECTION_POOL_AVAILABLE and pooled_connection_from_layer is not None
+        
+        if use_pooled:
+            # Use pooled connection (auto-released on exit)
+            try:
+                with pooled_connection_from_layer(layer) as (connexion, source_uri):
+                    if connexion is None:
+                        logger.warning(f"Cannot create spatial index for PostgreSQL layer {layer.name()}: no database connection (pooled)")
+                        return False
+                    return self._create_postgresql_indexes(connexion, schema, table, geometry_field, primary_key_name, layer.name())
+            except Exception as e:
+                logger.error(f"Pooled connection error for spatial index: {e}")
+                # Fallback to non-pooled connection
+                use_pooled = False
+        
+        if not use_pooled:
+            connexion, source_uri = get_datasource_connexion_from_layer(layer)
+            
+            # CRITICAL FIX: Check if connexion is None (PostgreSQL unavailable or connection failed)
+            if connexion is None:
+                logger.warning(f"Cannot create spatial index for PostgreSQL layer {layer.name()}: no database connection")
+                return False
+
+            try:
+                return self._create_postgresql_indexes(connexion, schema, table, geometry_field, primary_key_name, layer.name())
+            finally:
+                try:
+                    connexion.close()
+                except (OSError, AttributeError) as e:
+                    logger.debug(f"Could not close connection: {e}")
+
+        return True
+
+    def _create_postgresql_indexes(self, connexion, schema, table, geometry_field, primary_key_name, layer_name):
+        """
+        Internal method to create PostgreSQL indexes.
+        
+        Args:
+            connexion: Active PostgreSQL connection
+            schema: Schema name
+            table: Table name
+            geometry_field: Geometry column name
+            primary_key_name: Primary key column name
+            layer_name: Layer name for logging
+            
+        Returns:
+            bool: True if successful
+        """
+        try:
+            with connexion.cursor() as cursor:
+                # PERFORMANCE: Check if GIST index already exists before creating
+                gist_index_name = f"{schema}_{table}_{geometry_field}_idx"
+                cursor.execute("""
+                    SELECT 1 FROM pg_indexes 
+                    WHERE schemaname = %s AND tablename = %s AND indexname = %s
+                """, (schema, table, gist_index_name))
+                gist_exists = cursor.fetchone() is not None
+                
+                if not gist_exists:
+                    logger.debug(f"Creating GIST spatial index on {schema}.{table}.{geometry_field}")
+                    cursor.execute(
+                        f'CREATE INDEX {gist_index_name} '
+                        f'ON "{schema}"."{table}" USING GIST ("{geometry_field}");'
+                    )
+                else:
+                    logger.debug(f"GIST index {gist_index_name} already exists, skipping")
+                
+                # PERFORMANCE: Check if primary key index already exists
+                # Note: PostgreSQL auto-creates index for PRIMARY KEY, but not for manual 'id' fields
+                pk_index_name = f"{schema}_{table}_{primary_key_name}_idx"
+                cursor.execute("""
+                    SELECT 1 FROM pg_indexes 
+                    WHERE schemaname = %s AND tablename = %s AND indexname = %s
+                """, (schema, table, pk_index_name))
+                pk_exists = cursor.fetchone() is not None
+                
+                if not pk_exists and primary_key_name != 'ctid':
+                    logger.debug(f"Creating unique index on {schema}.{table}.{primary_key_name}")
+                    try:
+                        cursor.execute(
+                            f'CREATE UNIQUE INDEX {pk_index_name} '
+                            f'ON "{schema}"."{table}" ("{primary_key_name}");'
+                        )
+                    except Exception as e:
+                        # May fail if column has duplicates - not critical
+                        logger.debug(f"Could not create unique index on {primary_key_name}: {e}")
+                else:
+                    logger.debug(f"PK index for {primary_key_name} already exists or not needed, skipping")
+                
+                # PERFORMANCE: Skip CLUSTER at init - it's very slow on large tables
+                # CLUSTER will be done lazily during first filter if beneficial
+                # (Removed: ALTER TABLE ... CLUSTER ON ...)
+                
+                # PERFORMANCE: Only ANALYZE if table has no statistics
+                cursor.execute("""
+                    SELECT 1 FROM pg_statistic s
+                    JOIN pg_class c ON s.starelid = c.oid
+                    JOIN pg_namespace n ON c.relnamespace = n.oid
+                    WHERE n.nspname = %s AND c.relname = %s
+                    LIMIT 1
+                """, (schema, table))
+                has_stats = cursor.fetchone() is not None
+                
+                if not has_stats:
+                    logger.debug(f"Running ANALYZE on {schema}.{table} (no statistics found)")
+                    cursor.execute(f'ANALYZE "{schema}"."{table}";')
+                else:
+                    logger.debug(f"Table {schema}.{table} already has statistics, skipping ANALYZE")
+                
+            connexion.commit()
+            logger.info(f"PostgreSQL layer {layer_name}: spatial index setup completed")
+        except Exception as e:
+            logger.warning(f"Error creating spatial index for PostgreSQL layer {layer_name}: {e}")
+            return False
+
+        if self.isCanceled():
+            return False
+        
+        return True
+
+    def create_spatial_index_for_layer(self, layer):
+        """
+        Create QGIS spatial index for a layer.
+        
+        Args:
+            layer (QgsVectorLayer): Layer to index
+            
+        Returns:
+            bool: True if successful or index already exists, False if canceled
+        """
+        try:
+            if not layer.isSpatial():
+                return True
+            
+            if layer.hasSpatialIndex() != QgsFeatureSource.SpatialIndexNotPresent:
+                return True
+            
+            if layer.featureCount() == 0:
+                return True
+            
+            # Check for at least one valid geometry
+            has_valid_geom = False
+            for feature in layer.getFeatures():
+                if feature.hasGeometry() and not feature.geometry().isNull():
+                    has_valid_geom = True
+                    break
+                if self.isCanceled():
+                    return False
+            
+            if not has_valid_geom:
+                return True
+            
+            # Create spatial index
+            alg_params_createspatialindex = {"INPUT": layer}
+            processing.run('qgis:createspatialindex', alg_params_createspatialindex)
+            
+            if self.isCanceled():
+                return False
+        
+        except Exception as e:
+            safe_log(logger, logging.WARNING, 
+                    f"Failed to create spatial index for layer {layer.name()}: {str(e)}")
+    
+        return True
+
+    def save_variables_from_layer(self, layer, layer_properties=[]):
+        """
+        Save layer variables to Spatialite database.
+        
+        Args:
+            layer (QgsVectorLayer): Layer to save variables for
+            layer_properties (list): List of (key_group, key) tuples, or empty for all properties
+        """
+        layer_all_properties_flag = False
+        if not isinstance(layer, QgsVectorLayer):
+            logger.error(f"save_variables_from_layer: Expected QgsVectorLayer, got {type(layer).__name__}")
+            return
+
+        if len(layer_properties) == 0:
+            layer_all_properties_flag = True
+
+        if layer.id() in self.PROJECT_LAYERS.keys():
+            conn = self._safe_spatialite_connect()
+            cur = conn.cursor()
+
+            try:
+                if layer_all_properties_flag is True:
+                    for key_group in ("infos", "exploring", "filtering"):
+                        for key, value in self.PROJECT_LAYERS[layer.id()][key_group].items():
+                            value_typped, type_returned = self.return_typped_value(value, 'save')
+                            if type_returned in (list, dict):
+                                value_typped = json.dumps(value_typped)
+                            variable_key = f"filterMate_{key_group}_{key}"
+                            # THREAD SAFETY (v2.3.10): Queue for main thread execution
+                            self._deferred_layer_variables.append((layer.id(), variable_key, value_typped))
+                            self.savingLayerVariable.emit(layer, variable_key, value_typped, type_returned)
+                            cur.execute(
+                                """INSERT INTO fm_project_layers_properties 
+                                   VALUES(?, datetime(), ?, ?, ?, ?, ?)""",
+                                (
+                                    str(uuid.uuid4()),
+                                    str(self.project_uuid),
+                                    layer.id(),
+                                    key_group,
+                                    key,
+                                    value_typped.replace("\'", "\'\'") if type_returned in (str, dict, list) else value_typped
+                                )
+                            )
+                            conn.commit()
+                else:
+                    for layer_property in layer_properties:
+                        if layer_property[0] in ("infos", "exploring", "filtering"):
+                            if layer_property[0] in self.PROJECT_LAYERS[layer.id()] and layer_property[1] in self.PROJECT_LAYERS[layer.id()][layer_property[0]]:
+                                value = self.PROJECT_LAYERS[layer.id()][layer_property[0]][layer_property[1]]
+                                value_typped, type_returned = self.return_typped_value(value, 'save')
+                                if type_returned in (list, dict):
+                                    value_typped = json.dumps(value_typped)
+                                variable_key = f"filterMate_{layer_property[0]}_{layer_property[1]}"
+                                # THREAD SAFETY (v2.3.10): Queue for main thread execution
+                                self._deferred_layer_variables.append((layer.id(), variable_key, value_typped))
+                                self.savingLayerVariable.emit(layer, variable_key, value_typped, type_returned)
+                                cur.execute(
+                                    """INSERT INTO fm_project_layers_properties 
+                                       VALUES(?, datetime(), ?, ?, ?, ?, ?)""",
+                                    (
+                                        str(uuid.uuid4()),
+                                        str(self.project_uuid),
+                                        layer.id(),
+                                        layer_property[0],
+                                        layer_property[1],
+                                        value_typped.replace("\'", "\'\'") if type_returned in (str, dict, list) else value_typped
+                                    )
+                                )
+                                conn.commit()
+            finally:
+                # STABILITY FIX: Ensure DB connection is always closed
+                try:
+                    cur.close()
+                except Exception:
+                    pass
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    def remove_variables_from_layer(self, layer, layer_properties=[]):
+        """
+        Remove layer variables from Spatialite database.
+        
+        Args:
+            layer (QgsVectorLayer): Layer to remove variables from
+            layer_properties (list): List of (key_group, key) tuples, or empty for all properties
+        """
+        layer_all_properties_flag = False
+        if not isinstance(layer, QgsVectorLayer):
+            logger.error(f"remove_variables_from_layer: Expected QgsVectorLayer, got {type(layer).__name__}")
+            return
+
+        if len(layer_properties) == 0:
+            layer_all_properties_flag = True
+
+        if layer.id() in self.PROJECT_LAYERS.keys():
+            conn = self._safe_spatialite_connect()
+            cur = conn.cursor()
+
+            try:
+                if layer_all_properties_flag is True:
+                    cur.execute(
+                        """DELETE FROM fm_project_layers_properties 
+                           WHERE fk_project = ? AND layer_id = ?""",
+                        (str(self.project_uuid), layer.id())
+                    )
+                    conn.commit()
+                    # THREAD SAFETY (v2.3.10): Queue for main thread execution (clear all)
+                    self._deferred_layer_variables.append((layer.id(), None, None))
+                else:
+                    for layer_property in layer_properties:
+                        if layer_property[0] in ("infos", "exploring", "filtering"):
+                            if layer_property[0] in self.PROJECT_LAYERS[layer.id()] and layer_property[1] in self.PROJECT_LAYERS[layer.id()][layer_property[0]]:
+                                cur.execute(
+                                    """DELETE FROM fm_project_layers_properties  
+                                       WHERE fk_project = ? AND layer_id = ? AND meta_type = ? AND meta_key = ?""",
+                                    (str(self.project_uuid), layer.id(), layer_property[0], layer_property[1])
+                                )
+                                conn.commit()
+                                variable_key = f"filterMate_{layer_property[0]}_{layer_property[1]}"
+                                # THREAD SAFETY (v2.3.10): Queue for main thread execution
+                                self._deferred_layer_variables.append((layer.id(), variable_key, ''))
+                                self.removingLayerVariable.emit(layer, variable_key)
+            finally:
+                # STABILITY FIX: Ensure DB connection is always closed
+                try:
+                    cur.close()
+                except Exception:
+                    pass
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    def save_style_from_layer_id(self, layer_id):
+        """
+        Save layer style to database or file.
+        
+        Args:
+            layer_id (str): Layer ID to save style for
+            
+        Returns:
+            bool: True (always, errors are logged but not propagated)
+        """
+        if layer_id in self.project_layers.keys():
+            if "infos" not in self.project_layers[layer_id]:
+                logger.warning(f"Layer {layer_id} missing 'infos' dictionary, skipping style save")
+                return True
+            
+            if "layer_name" not in self.project_layers[layer_id]["infos"]:
+                logger.warning(f"Layer {layer_id} missing 'layer_name' in infos, skipping style save")
+                return True
+
+            layers = [layer for layer in self.PROJECT.mapLayersByName(self.project_layers[layer_id]["infos"]["layer_name"]) if layer.id() == layer_id]
+            if len(layers) > 0:
+                layer = layers[0]
+                try:
+                    layer.deleteStyleFromDatabase(name=f"FilterMate_style_{layer.name()}")
+                    result = layer.saveStyleToDatabase(name=f"FilterMate_style_{layer.name()}", description=f"FilterMate style for {layer.name()}", useAsDefault=True, uiFileContent="") 
+                except (RuntimeError, AttributeError) as e:
+                    logger.debug(f"Could not save style to database for layer {layer.name()}, falling back to file: {e}")
+                    layer_path = layer.source().split('|')[0]
+                    layer.saveNamedStyle(os.path.normcase(os.path.join(os.path.split(layer_path)[0], f'FilterMate_style_{layer.name()}.qml')))
+
+        return True
+
+    def remove_variables_from_all_layers(self):
+        """
+        Remove variables from all layers in the project.
+        
+        Returns:
+            bool: True if successful, False if canceled or failed
+        """
+        if len(self.project_layers) == 0:
+            if len(self.layers) > 0:
+                for layer_obj in self.layers:
+                    if isinstance(layer_obj, tuple) and len(list(layer_obj)) == 3:
+                        layer = layer_obj[0]
+                    elif isinstance(layer_obj, QgsVectorLayer):
+                        layer = layer_obj
+
+                    result_layers = [result_layer for result_layer in self.PROJECT.mapLayersByName(layer.name())]
+                    if len(result_layers) > 0:
+                        for result_layer in result_layers:
+                            # THREAD SAFETY (v2.3.10): Queue for main thread execution
+                            self._deferred_layer_variables.append((result_layer.id(), None, None))
+                            if self.isCanceled():
+                                return False
+                    if self.isCanceled():
+                        return False
+            else:
+                return False
+        else:
+            for layer_id in self.project_layers:
+                if "infos" not in self.project_layers[layer_id]:
+                    continue
+                if "layer_name" not in self.project_layers[layer_id]["infos"]:
+                    continue
+
+                result_layers = [layer for layer in self.PROJECT.mapLayersByName(self.project_layers[layer_id]["infos"]["layer_name"]) if layer.id() == layer_id]
+                if len(result_layers) > 0:
+                    result_layer = result_layers[0]
+                    # THREAD SAFETY (v2.3.10): Queue for main thread execution
+                    self._deferred_layer_variables.append((result_layer.id(), None, None))
+
+                if self.isCanceled():
+                    return False
+
+        return True
+
+    def select_properties_from_spatialite(self, layer_id):
+        """
+        Select layer properties from Spatialite database.
+        
+        Uses retry logic to handle database lock contention from concurrent access.
+        
+        Args:
+            layer_id (str): Layer ID to select properties for
+            
+        Returns:
+            list: List of (meta_type, meta_key, meta_value) tuples
+        """
+        def do_select():
+            conn = None
+            try:
+                conn = self._safe_spatialite_connect()
+                cur = conn.cursor()
+                cur.execute(
+                    """SELECT meta_type, meta_key, meta_value FROM fm_project_layers_properties  
+                       WHERE fk_project = ? and layer_id = ?""",
+                    (str(self.project_uuid), layer_id)
+                )
+                results = cur.fetchall()
+                logger.debug(f"📖 Loaded {len(results)} properties from DB for layer {layer_id}")
+                cur.close()
+                return results
+            finally:
+                if conn:
+                    try:
+                        conn.close()
+                    except (AttributeError, OSError, sqlite3.Error):
+                        pass
+        
+        return sqlite_execute_with_retry(
+            do_select, 
+            operation_name=f"select properties for layer {layer_id}"
+        )
+    
+    def insert_properties_to_spatialite(self, layer_id, layer_props):
+        """
+        Insert layer properties into Spatialite database.
+        
+        Uses retry logic to handle database lock contention from concurrent access.
+        
+        Args:
+            layer_id (str): Layer ID
+            layer_props (dict): Dictionary of layer properties to insert
+        """
+        def do_insert():
+            conn = None
+            try:
+                conn = self._safe_spatialite_connect()
+                # Begin explicit transaction for better lock management
+                conn.execute('BEGIN IMMEDIATE')
+                cur = conn.cursor()
+                for key_group in layer_props:
+                    for key in layer_props[key_group]:
+                        value_typped, type_returned = self.return_typped_value(layer_props[key_group][key], 'save')
+                        if type_returned in (list, dict):
+                            value_typped = json.dumps(value_typped)
+                        cur.execute(
+                            """INSERT INTO fm_project_layers_properties 
+                               VALUES(?, datetime(), ?, ?, ?, ?, ?)""",
+                            (
+                                str(uuid.uuid4()),
+                                str(self.project_uuid),
+                                layer_id,
+                                key_group,
+                                key,
+                                value_typped.replace("\'", "\'\'") if type_returned in (str, dict, list) else value_typped
+                            )
+                        )
+                conn.commit()
+                cur.close()
+                return True
+            except (sqlite3.Error, OSError, ValueError) as e:
+                logger.debug(f"Error inserting properties to Spatialite: {e}")
+                if conn:
+                    try:
+                        conn.rollback()
+                    except (AttributeError, OSError, sqlite3.Error):
+                        pass
+                raise
+            finally:
+                if conn:
+                    try:
+                        conn.close()
+                    except (AttributeError, OSError, sqlite3.Error):
+                        pass
+        
+        sqlite_execute_with_retry(
+            do_insert, 
+            operation_name=f"insert properties for layer {layer_id}"
+        )
+
+    def can_cast(self, dest_type, source_value):
+        """
+        Check if a value can be cast to a destination type.
+        Delegates to centralized type_utils.can_cast().
+        
+        Args:
+            dest_type (type): Target type
+            source_value: Value to cast
+            
+        Returns:
+            bool: True if castable, False otherwise
+        """
+        return can_cast(dest_type, source_value)
+
+    def return_typped_value(self, value_as_string, action=None):
+        """
+        Convert string value to typed value with type detection.
+        Delegates to centralized type_utils.return_typed_value().
+        
+        Args:
+            value_as_string: String value to convert
+            action (str): 'save' or 'load' to handle JSON serialization
+            
+        Returns:
+            tuple: (typed_value, type_returned)
+        """
+        return return_typed_value(value_as_string, action)
+
+    def cancel(self):
+        """Handle task cancellation.
+        
+        CRASH FIX (v2.8.6): Check if QGIS is alive before calling QgsMessageLog.
+        During QGIS shutdown (QgsTaskManager::cancelAll), the C++ objects may
+        already be destroyed, causing Windows fatal access violation.
+        
+        CRASH FIX (v2.8.7): Strengthened protection - skip ALL logging during cancel.
+        The is_qgis_alive() check is not sufficient because QgsMessageLog may be
+        destroyed before QApplication during QgsApplication::~QgsApplication().
+        Since cancel() is often called during shutdown, we now avoid QgsMessageLog
+        entirely in this method to prevent the Windows fatal exception.
+        """
+        # CRASH FIX (v2.8.7): Do NOT use QgsMessageLog in cancel() method.
+        # During QGIS shutdown, QgsTaskManager::cancelAll() is called, and
+        # QgsMessageLog may already be destroyed even if QApplication exists.
+        # Use Python logger only (file-based, safe during shutdown).
+        try:
+            logger.info(f'"{self.description()}" task was canceled')
+        except Exception:
+            # Even Python logging might fail during shutdown, ignore silently
+            pass
+        
+        # Call parent cancel without any QGIS API calls
+        super().cancel()
+
+    def finished(self, result):
+        """
+        Handle task completion and emit results.
+        
+        CRITICAL: Signals must be emitted and disconnected BEFORE displaying messages
+        to avoid "wrapped C/C++ object has been deleted" errors.
+        
+        STABILITY FIX v2.3.9: Uses safe_emit() and safe_disconnect() from object_safety
+        module to prevent access violations on certain machines.
+        
+        THREAD SAFETY FIX v2.3.10: Applies deferred layer variable operations that were
+        queued during run() execution. QgsExpressionContextUtils must be called from
+        the main GUI thread to avoid access violations.
+        
+        Args:
+            result (bool): Task result
+        """
+        logger.info(f"LayersManagementEngineTask.finished(): task_action={self.task_action}, result={result}, project_layers count={len(self.project_layers) if self.project_layers else 0}")
+        
+        # THREAD SAFETY (v2.3.10): Apply deferred layer variable operations
+        # These operations MUST happen in the main thread (finished() runs in main thread)
+        # CRASH FIX (v2.3.12): Use safe wrapper functions that re-fetch and validate
+        # the layer immediately before C++ operations to prevent access violations
+        # CRASH FIX (v2.4.7): Process events BEFORE applying layer variables to
+        # allow any pending layer deletions to complete, reducing race condition window
+        # CRASH FIX (v2.4.8): Check if QGIS is alive before any layer operations
+        # CRASH FIX (v2.4.9): Use QTimer.singleShot(0) to defer layer variable operations
+        # to the next event loop iteration. This ensures all pending layer deletions
+        # are fully processed before we access the layers, preventing access violations.
+        if self._deferred_layer_variables:
+            # Early exit if QGIS is shutting down - prevents access violations
+            if not is_qgis_alive():
+                logger.debug("QGIS is not alive, skipping deferred layer variable operations")
+                self._deferred_layer_variables.clear()
+            else:
+                logger.debug(f"Scheduling {len(self._deferred_layer_variables)} deferred layer variable operations")
+                
+                # Copy the list to avoid modification during iteration
+                # and clear immediately so task can be fully cleaned up
+                operations_to_apply = list(self._deferred_layer_variables)
+                self._deferred_layer_variables.clear()
+                
+                # CRASH FIX (v2.4.9): Use QTimer.singleShot(0) to defer operations
+                # to the next event loop cycle. This provides a complete "round-trip"
+                # through Qt's event loop, ensuring all pending layer deletions
+                # are fully processed before we touch any layers.
+                # On Windows, access violations from deleted C++ objects are FATAL
+                # and cannot be caught by Python's try/except.
+                def apply_deferred_layer_variables():
+                    """Apply layer variables in next event loop iteration."""
+                    try:
+                        # Final QGIS alive check before operations
+                        if not is_qgis_alive():
+                            logger.debug("QGIS not alive in deferred callback, skipping layer variables")
+                            return
+                        
+                        for layer_id, variable_key, value in operations_to_apply:
+                            # Re-check QGIS alive status for each operation
+                            if not is_qgis_alive():
+                                logger.debug("QGIS became unavailable during layer variable loop")
+                                break
+                            
+                            if variable_key is None:
+                                # Clear all layer variables using safe wrapper
+                                if not safe_set_layer_variables(layer_id, {}):
+                                    logger.debug(f"Could not clear layer variables for {layer_id} (layer may be deleted)")
+                            else:
+                                # Set individual variable using safe wrapper
+                                if not safe_set_layer_variable(layer_id, variable_key, value):
+                                    logger.debug(f"Could not set layer variable {variable_key} for {layer_id} (layer may be deleted)")
+                    except Exception as e:
+                        logger.warning(f"Error in deferred layer variable callback: {e}")
+                
+                # Schedule for next event loop iteration (0ms timeout)
+                QTimer.singleShot(0, apply_deferred_layer_variables)
+        
+        result_action = None
+        message_category = MESSAGE_TASKS_CATEGORIES[self.task_action]
+
+        if self.exception is None:
+            if result is None:
+                # STABILITY FIX: Use safe_emit and safe_disconnect
+                if self.project_layers is not None:
+                    safe_emit(self.resultingLayers, self.project_layers)
+                safe_disconnect(self.resultingLayers)
+                
+                # Task was likely canceled by user - log only, no message bar notification
+                logger.info('Task completed with no result (likely canceled by user)')
+            else:
+                # CRITICAL: Emit signal BEFORE showing message using safe_emit
+                if self.project_layers is not None:
+                    logger.info(f"Emitting resultingLayers signal with {len(self.project_layers)} layers")
+                    if safe_emit(self.resultingLayers, self.project_layers):
+                        logger.info("resultingLayers signal emitted successfully")
+                    else:
+                        logger.warning("resultingLayers signal emission failed (receiver may be deleted)")
+                
+                if message_category == 'ManageLayers':
+                    if self.task_action == 'add_layers':
+                        result_action = f'{len(self.layers)} layer(s) added'
+                    elif self.task_action == 'remove_layers':
+                        result_action = f'{len(list(self.project_layers.keys())) - len(self.layers)} layer(s) removed'
+                    # Message bar notification removed - internal operation, too verbose for UX
+                    logger.info(f'Layers list has been updated: {result_action}')
+                elif message_category == 'ManageLayersProperties':
+                    if self.layer_all_properties_flag is True:    
+                        if self.task_action == 'save_layer_variable':
+                            result_action = f'All properties saved for {self.layer_id} layer'
+                        elif self.task_action == 'remove_layer_variable':
+                            result_action = f'All properties removed for {self.layer_id} layer'
+                        # Message bar notification removed - internal operation, too verbose for UX
+                        logger.info(f'Layers properties updated: {result_action}')
+                
+                # STABILITY FIX: Use safe_disconnect
+                safe_disconnect(self.resultingLayers)
+        else:
+            # STABILITY FIX: Use safe_disconnect even on error
+            safe_disconnect(self.resultingLayers)
+            
+            iface.messageBar().pushMessage(
+                message_category,
+                f"Exception: {self.exception}",
+                Qgis.Critical
+            )
+            raise self.exception
