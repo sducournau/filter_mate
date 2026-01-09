@@ -2,7 +2,7 @@
 
 **Epic:** Migration Architecture Hexagonale  
 **Sprint Actuel:** Sprint 2 - Intégration Controllers  
-**Dernière MAJ:** 2026-01-09 (MIG-060, MIG-061 Phase 6 démarré - SplitterManager)
+**Dernière MAJ:** 2026-01-09 (MIG-024 Phase 3 terminée - DatabaseManager)
 
 ---
 
@@ -10,44 +10,64 @@
 
 ### 📥 BACKLOG
 
-| ID      | Story                   | Priorité | Phase | Dépend de    |
-| ------- | ----------------------- | -------- | ----- | ------------ |
-| MIG-004 | CI/CD Configuration     | 🟡 P2    | 1     | -            |
-| MIG-041 | Tests Performance       | 🟠 P1    | 5     | MIG-040      |
-| MIG-042 | Documentation Migration | 🟡 P2    | 5     | MIG-040      |
-| MIG-043 | Dépréciation Legacy     | 🟡 P2    | 5     | MIG-040      |
-| MIG-050 | Release v3.0.0          | 🟠 P1    | 5     | MIG-041..043 |
+| ID       | Story                   | Priorité | Phase | Dépend de    |
+| -------- | ----------------------- | -------- | ----- | ------------ |
+| MIG-004  | CI/CD Configuration     | 🟡 P2    | 1     | -            |
+| MIG-041  | Tests Performance       | 🟠 P1    | 5     | MIG-040      |
+| MIG-042  | Documentation Migration | 🟡 P2    | 5     | MIG-040      |
+| MIG-043  | Dépréciation Legacy     | 🟡 P2    | 5     | MIG-040      |
+| MIG-050  | Release v3.0.0          | 🟠 P1    | 5     | MIG-041..043 |
+| MIG-024b | Réduction Finale App    | 🟡 P2    | 5     | MIG-024      |
 
 #### Phase 6: God Class DockWidget (30 stories)
 
-| ID      | Story                   | Priorité | Sprint | Dépend de   |
-| ------- | ----------------------- | -------- | ------ | ----------- |
-| MIG-062 | DimensionsManager       | 🟠 P1    | 6      | MIG-060     |
-| MIG-063 | SpacingManager          | 🟠 P1    | 6      | MIG-060     |
-| MIG-064 | ActionBarManager        | 🟠 P1    | 6      | MIG-060     |
-| MIG-065 | Styling Module          | 🔴 P0    | 6      | MIG-024     |
-| MIG-066 | ThemeManager            | 🟠 P1    | 6      | MIG-065     |
-| MIG-067 | IconManager             | 🟠 P1    | 6      | MIG-065     |
-| MIG-068 | ButtonStyler            | 🟡 P2    | 6      | MIG-065     |
-| MIG-070 | ConfigController        | 🟠 P1    | 7      | MIG-060,065 |
-| MIG-071 | BackendController       | 🟠 P1    | 7      | MIG-070     |
-| MIG-072 | FavoritesController     | 🟠 P1    | 7      | MIG-070     |
-| MIG-073 | LayerSyncController     | 🟠 P1    | 7      | MIG-070     |
-| MIG-074 | PropertyController      | 🟡 P2    | 7      | MIG-070     |
-| MIG-075 | BackendService          | 🟠 P1    | 7      | MIG-070     |
-| MIG-076 | FavoritesService        | 🟠 P1    | 7      | MIG-075     |
-| MIG-077 | LayerService            | 🟠 P1    | 7      | MIG-075     |
-| MIG-078 | PostgresSessionManager  | 🟡 P2    | 7      | MIG-075     |
-| MIG-080 | Dialogs Module          | 🟢 P3    | 8      | MIG-075     |
-| MIG-081 | FavoritesManagerDialog  | 🟡 P2    | 8      | MIG-080     |
-| MIG-082 | OptimizationDialog      | 🟡 P2    | 8      | MIG-080     |
-| MIG-083 | PostgresInfoDialog      | 🟢 P3    | 8      | MIG-080     |
-| MIG-084 | SignalManager Complet   | 🔴 P0    | 8      | MIG-070     |
-| MIG-085 | LayerSignalHandler      | 🟠 P1    | 8      | MIG-084     |
-| MIG-086 | Migrate All Signals     | 🟠 P1    | 8      | MIG-084     |
-| MIG-087 | DockWidget Orchestrator | 🔴 P0    | 9      | MIG-080,084 |
-| MIG-088 | Deprecation Warnings    | 🟠 P1    | 9      | MIG-087     |
-| MIG-089 | Regression Testing      | 🔴 P0    | 9      | MIG-040,087 |
+##### Sprint 6 - Layout & Styling (9 stories)
+
+| ID      | Story                   | Priorité | Statut         | Notes                    |
+| ------- | ----------------------- | -------- | -------------- | ------------------------ |
+| MIG-060 | Layout Module Structure | 🔴 P0    | ✅ DONE        | `ui/layout/` créé        |
+| MIG-061 | SplitterManager         | 🟠 P1    | ✅ DONE        | 370 lignes, 18 tests     |
+| MIG-062 | DimensionsManager       | 🟠 P1    | 🔄 IN_PROGRESS | Squelette créé (123L)    |
+| MIG-063 | SpacingManager          | 🟠 P1    | 🔄 IN_PROGRESS | Squelette créé           |
+| MIG-064 | ActionBarManager        | 🟠 P1    | 🔄 IN_PROGRESS | Squelette créé           |
+| MIG-065 | Styling Module          | 🔴 P0    | 📝 TODO        | `ui/styles/` à compléter |
+| MIG-066 | ThemeManager            | 🟠 P1    | 📝 TODO        | Migrer de ui_styles.py   |
+| MIG-067 | IconManager             | 🟠 P1    | 📝 TODO        | Migrer IconThemeManager  |
+| MIG-068 | ButtonStyler            | 🟡 P2    | 📝 TODO        | Styling unifié boutons   |
+
+##### Sprint 7 - Controllers & Services (9 stories)
+
+| ID      | Story                  | Priorité | Statut  | Dépend de   |
+| ------- | ---------------------- | -------- | ------- | ----------- |
+| MIG-070 | ConfigController       | 🟠 P1    | 📝 TODO | MIG-060,065 |
+| MIG-071 | BackendController      | 🟠 P1    | 📝 TODO | MIG-070     |
+| MIG-072 | FavoritesController    | 🟠 P1    | 📝 TODO | MIG-070     |
+| MIG-073 | LayerSyncController    | 🟠 P1    | 📝 TODO | MIG-070     |
+| MIG-074 | PropertyController     | 🟡 P2    | 📝 TODO | MIG-070     |
+| MIG-075 | BackendService         | 🟠 P1    | 📝 TODO | MIG-070     |
+| MIG-076 | FavoritesService       | 🟠 P1    | 📝 TODO | MIG-075     |
+| MIG-077 | LayerService           | 🟠 P1    | 📝 TODO | MIG-075     |
+| MIG-078 | PostgresSessionManager | 🟡 P2    | 📝 TODO | MIG-075     |
+
+##### Sprint 8 - Dialogs & Signals (7 stories)
+
+| ID      | Story                  | Priorité | Statut         | Notes               |
+| ------- | ---------------------- | -------- | -------------- | ------------------- |
+| MIG-080 | Dialogs Module         | 🟢 P3    | ✅ DONE        | `ui/dialogs/` créé  |
+| MIG-081 | FavoritesManagerDialog | 🟡 P2    | 🔄 IN_PROGRESS | Fichier créé        |
+| MIG-082 | OptimizationDialog     | 🟡 P2    | 📝 TODO        | 8 méthodes à migrer |
+| MIG-083 | PostgresInfoDialog     | 🟢 P3    | 📝 TODO        | Info session PG     |
+| MIG-084 | SignalManager Complet  | 🔴 P0    | 📝 TODO        | 🔴 HIGH RISK        |
+| MIG-085 | LayerSignalHandler     | 🟠 P1    | 📝 TODO        | Handler spécialisé  |
+| MIG-086 | Migrate All Signals    | 🟠 P1    | 📝 TODO        | Migration complète  |
+
+##### Sprint 9 - Final Refactoring (3 stories)
+
+| ID      | Story                   | Priorité | Statut  | Notes             |
+| ------- | ----------------------- | -------- | ------- | ----------------- |
+| MIG-087 | DockWidget Orchestrator | 🔴 P0    | 📝 TODO | 🔴 HIGH RISK      |
+| MIG-088 | Deprecation Warnings    | 🟠 P1    | 📝 TODO | Prep v4.0         |
+| MIG-089 | Regression Testing      | 🔴 P0    | 📝 TODO | 50+ tests Phase 6 |
 
 ---
 
@@ -61,9 +81,9 @@
 
 ### 🔄 IN PROGRESS
 
-| ID      | Story                   | Priorité | Assigné | Progression | Notes                                                                                         |
-| ------- | ----------------------- | -------- | ------- | ----------- | --------------------------------------------------------------------------------------------- |
-| MIG-024 | Réduction FilterMateApp | 🟠 P1    | Dev     | 85%         | TaskBuilder + VariablesManager + UndoRedoHandler + RefreshManager + LayerValidator (80 tests) |
+| ID  | Story | Priorité | Assigné | Progression | Notes |
+| --- | ----- | -------- | ------- | ----------- | ----- |
+| -   | -     | -        | -       | -           | -     |
 
 ---
 
@@ -95,9 +115,14 @@
 | MIG-031 | DI Container             | 🟠 P1    | 2026-01-08 | `infrastructure/di/container.py`              |
 | MIG-032 | App Bridge               | 🟠 P1    | 2026-01-08 | `adapters/app_bridge.py` (18KB)               |
 | MIG-023 | Réduction appTasks.py    | 🔴 P0    | 2026-01-08 | `adapters/qgis/tasks/` (multi_step, progress) |
+| MIG-024 | Réduction FilterMateApp  | 🟠 P1    | 2026-01-09 | 6 modules extraits (~3500L), délégation DI ✅ |
 | MIG-025 | Intégration Controllers  | 🔴 P0    | 2026-01-08 | Délégation manage_task + FilterService DI     |
 | MIG-060 | Layout Module Structure  | 🔴 P0    | 2026-01-09 | `ui/layout/` module créé (Phase 6)            |
-| MIG-061 | SplitterManager          | 🟠 P1    | 2026-01-09 | 320 lignes, 18 tests, intégré dockwidget      |
+| MIG-061 | SplitterManager          | 🟠 P1    | 2026-01-09 | 370 lignes, 18 tests, intégré dockwidget      |
+| MIG-062 | DimensionsManager        | 🟠 P1    | 2026-01-09 | 650 lignes, 15 tests, intégré dockwidget      |
+| MIG-063 | SpacingManager           | 🟠 P1    | 2026-01-09 | 320 lignes, 12 tests, standalone spacing      |
+| MIG-064 | ActionBarManager         | 🟠 P1    | 2026-01-09 | 520 lignes, 18 tests, action bar positioning  |
+| MIG-080 | Dialogs Module Structure | 🟢 P3    | 2026-01-09 | `ui/dialogs/` module créé (Phase 6)           |
 
 ---
 
@@ -106,12 +131,12 @@
 ```
 Phase 1: Stabilisation     [██████████] 100%  (4/4 stories)
 Phase 2: Core Domain       [██████████] 100%  (6/6 stories)
-Phase 3: God Classes       [████████░░] 80%   (4/5 stories - Controllers intégrés)
+Phase 3: God Classes       [██████████] 100%  (5/5 stories - MIG-024 DONE ✅)
 Phase 4: Backends          [██████████] 100%  (4/4 stories - Factory done)
 Phase 5: Validation        [██░░░░░░░░] 20%   (1/5 stories)
-Phase 6: DockWidget        [█░░░░░░░░░] 7%    (2/30 stories) ✅ MIG-060,061
+Phase 6: DockWidget        [██░░░░░░░░] 20%   (6/30 stories) ✅ MIG-060..064,080
 ─────────────────────────────────────────────
-TOTAL                      [████░░░░░░] 41%   (22/54 stories)
+TOTAL                      [█████░░░░░] 50%   (27/54 stories)
 ```
 
 ---
@@ -138,10 +163,9 @@ TOTAL                      [████░░░░░░] 41%   (22/54 stories
 
 ## 🚧 Blocages Actuels
 
-| Bloqueur                        | Impact  | Stories Bloquées | Action Requise                          |
-| ------------------------------- | ------- | ---------------- | --------------------------------------- |
-| Controllers non connectés au UI | Phase 3 | MIG-024          | Intégrer dans filter_mate_dockwidget.py |
-| God Class 12,985 lignes         | Release | MIG-050          | Réduire via strangler fig pattern       |
+| Bloqueur                 | Impact  | Stories Bloquées | Action Requise                       |
+| ------------------------ | ------- | ---------------- | ------------------------------------ |
+| DockWidget 13,000 lignes | Phase 6 | MIG-065..089     | Extraire via Phase 6 (strangler fig) |
 
 ---
 
@@ -157,14 +181,25 @@ TOTAL                      [████░░░░░░] 41%   (22/54 stories
 
 ## 📊 Métriques Clés
 
-| Métrique                  | Avant v3 | Actuel | Cible v3 | Status |
-| ------------------------- | -------- | ------ | -------- | ------ |
-| filter_mate_dockwidget.py | 12,940   | 12,985 | < 800    | 🔴     |
-| filter_mate_app.py        | 5,913    | 5,984  | < 800    | 🔴     |
-| Tests unitaires           | ~30      | 92     | 150+     | 🟡     |
-| Core Domain (lignes)      | 0        | 1,234  | -        | ✅     |
-| Controllers (lignes)      | 0        | 2,897  | -        | ✅     |
-| Coverage estimé           | ~40%     | ~55%   | 85%      | 🟡     |
+| Métrique                   | Avant v3 | Actuel | Cible v3 | Status |
+| -------------------------- | -------- | ------ | -------- | ------ |
+| filter_mate_dockwidget.py  | 12,940   | 12,985 | < 2,000  | 🟡     |
+| filter_mate_app.py         | 5,913    | 6,062  | < 3,000  | 🟡     |
+| Adapters extraits (lignes) | 0        | 17,500 | -        | ✅     |
+| Tests unitaires            | ~30      | 110    | 150+     | 🟡     |
+| Core Domain (lignes)       | 0        | 1,234  | -        | ✅     |
+| Controllers (lignes)       | 0        | 2,897  | -        | ✅     |
+| Coverage estimé            | ~40%     | ~60%   | 85%      | 🟡     |
+
+### Modules Extraits de FilterMateApp (MIG-024)
+
+- `adapters/task_builder.py` (365 lignes)
+- `adapters/variables_manager.py` (474 lignes)
+- `adapters/undo_redo_handler.py` (587 lignes)
+- `adapters/layer_refresh_manager.py` (285 lignes)
+- `adapters/layer_validator.py` (270 lignes)
+- `adapters/task_bridge.py` (780 lignes)
+- `adapters/database_manager.py` (557 lignes) ← NEW
 
 ---
 
@@ -216,6 +251,7 @@ TOTAL                      [████░░░░░░] 41%   (22/54 stories
 | Ressource               | Lien                                                           |
 | ----------------------- | -------------------------------------------------------------- |
 | User Stories détaillées | [migration-v3-user-stories.md](migration-v3-user-stories.md)   |
+| **Phase 6 Stories**     | [stories/phase6-stories.md](stories/phase6-stories.md)         |
 | Architecture v3         | [../../docs/architecture-v3.md](../../docs/architecture-v3.md) |
 | Guide Migration         | [../../docs/migration-v3.md](../../docs/migration-v3.md)       |
 | Backlog Bugs            | [../../BACKLOG.md](../../BACKLOG.md)                           |

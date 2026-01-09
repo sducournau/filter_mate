@@ -93,12 +93,16 @@ class SplitterManager(LayoutManagerBase):
         This method replaces the original _setup_main_splitter() from
         filter_mate_dockwidget.py (lines 693-771).
         """
+        UIConfig = None
         try:
-            # Lazy import to avoid circular dependencies
-            from modules.ui_config import UIConfig
+            # Try relative import first (package context)
+            from ...modules.ui_config import UIConfig
         except ImportError:
-            logger.warning("UIConfig not available, using defaults")
-            UIConfig = None
+            try:
+                # Fallback to absolute import (QGIS plugin context)
+                from modules.ui_config import UIConfig
+            except ImportError:
+                logger.warning("UIConfig not available, using defaults")
         
         try:
             # Get splitter reference from dockwidget
@@ -155,10 +159,18 @@ class SplitterManager(LayoutManagerBase):
             logger.warning("Cannot apply - splitter not initialized")
             return
         
+        UIConfig = None
         try:
-            from modules.ui_config import UIConfig
-            self._config = UIConfig.get_config('splitter') or {}
+            from ...modules.ui_config import UIConfig
         except ImportError:
+            try:
+                from modules.ui_config import UIConfig
+            except ImportError:
+                pass
+        
+        if UIConfig:
+            self._config = UIConfig.get_config('splitter') or {}
+        else:
             self._config = self._get_default_config()
         
         self._apply_splitter_properties()
@@ -231,10 +243,14 @@ class SplitterManager(LayoutManagerBase):
         - frame_exploring: Minimum policy (can shrink to min but prefers base)
         - frame_toolset: Expanding policy (takes remaining space)
         """
+        UIConfig = None
         try:
-            from modules.ui_config import UIConfig
+            from ...modules.ui_config import UIConfig
         except ImportError:
-            UIConfig = None
+            try:
+                from modules.ui_config import UIConfig
+            except ImportError:
+                pass
         
         # Configure frame_exploring
         if hasattr(self.dockwidget, 'frame_exploring'):

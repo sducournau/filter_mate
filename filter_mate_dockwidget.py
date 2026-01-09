@@ -197,11 +197,12 @@ except ImportError as e:
 
 # Import Layout Managers for God Class refactoring (v3.1 - Phase 6)
 try:
-    from .ui.layout import SplitterManager
+    from .ui.layout import SplitterManager, DimensionsManager
     LAYOUT_MANAGERS_AVAILABLE = True
 except ImportError as e:
     LAYOUT_MANAGERS_AVAILABLE = False
     SplitterManager = None
+    DimensionsManager = None
     logger.debug(f"Layout managers not available: {e}")
 
 class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
@@ -358,6 +359,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             except Exception as e:
                 logger.warning(f"Could not create SplitterManager: {e}")
                 self._splitter_manager = None
+        
+        # v3.1: DimensionsManager handles widget dimensions (Phase 6 - MIG-062)
+        self._dimensions_manager = None
+        if LAYOUT_MANAGERS_AVAILABLE and DimensionsManager:
+            try:
+                self._dimensions_manager = DimensionsManager(self)
+                logger.debug("DimensionsManager created (v3.1 Phase 6 - MIG-062)")
+            except Exception as e:
+                logger.warning(f"Could not create DimensionsManager: {e}")
+                self._dimensions_manager = None
         
         # v3.0: Initialize MVC Controller Integration (Strangler Fig pattern)
         # Controllers are created but legacy code still handles most operations
@@ -876,7 +887,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         Orchestrates the application of dimensions by calling specialized methods.
         Called from setupUiCustom() during initialization.
+        
+        v3.1 Phase 6 (MIG-062): Delegates to DimensionsManager if available.
         """
+        # v3.1: Delegate to DimensionsManager (Phase 6 - MIG-062)
+        if self._dimensions_manager is not None:
+            try:
+                self._dimensions_manager.apply()
+                logger.debug("apply_dynamic_dimensions delegated to DimensionsManager (v3.1)")
+                return
+            except Exception as e:
+                logger.warning(f"DimensionsManager.apply() failed, falling back to legacy: {e}")
+        
+        # Legacy fallback - original implementation
         try:
             # Apply dockwidget minimum size based on profile
             self._apply_dockwidget_dimensions()
