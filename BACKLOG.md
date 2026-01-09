@@ -108,15 +108,16 @@
 
 ### Critiques Résolus ✅
 
-- CRIT-002: SQL Injection Risk (v3.0.20)
-- CRIT-004: Thread Safety (v2.3.9)
-- CRIT-005: Perte Couche Courante (v3.0.21)
-- CRIT-006: TypeError feature_count None (v3.0.19)
-- CRIT-003: God Classes → **Architecture créée, délégation en cours**
+- CRIT-001: Bug État Buffer Multi-Étapes (v3.0.10) ✅
+- CRIT-002: SQL Injection Risk (v3.0.20) ✅
+- CRIT-004: Thread Safety (v2.3.9) ✅
+- CRIT-005: Perte Couche Courante (v3.0.21) ✅
+- CRIT-006: TypeError feature_count None (v3.0.19) ✅
+- CRIT-003: God Classes → **Architecture créée, Phase 6 complète**
 
-### Critique Restant ⚠️
+### ✅ Tous les bugs critiques résolus!
 
-- CRIT-001: Bug État Buffer Multi-Étapes
+**Tests manquants:** HIGH-018 (tests multi-step pour valider CRIT-001)
 
 ---
 
@@ -901,7 +902,7 @@ def temp_table_context(self, db_path, table_name):
 - [x] **CRIT-004**: Thread Safety ✅ **v2.3.9** (détection auto + fallback séquentiel)
 - [ ] **HIGH-001**: Supprimer imports inutilisés
 - [x] **HIGH-002**: Corriger clauses except nues ✅ **v3.0.20**
-- [ ] **HIGH-018**: Ajouter tests multi-step
+- [x] **HIGH-018**: Ajouter tests multi-step ✅ **v3.1.1** (19 tests dans test_buffer_state_multistep.py)
 
 ### Phase 2: Qualité de Code (Semaine 3-4)
 
