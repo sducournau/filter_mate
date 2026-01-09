@@ -5747,14 +5747,30 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def on_config_buttonbox_accepted(self):
-        """Called when OK button is clicked"""
+        """Called when OK button is clicked.
+        
+        v3.1 STORY-2.5: Delegates to ConfigController if available.
+        """
         logger.info("Configuration OK button clicked")
+        # v3.1 STORY-2.5: Try controller delegation first
+        if self._controller_integration is not None:
+            if self._controller_integration.delegate_config_apply_pending_changes():
+                return
+        # Fallback to legacy
         self.apply_pending_config_changes()
 
 
     def on_config_buttonbox_rejected(self):
-        """Called when Cancel button is clicked"""
+        """Called when Cancel button is clicked.
+        
+        v3.1 STORY-2.5: Delegates to ConfigController if available.
+        """
         logger.info("Configuration Cancel button clicked")
+        # v3.1 STORY-2.5: Try controller delegation first
+        if self._controller_integration is not None:
+            if self._controller_integration.delegate_config_cancel_pending_changes():
+                return
+        # Fallback to legacy
         self.cancel_pending_config_changes()
 
 
@@ -9749,7 +9765,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def get_layers_to_export(self):
-
+        # v3.1 STORY-2.5: Sync with export controller
         if self.widgets_initialized is True and self.current_layer is not None:
 
             checked_list_data = []
@@ -9758,6 +9774,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     data = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].itemData(i, Qt.UserRole)
                     if isinstance(data, str):
                         checked_list_data.append(data)
+            
+            # v3.1 STORY-2.5: Sync to controller
+            if self._controller_integration is not None:
+                self._controller_integration.delegate_export_set_layers_to_export(checked_list_data)
+            
             return checked_list_data
 
 

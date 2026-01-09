@@ -23,6 +23,7 @@ from .filtering_controller import FilteringController
 from .exporting_controller import ExportingController
 from .backend_controller import BackendController
 from .layer_sync_controller import LayerSyncController
+from .config_controller import ConfigController
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
@@ -78,6 +79,7 @@ class ControllerIntegration:
         self._exporting_controller: Optional[ExportingController] = None
         self._backend_controller: Optional[BackendController] = None
         self._layer_sync_controller: Optional[LayerSyncController] = None
+        self._config_controller: Optional[ConfigController] = None
         
         # Connection tracking
         self._connections: list = []
@@ -117,6 +119,11 @@ class ControllerIntegration:
     def layer_sync_controller(self) -> Optional[LayerSyncController]:
         """Get the layer sync controller."""
         return self._layer_sync_controller
+
+    @property
+    def config_controller(self) -> Optional[ConfigController]:
+        """Get the config controller."""
+        return self._config_controller
     
     def setup(self) -> bool:
         """
@@ -181,6 +188,7 @@ class ControllerIntegration:
             self._exporting_controller = None
             self._backend_controller = None
             self._layer_sync_controller = None
+            self._config_controller = None
             self._registry = None
             self._is_setup = False
             
@@ -223,6 +231,12 @@ class ControllerIntegration:
             dockwidget=self._dockwidget
         )
         
+        # v3.1 STORY-2.5: Create ConfigController
+        self._config_controller = ConfigController(
+            dockwidget=self._dockwidget,
+            signal_manager=self._signal_manager
+        )
+        
         logger.debug("All controllers created")
     
     def _register_controllers(self) -> None:
@@ -262,6 +276,13 @@ class ControllerIntegration:
             'layer_sync',
             self._layer_sync_controller,
             tab_index=TabIndex.FILTERING  # Layer sync active on all tabs
+        )
+        
+        # v3.1 STORY-2.5: Register ConfigController
+        self._registry.register(
+            'config',
+            self._config_controller,
+            tab_index=TabIndex.CONFIGURATION  # Tab for configuration
         )
         
         logger.debug("All controllers registered")
@@ -963,6 +984,140 @@ class ControllerIntegration:
         if self._exporting_controller:
             return self._exporting_controller.execute_export()
         return False
+
+    # === Exporting Controller Delegation Methods ===
+    
+    def delegate_export_get_layers_to_export(self) -> Optional[list]:
+        """
+        Delegate getting layers to export.
+        
+        v3.1 STORY-2.5: Returns list of layer IDs selected for export.
+        
+        Returns:
+            List of layer IDs or None if delegation failed
+        """
+        if self._exporting_controller:
+            try:
+                return self._exporting_controller.get_layers_to_export()
+            except Exception as e:
+                logger.warning(f"delegate_export_get_layers_to_export failed: {e}")
+                return None
+        return None
+    
+    def delegate_export_set_layers_to_export(self, layer_ids: list) -> bool:
+        """
+        Delegate setting layers to export.
+        
+        v3.1 STORY-2.5: Updates list of layers selected for export.
+        
+        Args:
+            layer_ids: List of layer IDs to export
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._exporting_controller:
+            try:
+                self._exporting_controller.set_layers_to_export(layer_ids)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_export_set_layers_to_export failed: {e}")
+                return False
+        return False
+    
+    def delegate_export_get_output_path(self) -> Optional[str]:
+        """
+        Delegate getting export output path.
+        
+        v3.1 STORY-2.5: Returns current output path.
+        
+        Returns:
+            Output path string or None if delegation failed
+        """
+        if self._exporting_controller:
+            try:
+                return self._exporting_controller.get_output_path()
+            except Exception as e:
+                logger.warning(f"delegate_export_get_output_path failed: {e}")
+                return None
+        return None
+    
+    def delegate_export_set_output_path(self, path: str) -> bool:
+        """
+        Delegate setting export output path.
+        
+        v3.1 STORY-2.5: Sets output path for export.
+        
+        Args:
+            path: Output path to set
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._exporting_controller:
+            try:
+                self._exporting_controller.set_output_path(path)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_export_set_output_path failed: {e}")
+                return False
+        return False
+    
+    def delegate_export_get_output_format(self) -> Optional[str]:
+        """
+        Delegate getting export output format.
+        
+        v3.1 STORY-2.5: Returns current output format.
+        
+        Returns:
+            Format value string or None if delegation failed
+        """
+        if self._exporting_controller:
+            try:
+                return self._exporting_controller.get_output_format().value
+            except Exception as e:
+                logger.warning(f"delegate_export_get_output_format failed: {e}")
+                return None
+        return None
+    
+    def delegate_export_on_format_changed(self, format_value: str) -> bool:
+        """
+        Delegate format change handling.
+        
+        v3.1 STORY-2.5: Handles export format change.
+        
+        Args:
+            format_value: New format value
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._exporting_controller:
+            try:
+                self._exporting_controller.on_format_changed(format_value)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_export_on_format_changed failed: {e}")
+                return False
+        return False
+    
+    def delegate_export_get_available_formats(self) -> Optional[list]:
+        """
+        Delegate getting available export formats.
+        
+        v3.1 STORY-2.5: Returns list of available formats.
+        
+        Returns:
+            List of format values or None if delegation failed
+        """
+        if self._exporting_controller:
+            try:
+                formats = self._exporting_controller.get_available_formats()
+                return [f.value for f in formats]
+            except Exception as e:
+                logger.warning(f"delegate_export_get_available_formats failed: {e}")
+                return None
+        return None
     
     def delegate_update_backend_indicator(
         self,
@@ -1090,10 +1245,536 @@ class ControllerIntegration:
             'controllers': {
                 'exploring': self._exploring_controller is not None,
                 'filtering': self._filtering_controller is not None,
-                'exporting': self._exporting_controller is not None
+                'exporting': self._exporting_controller is not None,
+                'config': self._config_controller is not None
             }
         }
+
+    # === Config Controller Delegation Methods ===
     
+    def delegate_config_data_changed(self, input_data: Any = None) -> bool:
+        """
+        Delegate configuration data change handling.
+        
+        v3.1 STORY-2.5: Centralized config change handling.
+        
+        Args:
+            input_data: Data that changed
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._config_controller:
+            try:
+                self._config_controller.data_changed_configuration_model(input_data)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_config_data_changed failed: {e}")
+                return False
+        return False
+    
+    def delegate_config_apply_pending_changes(self) -> bool:
+        """
+        Delegate applying pending config changes.
+        
+        v3.1 STORY-2.5: Applies all pending configuration changes.
+        
+        Returns:
+            True if all changes applied successfully, False otherwise
+        """
+        if self._config_controller:
+            try:
+                return self._config_controller.apply_pending_config_changes()
+            except Exception as e:
+                logger.warning(f"delegate_config_apply_pending_changes failed: {e}")
+                return False
+        return False
+    
+    def delegate_config_cancel_pending_changes(self) -> bool:
+        """
+        Delegate canceling pending config changes.
+        
+        v3.1 STORY-2.5: Cancels all pending changes and reverts to saved state.
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._config_controller:
+            try:
+                self._config_controller.cancel_pending_config_changes()
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_config_cancel_pending_changes failed: {e}")
+                return False
+        return False
+    
+    def delegate_config_has_pending_changes(self) -> Optional[bool]:
+        """
+        Delegate checking if there are pending config changes.
+        
+        v3.1 STORY-2.5: Returns pending changes status.
+        
+        Returns:
+            True if pending changes exist, None if delegation failed
+        """
+        if self._config_controller:
+            try:
+                return self._config_controller.has_pending_changes
+            except Exception as e:
+                logger.warning(f"delegate_config_has_pending_changes failed: {e}")
+                return None
+        return None
+    
+    def delegate_config_save(self) -> bool:
+        """
+        Delegate saving configuration.
+        
+        v3.1 STORY-2.5: Saves current configuration to file.
+        
+        Returns:
+            True if save succeeded, False otherwise
+        """
+        if self._config_controller:
+            try:
+                return self._config_controller._save_configuration()
+            except Exception as e:
+                logger.warning(f"delegate_config_save failed: {e}")
+                return False
+        return False
+    
+    def delegate_config_reload(self) -> bool:
+        """
+        Delegate reloading configuration.
+        
+        v3.1 STORY-2.5: Reloads configuration from file.
+        
+        Returns:
+            True if reload succeeded, False otherwise
+        """
+        if self._config_controller:
+            try:
+                return self._config_controller._reload_configuration()
+            except Exception as e:
+                logger.warning(f"delegate_config_reload failed: {e}")
+                return False
+        return False
+    
+    def delegate_config_get_current(self) -> Optional[Dict[str, Any]]:
+        """
+        Delegate getting current configuration.
+        
+        v3.1 STORY-2.5: Returns current config dictionary.
+        
+        Returns:
+            Configuration dictionary or None if delegation failed
+        """
+        if self._config_controller:
+            try:
+                return self._config_controller.get_current_config()
+            except Exception as e:
+                logger.warning(f"delegate_config_get_current failed: {e}")
+                return None
+        return None
+    
+    def delegate_config_set_value(self, key: str, value: Any) -> bool:
+        """
+        Delegate setting a config value.
+        
+        v3.1 STORY-2.5: Sets a configuration value.
+        
+        Args:
+            key: Configuration key
+            value: Value to set
+        
+        Returns:
+            True if value was set, False otherwise
+        """
+        if self._config_controller:
+            try:
+                return self._config_controller.set_config_value(key, value)
+            except Exception as e:
+                logger.warning(f"delegate_config_set_value failed: {e}")
+                return False
+        return False
+    
+    # ========================================
+    # EXPORT DIALOG DELEGATION METHODS
+    # v3.1 STORY-2.5 Phase 2
+    # ========================================
+    
+    def delegate_export_can_export(self) -> Optional[bool]:
+        """
+        Delegate checking if export is possible.
+        
+        v3.1 STORY-2.5: Checks export preconditions.
+        
+        Returns:
+            True if export possible, False if not, None if delegation failed
+        """
+        if self._exporting_controller:
+            try:
+                return self._exporting_controller.can_export()
+            except Exception as e:
+                logger.warning(f"delegate_export_can_export failed: {e}")
+                return None
+        return None
+    
+    def delegate_export_execute(self) -> bool:
+        """
+        Delegate export execution.
+        
+        v3.1 STORY-2.5: Executes the export operation.
+        
+        Returns:
+            True if export succeeded, False otherwise
+        """
+        if self._exporting_controller:
+            try:
+                return self._exporting_controller.execute_export()
+            except Exception as e:
+                logger.warning(f"delegate_export_execute failed: {e}")
+                return False
+        return False
+    
+    def delegate_export_get_output_crs(self) -> Optional[str]:
+        """
+        Delegate getting output CRS.
+        
+        v3.1 STORY-2.5: Returns the output CRS authid.
+        
+        Returns:
+            CRS authid string or None
+        """
+        if self._exporting_controller:
+            try:
+                return self._exporting_controller.get_output_crs()
+            except Exception as e:
+                logger.warning(f"delegate_export_get_output_crs failed: {e}")
+                return None
+        return None
+    
+    def delegate_export_set_output_crs(self, crs: str) -> bool:
+        """
+        Delegate setting output CRS.
+        
+        v3.1 STORY-2.5: Sets the output CRS.
+        
+        Args:
+            crs: CRS authid string (e.g. 'EPSG:4326')
+        
+        Returns:
+            True if set, False otherwise
+        """
+        if self._exporting_controller:
+            try:
+                self._exporting_controller.set_output_crs(crs)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_export_set_output_crs failed: {e}")
+                return False
+        return False
+    
+    def delegate_export_get_zip_output(self) -> Optional[bool]:
+        """
+        Delegate getting zip output flag.
+        
+        v3.1 STORY-2.5: Returns whether output should be zipped.
+        
+        Returns:
+            True if zip enabled, False if disabled, None if failed
+        """
+        if self._exporting_controller:
+            try:
+                return self._exporting_controller.get_zip_output()
+            except Exception as e:
+                logger.warning(f"delegate_export_get_zip_output failed: {e}")
+                return None
+        return None
+    
+    def delegate_export_set_zip_output(self, zip_it: bool) -> bool:
+        """
+        Delegate setting zip output flag.
+        
+        v3.1 STORY-2.5: Sets the zip output flag.
+        
+        Args:
+            zip_it: True to zip output, False otherwise
+        
+        Returns:
+            True if set, False otherwise
+        """
+        if self._exporting_controller:
+            try:
+                self._exporting_controller.set_zip_output(zip_it)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_export_set_zip_output failed: {e}")
+                return False
+        return False
+    
+    def delegate_export_get_include_styles(self) -> Optional[bool]:
+        """
+        Delegate getting include styles flag.
+        
+        v3.1 STORY-2.5: Returns whether styles should be included.
+        
+        Returns:
+            True if styles included, False if not, None if failed
+        """
+        if self._exporting_controller:
+            try:
+                return self._exporting_controller.get_include_styles()
+            except Exception as e:
+                logger.warning(f"delegate_export_get_include_styles failed: {e}")
+                return None
+        return None
+    
+    def delegate_export_set_include_styles(self, include: bool) -> bool:
+        """
+        Delegate setting include styles flag.
+        
+        v3.1 STORY-2.5: Sets whether styles should be included.
+        
+        Args:
+            include: True to include styles, False otherwise
+        
+        Returns:
+            True if set, False otherwise
+        """
+        if self._exporting_controller:
+            try:
+                self._exporting_controller.set_include_styles(include)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_export_set_include_styles failed: {e}")
+                return False
+        return False
+    
+    def delegate_export_is_exporting(self) -> Optional[bool]:
+        """
+        Delegate checking if export is in progress.
+        
+        v3.1 STORY-2.5: Returns whether an export is currently running.
+        
+        Returns:
+            True if exporting, False if not, None if failed
+        """
+        if self._exporting_controller:
+            try:
+                return self._exporting_controller.is_exporting()
+            except Exception as e:
+                logger.warning(f"delegate_export_is_exporting failed: {e}")
+                return None
+        return None
+    
+    def delegate_export_get_progress(self) -> Optional[float]:
+        """
+        Delegate getting export progress.
+        
+        v3.1 STORY-2.5: Returns current export progress.
+        
+        Returns:
+            Progress as float 0.0-1.0, or None if failed
+        """
+        if self._exporting_controller:
+            try:
+                return self._exporting_controller.get_progress()
+            except Exception as e:
+                logger.warning(f"delegate_export_get_progress failed: {e}")
+                return None
+        return None
+    
+    def delegate_export_get_mode(self) -> Optional[str]:
+        """
+        Delegate getting export mode.
+        
+        v3.1 STORY-2.5 Phase 3: Returns the current export mode.
+        
+        Returns:
+            Export mode string ('single', 'batch', etc.) or None if failed
+        """
+        if self._exporting_controller:
+            try:
+                mode = self._exporting_controller.get_export_mode()
+                return mode.value if mode else None
+            except Exception as e:
+                logger.warning(f"delegate_export_get_mode failed: {e}")
+                return None
+        return None
+    
+    def delegate_export_set_mode(self, mode: str) -> bool:
+        """
+        Delegate setting export mode.
+        
+        v3.1 STORY-2.5 Phase 3: Sets the export mode.
+        
+        Args:
+            mode: Export mode string ('single', 'batch', etc.)
+        
+        Returns:
+            True if set, False otherwise
+        """
+        if self._exporting_controller:
+            try:
+                # Import ExportMode enum
+                from .exporting_controller import ExportMode
+                export_mode = ExportMode(mode) if mode else ExportMode.SINGLE
+                self._exporting_controller.set_export_mode(export_mode)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_export_set_mode failed: {e}")
+                return False
+        return False
+    
+    def delegate_export_add_layer(self, layer_id: str) -> bool:
+        """
+        Delegate adding a layer to export list.
+        
+        v3.1 STORY-2.5 Phase 3: Adds a layer to the export selection.
+        
+        Args:
+            layer_id: Layer ID to add
+        
+        Returns:
+            True if added, False otherwise
+        """
+        if self._exporting_controller:
+            try:
+                self._exporting_controller.add_layer(layer_id)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_export_add_layer failed: {e}")
+                return False
+        return False
+    
+    def delegate_export_remove_layer(self, layer_id: str) -> bool:
+        """
+        Delegate removing a layer from export list.
+        
+        v3.1 STORY-2.5 Phase 3: Removes a layer from the export selection.
+        
+        Args:
+            layer_id: Layer ID to remove
+        
+        Returns:
+            True if removed, False otherwise
+        """
+        if self._exporting_controller:
+            try:
+                self._exporting_controller.remove_layer(layer_id)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_export_remove_layer failed: {e}")
+                return False
+        return False
+    
+    def delegate_export_clear_layers(self) -> bool:
+        """
+        Delegate clearing all layers from export list.
+        
+        v3.1 STORY-2.5 Phase 3: Clears all layers from export selection.
+        
+        Returns:
+            True if cleared, False otherwise
+        """
+        if self._exporting_controller:
+            try:
+                self._exporting_controller.clear_layers()
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_export_clear_layers failed: {e}")
+                return False
+        return False
+    
+    def delegate_export_on_layer_selection_changed(self, layer_ids: list) -> bool:
+        """
+        Delegate layer selection change notification.
+        
+        v3.1 STORY-2.5 Phase 3: Notifies controller of layer selection change.
+        
+        Args:
+            layer_ids: List of selected layer IDs
+        
+        Returns:
+            True if processed, False otherwise
+        """
+        if self._exporting_controller:
+            try:
+                self._exporting_controller.on_layer_selection_changed(layer_ids)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_export_on_layer_selection_changed failed: {e}")
+                return False
+        return False
+    
+    def delegate_export_on_crs_changed(self, crs_string: str) -> bool:
+        """
+        Delegate CRS change notification.
+        
+        v3.1 STORY-2.5 Phase 3: Notifies controller of CRS change.
+        
+        Args:
+            crs_string: CRS authid string (e.g. 'EPSG:4326')
+        
+        Returns:
+            True if processed, False otherwise
+        """
+        if self._exporting_controller:
+            try:
+                self._exporting_controller.on_crs_changed(crs_string)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_export_on_crs_changed failed: {e}")
+                return False
+        return False
+    
+    def delegate_export_on_output_path_changed(self, path: str) -> bool:
+        """
+        Delegate output path change notification.
+        
+        v3.1 STORY-2.5 Phase 3: Notifies controller of path change.
+        
+        Args:
+            path: New output path
+        
+        Returns:
+            True if processed, False otherwise
+        """
+        if self._exporting_controller:
+            try:
+                self._exporting_controller.on_output_path_changed(path)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_export_on_output_path_changed failed: {e}")
+                return False
+        return False
+    
+    def delegate_export_get_last_result(self) -> Optional[dict]:
+        """
+        Delegate getting last export result.
+        
+        v3.1 STORY-2.5 Phase 3: Returns the last export result.
+        
+        Returns:
+            Export result dictionary or None
+        """
+        if self._exporting_controller:
+            try:
+                result = self._exporting_controller.get_last_result()
+                if result:
+                    return {
+                        'success': result.success,
+                        'exported_count': result.exported_count,
+                        'failed_count': result.failed_count,
+                        'output_paths': result.output_paths,
+                        'error_message': result.error_message
+                    }
+                return None
+            except Exception as e:
+                logger.warning(f"delegate_export_get_last_result failed: {e}")
+                return None
+        return None
+
     def __repr__(self) -> str:
         """String representation."""
         status = "active" if self._is_setup else "inactive"
