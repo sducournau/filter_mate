@@ -2,7 +2,7 @@
 
 **Epic:** Migration Architecture Hexagonale  
 **Sprint Actuel:** Sprint 2 - Intégration Controllers  
-**Dernière MAJ:** 2026-01-08 (MIG-024 LayerValidator extrait - 80 tests passant)
+**Dernière MAJ:** 2026-01-09 (MIG-060, MIG-061 Phase 6 démarré - SplitterManager)
 
 ---
 
@@ -22,8 +22,6 @@
 
 | ID      | Story                   | Priorité | Sprint | Dépend de   |
 | ------- | ----------------------- | -------- | ------ | ----------- |
-| MIG-060 | Layout Module Structure | 🔴 P0    | 6      | MIG-024     |
-| MIG-061 | SplitterManager         | 🟠 P1    | 6      | MIG-060     |
 | MIG-062 | DimensionsManager       | 🟠 P1    | 6      | MIG-060     |
 | MIG-063 | SpacingManager          | 🟠 P1    | 6      | MIG-060     |
 | MIG-064 | ActionBarManager        | 🟠 P1    | 6      | MIG-060     |
@@ -98,6 +96,8 @@
 | MIG-032 | App Bridge               | 🟠 P1    | 2026-01-08 | `adapters/app_bridge.py` (18KB)               |
 | MIG-023 | Réduction appTasks.py    | 🔴 P0    | 2026-01-08 | `adapters/qgis/tasks/` (multi_step, progress) |
 | MIG-025 | Intégration Controllers  | 🔴 P0    | 2026-01-08 | Délégation manage_task + FilterService DI     |
+| MIG-060 | Layout Module Structure  | 🔴 P0    | 2026-01-09 | `ui/layout/` module créé (Phase 6)            |
+| MIG-061 | SplitterManager          | 🟠 P1    | 2026-01-09 | 320 lignes, 18 tests, intégré dockwidget      |
 
 ---
 
@@ -109,9 +109,9 @@ Phase 2: Core Domain       [██████████] 100%  (6/6 stories)
 Phase 3: God Classes       [████████░░] 80%   (4/5 stories - Controllers intégrés)
 Phase 4: Backends          [██████████] 100%  (4/4 stories - Factory done)
 Phase 5: Validation        [██░░░░░░░░] 20%   (1/5 stories)
-Phase 6: DockWidget        [░░░░░░░░░░] 0%    (0/30 stories) 📋 NEW
+Phase 6: DockWidget        [█░░░░░░░░░] 7%    (2/30 stories) ✅ MIG-060,061
 ─────────────────────────────────────────────
-TOTAL                      [████░░░░░░] 37%   (20/54 stories)
+TOTAL                      [████░░░░░░] 41%   (22/54 stories)
 ```
 
 ---
