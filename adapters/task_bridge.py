@@ -149,6 +149,7 @@ class TaskBridge:
                 'attribute': {'count': 0, 'success': 0, 'time_ms': 0.0},
                 'spatial': {'count': 0, 'success': 0, 'time_ms': 0.0},
                 'multi_step': {'count': 0, 'success': 0, 'time_ms': 0.0},
+                'export': {'count': 0, 'success': 0, 'time_ms': 0.0},
             }
         }
         
@@ -201,6 +202,7 @@ class TaskBridge:
                 'attribute': {'count': 0, 'success': 0, 'time_ms': 0.0},
                 'spatial': {'count': 0, 'success': 0, 'time_ms': 0.0},
                 'multi_step': {'count': 0, 'success': 0, 'time_ms': 0.0},
+                'export': {'count': 0, 'success': 0, 'time_ms': 0.0},
             }
         }
     
@@ -573,6 +575,124 @@ class TaskBridge:
         
         try:
             from core.services.filter_service import MultiStepRequest
+            return True
+        except ImportError:
+            return False
+    
+    # ========================================================================
+    # Export Operations
+    # ========================================================================
+    
+    def execute_export(
+        self,
+        source_layer: 'QgsVectorLayer',
+        output_path: str,
+        format: str = 'gpkg',
+        field_mapping: Optional[Dict[str, str]] = None,
+        progress_callback: Optional[callable] = None,
+        cancel_check: Optional[callable] = None
+    ) -> BridgeResult:
+        """
+        Execute layer export using streaming exporter.
+        
+        This provides the Strangler Fig pattern for export operations,
+        using the optimized StreamingExporter for large datasets.
+        
+        Args:
+            source_layer: QGIS layer to export
+            output_path: Path for output file
+            format: Output format ('gpkg', 'shp', 'geojson', etc.)
+            field_mapping: Optional field name mapping
+            progress_callback: Callback for progress updates
+            cancel_check: Callback to check for cancellation
+            
+        Returns:
+            BridgeResult with export status and metrics
+        """
+        if not self.is_available():
+            return BridgeResult.not_available()
+        
+        start_time = time.time()
+        self._metrics['operations'] += 1
+        
+        try:
+            # Import streaming exporter
+            from modules.tasks.result_streaming import StreamingExporter, StreamingConfig
+            
+            logger.info("=" * 60)
+            logger.info("🚀 V3 TASKBRIDGE: Executing streaming export")
+            logger.info("=" * 60)
+            logger.info(f"   Layer: '{source_layer.name()}'")
+            logger.info(f"   Format: {format}")
+            logger.info(f"   Output: {output_path}")
+            
+            # Create streaming exporter with default config
+            exporter = StreamingExporter()
+            
+            # Execute export
+            result = exporter.export_layer_streaming(
+                source_layer=source_layer,
+                output_path=output_path,
+                format=format,
+                field_mapping=field_mapping,
+                progress_callback=progress_callback,
+                cancel_check=cancel_check
+            )
+            
+            elapsed_ms = (time.time() - start_time) * 1000
+            success = result.get('success', False)
+            
+            self._metrics['total_time_ms'] += elapsed_ms
+            self._update_type_metrics('export', success, elapsed_ms)
+            
+            if success:
+                self._metrics['successes'] += 1
+                logger.info(f"✅ V3 TaskBridge EXPORT SUCCESS")
+                logger.info(f"   Features exported: {result.get('features_exported', 0)}")
+                logger.info(f"   File size: {result.get('bytes_written', 0)} bytes")
+                logger.info(f"   Execution time: {elapsed_ms:.1f}ms")
+                
+                return BridgeResult(
+                    status=BridgeStatus.SUCCESS,
+                    success=True,
+                    feature_count=result.get('features_exported', 0),
+                    expression=f"export to {format}",
+                    execution_time_ms=elapsed_ms,
+                    backend_used='streaming_exporter'
+                )
+            else:
+                self._metrics['errors'] += 1
+                error_msg = result.get('error', 'Unknown export error')
+                logger.warning(f"⚠️ V3 TaskBridge EXPORT FAILED: {error_msg}")
+                
+                return BridgeResult(
+                    status=BridgeStatus.FALLBACK,
+                    success=False,
+                    error_message=error_msg,
+                    execution_time_ms=elapsed_ms
+                )
+                
+        except ImportError as e:
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.debug(f"StreamingExporter not available: {e}")
+            return BridgeResult.fallback(f"StreamingExporter not available: {e}")
+            
+        except Exception as e:
+            elapsed_ms = (time.time() - start_time) * 1000
+            self._metrics['errors'] += 1
+            self._metrics['total_time_ms'] += elapsed_ms
+            self._update_type_metrics('export', False, elapsed_ms)
+            
+            logger.warning(f"TaskBridge.execute_export failed: {e}")
+            return BridgeResult.fallback(str(e))
+    
+    def supports_export(self) -> bool:
+        """Check if streaming export is available."""
+        if not self.is_available():
+            return False
+        
+        try:
+            from modules.tasks.result_streaming import StreamingExporter
             return True
         except ImportError:
             return False

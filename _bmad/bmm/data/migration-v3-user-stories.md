@@ -872,7 +872,350 @@ flowchart TD
     MIG-041 --> MIG-050
     MIG-042 --> MIG-050
     MIG-043 --> MIG-050
+
+    %% Phase 6: God Class DockWidget
+    MIG-024 --> MIG-060
+    MIG-024 --> MIG-065
+    MIG-023 --> MIG-070
+    MIG-060 --> MIG-070
+    MIG-065 --> MIG-070
+    MIG-070 --> MIG-075
+    MIG-075 --> MIG-080
+    MIG-070 --> MIG-084
+    MIG-080 --> MIG-087
+    MIG-084 --> MIG-087
+    MIG-040 --> MIG-087
+    MIG-087 --> MIG-050
 ```
+
+---
+
+## 🏗️ PHASE 6 : God Class DockWidget
+
+> **Objectif:** Réduire `filter_mate_dockwidget.py` de 13,002 lignes à ~500 lignes  
+> **Stories:** MIG-060 → MIG-089  
+> **Sprints:** 6-9  
+> **Document détaillé:** [epics.md](../../_bmad-output/planning-artifacts/epics.md)
+
+### Vue d'Ensemble Phase 6
+
+| Epic | ID Range    | Titre               | Sprint | Effort |
+| ---- | ----------- | ------------------- | ------ | ------ |
+| 6.1  | MIG-060→064 | Layout Managers     | 6      | 3j     |
+| 6.2  | MIG-065→068 | Styling Managers    | 6      | 2j     |
+| 6.3  | MIG-070→074 | New Controllers     | 7      | 5j     |
+| 6.4  | MIG-075→078 | Additional Services | 7      | 4j     |
+| 6.5  | MIG-080→083 | Dialogs             | 8      | 3j     |
+| 6.6  | MIG-084→086 | Signal Management   | 8      | 3j     |
+| 6.7  | MIG-087→089 | Final Refactoring   | 9      | 3j     |
+
+---
+
+### STORY-6.1: Layout Module Structure
+
+**ID:** `MIG-060`  
+**Priorité:** 🔴 P0  
+**Statut:** `TODO`  
+**Sprint:** 6  
+**Effort:** 0.5 jour
+
+**En tant que** développeur,  
+**Je veux** créer la structure du module `ui/layout/`,  
+**Afin que** les layout managers aient un emplacement dédié.
+
+#### Critères d'Acceptation
+
+- [ ] `ui/layout/__init__.py` créé
+- [ ] Structure documentée
+
+---
+
+### STORY-6.2: SplitterManager
+
+**ID:** `MIG-061`  
+**Priorité:** 🟠 P1  
+**Statut:** `TODO`  
+**Sprint:** 6  
+**Dépend de:** MIG-060
+
+**En tant que** développeur,  
+**Je veux** extraire la gestion des splitters,  
+**Afin d'** isoler la logique de redimensionnement.
+
+#### Méthodes à Extraire (lignes 693-848)
+
+- `_setup_main_splitter()`
+- `_apply_splitter_frame_policies()`
+- `_set_initial_splitter_sizes()`
+
+---
+
+### STORY-6.3: DimensionsManager
+
+**ID:** `MIG-062`  
+**Priorité:** 🟠 P1  
+**Statut:** `TODO`  
+**Sprint:** 6  
+**Dépend de:** MIG-060
+
+**Méthodes à Extraire (lignes 848-1041, 1334-1403):**
+
+- `apply_dynamic_dimensions()`
+- `_apply_dockwidget_dimensions()`
+- `_apply_widget_dimensions()`
+- `_apply_frame_dimensions()`
+
+---
+
+### STORY-6.4: SpacingManager
+
+**ID:** `MIG-063`  
+**Priorité:** 🟠 P1  
+**Statut:** `TODO`  
+**Sprint:** 6  
+**Dépend de:** MIG-060
+
+---
+
+### STORY-6.5: ActionBarManager
+
+**ID:** `MIG-064`  
+**Priorité:** 🟠 P1  
+**Statut:** `TODO`  
+**Sprint:** 6  
+**Dépend de:** MIG-060  
+**Effort:** 1.5 jours
+
+**14 méthodes à extraire (lignes 4039-4604)**
+
+---
+
+### STORY-6.6: Styling Module Structure
+
+**ID:** `MIG-065`  
+**Priorité:** 🔴 P0  
+**Statut:** `TODO`  
+**Sprint:** 6
+
+---
+
+### STORY-6.7: ThemeManager
+
+**ID:** `MIG-066`  
+**Priorité:** 🟠 P1  
+**Statut:** `TODO`  
+**Sprint:** 6  
+**Dépend de:** MIG-065
+
+---
+
+### STORY-6.8: IconManager
+
+**ID:** `MIG-067`  
+**Priorité:** 🟠 P1  
+**Statut:** `TODO`  
+**Sprint:** 6  
+**Dépend de:** MIG-065
+
+---
+
+### STORY-6.9: ButtonStyler
+
+**ID:** `MIG-068`  
+**Priorité:** 🟡 P2  
+**Statut:** `TODO`  
+**Sprint:** 6  
+**Dépend de:** MIG-065
+
+---
+
+### STORY-6.10: ConfigController
+
+**ID:** `MIG-070`  
+**Priorité:** 🟠 P1  
+**Statut:** `TODO`  
+**Sprint:** 7  
+**Effort:** 1 jour
+
+**En tant que** développeur,  
+**Je veux** un controller pour la configuration,  
+**Afin que** l'onglet Settings soit géré proprement.
+
+**16 méthodes à extraire (lignes 5074-5777)**
+
+---
+
+### STORY-6.11: BackendController
+
+**ID:** `MIG-071`  
+**Priorité:** 🟠 P1  
+**Statut:** `TODO`  
+**Sprint:** 7
+
+---
+
+### STORY-6.12: FavoritesController
+
+**ID:** `MIG-072`  
+**Priorité:** 🟠 P1  
+**Statut:** `TODO`  
+**Sprint:** 7
+
+---
+
+### STORY-6.13: LayerSyncController
+
+**ID:** `MIG-073`  
+**Priorité:** 🟠 P1  
+**Statut:** `TODO`  
+**Sprint:** 7  
+**Effort:** 1.5 jours
+
+---
+
+### STORY-6.14: PropertyController
+
+**ID:** `MIG-074`  
+**Priorité:** 🟡 P2  
+**Statut:** `TODO`  
+**Sprint:** 7
+
+---
+
+### STORY-6.15: BackendService
+
+**ID:** `MIG-075`  
+**Priorité:** 🟠 P1  
+**Statut:** `TODO`  
+**Sprint:** 7
+
+---
+
+### STORY-6.16: FavoritesService
+
+**ID:** `MIG-076`  
+**Priorité:** 🟠 P1  
+**Statut:** `TODO`  
+**Sprint:** 7
+
+---
+
+### STORY-6.17: LayerService
+
+**ID:** `MIG-077`  
+**Priorité:** 🟠 P1  
+**Statut:** `TODO`  
+**Sprint:** 7
+
+---
+
+### STORY-6.18: PostgresSessionManager
+
+**ID:** `MIG-078`  
+**Priorité:** 🟡 P2  
+**Statut:** `TODO`  
+**Sprint:** 7
+
+---
+
+### STORY-6.19: Dialogs Module
+
+**ID:** `MIG-080`  
+**Priorité:** 🟢 P3  
+**Statut:** `TODO`  
+**Sprint:** 8
+
+---
+
+### STORY-6.20: FavoritesManagerDialog
+
+**ID:** `MIG-081`  
+**Priorité:** 🟡 P2  
+**Statut:** `TODO`  
+**Sprint:** 8
+
+---
+
+### STORY-6.21: OptimizationDialog
+
+**ID:** `MIG-082`  
+**Priorité:** 🟡 P2  
+**Statut:** `TODO`  
+**Sprint:** 8
+
+---
+
+### STORY-6.22: PostgresInfoDialog
+
+**ID:** `MIG-083`  
+**Priorité:** 🟢 P3  
+**Statut:** `TODO`  
+**Sprint:** 8
+
+---
+
+### STORY-6.23: SignalManager Complet
+
+**ID:** `MIG-084`  
+**Priorité:** 🔴 P0  
+**Statut:** `TODO`  
+**Sprint:** 8  
+**Risque:** 🔴 HIGH
+
+**En tant que** développeur,  
+**Je veux** centraliser tous les signaux dans SignalManager,  
+**Afin d'** éviter les fuites de connexions.
+
+---
+
+### STORY-6.24: LayerSignalHandler
+
+**ID:** `MIG-085`  
+**Priorité:** 🟠 P1  
+**Statut:** `TODO`  
+**Sprint:** 8
+
+---
+
+### STORY-6.25: Migrate All Signals
+
+**ID:** `MIG-086`  
+**Priorité:** 🟠 P1  
+**Statut:** `TODO`  
+**Sprint:** 8
+
+---
+
+### STORY-6.26: Simplify DockWidget to Orchestrator
+
+**ID:** `MIG-087`  
+**Priorité:** 🔴 P0  
+**Statut:** `TODO`  
+**Sprint:** 9  
+**Risque:** 🔴 HIGH
+
+**En tant que** développeur,  
+**Je veux** réduire le dockwidget à un orchestrateur minimal (~500 lignes),  
+**Afin qu'** il ne contienne que la coordination.
+
+---
+
+### STORY-6.27: Deprecation Warnings
+
+**ID:** `MIG-088`  
+**Priorité:** 🟠 P1  
+**Statut:** `TODO`  
+**Sprint:** 9
+
+---
+
+### STORY-6.28: Regression Testing
+
+**ID:** `MIG-089`  
+**Priorité:** 🔴 P0  
+**Statut:** `TODO`  
+**Sprint:** 9  
+**Dépend de:** MIG-040
 
 ---
 
@@ -891,7 +1234,8 @@ flowchart TD
 | Lignes `adapters/backends/*`       | -        | < 800  | **~1,650 total ✅** |
 | Couverture tests                   | ~70%     | ≥ 85%  | ~72%                |
 | Nombre de tests                    | 45       | > 200  | **+24 régr.**       |
-| Stories DONE                       | 1        | 20     | **10 ✅**           |
+| Stories DONE                       | 1        | 50     | **20 ✅**           |
+| Stories Phase 6 (NEW)              | -        | 30     | 0                   |
 
 ### Stories Complétées
 

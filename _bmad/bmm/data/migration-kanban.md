@@ -18,6 +18,39 @@
 | MIG-043 | Dépréciation Legacy     | 🟡 P2    | 5     | MIG-040      |
 | MIG-050 | Release v3.0.0          | 🟠 P1    | 5     | MIG-041..043 |
 
+#### Phase 6: God Class DockWidget (30 stories)
+
+| ID      | Story                   | Priorité | Sprint | Dépend de   |
+| ------- | ----------------------- | -------- | ------ | ----------- |
+| MIG-060 | Layout Module Structure | 🔴 P0    | 6      | MIG-024     |
+| MIG-061 | SplitterManager         | 🟠 P1    | 6      | MIG-060     |
+| MIG-062 | DimensionsManager       | 🟠 P1    | 6      | MIG-060     |
+| MIG-063 | SpacingManager          | 🟠 P1    | 6      | MIG-060     |
+| MIG-064 | ActionBarManager        | 🟠 P1    | 6      | MIG-060     |
+| MIG-065 | Styling Module          | 🔴 P0    | 6      | MIG-024     |
+| MIG-066 | ThemeManager            | 🟠 P1    | 6      | MIG-065     |
+| MIG-067 | IconManager             | 🟠 P1    | 6      | MIG-065     |
+| MIG-068 | ButtonStyler            | 🟡 P2    | 6      | MIG-065     |
+| MIG-070 | ConfigController        | 🟠 P1    | 7      | MIG-060,065 |
+| MIG-071 | BackendController       | 🟠 P1    | 7      | MIG-070     |
+| MIG-072 | FavoritesController     | 🟠 P1    | 7      | MIG-070     |
+| MIG-073 | LayerSyncController     | 🟠 P1    | 7      | MIG-070     |
+| MIG-074 | PropertyController      | 🟡 P2    | 7      | MIG-070     |
+| MIG-075 | BackendService          | 🟠 P1    | 7      | MIG-070     |
+| MIG-076 | FavoritesService        | 🟠 P1    | 7      | MIG-075     |
+| MIG-077 | LayerService            | 🟠 P1    | 7      | MIG-075     |
+| MIG-078 | PostgresSessionManager  | 🟡 P2    | 7      | MIG-075     |
+| MIG-080 | Dialogs Module          | 🟢 P3    | 8      | MIG-075     |
+| MIG-081 | FavoritesManagerDialog  | 🟡 P2    | 8      | MIG-080     |
+| MIG-082 | OptimizationDialog      | 🟡 P2    | 8      | MIG-080     |
+| MIG-083 | PostgresInfoDialog      | 🟢 P3    | 8      | MIG-080     |
+| MIG-084 | SignalManager Complet   | 🔴 P0    | 8      | MIG-070     |
+| MIG-085 | LayerSignalHandler      | 🟠 P1    | 8      | MIG-084     |
+| MIG-086 | Migrate All Signals     | 🟠 P1    | 8      | MIG-084     |
+| MIG-087 | DockWidget Orchestrator | 🔴 P0    | 9      | MIG-080,084 |
+| MIG-088 | Deprecation Warnings    | 🟠 P1    | 9      | MIG-087     |
+| MIG-089 | Regression Testing      | 🔴 P0    | 9      | MIG-040,087 |
+
 ---
 
 ### 📋 TODO (Sprint Courant)
@@ -76,8 +109,9 @@ Phase 2: Core Domain       [██████████] 100%  (6/6 stories)
 Phase 3: God Classes       [████████░░] 80%   (4/5 stories - Controllers intégrés)
 Phase 4: Backends          [██████████] 100%  (4/4 stories - Factory done)
 Phase 5: Validation        [██░░░░░░░░] 20%   (1/5 stories)
+Phase 6: DockWidget        [░░░░░░░░░░] 0%    (0/30 stories) 📋 NEW
 ─────────────────────────────────────────────
-TOTAL                      [████████░░] 83%   (20/24 stories)
+TOTAL                      [████░░░░░░] 37%   (20/54 stories)
 ```
 
 ---
@@ -143,6 +177,7 @@ TOTAL                      [████████░░] 83%   (20/24 stories
 | `phase-3`  | God Classes             | 🟡 Jaune  |
 | `phase-4`  | Backends                | 🟠 Orange |
 | `phase-5`  | Validation              | 🔴 Rouge  |
+| `phase-6`  | God Class DockWidget    | 🟣 Violet |
 | `blocking` | Bloque d'autres stories | ⚫ Noir   |
 | `critical` | Bug critique à fixer    | 🔴 Rouge  |
 

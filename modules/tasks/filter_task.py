@@ -1288,6 +1288,75 @@ class FilterEngineTask(QgsTask):
             logger.debug(f"Traceback: {traceback.format_exc()}")
             return None
 
+    def _try_v3_export(self, layer, output_path, format_type, progress_callback=None):
+        """
+        Try to execute export using v3 TaskBridge streaming exporter.
+        
+        This is part of the Strangler Fig migration pattern for export operations.
+        
+        Args:
+            layer: QgsVectorLayer to export
+            output_path: Path for output file
+            format_type: Export format ('gpkg', 'shp', etc.)
+            progress_callback: Optional callback for progress
+            
+        Returns:
+            bool: True if v3 handled the export successfully
+            None: If v3 cannot handle (fallback to legacy)
+        """
+        if not self._task_bridge:
+            return None
+        
+        # Check if TaskBridge supports export
+        if not self._task_bridge.supports_export():
+            logger.debug("TaskBridge: export not supported - using legacy code")
+            return None
+        
+        try:
+            logger.info("=" * 60)
+            logger.info("🚀 V3 TASKBRIDGE: Attempting streaming export")
+            logger.info("=" * 60)
+            logger.info(f"   Layer: '{layer.name()}'")
+            logger.info(f"   Format: {format_type}")
+            logger.info(f"   Output: {output_path}")
+            
+            # Define cancel check
+            def cancel_check():
+                return self.isCanceled()
+            
+            bridge_result = self._task_bridge.execute_export(
+                source_layer=layer,
+                output_path=output_path,
+                format=format_type,
+                progress_callback=progress_callback,
+                cancel_check=cancel_check
+            )
+            
+            if bridge_result.status == BridgeStatus.SUCCESS and bridge_result.success:
+                logger.info(f"✅ V3 TaskBridge EXPORT SUCCESS")
+                logger.info(f"   Features exported: {bridge_result.feature_count}")
+                logger.info(f"   Execution time: {bridge_result.execution_time_ms:.1f}ms")
+                
+                # Store in task_parameters for metrics
+                if 'actual_backends' not in self.task_parameters:
+                    self.task_parameters['actual_backends'] = {}
+                self.task_parameters['actual_backends'][f'export_{layer.id()}'] = 'v3_streaming'
+                
+                return True
+                
+            elif bridge_result.status == BridgeStatus.FALLBACK:
+                logger.info(f"⚠️ V3 TaskBridge EXPORT: FALLBACK requested")
+                logger.info(f"   Reason: {bridge_result.error_message}")
+                return None
+                
+            else:
+                logger.debug(f"TaskBridge export: status={bridge_result.status}")
+                return None
+                
+        except Exception as e:
+            logger.warning(f"TaskBridge export delegation failed: {e}")
+            return None
+
     def _initialize_source_filtering_parameters(self):
         """Extract and initialize all parameters needed for source layer filtering"""
         self.param_source_old_subset = ''
@@ -9415,6 +9484,29 @@ class FilterEngineTask(QgsTask):
         Returns:
             tuple: (success: bool, error_message: str or None)
         """
+        # =====================================================================
+        # MIG-023: STRANGLER FIG PATTERN - Try v3 streaming export first
+        # =====================================================================
+        # Only use v3 for large layers without styles (streaming optimization)
+        feature_count = layer.featureCount()
+        use_v3_streaming = (
+            feature_count > 10000 and  # Large dataset threshold
+            not save_styles and  # Styles require legacy QGIS processing
+            datatype.upper() in ('GPKG', 'GEOJSON', 'SHP')  # Supported formats
+        )
+        
+        if use_v3_streaming:
+            v3_result = self._try_v3_export(layer, output_path, datatype.lower())
+            if v3_result is True:
+                logger.info("✅ V3 streaming export completed - skipping legacy code")
+                return True, None
+            elif v3_result is False:
+                logger.error("❌ V3 streaming export failed - falling back to legacy")
+                # Continue with legacy code below
+            else:
+                logger.debug("V3 export not applicable - using legacy code")
+        # =====================================================================
+        
         current_projection = projection if projection else layer.sourceCrs()
         
         # Map short datatype names to QGIS driver names
