@@ -89,10 +89,23 @@ class TestThemeManager:
         """detect_system_theme should return 'dark' for dark palette."""
         from ui.styles.theme_manager import ThemeManager
         
-        manager = ThemeManager(mock_dockwidget)
+        # Create a dark palette mock
+        dark_color = MagicMock()
+        dark_color.red.return_value = 30
+        dark_color.green.return_value = 30
+        dark_color.blue.return_value = 30
         
-        # Mock returns low luminance colors (dark)
-        result = manager.detect_system_theme()
+        dark_palette = MagicMock()
+        dark_palette.color.return_value = dark_color
+        
+        dark_app = MagicMock()
+        dark_app.palette.return_value = dark_palette
+        
+        with patch('ui.styles.theme_manager.QgsApplication') as mock_qgs_app:
+            mock_qgs_app.instance.return_value = dark_app
+            
+            manager = ThemeManager(mock_dockwidget)
+            result = manager.detect_system_theme()
         
         assert result == 'dark'
     
@@ -100,18 +113,23 @@ class TestThemeManager:
         """detect_system_theme should return 'default' for light palette."""
         from ui.styles.theme_manager import ThemeManager
         
-        # Configure palette for light mode
-        _bg_color_mock.red.return_value = 240
-        _bg_color_mock.green.return_value = 240
-        _bg_color_mock.blue.return_value = 240
+        # Create a light palette mock
+        light_color = MagicMock()
+        light_color.red.return_value = 240
+        light_color.green.return_value = 240
+        light_color.blue.return_value = 240
         
-        manager = ThemeManager(mock_dockwidget)
-        result = manager.detect_system_theme()
+        light_palette = MagicMock()
+        light_palette.color.return_value = light_color
         
-        # Restore dark mode config for other tests
-        _bg_color_mock.red.return_value = 30
-        _bg_color_mock.green.return_value = 30
-        _bg_color_mock.blue.return_value = 30
+        light_app = MagicMock()
+        light_app.palette.return_value = light_palette
+        
+        with patch('ui.styles.theme_manager.QgsApplication') as mock_qgs_app:
+            mock_qgs_app.instance.return_value = light_app
+            
+            manager = ThemeManager(mock_dockwidget)
+            result = manager.detect_system_theme()
         
         assert result == 'default'
     

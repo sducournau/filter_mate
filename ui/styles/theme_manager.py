@@ -8,11 +8,10 @@ Story: MIG-066
 Phase: 6 - God Class DockWidget Migration
 """
 
-from typing import TYPE_CHECKING, Optional, Dict, Any
+from typing import TYPE_CHECKING, Optional, Dict, Any, Callable, List
 import logging
 import os
 
-from qgis.PyQt.QtCore import QObject, pyqtSignal
 from qgis.core import QgsApplication
 
 from .base_styler import StylerBase
@@ -23,14 +22,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class ThemeManager(StylerBase, QObject):
+class ThemeManager(StylerBase):
     """
     Centralized theme management for FilterMate.
     
     Provides:
     - Theme detection from QGIS palette
     - Theme application to widgets
-    - Theme change events
+    - Theme change events via callbacks
     - Color scheme management
     
     Migrated methods from modules/ui_styles.py:
@@ -39,22 +38,19 @@ class ThemeManager(StylerBase, QObject):
     - get_current_theme() -> current_theme property
     - load_stylesheet() -> _load_stylesheet()
     
-    Signals:
-        theme_changed: Emitted when theme changes, carries new theme name
+    Theme Change Callbacks:
+        Use add_theme_changed_callback() to register handlers
     
     Example:
         manager = ThemeManager(dockwidget)
         manager.setup()
         
-        # React to theme changes
-        manager.theme_changed.connect(on_theme_changed)
+        # React to theme changes via callback
+        manager.add_theme_changed_callback(on_theme_changed)
         
         # Change theme
         manager.set_theme('dark')
     """
-    
-    # Signal emitted when theme changes
-    theme_changed = pyqtSignal(str)
     
     # Default color schemes
     COLOR_SCHEMES = {
@@ -115,14 +111,41 @@ class ThemeManager(StylerBase, QObject):
         Args:
             dockwidget: The main FilterMate dockwidget instance
         """
-        # Initialize both base classes
-        StylerBase.__init__(self, dockwidget)
-        QObject.__init__(self)
+        super().__init__(dockwidget)
         
         self._current_theme: str = 'default'
         self._auto_detect: bool = True
         self._styles_cache: Dict[str, str] = {}
         self._config_data: Optional[Dict] = None
+        self._theme_changed_callbacks: List[Callable[[str], None]] = []
+    
+    def add_theme_changed_callback(self, callback: Callable[[str], None]) -> None:
+        """
+        Register a callback to be called when theme changes.
+        
+        Args:
+            callback: Function that accepts theme name as parameter
+        """
+        if callback not in self._theme_changed_callbacks:
+            self._theme_changed_callbacks.append(callback)
+    
+    def remove_theme_changed_callback(self, callback: Callable[[str], None]) -> None:
+        """
+        Remove a previously registered theme change callback.
+        
+        Args:
+            callback: The callback to remove
+        """
+        if callback in self._theme_changed_callbacks:
+            self._theme_changed_callbacks.remove(callback)
+    
+    def _emit_theme_changed(self, theme: str) -> None:
+        """Notify all registered callbacks of theme change."""
+        for callback in self._theme_changed_callbacks:
+            try:
+                callback(theme)
+            except Exception as e:
+                logger.error(f"Error in theme change callback: {e}")
     
     @property
     def current_theme(self) -> str:
@@ -177,7 +200,7 @@ class ThemeManager(StylerBase, QObject):
             old_theme = self._current_theme
             self._current_theme = theme
             self.apply()
-            self.theme_changed.emit(theme)
+            self._emit_theme_changed(theme)
             logger.info(f"Theme changed from '{old_theme}' to '{theme}'")
     
     def detect_system_theme(self) -> str:
@@ -341,4 +364,5 @@ class ThemeManager(StylerBase, QObject):
     def teardown(self) -> None:
         """Clean up resources."""
         self.clear_cache()
+        self._theme_changed_callbacks.clear()
         super().teardown()

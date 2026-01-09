@@ -5,7 +5,7 @@ epic: 6.2 - Styling Managers Extraction
 phase: 6
 sprint: 6
 priority: P2
-status: READY_FOR_DEV
+status: DONE
 effort: 0.5 day
 assignee: null
 dependsOn: [MIG-065]

@@ -5,9 +5,9 @@ epic: 6.3 - New Controllers
 phase: 6
 sprint: 7
 priority: P1
-status: READY_FOR_DEV
+status: DONE
 effort: 1 day
-assignee: null
+assignee: Dev Agent
 dependsOn: [MIG-020, MIG-021, MIG-022, MIG-060, MIG-065]
 blocks: [MIG-087]
 createdAt: 2026-01-09
@@ -99,42 +99,42 @@ logger = logging.getLogger(__name__)
 class ConfigController(QObject):
     """
     Controller for configuration management.
-    
+
     Handles:
     - Theme changes (dark/light mode)
     - UI profile changes
     - Action bar position
     - Export settings
     - Configuration persistence
-    
+
     Signals:
         config_changed: Emitted when any configuration value changes
         theme_changed: Emitted when theme changes
     """
-    
+
     config_changed = pyqtSignal(str, object)  # key, value
     theme_changed = pyqtSignal(str)  # theme name
-    
+
     def __init__(self, dockwidget: 'FilterMateDockWidget') -> None:
         """Initialize the config controller."""
         super().__init__()
         self.dockwidget = dockwidget
         self._pending_changes: Dict[str, Any] = {}
         self._initialized = False
-        
+
     def setup(self) -> None:
         """Initialize configuration widgets and load saved config."""
         pass
-        
+
     def apply_pending_config_changes(self) -> bool:
         """
         Apply all pending configuration changes.
-        
+
         Returns:
             True if all changes applied successfully
         """
         pass
-        
+
     def cancel_pending_config_changes(self) -> None:
         """Discard all pending changes and restore current values."""
         pass
@@ -151,7 +151,7 @@ class FilterMateDockWidget(QDockWidget):
     def __init__(self, ...):
         ...
         self._config_controller = ConfigController(self)
-        
+
     # Façade pour rétrocompatibilité
     def apply_pending_config_changes(self):
         """@deprecated Use ConfigController.apply_pending_config_changes()"""
@@ -163,50 +163,54 @@ class FilterMateDockWidget(QDockWidget):
 ## 🔗 Dépendances
 
 ### Entrée
+
 - MIG-020, MIG-021, MIG-022: Controllers existants (pattern à suivre)
 - MIG-060: Layout module (pour UI profile)
 - MIG-065: Styling module (pour theme)
 
 ### Sortie
+
 - MIG-087: Final refactoring (dépend de ce controller)
 
 ---
 
 ## 📊 Métriques
 
-| Métrique | Avant | Après |
-|----------|-------|-------|
-| Lignes dans dockwidget | ~700 | 0 |
-| Méthodes dans dockwidget | 16 | 0 (façades) |
-| Nouveau fichier | - | < 400 lignes |
-| Tests | 0 | > 80% coverage |
+| Métrique                 | Avant | Après          |
+| ------------------------ | ----- | -------------- |
+| Lignes dans dockwidget   | ~700  | 0              |
+| Méthodes dans dockwidget | 16    | 0 (façades)    |
+| Nouveau fichier          | -     | < 400 lignes   |
+| Tests                    | 0     | > 80% coverage |
 
 ---
 
 ## 🧪 Scénarios de Test
 
 ### Test 1: Apply Theme Change
+
 ```python
 def test_apply_theme_change():
     """Le changement de thème doit être appliqué."""
     controller = ConfigController(mock_dockwidget)
     controller._pending_changes['theme'] = 'dark'
-    
+
     result = controller.apply_pending_config_changes()
-    
+
     assert result is True
     assert controller._pending_changes == {}
 ```
 
 ### Test 2: Cancel Pending Changes
+
 ```python
 def test_cancel_pending_changes():
     """Les changements non appliqués doivent être annulés."""
     controller = ConfigController(mock_dockwidget)
     controller._pending_changes['theme'] = 'dark'
-    
+
     controller.cancel_pending_config_changes()
-    
+
     assert controller._pending_changes == {}
 ```
 

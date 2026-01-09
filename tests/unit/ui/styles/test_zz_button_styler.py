@@ -4,9 +4,17 @@ Tests for ButtonStyler.
 Story: MIG-068
 Phase: 6 - God Class DockWidget Migration
 
-Note: QGIS mocks are configured in conftest.py to be shared across all style tests.
-ButtonStyler is loaded directly via importlib to avoid importing ThemeManager
-which causes metaclass conflicts even with mocked QObject.
+Note: This test file uses a workaround to load ButtonStyler directly without
+triggering the ui/styles/__init__.py chain import that would load ThemeManager
+and cause metaclass conflicts with mocked QObject.
+
+The workaround:
+1. Creates a local StylerBase class matching the real one
+2. Loads button_styler.py directly via importlib
+3. Uses atexit to clean up sys.modules after tests
+
+IMPORTANT: This file must be run LAST in alphabetical order to avoid polluting
+other tests. If needed, rename to test_zz_button_styler.py.
 """
 
 import pytest
@@ -16,14 +24,23 @@ from pathlib import Path
 import types
 import importlib.util
 from abc import ABC, abstractmethod
+import atexit
 
 # Add plugin path for imports
 plugin_path = Path(__file__).parents[4]
 if str(plugin_path) not in sys.path:
     sys.path.insert(0, str(plugin_path))
 
-# IMPORTANT: Mocks are configured in conftest.py - do not reconfigure here
-# We only need to load ButtonStyler directly to avoid ThemeManager import chain
+# Ensure QGIS mocks are properly configured (from parent conftest.py)
+# But we need to make sure Qt.PointingHandCursor is an int, not a Mock
+if 'qgis.PyQt.QtCore' in sys.modules:
+    _qt_core = sys.modules['qgis.PyQt.QtCore']
+    if hasattr(_qt_core, 'Qt'):
+        _qt_core.Qt.PointingHandCursor = 13  # Ensure it's an int
+if 'qgis.PyQt.QtGui' in sys.modules:
+    _qt_gui = sys.modules['qgis.PyQt.QtGui']
+    # Make QCursor a simple callable that returns a MagicMock
+    _qt_gui.QCursor = lambda *args: MagicMock()
 
 
 # Create a real StylerBase class that will work with ButtonStyler
@@ -68,13 +85,13 @@ class StylerBase(ABC):
         pass
 
 
-# Create a module for base_styler
-_base_styler_module = types.ModuleType('ui.styles.base_styler')
-_base_styler_module.StylerBase = StylerBase
-
 # Save original modules to restore later
 _original_base_styler = sys.modules.get('ui.styles.base_styler')
 _original_button_styler = sys.modules.get('ui.styles.button_styler')
+
+# Create a module for base_styler
+_base_styler_module = types.ModuleType('ui.styles.base_styler')
+_base_styler_module.StylerBase = StylerBase
 
 # Pre-populate sys.modules to prevent loading real modules
 sys.modules['ui.styles.base_styler'] = _base_styler_module
@@ -106,7 +123,6 @@ def _cleanup_modules():
 
 
 # Register cleanup to run at module exit
-import atexit
 atexit.register(_cleanup_modules)
 class TestButtonStyler:
     """Tests for ButtonStyler class."""

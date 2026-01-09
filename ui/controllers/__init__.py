@@ -22,6 +22,7 @@ from .exporting_controller import (
     ExportFormat,
     ExportMode
 )
+from .config_controller import ConfigController
 from .integration import ControllerIntegration
 
 __all__ = [
@@ -40,5 +41,6 @@ __all__ = [
     'ExportResult',
     'ExportFormat',
     'ExportMode',
+    'ConfigController',
     'ControllerIntegration',
 ]

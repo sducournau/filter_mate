@@ -35,7 +35,7 @@
 
 | ID      | Story                  | Priorité | Statut  | Dépend de   |
 | ------- | ---------------------- | -------- | ------- | ----------- |
-| MIG-070 | ConfigController       | 🟠 P1    | 📝 TODO | MIG-060,065 |
+| MIG-070 | ConfigController       | 🟠 P1    | ✅ DONE | MIG-060,065 |
 | MIG-071 | BackendController      | 🟠 P1    | 📝 TODO | MIG-070     |
 | MIG-072 | FavoritesController    | 🟠 P1    | 📝 TODO | MIG-070     |
 | MIG-073 | LayerSyncController    | 🟠 P1    | 📝 TODO | MIG-070     |
