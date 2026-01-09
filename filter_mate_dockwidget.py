@@ -172,13 +172,27 @@ except ImportError as e:
 
 # Import Layout Managers for God Class refactoring (v3.1 - Phase 6)
 try:
-    from .ui.layout import SplitterManager, DimensionsManager
+    from .ui.layout import SplitterManager, DimensionsManager, SpacingManager, ActionBarManager
     LAYOUT_MANAGERS_AVAILABLE = True
 except ImportError as e:
     LAYOUT_MANAGERS_AVAILABLE = False
     SplitterManager = None
     DimensionsManager = None
+    SpacingManager = None
+    ActionBarManager = None
     logger.debug(f"Layout managers not available: {e}")
+
+# Import Style Managers for God Class refactoring (v3.1 - Phase 6)
+try:
+    from .ui.styles import ThemeManager, IconManager, ButtonStyler
+    STYLE_MANAGERS_AVAILABLE = True
+except ImportError as e:
+    STYLE_MANAGERS_AVAILABLE = False
+    ThemeManager = None
+    IconManager = None
+    ButtonStyler = None
+    logger.debug(f"Style managers not available: {e}")
+
 
 class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
@@ -344,6 +358,42 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             except Exception as e:
                 logger.warning(f"Could not create DimensionsManager: {e}")
                 self._dimensions_manager = None
+        
+        # v3.1: SpacingManager handles layout spacing (Phase 6 - MIG-063)
+        self._spacing_manager = None
+        if LAYOUT_MANAGERS_AVAILABLE and SpacingManager:
+            try:
+                self._spacing_manager = SpacingManager(self)
+                logger.debug("SpacingManager created (v3.1 Phase 6 - MIG-063)")
+            except Exception as e:
+                logger.warning(f"Could not create SpacingManager: {e}")
+                self._spacing_manager = None
+        
+        # v3.1: ActionBarManager handles action bar layout (Phase 6 - MIG-064)
+        self._action_bar_manager = None
+        if LAYOUT_MANAGERS_AVAILABLE and ActionBarManager:
+            try:
+                self._action_bar_manager = ActionBarManager(self)
+                logger.debug("ActionBarManager created (v3.1 Phase 6 - MIG-064)")
+            except Exception as e:
+                logger.warning(f"Could not create ActionBarManager: {e}")
+                self._action_bar_manager = None
+        
+        # v3.1: Style Managers (Phase 6 - MIG-070+)
+        self._theme_manager = None
+        self._icon_manager = None
+        self._button_styler = None
+        if STYLE_MANAGERS_AVAILABLE:
+            try:
+                self._theme_manager = ThemeManager(self)
+                self._icon_manager = IconManager(self)
+                self._button_styler = ButtonStyler(self)
+                logger.debug("Style managers created (v3.1 Phase 6 - MIG-070+)")
+            except Exception as e:
+                logger.warning(f"Could not create style managers: {e}")
+                self._theme_manager = None
+                self._icon_manager = None
+                self._button_styler = None
         
         # v3.0: Initialize MVC Controller Integration (Strangler Fig pattern)
         # Controllers are created but legacy code still handles most operations
@@ -862,6 +912,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Called from setupUiCustom() during initialization.
         
         v3.1 Phase 6 (MIG-062): Delegates to DimensionsManager if available.
+        v3.1 Phase 6 (MIG-063): Delegates spacing to SpacingManager if available.
         """
         # v3.1: Delegate to DimensionsManager (Phase 6 - MIG-062)
         if self._dimensions_manager is not None:
@@ -881,11 +932,25 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._apply_widget_dimensions()
             self._apply_frame_dimensions()
             self._harmonize_checkable_pushbuttons()
-            self._apply_layout_spacing()
-            self._harmonize_spacers()
+            
+            # v3.1: Delegate spacing to SpacingManager (Phase 6 - MIG-063)
+            if self._spacing_manager is not None:
+                try:
+                    self._spacing_manager.apply()
+                    logger.debug("Spacing delegated to SpacingManager (v3.1)")
+                except Exception as e:
+                    logger.warning(f"SpacingManager.apply() failed, using legacy: {e}")
+                    self._apply_layout_spacing()
+                    self._harmonize_spacers()
+                    self._adjust_row_spacing()
+            else:
+                # Legacy spacing methods
+                self._apply_layout_spacing()
+                self._harmonize_spacers()
+                self._adjust_row_spacing()
+            
             self._apply_qgis_widget_dimensions()
             self._align_key_layouts()
-            self._adjust_row_spacing()
             
             logger.info("Successfully applied dynamic dimensions to all widgets")
             
@@ -4073,10 +4138,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         - 'bottom': Action bar at bottom (horizontal layout)
         - 'left': Action bar on left side (vertical layout)
         - 'right': Action bar on right side (vertical layout)
+        
+        v3.1 Phase 6 (MIG-064): Delegates to ActionBarManager if available.
         """
         if not hasattr(self, 'frame_actions'):
             return
         
+        # v3.1: Delegate to ActionBarManager (Phase 6 - MIG-064)
+        if self._action_bar_manager is not None:
+            try:
+                self._action_bar_manager.setup()
+                logger.debug("Action bar setup delegated to ActionBarManager (v3.1)")
+                return
+            except Exception as e:
+                logger.warning(f"ActionBarManager.setup() failed, falling back to legacy: {e}")
+        
+        # Legacy fallback - original implementation
         # Get configured position
         position = self._get_action_bar_position()
         logger.info(f"Setting up action bar with position: {position}")
@@ -6353,25 +6430,58 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         6. Setting key widget sizes
         7. Starting QGIS theme watcher for automatic dark/light mode switching
         
-        Benefits:
-        - Centralized style management
-        - Automatic adaptation to screen size and QGIS theme
-        - Proper error handling and fallbacks
-        - Easy theme customization via config.json
-        - Automatic theme sync when QGIS theme changes
+        v3.1 Phase 6 (MIG-070+): Delegates to Style Managers if available.
         """
-        # Auto-configure UI profile and theme
-        self._apply_auto_configuration()
+        # v3.1: Delegate to Style Managers (Phase 6 - MIG-070+)
+        if self._theme_manager is not None:
+            try:
+                self._theme_manager.setup()
+                logger.debug("Theme management delegated to ThemeManager (v3.1)")
+            except Exception as e:
+                logger.warning(f"ThemeManager.setup() failed, falling back to legacy: {e}")
+                self._apply_auto_configuration()
+                self._apply_stylesheet()
+                self._setup_theme_watcher()
+        else:
+            # Legacy theme configuration
+            self._apply_auto_configuration()
+            self._apply_stylesheet()
+            self._setup_theme_watcher()
         
-        # Apply stylesheet
-        self._apply_stylesheet()
+        # v3.1: Delegate icon management to IconManager
+        if self._icon_manager is not None:
+            try:
+                self._icon_manager.setup()
+                logger.debug("Icon management delegated to IconManager (v3.1)")
+            except Exception as e:
+                logger.warning(f"IconManager.setup() failed, falling back to legacy: {e}")
+                # Legacy icon initialization
+                if ICON_THEME_AVAILABLE:
+                    current_theme = StyleLoader.detect_qgis_theme()
+                    IconThemeManager.set_theme(current_theme)
+                    logger.info(f"IconThemeManager pre-initialized with theme: {current_theme}")
+        else:
+            # Legacy icon initialization
+            if ICON_THEME_AVAILABLE:
+                current_theme = StyleLoader.detect_qgis_theme()
+                IconThemeManager.set_theme(current_theme)
+                logger.info(f"IconThemeManager pre-initialized with theme: {current_theme}")
         
-        # Initialize IconThemeManager with current QGIS theme BEFORE configuring icons
-        if ICON_THEME_AVAILABLE:
-            current_theme = StyleLoader.detect_qgis_theme()
-            IconThemeManager.set_theme(current_theme)
-            logger.info(f"IconThemeManager pre-initialized with theme: {current_theme}")
+        # v3.1: Delegate button styling to ButtonStyler
+        if self._button_styler is not None:
+            try:
+                self._button_styler.setup()
+                logger.debug("Button styling delegated to ButtonStyler (v3.1)")
+            except Exception as e:
+                logger.warning(f"ButtonStyler.setup() failed, falling back to legacy: {e}")
+                self._legacy_configure_widgets()
+        else:
+            self._legacy_configure_widgets()
         
+        logger.info("UI style management complete (v3.1)")
+    
+    def _legacy_configure_widgets(self):
+        """Legacy widget configuration - used as fallback for ButtonStyler."""
         # Get configuration
         pushButton_config_path = ['APP', 'DOCKWIDGET', 'PushButton']
         pushButton_config = self.CONFIG_DATA[pushButton_config_path[0]][pushButton_config_path[1]][pushButton_config_path[2]]
@@ -6388,11 +6498,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._configure_pushbuttons(pushButton_config, icons_sizes, font)
         self._configure_other_widgets(font)
         self._configure_key_widgets_sizes(icons_sizes)
-        
-        # Start theme watcher for automatic dark/light mode switching
-        self._setup_theme_watcher()
-        
-        logger.debug("UI stylesheet loaded and applied successfully")
     
     def _setup_theme_watcher(self):
         """
@@ -7439,18 +7544,24 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         The configuration methods (_configure_*_selection_groupbox) handle the 
         exclusive state by checking/unchecking groupboxes and expanding/collapsing them.
         
+        v3.1 STORY-2.3: Delegates mode change to ExploringController for cache invalidation.
+        
         Args:
             groupbox (str): Selected groupbox ('single_selection', 'multiple_selection', or 'custom_selection')
         """
         if self.widgets_initialized is True:
-            # CACHE INVALIDATION: When groupbox changes, invalidate cache for the previous groupbox
-            # because the user is switching to a different selection mode
-            if hasattr(self, '_exploring_cache') and self.current_layer:
-                layer_id = self.current_layer.id()
-                old_groupbox = self.current_exploring_groupbox
-                if old_groupbox and old_groupbox != groupbox:
-                    self._exploring_cache.invalidate(layer_id, old_groupbox)
-                    logger.debug(f"exploring_groupbox_changed: Invalidated cache for {layer_id[:8]}.../{old_groupbox}")
+            # v3.1 STORY-2.3: Delegate mode change to controller (handles cache invalidation)
+            if self._controller_integration is not None:
+                self._controller_integration.delegate_exploring_set_groupbox_mode(groupbox)
+            else:
+                # CACHE INVALIDATION: When groupbox changes, invalidate cache for the previous groupbox
+                # because the user is switching to a different selection mode
+                if hasattr(self, '_exploring_cache') and self.current_layer:
+                    layer_id = self.current_layer.id()
+                    old_groupbox = self.current_exploring_groupbox
+                    if old_groupbox and old_groupbox != groupbox:
+                        self._exploring_cache.invalidate(layer_id, old_groupbox)
+                        logger.debug(f"exploring_groupbox_changed: Invalidated cache for {layer_id[:8]}.../{old_groupbox}")
             
             # Get the widget that was clicked
             triggering_widget = None
@@ -8091,7 +8202,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return self.get_filtered_layer_extent(self.current_layer)
 
     def zooming_to_features(self, features, expression=None):
+        """
+        Zoom to provided features on the map canvas.
         
+        v3.1 STORY-2.3: Try controller delegation first for cleaner architecture.
+        """
         if self.widgets_initialized is True and self.current_layer is not None:
 
             # v3.0.14: CRITICAL - Use centralized deletion check with full protection
@@ -8100,8 +8215,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.current_layer = None
                 return
 
+            # v3.1 STORY-2.3: Try controller delegation first
+            if features and len(features) > 0 and self._controller_integration is not None:
+                if self._controller_integration.delegate_zoom_to_features(features, expression, self.current_layer):
+                    logger.debug("zooming_to_features: Delegated to controller successfully")
+                    return
+
             # DIAGNOSTIC: Log incoming features
-            logger.info(f"🔍 zooming_to_features DIAGNOSTIC:")
+            logger.info(f"🔍 zooming_to_features DIAGNOSTIC (legacy path):")
             logger.info(f"   features count: {len(features) if features else 0}")
             logger.info(f"   expression: '{expression}'")
             if features and len(features) > 0:
@@ -8776,7 +8897,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
 
     def exploring_deselect_features(self):
-
+        """
+        Deselect all features on the current layer.
+        
+        v3.1 Phase 6 (STORY-2.3): Delegates to ExploringController if available.
+        """
         if self.widgets_initialized is True and self.current_layer is not None:
 
             # v3.0.14: CRITICAL - Use centralized deletion check with full protection
@@ -8785,6 +8910,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.current_layer = None
                 return
 
+            # v3.1: Delegate to ExploringController (STORY-2.3)
+            if self._controller_integration is not None:
+                if self._controller_integration.delegate_exploring_clear_selection():
+                    logger.debug("exploring_deselect_features: delegated to controller")
+                    return
+            
+            # Legacy fallback
             self.current_layer.removeSelection()
         
 
@@ -8796,6 +8928,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         1. Activates the QGIS rectangle selection tool on the canvas
         2. Retrieves features from the current exploration mode (single/multiple/custom) 
            and selects them on the layer.
+        
+        v3.1 STORY-2.3: Delegate to ExploringController when available.
         """
         if self.widgets_initialized is True and self.current_layer is not None:
             
@@ -8805,10 +8939,23 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.current_layer = None
                 return
 
-            # Activate QGIS selection tool on canvas
+            # v3.1 STORY-2.3: Delegate to ExploringController
+            if self._controller_integration is not None:
+                # Step 1: Activate selection tool via controller
+                if self._controller_integration.delegate_exploring_activate_selection_tool(self.current_layer):
+                    logger.debug("exploring_select_features: Selection tool delegated to controller")
+                    # Step 2: Get features and select them via controller
+                    features, expression = self.get_current_features()
+                    if len(features) > 0:
+                        feature_ids = [feature.id() for feature in features]
+                        if self._controller_integration.delegate_exploring_select_layer_features(feature_ids, self.current_layer):
+                            logger.debug(f"exploring_select_features: Selected {len(features)} features via controller")
+                            return
+            
+            # Legacy fallback: Activate QGIS selection tool on canvas
             try:
                 self.iface.actionSelectRectangle().trigger()
-                logger.debug("exploring_select_features: Selection tool activated on canvas")
+                logger.debug("exploring_select_features: Selection tool activated on canvas (legacy)")
             except Exception as e:
                 logger.warning(f"exploring_select_features: Failed to activate selection tool: {e}")
             
@@ -12737,6 +12884,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Get statistics about the exploring features cache.
         
+        v3.1 Phase 6 (STORY-2.3): Delegates to ExploringController if available.
+        
         Returns:
             dict: Cache statistics including hits, misses, hit ratio, and entry counts.
                   Returns empty dict if cache is not initialized.
@@ -12745,6 +12894,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             >>> stats = self.get_exploring_cache_stats()
             >>> print(f"Cache hit ratio: {stats['hit_ratio']}")
         """
+        # v3.1: Delegate to ExploringController (STORY-2.3)
+        if self._controller_integration is not None:
+            stats = self._controller_integration.delegate_exploring_get_cache_stats()
+            if stats:
+                return stats
+        
+        # Legacy fallback
         if hasattr(self, '_exploring_cache'):
             return self._exploring_cache.get_stats()
         return {}
@@ -12752,6 +12908,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def invalidate_exploring_cache(self, layer_id=None, groupbox_type=None):
         """
         Invalidate the exploring features cache.
+        
+        v3.1 Phase 6 (STORY-2.3): Delegates to ExploringController if available.
         
         Args:
             layer_id: Optional layer ID to invalidate. If None, invalidates all layers.
@@ -12764,6 +12922,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             >>> self.invalidate_exploring_cache(layer.id())  # Clear specific layer
             >>> self.invalidate_exploring_cache(layer.id(), 'single_selection')  # Clear specific
         """
+        # v3.1: Delegate to ExploringController (STORY-2.3)
+        if layer_id is None and groupbox_type is None:
+            if self._controller_integration is not None:
+                if self._controller_integration.delegate_exploring_clear_cache():
+                    logger.debug("Exploring cache: delegated clear_cache to controller")
+                    return
+        
+        # Legacy fallback (or specific layer/groupbox invalidation)
         if hasattr(self, '_exploring_cache'):
             if layer_id is None:
                 self._exploring_cache.invalidate_all()

@@ -67,6 +67,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
         self._current_layer: Optional[QgsVectorLayer] = None
         self._current_field: Optional[str] = None
         self._selected_features: List[str] = []
+        self._current_groupbox_mode: str = "single_selection"  # v3.1 STORY-2.3
         
         # Cache for feature values
         self._features_cache = features_cache
@@ -619,8 +620,61 @@ class ExploringController(BaseController, LayerSelectionMixin):
         logger.debug(f"Selection changed: {len(selected_values)} features selected")
 
     def clear_selection(self) -> None:
-        """Clear the current selection."""
+        """
+        Clear the current selection.
+        
+        v3.1 Phase 6 (STORY-2.3): Also clears QGIS layer selection.
+        """
         self._selected_features.clear()
+        
+        # v3.1: Also clear QGIS layer selection
+        if self._current_layer and self.is_layer_valid(self._current_layer):
+            try:
+                self._current_layer.removeSelection()
+                logger.debug("ExploringController: Cleared layer selection")
+            except Exception as e:
+                logger.warning(f"ExploringController: Failed to clear layer selection: {e}")
+
+    # === Groupbox Mode Management (v3.1 STORY-2.3) ===
+
+    def get_groupbox_mode(self) -> str:
+        """
+        Get current exploring groupbox mode.
+        
+        Returns:
+            Current mode: 'single_selection', 'multiple_selection', or 'custom_selection'
+        """
+        return self._current_groupbox_mode
+
+    def set_groupbox_mode(self, mode: str) -> bool:
+        """
+        Set current exploring groupbox mode.
+        
+        This method tracks the groupbox state in the controller for better 
+        separation of concerns. The UI still handles the actual widget states.
+        
+        Args:
+            mode: 'single_selection', 'multiple_selection', or 'custom_selection'
+        
+        Returns:
+            True if mode was set, False if invalid mode
+        """
+        valid_modes = ('single_selection', 'multiple_selection', 'custom_selection')
+        if mode not in valid_modes:
+            logger.warning(f"ExploringController: Invalid groupbox mode '{mode}'")
+            return False
+        
+        old_mode = self._current_groupbox_mode
+        if old_mode != mode:
+            # Invalidate cache for old mode when switching
+            if self._features_cache and self._current_layer:
+                layer_id = self._current_layer.id()
+                self._features_cache.invalidate(layer_id, old_mode)
+                logger.debug(f"ExploringController: Groupbox mode changed {old_mode} -> {mode}, cache invalidated")
+            
+            self._current_groupbox_mode = mode
+        
+        return True
 
     # === Signal Connections ===
 
@@ -643,6 +697,68 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 self._on_field_changed,
                 'exploring'
             )
+
+    # === Selection Tool Activation ===
+
+    def activate_selection_tool(self, layer: QgsVectorLayer = None) -> bool:
+        """
+        Activate QGIS rectangle selection tool on canvas.
+        
+        Args:
+            layer: Optional layer to set as active. If None, uses current layer.
+        
+        Returns:
+            True if tool activated successfully, False otherwise
+        """
+        if not QGIS_AVAILABLE:
+            return False
+        
+        target_layer = layer or self._current_layer
+        
+        try:
+            # Activate QGIS selection tool on canvas
+            iface.actionSelectRectangle().trigger()
+            logger.debug("ExploringController: Selection tool activated on canvas")
+            
+            # Set active layer in LayerTreeView
+            if target_layer:
+                iface.setActiveLayer(target_layer)
+                logger.debug(f"ExploringController: Active layer set to {target_layer.name()}")
+            
+            return True
+        except Exception as e:
+            logger.warning(f"ExploringController: Failed to activate selection tool: {e}")
+            return False
+
+    def select_layer_features(self, feature_ids: List[int] = None, layer: QgsVectorLayer = None) -> bool:
+        """
+        Select features on a layer using QGIS selection.
+        
+        Args:
+            feature_ids: List of feature IDs to select. If None, clears selection.
+            layer: Optional layer to use. If None, uses current layer.
+        
+        Returns:
+            True if selection succeeded, False otherwise
+        """
+        target_layer = layer or self._current_layer
+        if not target_layer:
+            logger.debug("ExploringController: No layer available for selection")
+            return False
+        
+        try:
+            # Clear existing selection first
+            target_layer.removeSelection()
+            
+            # Select new features
+            if feature_ids and len(feature_ids) > 0:
+                target_layer.select(feature_ids)
+                logger.debug(f"ExploringController: Selected {len(feature_ids)} features on {target_layer.name()}")
+            
+            return True
+        except Exception as e:
+            logger.warning(f"ExploringController: Failed to select features: {e}")
+            return False
 
     # === Cache Management ===
 

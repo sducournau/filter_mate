@@ -419,45 +419,254 @@ class ControllerIntegration:
             return self._exploring_controller.zoom_to_selected()
         return False
     
-    def delegate_zoom_to_features(self, features: list, expression: str = None) -> bool:
+    def delegate_zoom_to_features(self, features: list, expression: str = None, layer=None) -> bool:
         """
         Delegate zoom to features operation.
+        
+        v3.1 Phase 6 (STORY-2.3): Enhanced with layer sync for robust delegation.
         
         Args:
             features: List of QgsFeature objects to zoom to
             expression: Optional expression string (for logging)
+            layer: Optional layer to sync before zoom (if None, uses dockwidget.current_layer)
         
         Returns:
             True if delegation succeeded, False otherwise
         """
         if self._exploring_controller and features:
             try:
+                # v3.1 STORY-2.3: Sync layer before zoom to ensure controller has correct layer
+                target_layer = layer
+                if target_layer is None and self._dockwidget:
+                    target_layer = getattr(self._dockwidget, 'current_layer', None)
+                
+                if target_layer:
+                    self._exploring_controller.set_layer(target_layer)
+                
                 return self._exploring_controller.zoom_to_features(features)
             except Exception as e:
                 logger.warning(f"delegate_zoom_to_features failed: {e}")
                 return False
         return False
     
-    def delegate_flash_features(self, feature_ids: list) -> bool:
+    def delegate_flash_features(self, feature_ids: list, layer=None) -> bool:
         """
         Delegate flash features operation to ExploringController.
         
         v3.1 Vague 2: Supports dockwidget exploring_identify_clicked delegation.
+        v3.1 Phase 6 (STORY-2.3): Enhanced with layer sync for robust delegation.
         
         Args:
             feature_ids: List of feature IDs to flash
+            layer: Optional layer to sync before flash (if None, uses dockwidget.current_layer)
         
         Returns:
             True if delegation succeeded, False otherwise
         """
         if self._exploring_controller and feature_ids:
             try:
+                # v3.1 STORY-2.3: Sync layer before flash to ensure controller has correct layer
+                target_layer = layer
+                if target_layer is None and self._dockwidget:
+                    target_layer = getattr(self._dockwidget, 'current_layer', None)
+                
+                if target_layer:
+                    self._exploring_controller.set_layer(target_layer)
+                
                 return self._exploring_controller.flash_features(feature_ids)
             except Exception as e:
                 logger.warning(f"delegate_flash_features failed: {e}")
                 return False
         return False
     
+    # === Exploring Controller Delegation (v3.1 Phase 6 - STORY-2.3) ===
+    
+    def delegate_exploring_setup(self) -> bool:
+        """
+        Delegate exploring controller setup.
+        
+        v3.1 Phase 6 (STORY-2.3): Full delegation to ExploringController.
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._exploring_controller:
+            try:
+                self._exploring_controller.setup()
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_exploring_setup failed: {e}")
+                return False
+        return False
+    
+    def delegate_exploring_get_current_features(self) -> list:
+        """
+        Delegate getting current selected features.
+        
+        Returns:
+            List of selected feature values, empty list on failure
+        """
+        if self._exploring_controller:
+            try:
+                return self._exploring_controller.get_selected_features()
+            except Exception as e:
+                logger.warning(f"delegate_exploring_get_current_features failed: {e}")
+                return []
+        return []
+    
+    def delegate_exploring_set_layer(self, layer) -> bool:
+        """
+        Delegate layer change to exploring controller.
+        
+        Args:
+            layer: The new layer to set
+            
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._exploring_controller:
+            try:
+                self._exploring_controller.set_layer(layer)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_exploring_set_layer failed: {e}")
+                return False
+        return False
+    
+    def delegate_exploring_clear_cache(self) -> bool:
+        """
+        Delegate cache clearing to exploring controller.
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._exploring_controller:
+            try:
+                self._exploring_controller.clear_cache()
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_exploring_clear_cache failed: {e}")
+                return False
+        return False
+    
+    def delegate_exploring_get_cache_stats(self) -> dict:
+        """
+        Delegate cache stats retrieval.
+        
+        Returns:
+            Cache stats dictionary, empty dict on failure
+        """
+        if self._exploring_controller:
+            try:
+                return self._exploring_controller.get_cache_stats()
+            except Exception as e:
+                logger.warning(f"delegate_exploring_get_cache_stats failed: {e}")
+                return {}
+        return {}
+    
+    def delegate_exploring_clear_selection(self) -> bool:
+        """
+        Delegate clearing feature selection.
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._exploring_controller:
+            try:
+                self._exploring_controller.clear_selection()
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_exploring_clear_selection failed: {e}")
+                return False
+        return False
+
+    def delegate_exploring_set_groupbox_mode(self, mode: str) -> bool:
+        """
+        Delegate groupbox mode change to ExploringController.
+        
+        v3.1 STORY-2.3: Tracks groupbox state in controller for cache invalidation.
+        
+        Args:
+            mode: 'single_selection', 'multiple_selection', or 'custom_selection'
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._exploring_controller:
+            try:
+                return self._exploring_controller.set_groupbox_mode(mode)
+            except Exception as e:
+                logger.warning(f"delegate_exploring_set_groupbox_mode failed: {e}")
+                return False
+        return False
+
+    def delegate_exploring_get_groupbox_mode(self) -> str:
+        """
+        Get current groupbox mode from ExploringController.
+        
+        Returns:
+            Current mode or 'single_selection' as default
+        """
+        if self._exploring_controller:
+            try:
+                return self._exploring_controller.get_groupbox_mode()
+            except Exception as e:
+                logger.warning(f"delegate_exploring_get_groupbox_mode failed: {e}")
+                return 'single_selection'
+        return 'single_selection'
+    
+    def delegate_exploring_zoom_to_selected(self) -> bool:
+        """
+        Delegate zoom to selected features.
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._exploring_controller:
+            try:
+                return self._exploring_controller.zoom_to_selected()
+            except Exception as e:
+                logger.warning(f"delegate_exploring_zoom_to_selected failed: {e}")
+                return False
+        return False
+
+    def delegate_exploring_activate_selection_tool(self, layer=None) -> bool:
+        """
+        Delegate activation of QGIS selection tool.
+        
+        Args:
+            layer: Optional layer to set as active
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._exploring_controller:
+            try:
+                return self._exploring_controller.activate_selection_tool(layer)
+            except Exception as e:
+                logger.warning(f"delegate_exploring_activate_selection_tool failed: {e}")
+                return False
+        return False
+
+    def delegate_exploring_select_layer_features(self, feature_ids: list = None, layer=None) -> bool:
+        """
+        Delegate feature selection on layer.
+        
+        Args:
+            feature_ids: List of feature IDs to select
+            layer: Optional layer to use
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._exploring_controller:
+            try:
+                return self._exploring_controller.select_layer_features(feature_ids, layer)
+            except Exception as e:
+                logger.warning(f"delegate_exploring_select_layer_features failed: {e}")
+                return False
+        return False
+
     def delegate_execute_filter(self) -> bool:
         """Delegate filter execution to filtering controller."""
         if self._filtering_controller:
