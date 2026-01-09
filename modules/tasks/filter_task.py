@@ -12063,6 +12063,9 @@ class FilterEngineTask(QgsTask):
                             
                             if has_complex_filter:
                                 try:
+                                    # CRIT-005 FIX: Block signals during reload to prevent
+                                    # currentLayerChanged emissions that cause combobox reset
+                                    layer.blockSignals(True)
                                     layer.dataProvider().reloadData()
                                     logger.debug(f"  → Forced reloadData() for {layer.name()} (postgres, complex filter)")
                                 except Exception as reload_err:
@@ -12071,12 +12074,18 @@ class FilterEngineTask(QgsTask):
                                         layer.reload()
                                     except Exception:
                                         pass
+                                finally:
+                                    layer.blockSignals(False)
                                 layers_refreshed['postgres'] += 1
                             else:
                                 try:
+                                    # CRIT-005 FIX: Block signals during reload
+                                    layer.blockSignals(True)
                                     layer.reload()
                                 except Exception:
                                     pass
+                                finally:
+                                    layer.blockSignals(False)
                         # v2.6.6: For OGR/Spatialite, just triggerRepaint - NO reloadData()
                         # This prevents freeze on large FID IN filters
                         
@@ -12318,7 +12327,13 @@ class FilterEngineTask(QgsTask):
                             # FIX v2.9.24: Also force reload for Spatialite to fix second filter display
                             # FIX v3.0.8: Also reload OGR layers for correct feature count
                             if layer.providerType() in ('postgres', 'spatialite', 'ogr'):
-                                layer.reload()
+                                # CRIT-005 FIX: Block signals during reload to prevent
+                                # currentLayerChanged emissions that reset combobox
+                                try:
+                                    layer.blockSignals(True)
+                                    layer.reload()
+                                finally:
+                                    layer.blockSignals(False)
                             # v2.6.5: Skip updateExtents for large layers
                             # v3.0.10: Protect against None feature_count
                             feature_count = layer.featureCount()
@@ -12351,7 +12366,13 @@ class FilterEngineTask(QgsTask):
                                 # Without reload(), featureCount() returns stale data for OGR/GeoPackage layers
                                 # causing "Filter APPLIED: batiment → 1164986 features" instead of actual filtered count
                                 if layer.providerType() in ('postgres', 'spatialite', 'ogr'):
-                                    layer.reload()
+                                    # CRIT-005 FIX: Block signals during reload to prevent
+                                    # currentLayerChanged emissions that reset combobox
+                                    try:
+                                        layer.blockSignals(True)
+                                        layer.reload()
+                                    finally:
+                                        layer.blockSignals(False)
                                 # v2.6.5: Skip updateExtents for large layers
                                 # v3.0.10: Protect against None feature_count
                                 feature_count = layer.featureCount()
