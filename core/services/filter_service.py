@@ -12,11 +12,11 @@ from datetime import datetime
 from enum import Enum
 import logging
 
-from core.domain.filter_expression import FilterExpression, ProviderType
-from core.domain.filter_result import FilterResult
-from core.domain.layer_info import LayerInfo
-from core.domain.optimization_config import OptimizationConfig
-from core.services.expression_service import ExpressionService
+from ..domain.filter_expression import FilterExpression, ProviderType
+from ..domain.filter_result import FilterResult
+from ..domain.layer_info import LayerInfo
+from ..domain.optimization_config import OptimizationConfig
+from .expression_service import ExpressionService
 
 logger = logging.getLogger(__name__)
 

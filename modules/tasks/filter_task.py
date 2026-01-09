@@ -351,6 +351,26 @@ class FilterEngineTask(QgsTask):
         else:
             logger.warning(f"⚠️ queue_subset_request called with invalid params: layer={layer}, expression={expression is not None}")
         return True  # Return True to indicate success (actual application is deferred)
+
+    def _collect_backend_warnings(self, backend):
+        """
+        Collect user warnings from a backend and add them to the task's warning queue.
+        
+        v3.0.21: Backends store warnings instead of calling iface.messageBar() directly
+        from background threads, which caused warnings to appear in separate popup windows.
+        This method collects those warnings for display in finished() on the main thread.
+        
+        Args:
+            backend: The backend instance that may have queued warnings
+        """
+        if backend and hasattr(backend, 'get_user_warnings'):
+            warnings = backend.get_user_warnings()
+            if warnings:
+                for warning in warnings:
+                    if warning not in self.warning_messages:  # Avoid duplicates
+                        self.warning_messages.append(warning)
+                        logger.debug(f"📥 Collected backend warning: {warning[:60]}...")
+                backend.clear_user_warnings()
     
     def _ensure_db_directory_exists(self):
         """
@@ -8144,6 +8164,9 @@ class FilterEngineTask(QgsTask):
                                 
                                 result = ogr_backend.apply_filter(layer, ogr_expression, fallback_old_subset, fallback_combine_op)
                                 
+                                # v3.0.21: Collect any user warnings from the OGR backend
+                                self._collect_backend_warnings(ogr_backend)
+                                
                                 if result:
                                     logger.info(f"✓ OGR fallback SUCCEEDED for {layer.name()}")
                                     if 'actual_backends' not in self.task_parameters:
@@ -8250,6 +8273,9 @@ class FilterEngineTask(QgsTask):
             
             # Apply filter using backend (delegates to appropriate method for each provider type)
             result = backend.apply_filter(layer, expression, old_subset, combine_operator)
+            
+            # v3.0.21: Collect any user warnings from the backend for display in finished()
+            self._collect_backend_warnings(backend)
             
             # FALLBACK MECHANISM v2.4.1: If Spatialite or PostgreSQL backend fails on a forced layer,
             # try OGR backend as fallback. This handles cases where user forces a backend
@@ -8411,6 +8437,9 @@ class FilterEngineTask(QgsTask):
                                 
                                 # Apply OGR filter
                                 result = ogr_backend.apply_filter(layer, ogr_expression, old_subset, combine_operator)
+                                
+                                # v3.0.21: Collect any user warnings from the OGR backend
+                                self._collect_backend_warnings(ogr_backend)
                                 
                                 if result:
                                     logger.info(f"✓ OGR fallback SUCCEEDED for {layer.name()}")

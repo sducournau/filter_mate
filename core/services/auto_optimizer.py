@@ -25,8 +25,8 @@ from typing import Dict, List, Optional, Tuple, Any
 from enum import Enum
 from dataclasses import dataclass, field
 
-from core.domain.filter_expression import ProviderType
-from core.domain.layer_info import LayerInfo, GeometryType
+from ..domain.filter_expression import ProviderType
+from ..domain.layer_info import LayerInfo, GeometryType
 
 logger = logging.getLogger('FilterMate.Optimizer.Auto')
 

@@ -159,7 +159,7 @@ class TaskBridge:
     def _try_initialize(self) -> bool:
         """Try to initialize the bridge with v3 services."""
         try:
-            from adapters.app_bridge import (
+            from .app_bridge import (
                 is_initialized as services_initialized,
                 initialize_services,
                 get_backend_factory,
@@ -289,7 +289,7 @@ class TaskBridge:
         start_time = time.time()
         
         try:
-            from adapters.app_bridge import layer_info_from_qgis_layer
+            from .app_bridge import layer_info_from_qgis_layer
             
             # Convert source layer to LayerInfo
             source_info = layer_info_from_qgis_layer(source_layer)
@@ -366,8 +366,8 @@ class TaskBridge:
         start_time = time.time()
         
         try:
-            from adapters.app_bridge import layer_info_from_qgis_layer
-            from core.domain.filter_expression import FilterExpression
+            from .app_bridge import layer_info_from_qgis_layer
+            from ..core.domain.filter_expression import FilterExpression
             
             layer_info = layer_info_from_qgis_layer(layer)
             backend = self._backend_factory.get_backend(layer_info)
@@ -412,7 +412,7 @@ class TaskBridge:
         provider_type: 'ProviderType'
     ) -> 'FilterExpression':
         """Build spatial filter expression from predicates."""
-        from core.domain.filter_expression import FilterExpression, SpatialPredicate
+        from ..core.domain.filter_expression import FilterExpression, SpatialPredicate
         
         # Convert string predicates to enum
         spatial_predicates = []
@@ -451,8 +451,8 @@ class TaskBridge:
             return (expression, 'qgis')
         
         try:
-            from adapters.app_bridge import layer_info_from_qgis_layer
-            from core.domain.filter_expression import FilterExpression
+            from .app_bridge import layer_info_from_qgis_layer
+            from ..core.domain.filter_expression import FilterExpression
             
             layer_info = layer_info_from_qgis_layer(layer)
             
@@ -503,9 +503,9 @@ class TaskBridge:
         start_time = time.time()
         
         try:
-            from adapters.app_bridge import get_filter_service, layer_info_from_qgis_layer
-            from core.services.filter_service import MultiStepRequest, FilterStep
-            from core.domain.filter_expression import FilterExpression
+            from .app_bridge import get_filter_service, layer_info_from_qgis_layer
+            from ..core.services.filter_service import MultiStepRequest, FilterStep
+            from ..core.domain.filter_expression import FilterExpression
             
             filter_service = get_filter_service()
             source_info = layer_info_from_qgis_layer(source_layer)
@@ -615,7 +615,7 @@ class TaskBridge:
         
         try:
             # Import streaming exporter
-            from adapters.qgis.tasks import StreamingExporter
+            from .qgis.tasks import StreamingExporter
             
             logger.info("=" * 60)
             logger.info("🚀 V3 TASKBRIDGE: Executing streaming export")
@@ -715,7 +715,7 @@ class TaskBridge:
             return None
         
         try:
-            from adapters.app_bridge import layer_info_from_qgis_layer
+            from .app_bridge import layer_info_from_qgis_layer
             
             layer_info = layer_info_from_qgis_layer(layer)
             backend = self._backend_factory.get_backend(layer_info)

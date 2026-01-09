@@ -1,38 +1,25 @@
-class FilterMateException(Exception):
-    """Base exception class for FilterMate plugin."""
-    pass
+# -*- coding: utf-8 -*-
+"""
+DEPRECATED: Legacy compatibility shim for modules/customExceptions
 
+Migrated to core/domain/exceptions.py
+This file provides backward compatibility only.
+"""
+import warnings
 
-class LayerNotFoundError(FilterMateException):
-    """Exception raised when a layer cannot be found."""
-    pass
+warnings.warn(
+    "modules.customExceptions is deprecated. Use core.domain.exceptions instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
+# Re-export from new location
+try:
+    from ..core.domain.exceptions import SignalStateChangeError
+except ImportError:
+    # Fallback
+    class SignalStateChangeError(Exception):
+        """Error during signal state change."""
+        pass
 
-class InvalidExpressionError(FilterMateException):
-    """Exception raised when an expression is invalid."""
-    pass
-
-
-class SignalStateChangeError(Exception):
-    """Exception raised for errors when changing a widget's signal state.
-
-    Attributes:
-        input_state -- input state which caused the error
-        widget_path -- name of the concerned widget
-        message -- explanation of the error
-    """
-
-    def __init__(self, input_state, widget_path, message=None):
-        self.input_state = input_state
-        self.widget_path = widget_path
-        if message is not None:
-            self.input_message = message
-        else:
-            if self.input_state is None:
-                self.input_message = "Signal doesn't exists"
-            else:
-                self.input_message = "Cannot change signal state"
-
-        self.message = f"{'.'.join(self.widget_path)} : {self.input_message}"
-
-        super().__init__(self.message)
+__all__ = ['SignalStateChangeError']

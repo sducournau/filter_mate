@@ -363,3 +363,170 @@ class TaskParameterBuilder:
         if abs(rounded - round(rounded)) < 0.0000001:
             return float(round(rounded))
         return rounded
+    
+    def build_common_task_params(
+        self, 
+        features: List,
+        expression: str,
+        layers_to_filter: List[Dict],
+        include_history: bool = False,
+        session_id: str = "",
+        db_file_path: str = "",
+        project_uuid: str = "",
+        history_manager: Any = None
+    ) -> Dict[str, Any]:
+        """
+        Build common task parameters for filter/unfilter/reset operations.
+        
+        Extracted from FilterMateApp._build_common_task_params().
+        
+        Args:
+            features: Selected features for filtering
+            expression: Filter expression
+            layers_to_filter: List of layer info dicts to apply filter to
+            include_history: Whether to include history_manager (for unfilter)
+            session_id: Session ID for multi-client isolation
+            db_file_path: Database file path
+            project_uuid: Project UUID
+            history_manager: Optional history manager instance
+            
+        Returns:
+            Common task parameters dictionary
+        """
+        # Log incoming features at DEBUG level
+        feat_count = len(features) if features else 0
+        logger.debug(f"build_common_task_params: {feat_count} features received, expression='{expression}'")
+        
+        # Deduplicate features by ID to prevent processing same feature twice
+        deduplicated_features = []
+        seen_ids = set()
+        if features:
+            for feat in features:
+                if hasattr(feat, 'id'):
+                    feat_id = feat.id()
+                    if feat_id not in seen_ids:
+                        seen_ids.add(feat_id)
+                        deduplicated_features.append(feat)
+                    else:
+                        logger.debug(f"  Removing duplicate feature id={feat_id}")
+                else:
+                    # Non-QgsFeature item, keep as is
+                    deduplicated_features.append(feat)
+        
+        if len(deduplicated_features) != feat_count:
+            # Log at WARNING only if significant deduplication (>10% difference)
+            if feat_count - len(deduplicated_features) > max(1, feat_count * 0.1):
+                logger.warning(f"  ⚠️ Deduplicated features: {feat_count} → {len(deduplicated_features)}")
+            else:
+                logger.debug(f"  Deduplicated features: {feat_count} → {len(deduplicated_features)}")
+            features = deduplicated_features
+        
+        # Log feature diagnostics
+        logger.debug(f"=== build_common_task_params DIAGNOSTIC ===")
+        logger.debug(f"  features count: {len(features) if features else 0}")
+        if features and logger.isEnabledFor(logging.DEBUG):
+            for idx, feat in enumerate(features[:3]):
+                if hasattr(feat, 'id') and hasattr(feat, 'geometry'):
+                    feat_id = feat.id()
+                    if feat.hasGeometry():
+                        bbox = feat.geometry().boundingBox()
+                        logger.debug(f"  feature[{idx}]: id={feat_id}, bbox=({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})")
+                    else:
+                        logger.debug(f"  feature[{idx}]: id={feat_id}, NO GEOMETRY")
+                else:
+                    logger.debug(f"  feature[{idx}]: type={type(feat).__name__}")
+            if len(features) > 3:
+                logger.debug(f"  ... and {len(features) - 3} more features")
+        logger.debug(f"  expression: '{expression}'")
+        logger.debug(f"  layers_to_filter count: {len(layers_to_filter)}")
+        
+        # Validate that expression is a boolean filter expression, not a display expression
+        validated_expression = expression
+        if expression:
+            # Check if expression contains comparison operators (required for boolean filter)
+            comparison_operators = ['=', '>', '<', '!=', '<>', ' IN ', ' LIKE ', ' ILIKE ', 
+                                   ' IS NULL', ' IS NOT NULL', ' BETWEEN ', ' NOT ', '~']
+            has_comparison = any(op in expression.upper() for op in comparison_operators)
+            
+            if not has_comparison:
+                # Expression doesn't contain comparison operators - likely a display expression
+                logger.debug(f"build_common_task_params: Rejecting display expression '{expression}' - no comparison operators")
+                validated_expression = ''
+        
+        # Store feature IDs (FIDs) for thread-safe recovery
+        # QgsFeature objects can become invalid when accessed from background threads
+        # FIDs allow us to refetch features from the source layer if validation fails
+        feature_fids = []
+        if features:
+            for f in features:
+                try:
+                    if hasattr(f, 'id') and callable(f.id):
+                        fid = f.id()
+                        if fid is not None and fid >= 0:  # Valid FID
+                            feature_fids.append(fid)
+                except Exception as e:
+                    logger.warning(f"build_common_task_params: Could not get FID from feature: {e}")
+        
+        # Log FIDs for diagnostic
+        logger.info(f"build_common_task_params: Extracted {len(feature_fids)} FIDs from {len(features) if features else 0} features")
+        if feature_fids:
+            logger.info(f"  FIDs: {feature_fids[:10]}{'...' if len(feature_fids) > 10 else ''}")
+        
+        params = {
+            "features": features,
+            "feature_fids": feature_fids,  # Thread-safe FIDs for recovery
+            "expression": validated_expression,
+            "options": self._dockwidget.project_props.get("OPTIONS", {}) if self._dockwidget else {},
+            "layers": layers_to_filter,
+            "db_file_path": db_file_path,
+            "project_uuid": project_uuid,
+            "session_id": session_id  # For multi-client materialized view isolation
+        }
+        
+        if include_history and history_manager:
+            params["history_manager"] = history_manager
+        
+        # Add forced backends information from dockwidget
+        if self._dockwidget and hasattr(self._dockwidget, 'forced_backends'):
+            params["forced_backends"] = self._dockwidget.forced_backends
+        
+        return params
+    
+    def build_layer_management_params(
+        self,
+        layers: List,
+        reset_flag: bool,
+        project_layers: Dict,
+        config_data: Dict,
+        db_file_path: str = "",
+        project_uuid: str = "",
+        session_id: str = ""
+    ) -> Dict[str, Any]:
+        """
+        Build parameters for layer management tasks (add/remove layers).
+        
+        Extracted from FilterMateApp._build_layer_management_params().
+        
+        Args:
+            layers: List of layers to manage
+            reset_flag: Whether to reset all layer variables
+            project_layers: PROJECT_LAYERS dictionary
+            config_data: CONFIG_DATA dictionary
+            db_file_path: Database file path
+            project_uuid: Project UUID
+            session_id: Session ID for multi-client isolation
+            
+        Returns:
+            Layer management task parameters dictionary
+        """
+        return {
+            "task": {
+                "layers": layers,
+                "project_layers": project_layers,
+                "reset_all_layers_variables_flag": reset_flag,
+                "config_data": config_data,
+                "db_file_path": db_file_path,
+                "project_uuid": project_uuid,
+                "session_id": session_id  # For multi-client materialized view isolation
+            }
+        }

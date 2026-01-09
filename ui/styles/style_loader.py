@@ -1,16 +1,19 @@
 # -*- coding: utf-8 -*-
 """
-UI Styles Module for FilterMate
+Style Loader for FilterMate UI.
 
-Handles loading and applying QSS stylesheets to the FilterMate dockwidget.
-Supports multiple themes and dynamic color replacement.
-Integrates with UIConfig for dynamic sizing based on display profiles.
+Handles loading and applying QSS stylesheets with theme support.
+
+Migrated from modules/ui_styles.py (v4.0 Architecture Cleanup)
+Story: MIG-090 - Final modules/ removal
+
+Author: FilterMate Team
+Date: January 2026
 """
 
 import os
 import logging
 from typing import Dict, Optional
-from PyQt5.QtCore import QFile, QTextStream, QIODevice
 from PyQt5.QtWidgets import QWidget
 from qgis.core import QgsApplication
 
@@ -18,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 # Import UIConfig for dynamic sizing
 try:
-    from .ui_config import UIConfig, DisplayProfile
+    from ...ui.config import UIConfig, DisplayProfile
     UI_CONFIG_AVAILABLE = True
 except ImportError:
     UI_CONFIG_AVAILABLE = False
@@ -103,7 +106,7 @@ class StyleLoader:
             str: Raw stylesheet content with placeholders intact, or empty string on error
         """
         # Determine file path
-        plugin_dir = os.path.dirname(os.path.dirname(__file__))
+        plugin_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         style_file = os.path.join(plugin_dir, 'resources', 'styles', f'{theme}.qss')
         
         # Fallback to default if theme file doesn't exist
@@ -190,7 +193,7 @@ class StyleLoader:
         
         # Extract colors from config using helpers
         try:
-            from .config_helpers import (
+            from ...modules.config_helpers import (
                 get_active_theme, get_theme_colors,
                 get_background_colors, get_font_colors, get_accent_colors
             )
@@ -291,7 +294,7 @@ class StyleLoader:
         """
         if config_data:
             try:
-                from .config_helpers import get_config_value
+                from ...modules.config_helpers import get_config_value
                 # Try new structure
                 themes = get_config_value(config_data, "app", "themes")
                 if themes:
@@ -351,7 +354,7 @@ class StyleLoader:
             str: Active theme name or 'default'
         """
         try:
-            from .config_helpers import get_active_theme as get_active_theme_helper
+            from ...modules.config_helpers import get_active_theme as get_active_theme_helper
             active_theme = get_active_theme_helper(config_data)
             
             # Auto-detect from QGIS if set to 'auto'
@@ -481,7 +484,7 @@ class StyleLoader:
         
         # Also update icon theme
         try:
-            from .icon_utils import IconThemeManager
+            from ...modules.icon_utils import IconThemeManager
             IconThemeManager.set_theme(theme_to_apply)
         except ImportError:
             pass
@@ -502,127 +505,8 @@ class StyleLoader:
         Synchronize IconThemeManager with current StyleLoader theme.
         """
         try:
-            from .icon_utils import IconThemeManager
+            from ...modules.icon_utils import IconThemeManager
             IconThemeManager.set_theme(cls._current_theme)
             logger.debug(f"Synced IconThemeManager to theme: {cls._current_theme}")
         except ImportError:
             logger.warning("IconThemeManager not available")
-
-
-class QGISThemeWatcher:
-    """
-    Watches for QGIS theme changes and notifies subscribers.
-    
-    Connects to QApplication palette change signal to detect
-    when user changes QGIS theme (e.g., Night Mapping).
-    
-    Usage:
-        watcher = QGISThemeWatcher()
-        watcher.theme_changed.connect(my_handler)
-        watcher.start_watching()
-    """
-    
-    _instance = None
-    _callbacks = []
-    _last_theme = None
-    _is_watching = False
-    
-    def __new__(cls):
-        """Singleton pattern."""
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-    
-    @classmethod
-    def get_instance(cls) -> 'QGISThemeWatcher':
-        """Get the singleton instance."""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-    
-    def start_watching(self) -> bool:
-        """
-        Start watching for QGIS theme changes.
-        
-        Connects to QApplication paletteChanged signal.
-        
-        Returns:
-            bool: True if successfully started
-        """
-        if self._is_watching:
-            return True
-        
-        try:
-            app = QgsApplication.instance()
-            if app:
-                app.paletteChanged.connect(self._on_palette_changed)
-                self._last_theme = StyleLoader.detect_qgis_theme()
-                self._is_watching = True
-                logger.info(f"QGISThemeWatcher started (current theme: {self._last_theme})")
-                return True
-        except Exception as e:
-            logger.error(f"Failed to start QGISThemeWatcher: {e}")
-        
-        return False
-    
-    def stop_watching(self) -> None:
-        """Stop watching for theme changes."""
-        if not self._is_watching:
-            return
-        
-        try:
-            app = QgsApplication.instance()
-            if app:
-                app.paletteChanged.disconnect(self._on_palette_changed)
-        except Exception:
-            pass
-        
-        self._is_watching = False
-        logger.info("QGISThemeWatcher stopped")
-    
-    def add_callback(self, callback) -> None:
-        """
-        Add a callback to be called when theme changes.
-        
-        Args:
-            callback: Function(new_theme: str) to call
-        """
-        if callback not in self._callbacks:
-            self._callbacks.append(callback)
-    
-    def remove_callback(self, callback) -> None:
-        """Remove a callback."""
-        if callback in self._callbacks:
-            self._callbacks.remove(callback)
-    
-    def _on_palette_changed(self, palette) -> None:
-        """Handle palette change from QGIS."""
-        new_theme = StyleLoader.detect_qgis_theme()
-        
-        if new_theme != self._last_theme:
-            logger.info(f"QGIS theme changed: {self._last_theme} -> {new_theme}")
-            self._last_theme = new_theme
-            
-            # Update StyleLoader current theme
-            StyleLoader._current_theme = new_theme
-            StyleLoader.clear_cache()
-            
-            # Sync icon theme
-            StyleLoader.sync_icon_theme()
-            
-            # Notify all callbacks
-            for callback in self._callbacks:
-                try:
-                    callback(new_theme)
-                except Exception as e:
-                    logger.error(f"Error in theme change callback: {e}")
-    
-    @property
-    def current_theme(self) -> str:
-        """Get the current detected theme."""
-        return self._last_theme or StyleLoader.detect_qgis_theme()
-    
-    @property
-    def is_watching(self) -> bool:
-        """Check if watcher is active."""
-        return self._is_watching

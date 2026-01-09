@@ -20,10 +20,10 @@ import logging
 import time
 from typing import Optional, List, Dict, Any
 
-from core.ports.backend_port import BackendPort, BackendInfo, BackendCapability
-from core.domain.filter_expression import FilterExpression, ProviderType
-from core.domain.filter_result import FilterResult
-from core.domain.layer_info import LayerInfo
+from ....core.ports.backend_port import BackendPort, BackendInfo, BackendCapability
+from ....core.domain.filter_expression import FilterExpression, ProviderType
+from ....core.domain.filter_result import FilterResult
+from ....core.domain.layer_info import LayerInfo
 
 logger = logging.getLogger('FilterMate.Backend.Memory')
 

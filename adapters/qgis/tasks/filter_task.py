@@ -85,7 +85,7 @@ class FilterTask(BaseFilterMateTask):
 
     def _execute(self) -> TaskResult:
         """Execute filter operation."""
-        from core.domain.filter_result import FilterResult
+        from ....core.domain.filter_result import FilterResult
 
         total = len(self._target_layers)
         successful = 0

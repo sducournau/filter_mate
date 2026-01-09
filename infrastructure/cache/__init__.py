@@ -4,4 +4,9 @@ FilterMate Infrastructure Cache.
 Caching utilities for performance optimization.
 """
 
-__all__ = []
+# Re-export legacy cache classes for backward compatibility
+from ...infrastructure.cache import ExploringFeaturesCache
+
+__all__ = [
+    'ExploringFeaturesCache',
+]

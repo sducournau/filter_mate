@@ -9,7 +9,7 @@ replacing the old ui.config imports.
 
 # Re-export from legacy module for now (will be migrated later)
 try:
-    from ui.config import (
+    from ...ui.config import (
         UIConfig,
         DisplayProfile,
     )

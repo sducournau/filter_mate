@@ -33,7 +33,7 @@ from osgeo import ogr
 
 import os.path
 import logging
-from .config.config import init_env_vars
+from .config.config import init_env_vars, ENV_VARS
 import json
 from .modules.tasks import (
     FilterEngineTask,
@@ -91,9 +91,11 @@ try:
         validate_expression,
         parse_expression,
     )
+    from .adapters.task_builder import TaskParameterBuilder  # v4.0: Task parameter extraction
     HEXAGONAL_AVAILABLE = True
 except ImportError:
     HEXAGONAL_AVAILABLE = False
+    TaskParameterBuilder = None  # v4.0: Fallback
 
     def _init_hexagonal_services(config=None):
         """Fallback when hexagonal services unavailable."""
@@ -2113,6 +2115,21 @@ class FilterMateApp:
                 except Exception as e:
                     logger.debug(f"Could not disconnect current_layer combobox: {e}")
                 
+                # v3.0.19: CRITICAL FIX - Also BLOCK Qt internal signals on combobox
+                # Disconnecting our handler is NOT enough - Qt's internal signal handling
+                # can still trigger combobox value changes when canvas.refresh() completes.
+                # By blocking signals, we prevent Qt from internally resetting the combobox.
+                try:
+                    self.dockwidget.comboBox_filtering_current_layer.blockSignals(True)
+                    logger.info("v3.0.19: 🔒 BLOCKED Qt signals on current_layer combobox during filtering")
+                    from qgis.core import QgsMessageLog, Qgis
+                    QgsMessageLog.logMessage(
+                        "v3.0.19: 🔒 Combobox signals BLOCKED for entire filtering + 5s protection",
+                        "FilterMate", Qgis.Info
+                    )
+                except Exception as e:
+                    logger.error(f"v3.0.19: Failed to block combobox signals: {e}")
+                
                 # v2.9.27: CRITICAL - Also disconnect LAYER_TREE_VIEW signal during filtering
                 # Canvas refresh in FilterEngineTask.finished() can trigger currentLayerChanged on the
                 # layer tree view. Without disconnecting, this can call current_layer_changed() after
@@ -2196,11 +2213,11 @@ class FilterMateApp:
                     logger.warning(f"Spatialite functions not available - using OGR fallback")
             
             if task_name == 'filter':
-                show_backend_info(iface, provider_type, layer_count, operation='filter', is_fallback=is_fallback)
+                show_backend_info(provider_type, layer_count, operation='filter', is_fallback=is_fallback)
             elif task_name == 'unfilter':
-                show_backend_info(iface, provider_type, layer_count, operation='unfilter', is_fallback=is_fallback)
+                show_backend_info(provider_type, layer_count, operation='unfilter', is_fallback=is_fallback)
             elif task_name == 'reset':
-                show_backend_info(iface, provider_type, layer_count, operation='reset', is_fallback=is_fallback)
+                show_backend_info(provider_type, layer_count, operation='reset', is_fallback=is_fallback)
 
             # v3.0.8: CRITICAL FIX - Do NOT set any dependent layers for filter tasks
             # PROBLEM: QGIS QgsTaskManager automatically cancels tasks when dependent layers are modified.
@@ -3274,6 +3291,10 @@ class FilterMateApp:
         """
         Build common task parameters for filter/unfilter/reset operations.
         
+        .. deprecated:: 4.0.0
+            Delegates to TaskParameterBuilder.build_common_task_params()
+            Direct use of this method is discouraged.
+        
         Args:
             features: Selected features for filtering
             expression (str): Filter expression
@@ -3283,6 +3304,26 @@ class FilterMateApp:
         Returns:
             dict: Common task parameters
         """
+        # v4.0: Delegate to TaskParameterBuilder
+        if TaskParameterBuilder and self.dockwidget:
+            builder = TaskParameterBuilder(
+                dockwidget=self.dockwidget,
+                project_layers=self.PROJECT_LAYERS,
+                config_data=self.CONFIG_DATA
+            )
+            return builder.build_common_task_params(
+                features=features,
+                expression=expression,
+                layers_to_filter=layers_to_filter,
+                include_history=include_history,
+                session_id=self.session_id,
+                db_file_path=self.db_file_path,
+                project_uuid=self.project_uuid,
+                history_manager=self.history_manager if include_history else None
+            )
+        
+        # Fallback to legacy implementation (should not happen in v4.0+)
+        logger.warning("TaskParameterBuilder unavailable - using legacy implementation")
         
         # DIAGNOSTIC v2.4.17: Log incoming features at DEBUG level
         feat_count = len(features) if features else 0
@@ -3390,6 +3431,10 @@ class FilterMateApp:
         """
         Build parameters for layer management tasks (add/remove layers).
         
+        .. deprecated:: 4.0.0
+            Delegates to TaskParameterBuilder.build_layer_management_params()
+            Direct use of this method is discouraged.
+        
         Args:
             layers (list): List of layers to manage
             reset_flag (bool): Whether to reset all layer variables
@@ -3397,6 +3442,25 @@ class FilterMateApp:
         Returns:
             dict: Layer management task parameters
         """
+        # v4.0: Delegate to TaskParameterBuilder
+        if TaskParameterBuilder and self.dockwidget:
+            builder = TaskParameterBuilder(
+                dockwidget=self.dockwidget,
+                project_layers=self.PROJECT_LAYERS,
+                config_data=self.CONFIG_DATA
+            )
+            return builder.build_layer_management_params(
+                layers=layers,
+                reset_flag=reset_flag,
+                project_layers=self.PROJECT_LAYERS,
+                config_data=self.CONFIG_DATA,
+                db_file_path=self.db_file_path,
+                project_uuid=self.project_uuid,
+                session_id=self.session_id
+            )
+        
+        # Fallback to legacy implementation (should not happen in v4.0+)
+        logger.warning("TaskParameterBuilder unavailable - using legacy implementation")
         return {
             "task": {
                 "layers": layers,
@@ -4255,7 +4319,7 @@ class FilterMateApp:
         from .config.feedback_config import should_show_message
         
         feature_count = source_layer.featureCount()
-        show_success_with_backend(iface, provider_type, task_name, layer_count, is_fallback=is_fallback)
+        show_success_with_backend(provider_type, task_name, layer_count, is_fallback=is_fallback)
         
         # Only show feature count if configured to do so
         if should_show_message('filter_count'):
@@ -4544,23 +4608,23 @@ class FilterMateApp:
                         
                         if restored_layer and restored_layer.isValid():
                             if not current_combo_layer or current_combo_layer.id() != restored_layer.id():
-                                # Block signals to prevent triggering during setLayer
-                                self.dockwidget.comboBox_filtering_current_layer.blockSignals(True)
+                                # KEEP SIGNALS BLOCKED - don't unblock yet!
+                                # We'll unblock in delayed timer after protection window
                                 self.dockwidget.comboBox_filtering_current_layer.setLayer(restored_layer)
-                                self.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
                                 QgsMessageLog.logMessage(
-                                    f"v3.0.16: ✅ FORCED combobox to '{restored_layer.name()}'",
+                                    f"v3.0.19: ✅ FORCED combobox to '{restored_layer.name()}' (signals STAY BLOCKED)",
                                     "FilterMate", Qgis.Info
                                 )
-                                logger.info(f"v2.9.26: ✅ FINALLY - Forced combobox to '{restored_layer.name()}'")
+                                logger.info(f"v3.0.19: ✅ FINALLY - Forced combobox to '{restored_layer.name()}' (signals blocked)")
                             # v3.0.10: Also ensure current_layer is set correctly BEFORE signal reconnection
                             if self.dockwidget.current_layer is None or self.dockwidget.current_layer.id() != restored_layer.id():
                                 self.dockwidget.current_layer = restored_layer
                                 logger.info(f"v3.0.10: ✅ FINALLY - Ensured current_layer is '{restored_layer.name()}'")
                     
-                    # v2.9.20: ALWAYS reconnect signal
-                    self.dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
-                    logger.info("v2.9.20: ✅ FINALLY - Reconnected current_layer signal after filtering")
+                    # v3.0.19: CRITICAL FIX - Don't reconnect signal yet!
+                    # Keep it disconnected during the entire protection window (5s)
+                    # We'll reconnect it in a delayed timer AFTER protection expires
+                    logger.info("v3.0.19: ⏳ Keeping current_layer signal DISCONNECTED during 5s protection")
                     
                     # v2.9.27: Reconnect LAYER_TREE_VIEW signal (disconnected in manage_task)
                     # Only if the legend link option is enabled (otherwise signal was never connected)
@@ -4615,10 +4679,9 @@ class FilterMateApp:
                         self.dockwidget._saved_layer_id_before_filter = self._current_layer_id_before_filter
                     logger.info(f"v3.0.12: ⏱️ Updated 2000ms protection window AFTER combobox restoration")
                     
-                    # v3.0.13: CRITICAL - Schedule multiple delayed combobox verification checks
-                    # The canvas refresh timers (up to 1500ms) can trigger layer changes AFTER
-                    # our protection is set. By scheduling checks at 200ms, 600ms, 1000ms, 1500ms, and 2000ms,
-                    # we ensure the combobox is restored even if async signals change it.
+                    # v3.0.19: CRITICAL - Schedule combobox signal reconnection AFTER protection expires
+                    # Keep combobox signals BLOCKED during entire 5s protection window
+                    # This prevents Qt from internally resetting the combobox when async refreshes complete
                     if hasattr(self, '_current_layer_id_before_filter') and self._current_layer_id_before_filter:
                         saved_layer_id = self._current_layer_id_before_filter
                         
@@ -4634,34 +4697,61 @@ class FilterMateApp:
                                     # v3.0.16: Log every check to QGIS MessageLog
                                     from qgis.core import QgsMessageLog, Qgis
                                     QgsMessageLog.logMessage(
-                                        f"v3.0.16: 🔄 DELAYED CHECK - combobox='{current_name}', expected='{saved_layer.name()}'",
+                                        f"v3.0.19: 🔄 DELAYED CHECK - combobox='{current_name}', expected='{saved_layer.name()}'",
                                         "FilterMate", Qgis.Info
                                     )
                                     if not current_combo or current_combo.id() != saved_layer.id():
-                                        logger.info(f"v3.0.13: 🔧 DELAYED CHECK - Combobox was changed, restoring to '{saved_layer.name()}'")
+                                        logger.info(f"v3.0.19: 🔧 DELAYED CHECK - Combobox was changed, restoring to '{saved_layer.name()}'")
                                         QgsMessageLog.logMessage(
-                                            f"v3.0.16: 🔧 RESTORING combobox from '{current_name}' to '{saved_layer.name()}'",
+                                            f"v3.0.19: 🔧 RESTORING combobox from '{current_name}' to '{saved_layer.name()}'",
                                             "FilterMate", Qgis.Warning
                                         )
-                                        self.dockwidget.comboBox_filtering_current_layer.blockSignals(True)
+                                        # Keep signals blocked during restore
                                         self.dockwidget.comboBox_filtering_current_layer.setLayer(saved_layer)
-                                        self.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
                                         self.dockwidget.current_layer = saved_layer
                             except Exception as e:
-                                logger.debug(f"v3.0.13: Error in delayed combobox check: {e}")
+                                logger.debug(f"v3.0.19: Error in delayed combobox check: {e}")
                         
-                        # Schedule multiple checks to catch async signal-triggered changes
-                        # v3.0.10: CRITICAL FIX - Extended delayed checks to cover 5s protection window
-                        # layer.reload() can trigger async signals that arrive after 2s
+                        def unblock_and_reconnect_combobox():
+                            """Unblock combobox signals and reconnect handler AFTER protection window."""
+                            try:
+                                if not self.dockwidget:
+                                    return
+                                # Unblock Qt internal signals
+                                self.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
+                                # Reconnect our handler
+                                self.dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
+                                
+                                # v3.0.19: CRITICAL FIX - Reset _filtering_in_progress HERE, not earlier
+                                # This flag must stay True during the ENTIRE 5s protection window
+                                # Otherwise current_layer_changed() will process signals during protection
+                                self.dockwidget._filtering_in_progress = False
+                                
+                                logger.info("v3.0.19: ✅ Unblocked combobox, reconnected handler, and reset filtering flag after 5s protection")
+                                from qgis.core import QgsMessageLog, Qgis
+                                QgsMessageLog.logMessage(
+                                    "v3.0.19: ✅ Combobox protection ENDED - signals reconnected, filtering flag reset",
+                                    "FilterMate", Qgis.Info
+                                )
+                            except Exception as e:
+                                logger.error(f"v3.0.19: Error reconnecting combobox: {e}")
+                        
+                        # Schedule checks during protection window (signals still blocked)
                         from qgis.PyQt.QtCore import QTimer
-                        for delay in [200, 600, 1000, 1500, 2000, 2500, 3000, 4000, 5000]:
+                        for delay in [200, 600, 1000, 1500, 2000, 2500, 3000, 4000]:
                             QTimer.singleShot(delay, restore_combobox_if_needed)
-                        logger.info(f"v3.0.10: 📋 Scheduled 9 delayed combobox verification checks (up to 5s)")
+                        
+                        # Unblock and reconnect AFTER 5s protection window
+                        QTimer.singleShot(5100, unblock_and_reconnect_combobox)  # 5.1s to ensure protection has expired
+                        
+                        logger.info(f"v3.0.19: 📋 Scheduled 8 delayed checks + signal reconnection at 5.1s")
                     
-                    # v2.9.26: CRITICAL - Reset filtering flag LAST to ensure all operations complete
-                    # while the flag is still protecting against unwanted signal emissions
-                    self.dockwidget._filtering_in_progress = False
-                    logger.info("v2.9.26: 🔓 Filtering in progress flag RESET (after signal reconnection)")
+                    # v3.0.19: REMOVED - Don't reset _filtering_in_progress here!
+                    # It must stay True during the entire 5s protection window.
+                    # It will be reset in unblock_and_reconnect_combobox() at 5.1s
+                    
+                except Exception as reconnect_error:
+                    logger.error(f"v2.9.20: ❌ Failed to reconnect layerChanged signal: {reconnect_error}")
                     
                 except Exception as reconnect_error:
                     logger.error(f"v2.9.20: ❌ Failed to reconnect layerChanged signal: {reconnect_error}")

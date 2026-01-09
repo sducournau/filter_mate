@@ -26,7 +26,7 @@ from qgis.core import (
     QgsProject,
 )
 
-from core.ports.filter_optimizer import (
+from ...core.ports.filter_optimizer import (
     IFilterOptimizer,
     ISelectivityEstimator,
     FilterStrategy,

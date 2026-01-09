@@ -10,7 +10,7 @@ from typing import Optional, List, Set
 from dataclasses import dataclass, field
 import re
 
-from core.domain.filter_expression import ProviderType, SpatialPredicate
+from ..domain.filter_expression import ProviderType, SpatialPredicate
 
 
 @dataclass

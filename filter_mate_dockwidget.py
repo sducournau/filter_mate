@@ -749,6 +749,116 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # Setup action bar layout based on configuration
         self._setup_action_bar_layout()
+        
+        # Setup tab-specific widgets (always needed regardless of splitter)
+        self._setup_exploring_tab_widgets()
+        self._setup_filtering_tab_widgets()
+        self._setup_exporting_tab_widgets()
+
+        # Continue setupUiCustom after widget creation
+        if 'CURRENT_PROJECT' in self.CONFIG_DATA:
+            self.project_props = self.CONFIG_DATA["CURRENT_PROJECT"]
+
+        self.manage_configuration_model()
+        self.dockwidget_widgets_configuration()
+        
+        # CRITICAL: Load icons immediately after widgets are configured
+        self._load_all_pushbutton_icons()
+        
+        # Setup anti-truncation tooltips for widgets with potentially long text
+        self._setup_truncation_tooltips()
+    
+    def _load_all_pushbutton_icons(self):
+        """
+        Load icons for all PushButton widgets directly from config.
+        
+        This method is called immediately after dockwidget_widgets_configuration()
+        to ensure icons are loaded before any UI display.
+        """
+        try:
+            # Get icons configuration
+            icons_config = self.CONFIG_DATA.get("APP", {}).get("DOCKWIDGET", {}).get("PushButton", {}).get("ICONS", {})
+            icons_sizes_config = self.CONFIG_DATA.get("APP", {}).get("DOCKWIDGET", {}).get("PushButton", {}).get("ICONS_SIZES", {})
+            
+            # Get icon sizes - default to reasonable values
+            action_icon_size = icons_sizes_config.get("ACTION", {}).get("value", 24)
+            other_icon_size = icons_sizes_config.get("OTHERS", {}).get("value", 20)
+            
+            if not icons_config:
+                logger.warning("No ICONS configuration found in config.json")
+                return
+            
+            icons_loaded = 0
+            for widget_group in ["ACTION", "EXPLORING", "FILTERING", "EXPORTING"]:
+                group_icons = icons_config.get(widget_group, {})
+                
+                # Determine icon size for this group
+                icon_size = action_icon_size if widget_group == "ACTION" else other_icon_size
+                
+                for widget_name, icon_file in group_icons.items():
+                    # Get the widget directly by attribute name
+                    widget_attr_name = self._get_widget_attr_name(widget_group, widget_name)
+                    
+                    if hasattr(self, widget_attr_name):
+                        widget = getattr(self, widget_attr_name)
+                        icon_path = os.path.join(self.plugin_dir, "icons", icon_file)
+                        
+                        if os.path.exists(icon_path):
+                            if ICON_THEME_AVAILABLE:
+                                icon = get_themed_icon(icon_path)
+                            else:
+                                icon = QtGui.QIcon(icon_path)
+                            
+                            widget.setIcon(icon)
+                            # Set icon size explicitly
+                            widget.setIconSize(QtCore.QSize(icon_size, icon_size))
+                            icons_loaded += 1
+                        else:
+                            logger.debug(f"Icon not found: {icon_path}")
+                    else:
+                        logger.debug(f"Widget not found: {widget_attr_name}")
+            
+            logger.info(f"Loaded {icons_loaded} pushbutton icons (action: {action_icon_size}px, others: {other_icon_size}px)")
+            
+        except Exception as e:
+            logger.error(f"Error loading pushbutton icons: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+    
+    def _get_widget_attr_name(self, widget_group, widget_name):
+        """
+        Get the attribute name for a widget based on group and name.
+        
+        Maps config names to actual widget attribute names.
+        """
+        # Map of widget group/name to attribute names
+        widget_map = {
+            ("ACTION", "FILTER"): "pushButton_action_filter",
+            ("ACTION", "UNDO_FILTER"): "pushButton_action_undo_filter",
+            ("ACTION", "REDO_FILTER"): "pushButton_action_redo_filter",
+            ("ACTION", "UNFILTER"): "pushButton_action_unfilter",
+            ("ACTION", "EXPORT"): "pushButton_action_export",
+            ("ACTION", "ABOUT"): "pushButton_action_about",
+            ("EXPLORING", "IDENTIFY"): "pushButton_exploring_identify",
+            ("EXPLORING", "ZOOM"): "pushButton_exploring_zoom",
+            ("EXPLORING", "IS_SELECTING"): "pushButton_checkable_exploring_selecting",
+            ("EXPLORING", "IS_TRACKING"): "pushButton_checkable_exploring_tracking",
+            ("EXPLORING", "IS_LINKING"): "pushButton_checkable_exploring_linking_widgets",
+            ("EXPLORING", "RESET_ALL_LAYER_PROPERTIES"): "pushButton_exploring_reset_layer_properties",
+            ("FILTERING", "AUTO_CURRENT_LAYER"): "pushButton_checkable_filtering_auto_current_layer",
+            ("FILTERING", "HAS_LAYERS_TO_FILTER"): "pushButton_checkable_filtering_layers_to_filter",
+            ("FILTERING", "HAS_COMBINE_OPERATOR"): "pushButton_checkable_filtering_current_layer_combine_operator",
+            ("FILTERING", "HAS_GEOMETRIC_PREDICATES"): "pushButton_checkable_filtering_geometric_predicates",
+            ("FILTERING", "HAS_BUFFER_VALUE"): "pushButton_checkable_filtering_buffer_value",
+            ("FILTERING", "HAS_BUFFER_TYPE"): "pushButton_checkable_filtering_buffer_type",
+            ("EXPORTING", "HAS_LAYERS_TO_EXPORT"): "pushButton_checkable_exporting_layers",
+            ("EXPORTING", "HAS_PROJECTION_TO_EXPORT"): "pushButton_checkable_exporting_projection",
+            ("EXPORTING", "HAS_STYLES_TO_EXPORT"): "pushButton_checkable_exporting_styles",
+            ("EXPORTING", "HAS_DATATYPE_TO_EXPORT"): "pushButton_checkable_exporting_datatype",
+            ("EXPORTING", "HAS_OUTPUT_FOLDER_TO_EXPORT"): "pushButton_checkable_exporting_output_folder",
+            ("EXPORTING", "HAS_ZIP_TO_EXPORT"): "pushButton_checkable_exporting_zip",
+        }
+        return widget_map.get((widget_group, widget_name), "")
 
     def _setup_main_splitter(self):
         """
@@ -817,24 +927,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             import traceback
             logger.error(traceback.format_exc())
             self.main_splitter = None
-        
-        # Setup action bar layout
-        self._setup_action_bar_layout()
-        
-        # Setup tab-specific widgets (always needed regardless of splitter)
-        self._setup_exploring_tab_widgets()
-        self._setup_filtering_tab_widgets()
-        self._setup_exporting_tab_widgets()
-
-        # Continue setupUiCustom after widget creation
-        if 'CURRENT_PROJECT' in self.CONFIG_DATA:
-            self.project_props = self.CONFIG_DATA["CURRENT_PROJECT"]
-
-        self.manage_configuration_model()
-        self.dockwidget_widgets_configuration()
-        
-        # Setup anti-truncation tooltips for widgets with potentially long text
-        self._setup_truncation_tooltips()
     
     def _apply_splitter_frame_policies(self):
         """
@@ -3063,7 +3155,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         from .adapters.backends.postgresql import PostgreSQLGeometricFilter
         from .adapters.backends.spatialite import SpatialiteGeometricFilter
         from .adapters.backends.ogr import OGRGeometricFilter
-        from .adapters.backends import POSTGRESQL_AVAILABLE
+        from .modules.backends import POSTGRESQL_AVAILABLE
         
         if not layer or not layer.isValid():
             return False
@@ -3122,7 +3214,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         from .adapters.backends.postgresql import PostgreSQLGeometricFilter
         from .adapters.backends.spatialite import SpatialiteGeometricFilter
         from .adapters.backends.ogr import OGRGeometricFilter
-        from .adapters.backends import POSTGRESQL_AVAILABLE
+        from .modules.backends import POSTGRESQL_AVAILABLE
         
         if not backend_type:
             show_warning("FilterMate", "No backend selected to force")
@@ -6324,7 +6416,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             icons_sizes (dict): Icon size dictionary with ACTION and OTHERS keys
             font (QFont): Font to apply to buttons
         """
-        pushButton_config_path = ['APP', 'DOCKWIDGET', 'PushButton']
+        # Get icons configuration directly
+        icons_config = pushButton_config.get("ICONS", {})
         
         for widget_group in self.widgets:
             for widget_name in self.widgets[widget_group]:
@@ -6332,7 +6425,25 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 widget_obj = self.widgets[widget_group][widget_name]["WIDGET"]
                 
                 if widget_type == "PushButton":
-                    self.set_widget_icon(pushButton_config_path + ["ICONS", widget_group, widget_name])
+                    # Load icon directly from config
+                    try:
+                        icon_file = icons_config.get(widget_group, {}).get(widget_name)
+                        if icon_file:
+                            icon_path = os.path.join(self.plugin_dir, "icons", icon_file)
+                            if os.path.exists(icon_path):
+                                if ICON_THEME_AVAILABLE:
+                                    icon = get_themed_icon(icon_path)
+                                else:
+                                    icon = QtGui.QIcon(icon_path)
+                                widget_obj.setIcon(icon)
+                                # Store path in widgets dict for later reference
+                                self.widgets[widget_group][widget_name]["ICON"] = icon_path
+                                logger.debug(f"Icon set for {widget_group}/{widget_name}: {icon_file}")
+                            else:
+                                logger.warning(f"Icon file not found: {icon_path}")
+                    except Exception as e:
+                        logger.debug(f"Could not load icon for {widget_group}/{widget_name}: {e}")
+                    
                     widget_obj.setCursor(Qt.PointingHandCursor)
                     
                     # Set tooltips for exploring buttons
@@ -6527,13 +6638,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _legacy_configure_widgets(self):
         """Legacy widget configuration - used as fallback for ButtonStyler."""
+        # Safety check: widgets must be initialized
+        if self.widgets is None or not self.widgets:
+            logger.warning("_legacy_configure_widgets called but widgets not initialized yet")
+            return
+        
         # Get configuration
         pushButton_config_path = ['APP', 'DOCKWIDGET', 'PushButton']
         pushButton_config = self.CONFIG_DATA[pushButton_config_path[0]][pushButton_config_path[1]][pushButton_config_path[2]]
         
         icons_sizes = {
-            "ACTION": pushButton_config.get("ICONS_SIZES", {}).get("ACTION", 20),
-            "OTHERS": pushButton_config.get("ICONS_SIZES", {}).get("OTHERS", 20),
+            "ACTION": pushButton_config.get("ICONS_SIZES", {}).get("ACTION", {}).get("value", 20),
+            "OTHERS": pushButton_config.get("ICONS_SIZES", {}).get("OTHERS", {}).get("value", 20),
         }
         
         font = QFont("Segoe UI Semibold", 8)
@@ -6763,6 +6879,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # CRITICAL FIX: Protect against Qt access violations during task execution
         # DO NOT call processEvents() inside the loop - it can trigger widget destruction
         # during iteration, causing access violations
+        
+        # Guard against None widgets (can happen during initialization or cleanup)
+        if self.widgets is None:
+            logger.debug("disconnect_widgets_signals: widgets is None, skipping")
+            return
         
         for widget_group in self.widgets:
             if widget_group != 'QGIS':
@@ -10893,35 +11014,45 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     
                     if restore_layer and restore_layer.isValid():
                         if not self.current_layer or self.current_layer.id() != restore_layer.id():
-                            self.comboBox_filtering_current_layer.blockSignals(True)
+                            # v3.0.19: Don't change blockSignals state - might already be blocked by filter_mate_app
+                            # Just set the layer directly - setLayer() works even with signals blocked
                             self.comboBox_filtering_current_layer.setLayer(restore_layer)
-                            self.comboBox_filtering_current_layer.blockSignals(False)
                             self.current_layer = restore_layer
-                            logger.info(f"v3.0.15: ✅ Restored to '{restore_layer.name()}' after blocking layer=None")
+                            logger.info(f"v3.0.19: ✅ Restored to '{restore_layer.name()}' after blocking layer=None (signals kept blocked)")
+                            QgsMessageLog.logMessage(
+                                f"v3.0.19: ✅ RESTORED combobox to '{restore_layer.name()}' (layer was None)",
+                                "FilterMate", Qgis.Info
+                            )
                         else:
                             # Just ensure combobox shows the correct layer
                             current_combo = self.comboBox_filtering_current_layer.currentLayer()
                             if not current_combo or current_combo.id() != self.current_layer.id():
-                                self.comboBox_filtering_current_layer.blockSignals(True)
+                                # v3.0.19: Don't toggle blockSignals - keep existing state
                                 self.comboBox_filtering_current_layer.setLayer(self.current_layer)
-                                self.comboBox_filtering_current_layer.blockSignals(False)
-                                logger.info(f"v3.0.15: ✅ Synced combobox to existing current_layer '{self.current_layer.name()}'")
+                                logger.info(f"v3.0.19: ✅ Synced combobox to existing current_layer '{self.current_layer.name()}' (signals kept blocked)")
                     else:
                         logger.warning(f"v3.0.15: ⚠️ No valid layer to restore during protection window")
                     return
 
                 # Case 2: layer is different from saved layer - BLOCK to prevent unwanted change
                 if saved_layer_id and layer.id() != saved_layer_id:
-                    logger.info(f"v3.0.14: 🛡️ current_layer_changed BLOCKED - requested '{layer.name()}' != saved during protection window (elapsed={elapsed:.3f}s)")
+                    logger.info(f"v3.0.19: 🛡️ current_layer_changed BLOCKED - requested '{layer.name()}' != saved during protection window (elapsed={elapsed:.3f}s)")
+                    QgsMessageLog.logMessage(
+                        f"v3.0.19: 🛡️ BLOCKED attempt to change from saved layer to '{layer.name()}'",
+                        "FilterMate", Qgis.Warning
+                    )
                     # Restore the combobox to the saved layer
                     from qgis.core import QgsProject
                     saved_layer = QgsProject.instance().mapLayer(saved_layer_id)
                     if saved_layer and saved_layer.isValid():
-                        self.comboBox_filtering_current_layer.blockSignals(True)
+                        # v3.0.19: Don't toggle blockSignals - keep existing state from filter_mate_app
                         self.comboBox_filtering_current_layer.setLayer(saved_layer)
-                        self.comboBox_filtering_current_layer.blockSignals(False)
                         self.current_layer = saved_layer
-                        logger.info(f"v3.0.14: ✅ Restored combobox and current_layer to '{saved_layer.name()}'")
+                        logger.info(f"v3.0.19: ✅ Restored combobox and current_layer to '{saved_layer.name()}' (signals kept blocked)")
+                        QgsMessageLog.logMessage(
+                            f"v3.0.19: ✅ FORCE RESTORED to '{saved_layer.name()}'",
+                            "FilterMate", Qgis.Info
+                        )
                     return
 
                 # Case 3: layer is same as saved layer - ALLOW but log

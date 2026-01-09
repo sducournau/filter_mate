@@ -150,6 +150,8 @@ Toutes les stories ont été complétées et archivées. Voir `_archive/` pour l
 
 ## 📊 Progression par Phase
 
+### ✅ Migration v3 (Phases 1-6) - COMPLETE
+
 ```
 Phase 1: Stabilisation     [██████████] 100%  (4/4 stories)
 Phase 2: Core Domain       [██████████] 100%  (6/6 stories)
@@ -158,14 +160,41 @@ Phase 4: Backends          [██████████] 100%  (4/4 stories)
 Phase 5: Validation        [██████████] 100%  (5/5 stories) ✅
 Phase 6: DockWidget        [██████████] 100%  (30/30 stories) ✅
 ─────────────────────────────────────────────
-TOTAL                      [██████████] 100%  (54/54 stories) 🎉
+TOTAL MIGRATION v3         [██████████] 100%  (54/54 stories) 🎉
+```
+
+### 🗺️ Legacy Removal (Phases 7-10) - PLANNED
+
+```
+Phase 7: Backend Consolidation  [░░░░░░░░░░] 0%   (0/14 stories)  📋 v3.1→v3.2
+Phase 8: Tasks Consolidation    [░░░░░░░░░░] 0%   (0/12 stories)  📋 v3.2→v3.3
+Phase 9: Utilities Migration    [░░░░░░░░░░] 0%   (0/10 stories)  📋 v3.3→v3.4
+Phase 10: Final Cleanup         [░░░░░░░░░░] 0%   (0/6 stories)   📋 v3.4→v4.0
+─────────────────────────────────────────────
+TOTAL LEGACY REMOVAL       [░░░░░░░░░░] 0%   (0/42 stories)
 ```
 
 ---
 
-## 🎉 Migration Complète!
+## 🎯 Prochaine Phase: Backend Consolidation (Phase 7)
 
-Toutes les phases sont terminées. Les stories ont été archivées dans `stories/_archive/`.
+Voir [phase1-backend-consolidation.md](stories/phase1-backend-consolidation.md) pour les stories détaillées.
+
+| ID      | Story                      | Priorité | Sprint | Status  |
+| ------- | -------------------------- | -------- | ------ | ------- |
+| DEP-001 | Migrate Base Backend       | 🔴 P0    | 10     | 📋 TODO |
+| DEP-002 | Migrate PostgreSQL Backend | 🔴 P0    | 10     | 📋 TODO |
+| DEP-003 | Migrate Spatialite Backend | 🔴 P0    | 10     | 📋 TODO |
+| DEP-004 | Migrate OGR Backend        | 🔴 P0    | 10     | 📋 TODO |
+| DEP-005 | Migrate Memory Backend     | 🟡 P2    | 10     | 📋 TODO |
+
+---
+
+## 🎉 Migration v3 Complète!
+
+Toutes les phases de migration v3 sont terminées. Les stories ont été archivées dans `stories/_archive/`.
+
+Le projet entre maintenant dans la phase de **Legacy Removal** pour préparer v4.0.
 
 ---
 
@@ -176,29 +205,33 @@ Toutes les phases sont terminées. Les stories ont été archivées dans `storie
 | Sprint 0 (Pré-migration) | 2                  | 1                  | 50%      |
 | Sprint 1 (Core Domain)   | 12                 | 15                 | 125% 🚀  |
 | Sprint 2 (Phase 3-5)     | 10                 | 12                 | 120% 🚀  |
-| Sprint 3 (Courant)       | 4                  | 0                  | -        |
+| Sprint 3 (Phase 6)       | 30                 | 30                 | 100% ✅  |
+| Sprint 10 (Phase 7)      | 5                  | 0                  | -        |
 
 ---
 
 ## 📊 Métriques Clés
 
-| Métrique                   | Avant v3 | Actuel | Cible v3 | Status |
-| -------------------------- | -------- | ------ | -------- | ------ |
-| filter_mate_dockwidget.py  | 12,940   | 12,985 | < 2,000  | 🟡     |
-| filter_mate_app.py         | 5,913    | 6,062  | < 3,000  | 🟡     |
-| Adapters extraits (lignes) | 0        | 17,500 | -        | ✅     |
-| Tests unitaires            | ~30      | 260+   | 150+     | ✅     |
-| Core Domain (lignes)       | 0        | 1,234  | -        | ✅     |
-| Controllers (lignes)       | 0        | 2,897  | -        | ✅     |
-| Coverage estimé            | ~40%     | ~75%   | 85%      | 🟡     |
+| Métrique              | Avant v3 | Actuel v3.0.21 | Cible v4 | Status |
+| --------------------- | -------- | -------------- | -------- | ------ |
+| Lignes dans modules/  | 40,000   | 40,000         | 0        | 📋     |
+| Lignes dans core/     | 0        | 6,000          | 8,000    | ✅     |
+| Lignes dans adapters/ | 0        | 3,500          | 15,000   | 🟡     |
+| Fichiers > 800 lignes | 15       | 8              | 0        | 🟡     |
+| Tests unitaires       | ~30      | 400+           | 500+     | ✅     |
+| Coverage estimé       | ~40%     | ~75%           | 85%      | 🟡     |
 
-### Phase 5 Livrables
+### Structure Actuelle
 
-- `tests/integration/workflows/test_e2e_complete_workflow.py` (560 lignes)
-- `tests/performance/test_v3_performance_comparison.py` (450 lignes)
-- `tests/test_deprecation_warnings.py` (160 lignes)
-- `docs/RELEASE_NOTES_v3.1.md` (150 lignes)
-- `modules/__init__.py` - Deprecation warnings (110 lignes)
+```
+filter_mate/
+├── core/          ~6,000 lignes  ✅ Nouvelle architecture
+├── adapters/      ~3,500 lignes  ✅ Nouvelle architecture
+├── ui/            ~15,000 lignes ✅ Nouvelle architecture
+├── infrastructure/ ~2,000 lignes ✅ Nouvelle architecture
+├── modules/       ~40,000 lignes ⚠️ DEPRECATED - À migrer
+└── config/        ~500 lignes    ✅ Configuration
+```
 
 ---
 
@@ -212,84 +245,82 @@ Toutes les phases sont terminées. Les stories ont été archivées dans `storie
 | `phase-4`  | Backends                | 🟠 Orange |
 | `phase-5`  | Validation              | 🔴 Rouge  |
 | `phase-6`  | God Class DockWidget    | 🟣 Violet |
+| `phase-7`  | Backend Consolidation   | 🔵 Bleu   |
+| `phase-8`  | Tasks Consolidation     | 🟢 Vert   |
+| `phase-9`  | Utilities Migration     | 🟡 Jaune  |
+| `phase-10` | Final Cleanup           | 🟠 Orange |
 | `blocking` | Bloque d'autres stories | ⚫ Noir   |
 | `critical` | Bug critique à fixer    | 🔴 Rouge  |
+| `dep-*`    | Deprecation story       | ⬛ Gris   |
 
 ---
 
 ## 📝 Notes de Sprint
 
-### Sprint 3 - Objectifs (Phase 6: Styling)
+### Sprint 10 - Objectifs (Phase 7: Backend Consolidation)
 
-1. ⬜ MIG-065: Créer module `ui/styles/`
-2. ⬜ MIG-066: Extraire ThemeManager de ui_styles.py
-3. ⬜ MIG-067: Extraire IconManager (IconThemeManager)
-4. ⬜ MIG-068: Créer ButtonStyler composant
+1. ⬜ DEP-001: Migrate Base Backend to adapters/
+2. ⬜ DEP-002: Migrate PostgreSQL Backend (split 3500L → 5 fichiers)
+3. ⬜ DEP-003: Migrate Spatialite Backend (split 2500L → 4 fichiers)
+4. ⬜ DEP-004: Migrate OGR Backend (split 3500L → 4 fichiers)
+5. ⬜ DEP-005: Migrate Memory Backend
 
-### Accomplissements Sprint 2 (Phase 5 Complete!)
+### Accomplissements Sprint 3 (Phase 6 Complete!)
 
-- ✅ MIG-040: Tests E2E complets (6 classes, 150+ tests)
-- ✅ MIG-041: Benchmarks performance v2/v3
-- ✅ MIG-042: Documentation migration mise à jour
-- ✅ MIG-043: Système de dépréciation implémenté
-- ✅ MIG-050: Release notes v3.1.0 créées
+- ✅ 30 stories complétées pour DockWidget refactoring
+- ✅ ui/layout/, ui/styles/, ui/dialogs/ créés
+- ✅ Controllers intégrés (12 controllers)
+- ✅ SignalManager et LayerSignalHandler
 
-### Accomplissements Sprint 1 (Exceptionnel!)
+### Risques Identifiés (Legacy Removal)
 
-- ✅ Core Domain complet (4 value objects)
-- ✅ 4 ports définis (BackendPort, CachePort, etc.)
-- ✅ 4 services créés (Filter, History, Expression, AutoOptimizer)
-- ✅ 3 controllers créés (Filtering, Exploring, Exporting)
-- ✅ DI Container + Providers
-- ✅ Backend Factory
-- ✅ App Bridge pour compatibilité
-- ✅ 92 fichiers de tests
-
-### Risques Identifiés
-
-- [x] Tests QGIS difficiles à mocker → ✅ Résolu avec mocks dans tests/
-- [x] Couplage fort dockwidget ↔ logique métier → ✅ Phase 6 en cours
-- [ ] SignalManager complexe → À surveiller (MIG-084)
+- [ ] filter_task.py (12700 lignes) - Complexité élevée
+- [ ] Dépendances circulaires modules/ ↔ adapters/
+- [ ] Tests de régression critiques
 
 ---
 
 ## 🔗 Liens Rapides
 
-| Ressource               | Lien                                                                 |
-| ----------------------- | -------------------------------------------------------------------- |
-| User Stories détaillées | [migration-v3-user-stories.md](migration-v3-user-stories.md)         |
-| **Phase 6 Stories**     | [stories/phase6-stories.md](stories/phase6-stories.md)               |
-| Architecture v3         | [../../docs/architecture-v3.md](../../docs/architecture-v3.md)       |
-| Guide Migration         | [../../docs/migration-v3.md](../../docs/migration-v3.md)             |
-| **Release Notes v3.1**  | [../../docs/RELEASE_NOTES_v3.1.md](../../docs/RELEASE_NOTES_v3.1.md) |
-| Backlog Bugs            | [../../BACKLOG.md](../../BACKLOG.md)                                 |
-| Changelog               | [../../CHANGELOG.md](../../CHANGELOG.md)                             |
+| Ressource                  | Lien                                                                               |
+| -------------------------- | ---------------------------------------------------------------------------------- |
+| **Legacy Removal Roadmap** | [legacy-removal-roadmap.md](legacy-removal-roadmap.md)                             |
+| **Phase 7 Stories**        | [stories/phase1-backend-consolidation.md](stories/phase1-backend-consolidation.md) |
+| User Stories détaillées    | [migration-v3-user-stories.md](migration-v3-user-stories.md)                       |
+| Architecture v3            | [../../docs/architecture-v3.md](../../docs/architecture-v3.md)                     |
+| Guide Migration            | [../../docs/migration-v3.md](../../docs/migration-v3.md)                           |
+| Release Notes v3.1         | [../../docs/RELEASE_NOTES_v3.1.md](../../docs/RELEASE_NOTES_v3.1.md)               |
+| Backlog Bugs               | [../../BACKLOG.md](../../BACKLOG.md)                                               |
+| Changelog                  | [../../CHANGELOG.md](../../CHANGELOG.md)                                           |
 
 ---
 
-## 📊 Burndown Chart (Sprint 2 - Complete)
+## 📊 Timeline Legacy Removal
 
 ```
-Stories │
-   6    │ ●───────────────────────────
-        │     ╲
-   5    │       ╲   Idéal
-        │         ●─╲
-   4    │             ╲
-        │               ╲
-   3    │                 ●╲
-        │                   ╲
-   2    │                     ╲
-        │                       ●
-   1    │                        ╲
-        │                          ●
-   0    │───────────────────────────●
-        └─────────────────────────────
-          J1  J2  J3  J4  J5  J6  J7
-
-● = Réel (Sprint 2 Complete!)
+v3.0.21 (Current) ────┬───────────────────────────────────────────────────
+                      │
+                      ├── v3.1.0 (2026-Q1)
+                      │   └── Phase 7 Start: Backend consolidation
+                      │
+                      ├── v3.2.0 (2026-Q2)
+                      │   ├── Phase 7 Complete
+                      │   └── Phase 8 Start: Tasks consolidation
+                      │
+                      ├── v3.3.0 (2026-Q2)
+                      │   ├── Phase 8 Complete
+                      │   └── Phase 9 Start: Utilities migration
+                      │
+                      ├── v3.4.0 (2026-Q3)
+                      │   ├── Phase 9 Complete
+                      │   └── Phase 10 Start: Final cleanup
+                      │
+                      └── v4.0.0 (2026-Q3)
+                          ├── Phase 10 Complete
+                          ├── modules/ removed
+                          └── 🎉 Legacy Removal Complete!
 ```
 
 ---
 
-_Dernière mise à jour: 2026-01-09 - Phase 5 COMPLETE ✅_
+_Dernière mise à jour: 2026-01-09 - Phase 6 COMPLETE ✅ | Legacy Removal PLANNED 📋_

@@ -497,6 +497,37 @@ pytest tests/unit/ tests/integration/ -v --tb=short
 - **Port-based testing**: Mock via interfaces
 - **Clear boundaries**: Core domain has no QGIS deps
 
+## �️ Legacy Removal Roadmap
+
+### Current State (v3.0.21)
+
+The codebase currently maintains **dual architecture** for backward compatibility:
+
+| Architecture        | Location                                       | Status        | Removal Target |
+| ------------------- | ---------------------------------------------- | ------------- | -------------- |
+| **New (Hexagonal)** | `core/`, `adapters/`, `ui/`, `infrastructure/` | ✅ Production | Keep           |
+| **Legacy**          | `modules/`                                     | ⚠️ Deprecated | v4.0.0         |
+
+### Planned Phases
+
+| Phase       | Version   | Focus                 | Status     |
+| ----------- | --------- | --------------------- | ---------- |
+| **Phase 1** | v3.1→v3.2 | Backend Consolidation | 📋 Planned |
+| **Phase 2** | v3.2→v3.3 | Tasks Consolidation   | 📋 Planned |
+| **Phase 3** | v3.3→v3.4 | Utilities Migration   | 📋 Planned |
+| **Phase 4** | v3.4→v4.0 | Final Cleanup         | 📋 Planned |
+
+### Key Migrations
+
+```
+modules/backends/          → adapters/backends/     (Phase 1)
+modules/tasks/             → adapters/qgis/tasks/   (Phase 2)
+modules/appUtils.py        → Split to multiple      (Phase 3)
+modules/*.py               → core/, infrastructure/ (Phase 3)
+```
+
+For detailed migration plan, see [Legacy Removal Roadmap](../_bmad/bmm/data/legacy-removal-roadmap.md).
+
 ## 📚 Related Documentation
 
 - [Developer Guide](development-guide.md)
@@ -504,7 +535,8 @@ pytest tests/unit/ tests/integration/ -v --tb=short
 - [API Reference](api-reference.md)
 - [Backend Audit Report](BACKEND_AUDIT_REPORT.md)
 - [Component Inventory](component-inventory.md)
+- [Legacy Removal Roadmap](../_bmad/bmm/data/legacy-removal-roadmap.md)
 
 ---
 
-_Last updated: January 2026 | FilterMate v3.0.0_
+_Last updated: January 2026 | FilterMate v3.0.21_

@@ -36,18 +36,18 @@ Migration Guide (MIG-011):
 """
 
 # Re-export from new locations for compatibility
-from adapters.backends.factory import (
+from .backends.factory import (
     BackendFactory,
     BackendSelector,
     create_backend_factory,
 )
 
-from adapters.backends.memory.backend import MemoryBackend
-from adapters.backends.ogr.backend import OgrBackend
-from adapters.backends.spatialite.backend import SpatialiteBackend
-from adapters.backends.postgresql.backend import PostgreSQLBackend
+from .backends.memory.backend import MemoryBackend
+from .backends.ogr.backend import OgrBackend
+from .backends.spatialite.backend import SpatialiteBackend
+from .backends.postgresql.backend import PostgreSQLBackend
 
-from core.services.auto_optimizer import (
+from ..core.services.auto_optimizer import (
     AutoOptimizer,
     OptimizationType,
     OptimizerConfig,
@@ -59,7 +59,7 @@ from core.services.auto_optimizer import (
     recommend_optimizations,
 )
 
-from adapters.qgis.filter_optimizer import (
+from .qgis.filter_optimizer import (
     QgisFilterOptimizer,
     QgisSelectivityEstimator,
     SpatialiteQueryBuilder,
@@ -69,7 +69,7 @@ from adapters.qgis.filter_optimizer import (
     create_filter_optimizer,
 )
 
-from core.ports.filter_optimizer import (
+from ..core.ports.filter_optimizer import (
     FilterStrategy,
     FilterPlan,
     FilterStep,
@@ -80,7 +80,7 @@ from core.ports.filter_optimizer import (
 )
 
 # MIG-011: Legacy Backend Adapter for v2.x → v3.0 migration
-from adapters.legacy_adapter import (
+from .legacy_adapter import (
     LegacyBackendAdapter,
     wrap_legacy_postgresql_backend,
     wrap_legacy_spatialite_backend,
