@@ -834,11 +834,11 @@ def temp_table_context(self, db_path, table_name):
 | MED-035 | Tests E2E absents            | ✅ test_e2e_complete_workflow.py (665 lignes)        |
 | MED-036 | Mocks incomplets             | Améliorer                                            |
 | MED-037 | Fixtures non réutilisables   | ✅ conftest.py dans tests/                           |
-| MED-038 | Documentation API incomplète | Compléter                                            |
-| MED-039 | Guide utilisateur manquant   | Créer                                                |
+| MED-038 | Documentation API incomplète | ✅ api-reference.md (740 lignes)                     |
+| MED-039 | Guide utilisateur manquant   | ✅ TUTORIAL_ROAD_FILTERING.md + development-guide.md |
 | MED-040 | Changelog non automatisé     | Automatiser                                          |
-| MED-041 | README.md à jour?            | Réviser                                              |
-| MED-042 | Exemples de code absents     | Ajouter                                              |
+| MED-041 | README.md à jour?            | ✅ 385 lignes                                        |
+| MED-042 | Exemples de code absents     | ✅ TUTORIAL_ROAD_FILTERING.md, api-reference.md      |
 
 ---
 
@@ -931,7 +931,7 @@ def temp_table_context(self, db_path, table_name):
 
 - [x] **MED-031-033**: Augmenter couverture tests ✅ (144 fichiers, 46362 lignes, ~70%)
 - [x] **MED-034-035**: Ajouter tests intégration/E2E ✅ (6 suites workflows, test_e2e_complete_workflow.py)
-- [ ] **MED-038-039**: Compléter documentation
+- [x] **MED-038-039**: Compléter documentation ✅ (4756 lignes, 10 fichiers docs/)
 
 ---
 
