@@ -1179,80 +1179,34 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return self.forced_backends.get(layer_id)
     
     def _get_optimal_backend_for_layer(self, layer):
-        """
-        Determine optimal backend for a layer based on its characteristics.
-        
-        Logic matches BackendFactory.get_backend() to ensure consistency.
-        
-        Analysis criteria:
-        - Layer provider type
-        - Feature count (small/medium/large datasets)
-        - PostgreSQL availability (psycopg2 installed)
-        - Data source type (file-based vs server-based)
-        
-        Args:
-            layer: QgsVectorLayer instance
-        
-        Returns:
-            str or None: Optimal backend type ('postgresql', 'spatialite', 'ogr'), or None for auto
-        """
+        """v3.1 Sprint 16: Determine optimal backend for layer."""
         from qgis.core import QgsVectorLayer
         from .modules.appUtils import detect_layer_provider_type, POSTGRESQL_AVAILABLE
         from .adapters.backends.factory import should_use_memory_optimization
         
-        # Only process vector layers
         if not layer or not isinstance(layer, QgsVectorLayer) or not layer.isValid():
             return None
         
-        provider_type = detect_layer_provider_type(layer)
-        feature_count = layer.featureCount()
+        provider = detect_layer_provider_type(layer)
+        count = layer.featureCount()
         source = layer.source().lower()
         
-        logger.info(f"Analyzing layer: {layer.name()}")
-        logger.info(f"  Provider: {provider_type}, Features: {feature_count:,}")
-        logger.info(f"  PostgreSQL available: {POSTGRESQL_AVAILABLE}")
-        
         # PostgreSQL layers
-        if provider_type == 'postgresql':
-            if not POSTGRESQL_AVAILABLE:
-                logger.info(f"  → PostgreSQL unavailable - OGR fallback")
+        if provider == 'postgresql':
+            if not POSTGRESQL_AVAILABLE or should_use_memory_optimization(layer, provider):
                 return 'ogr'
-            
-            # Check if memory optimization would be used (matches BackendFactory logic)
-            if should_use_memory_optimization(layer, provider_type):
-                logger.info(f"  → Small PostgreSQL dataset ({feature_count} features) - OGR memory optimization")
-                return 'ogr'
-            
-            # Large PostgreSQL datasets - use PostgreSQL backend for server-side ops
-            logger.info(f"  → Large PostgreSQL dataset ({feature_count} features) - PostgreSQL optimal")
             return 'postgresql'
         
-        # SQLite/Spatialite layers
-        elif provider_type == 'spatialite':
-            if feature_count > 5000:
-                logger.info(f"  → SQLite dataset ({feature_count} features) - Spatialite R-tree indexes optimal")
-                return 'spatialite'
-            else:
-                logger.info(f"  → Small SQLite dataset ({feature_count} features) - OGR sufficient")
-                return 'ogr'
+        # Spatialite layers
+        if provider == 'spatialite':
+            return 'spatialite' if count > 5000 else 'ogr'
         
-        # OGR layers (Shapefile, GeoJSON, GeoPackage via OGR)
-        elif provider_type == 'ogr':
-            # Check if it's a GeoPackage/SQLite accessed via OGR
-            if 'gpkg' in source or 'sqlite' in source:
-                if feature_count > 5000:
-                    logger.info(f"  → GeoPackage via OGR ({feature_count} features) - Spatialite backend optimal")
-                    return 'spatialite'
-                else:
-                    logger.info(f"  → Small GeoPackage ({feature_count} features) - OGR sufficient")
-                    return 'ogr'
-            
-            # Regular OGR formats (Shapefile, GeoJSON, etc.)
-            logger.info(f"  → OGR format ({feature_count} features) - OGR backend sufficient")
+        # OGR layers - check for GeoPackage
+        if provider == 'ogr':
+            if ('gpkg' in source or 'sqlite' in source) and count > 5000:
+                return 'spatialite'
             return 'ogr'
         
-        # Unknown provider - let auto-selection handle it
-        logger.info(f"  → Unknown provider '{provider_type}' - using auto-selection")
         return None
     
     # ========================================
@@ -3198,59 +3152,25 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.error(f"Error applying theme change: {e}")
     
     def _refresh_icons_for_theme(self):
-        """
-        Refresh all button icons for the current theme.
-        
-        Iterates through all PushButton widgets and reapplies their icons
-        using the IconThemeManager to get theme-appropriate versions.
-        """
-        if not ICON_THEME_AVAILABLE:
-            return
-        
-        if not self.widgets_initialized:
-            return
+        """v3.1 Sprint 16: Refresh all button icons for the current theme."""
+        if not ICON_THEME_AVAILABLE or not self.widgets_initialized: return
         
         try:
             # Refresh toolbox icons
-            toolbox_icons = {
-                0: "filter_multi.png",   # FILTERING tab
-                1: "save.png",           # EXPORTING tab
-                2: "parameters.png"      # CONFIGURATION tab
-            }
-            for index, icon_file in toolbox_icons.items():
-                icon_path = os.path.join(self.plugin_dir, "icons", icon_file)
-                if os.path.exists(icon_path):
-                    themed_icon = get_themed_icon(icon_path)
-                    self.toolBox_tabTools.setItemIcon(index, themed_icon)
+            for idx, icon in enumerate(["filter_multi.png", "save.png", "parameters.png"]):
+                path = os.path.join(self.plugin_dir, "icons", icon)
+                if os.path.exists(path): self.toolBox_tabTools.setItemIcon(idx, get_themed_icon(path))
             
             # Refresh pushbutton icons
-            pushButton_config_path = ['APP', 'DOCKWIDGET', 'PushButton']
-            
-            for widget_group in self.widgets:
-                for widget_name in self.widgets[widget_group]:
-                    widget_info = self.widgets[widget_group][widget_name]
-                    widget_type = widget_info.get("TYPE")
-                    
-                    if widget_type == "PushButton":
-                        widget_obj = widget_info.get("WIDGET")
-                        
-                        # Get icon path from stored config
-                        icon_path = widget_info.get("ICON")
-                        if not icon_path:
-                            icon_path = widget_info.get("ICON_ON_FALSE")
-                        
-                        if icon_path and os.path.exists(icon_path):
-                            # Apply themed icon
-                            themed_icon = get_themed_icon(icon_path)
-                            widget_obj.setIcon(themed_icon)
-                            
-                            # Store path for future reference
-                            widget_obj.setProperty('icon_path', icon_path)
-            
-            logger.debug(f"Refreshed icons for theme: {StyleLoader.get_current_theme()}")
-            
-        except Exception as e:
-            logger.error(f"Error refreshing icons: {e}")
+            for wg in self.widgets:
+                for wn in self.widgets[wg]:
+                    wi = self.widgets[wg][wn]
+                    if wi.get("TYPE") != "PushButton": continue
+                    icon_path = wi.get("ICON") or wi.get("ICON_ON_FALSE")
+                    if icon_path and os.path.exists(icon_path):
+                        wi.get("WIDGET").setIcon(get_themed_icon(icon_path))
+                        wi.get("WIDGET").setProperty('icon_path', icon_path)
+        except Exception: pass
 
 
     def set_widgets_enabled_state(self, state):
@@ -3465,67 +3385,24 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.error(f"Error connecting groupbox signals directly: {e}", exc_info=True)
 
     def _force_exploring_groupbox_exclusive(self, active_groupbox):
-        """
-        Force exclusive state for exploring groupboxes.
-        
-        Ensures only the specified groupbox is checked and expanded,
-        while all others are unchecked and collapsed.
-        
-        Args:
-            active_groupbox (str): The groupbox to activate ('single_selection', 'multiple_selection', or 'custom_selection')
-        """
-        # Prevent recursive calls
-        if self._updating_groupbox:
-            return
-        
-        logger.debug(f"_force_exploring_groupbox_exclusive called: active_groupbox={active_groupbox}")
-        
-        # Set lock to prevent recursion
+        """v3.1 Sprint 16: Force exclusive state for exploring groupboxes."""
+        if self._updating_groupbox: return
         self._updating_groupbox = True
         
         try:
-            single_gb = self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"]
-            multiple_gb = self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"]
-            custom_gb = self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"]
+            gbs = {
+                "single": self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"],
+                "multiple": self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"],
+                "custom": self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"]
+            }
+            active_key = active_groupbox.split("_")[0]  # single, multiple, custom
             
-            # Block all signals to avoid recursive calls
-            single_gb.blockSignals(True)
-            multiple_gb.blockSignals(True)
-            custom_gb.blockSignals(True)
-            
-            # Set states based on active groupbox
-            if active_groupbox == "single_selection":
-                single_gb.setChecked(True)
-                single_gb.setCollapsed(False)
-                multiple_gb.setChecked(False)
-                multiple_gb.setCollapsed(True)
-                custom_gb.setChecked(False)
-                custom_gb.setCollapsed(True)
-            elif active_groupbox == "multiple_selection":
-                single_gb.setChecked(False)
-                single_gb.setCollapsed(True)
-                multiple_gb.setChecked(True)
-                multiple_gb.setCollapsed(False)
-                custom_gb.setChecked(False)
-                custom_gb.setCollapsed(True)
-            elif active_groupbox == "custom_selection":
-                single_gb.setChecked(False)
-                single_gb.setCollapsed(True)
-                multiple_gb.setChecked(False)
-                multiple_gb.setCollapsed(True)
-                custom_gb.setChecked(True)
-                custom_gb.setCollapsed(False)
-            
-            logger.debug(f"After setting - single: checked={single_gb.isChecked()}, collapsed={single_gb.isCollapsed()}")
-            logger.debug(f"After setting - multiple: checked={multiple_gb.isChecked()}, collapsed={multiple_gb.isCollapsed()}")
-            logger.debug(f"After setting - custom: checked={custom_gb.isChecked()}, collapsed={custom_gb.isCollapsed()}")
-            
-            # Restore signals
-            single_gb.blockSignals(False)
-            multiple_gb.blockSignals(False)
-            custom_gb.blockSignals(False)
+            for gb in gbs.values(): gb.blockSignals(True)
+            for key, gb in gbs.items():
+                gb.setChecked(key == active_key)
+                gb.setCollapsed(key != active_key)
+            for gb in gbs.values(): gb.blockSignals(False)
         finally:
-            # Always release the lock
             self._updating_groupbox = False
 
     def _on_groupbox_clicked(self, groupbox, state):
@@ -4201,92 +4078,38 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             )
         return [], None
     
-    def get_exploring_features_async(
-        self, 
-        expression: str,
-        on_complete=None,
-        on_error=None,
-        on_progress=None
-    ):
-        """
-        Evaluate an expression asynchronously for large layers.
-        
-        This method uses QgsTask to evaluate expressions in a background thread,
-        preventing UI freezes for large datasets with complex expressions.
-        
-        PERFORMANCE (v2.5.10): For layers with >10k features and custom expressions,
-        this method should be used instead of the synchronous get_exploring_features.
-        
-        Args:
-            expression: QGIS expression string to evaluate
-            on_complete: Callback(features, expression, layer_id) called on success
-            on_error: Callback(error_msg, layer_id) called on error
-            on_progress: Callback(current, total, layer_id) for progress updates
-            
-        Returns:
-            ExpressionEvaluationTask if started, None if not available or invalid
-        """
+    def get_exploring_features_async(self, expression: str, on_complete=None, on_error=None, on_progress=None):
+        """v3.1 Sprint 16: Async expression evaluation for large layers."""
         if not ASYNC_EXPRESSION_AVAILABLE or self._expression_manager is None:
-            logger.warning("Async expression evaluation not available")
-            if on_error:
-                on_error("Async evaluation not available", "")
+            if on_error: on_error("Async evaluation not available", "")
+            return None
+        if not self.current_layer or not self.current_layer.isValid() or not expression:
+            if on_error: on_error("Invalid layer or expression", self.current_layer.id() if self.current_layer else "")
             return None
         
-        if self.current_layer is None or not self.current_layer.isValid():
-            logger.warning("Cannot evaluate expression: no valid layer")
-            if on_error:
-                on_error("No valid layer", "")
-            return None
-        
-        if not expression:
-            logger.warning("Cannot evaluate empty expression")
-            if on_error:
-                on_error("Empty expression", self.current_layer.id() if self.current_layer else "")
-            return None
-        
-        # Set loading state
         self._set_expression_loading_state(True)
+        layer_id = self.current_layer.id()
         
-        # Wrap callbacks to handle UI state
-        def _on_complete_wrapper(features, expr, layer_id):
+        def wrap_complete(features, expr, lid):
             self._set_expression_loading_state(False)
             self._pending_async_evaluation = None
-            
-            # Cache the result
-            if features and expr:
-                self._set_cached_expression_result(layer_id, expr, features)
-            
-            if on_complete:
-                on_complete(features, expr, layer_id)
+            if features and expr: self._set_cached_expression_result(lid, expr, features)
+            if on_complete: on_complete(features, expr, lid)
         
-        def _on_error_wrapper(error_msg, layer_id):
+        def wrap_error(msg, lid):
             self._set_expression_loading_state(False)
             self._pending_async_evaluation = None
-            logger.error(f"Async expression evaluation failed: {error_msg}")
-            if on_error:
-                on_error(error_msg, layer_id)
+            if on_error: on_error(msg, lid)
         
-        def _on_cancelled_wrapper(layer_id):
+        def wrap_cancel(lid):
             self._set_expression_loading_state(False)
             self._pending_async_evaluation = None
-            logger.debug(f"Async expression evaluation cancelled for {layer_id}")
         
-        # Start async evaluation
         task = self._expression_manager.evaluate(
-            layer=self.current_layer,
-            expression=expression,
-            on_complete=_on_complete_wrapper,
-            on_error=_on_error_wrapper,
-            on_progress=on_progress,
-            on_cancelled=_on_cancelled_wrapper,
-            cancel_existing=True,
-            description=f"FilterMate: Evaluating expression on {self.current_layer.name()}"
-        )
-        
-        if task:
-            self._pending_async_evaluation = task
-            logger.debug(f"Started async expression evaluation for {self.current_layer.name()}")
-        
+            layer=self.current_layer, expression=expression, on_complete=wrap_complete,
+            on_error=wrap_error, on_progress=on_progress, on_cancelled=wrap_cancel,
+            cancel_existing=True, description=f"FilterMate: Evaluating on {self.current_layer.name()}")
+        if task: self._pending_async_evaluation = task
         return task
     
     def cancel_async_expression_evaluation(self):
@@ -4877,103 +4700,53 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return flag_value_changed
 
     def _update_selection_expression_property(self, property_path, layer_props, input_data, custom_functions):
-        """
-        Update selection expression properties.
-        
-        Args:
-            property_path: Property path tuple
-            layer_props: Layer properties dict
-            input_data: New expression value
-            custom_functions: Callbacks dict
-            
-        Returns:
-            bool: True if value changed (or always True for expressions to trigger display update)
-        """
-        value_changed = False
+        """v3.1 Sprint 16: Update selection expression properties."""
         if str(layer_props[property_path[0]][property_path[1]]) != input_data:
             self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
-            if "ON_TRUE" in custom_functions:
-                custom_functions["ON_TRUE"](0)
-            value_changed = True
-        
-        # CRITICAL FIX: Always return True for selection expressions
-        # This ensures ON_CHANGE is called to update the FeaturePicker display expression
-        # even when re-selecting the same field (e.g., after layer switch)
-        return True
+            if "ON_TRUE" in custom_functions: custom_functions["ON_TRUE"](0)
+        return True  # Always trigger ON_CHANGE for expression updates
 
     def _update_other_property(self, property_path, properties_tuples, properties_group_key, layer_props, input_data, custom_functions):
-        """
-        Update other property types (filtering, exporting, etc.).
-        
-        Args:
-            property_path: Property path tuple
-            properties_tuples: Property tuples list
-            properties_group_key: Group key
-            layer_props: Layer properties dict
-            input_data: New value
-            custom_functions: Callbacks dict
-            
-        Returns:
-            bool: True if value changed
-        """
-        flag_value_changed = False
-        
-        # Safety guard: ensure properties_tuples is not None
-        if properties_tuples is None or len(properties_tuples) == 0:
-            logger.warning(f"_update_other_property: properties_tuples is None or empty for property_path={property_path}")
+        """v3.1 Sprint 16: Update other property types."""
+        if not properties_tuples:
             return False
         
-        # 'source_layer' group has no parent toggle, always treat as enabled
+        # Check group state
         if properties_group_key == 'source_layer':
             group_state = True
         else:
-            group_enabled_property = properties_tuples[0]
-            group_state = self.widgets[group_enabled_property[0].upper()][group_enabled_property[1].upper()]["WIDGET"].isChecked()
+            group_state = self.widgets[properties_tuples[0][0].upper()][properties_tuples[0][1].upper()]["WIDGET"].isChecked()
 
-        if group_state is False:
+        if not group_state:
             self.properties_group_state_reset_to_default(properties_tuples, properties_group_key, group_state)
-            flag_value_changed = True
+            return True
+        
+        self.properties_group_state_enabler(properties_tuples)
+        widget_type = self.widgets[property_path[0].upper()][property_path[1].upper()]["TYPE"]
+        current_value = layer_props.get(property_path[0], {}).get(property_path[1])
+        layer_id = self.current_layer.id()
+        
+        if property_path[0] not in self.PROJECT_LAYERS[layer_id]:
+            self.PROJECT_LAYERS[layer_id][property_path[0]] = {}
+        
+        if widget_type == 'PushButton':
+            if current_value != input_data:
+                self.PROJECT_LAYERS[layer_id][property_path[0]][property_path[1]] = input_data
+                callback = "ON_TRUE" if input_data else "ON_FALSE"
+                if callback in custom_functions: custom_functions[callback](0)
+                if property_path[1] == 'has_layers_to_filter' and input_data:
+                    self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'disconnect')
+                    self.filtering_populate_layers_chekableCombobox()
+                    self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
+                return True
         else:
-            self.properties_group_state_enabler(properties_tuples)
-            widget_type = self.widgets[property_path[0].upper()][property_path[1].upper()]["TYPE"]
-            current_value = layer_props.get(property_path[0], {}).get(property_path[1])
-            
-            if widget_type == 'PushButton':
-                if current_value is not input_data and input_data is True:
-                    if property_path[0] not in self.PROJECT_LAYERS[self.current_layer.id()]:
-                        self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]] = {}
-                    self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
-                    flag_value_changed = True
-                    if "ON_TRUE" in custom_functions:
-                        custom_functions["ON_TRUE"](0)
-                    
-                    if property_path[1] == 'has_layers_to_filter':
-                        self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'disconnect')
-                        self.filtering_populate_layers_chekableCombobox()
-                        self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
-                        
-                elif current_value is not input_data and input_data is False:
-                    if property_path[0] not in self.PROJECT_LAYERS[self.current_layer.id()]:
-                        self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]] = {}
-                    self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
-                    flag_value_changed = True
-                    if "ON_FALSE" in custom_functions:
-                        custom_functions["ON_FALSE"](0)
-            else:
-                new_value = custom_functions["CUSTOM_DATA"](0) if "CUSTOM_DATA" in custom_functions else input_data
-                
-                if current_value != new_value:
-                    if property_path[0] not in self.PROJECT_LAYERS[self.current_layer.id()]:
-                        self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]] = {}
-                    self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = new_value
-                    flag_value_changed = True
-                    
-                    if new_value and "ON_TRUE" in custom_functions:
-                        custom_functions["ON_TRUE"](0)
-                    elif not new_value and "ON_FALSE" in custom_functions:
-                        custom_functions["ON_FALSE"](0)
-                    
-        return flag_value_changed
+            new_value = custom_functions["CUSTOM_DATA"](0) if "CUSTOM_DATA" in custom_functions else input_data
+            if current_value != new_value:
+                self.PROJECT_LAYERS[layer_id][property_path[0]][property_path[1]] = new_value
+                callback = "ON_TRUE" if new_value else "ON_FALSE"
+                if callback in custom_functions: custom_functions[callback](0)
+                return True
+        return False
 
     def layer_property_changed(self, input_property, input_data=None, custom_functions={}):
         """
@@ -5104,75 +4877,47 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         logger.warning("_update_buffer_validation: Controller delegation failed")
 
     def set_exporting_properties(self):
+        """v3.1 Sprint 16: Set exporting widgets from project properties."""
+        if not self.widgets_initialized or not self.has_loaded_layers:
+            return
 
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
+        widgets_to_stop = [["EXPORTING", w] for w in ["HAS_LAYERS_TO_EXPORT", "HAS_PROJECTION_TO_EXPORT", "HAS_STYLES_TO_EXPORT", 
+            "HAS_DATATYPE_TO_EXPORT", "LAYERS_TO_EXPORT", "PROJECTION_TO_EXPORT", "STYLES_TO_EXPORT", "DATATYPE_TO_EXPORT"]]
+        
+        for wp in widgets_to_stop: self.manageSignal(wp, 'disconnect')
 
-            widgets_to_stop =   [
-                                    ["EXPORTING","HAS_LAYERS_TO_EXPORT"],
-                                    ["EXPORTING","HAS_PROJECTION_TO_EXPORT"],
-                                    ["EXPORTING","HAS_STYLES_TO_EXPORT"],
-                                    ["EXPORTING","HAS_DATATYPE_TO_EXPORT"],
-                                    ["EXPORTING","LAYERS_TO_EXPORT"],
-                                    ["EXPORTING","PROJECTION_TO_EXPORT"],
-                                    ["EXPORTING","STYLES_TO_EXPORT"],
-                                    ["EXPORTING","DATATYPE_TO_EXPORT"]
-                                ]
+        for group_key, properties_tuples in self.export_properties_tuples_dict.items():
+            group_state = self.widgets[properties_tuples[0][0].upper()][properties_tuples[0][1].upper()]["WIDGET"].isChecked()
             
-            for widget_path in widgets_to_stop:
-                self.manageSignal(widget_path, 'disconnect')
+            if not group_state:
+                self.properties_group_state_reset_to_default(properties_tuples, group_key, group_state)
+            else:
+                self.properties_group_state_enabler(properties_tuples)
+                for prop_path in properties_tuples:
+                    key0, key1 = prop_path[0].upper(), prop_path[1].upper()
+                    if key0 not in self.widgets or key1 not in self.widgets.get(key0, {}):
+                        continue
+                    w = self.widgets[key0][key1]
+                    val = self.project_props.get(key0, {}).get(key1)
+                    self._set_widget_value(w, val, prop_path[1])
 
-            group_state = True
+        for wp in widgets_to_stop: self.manageSignal(wp, 'connect')
+        self.CONFIG_DATA["CURRENT_PROJECT"]['EXPORTING'] = self.project_props['EXPORTING']
 
-            for properties_group_key in self.export_properties_tuples_dict:
-                properties_tuples = self.export_properties_tuples_dict[properties_group_key]
-                
-                group_enabled_property = properties_tuples[0]
-                group_state = self.widgets[group_enabled_property[0].upper()][group_enabled_property[1].upper()]["WIDGET"].isChecked()
-
-                if group_state is False:
-                    self.properties_group_state_reset_to_default(properties_tuples, properties_group_key, group_state)
-
-                else:
-                    self.properties_group_state_enabler(properties_tuples)
-                    for i, property_path in enumerate(properties_tuples):
-                        # Skip tuples that don't have a corresponding widget (data-only properties)
-                        if property_path[0].upper() not in self.widgets:
-                            continue
-                        if property_path[1].upper() not in self.widgets[property_path[0].upper()]:
-                            continue
-                        
-                        widget_type = self.widgets[property_path[0].upper()][property_path[1].upper()]["TYPE"]
-                        if widget_type == 'PushButton':
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setChecked(self.project_props[property_path[0].upper()][property_path[1].upper()])
-                        elif widget_type == 'CheckBox':
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setChecked(self.project_props[property_path[0].upper()][property_path[1].upper()])
-                        elif widget_type == 'CheckableComboBox':
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setCheckedItems(self.project_props[property_path[0].upper()][property_path[1].upper()])
-                        elif widget_type == 'CustomCheckableComboBox':
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["CUSTOM_LOAD_FUNCTION"]
-                        elif widget_type == 'ComboBox':
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setCurrentIndex(self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].findText(self.project_props[property_path[0].upper()][property_path[1].upper()]))
-                        elif widget_type == 'QgsDoubleSpinBox':
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setValue(self.project_props[property_path[0].upper()][property_path[1].upper()])
-                        elif widget_type == 'LineEdit':
-                            if self.project_props[property_path[0].upper()][property_path[1].upper()] == '':
-                                if property_path[1] == 'output_folder_to_export':
-                                    self.reset_export_output_path()
-                                if property_path[1] == 'zip_to_export':
-                                    self.reset_export_output_pathzip()
-                            else:
-                                self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setText(self.project_props[property_path[0].upper()][property_path[1].upper()])
-                        elif widget_type == 'QgsProjectionSelectionWidget':
-                            crs = QgsCoordinateReferenceSystem(self.project_props[property_path[0].upper()][property_path[1].upper()])
-                            if crs.isValid():
-                                self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setCrs(crs)
-
-            for widget_path in widgets_to_stop:
-                self.manageSignal(widget_path, 'connect')
-
-            self.CONFIG_DATA["CURRENT_PROJECT"]['EXPORTING'] = self.project_props['EXPORTING']
-            # self.reload_configuration_model()
-
+    def _set_widget_value(self, widget_data, value, prop_name=None):
+        """v3.1 Sprint 16: Set widget value by type."""
+        w, wt = widget_data["WIDGET"], widget_data["TYPE"]
+        if wt in ('PushButton', 'CheckBox'): w.setChecked(value)
+        elif wt == 'CheckableComboBox': w.setCheckedItems(value)
+        elif wt == 'ComboBox': w.setCurrentIndex(w.findText(value))
+        elif wt == 'QgsDoubleSpinBox': w.setValue(value)
+        elif wt == 'LineEdit':
+            if not value and prop_name == 'output_folder_to_export': self.reset_export_output_path()
+            elif not value and prop_name == 'zip_to_export': self.reset_export_output_pathzip()
+            else: w.setText(value)
+        elif wt == 'QgsProjectionSelectionWidget':
+            crs = QgsCoordinateReferenceSystem(value)
+            if crs.isValid(): w.setCrs(crs)
 
     def properties_group_state_enabler(self, tuple_group):
         """v3.1 Sprint 12: Simplified - enable widgets in a property group."""
@@ -5498,70 +5243,40 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
 
     def get_project_layers_from_app(self, project_layers, project=None):
-        """v3.1 Sprint 12: Simplified - update dockwidget with layer info from app."""
-        # Skip if filtering in progress
+        """v3.1 Sprint 16: Simplified - update dockwidget with layer info from app."""
         if self._filtering_in_progress:
-            if project_layers is not None:
-                self.PROJECT_LAYERS = project_layers
-            if project is not None:
-                self.PROJECT = project
+            if project_layers: self.PROJECT_LAYERS = project_layers
+            if project: self.PROJECT = project
             return
-        
-        # Prevent recursive calls
-        if self._updating_layers:
-            return
-        
-        if project_layers is None:
-            project_layers = {}
+        if self._updating_layers: return
+        if project_layers is None: project_layers = {}
             
-        self._updating_layers = True
-        self._plugin_busy = True
+        self._updating_layers, self._plugin_busy = True, True
         
         try:
             self._update_project_layers_data(project_layers, project)
-
             if not self.widgets_initialized:
                 self._pending_layers_update = True
                 return
-
             if self.PROJECT and self.PROJECT_LAYERS:
-                if not self._signals_connected:
-                    self.connect_widgets_signals()
-                    self._signals_connected = True
-                
+                if not self._signals_connected: self.connect_widgets_signals(); self._signals_connected = True
                 layer = self._determine_active_layer()
                 self._activate_layer_ui()
-                
-                if layer:
-                    self._refresh_layer_specific_widgets(layer)
+                if layer: self._refresh_layer_specific_widgets(layer)
                 return
-            
-            # Check for valid current_layer in transient state
             if self.current_layer and self.current_layer.isValid():
-                if not self._signals_connected:
-                    self.connect_widgets_signals()
-                    self._signals_connected = True
+                if not self._signals_connected: self.connect_widgets_signals(); self._signals_connected = True
                 return
-            
-            # Truly no layers - disable UI
-            self.has_loaded_layers = False
-            self.current_layer = None
+            # No layers - disable UI
+            self.has_loaded_layers, self.current_layer = False, None
             self.disconnect_widgets_signals()
             self._signals_connected = False
             self.set_widgets_enabled_state(False)
-            
             if self.backend_indicator_label:
                 self.backend_indicator_label.setText("...")
-                self.backend_indicator_label.setStyleSheet("""
-                    QLabel#label_backend_indicator {
-                        color: #7f8c8d; font-size: 9pt; font-weight: 600;
-                        padding: 3px 10px; border-radius: 12px; border: none;
-                        background-color: #ecf0f1;
-                    }
-                """)
+                self.backend_indicator_label.setStyleSheet("QLabel#label_backend_indicator { color: #7f8c8d; font-size: 9pt; font-weight: 600; padding: 3px 10px; border-radius: 12px; border: none; background-color: #ecf0f1; }")
         finally:
-            self._updating_layers = False
-            self._plugin_busy = False
+            self._updating_layers, self._plugin_busy = False, False
 
 
     def open_project_page(self):
