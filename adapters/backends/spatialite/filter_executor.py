@@ -183,3 +183,90 @@ def build_spatialite_query(
     """
     
     return query
+
+
+def apply_spatialite_subset(
+    layer,
+    name: str,
+    primary_key_name: str,
+    sql_subset_string: str,
+    cur,
+    conn,
+    current_seq_order: int,
+    project_uuid: str,
+    source_layer,
+    get_session_prefixed_name_func,
+    queue_subset_string_func,
+    logger=None
+) -> bool:
+    """
+    Apply subset string to layer and update history.
+    
+    This is extracted from FilterTask._apply_spatialite_subset() for modularity.
+    Uses session-prefixed naming for multi-client isolation.
+    
+    Args:
+        layer: QGIS vector layer to filter
+        name: Temp table name (will be session-prefixed)
+        primary_key_name: Primary key field name
+        sql_subset_string: Original SQL subset string for history
+        cur: Spatialite cursor for history updates
+        conn: Spatialite connection for commit
+        current_seq_order: Sequence order for history tracking
+        project_uuid: UUID of current project
+        source_layer: Source layer for history reference
+        get_session_prefixed_name_func: Function to get session-prefixed name
+        queue_subset_string_func: Function to queue subset string (thread-safe)
+        logger: Optional logger instance
+        
+    Returns:
+        bool: True if successful
+    """
+    import uuid as uuid_module
+    
+    # Use session-prefixed name for multi-client isolation
+    session_name = get_session_prefixed_name_func(name)
+    
+    # Apply subset string to layer (reference temp table)
+    layer_subsetString = f'"{primary_key_name}" IN (SELECT "{primary_key_name}" FROM mv_{session_name})'
+    
+    if logger:
+        logger.debug(f"Applying Spatialite subset string: {layer_subsetString}")
+    
+    # THREAD SAFETY: Queue subset string for application in finished()
+    queue_subset_string_func(layer, layer_subsetString)
+    
+    # Note: We assume success since the actual application happens in finished()
+    # The history update proceeds with the assumption that the filter will be applied
+    
+    # Update history
+    if cur and conn:
+        cur.execute("""INSERT INTO fm_subset_history VALUES('{id}', datetime(), '{fk_project}', '{layer_id}', '{layer_source_id}', {seq_order}, '{subset_string}');""".format(
+            id=uuid_module.uuid4(),
+            fk_project=project_uuid,
+            layer_id=layer.id(),
+            layer_source_id=source_layer.id(),
+            seq_order=current_seq_order,
+            subset_string=sql_subset_string.replace("\'","\'\'")
+        ))
+        conn.commit()
+    
+    return True
+
+
+def prepare_spatialite_source_geom(*args, **kwargs):
+    """
+    Prepare geometry expression for Spatialite spatial filtering.
+    
+    STUB: This is a placeholder for the complex prepare_spatialite_source_geom()
+    method (629 lines) which is deferred for later extraction due to:
+    - Thread-safety concerns (WKT caching)
+    - Multiple internal helper dependencies
+    - Complex dissolve geometry handling
+    
+    See docs/EPIC-1-Phase-E4-Implementation-Plan.md for extraction strategy.
+    """
+    raise NotImplementedError(
+        "prepare_spatialite_source_geom is still in FilterTask. "
+        "This stub is a placeholder for future extraction."
+    )
