@@ -1998,7 +1998,7 @@ class FilterMateApp:
             if not self.PROJECT_LAYERS:
                 return
             
-            from .modules.tasks.query_cache import warm_cache_for_project
+            from infrastructure.cache import warm_cache_for_project
             
             # Collect layer info for cache warming
             layers_info = []

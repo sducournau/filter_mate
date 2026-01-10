@@ -1,18 +1,36 @@
 """
-Tasks Module
+Tasks Module - LEGACY SHIM
+
+DEPRECATED: This module is a backward compatibility shim.
+
+NEW IMPORTS (EPIC-1 v3.0):
+- infrastructure.utils.task_utils for database utilities
+- infrastructure.cache.query_cache for expression caching
 
 Refactored from appTasks.py during Phase 3 (Dec 2025).
 
 This module provides backwards-compatible imports for all task-related classes and utilities.
 
 Extraction Status:
-- task_utils.py: Common utility functions (spatialite_connect, etc.) ✅ Phase 3a
+- task_utils.py: Migrated to infrastructure/utils/task_utils.py ✅ EPIC-1
+- query_cache.py: Migrated to infrastructure/cache/query_cache.py ✅ EPIC-1
 - geometry_cache.py: SourceGeometryCache class ✅ Phase 3a
 - layer_management_task.py: LayersManagementEngineTask class ✅ Phase 3b
 - filter_task.py: FilterEngineTask class (4165 lines) ✅ Phase 3c
 
-Current Status: Phase 3c complete - FilterEngineTask extracted
+Current Status: EPIC-1 Option A2 migration in progress
 """
+
+import warnings
+
+# Show deprecation warning
+warnings.warn(
+    "modules.tasks: Importing from modules.tasks is deprecated. "
+    "Use 'from infrastructure.utils import ...' for task_utils functions, "
+    "or 'from infrastructure.cache import ...' for query_cache.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 # Re-export FilterEngineTask from new module (Phase 3c)
 from .filter_task import FilterEngineTask
@@ -20,14 +38,15 @@ from .filter_task import FilterEngineTask
 # Re-export LayersManagementEngineTask from new module (Phase 3b)
 from .layer_management_task import LayersManagementEngineTask
 
-# Import from new modules
-from .task_utils import (
+# Import from infrastructure (EPIC-1 migration)
+from infrastructure.utils import (
     spatialite_connect,
     safe_spatialite_connect,
     sqlite_execute_with_retry,
     ensure_db_directory_exists,
     get_best_metric_crs,
     should_reproject_layer,
+    needs_metric_conversion,
     SQLITE_TIMEOUT,
     SQLITE_MAX_RETRIES,
     SQLITE_RETRY_DELAY,
@@ -43,15 +62,16 @@ __all__ = [
     'LayersManagementEngineTask',    # From layer_management_task.py (Phase 3b - ✅)
     
     # Constants
-    'MESSAGE_TASKS_CATEGORIES',      # From task_utils.py
+    'MESSAGE_TASKS_CATEGORIES',      # From infrastructure.utils.task_utils (EPIC-1)
     
-    # Utilities (from task_utils.py - Phase 3a - ✅)
+    # Utilities (from infrastructure.utils.task_utils - EPIC-1 - ✅)
     'spatialite_connect',
     'safe_spatialite_connect',
     'sqlite_execute_with_retry',
     'ensure_db_directory_exists',
     'get_best_metric_crs',
     'should_reproject_layer',
+    'needs_metric_conversion',
     'SQLITE_TIMEOUT',
     'SQLITE_MAX_RETRIES',
     'SQLITE_RETRY_DELAY',

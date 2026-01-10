@@ -1,7 +1,13 @@
 """
 FilterMate Infrastructure Utilities.
 
-Common utility functions and helper classes.
+Common utility functions and helper classes:
+- provider_utils: Provider type detection and utilities
+- validation_utils: Layer and expression validation
+- layer_utils: Layer data source connection and metadata
+- task_utils: Database connection and CRS utilities for tasks
+
+Migrated from modules/ (EPIC-1 v3.0).
 """
 from .provider_utils import (
     ProviderType,
@@ -41,6 +47,20 @@ from .layer_utils import (
     PROVIDER_OGR,
     PROVIDER_MEMORY,
 )
+from .task_utils import (
+    spatialite_connect,
+    safe_spatialite_connect,
+    sqlite_execute_with_retry,
+    ensure_db_directory_exists,
+    get_best_metric_crs,
+    should_reproject_layer,
+    needs_metric_conversion,
+    SQLITE_TIMEOUT,
+    SQLITE_MAX_RETRIES,
+    SQLITE_RETRY_DELAY,
+    SQLITE_MAX_RETRY_TIME,
+    MESSAGE_TASKS_CATEGORIES,
+)
 
 __all__ = [
     # Provider utils
@@ -78,4 +98,17 @@ __all__ = [
     'PROVIDER_SPATIALITE',
     'PROVIDER_OGR',
     'PROVIDER_MEMORY',
+    # Task utils (EPIC-1 migration)
+    'spatialite_connect',
+    'safe_spatialite_connect',
+    'sqlite_execute_with_retry',
+    'ensure_db_directory_exists',
+    'get_best_metric_crs',
+    'should_reproject_layer',
+    'needs_metric_conversion',
+    'SQLITE_TIMEOUT',
+    'SQLITE_MAX_RETRIES',
+    'SQLITE_RETRY_DELAY',
+    'SQLITE_MAX_RETRY_TIME',
+    'MESSAGE_TASKS_CATEGORIES',
 ]
