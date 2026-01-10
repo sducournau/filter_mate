@@ -175,9 +175,82 @@ Gestion des features et zoom.
 
 ---
 
-## 📋 Ordre d'Exécution Recommandé
+## � Analyse Architecturale
 
-### Sprint 1: Quick Wins (1 session) ✅ TERMINÉ
+### Utilisation des Controllers
+
+Le dockwidget délègue activement aux controllers :
+- **159 appels** à `_controller_integration`
+- **126 accès** à `self.widgets[]` pour gestion UI
+- **68 accès** à `PROJECT_LAYERS` pour données métier
+
+### Patterns de Délégation
+
+Méthodes déléguées avec succès :
+- ✅ `configure_groupbox()` → ExploringController
+- ✅ `index_to_combine_operator()` → FilteringController  
+- ✅ `combine_operator_to_index()` → FilteringController
+- ✅ `auto_select_optimal_backends()` → BackendController
+- ✅ `populate_*_combobox()` → Controllers respectifs
+
+### Méthodes Restantes (Priorité Refactoring)
+
+| Méthode | Lignes | Complexité | Action Recommandée |
+|---------|--------|------------|-------------------|
+| `dockwidget_widgets_configuration` | 164 | Configuration | Externaliser vers ConfigManager |
+| `__init__` | 69 | Initialisation | Garder (nécessaire) |
+| `_initialize_layer_state` | 60 | Initialisation | Simplifier managers |
+| `_setup_action_bar_layout` | 46 | Délégation | Déjà délègue à ActionBarManager |
+| `apply_pending_config_changes` | 45 | Config | Migrer vers ConfigController |
+
+---
+
+## 🎯 Recommandations pour Sprint 6
+
+### Cibles Prioritaires
+
+1. **Configuration Externalization** (164+ lignes)
+   - Créer `ConfigurationManager` pour `dockwidget_widgets_configuration`
+   - Externaliser dictionnaires de config vers JSON/YAML
+   - Réduire méthode à simple loader
+
+2. **Exploration Methods** (~300 lignes totales)
+   - Migrer `exploring_source_params_changed` vers ExploringController
+   - Migrer `exploring_link_widgets` vers ExploringController
+   - Migrer `_reload_exploration_widgets` vers ExploringController
+
+3. **Signal Management Cleanup** (~150 lignes)
+   - Consolider `manageSignal` calls
+   - Créer SignalManager helper
+   - Réduire code répétitif
+
+### Objectif Sprint 6
+
+**Cible** : Descendre sous **4,000 lignes** (-25% supplémentaire)  
+**Focus** : Migration configuration + exploration vers controllers  
+**Méthodologie** : Strangler Fig pattern continué
+
+---
+
+## 🔄 Prochaines Étapes
+
+### Session Suivante
+
+1. Créer `ConfigurationManager` pour externaliser widgets config
+2. Enrichir `ExploringController` avec méthodes exploration restantes
+3. Créer `SignalManager` helper pour simplifier gestion signaux
+4. Nettoyer commentaires obsolètes et code mort
+
+### Objectif v5.0
+
+- Dockwidget <2,000 lignes (façade pure)
+- Tous les controllers complets et testables
+- Architecture hexagonale complète
+- Code coverage >80%
+
+---
+
+_Dernière mise à jour : 10 janvier 2026 - Sprint 5 Session 2_
 
 1. ✅ Déléguer `current_layer_changed` (245 lignes)
 2. ✅ Déléguer `_update_buffer_validation` (106 lignes)
