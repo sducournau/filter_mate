@@ -93,6 +93,7 @@ try:
     from .adapters.undo_redo_handler import UndoRedoHandler  # v4.0: Undo/Redo extraction
     from .adapters.database_manager import DatabaseManager  # v4.0: Database operations extraction
     from .adapters.variables_manager import VariablesPersistenceManager  # v4.0: Variables persistence extraction
+    from .core.services.task_orchestrator import TaskOrchestrator  # v4.1: Task orchestration extraction
     HEXAGONAL_AVAILABLE = True
 except ImportError:
     HEXAGONAL_AVAILABLE = False
@@ -104,6 +105,7 @@ except ImportError:
     UndoRedoHandler = None  # v4.0: Fallback
     DatabaseManager = None  # v4.0: Fallback
     VariablesPersistenceManager = None  # v4.0: Fallback
+    TaskOrchestrator = None  # v4.1: Fallback
 
     def _init_hexagonal_services(config=None):
         """Fallback when hexagonal services unavailable."""
@@ -591,6 +593,30 @@ class FilterMateApp:
         
         # Initialize PROJECT_LAYERS as instance attribute (shadows class attribute for isolation)
         self.PROJECT_LAYERS = {}
+        
+        # v4.1: Initialize TaskOrchestrator (extracted from FilterMateApp.manage_task)
+        if HEXAGONAL_AVAILABLE and TaskOrchestrator:
+            self._task_orchestrator = TaskOrchestrator(
+                get_dockwidget=lambda: self.dockwidget,
+                get_project_layers=lambda: self.PROJECT_LAYERS,
+                get_config_data=lambda: self.CONFIG_DATA,
+                get_project=lambda: self.PROJECT,
+                check_reset_stale_flags=self._check_and_reset_stale_flags,
+                set_loading_flag=self._set_loading_flag,
+                set_initializing_flag=self._set_initializing_flag,
+                get_task_parameters=self.get_task_parameters,
+                handle_filter_task=self._execute_filter_task,
+                handle_layer_task=self._execute_layer_task,
+                handle_undo=self.handle_undo,
+                handle_redo=self.handle_redo,
+                force_reload_layers=self.force_reload_layers,
+                handle_remove_all_layers=self._handle_remove_all_layers,
+                handle_project_initialization=self._handle_project_initialization,
+            )
+            logger.info("FilterMate: TaskOrchestrator initialized (v4.1 migration)")
+        else:
+            self._task_orchestrator = None
+        
         # Note: Do NOT call self.run() here - it will be called from filter_mate.py
         # when the user actually activates the plugin to avoid QGIS initialization race conditions
 
@@ -895,12 +921,20 @@ class FilterMateApp:
             self.dockwidget.widgetsInitialized.connect(self._on_widgets_initialized)
             logger.debug("widgetsInitialized signal connected to _on_widgets_initialized")
             
+            # v4.1: Also connect to TaskOrchestrator if available
+            if self._task_orchestrator is not None:
+                self.dockwidget.widgetsInitialized.connect(self._task_orchestrator.on_widgets_initialized)
+                logger.debug("widgetsInitialized signal connected to TaskOrchestrator")
+            
             # CRITICAL FIX: Signal may have been emitted BEFORE connection (in dockwidget __init__)
             # Check if widgets are already initialized and manually sync if needed
             if hasattr(self.dockwidget, 'widgets_initialized') and self.dockwidget.widgets_initialized:
                 logger.info("Widgets already initialized before signal connection - syncing state")
                 # Call the handler directly since signal was already emitted
                 self._on_widgets_initialized()
+                # v4.1: Also sync TaskOrchestrator
+                if self._task_orchestrator is not None:
+                    self._task_orchestrator.on_widgets_initialized()
 
             # Force retranslation to ensure tooltips/text use current translator
             try:
@@ -1399,6 +1433,197 @@ class FilterMateApp:
             stability_constants=STABILITY_CONSTANTS
         )
 
+    # ========================================
+    # TASK EXECUTION METHODS (v4.1)
+    # ========================================
+    
+    def _execute_filter_task(self, task_name: str, task_parameters: dict):
+        """
+        Execute a filter/unfilter/reset task.
+        
+        v4.1: Extracted as callback for TaskOrchestrator.
+        Contains the actual task creation and execution logic for filtering operations.
+        
+        Args:
+            task_name: Name of the task ('filter', 'unfilter', 'reset')
+            task_parameters: Parameters for task execution
+        """
+        from .modules.tasks import FilterEngineTask
+        
+        if self.dockwidget is None or self.dockwidget.current_layer is None:
+            return
+        
+        current_layer = self.dockwidget.current_layer
+        
+        # Create task
+        self.appTasks[task_name] = FilterEngineTask(
+            self.tasks_descriptions[task_name], 
+            task_name, 
+            task_parameters
+        )
+        
+        # Get layers from task parameters
+        layers = []
+        layers_props = [layer_infos for layer_infos in task_parameters["task"]["layers"]]
+        layers_ids = [layer_props["layer_id"] for layer_props in layers_props]
+        for layer_props in layers_props:
+            temp_layers = self.PROJECT.mapLayersByName(layer_props["layer_name"])
+            for temp_layer in temp_layers:
+                if temp_layer.id() in layers_ids:
+                    layers.append(temp_layer)
+        
+        # Save current layer before filtering
+        self._save_current_layer_before_filter()
+        
+        # Set filtering protection flags
+        self._set_filter_protection_flags(current_layer)
+        
+        # Show backend info message
+        self._show_filter_start_message(task_name, task_parameters, layers_props, layers, current_layer)
+        
+        # Connect completion handler
+        self.appTasks[task_name].taskCompleted.connect(
+            lambda tn=task_name, cl=current_layer, tp=task_parameters: 
+                self.filter_engine_task_completed(tn, cl, tp)
+        )
+        
+        # Cancel conflicting tasks and add to task manager
+        self._cancel_conflicting_tasks()
+        QgsApplication.taskManager().addTask(self.appTasks[task_name])
+    
+    def _execute_layer_task(self, task_name: str, task_parameters: dict):
+        """
+        Execute a layer management task.
+        
+        v4.1: Extracted as callback for TaskOrchestrator.
+        Contains the actual task creation and execution logic for layer operations.
+        
+        Args:
+            task_name: Name of the task ('add_layers', 'remove_layers')
+            task_parameters: Parameters for task execution
+        """
+        from .modules.tasks import LayersManagementEngineTask
+        
+        self.appTasks[task_name] = LayersManagementEngineTask(
+            self.tasks_descriptions[task_name], 
+            task_name, 
+            task_parameters
+        )
+        
+        # Configure task based on type
+        if task_name == "add_layers":
+            self.appTasks[task_name].setDependentLayers([
+                layer for layer in task_parameters["task"]["layers"]
+            ])
+            if self.dockwidget is not None:
+                self.appTasks[task_name].begun.connect(
+                    self.dockwidget.disconnect_widgets_signals
+                )
+        elif task_name == "remove_layers":
+            self.appTasks[task_name].begun.connect(self.on_remove_layer_task_begun)
+        
+        # Connect signals with Qt.QueuedConnection
+        self.appTasks[task_name].resultingLayers.connect(
+            lambda result_project_layers, tn=task_name: 
+                self.layer_management_engine_task_completed(result_project_layers, tn),
+            Qt.QueuedConnection
+        )
+        self.appTasks[task_name].savingLayerVariable.connect(
+            lambda layer, variable_key, value_typped, type_returned: 
+                self.saving_layer_variable(layer, variable_key, value_typped, type_returned),
+            Qt.QueuedConnection
+        )
+        self.appTasks[task_name].removingLayerVariable.connect(
+            lambda layer, variable_key: 
+                self.removing_layer_variable(layer, variable_key),
+            Qt.QueuedConnection
+        )
+        self.appTasks[task_name].taskTerminated.connect(
+            lambda tn=task_name: self._handle_layer_task_terminated(tn),
+            Qt.QueuedConnection
+        )
+        
+        # Add to task manager
+        QgsApplication.taskManager().addTask(self.appTasks[task_name])
+    
+    def _save_current_layer_before_filter(self):
+        """Save current layer reference before filtering to restore after."""
+        self._current_layer_before_filter = self.dockwidget.current_layer if self.dockwidget else None
+        if self._current_layer_before_filter:
+            try:
+                self._current_layer_id_before_filter = self._current_layer_before_filter.id()
+                logger.info(f"v4.1: 💾 Saved current_layer before filtering")
+            except (RuntimeError, AttributeError):
+                self._current_layer_id_before_filter = None
+        else:
+            self._current_layer_id_before_filter = None
+    
+    def _set_filter_protection_flags(self, current_layer):
+        """Set protection flags and disconnect signals during filtering."""
+        if not self.dockwidget:
+            return
+        
+        # Set saved layer ID for protection
+        if self._current_layer_id_before_filter:
+            self.dockwidget._saved_layer_id_before_filter = self._current_layer_id_before_filter
+        
+        # Set filtering in progress flag
+        self.dockwidget._filtering_in_progress = True
+        logger.info("v4.1: 🔒 Filtering protection enabled")
+        
+        # Disconnect signals and block Qt signals on combobox
+        try:
+            self.dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'disconnect')
+            self.dockwidget.comboBox_filtering_current_layer.blockSignals(True)
+            self.dockwidget.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'disconnect')
+        except Exception as e:
+            logger.debug(f"Could not disconnect signals: {e}")
+    
+    def _show_filter_start_message(self, task_name, task_parameters, layers_props, layers, current_layer):
+        """Show informational message about filtering operation starting."""
+        layer_count = len(layers) + 1
+        source_provider_type = task_parameters["infos"].get("layer_provider_type", "unknown")
+        
+        # Determine dominant backend
+        distant_provider_types = [lp.get("layer_provider_type", "unknown") for lp in layers_props]
+        
+        if 'spatialite' in distant_provider_types:
+            provider_type = 'spatialite'
+        elif 'postgresql' in distant_provider_types:
+            provider_type = 'postgresql'
+        elif distant_provider_types:
+            provider_type = distant_provider_types[0]
+        else:
+            provider_type = source_provider_type
+        
+        # Check for forced backends
+        is_fallback = False
+        forced_backends = getattr(self.dockwidget, 'forced_backends', {}) if self.dockwidget else {}
+        if forced_backends:
+            all_layer_ids = [current_layer.id()] + [l.id() for l in layers]
+            forced_types = set(forced_backends.get(lid) for lid in all_layer_ids if lid in forced_backends)
+            if len(forced_types) == 1 and None not in forced_types:
+                provider_type = list(forced_types)[0]
+                is_fallback = (provider_type == 'ogr')
+        
+        # Check PostgreSQL fallback
+        if not is_fallback and provider_type == 'postgresql':
+            is_fallback = task_parameters["infos"].get("postgresql_connection_available", True) is False
+        
+        show_backend_info(provider_type, layer_count, operation=task_name, is_fallback=is_fallback)
+    
+    def _cancel_conflicting_tasks(self):
+        """Cancel any conflicting filter tasks that are currently running."""
+        try:
+            active_tasks = QgsApplication.taskManager().activeTasks()
+            for active_task in active_tasks:
+                key_active_task = [k for k, v in self.tasks_descriptions.items() 
+                                   if v == active_task.description()]
+                if key_active_task and key_active_task[0] in ('filter', 'reset', 'unfilter'):
+                    active_task.cancel()
+        except (IndexError, KeyError, AttributeError):
+            pass
+
     def manage_task(self, task_name, data=None):
         """
         Orchestrate execution of FilterMate tasks.
@@ -1406,6 +1631,11 @@ class FilterMateApp:
         Central dispatcher for all plugin operations including filtering, layer management,
         and project operations. Creates appropriate task objects and manages their execution
         through QGIS task manager.
+        
+        .. deprecated:: 4.1.0
+            This method delegates to TaskOrchestrator when available.
+            Direct task execution logic is being migrated to _execute_filter_task() 
+            and _execute_layer_task() methods.
         
         Args:
             task_name (str): Name of task to execute. Must be one of:
@@ -1429,6 +1659,20 @@ class FilterMateApp:
         """
 
         assert task_name in list(self.tasks_descriptions.keys())
+        
+        # v4.1: Feature flag for TaskOrchestrator delegation
+        # Set USE_TASK_ORCHESTRATOR = True to enable new architecture
+        # Keep False during testing period for safe rollback
+        USE_TASK_ORCHESTRATOR = False  # TODO: Enable after testing
+        
+        if USE_TASK_ORCHESTRATOR and self._task_orchestrator is not None:
+            logger.info(f"v4.1: Delegating task '{task_name}' to TaskOrchestrator")
+            try:
+                self._task_orchestrator.dispatch_task(task_name, data)
+                return
+            except Exception as e:
+                logger.warning(f"v4.1: TaskOrchestrator failed, falling back to legacy: {e}")
+                # Fall through to legacy code
         
         # v2.7.17: Enhanced logging for task reception
         logger.info(f"=" * 60)

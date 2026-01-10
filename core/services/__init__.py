@@ -55,6 +55,10 @@ from .buffer_service import (
 # 1. It has QGIS dependencies (QObject, pyqtSignal) - not pure Python
 # Import directly: from core.services.postgres_session_manager import PostgresSessionManager
 
+# Note: TaskOrchestrator is NOT exported here because:
+# 1. It has QGIS dependencies (QTimer, QgsApplication) - not pure Python
+# v4.1: Import directly: from core.services.task_orchestrator import TaskOrchestrator
+
 __all__ = [
     # Expression Service
     'ExpressionService',
