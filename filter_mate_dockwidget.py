@@ -470,41 +470,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # This method is not called during debugging
         
 
-    def getSignal(self, oObject : QObject, strSignalName : str):
-        """Get signal from QObject by name with caching for performance.
-        
-        Uses a class-level cache to avoid repeated iteration over metaObject
-        which can be very slow for complex QGIS widgets with many methods.
-        
-        Args:
-            oObject: Qt object to search for signal
-            strSignalName: Name of the signal to find
-            
-        Returns:
-            QMetaMethod: The signal method if found, None otherwise
-        """
-        # Create cache key from object's class name and signal name
-        # Using class name instead of object id since signals are class-level
+    def getSignal(self, oObject: QObject, strSignalName: str):
+        """v3.1 Sprint 14: Get signal from QObject by name with caching."""
         class_name = oObject.metaObject().className()
         cache_key = f"{class_name}.{strSignalName}"
-        
-        # Check cache first
         if cache_key in FilterMateDockWidget._signal_cache:
             return FilterMateDockWidget._signal_cache[cache_key]
-        
-        # Not in cache - search metaObject
         oMetaObj = oObject.metaObject()
         for i in range(oMetaObj.methodCount()):
             oMetaMethod = oMetaObj.method(i)
-            if not oMetaMethod.isValid():
-                continue
-            if oMetaMethod.methodType() == QMetaMethod.Signal and \
-                oMetaMethod.name() == strSignalName:
-                # Cache the result
+            if oMetaMethod.isValid() and oMetaMethod.methodType() == QMetaMethod.Signal and \
+               oMetaMethod.name() == strSignalName:
                 FilterMateDockWidget._signal_cache[cache_key] = oMetaMethod
                 return oMetaMethod
-        
-        # Signal not found - cache None to avoid repeated searches
         FilterMateDockWidget._signal_cache[cache_key] = None
         return None
 
@@ -645,84 +623,47 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             raise SignalStateChangeError(state, widget_path)
 
     def reset_multiple_checkable_combobox(self):
-        """
-        Safely reset and recreate the multiple checkable combobox widget.
-        
-        This method handles proper cleanup of the old widget and creation of a new one
-        to avoid Qt memory issues and crashes.
-        """
+        """v3.1 Sprint 14: Reset and recreate multiple checkable combobox widget."""
         try:
-            # Use the horizontal layout that contains the combobox
             layout = self.horizontalLayout_exploring_multiple_feature_picker
-            
-            # Safely remove old widget from layout (it's at index 0)
             if layout.count() > 0:
                 item = layout.itemAt(0)
                 if item and item.widget():
                     old_widget = item.widget()
                     layout.removeWidget(old_widget)
-                    # Properly delete the old widget to free resources
                     old_widget.deleteLater()
-            
-            # Reset and close widget safely
             if hasattr(self, 'checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection') and \
                self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection is not None:
                 try:
                     self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.reset()
                     self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.close()
                     self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.deleteLater()
-                except (RuntimeError, AttributeError) as e:
-                    # Widget may already be deleted or being destroyed
-                    logger.debug(f"Could not close widget (may already be destroyed): {e}")
-            
-            # Create new widget
+                except (RuntimeError, AttributeError):
+                    pass
             self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = None
             self.set_multiple_checkable_combobox()
-
-            # Insert new widget into layout (at position 0, before the order by button)
             if self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection is not None:
-                layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, 1)  # stretch=1 to fill space
+                layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, 1)
                 layout.update()
-
-                # Update widgets registry
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"] = {
                     "TYPE": "CustomCheckableFeatureComboBox",
                     "WIDGET": self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection,
-                    "SIGNALS": [
-                        ("updatingCheckedItemList", self.exploring_features_changed),
-                        ("filteringCheckedItemList", self.exploring_source_params_changed)
-                    ]
-                }
-        except Exception as e:
-            logger.error(f"Error resetting multiple checkable combobox: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+                    "SIGNALS": [("updatingCheckedItemList", self.exploring_features_changed),
+                                ("filteringCheckedItemList", self.exploring_source_params_changed)]}
+        except Exception:
+            pass
 
     def set_multiple_checkable_combobox(self):
         self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self.CONFIG_DATA, self)
 
 
     def _fix_toolbox_icons(self):
-        """
-        Fix toolBox_tabTools icons with absolute paths.
-        
-        The auto-generated filter_mate_dockwidget_base.py uses relative paths
-        for icons which don't work. This method replaces them with absolute paths.
-        """
-        toolbox_icons = {
-            0: "filter_multi.png",   # FILTERING tab
-            1: "save.png",           # EXPORTING tab
-            2: "parameters.png"      # CONFIGURATION tab
-        }
-        
-        for index, icon_file in toolbox_icons.items():
+        """v3.1 Sprint 14: Fix toolBox_tabTools icons with absolute paths."""
+        icons = {0: "filter_multi.png", 1: "save.png", 2: "parameters.png"}
+        for index, icon_file in icons.items():
             icon_path = os.path.join(self.plugin_dir, "icons", icon_file)
             if os.path.exists(icon_path):
-                # Use themed icon for dark mode support
-                if ICON_THEME_AVAILABLE:
-                    icon = get_themed_icon(icon_path)
-                else:
-                    icon = QtGui.QIcon(icon_path)
+                icon = get_themed_icon(icon_path) if ICON_THEME_AVAILABLE else QtGui.QIcon(icon_path)
                 self.toolBox_tabTools.setItemIcon(index, icon)
 
 
@@ -768,69 +709,31 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._setup_truncation_tooltips()
     
     def _load_all_pushbutton_icons(self):
-        """
-        Load icons for all PushButton widgets directly from config.
-        
-        This method is called immediately after dockwidget_widgets_configuration()
-        to ensure icons are loaded before any UI display.
-        """
+        """v3.1 Sprint 14: Load icons for all PushButton widgets from config."""
         try:
-            # Get icons configuration
-            icons_config = self.CONFIG_DATA.get("APP", {}).get("DOCKWIDGET", {}).get("PushButton", {}).get("ICONS", {})
-            icons_sizes_config = self.CONFIG_DATA.get("APP", {}).get("DOCKWIDGET", {}).get("PushButton", {}).get("ICONS_SIZES", {})
-            
-            # Get icon sizes - default to reasonable values
-            action_icon_size = icons_sizes_config.get("ACTION", {}).get("value", 24)
-            other_icon_size = icons_sizes_config.get("OTHERS", {}).get("value", 20)
-            
+            pb_config = self.CONFIG_DATA.get("APP", {}).get("DOCKWIDGET", {}).get("PushButton", {})
+            icons_config = pb_config.get("ICONS", {})
+            sizes = pb_config.get("ICONS_SIZES", {})
+            action_size = sizes.get("ACTION", {}).get("value", 24)
+            other_size = sizes.get("OTHERS", {}).get("value", 20)
             if not icons_config:
-                logger.warning("No ICONS configuration found in config.json")
                 return
-            
-            icons_loaded = 0
             for widget_group in ["ACTION", "EXPLORING", "FILTERING", "EXPORTING"]:
-                group_icons = icons_config.get(widget_group, {})
-                
-                # Determine icon size for this group
-                icon_size = action_icon_size if widget_group == "ACTION" else other_icon_size
-                
-                for widget_name, icon_file in group_icons.items():
-                    # Get the widget directly by attribute name
-                    widget_attr_name = self._get_widget_attr_name(widget_group, widget_name)
-                    
-                    if hasattr(self, widget_attr_name):
-                        widget = getattr(self, widget_attr_name)
+                icon_size = action_size if widget_group == "ACTION" else other_size
+                for widget_name, icon_file in icons_config.get(widget_group, {}).items():
+                    widget_attr = self._get_widget_attr_name(widget_group, widget_name)
+                    if hasattr(self, widget_attr):
+                        widget = getattr(self, widget_attr)
                         icon_path = os.path.join(self.plugin_dir, "icons", icon_file)
-                        
                         if os.path.exists(icon_path):
-                            if ICON_THEME_AVAILABLE:
-                                icon = get_themed_icon(icon_path)
-                            else:
-                                icon = QtGui.QIcon(icon_path)
-                            
+                            icon = get_themed_icon(icon_path) if ICON_THEME_AVAILABLE else QtGui.QIcon(icon_path)
                             widget.setIcon(icon)
-                            # Set icon size explicitly
                             widget.setIconSize(QtCore.QSize(icon_size, icon_size))
-                            icons_loaded += 1
-                        else:
-                            logger.debug(f"Icon not found: {icon_path}")
-                    else:
-                        logger.debug(f"Widget not found: {widget_attr_name}")
-            
-            logger.info(f"Loaded {icons_loaded} pushbutton icons (action: {action_icon_size}px, others: {other_icon_size}px)")
-            
-        except Exception as e:
-            logger.error(f"Error loading pushbutton icons: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+        except Exception:
+            pass
     
     def _get_widget_attr_name(self, widget_group, widget_name):
-        """
-        Get the attribute name for a widget based on group and name.
-        
-        Maps config names to actual widget attribute names.
-        """
-        # Map of widget group/name to attribute names
+        """v3.1 Sprint 14: Map config names to widget attribute names."""
         widget_map = {
             ("ACTION", "FILTER"): "pushButton_action_filter",
             ("ACTION", "UNDO_FILTER"): "pushButton_action_undo_filter",
@@ -855,404 +758,167 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             ("EXPORTING", "HAS_STYLES_TO_EXPORT"): "pushButton_checkable_exporting_styles",
             ("EXPORTING", "HAS_DATATYPE_TO_EXPORT"): "pushButton_checkable_exporting_datatype",
             ("EXPORTING", "HAS_OUTPUT_FOLDER_TO_EXPORT"): "pushButton_checkable_exporting_output_folder",
-            ("EXPORTING", "HAS_ZIP_TO_EXPORT"): "pushButton_checkable_exporting_zip",
-        }
+            ("EXPORTING", "HAS_ZIP_TO_EXPORT"): "pushButton_checkable_exporting_zip"}
         return widget_map.get((widget_group, widget_name), "")
 
     def _setup_main_splitter(self):
-        """
-        Setup the main splitter between frame_exploring and frame_toolset.
-        
-        The splitter already exists as 'splitter_main' from the .ui file.
-        This method configures it using UIConfig settings for optimal behavior.
-        
-        Configuration includes:
-        - Handle width and margins
-        - Stretch factors for proportional sizing
-        - Collapsible behavior
-        - Size policies for child frames
-        - Initial size distribution
-        """
+        """v3.1 Sprint 14: Setup main splitter between frames."""
         from .ui.config import UIConfig
-        
         try:
-            # The splitter already exists from the .ui file as splitter_main
-            # Just reference it as main_splitter for consistency
             self.main_splitter = self.splitter_main
-            
-            # Get splitter configuration from UIConfig
-            splitter_config = UIConfig.get_config('splitter')
-            handle_width = splitter_config.get('handle_width', 6)
-            handle_margin = splitter_config.get('handle_margin', 40)
-            exploring_stretch = splitter_config.get('exploring_stretch', 2)
-            toolset_stretch = splitter_config.get('toolset_stretch', 5)
-            collapsible = splitter_config.get('collapsible', False)
-            opaque_resize = splitter_config.get('opaque_resize', True)
-            
-            # Configure splitter properties
-            self.main_splitter.setChildrenCollapsible(collapsible)
+            cfg = UIConfig.get_config('splitter')
+            handle_width = cfg.get('handle_width', 6)
+            handle_margin = cfg.get('handle_margin', 40)
+            self.main_splitter.setChildrenCollapsible(cfg.get('collapsible', False))
             self.main_splitter.setHandleWidth(handle_width)
-            self.main_splitter.setOpaqueResize(opaque_resize)
-            
-            # Style the splitter handle - subtle and minimal
+            self.main_splitter.setOpaqueResize(cfg.get('opaque_resize', True))
             self.main_splitter.setStyleSheet(f"""
                 QSplitter::handle:vertical {{
-                    background-color: #d0d0d0;
-                    height: {handle_width - 2}px;
-                    margin: 2px {handle_margin}px;
-                    border-radius: {(handle_width - 2) // 2}px;
+                    background-color: #d0d0d0; height: {handle_width - 2}px;
+                    margin: 2px {handle_margin}px; border-radius: {(handle_width - 2) // 2}px;
                 }}
-                QSplitter::handle:vertical:hover {{
-                    background-color: #3498db;
-                }}
-            """)
-            
-            # Configure size policies for frames
+                QSplitter::handle:vertical:hover {{ background-color: #3498db; }}""")
             self._apply_splitter_frame_policies()
-            
-            # Set stretch factors for proportional sizing
-            self.main_splitter.setStretchFactor(0, exploring_stretch)
-            self.main_splitter.setStretchFactor(1, toolset_stretch)
-            
-            # Set initial sizes based on available height
+            self.main_splitter.setStretchFactor(0, cfg.get('exploring_stretch', 2))
+            self.main_splitter.setStretchFactor(1, cfg.get('toolset_stretch', 5))
             self._set_initial_splitter_sizes()
-            
-            logger.debug(f"Main splitter setup: handle={handle_width}px, "
-                        f"stretch={exploring_stretch}:{toolset_stretch}, "
-                        f"collapsible={collapsible}")
-            
-        except Exception as e:
-            logger.error(f"Error setting up main splitter: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+        except Exception:
             self.main_splitter = None
     
     def _apply_splitter_frame_policies(self):
-        """
-        Apply size policies to frames within the splitter.
-        
-        This ensures proper behavior when resizing:
-        - frame_exploring: Minimum policy (can shrink to min but prefers base)
-        - frame_toolset: Expanding policy (takes remaining space)
-        """
+        """v3.1 Sprint 14: Apply size policies to splitter frames."""
         from .ui.config import UIConfig
         from qgis.PyQt.QtWidgets import QSizePolicy
-        
-        # Map string policies to Qt enum values
-        policy_map = {
-            'Fixed': QSizePolicy.Fixed,
-            'Minimum': QSizePolicy.Minimum,
-            'Maximum': QSizePolicy.Maximum,
-            'Preferred': QSizePolicy.Preferred,
-            'Expanding': QSizePolicy.Expanding,
-            'MinimumExpanding': QSizePolicy.MinimumExpanding,
-            'Ignored': QSizePolicy.Ignored
-        }
-        
-        # Configure frame_exploring
-        if hasattr(self, 'frame_exploring'):
-            exploring_config = UIConfig.get_config('frame_exploring')
-            if exploring_config:
-                h_policy = policy_map.get(exploring_config.get('size_policy_h', 'Preferred'), QSizePolicy.Preferred)
-                v_policy = policy_map.get(exploring_config.get('size_policy_v', 'Minimum'), QSizePolicy.Minimum)
-                self.frame_exploring.setSizePolicy(h_policy, v_policy)
-                logger.debug(f"frame_exploring policy: {exploring_config.get('size_policy_h')}/{exploring_config.get('size_policy_v')}")
-        
-        # Configure frame_toolset
-        if hasattr(self, 'frame_toolset'):
-            toolset_config = UIConfig.get_config('frame_toolset')
-            if toolset_config:
-                h_policy = policy_map.get(toolset_config.get('size_policy_h', 'Preferred'), QSizePolicy.Preferred)
-                v_policy = policy_map.get(toolset_config.get('size_policy_v', 'Expanding'), QSizePolicy.Expanding)
-                self.frame_toolset.setSizePolicy(h_policy, v_policy)
-                logger.debug(f"frame_toolset policy: {toolset_config.get('size_policy_h')}/{toolset_config.get('size_policy_v')}")
+        policy_map = {'Fixed': QSizePolicy.Fixed, 'Minimum': QSizePolicy.Minimum,
+                      'Maximum': QSizePolicy.Maximum, 'Preferred': QSizePolicy.Preferred,
+                      'Expanding': QSizePolicy.Expanding, 'MinimumExpanding': QSizePolicy.MinimumExpanding,
+                      'Ignored': QSizePolicy.Ignored}
+        for frame_name, defaults in [('frame_exploring', ('Preferred', 'Minimum')),
+                                      ('frame_toolset', ('Preferred', 'Expanding'))]:
+            if hasattr(self, frame_name):
+                cfg = UIConfig.get_config(frame_name) or {}
+                h = policy_map.get(cfg.get('size_policy_h', defaults[0]), QSizePolicy.Preferred)
+                v = policy_map.get(cfg.get('size_policy_v', defaults[1]), QSizePolicy.Preferred)
+                getattr(self, frame_name).setSizePolicy(h, v)
     
     def _set_initial_splitter_sizes(self):
-        """
-        Set initial splitter sizes based on configuration ratios.
-        
-        Uses the available height to distribute space between frames
-        according to the configured ratios (50/50 by default for equal space).
-        """
+        """v3.1 Sprint 14: Set initial splitter sizes based on ratios."""
         from .ui.config import UIConfig
-        
-        splitter_config = UIConfig.get_config('splitter')
-        exploring_ratio = splitter_config.get('initial_exploring_ratio', 0.50)
-        toolset_ratio = splitter_config.get('initial_toolset_ratio', 0.50)
-        
-        # Get available height from splitter or use default
-        total_height = self.main_splitter.height()
-        if total_height < 100:  # Splitter not yet sized, use reasonable default
-            total_height = 600
-        
-        # Calculate sizes based on ratios for equal distribution
-        exploring_size = int(total_height * exploring_ratio)
-        toolset_size = int(total_height * toolset_ratio)
-        
-        # Set sizes - Qt will adjust based on actual available space
-        self.main_splitter.setSizes([exploring_size, toolset_size])
-        
-        logger.debug(f"Initial splitter sizes: exploring={exploring_size}px ({exploring_ratio:.0%}), toolset={toolset_size}px ({toolset_ratio:.0%})")
+        cfg = UIConfig.get_config('splitter')
+        exp_ratio = cfg.get('initial_exploring_ratio', 0.50)
+        tool_ratio = cfg.get('initial_toolset_ratio', 0.50)
+        total = self.main_splitter.height() if self.main_splitter.height() >= 100 else 600
+        self.main_splitter.setSizes([int(total * exp_ratio), int(total * tool_ratio)])
 
 
     def apply_dynamic_dimensions(self):
-        """
-        Apply dynamic dimensions to widgets based on active UI profile (compact/normal).
-        
-        Orchestrates the application of dimensions by calling specialized methods.
-        Called from setupUiCustom() during initialization.
-        
-        v3.1 Phase 6 (MIG-062): Delegates to DimensionsManager if available.
-        v3.1 Phase 6 (MIG-063): Delegates spacing to SpacingManager if available.
-        """
-        # v3.1: Delegate to DimensionsManager (Phase 6 - MIG-062)
+        """v3.1 Sprint 14: Apply dynamic dimensions to widgets."""
         if self._dimensions_manager is not None:
             try:
                 self._dimensions_manager.apply()
-                logger.debug("apply_dynamic_dimensions delegated to DimensionsManager (v3.1)")
                 return
-            except Exception as e:
-                logger.warning(f"DimensionsManager.apply() failed, falling back to legacy: {e}")
-        
-        # Legacy fallback - original implementation
+            except Exception:
+                pass
         try:
-            # Apply dockwidget minimum size based on profile
             self._apply_dockwidget_dimensions()
-            
-            # Apply dimensions in logical groups
             self._apply_widget_dimensions()
             self._apply_frame_dimensions()
             self._harmonize_checkable_pushbuttons()
-            
-            # v3.1: Delegate spacing to SpacingManager (Phase 6 - MIG-063)
             if self._spacing_manager is not None:
                 try:
                     self._spacing_manager.apply()
-                    logger.debug("Spacing delegated to SpacingManager (v3.1)")
-                except Exception as e:
-                    logger.warning(f"SpacingManager.apply() failed, using legacy: {e}")
+                except Exception:
                     self._apply_layout_spacing()
                     self._harmonize_spacers()
                     self._adjust_row_spacing()
             else:
-                # Legacy spacing methods
                 self._apply_layout_spacing()
                 self._harmonize_spacers()
                 self._adjust_row_spacing()
-            
             self._apply_qgis_widget_dimensions()
             self._align_key_layouts()
-            
-            logger.info("Successfully applied dynamic dimensions to all widgets")
-            
-        except Exception as e:
-            logger.error(f"Error applying dynamic dimensions: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
+            pass
     
     def _apply_dockwidget_dimensions(self):
-        """
-        Apply minimum size to the dockwidget based on active UI profile (compact/normal).
-        
-        This ensures the dockwidget can be resized smaller in compact mode,
-        allowing better screen space management.
-        """
+        """v3.1 Sprint 14: Apply minimum size to dockwidget based on profile."""
         from .ui.config import UIConfig
         from qgis.PyQt.QtCore import QSize
-        
-        # Get dockwidget dimensions from active profile
-        min_width = UIConfig.get_config('dockwidget', 'min_width')
-        min_height = UIConfig.get_config('dockwidget', 'min_height')
-        preferred_width = UIConfig.get_config('dockwidget', 'preferred_width')
-        preferred_height = UIConfig.get_config('dockwidget', 'preferred_height')
-        
-        if min_width and min_height:
-            self.setMinimumSize(QSize(min_width, min_height))
-            logger.debug(f"Applied dockwidget minimum size: {min_width}x{min_height}px")
-        
-        # Set a reasonable preferred size (not enforced, just a hint)
-        if preferred_width and preferred_height:
-            # Only resize if current size is larger than preferred (don't expand small windows)
-            current_size = self.size()
-            if current_size.width() > preferred_width or current_size.height() > preferred_height:
-                self.resize(preferred_width, preferred_height)
-                logger.debug(f"Resized dockwidget to preferred size: {preferred_width}x{preferred_height}px")
+        min_w, min_h = UIConfig.get_config('dockwidget', 'min_width'), UIConfig.get_config('dockwidget', 'min_height')
+        pref_w, pref_h = UIConfig.get_config('dockwidget', 'preferred_width'), UIConfig.get_config('dockwidget', 'preferred_height')
+        if min_w and min_h:
+            self.setMinimumSize(QSize(min_w, min_h))
+        if pref_w and pref_h:
+            if self.size().width() > pref_w or self.size().height() > pref_h:
+                self.resize(pref_w, pref_h)
     
     def _apply_widget_dimensions(self):
-        """
-        Apply dimensions to standard Qt widgets (ComboBox, LineEdit, SpinBox, GroupBox).
-        
-        Reads dimensions from UIConfig and applies them to all relevant widgets
-        using findChildren() for batch processing.
-        """
+        """v3.1 Sprint 14: Apply dimensions to standard Qt widgets."""
         from .ui.config import UIConfig
         from qgis.PyQt.QtWidgets import QComboBox, QLineEdit, QDoubleSpinBox, QSpinBox, QGroupBox
-        
-        # Get dimensions from active profile
-        combobox_height = UIConfig.get_config('combobox', 'height')
-        input_height = UIConfig.get_config('input', 'height')
-        groupbox_min_height = UIConfig.get_config('groupbox', 'min_height')
-        
-        # Apply to ComboBoxes
+        combo_h = UIConfig.get_config('combobox', 'height')
+        input_h = UIConfig.get_config('input', 'height')
+        gb_min_h = UIConfig.get_config('groupbox', 'min_height')
         for combo in self.findChildren(QComboBox):
-            combo.setMinimumHeight(combobox_height)
-            combo.setMaximumHeight(combobox_height)
-            combo.setSizePolicy(combo.sizePolicy().horizontalPolicy(), 
-                              QtWidgets.QSizePolicy.Fixed)
-        
-        # Apply to LineEdits
-        for line_edit in self.findChildren(QLineEdit):
-            line_edit.setMinimumHeight(input_height)
-            line_edit.setMaximumHeight(input_height)
-            line_edit.setSizePolicy(line_edit.sizePolicy().horizontalPolicy(), 
-                                   QtWidgets.QSizePolicy.Fixed)
-        
-        # Apply to SpinBoxes (QDoubleSpinBox and QSpinBox)
-        for spinbox in self.findChildren(QDoubleSpinBox):
-            spinbox.setMinimumHeight(input_height)
-            spinbox.setMaximumHeight(input_height)
-            spinbox.setSizePolicy(spinbox.sizePolicy().horizontalPolicy(), 
-                                QtWidgets.QSizePolicy.Fixed)
-        
-        for spinbox in self.findChildren(QSpinBox):
-            spinbox.setMinimumHeight(input_height)
-            spinbox.setMaximumHeight(input_height)
-            spinbox.setSizePolicy(spinbox.sizePolicy().horizontalPolicy(), 
-                                QtWidgets.QSizePolicy.Fixed)
-        
-        # Apply to GroupBoxes (QgsCollapsibleGroupBox included)
-        for groupbox in self.findChildren(QGroupBox):
-            groupbox.setMinimumHeight(groupbox_min_height)
-        
-        logger.debug(f"Applied widget dimensions: ComboBox={combobox_height}px, Input={input_height}px")
+            combo.setMinimumHeight(combo_h)
+            combo.setMaximumHeight(combo_h)
+            combo.setSizePolicy(combo.sizePolicy().horizontalPolicy(), QtWidgets.QSizePolicy.Fixed)
+        for le in self.findChildren(QLineEdit):
+            le.setMinimumHeight(input_h)
+            le.setMaximumHeight(input_h)
+            le.setSizePolicy(le.sizePolicy().horizontalPolicy(), QtWidgets.QSizePolicy.Fixed)
+        for spinbox in self.findChildren(QDoubleSpinBox) + self.findChildren(QSpinBox):
+            spinbox.setMinimumHeight(input_h)
+            spinbox.setMaximumHeight(input_h)
+            spinbox.setSizePolicy(spinbox.sizePolicy().horizontalPolicy(), QtWidgets.QSizePolicy.Fixed)
+        for gb in self.findChildren(QGroupBox):
+            gb.setMinimumHeight(gb_min_h)
     
     def _apply_frame_dimensions(self):
-        """
-        Apply dimensions and size policies to frames and widget key containers.
-        
-        This method configures:
-        - Widget key containers (sidebar buttons area)
-        - Main frames (exploring, toolset)
-        - Sub-frames (filtering)
-        
-        Size policies work in conjunction with the splitter configuration
-        to ensure proper resize behavior.
-        """
+        """v3.1 Sprint 14: Apply dimensions to frames and containers."""
         from .ui.config import UIConfig
         from qgis.PyQt.QtWidgets import QSizePolicy
-        
-        # Map string policies to Qt enum values
-        policy_map = {
-            'Fixed': QSizePolicy.Fixed,
-            'Minimum': QSizePolicy.Minimum,
-            'Maximum': QSizePolicy.Maximum,
-            'Preferred': QSizePolicy.Preferred,
-            'Expanding': QSizePolicy.Expanding,
-            'MinimumExpanding': QSizePolicy.MinimumExpanding,
-            'Ignored': QSizePolicy.Ignored
-        }
-        
-        # Get widget_keys dimensions
-        widget_keys_min_width = UIConfig.get_config('widget_keys', 'min_width')
-        widget_keys_max_width = UIConfig.get_config('widget_keys', 'max_width')
-        
-        # Get frame exploring configuration
-        exploring_config = UIConfig.get_config('frame_exploring')
-        exploring_min = exploring_config.get('min_height', 120) if exploring_config else 120
-        exploring_max = exploring_config.get('max_height', 350) if exploring_config else 350
-        exploring_h_policy = exploring_config.get('size_policy_h', 'Preferred') if exploring_config else 'Preferred'
-        exploring_v_policy = exploring_config.get('size_policy_v', 'Minimum') if exploring_config else 'Minimum'
-        
-        # Get frame toolset configuration
-        toolset_config = UIConfig.get_config('frame_toolset')
-        toolset_min = toolset_config.get('min_height', 200) if toolset_config else 200
-        toolset_max = toolset_config.get('max_height', 16777215) if toolset_config else 16777215
-        toolset_h_policy = toolset_config.get('size_policy_h', 'Preferred') if toolset_config else 'Preferred'
-        toolset_v_policy = toolset_config.get('size_policy_v', 'Expanding') if toolset_config else 'Expanding'
-        
-        # Get frame filtering configuration
-        filtering_config = UIConfig.get_config('frame_filtering')
-        filtering_min = filtering_config.get('min_height', 180) if filtering_config else 180
-        
-        # Get widget_keys padding and border radius from config
-        widget_keys_config = UIConfig.get_config('widget_keys')
-        widget_keys_padding = widget_keys_config.get('padding', 2) if widget_keys_config else 2
-        
-        # Apply to widget keys containers with enhanced styling
-        for widget_name in ['widget_exploring_keys', 'widget_filtering_keys', 'widget_exporting_keys']:
-            if hasattr(self, widget_name):
-                widget = getattr(self, widget_name)
-                widget.setMinimumWidth(widget_keys_min_width)
-                widget.setMaximumWidth(widget_keys_max_width)
-                # Apply consistent padding via layout margins
-                layout = widget.layout()
-                if layout:
-                    layout.setContentsMargins(widget_keys_padding, widget_keys_padding, 
-                                            widget_keys_padding, widget_keys_padding)
-                    layout.setSpacing(0)  # No extra spacing in container
-        
-        # Apply to frame_exploring with size policy
+        policy_map = {'Fixed': QSizePolicy.Fixed, 'Minimum': QSizePolicy.Minimum,
+                      'Maximum': QSizePolicy.Maximum, 'Preferred': QSizePolicy.Preferred,
+                      'Expanding': QSizePolicy.Expanding, 'MinimumExpanding': QSizePolicy.MinimumExpanding,
+                      'Ignored': QSizePolicy.Ignored}
+        wk_min = UIConfig.get_config('widget_keys', 'min_width')
+        wk_max = UIConfig.get_config('widget_keys', 'max_width')
+        wk_cfg = UIConfig.get_config('widget_keys') or {}
+        wk_pad = wk_cfg.get('padding', 2)
+        for wn in ['widget_exploring_keys', 'widget_filtering_keys', 'widget_exporting_keys']:
+            if hasattr(self, wn):
+                w = getattr(self, wn)
+                w.setMinimumWidth(wk_min)
+                w.setMaximumWidth(wk_max)
+                if w.layout():
+                    w.layout().setContentsMargins(wk_pad, wk_pad, wk_pad, wk_pad)
+                    w.layout().setSpacing(0)
+        exp_cfg = UIConfig.get_config('frame_exploring') or {}
         if hasattr(self, 'frame_exploring'):
-            self.frame_exploring.setMinimumHeight(exploring_min)
-            self.frame_exploring.setMaximumHeight(exploring_max)
-            h_policy = policy_map.get(exploring_h_policy, QSizePolicy.Preferred)
-            v_policy = policy_map.get(exploring_v_policy, QSizePolicy.Minimum)
-            self.frame_exploring.setSizePolicy(h_policy, v_policy)
-        
-        # Apply to frame_toolset with size policy
+            self.frame_exploring.setMinimumHeight(exp_cfg.get('min_height', 120))
+            self.frame_exploring.setMaximumHeight(exp_cfg.get('max_height', 350))
+            self.frame_exploring.setSizePolicy(policy_map.get(exp_cfg.get('size_policy_h', 'Preferred'), QSizePolicy.Preferred),
+                                               policy_map.get(exp_cfg.get('size_policy_v', 'Minimum'), QSizePolicy.Minimum))
+        ts_cfg = UIConfig.get_config('frame_toolset') or {}
         if hasattr(self, 'frame_toolset'):
-            self.frame_toolset.setMinimumHeight(toolset_min)
-            self.frame_toolset.setMaximumHeight(toolset_max)
-            h_policy = policy_map.get(toolset_h_policy, QSizePolicy.Preferred)
-            v_policy = policy_map.get(toolset_v_policy, QSizePolicy.Expanding)
-            self.frame_toolset.setSizePolicy(h_policy, v_policy)
-        
-        # Apply to frame_filtering (if it exists inside toolbox)
+            self.frame_toolset.setMinimumHeight(ts_cfg.get('min_height', 200))
+            self.frame_toolset.setMaximumHeight(ts_cfg.get('max_height', 16777215))
+            self.frame_toolset.setSizePolicy(policy_map.get(ts_cfg.get('size_policy_h', 'Preferred'), QSizePolicy.Preferred),
+                                             policy_map.get(ts_cfg.get('size_policy_v', 'Expanding'), QSizePolicy.Expanding))
+        flt_cfg = UIConfig.get_config('frame_filtering') or {}
         if hasattr(self, 'frame_filtering'):
-            self.frame_filtering.setMinimumHeight(filtering_min)
-        
-        logger.debug(f"Applied frame dimensions: exploring={exploring_min}-{exploring_max}px ({exploring_v_policy}), "
-                    f"toolset={toolset_min}px+ ({toolset_v_policy}), "
-                    f"widget_keys={widget_keys_min_width}-{widget_keys_max_width}px")
+            self.frame_filtering.setMinimumHeight(flt_cfg.get('min_height', 180))
     
     def _harmonize_checkable_pushbuttons(self):
-        """
-        Harmonize dimensions of all checkable pushbuttons across tabs.
-        
-        Applies consistent sizing to exploring, filtering, and exporting pushbuttons
-        based on the active UI profile (compact/normal/hidpi) using key_button dimensions
-        from UIConfig.
-        
-        v4.0 Sprint 4: Delegation to UILayoutController with fallback.
-        """
-        # v4.0 Sprint 4: Delegated to UILayoutController
-        if (hasattr(self, '_controller_integration') and 
-            self._controller_integration and
-            self._controller_integration.delegate_harmonize_checkable_pushbuttons()):
-            logger.debug("_harmonize_checkable_pushbuttons: Delegated to UILayoutController")
+        """v3.1 Sprint 14: Delegate to UILayoutController."""
+        if self._controller_integration and self._controller_integration.delegate_harmonize_checkable_pushbuttons():
             return
-        
-        # No fallback - controller handles all logic
-        logger.warning("_harmonize_checkable_pushbuttons: Controller delegation failed")
     
     def _apply_layout_spacing(self):
-        """
-        Apply consistent spacing to layouts across all tabs.
-        
-        Uses harmonized spacing values from UIConfig to ensure
-        uniform visual appearance across the entire UI.
-        
-        v4.0 Sprint 4: Delegation to UILayoutController with fallback.
-        """
-        # v4.0 Sprint 4: Delegated to UILayoutController
-        if (hasattr(self, '_controller_integration') and 
-            self._controller_integration and
-            self._controller_integration.delegate_apply_layout_spacing()):
-            logger.debug("_apply_layout_spacing: Delegated to UILayoutController")
+        """v3.1 Sprint 14: Delegate to UILayoutController."""
+        if self._controller_integration and self._controller_integration.delegate_apply_layout_spacing():
             return
-        
-        # No fallback - controller handles all logic
-        logger.warning("_apply_layout_spacing: Controller delegation failed")
     
     def _harmonize_spacers(self):
         """v3.1 Sprint 13: Simplified - harmonize vertical spacers across key widgets."""
@@ -1309,89 +975,33 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             pass
     
     def _align_key_layouts(self):
-        """
-        Align key layouts (exploring/filtering/exporting) for visual consistency.
-        
-        Sets consistent spacing, margins, and alignment for all key widget layouts
-        and their parent containers. Harmonizes vertical bars of pushbuttons.
-        
-        v4.0 Sprint 4: Delegation to UILayoutController with fallback.
-        """
-        # v4.0 Sprint 4: Delegated to UILayoutController
-        if (hasattr(self, '_controller_integration') and 
-            self._controller_integration and
-            self._controller_integration.delegate_align_key_layouts()):
-            logger.debug("_align_key_layouts: Delegated to UILayoutController")
+        """v3.1 Sprint 14: Delegate to UILayoutController."""
+        if self._controller_integration and self._controller_integration.delegate_align_key_layouts():
             return
-        
-        # No fallback - controller handles all logic
-        logger.warning("_align_key_layouts: Controller delegation failed")
     
     def _adjust_row_spacing(self):
-        """
-        Adjust row spacing in filtering and exporting value layouts.
-        
-        Synchronizes spacer heights between key and value layouts for proper
-        horizontal alignment of widgets across columns.
-        """
+        """v3.1 Sprint 14: Adjust row spacing for filtering/exporting alignment."""
         try:
             from qgis.PyQt.QtWidgets import QSpacerItem
             from .ui.elements import get_spacer_size
             from .ui.config import UIConfig, DisplayProfile
-            
-            # Get compact mode status and spacer sizes
             is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
-            layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 4
-            
-            spacer_sizes = {
-                'filtering': get_spacer_size('verticalSpacer_filtering_keys_field_top', is_compact),
-                'exporting': get_spacer_size('verticalSpacer_exporting_keys_field_top', is_compact)
-            }
-            
-            # Adjust spacers in filtering values layout to match keys layout
-            if hasattr(self, 'verticalLayout_filtering_values'):
-                values_layout = self.verticalLayout_filtering_values
-                spacer_target_height = spacer_sizes.get('filtering', 4)
-                
-                for i in range(values_layout.count()):
-                    item = values_layout.itemAt(i)
-                    if item and isinstance(item, QSpacerItem):
-                        # Adjust spacer to target height for alignment
-                        item.changeSize(
-                            item.sizeHint().width(),
-                            spacer_target_height,
-                            item.sizePolicy().horizontalPolicy(),
-                            item.sizePolicy().verticalPolicy()
-                        )
-                
-                # Set spacing to match keys layout
-                self.verticalLayout_filtering_values.setSpacing(layout_spacing)
-            
-            # Adjust spacers in exporting values layout to match keys layout
-            if hasattr(self, 'verticalLayout_exporting_values'):
-                values_layout = self.verticalLayout_exporting_values
-                spacer_target_height = spacer_sizes.get('exporting', 4)
-                
-                for i in range(values_layout.count()):
-                    item = values_layout.itemAt(i)
-                    if item and isinstance(item, QSpacerItem):
-                        # Adjust spacer to target height for alignment
-                        item.changeSize(
-                            item.sizeHint().width(),
-                            spacer_target_height,
-                            item.sizePolicy().horizontalPolicy(),
-                            item.sizePolicy().verticalPolicy()
-                        )
-                
-                # Set spacing to match keys layout
-                self.verticalLayout_exporting_values.setSpacing(layout_spacing)
-            
-            logger.debug(f"Adjusted row spacing: filtering/exporting aligned with {layout_spacing}px spacing")
-            
-        except Exception as e:
-            logger.warning(f"Could not adjust row spacing: {e}")
-            import traceback
-            traceback.print_exc()
+            spacing = UIConfig.get_config('layout', 'spacing_frame') or 4
+            spacers = {'filtering': get_spacer_size('verticalSpacer_filtering_keys_field_top', is_compact),
+                       'exporting': get_spacer_size('verticalSpacer_exporting_keys_field_top', is_compact)}
+            for name, layout_attr in [('filtering', 'verticalLayout_filtering_values'),
+                                       ('exporting', 'verticalLayout_exporting_values')]:
+                if hasattr(self, layout_attr):
+                    layout = getattr(self, layout_attr)
+                    target = spacers.get(name, 4)
+                    for i in range(layout.count()):
+                        item = layout.itemAt(i)
+                        if item and isinstance(item, QSpacerItem):
+                            item.changeSize(item.sizeHint().width(), target,
+                                          item.sizePolicy().horizontalPolicy(), item.sizePolicy().verticalPolicy())
+                    layout.setSpacing(spacing)
+        except Exception:
+            pass
 
     def _setup_backend_indicator(self):
         """
@@ -2948,150 +2558,67 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             widget.fieldChanged.connect(lambda f, g=groupbox: self._schedule_expression_change(g, f))
     
     def _schedule_expression_change(self, groupbox: str, expression: str):
-        """
-        Schedule a debounced expression change.
-        
-        This method stores the pending change and restarts the debounce timer.
-        The actual change will only be executed after the debounce delay (450ms)
-        has passed without new changes, preventing excessive recomputation.
-        
-        Args:
-            groupbox: The groupbox type ('single_selection', 'multiple_selection', 'custom_selection')
-            expression: The new expression value
-        """
-        # Store pending change
+        """v3.1 Sprint 14: Schedule debounced expression change."""
         self._pending_expression_change = (groupbox, expression)
-        
-        # Show loading indicator immediately for user feedback
         self._set_expression_loading_state(True, groupbox)
-        
-        # Restart debounce timer
         self._expression_debounce_timer.start()
-        
-        logger.debug(f"Scheduled expression change for {groupbox}: {expression[:50] if expression else 'None'}...")
     
     def _execute_debounced_expression_change(self):
-        """
-        Execute the pending expression change after debounce delay.
-        
-        Called by the debounce timer when the user has stopped making changes.
-        This method applies the expression change and triggers the appropriate
-        data refresh operations.
-        """
+        """v3.1 Sprint 14: Execute pending expression change after debounce."""
         if self._pending_expression_change is None:
             self._set_expression_loading_state(False)
             return
-        
         groupbox, expression = self._pending_expression_change
         self._pending_expression_change = None
-        
-        logger.debug(f"Executing debounced expression change for {groupbox}")
-        
         try:
-            # Build property key for layer_property_changed
             property_key = f"{groupbox}_expression"
-            
-            # Create custom functions that trigger source params changed
-            custom_functions = {
-                "ON_CHANGE": lambda x: self._execute_expression_params_change(groupbox)
-            }
-            
-            # Call the original handler
+            custom_functions = {"ON_CHANGE": lambda x: self._execute_expression_params_change(groupbox)}
             self.layer_property_changed(property_key, expression, custom_functions)
-            
-        except Exception as e:
-            logger.error(f"Error executing debounced expression change: {e}")
+        except Exception:
             self._set_expression_loading_state(False)
     
     def _execute_expression_params_change(self, groupbox: str):
-        """
-        Execute the expression params change with caching and optimization.
-
-        This method is called after the debounce delay and handles:
-        - Cache lookup to avoid redundant computations
-        - Actual data refresh via exploring_source_params_changed
-        - Loading state cleanup
-
-        FIX v2.9.24: Force feature picker widget refresh for both single and multiple selection
-        to ensure visual consistency when display expression changes
-
-        Args:
-            groupbox: The groupbox type
-        """
+        """v3.1 Sprint 14: Execute expression params change with caching."""
         try:
-            # SYNCHRONIZATION: Track which widget initiated this change
-            # This is used by exploring_link_widgets() to avoid infinite sync loops
             if groupbox in ("single_selection", "multiple_selection"):
                 self._last_expression_change_source = groupbox
-                logger.debug(f"Tracking expression change source: {groupbox}")
-
-            # FIX v2.9.24: Ensure feature picker widgets are properly refreshed
-            # This prevents stale display when the expression changes
-
             if groupbox == "single_selection":
                 try:
-                    # Force a visual update of the single selection feature picker
-                    widget = self.mFeaturePickerWidget_exploring_single_selection
-                    if widget and hasattr(widget, 'update'):
-                        # QgsFeaturePickerWidget is a native QGIS widget that should auto-refresh,
-                        # but we force an update to ensure immediate visual feedback
-                        widget.update()
-                        logger.debug("Forced feature picker widget refresh for single_selection")
-                except Exception as refresh_err:
-                    logger.debug(f"Could not force single selection widget refresh: {refresh_err}")
-
+                    self.mFeaturePickerWidget_exploring_single_selection.update()
+                except Exception:
+                    pass
             elif groupbox == "multiple_selection":
                 try:
-                    # Force a visual update of the checkable combo box
                     widget = self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection
                     if widget and hasattr(widget, 'list_widgets') and self.current_layer:
                         layer_id = self.current_layer.id()
                         if layer_id in widget.list_widgets:
-                            # Force viewport update to reflect expression changes
                             widget.list_widgets[layer_id].viewport().update()
-                            logger.debug("Forced feature picker widget refresh for multiple_selection")
-                except Exception as refresh_err:
-                    logger.debug(f"Could not force multiple selection widget refresh: {refresh_err}")
-
-            # Call the standard source params changed with change_source tracking
+                except Exception:
+                    pass
             self.exploring_source_params_changed(groupbox_override=groupbox, change_source=groupbox)
         finally:
-            # Clear loading state
             self._set_expression_loading_state(False, groupbox)
     
     def _set_expression_loading_state(self, loading: bool, groupbox: str = None):
-        """
-        Set the loading state for expression widgets.
-        
-        Updates the UI to show/hide loading indicators and provides
-        visual feedback during complex expression evaluation.
-        
-        Args:
-            loading: True to show loading state, False to hide
-            groupbox: Optional groupbox to update (None for all)
-        """
+        """v3.1 Sprint 14: Update loading state for expression widgets."""
         self._expression_loading = loading
-        
         try:
-            # Update cursor for the relevant widgets
             cursor = Qt.WaitCursor if loading else Qt.PointingHandCursor
-            
-            widgets_to_update = []
-            if groupbox == "single_selection" or groupbox is None:
-                widgets_to_update.append(self.mFieldExpressionWidget_exploring_single_selection)
-                widgets_to_update.append(self.mFeaturePickerWidget_exploring_single_selection)
-            if groupbox == "multiple_selection" or groupbox is None:
-                widgets_to_update.append(self.mFieldExpressionWidget_exploring_multiple_selection)
-                widgets_to_update.append(self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection)
-            if groupbox == "custom_selection" or groupbox is None:
-                widgets_to_update.append(self.mFieldExpressionWidget_exploring_custom_selection)
-            
-            for widget in widgets_to_update:
+            widgets = []
+            if groupbox in ("single_selection", None):
+                widgets.extend([self.mFieldExpressionWidget_exploring_single_selection,
+                              self.mFeaturePickerWidget_exploring_single_selection])
+            if groupbox in ("multiple_selection", None):
+                widgets.extend([self.mFieldExpressionWidget_exploring_multiple_selection,
+                              self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection])
+            if groupbox in ("custom_selection", None):
+                widgets.append(self.mFieldExpressionWidget_exploring_custom_selection)
+            for widget in widgets:
                 if widget and hasattr(widget, 'setCursor'):
                     widget.setCursor(cursor)
-                    
-        except Exception as e:
-            logger.debug(f"Could not update loading state cursor: {e}")
+        except Exception:
+            pass
     
     def _get_cached_expression_result(self, layer_id: str, expression: str):
         """
