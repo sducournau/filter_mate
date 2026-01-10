@@ -27,6 +27,14 @@ from .geometry_preparation import (
     create_geometry_preparation_adapter,
 )
 
+from .source_feature_resolver import (
+    SourceFeatureResolver,
+    FeatureResolverConfig,
+    FeatureResolutionResult,
+    FeatureSourceMode,
+    create_source_feature_resolver,
+)
+
 __all__ = [
     # Filter optimizer
     'QgisFilterOptimizer',
@@ -41,4 +49,10 @@ __all__ = [
     'GeometryPreparationConfig',
     'GeometryPreparationResult',
     'create_geometry_preparation_adapter',
+    # Source feature resolver
+    'SourceFeatureResolver',
+    'FeatureResolverConfig',
+    'FeatureResolutionResult',
+    'FeatureSourceMode',
+    'create_source_feature_resolver',
 ]
