@@ -3478,8 +3478,8 @@ class FilterEngineTask(QgsTask):
         """
         Convert QGIS expression to Spatialite SQL.
         
-        v4.0 DELEGATION: This method now delegates to ExpressionService.
-        Legacy implementation preserved as fallback.
+        v4.0 DELEGATION: Fully delegated to ExpressionService.
+        Legacy fallback removed in Phase E4 Session 1.
         
         Spatialite spatial functions are ~90% compatible with PostGIS, but there are some differences:
         - Type casting: PostgreSQL uses :: operator, Spatialite uses CAST() function
@@ -3499,36 +3499,10 @@ class FilterEngineTask(QgsTask):
         geom_col = getattr(self, 'param_source_geom', None) or 'geometry'
         
         # v4.0: Delegate to ExpressionService (consolidated implementation)
-        try:
-            from core.services.expression_service import ExpressionService
-            from core.domain.filter_expression import ProviderType
-            service = ExpressionService()
-            return service.to_sql(expression, ProviderType.SPATIALITE, geom_col)
-        except ImportError:
-            logger.debug("ExpressionService not available, using legacy implementation")
-            pass
-        
-        # LEGACY FALLBACK: Original implementation (to be removed in v5.0)
-        # Handle CASE expressions
-        expression = re.sub('case', ' CASE ', expression, flags=re.IGNORECASE)
-        expression = re.sub('when', ' WHEN ', expression, flags=re.IGNORECASE)
-        expression = re.sub(' is ', ' IS ', expression, flags=re.IGNORECASE)
-        expression = re.sub('then', ' THEN ', expression, flags=re.IGNORECASE)
-        expression = re.sub('else', ' ELSE ', expression, flags=re.IGNORECASE)
-        
-        # Handle LIKE/ILIKE - Spatialite doesn't have ILIKE, use LIKE with LOWER()
-        # IMPORTANT: Process ILIKE first, before processing LIKE, to avoid double-replacement
-        expression = re.sub(r'(\w+)\s+ILIKE\s+', r'LOWER(\1) LIKE LOWER(', expression, flags=re.IGNORECASE)
-        expression = re.sub(r'\bNOT\b', ' NOT ', expression, flags=re.IGNORECASE)
-        expression = re.sub(r'\bLIKE\b', ' LIKE ', expression, flags=re.IGNORECASE)
-        
-        # Convert PostgreSQL :: type casting to Spatialite CAST() function
-        expression = re.sub(r'(["\w]+)::numeric', r'CAST(\1 AS REAL)', expression)
-        expression = re.sub(r'(["\w]+)::integer', r'CAST(\1 AS INTEGER)', expression)
-        expression = re.sub(r'(["\w]+)::text', r'CAST(\1 AS TEXT)', expression)
-        expression = re.sub(r'(["\w]+)::double', r'CAST(\1 AS REAL)', expression)
-        
-        return expression
+        from core.services.expression_service import ExpressionService
+        from core.domain.filter_expression import ProviderType
+        service = ExpressionService()
+        return service.to_sql(expression, ProviderType.SPATIALITE, geom_col)
 
 
     def prepare_postgresql_source_geom(self):
