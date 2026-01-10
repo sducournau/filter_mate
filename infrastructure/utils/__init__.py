@@ -5,8 +5,7 @@ Common utility functions and helper classes:
 - provider_utils: Provider type detection and utilities
 - validation_utils: Layer and expression validation
 - layer_utils: Layer data source connection and metadata
-- task_utils: Database connection and CRS utilities for tasks
-
+- task_utils: Database connection and CRS utilities for tasks- complexity_estimator: Query complexity estimation and strategy recommendation
 Migrated from modules/ (EPIC-1 v3.0).
 """
 from .provider_utils import (
@@ -61,6 +60,14 @@ from .task_utils import (
     SQLITE_MAX_RETRY_TIME,
     MESSAGE_TASKS_CATEGORIES,
 )
+from .complexity_estimator import (
+    QueryComplexity,
+    ComplexityBreakdown,
+    OperationCosts,
+    QueryComplexityEstimator,
+    get_complexity_estimator,
+    estimate_query_complexity,
+)
 
 __all__ = [
     # Provider utils
@@ -111,4 +118,11 @@ __all__ = [
     'SQLITE_RETRY_DELAY',
     'SQLITE_MAX_RETRY_TIME',
     'MESSAGE_TASKS_CATEGORIES',
+    # Complexity estimator (EPIC-1 migration)
+    'QueryComplexity',
+    'ComplexityBreakdown',
+    'OperationCosts',
+    'QueryComplexityEstimator',
+    'get_complexity_estimator',
+    'estimate_query_complexity',
 ]
