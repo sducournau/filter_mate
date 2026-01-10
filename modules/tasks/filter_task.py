@@ -4787,11 +4787,8 @@ class FilterEngineTask(QgsTask):
         """
         Copy filtered layer (with subset string) to memory layer.
         
-        STABILITY FIX v2.3.9: Added geometry validation AND repair during copy to prevent
-        access violations when processing corrupted geometries from virtual layers.
-        
-        This is crucial for OGR layers with subset strings, as some QGIS
-        algorithms don't handle subset strings correctly.
+        v4.0 DELEGATION: Delegates to GeometryPreparationAdapter.
+        Legacy implementation preserved as fallback.
         
         Args:
             layer: Source layer (may have subset string active)
@@ -4800,6 +4797,23 @@ class FilterEngineTask(QgsTask):
         Returns:
             QgsVectorLayer: Memory layer with only filtered features and valid geometries
         """
+        # v4.0: Delegate to GeometryPreparationAdapter
+        try:
+            from adapters.qgis.geometry_preparation import GeometryPreparationAdapter
+            adapter = GeometryPreparationAdapter()
+            result = adapter.copy_filtered_to_memory(layer, layer_name)
+            if result.success and result.layer:
+                # Create spatial index for improved performance
+                self._verify_and_create_spatial_index(result.layer, layer_name)
+                return result.layer
+            elif result.error_message:
+                logger.warning(f"GeometryPreparationAdapter: {result.error_message}")
+        except ImportError:
+            logger.debug("GeometryPreparationAdapter not available, using legacy")
+        except Exception as e:
+            logger.debug(f"GeometryPreparationAdapter failed: {e}, using legacy")
+        
+        # LEGACY FALLBACK (to be removed in v5.0)
         # Check if layer has active filter
         subset_string = layer.subsetString()
         feature_count = layer.featureCount()
@@ -4882,12 +4896,8 @@ class FilterEngineTask(QgsTask):
         """
         Copy only selected features from layer to memory layer.
         
-        STABILITY FIX v2.3.9: Added geometry validation AND repair during copy to prevent
-        access violations when processing corrupted geometries from virtual layers.
-        
-        This method extracts only the currently selected features from the source
-        layer and copies them to a new memory layer. Essential for multi-selection
-        mode where only selected features should be used for spatial operations.
+        v4.0 DELEGATION: Delegates to GeometryPreparationAdapter.
+        Legacy implementation preserved as fallback.
         
         Args:
             layer: Source layer with selected features
@@ -4896,6 +4906,22 @@ class FilterEngineTask(QgsTask):
         Returns:
             QgsVectorLayer: Memory layer containing only selected features with valid geometries
         """
+        # v4.0: Delegate to GeometryPreparationAdapter
+        try:
+            from adapters.qgis.geometry_preparation import GeometryPreparationAdapter
+            adapter = GeometryPreparationAdapter()
+            result = adapter.copy_selected_to_memory(layer, layer_name)
+            if result.success and result.layer:
+                self._verify_and_create_spatial_index(result.layer, layer_name)
+                return result.layer
+            elif result.error_message:
+                logger.debug(f"GeometryPreparationAdapter: {result.error_message}")
+        except ImportError:
+            logger.debug("GeometryPreparationAdapter not available, using legacy")
+        except Exception as e:
+            logger.debug(f"GeometryPreparationAdapter failed: {e}, using legacy")
+        
+        # LEGACY FALLBACK (to be removed in v5.0)
         selected_count = layer.selectedFeatureCount()
         logger.debug(f"_copy_selected_features_to_memory: {layer.name()}, "
                     f"selected={selected_count}, provider={layer.providerType()}")
@@ -4985,8 +5011,8 @@ class FilterEngineTask(QgsTask):
         """
         Create memory layer from a list of QgsFeature objects.
         
-        This is used when task_parameters contains features but the source layer
-        has no visible features (e.g., after filtering).
+        v4.0 DELEGATION: Delegates to GeometryPreparationAdapter.
+        Legacy implementation preserved as fallback.
         
         Args:
             features: List of QgsFeature objects
@@ -4996,6 +5022,22 @@ class FilterEngineTask(QgsTask):
         Returns:
             QgsVectorLayer: Memory layer containing the features, or None on failure
         """
+        # v4.0: Delegate to GeometryPreparationAdapter
+        try:
+            from adapters.qgis.geometry_preparation import GeometryPreparationAdapter
+            adapter = GeometryPreparationAdapter()
+            result = adapter.create_memory_from_features(features, crs, layer_name)
+            if result.success and result.layer:
+                self._verify_and_create_spatial_index(result.layer, layer_name)
+                return result.layer
+            elif result.error_message:
+                logger.debug(f"GeometryPreparationAdapter: {result.error_message}")
+        except ImportError:
+            logger.debug("GeometryPreparationAdapter not available, using legacy")
+        except Exception as e:
+            logger.debug(f"GeometryPreparationAdapter failed: {e}, using legacy")
+        
+        # LEGACY FALLBACK (to be removed in v5.0)
         if not features or len(features) == 0:
             logger.warning(f"_create_memory_layer_from_features: No features provided")
             return None
@@ -5078,9 +5120,8 @@ class FilterEngineTask(QgsTask):
         """
         Convert a layer's geometries to their centroids.
         
-        This optimization significantly speeds up spatial queries for complex
-        polygons (e.g., buildings with many vertices) by using simple point
-        geometries instead.
+        v4.0 DELEGATION: Delegates to GeometryPreparationAdapter.
+        Legacy implementation preserved as fallback.
         
         Args:
             layer: QgsVectorLayer with polygon/line geometries
@@ -5089,6 +5130,21 @@ class FilterEngineTask(QgsTask):
             QgsVectorLayer: Memory layer with point geometries (centroids),
                            or None on failure
         """
+        # v4.0: Delegate to GeometryPreparationAdapter
+        try:
+            from adapters.qgis.geometry_preparation import GeometryPreparationAdapter
+            adapter = GeometryPreparationAdapter()
+            result = adapter.convert_to_centroids(layer)
+            if result.success and result.layer:
+                return result.layer
+            elif result.error_message:
+                logger.debug(f"GeometryPreparationAdapter: {result.error_message}")
+        except ImportError:
+            logger.debug("GeometryPreparationAdapter not available, using legacy")
+        except Exception as e:
+            logger.debug(f"GeometryPreparationAdapter failed: {e}, using legacy")
+        
+        # LEGACY FALLBACK (to be removed in v5.0)
         if not layer or not layer.isValid():
             logger.warning("_convert_layer_to_centroids: Invalid input layer")
             return None

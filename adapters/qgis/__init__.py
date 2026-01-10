@@ -5,6 +5,7 @@ QGIS-specific implementations for tasks, signals, and layer management.
 
 Submodules:
     - filter_optimizer: Multi-step filter optimization for QGIS layers
+    - geometry_preparation: Geometry preparation for spatial filtering
     - tasks: Async task implementations
     - signals: QGIS signal handlers
 """
@@ -19,7 +20,15 @@ from .filter_optimizer import (
     create_filter_optimizer,
 )
 
+from .geometry_preparation import (
+    GeometryPreparationAdapter,
+    GeometryPreparationConfig,
+    GeometryPreparationResult,
+    create_geometry_preparation_adapter,
+)
+
 __all__ = [
+    # Filter optimizer
     'QgisFilterOptimizer',
     'QgisSelectivityEstimator',
     'SpatialiteQueryBuilder',
@@ -27,4 +36,9 @@ __all__ = [
     'MemorySpatialIndex',
     'get_filter_optimizer',
     'create_filter_optimizer',
+    # Geometry preparation
+    'GeometryPreparationAdapter',
+    'GeometryPreparationConfig',
+    'GeometryPreparationResult',
+    'create_geometry_preparation_adapter',
 ]
