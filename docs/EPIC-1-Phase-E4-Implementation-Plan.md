@@ -1,7 +1,7 @@
 # EPIC-1 Phase E4: Backend Consolidation - Implementation Plan
 
-**Status:** IN PROGRESS (~640/3500 lines extracted, 18%)  
-**Date:** January 10, 2026 (Updated: January 11, 2026)  
+**Status:** PLANNED (stub modules created)  
+**Date:** January 10, 2026  
 **Estimated Effort:** 3-4 hours (2-3 sessions)
 
 ## Overview
@@ -139,9 +139,9 @@ Phase E4 extracts ~3,500 lines of backend-specific code from `filter_task.py` to
 | Performance regression       | MEDIUM | Benchmark before/after, profile critical paths   |
 | Missing dependencies         | LOW    | Extract in dependency order, stub if needed      |
 
-## Progress Summary (Updated: January 11, 2026 - E4-S3b)
+## Progress Summary (Updated: January 11, 2026 - E4-S3)
 
-**Phase E4 Status**: IN PROGRESS - ~640/3500 lines extracted (18%)
+**Phase E4 Status**: IN PROGRESS - Major PostgreSQL extraction completed
 
 ### Completed Extractions
 
@@ -158,30 +158,41 @@ Phase E4 extracts ~3,500 lines of backend-specific code from `filter_task.py` to
 - `build_spatialite_query()` → spatialite/filter_executor.py (64 lines)
 - Commit: MIG-211
 
-✅ **Session 3a (E4-S3a)**: MEDIUM methods batch 1 (~140 lines)
+✅ **Session 3 (E4-S3)**: PostgreSQL utility functions (~530 lines)
 
-- `apply_postgresql_type_casting()` → postgresql/filter_executor.py (40 lines)
-- `build_ogr_filter_from_selection()` → ogr/filter_executor.py (57 lines)
-- `apply_spatialite_subset()` → spatialite/filter_executor.py (44 lines)
-- Commit: MIG-213
+- `apply_postgresql_type_casting()` → type casting for varchar→numeric (40 lines)
+- `build_spatial_join_query()` → INNER JOIN subquery builder (56 lines)
+- `apply_combine_operator()` → UNION/INTERSECT/EXCEPT wrapping (20 lines)
+- `cleanup_session_materialized_views()` → Session MV cleanup (45 lines)
+- `execute_postgresql_commands()` → Auto-reconnection executor (27 lines)
+- `ensure_source_table_stats()` → ANALYZE for missing stats (40 lines)
+- `normalize_column_names_for_postgresql()` → Case normalization (49 lines)
+- `qualify_field_names_in_expression()` → Table prefix qualifier (90 lines)
+- `format_pk_values_for_sql()` → PK formatting for IN clause (45 lines)
+- `_is_pk_numeric()` → PK type detection (25 lines)
+- Commit: fe55ff8
 
-✅ **Session 3b (E4-S3b)**: PostgreSQL helpers (~127 lines)
+**Total Extracted**: ~900 lines / ~3,500 target (25.7%)
 
-- `build_spatial_join_query()` → postgresql/filter_executor.py (95 lines)
-- `apply_combine_operator()` → postgresql/filter_executor.py (32 lines)
-- `get_spatialite_datasource()` → spatialite/filter_executor.py (35 lines)
-- Commit: MIG-214, Sprint 18
+### PostgreSQL filter_executor.py Status
 
-**Total Extracted**: ~640 lines / ~3,500 target (18%)
-
-### Backend Module Sizes
-
-| Module                        | Lines   | Status |
-| ----------------------------- | ------- | ------ |
-| postgresql/filter_executor.py | 505     | Active |
-| spatialite/filter_executor.py | 305     | Active |
-| ogr/filter_executor.py        | 141     | Active |
-| **Total**                     | **951** | ✅     |
+**Functions implemented: 14**
+| Function | Lines | Status |
+|----------|-------|--------|
+| `prepare_postgresql_source_geom()` | 122 | ✅ Complete |
+| `qgis_expression_to_postgis()` | 68 | ✅ Complete |
+| `build_postgis_predicates()` | 59 | ✅ Complete |
+| `apply_postgresql_type_casting()` | 40 | ✅ Complete |
+| `build_spatial_join_query()` | 56 | ✅ Complete |
+| `apply_combine_operator()` | 20 | ✅ Complete |
+| `cleanup_session_materialized_views()` | 45 | ✅ Complete |
+| `execute_postgresql_commands()` | 27 | ✅ Complete |
+| `ensure_source_table_stats()` | 40 | ✅ Complete |
+| `normalize_column_names_for_postgresql()` | 49 | ✅ Complete |
+| `qualify_field_names_in_expression()` | 90 | ✅ Complete |
+| `format_pk_values_for_sql()` | 45 | ✅ Complete |
+| `_is_pk_numeric()` | 25 | ✅ Complete |
+| `add_numeric_cast()` | helper | ✅ Complete |
 
 ### Deferred for Refactoring
 
@@ -235,11 +246,13 @@ The following methods require significant refactoring before extraction:
 
 ## Next Steps
 
-1. ✅ Create stub modules (DONE - this commit)
-2. ⏳ Session 1: Extract HIGH priority methods
-3. ⏳ Session 2: Extract `prepare_spatialite_source_geom()`
-4. ⏳ Session 3: Extract OGR methods
-5. ⏳ Session 4: Complete extraction and integration
+1. ✅ Create stub modules (DONE - MIG-209)
+2. ✅ Session 1: Extract HIGH priority methods (DONE - MIG-210)
+3. ✅ Session 2: Extract predicate builders (DONE - MIG-211)
+4. ✅ Session 3: Extract PostgreSQL utility functions (DONE - fe55ff8)
+5. ⏳ Session 4: Extract `prepare_spatialite_source_geom()` (629 lines)
+6. ⏳ Session 5: Extract OGR methods
+7. ⏳ Session 6: Complete extraction and integration
 
 ---
 
