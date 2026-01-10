@@ -503,3 +503,380 @@ def apply_combine_operator(
         )
     else:
         return f'"{primary_key_name}" IN {param_expression}'
+
+
+def cleanup_session_materialized_views(
+    connexion,
+    schema_name: str,
+    session_id: str
+) -> int:
+    """
+    Clean up all materialized views for a specific session.
+    
+    EPIC-1 Phase E4-S4: Extracted from filter_task.py line 11004 (~45 lines)
+    
+    Drops all materialized views and indexes prefixed with the session_id.
+    Should be called when closing the plugin or resetting.
+    
+    Args:
+        connexion: psycopg2 connection
+        schema_name: Schema containing the materialized views
+        session_id: Session identifier prefix
+        
+    Returns:
+        int: Number of views cleaned up
+    """
+    if not session_id:
+        return 0
+    
+    try:
+        with connexion.cursor() as cursor:
+            # Find all materialized views for this session
+            cursor.execute("""
+                SELECT matviewname FROM pg_matviews 
+                WHERE schemaname = %s AND matviewname LIKE %s
+            """, (schema_name, f"mv_{session_id}_%"))
+            views = cursor.fetchall()
+            
+            count = 0
+            for (view_name,) in views:
+                try:
+                    # Drop associated index first
+                    index_name = view_name.replace('mv_', f'{schema_name}_').replace('_dump', '') + '_cluster'
+                    cursor.execute(f'DROP INDEX IF EXISTS "{schema_name}"."{index_name}" CASCADE;')
+                    # Drop the view
+                    cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema_name}"."{view_name}" CASCADE;')
+                    count += 1
+                except Exception as e:
+                    logger.warning(f"Error dropping view {view_name}: {e}")
+            
+            connexion.commit()
+            if count > 0:
+                logger.info(f"Cleaned up {count} materialized view(s) for session {session_id}")
+            return count
+    except Exception as e:
+        logger.error(f"Error cleaning up session views: {e}")
+        return 0
+
+
+def execute_postgresql_commands(
+    connexion,
+    commands: list,
+    source_layer=None,
+    reconnect_func=None
+) -> bool:
+    """
+    Execute PostgreSQL commands with automatic reconnection on failure.
+    
+    EPIC-1 Phase E4-S4: Extracted from filter_task.py line 11101 (~27 lines)
+    
+    Args:
+        connexion: psycopg2 connection
+        commands: List of SQL commands to execute
+        source_layer: Optional layer for reconnection
+        reconnect_func: Optional function to reconnect (e.g., get_datasource_connexion_from_layer)
+        
+    Returns:
+        bool: True if all commands succeeded
+    """
+    import psycopg2
+    
+    # Test connection
+    try:
+        with connexion.cursor() as cursor:
+            cursor.execute("SELECT 1")
+    except (psycopg2.OperationalError, psycopg2.InterfaceError, AttributeError) as e:
+        logger.debug(f"PostgreSQL connection test failed, reconnecting: {e}")
+        if reconnect_func and source_layer:
+            connexion, _ = reconnect_func(source_layer)
+    
+    # Execute commands
+    with connexion.cursor() as cursor:
+        for command in commands:
+            cursor.execute(command)
+            connexion.commit()
+    
+    return True
+
+
+def ensure_source_table_stats(
+    connexion,
+    schema: str,
+    table: str,
+    geom_field: str
+) -> bool:
+    """
+    Ensure PostgreSQL statistics exist for source table geometry column.
+    
+    EPIC-1 Phase E4-S4: Extracted from filter_task.py line 11128 (~40 lines)
+    
+    Checks pg_stats for geometry column statistics and runs ANALYZE if missing.
+    This prevents "stats for X.geom do not exist" warnings from PostgreSQL
+    query planner.
+    
+    Args:
+        connexion: psycopg2 connection
+        schema: Table schema name
+        table: Table name
+        geom_field: Geometry column name
+        
+    Returns:
+        bool: True if stats exist or were created, False on error
+    """
+    try:
+        with connexion.cursor() as cursor:
+            # Check if stats exist for geometry column
+            cursor.execute("""
+                SELECT COUNT(*) FROM pg_stats 
+                WHERE schemaname = %s 
+                AND tablename = %s 
+                AND attname = %s;
+            """, (schema, table, geom_field))
+            
+            result = cursor.fetchone()
+            has_stats = result[0] > 0 if result else False
+            
+            if not has_stats:
+                logger.info(f"Running ANALYZE on source table \"{schema}\".\"{table}\" (missing stats for {geom_field})")
+                cursor.execute(f'ANALYZE "{schema}"."{table}";')
+                connexion.commit()
+                logger.debug(f"ANALYZE completed for \"{schema}\".\"{table}\"")
+            
+            return True
+            
+    except Exception as e:
+        logger.warning(f"Could not check/create stats for \"{schema}\".\"{table}\": {e}")
+        return False
+
+
+def normalize_column_names_for_postgresql(expression: str, field_names: list) -> str:
+    """
+    Normalize column names in expression to match actual PostgreSQL column names.
+    
+    EPIC-1 Phase E4-S4: Extracted from filter_task.py line 7006 (49 lines)
+    
+    PostgreSQL is case-sensitive for quoted identifiers. If columns were created
+    without quotes, they are stored in lowercase. This function corrects column
+    names in filter expressions to match the actual column names.
+    
+    For example: "SUB_TYPE" → "sub_type" if the column exists as "sub_type"
+    
+    Args:
+        expression: SQL expression string
+        field_names: List of actual field names from the layer
+        
+    Returns:
+        str: Expression with corrected column names
+    """
+    import re
+    
+    if not expression or not field_names:
+        return expression
+    
+    result_expression = expression
+    
+    # Build case-insensitive lookup map: lowercase → actual name
+    field_lookup = {name.lower(): name for name in field_names}
+    
+    # Find all quoted column names in expression (e.g., "SUB_TYPE")
+    quoted_cols = re.findall(r'"([^"]+)"', result_expression)
+    
+    corrections_made = []
+    for col_name in quoted_cols:
+        # Skip if column exists with exact case (no correction needed)
+        if col_name in field_names:
+            continue
+        
+        # Check for case-insensitive match
+        col_lower = col_name.lower()
+        if col_lower in field_lookup:
+            correct_name = field_lookup[col_lower]
+            # Replace the incorrectly cased column name with correct one
+            result_expression = result_expression.replace(
+                f'"{col_name}"',
+                f'"{correct_name}"'
+            )
+            corrections_made.append(f'"{col_name}" → "{correct_name}"')
+    
+    if corrections_made:
+        logger.info(f"PostgreSQL column case normalization: {', '.join(corrections_made)}")
+    
+    return result_expression
+
+
+def qualify_field_names_in_expression(
+    expression: str,
+    field_names: list,
+    primary_key_name: str,
+    table_name: str,
+    is_postgresql: bool = True,
+    provider_type: str = None
+) -> str:
+    """
+    Qualify field names with table prefix for PostgreSQL/Spatialite expressions.
+    
+    EPIC-1 Phase E4-S4: Extracted from filter_task.py line 7056 (90 lines)
+    
+    This helper adds table qualifiers to field names in QGIS expressions to make them
+    compatible with PostgreSQL/Spatialite queries (e.g., "field" becomes "table"."field").
+    
+    For OGR providers, field names are NOT qualified (just wrapped in quotes if needed).
+    
+    Args:
+        expression: Raw QGIS expression string
+        field_names: List of field names to qualify
+        primary_key_name: Primary key field name
+        table_name: Source table name
+        is_postgresql: Whether target is PostgreSQL (True) or other provider (False)
+        provider_type: Provider type string (optional, for OGR/Spatialite detection)
+        
+    Returns:
+        str: Expression with qualified field names (PostgreSQL/Spatialite) or simple quoted names (OGR)
+    """
+    result_expression = expression
+    
+    # CRITICAL FIX: For PostgreSQL, first normalize column names to match actual database column case
+    if is_postgresql:
+        all_fields = list(field_names) + ([primary_key_name] if primary_key_name else [])
+        result_expression = normalize_column_names_for_postgresql(result_expression, all_fields)
+    
+    # For OGR and Spatialite, just ensure field names are quoted, no table qualification
+    if provider_type in ('ogr', 'spatialite'):
+        # Handle primary key
+        if primary_key_name in result_expression and f'"{primary_key_name}"' not in result_expression:
+            result_expression = result_expression.replace(
+                f' {primary_key_name} ',
+                f' "{primary_key_name}" '
+            )
+        
+        # Handle other fields
+        for field_name in field_names:
+            if field_name in result_expression and f'"{field_name}"' not in result_expression:
+                result_expression = result_expression.replace(
+                    f' {field_name} ',
+                    f' "{field_name}" '
+                )
+        
+        return result_expression
+    
+    # PostgreSQL: Add table qualification
+    # Handle primary key
+    if primary_key_name in result_expression:
+        if table_name not in result_expression:
+            if f' "{primary_key_name}" ' in result_expression:
+                if is_postgresql:
+                    result_expression = result_expression.replace(
+                        f'"{primary_key_name}"',
+                        f'"{table_name}"."{primary_key_name}"'
+                    )
+            elif f" {primary_key_name} " in result_expression:
+                if is_postgresql:
+                    result_expression = result_expression.replace(
+                        primary_key_name,
+                        f'"{table_name}"."{primary_key_name}"'
+                    )
+                else:
+                    result_expression = result_expression.replace(
+                        primary_key_name,
+                        f'"{primary_key_name}"'
+                    )
+    
+    # Handle other fields
+    existing_fields = [x for x in field_names if x in result_expression]
+    if existing_fields and table_name not in result_expression:
+        for field_name in existing_fields:
+            if f' "{field_name}" ' in result_expression:
+                if is_postgresql:
+                    result_expression = result_expression.replace(
+                        f'"{field_name}"',
+                        f'"{table_name}"."{field_name}"'
+                    )
+            elif f" {field_name} " in result_expression:
+                if is_postgresql:
+                    result_expression = result_expression.replace(
+                        field_name,
+                        f'"{table_name}"."{field_name}"'
+                    )
+                else:
+                    result_expression = result_expression.replace(
+                        field_name,
+                        f'"{field_name}"'
+                    )
+    
+    return result_expression
+
+
+def format_pk_values_for_sql(
+    values: list,
+    is_numeric: bool = None,
+    layer=None,
+    pk_field: str = None
+) -> str:
+    """
+    Format primary key values for SQL IN clause.
+    
+    EPIC-1 Phase E4-S4: Extracted from filter_task.py line 2295 (45 lines)
+    
+    CRITICAL: UUID fields must be quoted with single quotes in SQL.
+    Example: 
+        - Numeric: IN (1, 2, 3)
+        - UUID/Text: IN ('7b2e1a3e-b812-4d51-bf33-7f0cd0271ef3', ...)
+    
+    Args:
+        values: List of primary key values
+        is_numeric: Whether PK is numeric (optional, auto-detected if None)
+        layer: QgsVectorLayer to check PK type (optional)
+        pk_field: Primary key field name (optional)
+        
+    Returns:
+        str: Comma-separated values formatted for SQL IN clause
+    """
+    if not values:
+        return ''
+    
+    # Auto-detect if not specified
+    if is_numeric is None:
+        is_numeric = _is_pk_numeric(layer, pk_field)
+    
+    if is_numeric:
+        # Numeric: simple conversion to string
+        return ', '.join(str(v) for v in values)
+    else:
+        # Text/UUID: quote with single quotes, escape existing quotes
+        formatted = []
+        for v in values:
+            # Convert to string and escape single quotes
+            str_val = str(v).replace("'", "''")
+            formatted.append(f"'{str_val}'")
+        return ', '.join(formatted)
+
+
+def _is_pk_numeric(layer, pk_field: str) -> bool:
+    """
+    Check if primary key field is numeric.
+    
+    Args:
+        layer: QgsVectorLayer
+        pk_field: Primary key field name
+        
+    Returns:
+        bool: True if numeric, False otherwise (defaults to True if unknown)
+    """
+    if not layer or not pk_field:
+        return True  # Default to numeric assumption
+    
+    try:
+        from qgis.core import QVariant
+        field_idx = layer.fields().indexOf(pk_field)
+        if field_idx >= 0:
+            field_type = layer.fields().at(field_idx).type()
+            # Check for numeric types
+            numeric_types = [
+                QVariant.Int, QVariant.UInt, QVariant.LongLong, 
+                QVariant.ULongLong, QVariant.Double
+            ]
+            return field_type in numeric_types
+    except Exception:
+        pass
+    
+    return True  # Default to numeric
