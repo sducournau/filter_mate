@@ -35,8 +35,8 @@ warnings.warn(
 # Re-export FilterEngineTask from new module (Phase 3c)
 from .filter_task import FilterEngineTask
 
-# Re-export LayersManagementEngineTask from new module (Phase 3b)
-from .layer_management_task import LayersManagementEngineTask
+# Re-export LayersManagementEngineTask (EPIC-1 migration to core/tasks/)
+from core.tasks import LayersManagementEngineTask
 
 # Import from infrastructure (EPIC-1 migration)
 from infrastructure.utils import (
