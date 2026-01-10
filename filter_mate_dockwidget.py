@@ -8990,6 +8990,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Detect if source layer or distant layers already have a subsetString (existing filter).
         
+        v4.0 Sprint 2: Delegates to FilteringController when available.
+        
         When existing filters are detected, automatically enable additive filter mode.
         Uses existing combinator params if set, otherwise defaults to AND operator.
         
@@ -9000,6 +9002,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Returns:
             bool: True if existing filters were detected and additive mode was enabled
         """
+        # v4.0: Delegate to FilteringController if available
+        if self._controller_integration and self._controller_integration.filtering_controller:
+            try:
+                succeeded, result = self._controller_integration.delegate_detect_multi_step_filter(
+                    layer, layer_props
+                )
+                if succeeded:
+                    # Sync UI widgets if additive mode was enabled
+                    if result:
+                        self._sync_additive_mode_widgets(layer_props)
+                    return result
+            except Exception as e:
+                logger.debug(f"_detect_multi_step_filter delegation failed: {e}")
+        
+        # Fallback: Original logic
         try:
             has_existing_filter = False
             
@@ -9053,6 +9070,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except Exception as e:
             logger.debug(f"Error detecting multi-step filter: {e}")
             return False
+    
+    def _sync_additive_mode_widgets(self, layer_props):
+        """
+        Synchronize UI widgets after additive mode is enabled by controller.
+        
+        v4.0 Sprint 2: Helper for controller delegation.
+        
+        Args:
+            layer_props: Layer properties dict with updated filtering state
+        """
+        try:
+            # Set combobox widgets to index 0 (AND) for additive mode
+            self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].blockSignals(True)
+            self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].setCurrentIndex(0)
+            self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].blockSignals(False)
+            
+            self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].blockSignals(True)
+            self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].setCurrentIndex(0)
+            self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].blockSignals(False)
+        except Exception as widget_error:
+            logger.debug(f"Error syncing additive mode widgets: {widget_error}")
     
     def _synchronize_layer_widgets(self, layer, layer_props):
         """

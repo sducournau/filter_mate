@@ -1308,6 +1308,34 @@ class ControllerIntegration:
                 return False
         return False
     
+    def delegate_detect_multi_step_filter(
+        self,
+        layer: 'QgsVectorLayer',
+        layer_props: dict
+    ) -> Tuple[bool, bool]:
+        """
+        Delegate multi-step filter detection to filtering controller.
+        
+        v4.0 Sprint 2: Migrated from dockwidget._detect_multi_step_filter.
+        
+        Args:
+            layer: The source layer
+            layer_props: Layer properties dict from PROJECT_LAYERS
+            
+        Returns:
+            Tuple[bool, bool]: (delegation_succeeded, filter_detected)
+        """
+        if self._filtering_controller:
+            try:
+                result = self._filtering_controller.detect_multi_step_filter(
+                    layer, layer_props
+                )
+                return (True, result)
+            except Exception as e:
+                logger.warning(f"delegate_detect_multi_step_filter failed: {e}")
+                return (False, False)
+        return (False, False)
+    
     # === State Synchronization ===
     
     def sync_from_dockwidget(self) -> None:

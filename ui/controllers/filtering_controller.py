@@ -1047,6 +1047,138 @@ class FilteringController(BaseController, LayerSelectionMixin):
         """
         return ["AND", "AND NOT", "OR"]
 
+    # === Multi-Step Filter Detection ===
+    
+    def detect_multi_step_filter(
+        self,
+        layer: 'QgsVectorLayer',
+        layer_props: Dict[str, Any]
+    ) -> bool:
+        """
+        Detect if source or distant layers already have a subsetString (existing filter).
+        
+        v4.0 Sprint 2: Migrated from dockwidget for centralized filtering logic.
+        
+        When existing filters are detected, automatically enable additive filter mode.
+        Uses existing combinator params if set, otherwise defaults to AND operator.
+        
+        Args:
+            layer: The current source layer
+            layer_props: Layer properties dictionary from PROJECT_LAYERS
+            
+        Returns:
+            bool: True if existing filters were detected and additive mode was enabled
+        """
+        import logging
+        logger = logging.getLogger('FilterMate.FilteringController')
+        
+        try:
+            has_existing_filter = False
+            
+            # Check source layer for existing subset
+            if layer and hasattr(layer, 'subsetString'):
+                source_subset = layer.subsetString()
+                if source_subset and source_subset.strip():
+                    has_existing_filter = True
+                    logger.debug(
+                        f"Multi-step filter detected: source layer '{layer.name()}' "
+                        f"has subset: {source_subset[:50]}..."
+                    )
+            
+            # Check distant layers (layers_to_filter) for existing subsets
+            if not has_existing_filter:
+                filtering_props = layer_props.get("filtering", {})
+                if filtering_props.get("has_layers_to_filter", False):
+                    layers_to_filter = filtering_props.get("layers_to_filter", [])
+                    has_existing_filter = self._check_distant_layers_for_filters(
+                        layers_to_filter, logger
+                    )
+            
+            # If existing filters detected, enable additive filter
+            if has_existing_filter:
+                return self._enable_additive_mode(layer, layer_props, logger)
+            
+            return False
+            
+        except Exception as e:
+            logger.debug(f"Error detecting multi-step filter: {e}")
+            return False
+    
+    def _check_distant_layers_for_filters(
+        self,
+        layer_ids: List[str],
+        logger: 'logging.Logger'
+    ) -> bool:
+        """
+        Check if any distant layers have existing subsetString filters.
+        
+        Args:
+            layer_ids: List of layer IDs to check
+            logger: Logger instance
+            
+        Returns:
+            bool: True if any distant layer has an existing filter
+        """
+        try:
+            from qgis.core import QgsProject
+        except ImportError:
+            return False
+        
+        for layer_id in layer_ids:
+            distant_layer = QgsProject.instance().mapLayer(layer_id)
+            if distant_layer and hasattr(distant_layer, 'subsetString'):
+                distant_subset = distant_layer.subsetString()
+                if distant_subset and distant_subset.strip():
+                    logger.debug(
+                        f"Multi-step filter detected: distant layer "
+                        f"'{distant_layer.name()}' has subset: {distant_subset[:50]}..."
+                    )
+                    return True
+        return False
+    
+    def _enable_additive_mode(
+        self,
+        layer: 'QgsVectorLayer',
+        layer_props: Dict[str, Any],
+        logger: 'logging.Logger'
+    ) -> bool:
+        """
+        Enable additive filter mode for multi-step filtering.
+        
+        Args:
+            layer: The source layer
+            layer_props: Layer properties dictionary
+            logger: Logger instance
+            
+        Returns:
+            bool: True if additive mode was enabled
+        """
+        filtering = layer_props.get("filtering", {})
+        
+        # Only update if not already enabled (preserve user choice)
+        if filtering.get("has_combine_operator", False):
+            return False
+        
+        # Enable additive mode
+        layer_props["filtering"]["has_combine_operator"] = True
+        
+        # Use existing combinator params if set, otherwise default to AND
+        if not filtering.get("source_layer_combine_operator"):
+            layer_props["filtering"]["source_layer_combine_operator"] = "AND"
+        if not filtering.get("other_layers_combine_operator"):
+            layer_props["filtering"]["other_layers_combine_operator"] = "AND"
+        
+        # Update controller state
+        self._has_additive_mode = True
+        self._source_combine_operator = CombineOperator.AND
+        self._distant_combine_operator = CombineOperator.AND
+        
+        logger.info(
+            f"Multi-step filter auto-enabled for layer "
+            f"'{layer.name()}' - existing filters detected"
+        )
+        return True
+
     # === String Representation ===
     
     def __repr__(self) -> str:
