@@ -1255,142 +1255,58 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         logger.warning("_apply_layout_spacing: Controller delegation failed")
     
     def _harmonize_spacers(self):
-        """
-        Harmonize vertical spacers across all key widget sections.
-        
-        Applies consistent spacer dimensions to exploring/filtering/exporting key widgets
-        based on section-specific sizes from UI config.
-        """
+        """v3.1 Sprint 13: Simplified - harmonize vertical spacers across key widgets."""
         try:
             from qgis.PyQt.QtWidgets import QSpacerItem
             from .ui.elements import get_spacer_size
             from .ui.config import UIConfig, DisplayProfile
             
-            # Get compact mode status from UIConfig
             is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
-            
-            # Get dynamic spacer sizes based on active profile
             spacer_sizes = {
                 'exploring': get_spacer_size('verticalSpacer_exploring_tab_top', is_compact),
                 'filtering': get_spacer_size('verticalSpacer_filtering_keys_field_top', is_compact),
                 'exporting': get_spacer_size('verticalSpacer_exporting_keys_field_top', is_compact)
             }
-            
-            spacer_width = 20  # Standard width for vertical spacers
-            
-            # Harmonize spacers in all three key widgets
-            sections = {
-                'exploring': 'widget_exploring_keys',
-                'filtering': 'widget_filtering_keys',
-                'exporting': 'widget_exporting_keys'
-            }
+            sections = {'exploring': 'widget_exploring_keys', 'filtering': 'widget_filtering_keys', 'exporting': 'widget_exporting_keys'}
             
             for section_name, widget_name in sections.items():
-                # Get section-specific spacer height
-                target_spacer_height = spacer_sizes.get(section_name, 4)
-                
+                target_h = spacer_sizes.get(section_name, 4)
                 if hasattr(self, widget_name):
-                    widget = getattr(self, widget_name)
-                    layout = widget.layout()
+                    layout = getattr(self, widget_name).layout()
                     if layout:
-                        spacer_count = 0
-                        # Find the nested verticalLayout (e.g., verticalLayout_filtering_keys)
                         for i in range(layout.count()):
                             item = layout.itemAt(i)
                             if item and hasattr(item, 'layout') and item.layout():
-                                nested_layout = item.layout()
-                                # Iterate through nested layout items to find spacers
-                                for j in range(nested_layout.count()):
-                                    nested_item = nested_layout.itemAt(j)
-                                    if nested_item and isinstance(nested_item, QSpacerItem):
-                                        # Set section-specific spacer dimensions
-                                        nested_item.changeSize(
-                                            spacer_width,
-                                            target_spacer_height,
-                                            nested_item.sizePolicy().horizontalPolicy(),
-                                            nested_item.sizePolicy().verticalPolicy()
-                                        )
-                                        spacer_count += 1
-                        
-                        if spacer_count > 0:
-                            logger.debug(f"Harmonized {spacer_count} spacers in {section_name} to {target_spacer_height}px")
-            
-            mode_name = 'COMPACT' if is_compact else 'NORMAL'
-            logger.debug(f"Applied spacer dimensions ({mode_name} mode): {spacer_sizes}")
-            
-        except Exception as e:
-            logger.warning(f"Could not harmonize spacers: {e}")
-            import traceback
-            traceback.print_exc()
+                                for j in range(item.layout().count()):
+                                    nested = item.layout().itemAt(j)
+                                    if nested and isinstance(nested, QSpacerItem):
+                                        nested.changeSize(20, target_h, nested.sizePolicy().horizontalPolicy(), nested.sizePolicy().verticalPolicy())
+        except Exception:
+            pass
     
     def _apply_qgis_widget_dimensions(self):
-        """
-        Apply dimensions to QGIS custom widgets.
-        
-        Sets heights for QgsFeaturePickerWidget, QgsFieldExpressionWidget, 
-        QgsProjectionSelectionWidget, and forces QgsPropertyOverrideButton to exact 22px.
-        """
+        """v3.1 Sprint 13: Simplified - apply dimensions to QGIS custom widgets."""
         try:
             from qgis.PyQt.QtWidgets import QSizePolicy
+            from qgis.gui import QgsPropertyOverrideButton
             from .ui.config import UIConfig
             
-            # Get dimensions from config
-            combobox_height = UIConfig.get_config('combobox', 'height') or 24
-            input_height = UIConfig.get_config('input', 'height') or 24
+            cb_h = UIConfig.get_config('combobox', 'height') or 24
+            in_h = UIConfig.get_config('input', 'height') or 24
             
-            # QgsFeaturePickerWidget
-            for widget in self.findChildren(QgsFeaturePickerWidget):
-                widget.setMinimumHeight(combobox_height)
-                widget.setMaximumHeight(combobox_height)
-                widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            # Apply to standard QGIS widgets
+            for cls in [QgsFeaturePickerWidget, QgsFieldExpressionWidget, QgsProjectionSelectionWidget, QgsMapLayerComboBox, QgsFieldComboBox, QgsCheckableComboBox]:
+                for w in self.findChildren(cls):
+                    w.setMinimumHeight(cb_h)
+                    w.setMaximumHeight(cb_h)
+                    w.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             
-            # QgsFieldExpressionWidget
-            for widget in self.findChildren(QgsFieldExpressionWidget):
-                widget.setMinimumHeight(input_height)
-                widget.setMaximumHeight(input_height)
-                widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            
-            # QgsProjectionSelectionWidget
-            for widget in self.findChildren(QgsProjectionSelectionWidget):
-                widget.setMinimumHeight(combobox_height)
-                widget.setMaximumHeight(combobox_height)
-                widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            
-            # QgsMapLayerComboBox
-            for widget in self.findChildren(QgsMapLayerComboBox):
-                widget.setMinimumHeight(combobox_height)
-                widget.setMaximumHeight(combobox_height)
-                widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            
-            # QgsFieldComboBox
-            for widget in self.findChildren(QgsFieldComboBox):
-                widget.setMinimumHeight(combobox_height)
-                widget.setMaximumHeight(combobox_height)
-                widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            
-            # QgsCheckableComboBox (QGIS native)
-            for widget in self.findChildren(QgsCheckableComboBox):
-                widget.setMinimumHeight(combobox_height)
-                widget.setMaximumHeight(combobox_height)
-                widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            
-            # QgsPropertyOverrideButton - FORCE to exact 22px (smaller than inputs)
-            from qgis.gui import QgsPropertyOverrideButton
-            for widget in self.findChildren(QgsPropertyOverrideButton):
-                # Force to 22px (slightly smaller than 24px inputs for visual hierarchy)
-                button_size = 22
-                widget.setMinimumHeight(button_size)
-                widget.setMaximumHeight(button_size)
-                widget.setMinimumWidth(button_size)
-                widget.setMaximumWidth(button_size)
-                widget.setFixedSize(button_size, button_size)
-                widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-            
-            logger.debug(f"Applied QGIS widget dimensions: ComboBox={combobox_height}px, Input={input_height}px")
-            
-        except Exception as e:
-            # QGIS widgets may not support all size constraints
-            logger.debug(f"Could not apply dimensions to QGIS widgets: {e}")
+            # QgsPropertyOverrideButton - fixed 22px
+            for w in self.findChildren(QgsPropertyOverrideButton):
+                w.setFixedSize(22, 22)
+                w.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        except Exception:
+            pass
     
     def _align_key_layouts(self):
         """
@@ -2846,416 +2762,190 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._current_action_bar_position = position
 
     def _adjust_header_for_side_position(self, position):
-        """
-        Adjust header layout when action bar is in side position (left/right).
-        
-        Creates a wrapper with spacer to align the header with the main content.
-        
-        Args:
-            position: str - 'top', 'bottom', 'left', 'right'
-        """
+        """v3.1 Sprint 13: Adjust header for side action bar position."""
         if not hasattr(self, 'frame_header') or not self.frame_header:
             return
         
-        # Calculate the width of the action bar
-        if UI_CONFIG_AVAILABLE:
-            action_button_size = UIConfig.get_button_height("action_button")
-            spacer_width = int(action_button_size * 1.3)
-        else:
-            spacer_width = 54  # Fallback width
+        spacer_width = int(UIConfig.get_button_height("action_button") * 1.3) if UI_CONFIG_AVAILABLE else 54
         
         if position in ('left', 'right'):
-            # Check if wrapper already exists
             if hasattr(self, '_header_wrapper') and self._header_wrapper:
-                return  # Already wrapped
-            
-            # Get the parent layout of frame_header
-            parent_layout = None
-            if hasattr(self, 'verticalLayout_8'):
-                parent_layout = self.verticalLayout_8
-            
+                return
+            parent_layout = getattr(self, 'verticalLayout_8', None)
             if not parent_layout:
                 return
-            
-            # Find frame_header's index in parent layout
             header_idx = parent_layout.indexOf(self.frame_header)
             if header_idx < 0:
                 return
             
-            # Remove frame_header from parent layout
             parent_layout.removeWidget(self.frame_header)
-            
-            # Create wrapper widget
             self._header_wrapper = QtWidgets.QWidget(self.dockWidgetContents)
             self._header_wrapper.setObjectName("header_wrapper")
             wrapper_layout = QtWidgets.QHBoxLayout(self._header_wrapper)
             wrapper_layout.setContentsMargins(0, 0, 0, 0)
             wrapper_layout.setSpacing(0)
             
-            # Create spacer widget matching action bar width
             self._header_spacer = QtWidgets.QWidget(self._header_wrapper)
             self._header_spacer.setFixedWidth(spacer_width)
             self._header_spacer.setObjectName("header_spacer")
             
-            # Add spacer and header in correct order
-            if position == 'left':
-                wrapper_layout.addWidget(self._header_spacer, 0)
-                wrapper_layout.addWidget(self.frame_header, 1)
-            else:  # right
-                wrapper_layout.addWidget(self.frame_header, 1)
-                wrapper_layout.addWidget(self._header_spacer, 0)
-            
-            # Insert wrapper at same position as original header
+            widgets = (self._header_spacer, self.frame_header) if position == 'left' else (self.frame_header, self._header_spacer)
+            wrapper_layout.addWidget(widgets[0], 0 if widgets[0] == self._header_spacer else 1)
+            wrapper_layout.addWidget(widgets[1], 1 if widgets[1] == self.frame_header else 0)
             parent_layout.insertWidget(header_idx, self._header_wrapper)
-            
-            logger.debug(f"Header wrapped with spacer for {position} side action bar (spacer_width={spacer_width})")
         else:
-            # Restore original header position for top/bottom
             self._restore_header_from_wrapper()
 
     def _restore_header_from_wrapper(self):
-        """
-        Restore header from wrapper when switching away from side position.
-        """
+        """v3.1 Sprint 13: Restore header when switching from side position."""
         if not hasattr(self, '_header_wrapper') or not self._header_wrapper:
             return
-        
         if not hasattr(self, 'frame_header') or not self.frame_header:
             return
-        
-        # Get parent layout
-        parent_layout = None
-        if hasattr(self, 'verticalLayout_8'):
-            parent_layout = self.verticalLayout_8
-        
+        parent_layout = getattr(self, 'verticalLayout_8', None)
         if not parent_layout:
             return
-        
-        # Find wrapper's index
         wrapper_idx = parent_layout.indexOf(self._header_wrapper)
         if wrapper_idx < 0:
             return
-        
-        # Remove frame_header from wrapper
         wrapper_layout = self._header_wrapper.layout()
         if wrapper_layout:
             wrapper_layout.removeWidget(self.frame_header)
-        
-        # Remove wrapper from parent
         parent_layout.removeWidget(self._header_wrapper)
-        
-        # Re-add frame_header at same position
         self.frame_header.setParent(self.dockWidgetContents)
         parent_layout.insertWidget(wrapper_idx, self.frame_header)
-        
-        # Delete wrapper and spacer
         if hasattr(self, '_header_spacer') and self._header_spacer:
             self._header_spacer.deleteLater()
             self._header_spacer = None
-        
         self._header_wrapper.deleteLater()
         self._header_wrapper = None
-        
-        logger.debug("Header restored from wrapper")
 
 
     def _clear_action_bar_layout(self):
-        """
-        Clear the existing action bar layout completely.
-        
-        Removes all widgets and spacers from the current layout and deletes it
-        to prepare for a new layout.
-        """
+        """v3.1 Sprint 13: Clear action bar layout completely."""
         old_layout = self.frame_actions.layout()
         if old_layout:
-            # Remove all items from the layout
             while old_layout.count():
                 item = old_layout.takeAt(0)
-                widget = item.widget()
-                if widget:
-                    widget.setParent(None)  # Detach widget temporarily
-            # Delete the layout by reparenting to a temporary widget
-            temp_widget = QtWidgets.QWidget()
-            temp_widget.setLayout(old_layout)
-            temp_widget.deleteLater()
+                if item.widget():
+                    item.widget().setParent(None)
+            temp = QtWidgets.QWidget()
+            temp.setLayout(old_layout)
+            temp.deleteLater()
 
     def _create_horizontal_action_layout(self, action_buttons):
-        """
-        Create horizontal layout for action bar (top/bottom position).
-        
-        Creates a QHBoxLayout with action buttons separated by expanding
-        horizontal spacers for even distribution.
-        
-        Args:
-            action_buttons: list - List of QPushButton widgets to add
-        """
-        new_layout = QtWidgets.QHBoxLayout(self.frame_actions)
-        # Increased bottom margin for better spacing below action buttons
-        new_layout.setContentsMargins(8, 8, 8, 16)
-        new_layout.setSpacing(6)
-        
+        """v3.1 Sprint 13: Create horizontal layout for action bar."""
+        layout = QtWidgets.QHBoxLayout(self.frame_actions)
+        layout.setContentsMargins(8, 8, 8, 16)
+        layout.setSpacing(6)
         for i, btn in enumerate(action_buttons):
             btn.setParent(self.frame_actions)
-            new_layout.addWidget(btn)
-            # Add small spacer between buttons
+            layout.addWidget(btn)
             if i < len(action_buttons) - 1:
-                spacer = QtWidgets.QSpacerItem(
-                    4, 20, 
-                    QtWidgets.QSizePolicy.Expanding, 
-                    QtWidgets.QSizePolicy.Minimum
-                )
-                new_layout.addItem(spacer)
-        
-        logger.debug("Created horizontal action bar layout")
+                layout.addItem(QtWidgets.QSpacerItem(4, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))
 
     def _create_vertical_action_layout(self, action_buttons):
-        """
-        Create vertical layout for action bar (left/right position).
-        
-        Creates a QVBoxLayout with action buttons. The buttons are aligned
-        at the top of the frame, with spacing between them.
-        
-        Args:
-            action_buttons: list - List of QPushButton widgets to add
-        """
-        new_layout = QtWidgets.QVBoxLayout(self.frame_actions)
-        new_layout.setContentsMargins(4, 4, 4, 4)
-        new_layout.setSpacing(12)  # Spacing between buttons
-        
-        # Add buttons with center alignment
+        """v3.1 Sprint 13: Create vertical layout for action bar."""
+        layout = QtWidgets.QVBoxLayout(self.frame_actions)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(12)
         for btn in action_buttons:
             btn.setParent(self.frame_actions)
-            new_layout.addWidget(btn, 0, Qt.AlignHCenter)
-        
-        # Add stretch at the end to push buttons to top
-        new_layout.addStretch(1)
-        
-        logger.debug("Created vertical action bar layout")
+            layout.addWidget(btn, 0, Qt.AlignHCenter)
+        layout.addStretch(1)
 
     def _apply_action_bar_size_constraints(self, position):
-        """
-        Apply appropriate size constraints to frame_actions based on position.
-        
-        For horizontal mode (top/bottom), constrains height.
-        For vertical mode (left/right), constrains width and removes height constraints.
-        
-        Args:
-            position: str - 'top', 'bottom', 'left', 'right'
-        """
+        """v3.1 Sprint 13: Apply size constraints to frame_actions based on position."""
         if position in ('top', 'bottom'):
-            # Horizontal mode: constrain height, allow width to expand
-            if UI_CONFIG_AVAILABLE:
-                action_button_height = UIConfig.get_button_height("action_button")
-                frame_height = max(int(action_button_height * 1.8), 56)  # Minimum 56px to prevent clipping
-            else:
-                frame_height = 60  # Fallback height
-            
+            frame_height = max(int(UIConfig.get_button_height("action_button") * 1.8), 56) if UI_CONFIG_AVAILABLE else 60
             self.frame_actions.setMinimumHeight(frame_height)
-            self.frame_actions.setMaximumHeight(frame_height + 15)  # Allow flexibility
+            self.frame_actions.setMaximumHeight(frame_height + 15)
             self.frame_actions.setMinimumWidth(0)
-            self.frame_actions.setMaximumWidth(16777215)  # QWIDGETSIZE_MAX
-            self.frame_actions.setSizePolicy(
-                QtWidgets.QSizePolicy.Expanding, 
-                QtWidgets.QSizePolicy.Preferred  # Changed from Fixed to allow expansion
-            )
+            self.frame_actions.setMaximumWidth(16777215)
+            self.frame_actions.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
         else:
-            # Vertical mode (left/right): constrain width, allow height to expand
-            if UI_CONFIG_AVAILABLE:
-                action_button_size = UIConfig.get_button_height("action_button")
-                frame_width = int(action_button_size * 1.3)
-            else:
-                frame_width = 54  # Fallback width
-            
+            frame_width = int(UIConfig.get_button_height("action_button") * 1.3) if UI_CONFIG_AVAILABLE else 54
             self.frame_actions.setMinimumWidth(frame_width)
             self.frame_actions.setMaximumWidth(frame_width)
             self.frame_actions.setMinimumHeight(0)
-            self.frame_actions.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX
-            self.frame_actions.setSizePolicy(
-                QtWidgets.QSizePolicy.Fixed, 
-                QtWidgets.QSizePolicy.Expanding
-            )
-        
-        logger.debug(f"Applied action bar size constraints for position: {position}")
+            self.frame_actions.setMaximumHeight(16777215)
+            self.frame_actions.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Expanding)
 
     def _reposition_action_bar_in_main_layout(self, position):
-        """
-        Reposition the action bar frame in the main layout.
-        
-        Args:
-            position: str - 'top', 'bottom', 'left', 'right'
-        """
-        # Remove frame_actions from horizontalLayout_actions_container (its original position)
+        """v3.1 Sprint 13: Reposition action bar frame in main layout."""
         if self.horizontalLayout_actions_container.indexOf(self.frame_actions) >= 0:
             self.horizontalLayout_actions_container.removeWidget(self.frame_actions)
-        
+        self.frame_actions.setParent(self.dockWidgetContents)
         if position == 'top':
-            # Insert at the beginning of verticalLayout_main (before splitter)
-            self.frame_actions.setParent(self.dockWidgetContents)
             self.verticalLayout_main.insertWidget(0, self.frame_actions)
-            logger.info("Action bar positioned at TOP")
         elif position == 'bottom':
-            # Re-add to horizontalLayout_actions_container (its original position at bottom)
-            self.frame_actions.setParent(self.dockWidgetContents)
             self.horizontalLayout_actions_container.addWidget(self.frame_actions)
-            logger.info("Action bar positioned at BOTTOM")
         elif position in ('left', 'right'):
-            # Use wrapper for side positioning
             self._create_horizontal_wrapper_for_side_action_bar(position)
-            logger.info(f"Action bar positioned at {position.upper()}")
 
     def _create_horizontal_wrapper_for_side_action_bar(self, position):
-        """
-        Position action bar vertically on left or right side.
-        
-        Alignment determines the vertical extent:
-        - 'top': Action bar spans the full height (next to splitter)
-        - 'bottom': Action bar is only in the bottom actions area
-        
-        v4.0 Sprint 4: Delegation to UILayoutController with fallback.
-        
-        Args:
-            position: str - 'left' or 'right'
-        """
-        # v4.0 Sprint 4: Delegated to UILayoutController
-        if (hasattr(self, '_controller_integration') and 
-            self._controller_integration and
+        """v3.1 Sprint 13: Delegate to UILayoutController."""
+        if (hasattr(self, '_controller_integration') and self._controller_integration and
             self._controller_integration.delegate_create_horizontal_wrapper_for_side_action_bar()):
-            logger.debug("_create_horizontal_wrapper_for_side_action_bar: Delegated to UILayoutController")
             return
-        
-        # No fallback - controller handles all logic
-        logger.warning("_create_horizontal_wrapper_for_side_action_bar: Controller delegation failed")
 
     def _restore_side_action_bar_layout(self):
-        """
-        Restore the layout when switching away from side (left/right) action bar position.
-        
-        Removes spacers, wrapper widgets, and moves frame_actions back to its original position
-        in horizontalLayout_actions_container.
-        """
-        # Clean up the wrapper widget if it exists
+        """v3.1 Sprint 13: Restore layout from side action bar position."""
         if hasattr(self, '_side_action_wrapper') and self._side_action_wrapper:
-            # Move the splitter back to verticalLayout_main
             if self.main_splitter is not None:
                 wrapper_layout = self._side_action_wrapper.layout()
                 if wrapper_layout:
-                    # Remove splitter from wrapper
                     wrapper_layout.removeWidget(self.main_splitter)
                     self.main_splitter.setParent(self.dockWidgetContents)
-                
-                # Get wrapper's position in parent layout
-                parent_layout = self.verticalLayout_main
-                wrapper_idx = parent_layout.indexOf(self._side_action_wrapper)
-                
-                # Remove wrapper and re-add splitter at same position
+                wrapper_idx = self.verticalLayout_main.indexOf(self._side_action_wrapper)
                 if wrapper_idx >= 0:
-                    parent_layout.removeWidget(self._side_action_wrapper)
-                    parent_layout.insertWidget(wrapper_idx, self.main_splitter)
-            
-            # Delete wrapper widget
+                    self.verticalLayout_main.removeWidget(self._side_action_wrapper)
+                    self.verticalLayout_main.insertWidget(wrapper_idx, self.main_splitter)
             self._side_action_wrapper.deleteLater()
             self._side_action_wrapper = None
-        
-        # Restore header from wrapper if it was wrapped
         self._restore_header_from_wrapper()
-        
-        # Remove previously added spacer if exists
         if hasattr(self, '_vertical_action_spacer') and self._vertical_action_spacer:
-            # Remove from horizontalLayout_actions_container
             idx = self.horizontalLayout_actions_container.indexOf(self._vertical_action_spacer)
             if idx >= 0:
                 self.horizontalLayout_actions_container.takeAt(idx)
             self._vertical_action_spacer = None
-        
-        # Reset tracking flags
         self._side_action_bar_active = False
         self._side_action_bar_position = None
         self._side_action_bar_alignment = None
 
     def _restore_original_layout(self):
-        """
-        Restore original layout when switching from side (left/right) to top/bottom position.
-        
-        This method cleans up the side action bar setup and moves frame_actions back
-        to its original position in horizontalLayout_actions_container.
-        """
-        # First clean up the side action bar setup (spacers, position)
+        """v3.1 Sprint 13: Restore layout when switching from side to top/bottom."""
         self._restore_side_action_bar_layout()
-        
-        # Ensure frame_actions is in horizontalLayout_actions_container
-        # Remove from any layout it might be in
         if self.frame_actions.parent():
             parent_layout = self.frame_actions.parent().layout()
             if parent_layout:
                 idx = parent_layout.indexOf(self.frame_actions)
                 if idx >= 0:
                     parent_layout.removeWidget(self.frame_actions)
-        
-        # Re-add to horizontalLayout_actions_container if not already there
         if self.horizontalLayout_actions_container.indexOf(self.frame_actions) < 0:
             self.frame_actions.setParent(self.dockWidgetContents)
             self.horizontalLayout_actions_container.addWidget(self.frame_actions)
-        
-        logger.info("Restored original layout from side action bar")
 
     def _setup_exploring_tab_widgets(self):
-        """
-        Configure widgets for the Exploring tab.
-        
-        Sets up checkableComboBox for feature selection and configures mFieldExpressionWidget
-        for single/multiple/custom selection modes. Layer initialization is deferred to
-        manage_interactions() to prevent blocking during project load.
-        """
-        # Insert the checkableComboBox into the horizontal layout for multiple selection
-        # The layout contains the order by button, we insert the combobox before it
-        layout = self.horizontalLayout_exploring_multiple_feature_picker
-        layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, 1)  # stretch=1 to fill space
-
-        # Configure QgsFieldExpressionWidget to allow all field types (except geometry)
-        # QgsFieldProxyModel.AllTypes includes all field types
-        # We exclude only geometry fields using ~SkipGeometry filter
+        """v3.1 Sprint 13: Configure Exploring tab widgets."""
+        self.horizontalLayout_exploring_multiple_feature_picker.insertWidget(
+            0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, 1)
         field_filters = QgsFieldProxyModel.AllTypes
-        self.mFieldExpressionWidget_exploring_single_selection.setFilters(field_filters)
-        self.mFieldExpressionWidget_exploring_multiple_selection.setFilters(field_filters)
-        self.mFieldExpressionWidget_exploring_custom_selection.setFilters(field_filters)
-        
-        # NOTE: setLayer() calls are deferred to manage_interactions() via _deferred_manage_interactions()
-        # to prevent blocking during project load. The old synchronous calls here caused freezes.
-        
-        # Setup direct signal connections for fieldChanged -> display expression sync
-        # These bypass the unreliable manageSignal/isSignalConnected system
+        for widget in [self.mFieldExpressionWidget_exploring_single_selection,
+                       self.mFieldExpressionWidget_exploring_multiple_selection,
+                       self.mFieldExpressionWidget_exploring_custom_selection]:
+            widget.setFilters(field_filters)
         self._setup_expression_widget_direct_connections()
 
     def _setup_expression_widget_direct_connections(self):
-        """
-        Setup direct signal connections for all QgsFieldExpressionWidget widgets.
-        
-        This method establishes direct connections between fieldChanged signals and
-        the display expression update for associated FeaturePicker widgets.
-        
-        We bypass the manageSignal/isSignalConnected system because isSignalConnected()
-        is unreliable for tracking specific handler connections.
-        
-        PERFORMANCE: Uses debounced handlers to prevent excessive recomputation
-        when the user types quickly or makes rapid changes to complex expressions.
-        """
-        # SINGLE SELECTION: mFieldExpressionWidget -> mFeaturePickerWidget
-        def on_single_field_changed(field_name):
-            self._schedule_expression_change("single_selection", field_name)
-        
-        self.mFieldExpressionWidget_exploring_single_selection.fieldChanged.connect(on_single_field_changed)
-        
-        # MULTIPLE SELECTION: mFieldExpressionWidget -> checkableComboBoxFeaturesListPickerWidget
-        def on_multiple_field_changed(field_name):
-            self._schedule_expression_change("multiple_selection", field_name)
-        
-        self.mFieldExpressionWidget_exploring_multiple_selection.fieldChanged.connect(on_multiple_field_changed)
-        
-        # CUSTOM SELECTION: mFieldExpressionWidget (no FeaturePicker to update, but may have other uses)
-        def on_custom_field_changed(field_name):
-            self._schedule_expression_change("custom_selection", field_name)
-        
-        self.mFieldExpressionWidget_exploring_custom_selection.fieldChanged.connect(on_custom_field_changed)
+        """v3.1 Sprint 13: Connect fieldChanged signals for expression widgets."""
+        connections = [
+            (self.mFieldExpressionWidget_exploring_single_selection, "single_selection"),
+            (self.mFieldExpressionWidget_exploring_multiple_selection, "multiple_selection"),
+            (self.mFieldExpressionWidget_exploring_custom_selection, "custom_selection")
+        ]
+        for widget, groupbox in connections:
+            widget.fieldChanged.connect(lambda f, g=groupbox: self._schedule_expression_change(g, f))
     
     def _schedule_expression_change(self, groupbox: str, expression: str):
         """
@@ -3482,126 +3172,62 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.debug(f"Cleared {len(keys_to_remove)} cache entries for layer {layer_id}")
 
     def _setup_filtering_tab_widgets(self):
-        """
-        Configure widgets for the Filtering tab.
-        
-        Sets up comboBox_filtering_current_layer (VectorLayer filter), creates and configures
-        checkableComboBoxLayer_filtering_layers_to_filter with checkbox for distant layer centroids.
-        Layer initialization is deferred to manage_interactions() to prevent blocking during project load.
-        """
-        # Filter comboBox_filtering_current_layer to show only vector layers
+        """v3.1 Sprint 13: Simplified - configure widgets for Filtering tab."""
         self.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
         
-        # NOTE: setLayer() and backend indicator update are deferred to manage_interactions()
-        # via _deferred_manage_interactions() to prevent blocking during project load.
-
-        # Set centroid icon dynamically for source layer checkbox (from UI)
-        import os
         icon_path = os.path.join(os.path.dirname(__file__), "icons", "centroid.png")
         if os.path.exists(icon_path) and hasattr(self, 'checkBox_filtering_use_centroids_source_layer'):
             self.checkBox_filtering_use_centroids_source_layer.setIcon(QtGui.QIcon(icon_path))
-            self.checkBox_filtering_use_centroids_source_layer.setText("")  # Ensure no text
-            # Put icon/text on left, checkbox indicator on right
+            self.checkBox_filtering_use_centroids_source_layer.setText("")
             self.checkBox_filtering_use_centroids_source_layer.setLayoutDirection(QtCore.Qt.RightToLeft)
 
-        # Create custom checkable combobox for layers to filter
-        # Parent must be dockWidgetContents, not self (the dock widget), to avoid widget appearing in dock title bar
         self.checkableComboBoxLayer_filtering_layers_to_filter = QgsCheckableComboBoxLayer(self.dockWidgetContents)
         
-        # Create checkbox for distant layers centroids (with centroid icon, no text)
         self.checkBox_filtering_use_centroids_distant_layers = QtWidgets.QCheckBox(self.dockWidgetContents)
-        self.checkBox_filtering_use_centroids_distant_layers.setText("")  # No text, icon only
-        self.checkBox_filtering_use_centroids_distant_layers.setToolTip(
-            self.tr("Use centroids instead of full geometries for distant layers (faster for complex polygons)")
-        )
-        self.checkBox_filtering_use_centroids_distant_layers.setChecked(False)
+        self.checkBox_filtering_use_centroids_distant_layers.setText("")
+        self.checkBox_filtering_use_centroids_distant_layers.setToolTip(self.tr("Use centroids instead of full geometries for distant layers"))
         self.checkBox_filtering_use_centroids_distant_layers.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        # Set centroid icon for distant layers checkbox
         if os.path.exists(icon_path):
             self.checkBox_filtering_use_centroids_distant_layers.setIcon(QtGui.QIcon(icon_path))
-        # Put icon/text on left, checkbox indicator on right
         self.checkBox_filtering_use_centroids_distant_layers.setLayoutDirection(QtCore.Qt.RightToLeft)
-        font = QtGui.QFont()
-        font.setFamily("Segoe UI")
-        font.setPointSize(8)
-        self.checkBox_filtering_use_centroids_distant_layers.setFont(font)
-        self.checkBox_filtering_use_centroids_distant_layers.setSizePolicy(
-            QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed
-        )
+        self.checkBox_filtering_use_centroids_distant_layers.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         
-        # Create horizontal layout to hold combobox + checkbox
         self.horizontalLayout_filtering_distant_layers = QtWidgets.QHBoxLayout()
         self.horizontalLayout_filtering_distant_layers.setSpacing(4)
         self.horizontalLayout_filtering_distant_layers.addWidget(self.checkableComboBoxLayer_filtering_layers_to_filter)
         self.horizontalLayout_filtering_distant_layers.addWidget(self.checkBox_filtering_use_centroids_distant_layers)
+        self.verticalLayout_filtering_values.insertLayout(2, self.horizontalLayout_filtering_distant_layers)
         
-        # Insert into layout - position just above verticalSpacer_filtering_values_search_bottom (index 2)
-        layout = self.verticalLayout_filtering_values
-        layout.insertLayout(2, self.horizontalLayout_filtering_distant_layers)
-        
-        # Apply height constraints (these widgets are created before apply_dynamic_dimensions())
-        from .ui.config import UIConfig
         try:
-            combobox_height = UIConfig.get_config('combobox', 'height')
-            self.checkableComboBoxLayer_filtering_layers_to_filter.setMinimumHeight(combobox_height)
-            self.checkableComboBoxLayer_filtering_layers_to_filter.setMaximumHeight(combobox_height)
-            self.checkableComboBoxLayer_filtering_layers_to_filter.setSizePolicy(
-                QtWidgets.QSizePolicy.Preferred,
-                QtWidgets.QSizePolicy.Fixed
-            )
-        except Exception as e:
-            logger.debug(f"Could not set height for filtering checkable combobox: {e}")
+            from .ui.config import UIConfig
+            h = UIConfig.get_config('combobox', 'height')
+            self.checkableComboBoxLayer_filtering_layers_to_filter.setMinimumHeight(h)
+            self.checkableComboBoxLayer_filtering_layers_to_filter.setMaximumHeight(h)
+        except Exception:
+            pass
 
     def _setup_exporting_tab_widgets(self):
-        """
-        Configure widgets for the Exporting tab.
-        
-        Creates and configures checkableComboBoxLayer_exporting_layers, inserts it into layout,
-        and sets up map canvas selection color.
-        """
-        # Create custom checkable combobox for exporting layers
-        # Parent must be EXPORTING widget, not self (the dock widget)
+        """v3.1 Sprint 13: Simplified - configure widgets for Exporting tab."""
         self.checkableComboBoxLayer_exporting_layers = QgsCheckableComboBoxLayer(self.EXPORTING)
         
-        # Insert into verticalLayout_exporting_values (the values column in EXPORTING tab)
-        # verticalLayout_exporting_values contains: projection, spacer, styles, spacer, datatype, etc.
-        # We insert at index 0 to put it at the top, then add a spacer to align with keys
         if hasattr(self, 'verticalLayout_exporting_values'):
             self.verticalLayout_exporting_values.insertWidget(0, self.checkableComboBoxLayer_exporting_layers)
-            # Add spacer after combobox to align with keys spacer (Expanding like keys)
-            spacer_after_layers = QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
-            self.verticalLayout_exporting_values.insertItem(1, spacer_after_layers)
-            logger.debug("Exporting layers combobox inserted into verticalLayout_exporting_values")
+            self.verticalLayout_exporting_values.insertItem(1, QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
         
-        # Apply height constraints (these widgets are created before apply_dynamic_dimensions())
-        from .ui.config import UIConfig
         try:
-            combobox_height = UIConfig.get_config('combobox', 'height')
-            self.checkableComboBoxLayer_exporting_layers.setMinimumHeight(combobox_height)
-            self.checkableComboBoxLayer_exporting_layers.setMaximumHeight(combobox_height)
-            self.checkableComboBoxLayer_exporting_layers.setSizePolicy(
-                self.checkableComboBoxLayer_exporting_layers.sizePolicy().horizontalPolicy(),
-                QtWidgets.QSizePolicy.Fixed
-            )
-        except Exception as e:
-            logger.debug(f"Could not set height for exporting checkable combobox: {e}")
+            from .ui.config import UIConfig
+            h = UIConfig.get_config('combobox', 'height')
+            self.checkableComboBoxLayer_exporting_layers.setMinimumHeight(h)
+            self.checkableComboBoxLayer_exporting_layers.setMaximumHeight(h)
+        except Exception:
+            pass
         
-        # Disable all EXPORTING pushbuttons by default (will be enabled when plugin is initialized)
-        # This matches the behavior of FILTERING tab widgets
-        if hasattr(self, 'pushButton_checkable_exporting_layers'):
-            self.pushButton_checkable_exporting_layers.setEnabled(False)
-        if hasattr(self, 'pushButton_checkable_exporting_projection'):
-            self.pushButton_checkable_exporting_projection.setEnabled(False)
-        if hasattr(self, 'pushButton_checkable_exporting_styles'):
-            self.pushButton_checkable_exporting_styles.setEnabled(False)
-        if hasattr(self, 'pushButton_checkable_exporting_datatype'):
-            self.pushButton_checkable_exporting_datatype.setEnabled(False)
-        if hasattr(self, 'pushButton_checkable_exporting_output_folder'):
-            self.pushButton_checkable_exporting_output_folder.setEnabled(False)
-        if hasattr(self, 'pushButton_checkable_exporting_zip'):
-            self.pushButton_checkable_exporting_zip.setEnabled(False)
+        for btn in ['pushButton_checkable_exporting_layers', 'pushButton_checkable_exporting_projection',
+                    'pushButton_checkable_exporting_styles', 'pushButton_checkable_exporting_datatype',
+                    'pushButton_checkable_exporting_output_folder', 'pushButton_checkable_exporting_zip']:
+            if hasattr(self, btn):
+                getattr(self, btn).setEnabled(False)
         
-        # Configure map canvas selection color
         self.iface.mapCanvas().setSelectionColor(QColor(237, 97, 62, 75))
 
     def _index_to_combine_operator(self, index):
@@ -3883,264 +3509,110 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # They will be applied when user clicks OK button
     
     def _apply_theme_change(self, change, changes_summary):
-        """
-        Apply ACTIVE_THEME configuration change.
-        
-        Detects theme from config change and applies it using StyleLoader.
-        Supports 'auto', 'default', 'dark', and 'light' themes.
-        """
-        items_keys_values_path = change['path']
-        index = change['index']
-        
-        if 'ACTIVE_THEME' not in items_keys_values_path:
+        """v3.1 Sprint 13: Apply ACTIVE_THEME config change."""
+        if 'ACTIVE_THEME' not in change['path']:
             return
-        
         try:
-            # Get the new theme value from the edited item
-            value_item = self.config_view.model.itemFromIndex(index.siblingAtColumn(1))
+            value_item = self.config_view.model.itemFromIndex(change['index'].siblingAtColumn(1))
             value_data = value_item.data(QtCore.Qt.UserRole)
-            
-            # Handle ChoicesType format (dict with 'value' and 'choices')
-            if isinstance(value_data, dict) and 'value' in value_data:
-                new_theme_value = value_data['value']
+            new_theme = value_data.get('value') if isinstance(value_data, dict) else value_item.data(QtCore.Qt.DisplayRole)
+            if not new_theme:
+                return
+            from .ui.styles import StyleLoader
+            if new_theme == 'auto':
+                detected = StyleLoader.detect_qgis_theme()
+                StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA, detected)
             else:
-                # Fallback for string format (backward compatibility)
-                new_theme_value = value_item.data(QtCore.Qt.DisplayRole) if value_item else None
-            
-            if new_theme_value:
-                logger.info(f"ACTIVE_THEME changed to: {new_theme_value}")
-                
-                # Apply new theme
-                from .ui.styles import StyleLoader
-                
-                if new_theme_value == 'auto':
-                    # Auto-detect theme from QGIS
-                    detected_theme = StyleLoader.detect_qgis_theme()
-                    logger.info(f"Auto-detected QGIS theme: {detected_theme}")
-                    StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA, detected_theme)
-                else:
-                    # Apply specified theme (default, dark, light)
-                    StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA, new_theme_value)
-                
-                changes_summary.append(f"Theme: {new_theme_value}")
-                
-        except Exception as e:
-            logger.error(f"Error applying ACTIVE_THEME change: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+                StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA, new_theme)
+            changes_summary.append(f"Theme: {new_theme}")
+        except Exception:
+            pass
     
     def _apply_ui_profile_change(self, change, changes_summary):
-        """
-        Apply UI_PROFILE configuration change.
-        
-        Updates UIConfig with new profile (compact/normal/auto) and re-applies
-        dynamic dimensions. Shows confirmation message to user.
-        """
-        items_keys_values_path = change['path']
-        index = change['index']
-        
-        if 'UI_PROFILE' not in items_keys_values_path:
+        """v3.1 Sprint 13: Apply UI_PROFILE config change."""
+        if 'UI_PROFILE' not in change['path']:
             return
-        
         try:
-            # Get the new profile value from the edited item
-            value_item = self.config_view.model.itemFromIndex(index.siblingAtColumn(1))
+            value_item = self.config_view.model.itemFromIndex(change['index'].siblingAtColumn(1))
             value_data = value_item.data(QtCore.Qt.UserRole)
-            
-            # Handle ChoicesType format (dict with 'value' and 'choices')
-            if isinstance(value_data, dict) and 'value' in value_data:
-                new_profile_value = value_data['value']
-            else:
-                # Fallback for string format (backward compatibility)
-                new_profile_value = value_item.data(QtCore.Qt.DisplayRole) if value_item else None
-            
-            if new_profile_value:
-                logger.info(f"UI_PROFILE changed to: {new_profile_value}")
-                
-                # Update UIConfig with new profile
-                if UI_CONFIG_AVAILABLE:
-                    from .ui.config import UIConfig, DisplayProfile
-                    
-                    if new_profile_value == 'compact':
-                        UIConfig.set_profile(DisplayProfile.COMPACT)
-                        logger.info("Switched to COMPACT profile")
-                    elif new_profile_value == 'normal':
-                        UIConfig.set_profile(DisplayProfile.NORMAL)
-                        logger.info("Switched to NORMAL profile")
-                    elif new_profile_value == 'auto':
-                        # Detect optimal profile based on screen size
-                        detected_profile = UIConfig.detect_optimal_profile()
-                        UIConfig.set_profile(detected_profile)
-                        logger.info(f"Auto-detected profile: {detected_profile.value}")
-                    
-                    # Re-apply dynamic dimensions with new profile
-                    self.apply_dynamic_dimensions()
-                    
-                    # Message removed - profile change is visible in UI
-                    profile_display = UIConfig.get_profile_name().upper()
-                    logger.info(f"UI profile changed to {profile_display} mode")
-                    
-                    changes_summary.append(f"Profile: {new_profile_value}")
-                else:
-                    logger.warning("UI_CONFIG not available - cannot apply profile changes")
-                    
-        except Exception as e:
-            logger.error(f"Error applying UI_PROFILE change: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+            new_profile = value_data.get('value') if isinstance(value_data, dict) else value_item.data(QtCore.Qt.DisplayRole)
+            if not new_profile or not UI_CONFIG_AVAILABLE:
+                return
+            from .ui.config import UIConfig, DisplayProfile
+            profiles = {'compact': DisplayProfile.COMPACT, 'normal': DisplayProfile.NORMAL}
+            if new_profile in profiles:
+                UIConfig.set_profile(profiles[new_profile])
+            elif new_profile == 'auto':
+                UIConfig.set_profile(UIConfig.detect_optimal_profile())
+            self.apply_dynamic_dimensions()
+            changes_summary.append(f"Profile: {new_profile}")
+        except Exception:
+            pass
     
     def _apply_action_bar_position_change(self, change, changes_summary):
-        """
-        Apply ACTION_BAR_POSITION or ACTION_BAR_VERTICAL_ALIGNMENT configuration change.
-        
-        Updates the action bar layout position/alignment dynamically.
-        """
-        items_keys_values_path = change['path']
-        index = change['index']
-        
-        # Check if this is a position or alignment change
-        is_position_change = 'ACTION_BAR_POSITION' in items_keys_values_path and 'VERTICAL' not in items_keys_values_path
-        is_alignment_change = 'ACTION_BAR_VERTICAL_ALIGNMENT' in items_keys_values_path
-        
-        if not is_position_change and not is_alignment_change:
+        """v3.1 Sprint 13: Apply action bar position/alignment config change."""
+        path, index = change['path'], change['index']
+        is_position = 'ACTION_BAR_POSITION' in path and 'VERTICAL' not in path
+        is_alignment = 'ACTION_BAR_VERTICAL_ALIGNMENT' in path
+        if not is_position and not is_alignment:
             return
         
         try:
-            # Get the new value from the edited item
             value_item = self.config_view.model.itemFromIndex(index.siblingAtColumn(1))
             value_data = value_item.data(QtCore.Qt.UserRole)
+            new_value = value_data.get('value') if isinstance(value_data, dict) else value_item.data(QtCore.Qt.DisplayRole)
+            if not new_value:
+                return
             
-            # Handle ChoicesType format (dict with 'value' and 'choices')
-            if isinstance(value_data, dict) and 'value' in value_data:
-                new_value = value_data['value']
+            config_key = "ACTION_BAR_POSITION" if is_position else "ACTION_BAR_VERTICAL_ALIGNMENT"
+            set_config_value(self.CONFIG_DATA, new_value, "APP", "DOCKWIDGET", config_key)
+            
+            if is_position:
+                self._apply_action_bar_position(new_value)
+                changes_summary.append(f"Action bar position: {new_value}")
+                show_info("FilterMate", QCoreApplication.translate("FilterMateDockWidget", 
+                    "Action bar position changed. Use 'Reload Plugin' button for best results."))
             else:
-                # Fallback for string format (backward compatibility)
-                new_value = value_item.data(QtCore.Qt.DisplayRole) if value_item else None
-            
-            if new_value:
-                if is_position_change:
-                    logger.info(f"ACTION_BAR_POSITION changed to: {new_value}")
-                    
-                    # Update the config data in memory using helper (handles v1.0 and v2.0 formats)
-                    set_config_value(self.CONFIG_DATA, new_value, "APP", "DOCKWIDGET", "ACTION_BAR_POSITION")
-                    
-                    # Apply the new position
-                    self._apply_action_bar_position(new_value)
-                    changes_summary.append(f"Action bar position: {new_value}")
-                    
-                    # Show message that reload is recommended
-                    show_info(
-                        "FilterMate",
-                        QCoreApplication.translate("FilterMateDockWidget", 
-                            "Action bar position changed. Use 'Reload Plugin' button for best results.")
-                    )
-                    
-                elif is_alignment_change:
-                    logger.info(f"ACTION_BAR_VERTICAL_ALIGNMENT changed to: {new_value}")
-                    
-                    # Update the config data in memory using helper (handles v1.0 and v2.0 formats)
-                    set_config_value(self.CONFIG_DATA, new_value, "APP", "DOCKWIDGET", "ACTION_BAR_VERTICAL_ALIGNMENT")
-                    
-                    # Re-apply the current position to update alignment
-                    current_position = self._get_action_bar_position()
-                    if current_position in ('left', 'right'):
-                        self._apply_action_bar_position(current_position)
-                    changes_summary.append(f"Action bar alignment: {new_value}")
-                
-                # Show confirmation message
-                show_info(
-                    "FilterMate",
-                    f"Action bar updated successfully."
-                )
-                    
-        except Exception as e:
-            logger.error(f"Error applying action bar change: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+                current_pos = self._get_action_bar_position()
+                if current_pos in ('left', 'right'):
+                    self._apply_action_bar_position(current_pos)
+                changes_summary.append(f"Action bar alignment: {new_value}")
+        except Exception:
+            pass
     
     def _apply_export_style_change(self, change, changes_summary):
-        """
-        Apply STYLES_TO_EXPORT configuration change.
-        
-        Updates the export style combobox with new value.
-        """
-        items_keys_values_path = change['path']
-        index = change['index']
-        
-        if 'STYLES_TO_EXPORT' not in items_keys_values_path:
+        """v3.1 Sprint 13: Apply STYLES_TO_EXPORT config change."""
+        if 'STYLES_TO_EXPORT' not in change['path']:
             return
-        
         try:
-            # Get the new style value from the edited item
-            value_item = self.config_view.model.itemFromIndex(index.siblingAtColumn(1))
+            value_item = self.config_view.model.itemFromIndex(change['index'].siblingAtColumn(1))
             value_data = value_item.data(QtCore.Qt.UserRole)
-            
-            # Handle ChoicesType format (dict with 'value' and 'choices')
-            if isinstance(value_data, dict) and 'value' in value_data:
-                new_style_value = value_data['value']
-            else:
-                # Fallback for string format (backward compatibility)
-                new_style_value = value_item.data(QtCore.Qt.DisplayRole) if value_item else None
-            
-            if new_style_value and 'STYLES_TO_EXPORT' in self.widgets.get('EXPORTING', {}):
-                logger.info(f"STYLES_TO_EXPORT changed to: {new_style_value}")
-                
-                # Update the combobox selection
-                style_combo = self.widgets["EXPORTING"]["STYLES_TO_EXPORT"]["WIDGET"]
-                index_to_set = style_combo.findText(new_style_value)
-                if index_to_set >= 0:
-                    style_combo.setCurrentIndex(index_to_set)
-                    logger.info(f"Export style updated to: {new_style_value}")
-                    # Message removed - change visible in combobox
-                    
-                    changes_summary.append(f"Style: {new_style_value}")
-                
-        except Exception as e:
-            logger.error(f"Error applying STYLES_TO_EXPORT change: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+            new_style = value_data.get('value') if isinstance(value_data, dict) else value_item.data(QtCore.Qt.DisplayRole)
+            if new_style and 'STYLES_TO_EXPORT' in self.widgets.get('EXPORTING', {}):
+                combo = self.widgets["EXPORTING"]["STYLES_TO_EXPORT"]["WIDGET"]
+                idx = combo.findText(new_style)
+                if idx >= 0:
+                    combo.setCurrentIndex(idx)
+                    changes_summary.append(f"Style: {new_style}")
+        except Exception:
+            pass
     
     def _apply_export_format_change(self, change, changes_summary):
-        """
-        Apply DATATYPE_TO_EXPORT configuration change.
-        
-        Updates the export format combobox with new value.
-        """
-        items_keys_values_path = change['path']
-        index = change['index']
-        
-        if 'DATATYPE_TO_EXPORT' not in items_keys_values_path:
+        """v3.1 Sprint 13: Apply DATATYPE_TO_EXPORT config change."""
+        if 'DATATYPE_TO_EXPORT' not in change['path']:
             return
-        
         try:
-            # Get the new format value from the edited item
-            value_item = self.config_view.model.itemFromIndex(index.siblingAtColumn(1))
+            value_item = self.config_view.model.itemFromIndex(change['index'].siblingAtColumn(1))
             value_data = value_item.data(QtCore.Qt.UserRole)
-            
-            # Handle ChoicesType format (dict with 'value' and 'choices')
-            if isinstance(value_data, dict) and 'value' in value_data:
-                new_format_value = value_data['value']
-            else:
-                # Fallback for string format (backward compatibility)
-                new_format_value = value_item.data(QtCore.Qt.DisplayRole) if value_item else None
-            
-            if new_format_value and 'DATATYPE_TO_EXPORT' in self.widgets.get('EXPORTING', {}):
-                logger.info(f"DATATYPE_TO_EXPORT changed to: {new_format_value}")
-                
-                # Update the combobox selection
-                format_combo = self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"]
-                index_to_set = format_combo.findText(new_format_value)
-                if index_to_set >= 0:
-                    format_combo.setCurrentIndex(index_to_set)
-                    logger.info(f"Export format updated to: {new_format_value}")
-                    # Message removed - change visible in combobox
-                    
-                    changes_summary.append(f"Format: {new_format_value}")
-                
-        except Exception as e:
-            logger.error(f"Error applying DATATYPE_TO_EXPORT change: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+            new_format = value_data.get('value') if isinstance(value_data, dict) else value_item.data(QtCore.Qt.DisplayRole)
+            if new_format and 'DATATYPE_TO_EXPORT' in self.widgets.get('EXPORTING', {}):
+                combo = self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"]
+                idx = combo.findText(new_format)
+                if idx >= 0:
+                    combo.setCurrentIndex(idx)
+                    changes_summary.append(f"Format: {new_format}")
+        except Exception:
+            pass
 
 
     def apply_pending_config_changes(self):
