@@ -365,11 +365,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.manage_ui_style()
         try: self.manage_interactions()
         except Exception as e: logger.error(f"Error in manage_interactions: {e}")
-    
-    def _deferred_manage_interactions(self):
-        """Deferred initialization - NOT USED during debugging."""
-        # This method is not called during debugging
-        
 
     def getSignal(self, oObject: QObject, strSignalName: str):
         """v3.1 Sprint 14: Get signal from QObject by name with caching."""

@@ -10,68 +10,92 @@
 
 | Métrique          | Valeur       | Objectif      |
 | ----------------- | ------------ | ------------- |
-| Lignes dockwidget | **10,051**   | <2,000        |
+| Lignes dockwidget | **5,359**    | <2,000        |
 | Sprint actuel     | **Sprint 5** | Sprint 5      |
-| Réduction totale  | **-1,133**   | -9,364        |
-| Progrès           | **10.1%**    | 81.3% restant |
+| Réduction totale  | **-1,262**   | -9,235        |
+| Progrès           | **12.0%**    | 73.0% restant |
 
-### Progression Sprint 5 (session actuelle)
+### Progression Sprint 5 (session 10 janvier 2026)
 
-| Action                                       | Lignes avant | Lignes après | Réduction |
-| -------------------------------------------- | ------------ | ------------ | --------- |
-| Session précédente                           | 11,364       | 10,300       | -1,064    |
-| Simplification `zooming_to_features`         | 10,300       | 10,157       | -143      |
-| Simplification `exploring_identify_clicked`  | 10,157       | 10,109       | -48       |
-| Simplification `exploring_zoom_clicked`      | -            | -            | incl.     |
-| Simplification méthodes favorites            | 10,109       | 10,073       | -36       |
-| Simplification `exploring_deselect_features` | 10,073       | 10,051       | -22       |
-| **Total session**                            | **10,300**   | **10,051**   | **-249**  |
+| Action                                | Lignes avant | Lignes après | Réduction |
+| ------------------------------------- | ------------ | ------------ | --------- |
+| Session précédente                    | 11,364       | 10,300       | -1,064    |
+| Simplification `zooming_to_features`  | 10,300       | 10,157       | -143      |
+| Simplification `exploring_*_clicked`  | 10,157       | 10,109       | -48       |
+| Simplification méthodes favorites     | 10,109       | 10,073       | -36       |
+| Simplification `exploring_deselect`   | 10,073       | 10,051       | -22       |
+| **Session 10 jan 2026**               | **5,488**    | **5,359**    | **-129**  |
+| Migrer `_configure_*_groupbox` (×3)   | 5,488        | 5,470        | -18       |
+| Simplifier `_combine_operator_*` (×2) | 5,470        | 5,408        | -62       |
+| Supprimer `_verify_backend_supports`  | 5,408        | 5,364        | -44       |
+| Supprimer `_deferred_manage_*` (vide) | 5,364        | 5,359        | -5        |
+| **Total session 10 jan**              | **5,488**    | **5,359**    | **-129**  |
 
 ### Controllers existants (v4.0)
 
-| Controller                  | Lignes    | Rôle          | Sprint |
-| --------------------------- | --------- | ------------- | ------ |
-| integration.py              | 2,367     | Orchestration | S1-S4  |
-| filtering_controller.py     | 1,066     | Filtrage      | S1     |
-| layer_sync_controller.py    | 1,170     | Sync couches  | S3     |
-| property_controller.py      | 1,251     | Propriétés    | S3     |
-| exploring_controller.py     | 791       | Exploration   | S2     |
-| config_controller.py        | 708       | Configuration | S1     |
-| exporting_controller.py     | 697       | Export        | S1     |
-| favorites_controller.py     | 682       | Favoris       | -      |
-| backend_controller.py       | 581       | Backends      | S1     |
-| **ui_layout_controller.py** | **444**   | **UI Layout** | **S4** |
-| **Total controllers**       | **9,757** | -             | -      |
+| Controller                  | Lignes     | Rôle            | Sprint    |
+| --------------------------- | ---------- | --------------- | --------- |
+| integration.py              | 2,481      | Orchestration   | S1-S5     |
+| **exploring_controller.py** | **2,405**  | **Exploration** | **S1-S5** |
+| layer_sync_controller.py    | 1,170      | Sync couches    | S3        |
+| property_controller.py      | 1,251      | Propriétés      | S3        |
+| filtering_controller.py     | 1,066      | Filtrage        | S1        |
+| config_controller.py        | 708        | Configuration   | S1        |
+| exporting_controller.py     | 697        | Export          | S1        |
+| favorites_controller.py     | 682        | Favoris         | S4        |
+| backend_controller.py       | 581        | Backends        | S1        |
+| ui_layout_controller.py     | 444        | UI Layout       | S4        |
+| **Total controllers**       | **11,485** | -               | -         |
 
 ---
 
-## ✅ Phase 1: Délégations Directes (1,020 lignes)
+## ✅ Session 10 Janvier 2026 - Résumé
 
-Méthodes avec correspondance exacte dans un controller existant.
+### Travaux Accomplis
 
-### Priorité Haute (>100 lignes)
+1. **Migration groupbox vers ExploringController** (NEW)
 
-| Méthode Dockwidget          | Lignes | Controller Cible    | Méthode Cible              |
-| --------------------------- | ------ | ------------------- | -------------------------- |
-| `current_layer_changed`     | 245    | LayerSyncController | `on_current_layer_changed` |
-| `_update_buffer_validation` | 106    | PropertyController  | `update_buffer_validation` |
-| `_update_other_property`    | 102    | PropertyController  | `_update_other_property`   |
+   - Ajout méthode `configure_groupbox()` dans `ExploringController`
+   - Ajout délégation `delegate_exploring_configure_groupbox()` dans `integration.py`
+   - Simplification `_configure_single_selection_groupbox()` : 48 → 32 lignes
+   - Simplification `_configure_multiple_selection_groupbox()` : 36 → 30 lignes
+   - Simplification `_configure_custom_selection_groupbox()` : 36 → 33 lignes
+   - **Réduction nette** : -18 lignes
 
-### Priorité Moyenne (50-100 lignes)
+2. **Simplification méthodes opérateurs**
 
-| Méthode Dockwidget                  | Lignes | Controller Cible    | Méthode Cible                       |
-| ----------------------------------- | ------ | ------------------- | ----------------------------------- |
-| `auto_select_optimal_backends`      | 84     | BackendController   | `auto_select_optimal_backends`      |
-| `on_layer_selection_changed`        | 73     | ExportingController | `on_layer_selection_changed`        |
-| `_apply_action_bar_position_change` | 69     | ConfigController    | `_apply_action_bar_position_change` |
-| `_reset_layer_expressions`          | 68     | ExploringController | `set_layer`                         |
-| `_apply_ui_profile_change`          | 60     | ConfigController    | `_apply_ui_profile_change`          |
-| `_ensure_valid_current_layer`       | 60     | LayerSyncController | `_ensure_valid_current_layer`       |
-| `_apply_action_bar_position`        | 52     | ConfigController    | `_apply_action_bar_position_change` |
-| `_combine_operator_to_index`        | 51     | FilteringController | `combine_operator_to_index`         |
-| `cancel_pending_config_changes`     | 50     | ConfigController    | `cancel_pending_config_changes`     |
+   - `_index_to_combine_operator()` : 27 → 5 lignes
+   - `_combine_operator_to_index()` : 51 → 6 lignes
+   - Suppression code orphelin (7 lignes)
+   - **Réduction nette** : -62 lignes
 
-**Sous-total Phase 1: ~1,020 lignes**
+3. **Suppression code dupliqué**
+
+   - `_verify_backend_supports_layer()` : suppression (44 lignes)
+     - Existait déjà dans `BackendController`
+   - **Réduction nette** : -44 lignes
+
+4. **Nettoyage code mort**
+   - `_deferred_manage_interactions()` : suppression méthode vide (5 lignes)
+   - **Réduction nette** : -5 lignes
+
+### Résultats
+
+| Métrique            | Avant   | Après   | Variation        |
+| ------------------- | ------- | ------- | ---------------- |
+| Dockwidget          | 5,488   | 5,359   | **-129 (-2.4%)** |
+| ExploringController | 2,300   | 2,405   | +105             |
+| Integration         | 2,449   | 2,481   | +32              |
+| **Total codebase**  | ~25,000 | ~25,137 | +137             |
+
+**Note** : Augmentation temporaire due à la migration (ajout méthodes dans controllers). La réduction massive viendra au Sprint 6 quand les fallbacks seront supprimés.
+
+### Impact
+
+- **Complexité** : Réduction de la complexité du dockwidget
+- **Maintenabilité** : Logique groupbox centralisée dans `ExploringController`
+- **Architecture** : Meilleure séparation des responsabilités
+- **Tests** : Méthodes controllers testables indépendamment
 
 ---
 
@@ -79,17 +103,18 @@ Méthodes avec correspondance exacte dans un controller existant.
 
 Méthodes qui nécessitent d'enrichir les controllers existants.
 
-### ExploringController (+1,056 lignes)
+### ExploringController (+1,056 lignes) ✅ PARTIELLEMENT COMPLÉTÉ
 
-| Méthode                           | Lignes | Action                 |
-| --------------------------------- | ------ | ---------------------- |
-| `get_exploring_features`          | 249    | Migrer vers controller |
-| `_reload_exploration_widgets`     | 234    | Migrer vers controller |
-| `exploring_source_params_changed` | 137    | Migrer vers controller |
-| `exploring_link_widgets`          | 136    | Migrer vers controller |
-| `exploring_features_changed`      | 120    | Migrer vers controller |
-| `zooming_to_features`             | 154    | Migrer (zoom features) |
-| `_compute_zoom_extent_for_mode`   | 118    | Migrer (zoom)          |
+| Méthode                           | Lignes | Action                  | Status |
+| --------------------------------- | ------ | ----------------------- | ------ |
+| `configure_groupbox` (NEW)        | 105    | ✅ **COMPLÉTÉ v4.0 S5** | ✅     |
+| `get_exploring_features`          | 249    | Migrer vers controller  |        |
+| `_reload_exploration_widgets`     | 234    | Migrer vers controller  |        |
+| `exploring_source_params_changed` | 137    | Migrer vers controller  |        |
+| `exploring_link_widgets`          | 136    | Migrer vers controller  |        |
+| `exploring_features_changed`      | 120    | Migrer vers controller  |        |
+| `zooming_to_features`             | 154    | Migrer (zoom features)  |        |
+| `_compute_zoom_extent_for_mode`   | 118    | Migrer (zoom)           |        |
 
 ### LayerSyncController (+978 lignes)
 
