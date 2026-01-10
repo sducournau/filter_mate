@@ -54,7 +54,7 @@ from infrastructure.utils import (
     MESSAGE_TASKS_CATEGORIES
 )
 
-from .geometry_cache import SourceGeometryCache
+from infrastructure.cache import SourceGeometryCache
 
 __all__ = [
     # Main task classes

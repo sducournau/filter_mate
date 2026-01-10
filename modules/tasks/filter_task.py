@@ -164,11 +164,8 @@ except ImportError:
     CRS_UTILS_AVAILABLE = False
     logger.warning("crs_utils module not available - using legacy CRS handling")
 
-# Import geometry cache (Phase 3a extraction)
-from .geometry_cache import SourceGeometryCache
-
-# Import query expression cache (Phase 4 optimization)
-from .query_cache import QueryExpressionCache, get_query_cache
+# Import from infrastructure (EPIC-1 migration)
+from infrastructure.cache import SourceGeometryCache, QueryExpressionCache, get_query_cache
 
 # Import parallel executor (Phase 4 optimization)
 from .parallel_executor import ParallelFilterExecutor, ParallelConfig
