@@ -97,6 +97,7 @@ try:
     from .core.services.optimization_manager import OptimizationManager  # v4.2: Optimization management extraction
     from .adapters.filter_result_handler import FilterResultHandler  # v4.3: Filter result handling extraction
     from .core.services.app_initializer import AppInitializer  # v4.4: App initialization extraction
+    from .core.services.datasource_manager import DatasourceManager  # v4.5: Datasource management extraction
     HEXAGONAL_AVAILABLE = True
 except ImportError:
     HEXAGONAL_AVAILABLE = False
@@ -112,6 +113,7 @@ except ImportError:
     OptimizationManager = None  # v4.2: Fallback
     FilterResultHandler = None  # v4.3: Fallback
     AppInitializer = None  # v4.4: Fallback
+    DatasourceManager = None  # v4.5: Fallback
 
     def _init_hexagonal_services(config=None):
         """Fallback when hexagonal services unavailable."""
@@ -683,6 +685,22 @@ class FilterMateApp:
             logger.info("FilterMate: AppInitializer initialized (v4.4 migration)")
         else:
             self._app_initializer = None
+        
+        # v4.5: Initialize DatasourceManager (extracted from FilterMateApp datasource methods)
+        if HEXAGONAL_AVAILABLE and DatasourceManager:
+            self._datasource_manager = DatasourceManager(
+                get_project_callback=lambda: self.PROJECT,
+                get_iface_callback=lambda: self.iface,
+                get_config_data_callback=lambda: self.CONFIG_DATA,
+                set_config_data_callback=lambda cd: setattr(self, 'CONFIG_DATA', cd),
+                get_db_file_path_callback=lambda: self.db_file_path,
+                get_temp_schema_callback=lambda: self.app_postgresql_temp_schema,
+                show_error_callback=lambda msg: show_error(msg),
+                show_warning_callback=lambda msg: show_warning(msg)
+            )
+            logger.info("FilterMate: DatasourceManager initialized (v4.5 migration)")
+        else:
+            self._datasource_manager = None
         
         # Note: Do NOT call self.run() here - it will be called from filter_mate.py
         # when the user actually activates the plugin to avoid QGIS initialization race conditions
@@ -1424,9 +1442,21 @@ class FilterMateApp:
         """
         Get a Spatialite connection with proper error handling.
         
+        v4.5 DELEGATION: Uses DatasourceManager.get_spatialite_connection()
+        
         Returns:
             Connection object or None if connection fails
         """
+        # v4.5: Feature flag for DatasourceManager delegation
+        USE_DATASOURCE_MANAGER = False
+        
+        if USE_DATASOURCE_MANAGER and self._datasource_manager:
+            try:
+                return self._datasource_manager.get_spatialite_connection()
+            except Exception as e:
+                logger.error(f"DatasourceManager.get_spatialite_connection failed: {e}. Falling back to legacy.")
+        
+        # LEGACY: Original implementation (will be removed in Phase 4.6)
         if not os.path.exists(self.db_file_path):
             error_msg = f"Database file does not exist: {self.db_file_path}"
             logger.error(error_msg)
@@ -1501,6 +1531,10 @@ class FilterMateApp:
         self.PROJECT_LAYERS = {}
         self.project_datasources = {'postgresql': {}, 'spatialite': {}, 'ogr': {}}
         self.app_postgresql_temp_schema_setted = False
+        
+        # v4.5: Sync project_datasources with DatasourceManager
+        if self._datasource_manager:
+            self._datasource_manager.set_project_datasources(self.project_datasources)
         
         # Load favorites from new project
         if hasattr(self, 'favorites_manager'):
@@ -4422,7 +4456,23 @@ class FilterMateApp:
 
       
 
-    def create_spatial_index_for_layer(self, layer):    
+    def create_spatial_index_for_layer(self, layer):
+        """
+        Create spatial index for a layer.
+        
+        v4.5 DELEGATION: Uses DatasourceManager.create_spatial_index_for_layer()
+        """
+        # v4.5: Feature flag for DatasourceManager delegation
+        USE_DATASOURCE_MANAGER = False
+        
+        if USE_DATASOURCE_MANAGER and self._datasource_manager:
+            try:
+                self._datasource_manager.create_spatial_index_for_layer(layer)
+                return
+            except Exception as e:
+                logger.error(f"DatasourceManager.create_spatial_index_for_layer failed: {e}. Falling back to legacy.")
+        
+        # LEGACY: Original implementation (will be removed in Phase 4.6)
         # Guard invalid/missing-source layers
         if not is_layer_source_available(layer):
             logger.warning("create_spatial_index_for_layer: layer invalid or source missing; skipping.")
@@ -4483,9 +4533,22 @@ class FilterMateApp:
         """
         Add PostgreSQL datasource and create temp schema if needed.
         
+        v4.5 DELEGATION: Uses DatasourceManager.add_project_datasource()
+        
         Args:
             layer: PostgreSQL layer to get connection from
         """
+        # v4.5: Feature flag for DatasourceManager delegation
+        USE_DATASOURCE_MANAGER = False
+        
+        if USE_DATASOURCE_MANAGER and self._datasource_manager:
+            try:
+                self._datasource_manager.add_project_datasource(layer)
+                return
+            except Exception as e:
+                logger.error(f"DatasourceManager.add_project_datasource failed: {e}. Falling back to legacy.")
+        
+        # LEGACY: Original implementation (will be removed in Phase 4.6)
         connexion, source_uri = get_datasource_connexion_from_layer(layer)
         
         # CRITICAL FIX: Check if connexion is None (PostgreSQL unavailable or connection failed)
@@ -4721,11 +4784,25 @@ class FilterMateApp:
         return layer_info
     
     def _update_datasource_for_layer(self, layer_info):
-        """Update project datasources for a given layer.
+        """
+        Update project datasources for a given layer.
+        
+        v4.5 DELEGATION: Uses DatasourceManager.update_datasource_for_layer()
         
         Args:
             layer_info: Layer info dictionary
         """
+        # v4.5: Feature flag for DatasourceManager delegation
+        USE_DATASOURCE_MANAGER = False
+        
+        if USE_DATASOURCE_MANAGER and self._datasource_manager:
+            try:
+                self._datasource_manager.update_datasource_for_layer(layer_info)
+                return
+            except Exception as e:
+                logger.error(f"DatasourceManager.update_datasource_for_layer failed: {e}. Falling back to legacy.")
+        
+        # LEGACY: Original implementation (will be removed in Phase 4.6)
         layer_source_type = layer_info["layer_provider_type"]
         if layer_source_type not in self.project_datasources:
             self.project_datasources[layer_source_type] = {}
@@ -4758,11 +4835,25 @@ class FilterMateApp:
                 self.project_datasources[layer_source_type][absolute_path].append(full_uri)
     
     def _remove_datasource_for_layer(self, layer_info):
-        """Remove project datasources for a given layer.
+        """
+        Remove project datasources for a given layer.
+        
+        v4.5 DELEGATION: Uses DatasourceManager.remove_datasource_for_layer()
         
         Args:
             layer_info: Layer info dictionary
         """
+        # v4.5: Feature flag for DatasourceManager delegation
+        USE_DATASOURCE_MANAGER = False
+        
+        if USE_DATASOURCE_MANAGER and self._datasource_manager:
+            try:
+                self._datasource_manager.remove_datasource_for_layer(layer_info)
+                return
+            except Exception as e:
+                logger.error(f"DatasourceManager.remove_datasource_for_layer failed: {e}. Falling back to legacy.")
+        
+        # LEGACY: Original implementation (will be removed in Phase 4.6)
         layer_source_type = layer_info["layer_provider_type"]
         if layer_source_type not in self.project_datasources:
             self.project_datasources[layer_source_type] = {}
@@ -4991,6 +5082,25 @@ class FilterMateApp:
             logger.debug(f"Error validating PostgreSQL layers for orphaned MVs: {e}")
             
     def update_datasource(self):
+        """
+        Update CONFIG_DATA with active datasource connections.
+        
+        v4.5 DELEGATION: Uses DatasourceManager.update_datasource()
+        """
+        # v4.5: Feature flag for DatasourceManager delegation
+        USE_DATASOURCE_MANAGER = False
+        
+        if USE_DATASOURCE_MANAGER and self._datasource_manager:
+            try:
+                # Sync project_datasources from DatasourceManager
+                self.project_datasources = self._datasource_manager.get_project_datasources()
+                # Delegate to DatasourceManager
+                self._datasource_manager.update_datasource()
+                return
+            except Exception as e:
+                logger.error(f"DatasourceManager.update_datasource failed: {e}. Falling back to legacy.")
+        
+        # LEGACY: Original implementation (will be removed in Phase 4.6)
         # POSTGRESQL_AVAILABLE est maintenant importé au niveau du module
         ogr_driver_list = [ogr.GetDriver(i).GetDescription() for i in range(ogr.GetDriverCount())]
         ogr_driver_list.sort()
@@ -5054,7 +5164,27 @@ class FilterMateApp:
 
 
     def create_foreign_data_wrapper(self, project_datasource, datasource, format):
-
+        """
+        Create PostgreSQL foreign data wrapper for external datasource.
+        
+        v4.5 DELEGATION: Uses DatasourceManager.create_foreign_data_wrapper()
+        
+        Args:
+            project_datasource: Full path to datasource file
+            datasource: Basename of datasource (for server naming)
+            format: OGR format name (e.g., 'GPKG', 'ESRI Shapefile')
+        """
+        # v4.5: Feature flag for DatasourceManager delegation
+        USE_DATASOURCE_MANAGER = False
+        
+        if USE_DATASOURCE_MANAGER and self._datasource_manager:
+            try:
+                self._datasource_manager.create_foreign_data_wrapper(project_datasource, datasource, format)
+                return
+            except Exception as e:
+                logger.error(f"DatasourceManager.create_foreign_data_wrapper failed: {e}. Falling back to legacy.")
+        
+        # LEGACY: Original implementation (will be removed in Phase 4.6)
         sql_request = """CREATE EXTENSION IF NOT EXISTS ogr_fdw;
                         CREATE SCHEMA IF NOT EXISTS filter_mate_temp AUTHORIZATION postgres; 
                         DROP SERVER IF exists server_{datasource_name}  CASCADE;
