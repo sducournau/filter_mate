@@ -187,15 +187,15 @@ Gestion des features et zoom.
 
 ## 📊 Projections
 
-| Phase                  | Lignes Avant | Lignes Après | Réduction        |
-| ---------------------- | ------------ | ------------ | ---------------- |
-| État initial           | 13,108       | -            | -                |
-| Session initiale       | 13,108       | 12,248       | -860 (-6.6%)     |
-| Sprint 1 ✅             | 12,248       | 11,633       | -615 (-5.0%)     |
-| Sprint 2 ✅             | 11,633       | 10,305       | -1,328 (-11.4%)  |
-| Sprint 3 ✅             | 10,305       | 11,309       | +1,004 (temp)    |
-| Sprint 4 ✅             | 11,309       | 11,364       | +55 (temp)       |
-| Sprint 5 (à venir)     | 11,364       | ~2,000       | -9,364 (-82.4%)  |
+| Phase              | Lignes Avant | Lignes Après | Réduction       |
+| ------------------ | ------------ | ------------ | --------------- |
+| État initial       | 13,108       | -            | -               |
+| Session initiale   | 13,108       | 12,248       | -860 (-6.6%)    |
+| Sprint 1 ✅        | 12,248       | 11,633       | -615 (-5.0%)    |
+| Sprint 2 ✅        | 11,633       | 10,305       | -1,328 (-11.4%) |
+| Sprint 3 ✅        | 10,305       | 11,309       | +1,004 (temp)   |
+| Sprint 4 ✅        | 11,309       | 11,364       | +55 (temp)      |
+| Sprint 5 (à venir) | 11,364       | ~2,000       | -9,364 (-82.4%) |
 
 **Note**: Sprints 3-4 ont ajouté des wrappers temporaires (+1,059 lignes) pour permettre la délégation progressive. Le Sprint 5 supprimera tous les fallbacks pour atteindre l'objectif <2,000 lignes.
 
