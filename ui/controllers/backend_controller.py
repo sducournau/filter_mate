@@ -298,25 +298,178 @@ class BackendController(BaseController):
 
     def auto_select_optimal_backends(self) -> int:
         """
-        Auto-select optimal backend for each layer.
+        Auto-select optimal backend for each layer based on characteristics.
+        
+        v4.0 Sprint 1: Full implementation migrated from dockwidget.
+        
+        Analyzes each layer's characteristics and sets the most appropriate backend:
+        - PostgreSQL for large server-side datasets
+        - Spatialite for SQLite/GeoPackage with > 5000 features
+        - OGR for small datasets and file-based formats
 
         Returns:
-            Number of layers updated
+            Number of layers optimized
         """
         from qgis.core import QgsProject
 
         project = QgsProject.instance()
         layers = project.mapLayers().values()
         
-        count = 0
+        optimized_count = 0
+        skipped_count = 0
+        backend_stats = {'postgresql': 0, 'spatialite': 0, 'ogr': 0, 'auto': 0}
+        
+        logger.info("=" * 60)
+        logger.info("AUTO-SELECTING OPTIMAL BACKENDS FOR ALL LAYERS")
+        logger.info("=" * 60)
+        
         for layer in layers:
-            if isinstance(layer, QgsVectorLayer) and layer.isValid():
-                # Remove forced backend, let auto-detection work
-                self.set_forced_backend(layer.id(), None)
-                count += 1
-
-        logger.info(f"Set auto-backend for {count} layers")
-        return count
+            # Skip non-vector layers
+            if not isinstance(layer, QgsVectorLayer):
+                continue
+            
+            if not layer.isValid():
+                skipped_count += 1
+                continue
+            
+            layer_name = layer.name()
+            logger.info(f"\nAnalyzing layer: {layer_name}")
+            
+            # Get optimal backend for this layer
+            optimal_backend = self._get_optimal_backend_for_layer(layer)
+            
+            if optimal_backend:
+                # Verify backend supports layer
+                if self._verify_backend_supports_layer(layer, optimal_backend):
+                    self.set_forced_backend(layer.id(), optimal_backend)
+                    backend_stats[optimal_backend] += 1
+                    optimized_count += 1
+                    logger.info(f"  ✓ Set backend to: {optimal_backend.upper()}")
+                else:
+                    backend_stats['auto'] += 1
+                    logger.info(f"  ⚠ Backend {optimal_backend.upper()} not compatible - using auto")
+            else:
+                backend_stats['auto'] += 1
+                logger.info(f"  → Using auto-selection")
+        
+        logger.info("\n" + "=" * 60)
+        logger.info("AUTO-SELECTION COMPLETE")
+        logger.info(f"Optimized: {optimized_count} layers")
+        logger.info(f"Skipped: {skipped_count} invalid layers")
+        logger.info(f"Backend distribution:")
+        for backend, count in backend_stats.items():
+            if count > 0:
+                logger.info(f"  - {backend.upper()}: {count} layer(s)")
+        logger.info("=" * 60)
+        
+        # Emit signal with summary
+        self.backend_changed.emit(f"Optimized {optimized_count} layers")
+        
+        return optimized_count
+    
+    def _get_optimal_backend_for_layer(self, layer: QgsVectorLayer) -> Optional[str]:
+        """
+        Determine optimal backend for a layer based on characteristics.
+        
+        Args:
+            layer: QgsVectorLayer instance
+            
+        Returns:
+            Optimal backend ('postgresql', 'spatialite', 'ogr') or None for auto
+        """
+        try:
+            from modules.appUtils import detect_layer_provider_type, POSTGRESQL_AVAILABLE
+            from adapters.backends.factory import should_use_memory_optimization
+        except ImportError:
+            # Fallback imports for different package structures
+            try:
+                from ...modules.appUtils import detect_layer_provider_type, POSTGRESQL_AVAILABLE
+                from ...adapters.backends.factory import should_use_memory_optimization
+            except ImportError:
+                logger.warning("Could not import backend detection functions")
+                return None
+        
+        if not layer or not layer.isValid():
+            return None
+        
+        provider_type = detect_layer_provider_type(layer)
+        feature_count = layer.featureCount()
+        source = layer.source().lower()
+        
+        logger.debug(f"  Provider: {provider_type}, Features: {feature_count:,}")
+        logger.debug(f"  PostgreSQL available: {POSTGRESQL_AVAILABLE}")
+        
+        # PostgreSQL layers
+        if provider_type == 'postgresql':
+            if not POSTGRESQL_AVAILABLE:
+                logger.debug(f"  → PostgreSQL unavailable - OGR fallback")
+                return 'ogr'
+            
+            if should_use_memory_optimization(layer, provider_type):
+                logger.debug(f"  → Small PostgreSQL ({feature_count}) - OGR memory optimization")
+                return 'ogr'
+            
+            logger.debug(f"  → Large PostgreSQL ({feature_count}) - PostgreSQL optimal")
+            return 'postgresql'
+        
+        # SQLite/Spatialite layers
+        elif provider_type == 'spatialite':
+            if feature_count > 5000:
+                logger.debug(f"  → SQLite ({feature_count}) - Spatialite R-tree optimal")
+                return 'spatialite'
+            else:
+                logger.debug(f"  → Small SQLite ({feature_count}) - OGR sufficient")
+                return 'ogr'
+        
+        # OGR layers
+        elif provider_type == 'ogr':
+            if 'gpkg' in source or 'sqlite' in source:
+                if feature_count > 5000:
+                    logger.debug(f"  → GeoPackage ({feature_count}) - Spatialite optimal")
+                    return 'spatialite'
+                else:
+                    logger.debug(f"  → Small GeoPackage ({feature_count}) - OGR sufficient")
+                    return 'ogr'
+            
+            logger.debug(f"  → OGR format ({feature_count}) - OGR sufficient")
+            return 'ogr'
+        
+        logger.debug(f"  → Unknown provider '{provider_type}' - auto-selection")
+        return None
+    
+    def _verify_backend_supports_layer(self, layer: QgsVectorLayer, backend: str) -> bool:
+        """
+        Verify that a backend can actually process the layer.
+        
+        Args:
+            layer: Layer to check
+            backend: Backend type to verify
+            
+        Returns:
+            True if backend supports this layer
+        """
+        try:
+            from modules.appUtils import detect_layer_provider_type, POSTGRESQL_AVAILABLE
+        except ImportError:
+            try:
+                from ...modules.appUtils import detect_layer_provider_type, POSTGRESQL_AVAILABLE
+            except ImportError:
+                return True  # Assume compatible if can't check
+        
+        provider_type = detect_layer_provider_type(layer)
+        
+        if backend == 'postgresql':
+            # PostgreSQL backend only for PostgreSQL layers
+            return provider_type == 'postgresql' and POSTGRESQL_AVAILABLE
+        elif backend == 'spatialite':
+            # Spatialite works with SQLite and GeoPackage
+            source = layer.source().lower()
+            return provider_type == 'spatialite' or 'gpkg' in source or 'sqlite' in source
+        elif backend == 'ogr':
+            # OGR is universal fallback
+            return True
+        
+        return False
 
     def handle_indicator_clicked(self) -> None:
         """

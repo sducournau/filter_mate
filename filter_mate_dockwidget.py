@@ -3055,85 +3055,52 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Automatically select optimal backend for all layers in the project.
         
+        v4.0 Sprint 1: Delegated to BackendController.
+        
         Analyzes each layer's characteristics and sets the most appropriate backend.
         Shows summary message with results.
         """
-        from qgis.core import QgsProject
+        # v4.0: Delegate to BackendController if available
+        if self._controller_integration and self._controller_integration.backend_controller:
+            try:
+                optimized_count = self._controller_integration.backend_controller.auto_select_optimal_backends()
+                
+                # Show summary message
+                if optimized_count > 0:
+                    show_success("FilterMate", f"Optimized {optimized_count} layer(s)")
+                else:
+                    show_info("FilterMate", "All layers using auto-selection")
+                
+                # Update indicator for current layer
+                if self.current_layer:
+                    _, _, layer_props = self._validate_and_prepare_layer(self.current_layer)
+                    self._synchronize_layer_widgets(self.current_layer, layer_props)
+                return
+            except Exception as e:
+                logger.warning(f"auto_select_optimal_backends delegation failed: {e}, using fallback")
+        
+        # Fallback: minimal implementation
+        from qgis.core import QgsProject, QgsVectorLayer
         
         if not hasattr(self, 'PROJECT_LAYERS') or not self.PROJECT_LAYERS:
             show_warning("FilterMate", "No layers loaded in project")
             return
         
-        logger.info("=" * 60)
-        logger.info("AUTO-SELECTING OPTIMAL BACKENDS FOR ALL LAYERS")
-        logger.info("=" * 60)
-        
-        optimized_count = 0
-        skipped_count = 0
-        backend_stats = {'postgresql': 0, 'spatialite': 0, 'ogr': 0, 'auto': 0}
-        
         project = QgsProject.instance()
         layers = project.mapLayers().values()
         
-        from qgis.core import QgsVectorLayer
-        
+        count = 0
         for layer in layers:
-            # Skip non-vector layers (raster, mesh, etc.)
-            if not isinstance(layer, QgsVectorLayer):
-                continue
-            
-            if not layer.isValid():
-                skipped_count += 1
-                continue
-            
-            layer_name = layer.name()
-            logger.info(f"\nAnalyzing layer: {layer_name}")
-            
-            # Get optimal backend for THIS SPECIFIC LAYER
-            optimal_backend = self._get_optimal_backend_for_layer(layer)
-            
-            if optimal_backend:
-                # Verify that the optimal backend actually supports this layer
-                if self._verify_backend_supports_layer(layer, optimal_backend):
-                    # Set forced backend
-                    self._set_forced_backend(layer.id(), optimal_backend)
-                    backend_stats[optimal_backend] += 1
-                    optimized_count += 1
-                    logger.info(f"  ✓ Set backend to: {optimal_backend.upper()}")
-                else:
-                    # Backend not compatible - keep auto
-                    backend_stats['auto'] += 1
-                    logger.info(f"  ⚠ Optimal backend {optimal_backend.upper()} not compatible - keeping auto-selection")
-            else:
-                # Keep auto-selection
-                backend_stats['auto'] += 1
-                logger.info(f"  → Keeping auto-selection")
+            if isinstance(layer, QgsVectorLayer) and layer.isValid():
+                optimal = self._get_optimal_backend_for_layer(layer)
+                if optimal and self._verify_backend_supports_layer(layer, optimal):
+                    self._set_forced_backend(layer.id(), optimal)
+                    count += 1
         
-        logger.info("\n" + "=" * 60)
-        logger.info("AUTO-SELECTION COMPLETE")
-        logger.info(f"Optimized: {optimized_count} layers")
-        logger.info(f"Skipped: {skipped_count} invalid layers")
-        logger.info(f"Backend distribution:")
-        for backend, count in backend_stats.items():
-            if count > 0:
-                logger.info(f"  - {backend.upper()}: {count} layer(s)")
-        logger.info("=" * 60)
-        
-        # Show summary message
-        if optimized_count > 0:
-            summary = f"Optimized {optimized_count} layer(s): "
-            summary += ", ".join([f"{count} {backend.upper()}" for backend, count in backend_stats.items() if count > 0 and backend != 'auto'])
-            show_success("FilterMate", summary)
+        if count > 0:
+            show_success("FilterMate", f"Optimized {count} layer(s)")
         else:
             show_info("FilterMate", "All layers using auto-selection")
-        
-        # Update indicator for current layer
-        if self.current_layer:
-            # Get layer properties to pass to synchronization
-            _, _, layer_props = self._validate_and_prepare_layer(self.current_layer)
-            self._synchronize_layer_widgets(self.current_layer, layer_props)
-        
-        # The label will be added to frame_actions layout in _create_horizontal_action_bar_layout
 
     def _setup_action_bar_layout(self):
         """
@@ -10491,107 +10458,46 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Update buffer spinbox validation based on source layer geometry type.
         
+        v4.0 Sprint 1: Delegated to PropertyController.
+        
         Negative buffers (erosion) only work on polygon/multipolygon geometries.
         For point and line geometries, the minimum value is set to 0 to prevent
         negative buffer input.
-        
-        This method checks the current source layer (from exploring widgets) and
-        adjusts the spinbox minimum value accordingly.
         """
+        # v4.0: Delegate to PropertyController if available
+        if self._controller_integration and self._controller_integration.property_controller:
+            try:
+                self._controller_integration.delegate_update_buffer_validation()
+                return
+            except Exception as e:
+                logger.debug(f"_update_buffer_validation delegation failed: {e}, using fallback")
+        
+        # Fallback for when controller is not available
         from qgis.core import QgsWkbTypes
         
         spinbox = self.mQgsDoubleSpinBox_filtering_buffer_value
-        
-        # Get source layer from exploring widgets
-        source_layer = None
-        features = []
-        
-        try:
-            if self.current_layer is not None and self.widgets_initialized:
-                features, _ = self.get_current_features()
-                
-                # Source layer is the current layer in exploring mode
-                source_layer = self.current_layer
-        except Exception as e:
-            logger.debug(f"_update_buffer_validation: Could not get source layer: {e}")
+        if spinbox is None:
+            return
         
         # Default: allow negative buffers (for polygons)
         min_value = -1000000.0
         tooltip = self.tr("Buffer value in meters (positive=expand, negative=shrink polygons)")
         
-        if source_layer is not None:
+        if self.current_layer is not None:
             try:
-                geom_type = source_layer.geometryType()
+                geom_type = self.current_layer.geometryType()
                 
-                # Check if geometry is polygon/multipolygon
-                is_polygon = geom_type == QgsWkbTypes.PolygonGeometry
-                
-                # v2.8.9: Check if centroids are enabled for source layer
-                # When using centroids, the source layer becomes points, so negative buffer not allowed
-                use_centroids_source = False
-                if hasattr(self, 'checkBox_filtering_use_centroids_source_layer'):
-                    use_centroids_source = self.checkBox_filtering_use_centroids_source_layer.isChecked()
-                
-                if use_centroids_source:
-                    # Centroids enabled: source layer is effectively points, no negative buffer
+                if geom_type == QgsWkbTypes.PointGeometry:
                     min_value = 0.0
-                    tooltip = self.tr(
-                        "Buffer value in meters (positive only when centroids are enabled. "
-                        "Negative buffers cannot be applied to points)"
-                    )
-                    
-                    # If current value is negative, reset to 0
-                    current_value = spinbox.value()
-                    if current_value < 0:
-                        logger.info(f"Resetting negative buffer to 0: centroids enabled for source layer")
-                        spinbox.setValue(0.0)
-                        
-                        # Update PROJECT_LAYERS if layer exists
-                        if hasattr(self, 'current_layer') and self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
-                            self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value"] = 0.0
-                    
-                    logger.debug(f"Buffer validation: Centroids enabled, negative buffers disabled")
-                elif not is_polygon:
-                    # Point or Line geometry: disable negative buffers
+                    tooltip = self.tr("Buffer value in meters (points require positive buffer)")
+                elif geom_type == QgsWkbTypes.LineGeometry:
                     min_value = 0.0
-                    
-                    # Get geometry type name for tooltip
-                    if geom_type == QgsWkbTypes.PointGeometry:
-                        geom_name = self.tr("point")
-                    elif geom_type == QgsWkbTypes.LineGeometry:
-                        geom_name = self.tr("line")
-                    else:
-                        geom_name = self.tr("non-polygon")
-                    
-                    tooltip = self.tr(
-                        f"Buffer value in meters (positive only for {geom_name} layers. "
-                        f"Negative buffers only work on polygon layers)"
-                    )
-                    
-                    # If current value is negative, reset to 0
-                    current_value = spinbox.value()
-                    if current_value < 0:
-                        logger.info(f"Resetting negative buffer to 0 for {geom_name} layer: {source_layer.name()}")
-                        spinbox.setValue(0.0)
-                        
-                        # Update PROJECT_LAYERS if layer exists
-                        if hasattr(self, 'current_layer') and self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
-                            self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value"] = 0.0
-                    
-                    logger.debug(f"Buffer validation: {geom_name} geometry detected, minimum set to 0")
-                else:
-                    logger.debug(f"Buffer validation: Polygon geometry detected, negative buffers allowed")
-                    
+                    tooltip = self.tr("Buffer value in meters (lines require positive buffer)")
             except Exception as e:
-                logger.warning(f"_update_buffer_validation: Error checking geometry type: {e}")
+                logger.debug(f"_update_buffer_validation fallback: Error: {e}")
         
-        # Apply validation
         spinbox.setMinimum(min_value)
-        
-        # Update tooltip (unless it's already in orange/negative mode)
-        current_value = spinbox.value()
-        if current_value is None or current_value >= 0:
-            spinbox.setToolTip(tooltip)
+        spinbox.setToolTip(tooltip)
 
     def set_exporting_properties(self):
 

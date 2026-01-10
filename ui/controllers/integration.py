@@ -25,6 +25,7 @@ from .backend_controller import BackendController
 from .layer_sync_controller import LayerSyncController
 from .config_controller import ConfigController
 from .favorites_controller import FavoritesController
+from .property_controller import PropertyController
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
@@ -82,6 +83,7 @@ class ControllerIntegration:
         self._layer_sync_controller: Optional[LayerSyncController] = None
         self._config_controller: Optional[ConfigController] = None
         self._favorites_controller: Optional[FavoritesController] = None
+        self._property_controller: Optional[PropertyController] = None
         
         # Connection tracking
         self._connections: list = []
@@ -131,6 +133,11 @@ class ControllerIntegration:
     def favorites_controller(self) -> Optional[FavoritesController]:
         """Get the favorites controller."""
         return self._favorites_controller
+
+    @property
+    def property_controller(self) -> Optional[PropertyController]:
+        """Get the property controller."""
+        return self._property_controller
     
     def setup(self) -> bool:
         """
@@ -197,6 +204,7 @@ class ControllerIntegration:
             self._layer_sync_controller = None
             self._config_controller = None
             self._favorites_controller = None
+            self._property_controller = None
             self._registry = None
             self._is_setup = False
             
@@ -248,6 +256,12 @@ class ControllerIntegration:
         # v4.0: Create FavoritesController
         self._favorites_controller = FavoritesController(
             dockwidget=self._dockwidget
+        )
+        
+        # v4.0 Sprint 1: Create PropertyController
+        self._property_controller = PropertyController(
+            dockwidget=self._dockwidget,
+            signal_manager=self._signal_manager
         )
         
         logger.debug("All controllers created")
@@ -303,6 +317,13 @@ class ControllerIntegration:
             'favorites',
             self._favorites_controller,
             tab_index=TabIndex.FILTERING  # Favorites indicator visible on filtering tabs
+        )
+        
+        # v4.0 Sprint 1: Register PropertyController
+        self._registry.register(
+            'property',
+            self._property_controller,
+            tab_index=TabIndex.FILTERING  # Property controller active on filtering tab
         )
         
         logger.debug("All controllers registered")
@@ -1207,6 +1228,42 @@ class ControllerIntegration:
                 return True
             except Exception as e:
                 logger.warning(f"delegate_set_filtering_in_progress failed: {e}")
+                return False
+        return False
+    
+    def delegate_update_buffer_validation(self) -> bool:
+        """
+        Delegate buffer validation to property controller.
+        
+        v4.0 Sprint 1: Migrated from dockwidget._update_buffer_validation.
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._property_controller:
+            try:
+                self._property_controller.update_buffer_validation()
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_update_buffer_validation failed: {e}")
+                return False
+        return False
+    
+    def delegate_auto_select_optimal_backends(self) -> bool:
+        """
+        Delegate auto-select optimal backends to backend controller.
+        
+        v4.0 Sprint 1: Migrated from dockwidget.auto_select_optimal_backends.
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._backend_controller:
+            try:
+                self._backend_controller.auto_select_optimal_backends()
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_auto_select_optimal_backends failed: {e}")
                 return False
         return False
     

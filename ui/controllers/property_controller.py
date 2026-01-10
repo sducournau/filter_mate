@@ -748,9 +748,14 @@ class PropertyController(BaseController):
         """
         Update buffer spinbox validation based on source layer geometry.
         
-        Negative buffers only work on polygons. For points/lines,
-        minimum is set to 0.
+        Negative buffers (erosion) only work on polygon/multipolygon geometries.
+        For point and line geometries, the minimum value is set to 0 to prevent
+        negative buffer input.
+        
+        Also checks if centroids are enabled (which converts source to points).
         """
+        from qgis.core import QgsWkbTypes
+        
         dw = self.dockwidget
         spinbox = getattr(dw, 'mQgsDoubleSpinBox_filtering_buffer_value', None)
         
@@ -765,21 +770,89 @@ class PropertyController(BaseController):
         
         if current_layer is not None:
             try:
-                from qgis.core import QgsWkbTypes
-                
                 geom_type = current_layer.geometryType()
                 
-                if geom_type == QgsWkbTypes.PointGeometry:
+                # Check if geometry is polygon/multipolygon
+                is_polygon = geom_type == QgsWkbTypes.PolygonGeometry
+                
+                # Check if centroids are enabled for source layer
+                # When using centroids, the source layer becomes points
+                use_centroids_source = False
+                centroids_checkbox = getattr(dw, 'checkBox_filtering_use_centroids_source_layer', None)
+                if centroids_checkbox:
+                    use_centroids_source = centroids_checkbox.isChecked()
+                
+                if use_centroids_source:
+                    # Centroids enabled: source layer is effectively points
                     min_value = 0.0
-                    tooltip = "Buffer value in meters (points require positive buffer)"
-                elif geom_type == QgsWkbTypes.LineGeometry:
+                    tooltip = (
+                        "Buffer value in meters (positive only when centroids are enabled. "
+                        "Negative buffers cannot be applied to points)"
+                    )
+                    
+                    # Reset negative value to 0
+                    current_value = spinbox.value()
+                    if current_value < 0:
+                        logger.info("Resetting negative buffer to 0: centroids enabled for source layer")
+                        spinbox.setValue(0.0)
+                        self._update_project_layers_buffer(dw, current_layer, 0.0)
+                    
+                    logger.debug("Buffer validation: Centroids enabled, negative buffers disabled")
+                    
+                elif not is_polygon:
+                    # Point or Line geometry: disable negative buffers
                     min_value = 0.0
-                    tooltip = "Buffer value in meters (lines require positive buffer)"
-                # Polygon geometry allows negative buffers
+                    
+                    # Get geometry type name for tooltip
+                    if geom_type == QgsWkbTypes.PointGeometry:
+                        geom_name = "point"
+                    elif geom_type == QgsWkbTypes.LineGeometry:
+                        geom_name = "line"
+                    else:
+                        geom_name = "non-polygon"
+                    
+                    tooltip = (
+                        f"Buffer value in meters (positive only for {geom_name} layers. "
+                        f"Negative buffers only work on polygon layers)"
+                    )
+                    
+                    # Reset negative value to 0
+                    current_value = spinbox.value()
+                    if current_value < 0:
+                        logger.info(f"Resetting negative buffer to 0 for {geom_name} layer: {current_layer.name()}")
+                        spinbox.setValue(0.0)
+                        self._update_project_layers_buffer(dw, current_layer, 0.0)
+                    
+                    logger.debug(f"Buffer validation: {geom_name} geometry, minimum set to 0")
+                else:
+                    logger.debug("Buffer validation: Polygon geometry, negative buffers allowed")
                 
             except Exception as e:
-                logger.debug(f"Could not determine geometry type: {e}")
+                logger.warning(f"update_buffer_validation: Error checking geometry type: {e}")
         
+        # Apply validation
         spinbox.setMinimum(min_value)
-        if hasattr(dw, 'tr'):
-            spinbox.setToolTip(dw.tr(tooltip))
+        
+        # Update tooltip (unless it's already in orange/negative mode)
+        current_value = spinbox.value()
+        if current_value is None or current_value >= 0:
+            if hasattr(dw, 'tr'):
+                spinbox.setToolTip(dw.tr(tooltip))
+            else:
+                spinbox.setToolTip(tooltip)
+    
+    def _update_project_layers_buffer(self, dw, layer, value: float) -> None:
+        """
+        Update buffer value in PROJECT_LAYERS dictionary.
+        
+        Args:
+            dw: Dockwidget reference
+            layer: Current layer
+            value: New buffer value
+        """
+        project_layers = getattr(dw, 'PROJECT_LAYERS', None)
+        if project_layers and layer and layer.id() in project_layers:
+            try:
+                project_layers[layer.id()]["filtering"]["buffer_value"] = value
+            except (KeyError, TypeError):
+                pass  # Structure not as expected
