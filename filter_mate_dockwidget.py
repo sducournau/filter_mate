@@ -5143,36 +5143,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def force_reconnect_exploring_signals(self):
         """
-        Force reconnection of EXPLORING widget signals, bypassing the cache.
-        
-        v3.0.11: CRITICAL FIX for "exploring widgets don't reload on layer change after filter" bug.
-        
-        The signal connection cache (_signal_connection_states) can become desynchronized
-        with the actual signal state during filtering. This method bypasses the cache and 
-        forces direct reconnection of EXPLORING signals.
-        
-        This ensures that after a filter operation:
-        - Single selection features picker responds to featureChanged
-        - Multiple selection widget responds to updatingCheckedItemList/filteringCheckedItemList
-        - Expression widgets respond to fieldChanged
-        - Identify and Zoom buttons respond to clicked
-        
-        Called after filter/unfilter/reset operations complete to ensure widgets work.
-        
-        Notes:
-            - Clears EXPLORING signal cache entries before reconnecting
-            - Uses changeSignalState directly for actual signal state check
-            - Safe to call multiple times (idempotent)
-            - Logs reconnection status for debugging
+        v3.1 Sprint 10: Simplified - force reconnect EXPLORING signals bypassing cache.
         """
-        logger.info("v3.0.11: Force reconnecting EXPLORING signals (bypassing cache)")
-        
         if 'EXPLORING' not in self.widgets:
-            logger.warning("v3.0.11: EXPLORING widget group not found")
             return
         
-        # Define which widgets and their expected signals need reconnection
-        exploring_widgets_signals = {
+        widgets_signals = {
             'SINGLE_SELECTION_FEATURES': ['featureChanged'],
             'SINGLE_SELECTION_EXPRESSION': ['fieldChanged'],
             'MULTIPLE_SELECTION_FEATURES': ['updatingCheckedItemList', 'filteringCheckedItemList'],
@@ -5186,52 +5162,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             'RESET_ALL_LAYER_PROPERTIES': ['clicked'],
         }
         
-        reconnected_count = 0
-        
-        for widget_name, expected_signals in exploring_widgets_signals.items():
+        for widget_name, expected_signals in widgets_signals.items():
             if widget_name not in self.widgets['EXPLORING']:
                 continue
-                
             widget_obj = self.widgets['EXPLORING'][widget_name]
             
             for signal_tuple in widget_obj.get("SIGNALS", []):
                 if signal_tuple[-1] is None:
-                    continue  # Skip signals with no handler
-                    
-                signal_name = signal_tuple[0]
-                handler = signal_tuple[-1]
-                
-                # Only reconnect expected signals for this widget
+                    continue
+                signal_name, handler = signal_tuple[0], signal_tuple[-1]
                 if signal_name not in expected_signals:
                     continue
                 
-                # Clear cache entry to force re-evaluation
                 cache_key = f"EXPLORING.{widget_name}.{signal_name}"
-                if cache_key in self._signal_connection_states:
-                    del self._signal_connection_states[cache_key]
+                self._signal_connection_states.pop(cache_key, None)
                 
                 try:
-                    # Use changeSignalState which checks actual signal state
-                    state = self.changeSignalState(
-                        ['EXPLORING', widget_name],
-                        signal_name,
-                        handler,
-                        'connect'
-                    )
-                    
-                    # Update cache with actual state
+                    state = self.changeSignalState(['EXPLORING', widget_name], signal_name, handler, 'connect')
                     self._signal_connection_states[cache_key] = state
-                    
-                    if state is True:
-                        reconnected_count += 1
-                        logger.debug(f"v3.0.11: ✅ {widget_name}.{signal_name} connected")
-                    else:
-                        logger.warning(f"v3.0.11: ⚠️ {widget_name}.{signal_name} state={state}")
-                        
-                except (AttributeError, RuntimeError, TypeError, SignalStateChangeError) as e:
-                    logger.error(f"v3.0.11: ❌ Failed to reconnect {widget_name}.{signal_name}: {e}")
-        
-        logger.info(f"v3.0.11: Reconnected {reconnected_count} EXPLORING signals")
+                except (AttributeError, RuntimeError, TypeError, SignalStateChangeError):
+                    pass
 
     def manage_interactions(self):
         """
@@ -5461,134 +5411,61 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._updating_groupbox = False
 
     def _on_groupbox_clicked(self, groupbox, state):
-        """
-        Handle toggled signal from exploring groupbox checkbox.
-        
-        This method is called when the user clicks on the checkbox of a groupbox.
-        The 'state' parameter indicates whether the checkbox is now checked (True)
-        or unchecked (False).
-        
-        For exclusive behavior:
-        - If state=True: This groupbox was checked, make it the active one
-        - If state=False: User tried to uncheck, but we need at least one active.
-          Check if any other groupbox is checked; if not, force this one to stay checked.
-        
-        Args:
-            groupbox (str): The groupbox identifier ('single_selection', 'multiple_selection', or 'custom_selection')
-            state (bool): True if the checkbox was checked, False if unchecked
-        """
-        # Prevent recursive calls
-        if self._updating_groupbox:
+        """v3.1 Sprint 10: Simplified - handle groupbox checkbox toggle for exclusive behavior."""
+        if self._updating_groupbox or not self.widgets_initialized:
             return
         
-        # SAFETY: Don't process if widgets not initialized or if we're in an invalid state
-        # This prevents access violations during cleanup when layers are being destroyed
-        if not self.widgets_initialized or not hasattr(self, 'widgets'):
-            logger.debug(f"_on_groupbox_clicked ignored: widgets not ready")
+        if state:
+            self.exploring_groupbox_changed(groupbox)
             return
         
-        logger.debug(f"_on_groupbox_clicked called: groupbox={groupbox}, state={state}, widgets_initialized={self.widgets_initialized}")
+        # User unchecked - ensure at least one remains checked
+        try:
+            gbs = {
+                "single_selection": self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"],
+                "multiple_selection": self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"],
+                "custom_selection": self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"],
+            }
+        except (KeyError, AttributeError):
+            return
         
-        if self.widgets_initialized is True:
-            if state:
-                # User checked this groupbox - make it the active one
-                self.exploring_groupbox_changed(groupbox)
-            else:
-                # User unchecked this groupbox - check if any other is checked
-                # SAFETY: Verify widgets exist before accessing them
-                try:
-                    single_gb = self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"]
-                    multiple_gb = self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"]
-                    custom_gb = self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"]
-                except (KeyError, AttributeError) as e:
-                    logger.debug(f"Groupbox widgets not accessible: {e}")
-                    return
-                
-                # Check if at least one other groupbox is checked
-                other_checked = False
-                if groupbox == "single_selection":
-                    other_checked = multiple_gb.isChecked() or custom_gb.isChecked()
-                elif groupbox == "multiple_selection":
-                    other_checked = single_gb.isChecked() or custom_gb.isChecked()
-                elif groupbox == "custom_selection":
-                    other_checked = single_gb.isChecked() or multiple_gb.isChecked()
-                
-                if not other_checked:
-                    # No other groupbox is checked - force this one to stay checked
-                    # Block signal to avoid recursive call
-                    triggering_widget = None
-                    if groupbox == "single_selection":
-                        triggering_widget = single_gb
-                    elif groupbox == "multiple_selection":
-                        triggering_widget = multiple_gb
-                    elif groupbox == "custom_selection":
-                        triggering_widget = custom_gb
-                    
-                    if triggering_widget:
-                        triggering_widget.blockSignals(True)
-                        triggering_widget.setChecked(True)
-                        triggering_widget.setCollapsed(False)
-                        triggering_widget.blockSignals(False)
-                else:
-                    # Another groupbox is checked - find which one and activate it
-                    if single_gb.isChecked():
-                        self.exploring_groupbox_changed("single_selection")
-                    elif multiple_gb.isChecked():
-                        self.exploring_groupbox_changed("multiple_selection")
-                    elif custom_gb.isChecked():
-                        self.exploring_groupbox_changed("custom_selection")
+        # Check if any other is checked
+        other_checked = any(gbs[k].isChecked() for k in gbs if k != groupbox)
+        
+        if not other_checked:
+            # Force this one to stay checked
+            gbs[groupbox].blockSignals(True)
+            gbs[groupbox].setChecked(True)
+            gbs[groupbox].setCollapsed(False)
+            gbs[groupbox].blockSignals(False)
+        else:
+            # Activate the checked one
+            for name, gb in gbs.items():
+                if gb.isChecked():
+                    self.exploring_groupbox_changed(name)
+                    break
 
     def _on_groupbox_collapse_changed(self, groupbox, collapsed):
-        """
-        Handle collapsedStateChanged signal from exploring groupboxes.
-        
-        When a groupbox is EXPANDED (collapsed=False via arrow click),
-        force exclusive behavior to make it the active one.
-        When a groupbox is COLLAPSED, do nothing to avoid conflicts.
-        
-        Args:
-            groupbox (str): The groupbox identifier ('single_selection', 'multiple_selection', or 'custom_selection')
-            collapsed (bool): True if the groupbox was collapsed, False if expanded
-        """
-        # Prevent recursive calls - if we're already updating groupboxes, ignore this signal
-        if self._updating_groupbox:
+        """v3.1 Sprint 10: Handle groupbox expand - make it the active one."""
+        if self._updating_groupbox or not self.widgets_initialized or collapsed:
             return
-        
-        logger.debug(f"_on_groupbox_collapse_changed called: groupbox={groupbox}, collapsed={collapsed}, widgets_initialized={self.widgets_initialized}")
-        
-        if self.widgets_initialized is True:
-            # Only react when a groupbox is EXPANDED (user clicked arrow to open it)
-            if not collapsed:
-                # Force this groupbox to be the exclusive active one
-                self.exploring_groupbox_changed(groupbox)
+        self.exploring_groupbox_changed(groupbox)
 
     def exploring_groupbox_init(self):
 
-        if self.widgets_initialized is True:
-            self.properties_group_state_enabler(self.layer_properties_tuples_dict["selection_expression"]) 
-
-            exploring_groupbox = "single_selection"  # Default
-            
-            # Try to restore from PROJECT_LAYERS if current_layer exists
-            if self.current_layer is not None and self.current_layer.id() in self.PROJECT_LAYERS:
-                layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-                if "current_exploring_groupbox" in layer_props.get("exploring", {}):
-                    saved_groupbox = layer_props["exploring"]["current_exploring_groupbox"]
-                    if saved_groupbox:
-                        exploring_groupbox = saved_groupbox
-            
-            # Fallback: detect from UI state
-            if not exploring_groupbox or exploring_groupbox == "single_selection":
-                if self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].isCollapsed() is False:
-                    exploring_groupbox = "single_selection"
-
-                elif self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].isCollapsed() is False:
-                    exploring_groupbox = "multiple_selection"  
-
-                elif self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].isCollapsed() is False:
-                    exploring_groupbox = "custom_selection"
-
-            self.exploring_groupbox_changed(exploring_groupbox)
+        if not self.widgets_initialized:
+            return
+        
+        self.properties_group_state_enabler(self.layer_properties_tuples_dict["selection_expression"]) 
+        exploring_groupbox = "single_selection"
+        
+        # Try to restore from PROJECT_LAYERS
+        if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
+            saved = self.PROJECT_LAYERS[self.current_layer.id()].get("exploring", {}).get("current_exploring_groupbox")
+            if saved:
+                exploring_groupbox = saved
+        
+        self.exploring_groupbox_changed(exploring_groupbox)
 
     def _update_exploring_buttons_state(self):
         """
@@ -6565,94 +6442,46 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _validate_and_prepare_layer(self, layer):
         """
-        Validate layer and prepare for layer change operation.
-        
-        Returns tuple: (should_continue, layer, layer_props)
-        - should_continue: False if layer change should be aborted
-        - layer: The validated layer object
-        - layer_props: Layer properties from PROJECT_LAYERS
+        v3.1 Sprint 10: Simplified validation and preparation for layer change.
+        Returns: (should_continue, layer, layer_props)
         """
-        # STABILITY FIX: Check if plugin is busy with critical operations
-        if self._plugin_busy:
-            logger.debug("Plugin is busy, deferring layer validation")
+        # Quick guards
+        if self._plugin_busy or not self.PROJECT_LAYERS or not self.widgets_initialized:
             return (False, None, None)
         
-        # STABILITY FIX: Verify PROJECT_LAYERS is not empty
-        if not self.PROJECT_LAYERS:
-            logger.debug("PROJECT_LAYERS is empty, cannot validate layer")
+        # Skip raster layers and None
+        if layer is None or not isinstance(layer, QgsVectorLayer):
             return (False, None, None)
         
-        # Skip raster layers - FilterMate only handles vector layers
-        if layer is not None and not isinstance(layer, QgsVectorLayer):
+        # Verify C++ object validity
+        try:
+            _ = layer.id()
+        except RuntimeError:
             return (False, None, None)
         
-        # STABILITY FIX: Verify the layer C++ object is still valid
-        if layer is not None:
-            try:
-                # Test if the layer is still valid (not a deleted C++ object)
-                _ = layer.id()
-            except RuntimeError:
-                logger.warning("Layer object was deleted (C++ object invalid), skipping")
-                return (False, None, None)
-        
-        # Reject invalid/broken-source layers to avoid selection
-        if layer is None:
-            return (False, None, None)
+        # Verify layer source is available
         try:
             if not is_layer_source_available(layer):
-                logger.warning(f"current_layer_changed: rejecting invalid or missing-source layer '{layer.name()}'")
-                try:
-                    show_warning(
-                        "FilterMate",
-                        "La couche sélectionnée est invalide ou sa source est introuvable. Sélection annulée."
-                    )
-                except (RuntimeError, AttributeError) as e:
-                    logger.debug(f"Could not show warning message: {e}")
-                # Revert combo selection to previous valid layer if possible
-                try:
-                    prev = self.current_layer if isinstance(self.current_layer, QgsVectorLayer) and is_layer_source_available(self.current_layer) else None
-                    self.manageSignal(["FILTERING","CURRENT_LAYER"], 'disconnect')
-                    self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].setLayer(prev)
-                    self.manageSignal(["FILTERING","CURRENT_LAYER"], 'connect', 'layerChanged')
-                except Exception as _e:
-                    logger.debug(f"Could not revert current layer selection: {_e}")
+                show_warning("FilterMate", "La couche sélectionnée est invalide ou sa source est introuvable.")
                 return (False, None, None)
-        except Exception as _e:
-            logger.debug(f"Error while validating layer availability: {_e}")
-            return (False, None, None)
-
-        # Note: Recursive call check is now done at the beginning of current_layer_changed()
-        
-        if not self.widgets_initialized:
+        except Exception:
             return (False, None, None)
         
-        # Disconnect selectionChanged signal from previous layer
+        # Disconnect selectionChanged from previous layer
         if self.current_layer is not None and self.current_layer_selection_connection is not None:
             try:
                 self.current_layer.selectionChanged.disconnect(self.on_layer_selection_changed)
-                self.current_layer_selection_connection = None
-            except (TypeError, RuntimeError) as e:
-                logger.debug(f"Could not disconnect selectionChanged signal from previous layer: {type(e).__name__}: {e}")
-                self.current_layer_selection_connection = None
+            except (TypeError, RuntimeError):
+                pass
+            self.current_layer_selection_connection = None
         
         self.current_layer = layer
         
-        # Verify layer exists in PROJECT_LAYERS before proceeding
         if self.current_layer.id() not in self.PROJECT_LAYERS:
             return (False, None, None)
         
-        # Emit signal to notify app that current layer changed
         self.currentLayerChanged.emit()
-        
-        layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-        
-        # DEBUG: Log layer_props to verify correct properties
-        logger.debug(f"Layer {self.current_layer.name()} (id: {self.current_layer.id()}) properties:")
-        logger.debug(f"  - primary_key: {layer_props.get('infos', {}).get('primary_key_name', 'N/A')}")
-        logger.debug(f"  - single_selection_expression: {layer_props.get('exploring', {}).get('single_selection_expression', 'N/A')}")
-        logger.debug(f"  - multiple_selection_expression: {layer_props.get('exploring', {}).get('multiple_selection_expression', 'N/A')}")
-        
-        return (True, layer, layer_props)
+        return (True, layer, self.PROJECT_LAYERS[self.current_layer.id()])
     
     def _reset_layer_expressions(self, layer_props):
         """
@@ -6802,94 +6631,44 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def _restore_groupbox_ui_state(self, groupbox_name):
         """
-        Restore only the visual UI state of exploring groupboxes without widget updates.
-        
-        This method sets the collapsed/expanded state of groupboxes based on the saved
-        groupbox name. Unlike exploring_groupbox_changed(), it does NOT:
-        - Disconnect/reconnect signals
-        - Call setLayer() on widgets
-        - Trigger exploring_link_widgets() or exploring_features_changed()
-        
-        Use this when widgets have already been updated (e.g., after _reload_exploration_widgets())
-        and only the visual groupbox state needs restoration.
-        
-        Args:
-            groupbox_name (str): The groupbox to expand ('single_selection', 'multiple_selection', 
-                               or 'custom_selection')
+        v3.1 Sprint 10: Refactored - restore exploring groupbox visual state.
+        Sets collapsed/expanded state without triggering widget updates.
         """
         if not self.widgets_initialized:
             return
         
-        # Store current groupbox name
         self.current_exploring_groupbox = groupbox_name
         
-        # Save to PROJECT_LAYERS for persistence
         if self.current_layer is not None and self.current_layer.id() in self.PROJECT_LAYERS:
             self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = groupbox_name
         
-        # Get groupbox widgets
-        single_gb = self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"]
-        multiple_gb = self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"]
-        custom_gb = self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"]
+        # Map groupbox states: (checked, collapsed)
+        states = {
+            "single_selection": (True, False, False, True, False, True),
+            "multiple_selection": (False, True, True, False, False, True),
+            "custom_selection": (False, True, False, True, True, False),
+        }
+        s = states.get(groupbox_name, states["single_selection"])
         
-        # Block signals to prevent recursive calls during state restoration
-        single_gb.blockSignals(True)
-        multiple_gb.blockSignals(True)
-        custom_gb.blockSignals(True)
+        groupboxes = [
+            self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"],
+            self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"],
+            self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"],
+        ]
+        
+        for gb in groupboxes:
+            gb.blockSignals(True)
         
         try:
-            # Set visual state based on groupbox type
-            if groupbox_name == "single_selection":
-                single_gb.setChecked(True)
-                single_gb.setCollapsed(False)
-                multiple_gb.setChecked(False)
-                multiple_gb.setCollapsed(True)
-                custom_gb.setChecked(False)
-                custom_gb.setCollapsed(True)
-                # Enable widgets for this mode
-                if self.current_layer is not None:
-                    self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
-                    self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
-                    
-            elif groupbox_name == "multiple_selection":
-                single_gb.setChecked(False)
-                single_gb.setCollapsed(True)
-                multiple_gb.setChecked(True)
-                multiple_gb.setCollapsed(False)
-                custom_gb.setChecked(False)
-                custom_gb.setCollapsed(True)
-                # Enable widgets for this mode
-                if self.current_layer is not None:
-                    self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
-                    self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
-                    
-            elif groupbox_name == "custom_selection":
-                single_gb.setChecked(False)
-                single_gb.setCollapsed(True)
-                multiple_gb.setChecked(False)
-                multiple_gb.setCollapsed(True)
-                custom_gb.setChecked(True)
-                custom_gb.setCollapsed(False)
-                # Enable widgets for this mode
-                if self.current_layer is not None:
-                    self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
+            groupboxes[0].setChecked(s[0]); groupboxes[0].setCollapsed(s[1])
+            groupboxes[1].setChecked(s[2]); groupboxes[1].setCollapsed(s[3])
+            groupboxes[2].setChecked(s[4]); groupboxes[2].setCollapsed(s[5])
             
-            # v2.9.28: Force visual update of groupboxes after state change
-            # QgsCollapsibleGroupBox may not update visually without explicit repaint
-            single_gb.update()
-            multiple_gb.update()
-            custom_gb.update()
-            
-            # Also update parent container to ensure layout is recalculated
-            if single_gb.parent():
-                single_gb.parent().update()
-                
-            logger.debug(f"_restore_groupbox_ui_state: Set {groupbox_name} - single: checked={single_gb.isChecked()}, collapsed={single_gb.isCollapsed()}")
+            for gb in groupboxes:
+                gb.update()
         finally:
-            # Always restore signals
-            single_gb.blockSignals(False)
-            multiple_gb.blockSignals(False)
-            custom_gb.blockSignals(False)
+            for gb in groupboxes:
+                gb.blockSignals(False)
     
     def _reconnect_layer_signals(self, widgets_to_reconnect, layer_props):
         """
