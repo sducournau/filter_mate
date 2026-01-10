@@ -52,31 +52,21 @@ from .modules.appUtils import (
     validate_and_cleanup_postgres_layers,  # v2.8.1: Orphaned MV cleanup on project load
     clean_buffer_value,  # v3.0.12: Clean buffer values from float precision errors
 )
-from .modules.type_utils import can_cast, return_typed_value
+from .modules.type_utils import return_typed_value
 from .infrastructure.feedback import (
-    show_backend_info, show_progress_message, show_success_with_backend,
-    show_performance_warning, show_error_with_context,
-    show_info, show_warning, show_error, show_success  # v2.8.6: Centralized message bar
+    show_backend_info, show_success_with_backend,
+    show_info, show_warning, show_error
 )
 from .core.services.history_service import HistoryManager
 from .core.services.favorites_service import FavoritesManager
 from .ui.config import UIConfig, DisplayProfile
 from .modules.config_helpers import get_optimization_thresholds
 from .modules.object_safety import (
-    is_sip_deleted, is_valid_layer, is_valid_qobject, is_qgis_alive,
-    safe_disconnect, safe_emit, make_safe_callback,
-    safe_set_layer_variable,  # CRASH FIX v2.4.14: Use safe wrapper instead of direct call
-    GdalErrorHandler,  # v2.3.12: Suppress transient GDAL warnings during refresh
-    require_valid_layer  # STABILITY v2.6.0: Decorator for layer validation
-)
-# STABILITY v2.6.0: Circuit breaker for PostgreSQL connection protection
-from .infrastructure.resilience import (
-    get_postgresql_breaker,
-    CircuitOpenError
+    is_sip_deleted, is_valid_layer, is_qgis_alive,
+    GdalErrorHandler
 )
 from .infrastructure.logging import get_app_logger
 from .resources import *  # Qt resources must be imported with wildcard
-import uuid
 
 # v3.0: Hexagonal architecture services bridge
 # Provides access to new architecture while maintaining backward compatibility
@@ -100,6 +90,9 @@ try:
         TaskManagementService,
         TaskManagementConfig
     )
+    from .adapters.undo_redo_handler import UndoRedoHandler  # v4.0: Undo/Redo extraction
+    from .adapters.database_manager import DatabaseManager  # v4.0: Database operations extraction
+    from .adapters.variables_manager import VariablesPersistenceManager  # v4.0: Variables persistence extraction
     HEXAGONAL_AVAILABLE = True
 except ImportError:
     HEXAGONAL_AVAILABLE = False
@@ -108,6 +101,9 @@ except ImportError:
     LayerLifecycleConfig = None  # v4.0: Fallback
     TaskManagementService = None  # v4.0: Fallback
     TaskManagementConfig = None  # v4.0: Fallback
+    UndoRedoHandler = None  # v4.0: Fallback
+    DatabaseManager = None  # v4.0: Fallback
+    VariablesPersistenceManager = None  # v4.0: Fallback
 
     def _init_hexagonal_services(config=None):
         """Fallback when hexagonal services unavailable."""
@@ -222,97 +218,15 @@ class FilterMateApp:
         """
         Return only layers that are valid vector layers with available sources.
         
-        .. deprecated:: 4.0.0
-            Delegates to LayerLifecycleService.filter_usable_layers()
-        
-        STABILITY FIX v2.3.9: Uses is_valid_layer() from object_safety module
-        to prevent access violations from deleted C++ objects.
+        Delegates to LayerLifecycleService.filter_usable_layers().
         """
-        # v4.0: Delegate to LayerLifecycleService
         service = self._get_layer_lifecycle_service()
         if service:
             return service.filter_usable_layers(layers, POSTGRESQL_AVAILABLE)
         
-        # Fallback to legacy implementation
-        try:
-            input_count = len(layers or [])
-            usable = []
-            filtered_reasons = []
-            
-            logger.info(f"_filter_usable_layers: Processing {input_count} layers (POSTGRESQL_AVAILABLE={POSTGRESQL_AVAILABLE})")
-            
-            for l in (layers or []):
-                # CRITICAL: Check if C++ object was deleted before any access
-                if is_sip_deleted(l):
-                    filtered_reasons.append("unknown: C++ object deleted")
-                    continue
-                    
-                if not isinstance(l, QgsVectorLayer):
-                    try:
-                        name = l.name() if hasattr(l, 'name') else 'unknown'
-                    except RuntimeError:
-                        name = 'unknown'
-                    filtered_reasons.append(f"{name}: not a vector layer")
-                    continue
-                
-                # FIX v2.8.6: Enhanced logging for PostgreSQL layers
-                is_postgres = l.providerType() == 'postgres'
-                
-                # Use object_safety module for comprehensive validation
-                if not is_valid_layer(l):
-                    try:
-                        name = l.name()
-                        is_valid_qgis = l.isValid()
-                    except RuntimeError:
-                        name = 'unknown'
-                        is_valid_qgis = False
-                    reason = f"{name}: invalid layer (isValid={is_valid_qgis}, C++ object may be deleted)"
-                    if is_postgres:
-                        reason += " [PostgreSQL]"
-                        logger.warning(f"PostgreSQL layer '{name}' failed is_valid_layer check (isValid={is_valid_qgis})")
-                    filtered_reasons.append(reason)
-                    continue
-                
-                # IMPORTANT: For layer loading, we don't require psycopg2 to be available
-                # because the layer list should include all layers, even if some features
-                # (like filtering with PostgreSQL backend) won't work.
-                # Export uses QGIS API, not psycopg2 directly.
-                # 
-                # CRITICAL FIX v2.8.14: Be more permissive with PostgreSQL layers loaded by external scripts
-                # Sometimes is_layer_source_available fails temporarily during connection init
-                # but the layer is valid and the connection will work once fully established
-                if is_postgres:
-                    # For PostgreSQL: if layer is valid, include it even if source check fails
-                    # The connection may be initializing and will work shortly
-                    logger.info(f"PostgreSQL layer '{l.name()}': including despite any source availability issues (will retry connection later)")
-                    usable.append(l)
-                elif not is_layer_source_available(l, require_psycopg2=False):
-                    reason = f"{l.name()}: source not available (provider={l.providerType()})"
-                    filtered_reasons.append(reason)
-                    continue
-                else:
-                    usable.append(l)
-            
-            if filtered_reasons and input_count != len(usable):
-                logger.info(f"_filter_usable_layers: {input_count} input layers -> {len(usable)} usable layers. Filtered: {len(filtered_reasons)}")
-                # Group filtered reasons by type for cleaner logging
-                reason_types = {}
-                for reason in filtered_reasons:
-                    reason_key = reason.split(':')[1].strip() if ':' in reason else reason
-                    if reason_key not in reason_types:
-                        reason_types[reason_key] = []
-                    layer_name = reason.split(':')[0] if ':' in reason else 'unknown'
-                    reason_types[reason_key].append(layer_name)
-                
-                for reason_type, layers in reason_types.items():
-                    logger.info(f"  Filtered ({reason_type}): {len(layers)} layer(s) - {', '.join(layers[:5])}{'...' if len(layers) > 5 else ''}")
-            else:
-                logger.info(f"_filter_usable_layers: All {input_count} layers are usable")
-            
-            return usable
-        except Exception as e:
-            logger.error(f"_filter_usable_layers error: {e}", exc_info=True)
-            return []
+        # Service not available - return empty (should not happen in normal operation)
+        logger.error("LayerLifecycleService not available - returning empty layer list")
+        return []
 
     def _on_layers_added(self, layers):
         """Signal handler for layersAdded: ignore broken/invalid layers.
@@ -475,44 +389,14 @@ class FilterMateApp:
                     logger.debug(f"FilterMate: Hexagonal services cleanup error: {e}")
             return
         
-        # Fallback to legacy implementation
-        auto_cleanup_enabled = True  # Default to enabled
-        if self.dockwidget and hasattr(self.dockwidget, '_pg_auto_cleanup_enabled'):
-            auto_cleanup_enabled = self.dockwidget._pg_auto_cleanup_enabled
-        
-        if auto_cleanup_enabled:
-            self._cleanup_postgresql_session_views()
-        else:
-            logger.info("PostgreSQL auto-cleanup disabled - session views not cleaned")
-        
-        if self.dockwidget is not None:
-            # Nettoyer tous les widgets list_widgets pour éviter les KeyError
-            if hasattr(self.dockwidget, 'widgets'):
-                try:
-                    multiple_selection_widget = self.dockwidget.widgets.get("EXPLORING", {}).get("MULTIPLE_SELECTION_FEATURES", {}).get("WIDGET")
-                    if multiple_selection_widget and hasattr(multiple_selection_widget, 'list_widgets'):
-                        # Nettoyer tous les list_widgets
-                        multiple_selection_widget.list_widgets.clear()
-                        # Réinitialiser les tasks
-                        if hasattr(multiple_selection_widget, 'tasks'):
-                            multiple_selection_widget.tasks.clear()
-                except (KeyError, AttributeError, RuntimeError) as e:
-                    # Les widgets peuvent déjà être supprimés
-                    pass
-            
-            # Nettoyer PROJECT_LAYERS
-            if hasattr(self.dockwidget, 'PROJECT_LAYERS'):
-                self.dockwidget.PROJECT_LAYERS.clear()
-        
-        # Réinitialiser les structures de données de l'app
+        # Service not available - minimal cleanup
+        logger.warning("LayerLifecycleService not available - performing minimal cleanup")
         self.PROJECT_LAYERS.clear()
         self.project_datasources.clear()
         
-        # v3.0: Cleanup hexagonal architecture services
         if HEXAGONAL_AVAILABLE:
             try:
                 _cleanup_hexagonal_services()
-                logger.debug("FilterMate: Hexagonal services cleaned up")
             except Exception as e:
                 logger.debug(f"FilterMate: Hexagonal services cleanup error: {e}")
 
@@ -521,18 +405,8 @@ class FilterMateApp:
         """
         Clean up all PostgreSQL materialized views created by this session.
         
-        .. deprecated:: 4.0.0
-            Delegates to LayerLifecycleService.cleanup_postgresql_session_views()
-        
-        Drops all materialized views and indexes prefixed with the session_id
-        to prevent accumulation of orphaned views in the database.
-        
-        This is called during cleanup() when the plugin is unloaded.
-        
-        Uses circuit breaker pattern to prevent cascading failures if
-        PostgreSQL connection is unstable.
+        Delegates to LayerLifecycleService.cleanup_postgresql_session_views().
         """
-        # v4.0: Delegate to LayerLifecycleService
         service = self._get_layer_lifecycle_service()
         if service:
             service.cleanup_postgresql_session_views(
@@ -541,80 +415,8 @@ class FilterMateApp:
                 project_layers=self.PROJECT_LAYERS,
                 postgresql_available=POSTGRESQL_AVAILABLE
             )
-            return
-        
-        # Fallback to legacy implementation
-        if not POSTGRESQL_AVAILABLE:
-            return
-        
-        if not hasattr(self, 'session_id') or not self.session_id:
-            return
-        
-        # STABILITY v2.6.0: Check circuit breaker before attempting PostgreSQL operations
-        pg_breaker = get_postgresql_breaker()
-        if pg_breaker.is_open:
-            logger.debug("Skipping PostgreSQL cleanup - circuit breaker is OPEN")
-            return
-        
-        schema = self.app_postgresql_temp_schema
-        
-        # Try to get a PostgreSQL connection from any loaded layer
-        try:
-            from .modules.appUtils import get_datasource_connexion_from_layer
-            
-            # Find a PostgreSQL layer to get connection
-            connexion = None
-            for layer_id, layer_info in self.PROJECT_LAYERS.items():
-                layer = layer_info.get('layer')
-                if layer and layer.isValid() and layer.providerType() == 'postgres':
-                    connexion, _ = get_datasource_connexion_from_layer(layer)
-                    if connexion:
-                        break
-            
-            if not connexion:
-                logger.debug("No PostgreSQL connection available for session cleanup")
-                return
-            
-            try:
-                with connexion.cursor() as cursor:
-                    # Find all materialized views for this session
-                    cursor.execute("""
-                        SELECT matviewname FROM pg_matviews 
-                        WHERE schemaname = %s AND matviewname LIKE %s
-                    """, (schema, f"mv_{self.session_id}_%"))
-                    views = cursor.fetchall()
-                    
-                    if views:
-                        count = 0
-                        for (view_name,) in views:
-                            try:
-                                # Drop associated index first
-                                index_name = f"{schema}_{view_name[3:]}_cluster"  # Remove 'mv_' prefix
-                                cursor.execute(f'DROP INDEX IF EXISTS "{index_name}" CASCADE;')
-                                # Drop the view
-                                cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."{view_name}" CASCADE;')
-                                count += 1
-                            except Exception as e:
-                                logger.debug(f"Error dropping view {view_name}: {e}")
-                        
-                        connexion.commit()
-                        if count > 0:
-                            logger.info(f"Cleaned up {count} materialized view(s) for session {self.session_id}")
-                
-                # STABILITY v2.6.0: Record success for circuit breaker
-                pg_breaker.record_success()
-            finally:
-                try:
-                    connexion.close()
-                except Exception:
-                    pass  # Connection already closed or invalid
-                    
-        except CircuitOpenError:
-            logger.debug("PostgreSQL cleanup skipped - circuit breaker tripped")
-        except Exception as e:
-            # STABILITY v2.6.0: Record failure for circuit breaker
-            pg_breaker.record_failure()
-            logger.debug(f"Error during PostgreSQL session cleanup: {e}")
+        else:
+            logger.debug("LayerLifecycleService not available - skipping PostgreSQL cleanup")
 
 
     def __init__(self, plugin_dir):
@@ -667,6 +469,20 @@ class FilterMateApp:
         history_max_size = self._get_history_max_size_from_config()
         self.history_manager = HistoryManager(max_size=history_max_size)
         logger.info(f"FilterMate: HistoryManager initialized for undo/redo functionality (max_size={history_max_size})")
+        
+        # v4.0: Initialize UndoRedoHandler (extracted from FilterMateApp)
+        if HEXAGONAL_AVAILABLE and UndoRedoHandler:
+            self._undo_redo_handler = UndoRedoHandler(
+                history_manager=self.history_manager,
+                get_project_layers=lambda: self.PROJECT_LAYERS,
+                get_project=lambda: self.PROJECT,
+                get_iface=lambda: self.iface,
+                refresh_layers_callback=self._refresh_layers_and_canvas,
+                show_warning_callback=lambda t, m: iface.messageBar().pushWarning(t, m)
+            )
+            logger.info("FilterMate: UndoRedoHandler initialized (v4.0 migration)")
+        else:
+            self._undo_redo_handler = None
         
         # Initialize filter favorites manager for saving/loading favorites
         self.favorites_manager = FavoritesManager(max_favorites=50)
@@ -726,6 +542,30 @@ class FilterMateApp:
         self.project_file_name = os.path.basename(self.PROJECT.absoluteFilePath())
         self.project_file_path = self.PROJECT.absolutePath()
         self.project_uuid = ''
+        
+        # v4.0: Initialize DatabaseManager (extracted from FilterMateApp)
+        if HEXAGONAL_AVAILABLE and DatabaseManager:
+            self._database_manager = DatabaseManager(
+                config_directory=ENV_VARS["PLUGIN_CONFIG_DIRECTORY"],
+                project=self.PROJECT
+            )
+            logger.info("FilterMate: DatabaseManager initialized (v4.0 migration)")
+        else:
+            self._database_manager = None
+        
+        # v4.0: Initialize VariablesPersistenceManager (extracted from FilterMateApp)
+        if HEXAGONAL_AVAILABLE and VariablesPersistenceManager:
+            self._variables_manager = VariablesPersistenceManager(
+                get_spatialite_connection=self.get_spatialite_connection,
+                get_project_uuid=lambda: str(self.project_uuid),
+                get_project_layers=lambda: self.PROJECT_LAYERS,
+                return_typped_value=return_typed_value,  # Use module function directly
+                cancel_layer_tasks=lambda layer_id: self._cancel_layer_tasks(layer_id) if hasattr(self, 'dockwidget') and self.dockwidget else None,
+                is_layer_change_in_progress=lambda: hasattr(self, 'dockwidget') and self.dockwidget and getattr(self.dockwidget, '_updating_current_layer', False)
+            )
+            logger.info("FilterMate: VariablesPersistenceManager initialized (v4.0 migration)")
+        else:
+            self._variables_manager = None
 
         self.project_datasources = {}
         self.app_postgresql_temp_schema = 'filter_mate_temp'  # PostgreSQL temp schema name
@@ -921,201 +761,38 @@ class FilterMateApp:
         """
         Force a complete reload of all layers in the current project.
         
-        .. deprecated:: 4.0.2
-            Delegates to LayerLifecycleService.force_reload_layers()
+        v4.0.2: Delegates to LayerLifecycleService.force_reload_layers()
         
         This method is useful when the dockwidget gets out of sync with the
-        current project, or when switching projects doesn't properly reload layers.
-        
-        Workflow:
-        1. Cancel all pending tasks
-        2. Reset all state flags
-        3. Clear PROJECT_LAYERS
-        4. Reinitialize the database
-        5. Reload all vector layers from current project
-        
-        Can be called from UI (refresh button) or programmatically.
+        current project, or when switching projects does not properly reload layers.
         """
-        # v4.0.2: Delegate to LayerLifecycleService
+        global ENV_VARS
+        
         service = self._get_layer_lifecycle_service()
-        if service:
-            # Update project reference
-            init_env_vars()
-            global ENV_VARS
-            self.PROJECT = ENV_VARS["PROJECT"]
-            self.MapLayerStore = self.PROJECT.layerStore()
-            
-            service.force_reload_layers(
-                cancel_tasks_callback=self._safe_cancel_all_tasks,
-                reset_flags_callback=lambda: (
-                    self._check_and_reset_stale_flags(),
-                    self._set_loading_flag(False),
-                    self._set_initializing_flag(False),
-                    setattr(self, '_add_layers_queue', []),
-                    setattr(self, '_pending_add_layers_tasks', 0)
-                ),
-                init_db_callback=self.init_filterMate_db,
-                manage_task_callback=lambda layers: self.manage_task('add_layers', layers),
-                project_layers=self.PROJECT_LAYERS,
-                dockwidget=self.dockwidget,
-                stability_constants=STABILITY_CONSTANTS
-            )
+        if not service:
+            logger.error("LayerLifecycleService not available, cannot force reload layers")
             return
         
-        # Fallback to legacy implementation
-        from qgis.PyQt.QtCore import QTimer
-        
-        logger.info("FilterMate: Force reload layers requested")
-        
-        # 1. Reset all protection flags immediately
-        self._check_and_reset_stale_flags()
-        self._set_loading_flag(False)
-        self._set_initializing_flag(False)
-        
-        # 2. Cancel all pending tasks
-        self._safe_cancel_all_tasks()
-        
-        # 3. Clear the add_layers queue
-        self._add_layers_queue.clear()
-        self._pending_add_layers_tasks = 0
-        
-        # 4. Clear PROJECT_LAYERS
-        self.PROJECT_LAYERS = {}
-        
-        # 5. Reset dockwidget state
-        if self.dockwidget:
-            self.dockwidget.current_layer = None
-            self.dockwidget.has_loaded_layers = False
-            self.dockwidget.PROJECT_LAYERS = {}
-            self.dockwidget._plugin_busy = False
-            self.dockwidget._updating_layers = False
-            
-            # Reset combobox to no selection (do NOT call clear() - it breaks the proxy model sync)
-            try:
-                if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
-                    self.dockwidget.comboBox_filtering_current_layer.setLayer(None)
-                    # CRITICAL: Do NOT call clear() on QgsMapLayerComboBox!
-                    # It uses QgsMapLayerProxyModel which auto-syncs with project layers.
-                    # Calling clear() breaks this synchronization and the combobox stays empty.
-            except Exception as e:
-                logger.debug(f"Error resetting layer combobox during reload: {e}")
-            
-            # CRITICAL: Clear QgsFeaturePickerWidget to prevent access violation
-            # The widget has an internal timer that triggers scheduledReload which
-            # creates QgsVectorLayerFeatureSource - if the layer is invalid/destroyed,
-            # this causes a Windows fatal exception (access violation).
-            try:
-                if hasattr(self.dockwidget, 'mFeaturePickerWidget_exploring_single_selection'):
-                    self.dockwidget.mFeaturePickerWidget_exploring_single_selection.setLayer(None)
-            except Exception as e:
-                logger.debug(f"Error resetting FeaturePickerWidget during reload: {e}")
-            
-            # Update indicator to show reloading state
-            if hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
-                self.dockwidget.backend_indicator_label.setText("⟳")
-                self.dockwidget.backend_indicator_label.setStyleSheet("""
-                    QLabel#label_backend_indicator {
-                        color: #3498db;
-                        font-size: 9pt;
-                        font-weight: 600;
-                        padding: 3px 10px;
-                        border-radius: 12px;
-                        border: none;
-                        background-color: #e8f4fc;
-                    }
-                """)
-        
-        # 6. Update project reference
+        # Update project reference
         init_env_vars()
-        global ENV_VARS
         self.PROJECT = ENV_VARS["PROJECT"]
         self.MapLayerStore = self.PROJECT.layerStore()
         
-        # 7. Reinitialize database
-        try:
-            self.init_filterMate_db()
-        except Exception as e:
-            logger.error(f"Error reinitializing database during reload: {e}")
-        
-        # 8. Get all current vector layers and add them
-        current_layers = self._filter_usable_layers(list(self.PROJECT.mapLayers().values()))
-        
-        if current_layers:
-            logger.info(f"FilterMate: Reloading {len(current_layers)} layers")
-            
-            # Check if any PostgreSQL layers - need longer delay
-            has_postgres = any(
-                layer.providerType() == 'postgres' 
-                for layer in current_layers
-            )
-            delay = STABILITY_CONSTANTS['UI_REFRESH_DELAY_MS']
-            if has_postgres:
-                delay += STABILITY_CONSTANTS['POSTGRESQL_EXTRA_DELAY_MS']
-            
-            # Set loading flag so the UI refresh is triggered after add_layers completes
-            self._set_loading_flag(True)
-            
-            # Use weakref to prevent access violations on plugin unload
-            weak_self = weakref.ref(self)
-            def safe_add_layers():
-                strong_self = weak_self()
-                if strong_self is not None:
-                    strong_self.manage_task('add_layers', current_layers)
-            QTimer.singleShot(delay, safe_add_layers)
-            
-            # CRITICAL: Force UI refresh after layers are loaded
-            # Schedule refresh with enough time for add_layers to complete
-            refresh_delay = delay + 2000  # add_layers + 2s safety margin
-            def safe_ui_refresh():
-                strong_self = weak_self()
-                if strong_self is not None:
-                    strong_self._force_ui_refresh_after_reload()
-            QTimer.singleShot(refresh_delay, safe_ui_refresh)
-            
-            # Show success message
-            show_info(
-                f"Rechargement de {len(current_layers)} couche(s) en cours..."
-            )
-        else:
-            logger.info("FilterMate: No layers to reload")
-            show_info(
-                "Aucune couche vectorielle à recharger."
-            )
-            
-            # Update indicator to show waiting state
-            if self.dockwidget and hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
-                self.dockwidget.backend_indicator_label.setText("...")
-                self.dockwidget.backend_indicator_label.setStyleSheet("""
-                    QLabel#label_backend_indicator {
-                        color: #7f8c8d;
-                        font-size: 9pt;
-                        font-weight: 600;
-                        padding: 3px 10px;
-                        border-radius: 12px;
-                        border: none;
-                        background-color: #ecf0f1;
-                    }
-                """)
-
-    def _is_layer_valid(self, layer) -> bool:
-        """
-        Check if a layer object is still valid (C++ object not deleted).
-        
-        Args:
-            layer: QgsVectorLayer to check
-            
-        Returns:
-            bool: True if layer is valid and accessible, False otherwise
-        """
-        if layer is None:
-            return False
-        try:
-            # Try to access basic properties - will raise if C++ object is deleted
-            _ = layer.name()
-            _ = layer.id()
-            return layer.isValid()
-        except (RuntimeError, AttributeError):
-            return False
+        service.force_reload_layers(
+            cancel_tasks_callback=self._safe_cancel_all_tasks,
+            reset_flags_callback=lambda: (
+                self._check_and_reset_stale_flags(),
+                self._set_loading_flag(False),
+                self._set_initializing_flag(False),
+                setattr(self, '_add_layers_queue', []),
+                setattr(self, '_pending_add_layers_tasks', 0)
+            ),
+            init_db_callback=self.init_filterMate_db,
+            manage_task_callback=lambda layers: self.manage_task('add_layers', layers),
+            project_layers=self.PROJECT_LAYERS,
+            dockwidget=self.dockwidget,
+            stability_constants=STABILITY_CONSTANTS
+        )
 
     def run(self):
         """
@@ -1643,384 +1320,84 @@ class FilterMateApp:
     def _handle_remove_all_layers(self):
         """Handle remove all layers task.
         
-        .. deprecated:: 4.0.2
-            Delegates to LayerLifecycleService.handle_remove_all_layers()
+        v4.0.2: Delegates to LayerLifecycleService.handle_remove_all_layers()
         
         Safely cleans up all layer state when all layers are removed from project.
-        STABILITY FIX: Properly resets current_layer and has_loaded_layers to prevent
-        crashes when accessing invalid layer references.
         """
-        # v4.0.2: Delegate to LayerLifecycleService
         service = self._get_layer_lifecycle_service()
-        if service:
-            service.handle_remove_all_layers(
-                cancel_tasks_callback=self._safe_cancel_all_tasks,
-                dockwidget=self.dockwidget
-            )
+        if not service:
+            logger.error("LayerLifecycleService not available, cannot handle remove all layers")
             return
         
-        # Fallback to legacy implementation
-        self._safe_cancel_all_tasks()
-        
-        # CRITICAL: Check if dockwidget exists before accessing its methods
-        if self.dockwidget is not None:
-            # CRITICAL: Reset layer combo box to prevent access violations
-            # NOTE: Do NOT call clear() - it breaks the proxy model synchronization
-            try:
-                if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
-                    self.dockwidget.comboBox_filtering_current_layer.setLayer(None)
-                    logger.debug("FilterMate: Layer combo reset during remove_all_layers")
-            except Exception as e:
-                logger.debug(f"FilterMate: Error resetting layer combo during remove_all_layers: {e}")
-            
-            # CRITICAL: Reset QgsFeaturePickerWidget to prevent access violation
-            # The widget has an internal timer that triggers scheduledReload
-            try:
-                if hasattr(self.dockwidget, 'mFeaturePickerWidget_exploring_single_selection'):
-                    self.dockwidget.mFeaturePickerWidget_exploring_single_selection.setLayer(None)
-                    logger.debug("FilterMate: FeaturePickerWidget reset during remove_all_layers")
-            except Exception as e:
-                logger.debug(f"FilterMate: Error resetting FeaturePickerWidget during remove_all_layers: {e}")
-            
-            # STABILITY FIX: Disconnect LAYER_TREE_VIEW signal to prevent callbacks to invalid layers
-            try:
-                self.dockwidget.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'disconnect')
-            except Exception as e:
-                logger.debug(f"Could not disconnect LAYER_TREE_VIEW signal: {e}")
-            
-            self.dockwidget.disconnect_widgets_signals()
-            self.dockwidget.reset_multiple_checkable_combobox()
-            
-            # STABILITY FIX: Reset current_layer to prevent access to deleted objects
-            self.dockwidget.current_layer = None
-            self.dockwidget.has_loaded_layers = False
-            self.dockwidget._plugin_busy = False  # Ensure not stuck in busy state
-            
-            # Update backend indicator to show waiting state (badge style)
-            if hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
-                self.dockwidget.backend_indicator_label.setText("...")
-                self.dockwidget.backend_indicator_label.setStyleSheet("""
-                    QLabel#label_backend_indicator {
-                        color: #7f8c8d;
-                        font-size: 9pt;
-                        font-weight: 600;
-                        padding: 3px 10px;
-                        border-radius: 12px;
-                        border: none;
-                        background-color: #ecf0f1;
-                    }
-                """)
-        
-        self.layer_management_engine_task_completed({}, 'remove_all_layers')
-        
-        # Inform user that plugin is waiting for layers
-        show_info(
-            "Toutes les couches ont été supprimées. Ajoutez des couches vectorielles pour réactiver le plugin."
+        service.handle_remove_all_layers(
+            cancel_tasks_callback=self._safe_cancel_all_tasks,
+            dockwidget=self.dockwidget
         )
     
     def _handle_project_initialization(self, task_name):
         """Handle project read/new project initialization.
         
-        .. deprecated:: 4.0.2
-            Delegates to LayerLifecycleService.handle_project_initialization()
+        v4.0.2: Delegates to LayerLifecycleService.handle_project_initialization()
         
         Args:
             task_name: 'project_read' or 'new_project'
         """
-        # v4.0.2: Delegate to LayerLifecycleService
+        global ENV_VARS
+        
         service = self._get_layer_lifecycle_service()
-        if service:
-            # Handle signal reconnection logic (app-specific, not in service)
-            old_layer_store = self.MapLayerStore
-            new_layer_store = self.PROJECT.layerStore() if hasattr(self, 'PROJECT') and self.PROJECT else None
-            
-            if new_layer_store and self._signals_connected:
-                logger.info(f"FilterMate: Disconnecting old layer store signals for {task_name}")
-                try:
-                    old_layer_store.layersAdded.disconnect()
-                    old_layer_store.layersWillBeRemoved.disconnect()
-                    old_layer_store.allLayersRemoved.disconnect()
-                    logger.info("FilterMate: Old layer store signals disconnected")
-                except (TypeError, RuntimeError) as e:
-                    logger.debug(f"Could not disconnect old signals (expected): {e}")
-                
-                self.MapLayerStore = new_layer_store
-                self.MapLayerStore.layersAdded.connect(self._on_layers_added)
-                self.MapLayerStore.layersWillBeRemoved.connect(lambda layers: self.manage_task('remove_layers', layers))
-                self.MapLayerStore.allLayersRemoved.connect(lambda: self.manage_task('remove_all_layers'))
-                logger.info("FilterMate: Layer store signals reconnected to new project")
-            elif new_layer_store:
-                logger.debug("FilterMate: Updating MapLayerStore reference (signals not yet connected)")
-                self.MapLayerStore = new_layer_store
-            
-            # Clear old PROJECT_LAYERS and reset datasources
-            self.PROJECT_LAYERS = {}
-            self.project_datasources = {'postgresql': {}, 'spatialite': {}, 'ogr': {}}
-            self.app_postgresql_temp_schema_setted = False
-            
-            # Load favorites from new project
-            if hasattr(self, 'favorites_manager'):
-                self.favorites_manager.load_from_project()
-                logger.info(f"FilterMate: Favorites loaded for {task_name} ({self.favorites_manager.count} favorites)")
-            
-            service.handle_project_initialization(
-                task_name=task_name,
-                is_initializing=self._initializing_project,
-                is_loading=self._loading_new_project,
-                dockwidget=self.dockwidget,
-                check_reset_flags_callback=self._check_and_reset_stale_flags,
-                set_initializing_flag_callback=self._set_initializing_flag,
-                set_loading_flag_callback=self._set_loading_flag,
-                cancel_tasks_callback=self._safe_cancel_all_tasks,
-                init_env_vars_callback=lambda: (init_env_vars(), setattr(self, 'PROJECT', ENV_VARS["PROJECT"])),
-                get_project_callback=lambda: self.PROJECT,
-                init_db_callback=self.init_filterMate_db,
-                manage_task_callback=lambda layers: self.manage_task('add_layers', layers),
-                temp_schema=self.app_postgresql_temp_schema,
-                stability_constants=STABILITY_CONSTANTS
-            )
+        if not service:
+            logger.error("LayerLifecycleService not available, cannot handle project initialization")
             return
         
-        # Fallback to legacy implementation
-        logger.debug(f"_handle_project_initialization called with task_name={task_name}")
+        # Handle signal reconnection logic (app-specific, not in service)
+        old_layer_store = self.MapLayerStore
+        new_layer_store = self.PROJECT.layerStore() if hasattr(self, 'PROJECT') and self.PROJECT else None
         
-        # STABILITY FIX: Check and reset stale flags that might block operations
-        self._check_and_reset_stale_flags()
-        
-        # CRITICAL: Skip if already initializing to prevent recursive calls
-        if self._initializing_project:
-            logger.debug(f"Skipping {task_name} - already initializing project")
-            return
-        
-        # CRITICAL: Skip if currently loading a new project (add_layers in progress)
-        if self._loading_new_project:
-            logger.debug(f"Skipping {task_name} - already loading new project")
-            return
-        
-        # CRITICAL: Skip if dockwidget doesn't exist yet - run() handles initial setup
-        if self.dockwidget is None:
-            logger.debug(f"Skipping {task_name} - dockwidget not created yet (run() will handle)")
-            return
-        
-        # Use timestamp-tracked flag setter
-        self._set_initializing_flag(True)
-        
-        # CRITICAL: Reset layer combo box before project change to prevent access violations
-        # NOTE: Do NOT call clear() - it breaks the proxy model synchronization
-        if self.dockwidget is not None:
+        if new_layer_store and self._signals_connected:
+            logger.info(f"FilterMate: Disconnecting old layer store signals for {task_name}")
             try:
-                if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
-                    self.dockwidget.comboBox_filtering_current_layer.setLayer(None)
-                    logger.debug(f"FilterMate: Layer combo reset before {task_name}")
-            except Exception as e:
-                logger.debug(f"FilterMate: Error resetting layer combo before {task_name}: {e}")
+                old_layer_store.layersAdded.disconnect()
+                old_layer_store.layersWillBeRemoved.disconnect()
+                old_layer_store.allLayersRemoved.disconnect()
+                logger.info("FilterMate: Old layer store signals disconnected")
+            except (TypeError, RuntimeError) as e:
+                logger.debug(f"Could not disconnect old signals (expected): {e}")
             
-            # CRITICAL: Reset QgsFeaturePickerWidget to prevent access violation
-            try:
-                if hasattr(self.dockwidget, 'mFeaturePickerWidget_exploring_single_selection'):
-                    self.dockwidget.mFeaturePickerWidget_exploring_single_selection.setLayer(None)
-                    logger.debug(f"FilterMate: FeaturePickerWidget reset before {task_name}")
-            except Exception as e:
-                logger.debug(f"FilterMate: Error resetting FeaturePickerWidget before {task_name}: {e}")
+            self.MapLayerStore = new_layer_store
+            self.MapLayerStore.layersAdded.connect(self._on_layers_added)
+            self.MapLayerStore.layersWillBeRemoved.connect(lambda layers: self.manage_task('remove_layers', layers))
+            self.MapLayerStore.allLayersRemoved.connect(lambda: self.manage_task('remove_all_layers'))
+            logger.info("FilterMate: Layer store signals reconnected to new project")
+        elif new_layer_store:
+            logger.debug("FilterMate: Updating MapLayerStore reference (signals not yet connected)")
+            self.MapLayerStore = new_layer_store
         
-        # STABILITY FIX: Set dockwidget busy flag to prevent concurrent layer changes
-        if self.dockwidget is not None:
-            self.dockwidget._plugin_busy = True
+        # Clear old PROJECT_LAYERS and reset datasources
+        self.PROJECT_LAYERS = {}
+        self.project_datasources = {'postgresql': {}, 'spatialite': {}, 'ogr': {}}
+        self.app_postgresql_temp_schema_setted = False
         
-        try:
-            # Verify project is valid
-            project = QgsProject.instance()
-            if not project:
-                logger.warning(f"Project not available for {task_name}, skipping")
-                return
-            
-            self.app_postgresql_temp_schema_setted = False
-            self._safe_cancel_all_tasks()
-            
-            # Reset project datasources
-            self.project_datasources = {'postgresql': {}, 'spatialite': {}, 'ogr': {}}
-            # Use timestamp-tracked flag setter for loading
-            self._set_loading_flag(True)
-            
-            init_env_vars()
-            global ENV_VARS
-            self.PROJECT = ENV_VARS["PROJECT"]
-
-            # Verify project is still valid after init
-            if not self.PROJECT:
-                logger.warning(f"Project became invalid during {task_name}, skipping")
-                self._set_loading_flag(False)
-                return
-
-            # CRITICAL: Disconnect old layer store signals before updating reference
-            # The old MapLayerStore may be invalid after project change
-            old_layer_store = self.MapLayerStore
-            new_layer_store = self.PROJECT.layerStore()
-
-            # ALWAYS reconnect signals on project change - even if layer_store is same object,
-            # the project context has changed and signals may be stale
-            if self._signals_connected:
-                logger.info(f"FilterMate: Disconnecting old layer store signals for {task_name}")
-                try:
-                    # Disconnect ALL old signals using disconnect() without arguments
-                    # This ensures all connections are removed
-                    old_layer_store.layersAdded.disconnect()
-                    old_layer_store.layersWillBeRemoved.disconnect()
-                    old_layer_store.allLayersRemoved.disconnect()
-                    logger.info("FilterMate: Old layer store signals disconnected")
-                except (TypeError, RuntimeError) as e:
-                    # Signals may already be invalid after project change
-                    logger.debug(f"Could not disconnect old signals (expected): {e}")
-                
-                # Update to new layer store
-                self.MapLayerStore = new_layer_store
-                
-                # Reconnect signals to new layer store
-                self.MapLayerStore.layersAdded.connect(self._on_layers_added)
-                self.MapLayerStore.layersWillBeRemoved.connect(lambda layers: self.manage_task('remove_layers', layers))
-                self.MapLayerStore.allLayersRemoved.connect(lambda: self.manage_task('remove_all_layers'))
-                logger.info("FilterMate: Layer store signals reconnected to new project")
-            else:
-                # First time - just update reference, signals will be connected in run()
-                logger.debug("FilterMate: Updating MapLayerStore reference (signals not yet connected)")
-                self.MapLayerStore = new_layer_store
-            
-            all_project_layers = list(self.PROJECT.mapLayers().values())
-            init_layers = self._filter_usable_layers(all_project_layers)
-            
-            # FIX: Track PostgreSQL layers that failed initial validation (might not be ready yet)
-            postgres_pending = [l for l in all_project_layers 
-                               if isinstance(l, QgsVectorLayer) 
-                               and l.providerType() == 'postgres' 
-                               and l.id() not in [layer.id() for layer in init_layers]]
-            if postgres_pending:
-                logger.info(f"FilterMate: {len(postgres_pending)} PostgreSQL layers pending validation (connection may be initializing)")
-            
-            # Clear old PROJECT_LAYERS when switching projects
-            self.PROJECT_LAYERS = {}
-            
-            self.init_filterMate_db()
-            
-            # Load favorites from the new project
-            if hasattr(self, 'favorites_manager'):
-                self.favorites_manager.load_from_project()
-                logger.info(f"FilterMate: Favorites loaded for {task_name} ({self.favorites_manager.count} favorites)")
-            
-            # CRITICAL FIX v2.3.7: When switching projects, the layersAdded signal has ALREADY
-            # been emitted by QGIS BEFORE we reach this point (it's emitted with projectRead).
-            # Since we just reconnected signals, we missed it. We MUST manually trigger add_layers.
-            # 
-            # Previous comment was WRONG: "waiting for layersAdded signal" - the signal already passed!
-            
-            # Determine delay based on PostgreSQL presence
-            has_postgres = any(l.providerType() == 'postgres' for l in all_project_layers if isinstance(l, QgsVectorLayer))
-            base_delay = STABILITY_CONSTANTS['UI_REFRESH_DELAY_MS']
-            if has_postgres:
-                base_delay += STABILITY_CONSTANTS['POSTGRESQL_EXTRA_DELAY_MS']
-                logger.info(f"PostgreSQL project detected - using extended delay ({base_delay}ms)")
-            
-            if len(init_layers) > 0 or postgres_pending:
-                logger.info(f"FilterMate: {len(init_layers)} layers detected in {task_name} - manually triggering add_layers (signal already passed)")
-                
-                # CRITICAL: Manually call add_layers since we missed the signal
-                # Use a short delay to allow flag resets to complete
-                weak_self = weakref.ref(self)
-                captured_init_layers = init_layers
-                captured_postgres_pending = postgres_pending
-                
-                def trigger_add_layers():
-                    strong_self = weak_self()
-                    if strong_self is None:
-                        return
-                    # Reset flags before calling add_layers to prevent blocking
-                    strong_self._set_initializing_flag(False)
-                    strong_self._set_loading_flag(False)
-                    
-                    # Now trigger the add_layers task
-                    logger.info(f"FilterMate: Triggering add_layers for {len(captured_init_layers)} layers")
-                    strong_self.manage_task('add_layers', captured_init_layers)
-                    
-                    # FIX: Schedule retry for PostgreSQL layers that might be valid now
-                    if captured_postgres_pending:
-                        def retry_postgres_layers(retry_attempt=1):
-                            strong_self2 = weak_self()
-                            if strong_self2 is None:
-                                return
-                            # Re-check PostgreSQL layers that were pending
-                            now_valid = []
-                            still_pending = []
-                            for layer in captured_postgres_pending:
-                                try:
-                                    if layer.isValid() and layer.id() not in strong_self2.PROJECT_LAYERS:
-                                        now_valid.append(layer)
-                                        logger.info(f"PostgreSQL layer '{layer.name()}' is now valid (retry #{retry_attempt})")
-                                    elif not layer.isValid():
-                                        still_pending.append(layer)
-                                except (RuntimeError, AttributeError):
-                                    pass
-                            if now_valid:
-                                logger.info(f"FilterMate: Retrying {len(now_valid)} PostgreSQL layers that are now valid")
-                                strong_self2.manage_task('add_layers', now_valid)
-                            
-                            # FIX v2.8.6: Schedule additional retries if layers still pending
-                            if still_pending and retry_attempt < 3:
-                                logger.info(f"FilterMate: {len(still_pending)} PostgreSQL layers still not valid - scheduling retry #{retry_attempt + 1}")
-                                QTimer.singleShot(
-                                    STABILITY_CONSTANTS['POSTGRESQL_EXTRA_DELAY_MS'] * retry_attempt,
-                                    lambda: retry_postgres_layers(retry_attempt + 1)
-                                )
-                        
-                        # Retry PostgreSQL layers after additional delay
-                        QTimer.singleShot(STABILITY_CONSTANTS['POSTGRESQL_EXTRA_DELAY_MS'] * 2, retry_postgres_layers)
-                
-                # Use delay to ensure QGIS is stable (longer for PostgreSQL)
-                QTimer.singleShot(base_delay, trigger_add_layers)
-                
-                # CRITICAL: Force UI refresh after layers are loaded
-                # This ensures all widgets and signals are properly updated
-                # Use longer delay and verify PROJECT_LAYERS is populated
-                # For PostgreSQL projects, use even longer delay to account for retry mechanism
-                refresh_delay = 3000 if not has_postgres else 5000
-                
-                def refresh_after_load():
-                    if not self.dockwidget or not self.dockwidget.widgets_initialized:
-                        return
-                    
-                    # CRITICAL: Verify PROJECT_LAYERS has been populated before refreshing
-                    if len(self.PROJECT_LAYERS) == 0:
-                        logger.debug(f"PROJECT_LAYERS still empty, deferring UI refresh by 1000ms")
-                        # Layers not yet processed - try again in 1 second
-                        QTimer.singleShot(1000, refresh_after_load)
-                        return
-                    
-                    logger.info(f"Forcing UI refresh after {task_name} layer load with {len(self.PROJECT_LAYERS)} layers")
-                    self._refresh_ui_after_project_load()
-                
-                # Start with appropriate delay based on project type
-                QTimer.singleShot(refresh_delay, refresh_after_load)
-            else:
-                logger.info(f"FilterMate: No layers in {task_name}, resetting UI")
-                # CRITICAL: Check dockwidget exists before accessing (should be true due to check at start)
-                if self.dockwidget is not None:
-                    self.dockwidget.disconnect_widgets_signals()
-                    self.dockwidget.reset_multiple_checkable_combobox()
-                    self.layer_management_engine_task_completed({}, 'remove_all_layers')
-                    self._loading_new_project = False
-                    # Inform user that plugin is waiting for layers
-                    iface.messageBar().pushInfo(
-                        "FilterMate",
-                        "Projet sans couches vectorielles. Ajoutez des couches pour activer le plugin."
-                    )
-        finally:
-            # STABILITY FIX: Use timestamp-tracked flag resetters
-            self._set_initializing_flag(False)
-            # STABILITY FIX: Always reset _loading_new_project flag, even on error
-            if self._loading_new_project:
-                logger.debug(f"Resetting _loading_new_project flag in finally block")
-                self._set_loading_flag(False)
-            # STABILITY FIX: Release dockwidget busy flag
-            if self.dockwidget is not None:
-                self.dockwidget._plugin_busy = False
+        # Load favorites from new project
+        if hasattr(self, 'favorites_manager'):
+            self.favorites_manager.load_from_project()
+            logger.info(f"FilterMate: Favorites loaded for {task_name} ({self.favorites_manager.count} favorites)")
+        
+        service.handle_project_initialization(
+            task_name=task_name,
+            is_initializing=self._initializing_project,
+            is_loading=self._loading_new_project,
+            dockwidget=self.dockwidget,
+            check_reset_flags_callback=self._check_and_reset_stale_flags,
+            set_initializing_flag_callback=self._set_initializing_flag,
+            set_loading_flag_callback=self._set_loading_flag,
+            cancel_tasks_callback=self._safe_cancel_all_tasks,
+            init_env_vars_callback=lambda: (init_env_vars(), setattr(self, 'PROJECT', ENV_VARS["PROJECT"])),
+            get_project_callback=lambda: self.PROJECT,
+            init_db_callback=self.init_filterMate_db,
+            manage_task_callback=lambda layers: self.manage_task('add_layers', layers),
+            temp_schema=self.app_postgresql_temp_schema,
+            stability_constants=STABILITY_CONSTANTS
+        )
 
     def manage_task(self, task_name, data=None):
         """
@@ -2509,40 +1886,16 @@ class FilterMateApp:
         """
         Cancel all running tasks for a specific layer to prevent access violations.
         
-        .. deprecated:: 4.0.0
-            Delegates to TaskManagementService.cancel_layer_tasks()
-        
-        CRASH FIX (v2.3.20): This method must be called before modifying layer variables
-        (setLayerVariable) to prevent the race condition where background tasks are
-        iterating features while the main thread modifies layer state.
+        Delegates to TaskManagementService.cancel_layer_tasks().
         
         Args:
             layer_id: The ID of the layer whose tasks should be cancelled
         """
-        # v4.0: Delegate to TaskManagementService
         service = self._get_task_management_service()
         if service:
             service.cancel_layer_tasks(layer_id, self.dockwidget)
-            return
-        
-        # Fallback to legacy implementation
-        try:
-            # Cancel tasks in exploring widgets
-            if hasattr(self, 'dockwidget') and self.dockwidget:
-                exploring_widget = self.dockwidget.widgets.get("EXPLORING", {})
-                for widget_key in ["SINGLE_SELECTION_FEATURES", "MULTIPLE_SELECTION_FEATURES"]:
-                    widget_data = exploring_widget.get(widget_key, {})
-                    widget = widget_data.get("WIDGET")
-                    if widget and hasattr(widget, 'tasks'):
-                        for task_type in widget.tasks:
-                            if layer_id in widget.tasks[task_type]:
-                                task = widget.tasks[task_type][layer_id]
-                                if isinstance(task, QgsTask) and not sip.isdeleted(task):
-                                    if task.status() in [QgsTask.Running, QgsTask.Queued]:
-                                        logger.debug(f"Cancelling {task_type} task for layer {layer_id} before variable update")
-                                        task.cancel()
-        except Exception as e:
-            logger.debug(f"_cancel_layer_tasks: Error cancelling tasks: {e}")
+        else:
+            logger.warning("TaskManagementService not available, cannot cancel layer tasks")
 
     def _handle_layer_task_terminated(self, task_name):
         """Handle layer management task termination (failure or cancellation).
@@ -2624,42 +1977,12 @@ class FilterMateApp:
         
         Processes the first queued add_layers operation from self._add_layers_queue.
         Called after a previous add_layers task completes or from safety timer.
-        
-        Thread-safe: Uses _processing_queue flag to prevent concurrent processing.
         """
-        # v4.0: Delegate to TaskManagementService
         service = self._get_task_management_service()
         if service:
             service.process_add_layers_queue(self.manage_task)
-            return
-        
-        # Fallback to legacy implementation
-        # Prevent concurrent queue processing
-        if self._processing_queue:
-            logger.debug("Queue already being processed, skipping")
-            return
-        
-        if not self._add_layers_queue:
-            logger.debug("Queue is empty, nothing to process")
-            return
-        
-        self._processing_queue = True
-        
-        try:
-            # Get first queued operation
-            queued_layers = self._add_layers_queue.pop(0)
-            logger.info(f"Processing queued add_layers operation with {len(queued_layers) if queued_layers else 0} layers (queue size: {len(self._add_layers_queue)})")
-            
-            # Process the queued operation
-            # Note: manage_task will increment _pending_add_layers_tasks
-            self.manage_task('add_layers', queued_layers)
-            
-        except Exception as e:
-            logger.error(f"Error processing add_layers queue: {e}")
-            import traceback
-            logger.debug(traceback.format_exc())
-        finally:
-            self._processing_queue = False
+        else:
+            logger.warning("TaskManagementService not available, cannot process queue")
     
     def _warm_query_cache_for_layers(self):
         """Pre-warm query cache for loaded layers to reduce cold-start latency.
@@ -3517,20 +2840,8 @@ class FilterMateApp:
         """
         Build common task parameters for filter/unfilter/reset operations.
         
-        .. deprecated:: 4.0.0
-            Delegates to TaskParameterBuilder.build_common_task_params()
-            Direct use of this method is discouraged.
-        
-        Args:
-            features: Selected features for filtering
-            expression (str): Filter expression
-            layers_to_filter (list): List of layers to apply filter to
-            include_history (bool): Whether to include history_manager (for unfilter)
-            
-        Returns:
-            dict: Common task parameters
+        Delegates to TaskParameterBuilder.build_common_task_params().
         """
-        # v4.0: Delegate to TaskParameterBuilder
         if TaskParameterBuilder and self.dockwidget:
             builder = TaskParameterBuilder(
                 dockwidget=self.dockwidget,
@@ -3548,127 +2859,16 @@ class FilterMateApp:
                 history_manager=self.history_manager if include_history else None
             )
         
-        # Fallback to legacy implementation (should not happen in v4.0+)
-        logger.warning("TaskParameterBuilder unavailable - using legacy implementation")
-        
-        # DIAGNOSTIC v2.4.17: Log incoming features at DEBUG level
-        feat_count = len(features) if features else 0
-        logger.debug(f"_build_common_task_params: {feat_count} features received, expression='{expression}'")
-        
-        # FIX v2.4.19: Deduplicate features by ID to prevent processing same feature twice
-        # This can happen when features are passed from multiple sources (e.g., selection + expression)
-        deduplicated_features = []
-        seen_ids = set()
-        if features:
-            for feat in features:
-                if hasattr(feat, 'id'):
-                    feat_id = feat.id()
-                    if feat_id not in seen_ids:
-                        seen_ids.add(feat_id)
-                        deduplicated_features.append(feat)
-                    else:
-                        logger.debug(f"  Removing duplicate feature id={feat_id}")
-                else:
-                    # Non-QgsFeature item, keep as is
-                    deduplicated_features.append(feat)
-        
-        if len(deduplicated_features) != feat_count:
-            # Log at WARNING only if significant deduplication (>10% difference)
-            if feat_count - len(deduplicated_features) > max(1, feat_count * 0.1):
-                logger.warning(f"  ⚠️ Deduplicated features: {feat_count} → {len(deduplicated_features)}")
-            else:
-                logger.debug(f"  Deduplicated features: {feat_count} → {len(deduplicated_features)}")
-            features = deduplicated_features
-        
-        logger.debug(f"=== _build_common_task_params DIAGNOSTIC ===")
-        logger.debug(f"  features count: {len(features) if features else 0}")
-        if features and logger.isEnabledFor(logging.DEBUG):
-            # Only log first 3 features to reduce verbosity
-            for idx, feat in enumerate(features[:3]):
-                if hasattr(feat, 'id') and hasattr(feat, 'geometry'):
-                    feat_id = feat.id()
-                    if feat.hasGeometry():
-                        bbox = feat.geometry().boundingBox()
-                        logger.debug(f"  feature[{idx}]: id={feat_id}, bbox=({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})")
-                    else:
-                        logger.debug(f"  feature[{idx}]: id={feat_id}, NO GEOMETRY")
-                else:
-                    logger.debug(f"  feature[{idx}]: type={type(feat).__name__}")
-            if len(features) > 3:
-                logger.debug(f"  ... and {len(features) - 3} more features")
-        logger.debug(f"  expression: '{expression}'")
-        logger.debug(f"  layers_to_filter count: {len(layers_to_filter)}")
-        
-        # CRITICAL FIX: Validate that expression is a boolean filter expression, not a display expression
-        # Display expressions like coalesce("field",'<NULL>') return values, not boolean
-        # They cannot be used in SQL WHERE clauses
-        validated_expression = expression
-        if expression:
-            # Check if expression contains comparison operators (required for boolean filter)
-            comparison_operators = ['=', '>', '<', '!=', '<>', ' IN ', ' LIKE ', ' ILIKE ', 
-                                   ' IS NULL', ' IS NOT NULL', ' BETWEEN ', ' NOT ', '~']
-            has_comparison = any(op in expression.upper() for op in comparison_operators)
-            
-            if not has_comparison:
-                # Expression doesn't contain comparison operators - likely a display expression
-                # Don't use it as a filter expression
-                logger.debug(f"_build_common_task_params: Rejecting display expression '{expression}' - no comparison operators")
-                validated_expression = ''
-        
-        # v2.7.16: Store feature IDs (FIDs) for thread-safe recovery
-        # QgsFeature objects can become invalid when accessed from background threads
-        # FIDs allow us to refetch features from the source layer if validation fails
-        feature_fids = []
-        if features:
-            for f in features:
-                try:
-                    if hasattr(f, 'id') and callable(f.id):
-                        fid = f.id()
-                        if fid is not None and fid >= 0:  # Valid FID
-                            feature_fids.append(fid)
-                except Exception as e:
-                    logger.warning(f"_build_common_task_params: Could not get FID from feature: {e}")
-        
-        # v2.7.16: Log FIDs for diagnostic
-        logger.info(f"_build_common_task_params: Extracted {len(feature_fids)} FIDs from {len(features) if features else 0} features")
-        if feature_fids:
-            logger.info(f"  FIDs: {feature_fids[:10]}{'...' if len(feature_fids) > 10 else ''}")
-        
-        params = {
-            "features": features,
-            "feature_fids": feature_fids,  # v2.7.15: Thread-safe FIDs for recovery
-            "expression": validated_expression,
-            "options": self.dockwidget.project_props["OPTIONS"],
-            "layers": layers_to_filter,
-            "db_file_path": self.db_file_path,
-            "project_uuid": self.project_uuid,
-            "session_id": self.session_id  # For multi-client materialized view isolation
-        }
-        if include_history:
-            params["history_manager"] = self.history_manager
-        
-        # Add forced backends information from dockwidget
-        if self.dockwidget and hasattr(self.dockwidget, 'forced_backends'):
-            params["forced_backends"] = self.dockwidget.forced_backends
-        
-        return params
+        # TaskParameterBuilder required
+        logger.error("TaskParameterBuilder not available - cannot build task parameters")
+        return None
     
     def _build_layer_management_params(self, layers, reset_flag):
         """
         Build parameters for layer management tasks (add/remove layers).
         
-        .. deprecated:: 4.0.0
-            Delegates to TaskParameterBuilder.build_layer_management_params()
-            Direct use of this method is discouraged.
-        
-        Args:
-            layers (list): List of layers to manage
-            reset_flag (bool): Whether to reset all layer variables
-            
-        Returns:
-            dict: Layer management task parameters
+        Delegates to TaskParameterBuilder.build_layer_management_params().
         """
-        # v4.0: Delegate to TaskParameterBuilder
         if TaskParameterBuilder and self.dockwidget:
             builder = TaskParameterBuilder(
                 dockwidget=self.dockwidget,
@@ -3685,19 +2885,9 @@ class FilterMateApp:
                 session_id=self.session_id
             )
         
-        # Fallback to legacy implementation (should not happen in v4.0+)
-        logger.warning("TaskParameterBuilder unavailable - using legacy implementation")
-        return {
-            "task": {
-                "layers": layers,
-                "project_layers": self.PROJECT_LAYERS,
-                "reset_all_layers_variables_flag": reset_flag,
-                "config_data": self.CONFIG_DATA,
-                "db_file_path": self.db_file_path,
-                "project_uuid": self.project_uuid,
-                "session_id": self.session_id  # For multi-client materialized view isolation
-            }
-        }
+        # TaskParameterBuilder required
+        logger.error("TaskParameterBuilder not available - cannot build layer management parameters")
+        return None
 
     def get_task_parameters(self, task_name, data=None):
         """
@@ -4082,6 +3272,8 @@ class FilterMateApp:
         """
         Push filter state to history for source and associated layers.
         
+        v4.0: Delegated to UndoRedoHandler.
+        
         Args:
             source_layer (QgsVectorLayer): Source layer being filtered
             task_parameters (dict): Task parameters containing layers info
@@ -4089,447 +3281,158 @@ class FilterMateApp:
             provider_type (str): Backend provider type
             layer_count (int): Number of layers affected
         """
-        # Save source layer state to history
-        history = self.history_manager.get_or_create_history(source_layer.id())
-        filter_expression = source_layer.subsetString()
-        description = f"Filter: {filter_expression[:60]}..." if len(filter_expression) > 60 else f"Filter: {filter_expression}"
-        history.push_state(
-            expression=filter_expression,
-            feature_count=feature_count,
-            description=description,
-            metadata={"backend": provider_type, "operation": "filter", "layer_count": layer_count}
-        )
-        logger.info(f"FilterMate: Pushed filter state to history for source layer (position {history._current_index + 1}/{len(history._states)})")
-        
-        # Collect remote layers info for global history
-        remote_layers_info = {}
-        
-        # Save associated layers state to history
-        for layer_props in task_parameters.get("task", {}).get("layers", []):
-            if layer_props["layer_id"] in self.PROJECT_LAYERS:
-                layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"]) 
-                         if layer.id() == layer_props["layer_id"]]
-                if len(layers) == 1:
-                    assoc_layer = layers[0]
-                    assoc_history = self.history_manager.get_or_create_history(assoc_layer.id())
-                    assoc_filter = assoc_layer.subsetString()
-                    assoc_count = assoc_layer.featureCount()
-                    assoc_desc = f"Filter: {assoc_filter[:60]}..." if len(assoc_filter) > 60 else f"Filter: {assoc_filter}"
-                    assoc_history.push_state(
-                        expression=assoc_filter,
-                        feature_count=assoc_count,
-                        description=assoc_desc,
-                        metadata={"backend": layer_props.get("layer_provider_type", "unknown"), "operation": "filter"}
-                    )
-                    logger.info(f"FilterMate: Pushed filter state to history for layer {assoc_layer.name()}")
-                    
-                    # Add to global history info
-                    remote_layers_info[assoc_layer.id()] = (assoc_filter, assoc_count)
-        
-        # Push global state if we have remote layers
-        if remote_layers_info:
-            self.history_manager.push_global_state(
-                source_layer_id=source_layer.id(),
-                source_expression=filter_expression,
-                source_feature_count=feature_count,
-                remote_layers=remote_layers_info,
-                description=f"Global filter: {len(remote_layers_info) + 1} layers",
-                metadata={"backend": provider_type, "operation": "filter"}
+        if self._undo_redo_handler:
+            self._undo_redo_handler.push_filter_to_history(
+                source_layer=source_layer,
+                task_parameters=task_parameters,
+                feature_count=feature_count,
+                provider_type=provider_type,
+                layer_count=layer_count
             )
-            logger.info(f"FilterMate: Pushed global filter state ({len(remote_layers_info) + 1} layers)")
+        else:
+            logger.warning("UndoRedoHandler not available, history not updated")
     
     def update_undo_redo_buttons(self):
         """
         Update undo/redo button states based on history availability.
+        
+        v4.0: Delegates to UndoRedoHandler.
         """
-        if not self.dockwidget or not hasattr(self.dockwidget, 'pushButton_action_undo_filter') or not hasattr(self.dockwidget, 'pushButton_action_redo_filter'):
+        if not self.dockwidget:
             return
         
-        if not self.dockwidget.current_layer:
-            self.dockwidget.pushButton_action_undo_filter.setEnabled(False)
-            self.dockwidget.pushButton_action_redo_filter.setEnabled(False)
+        undo_btn = getattr(self.dockwidget, 'pushButton_action_undo_filter', None)
+        redo_btn = getattr(self.dockwidget, 'pushButton_action_redo_filter', None)
+        
+        if not undo_btn or not redo_btn:
             return
         
-        source_layer = self.dockwidget.current_layer
-        
-        # STABILITY FIX: Guard against KeyError if layer not in PROJECT_LAYERS
-        if source_layer.id() not in self.dockwidget.PROJECT_LAYERS:
-            logger.debug(f"update_undo_redo_buttons: layer {source_layer.name()} not in PROJECT_LAYERS")
-            self.dockwidget.pushButton_action_undo_filter.setEnabled(False)
-            self.dockwidget.pushButton_action_redo_filter.setEnabled(False)
-            return
-        
-        layers_to_filter = self.dockwidget.PROJECT_LAYERS[source_layer.id()]["filtering"].get("layers_to_filter", [])
-        
-        # Check if remote layers are selected
-        has_remote_layers = bool(layers_to_filter)
-        
-        # Determine undo/redo availability
-        if has_remote_layers:
-            # Global history mode
-            can_undo = self.history_manager.can_undo_global()
-            can_redo = self.history_manager.can_redo_global()
+        if self._undo_redo_handler:
+            current_layer = self.dockwidget.current_layer
+            layers_to_filter = []
+            if current_layer and current_layer.id() in self.dockwidget.PROJECT_LAYERS:
+                layers_to_filter = self.dockwidget.PROJECT_LAYERS[current_layer.id()]["filtering"].get("layers_to_filter", [])
+            
+            self._undo_redo_handler.update_button_states(
+                current_layer=current_layer,
+                layers_to_filter=layers_to_filter,
+                undo_button=undo_btn,
+                redo_button=redo_btn
+            )
         else:
-            # Source layer only mode
-            history = self.history_manager.get_history(source_layer.id())
-            can_undo = history.can_undo() if history else False
-            can_redo = history.can_redo() if history else False
-        
-        self.dockwidget.pushButton_action_undo_filter.setEnabled(can_undo)
-        self.dockwidget.pushButton_action_redo_filter.setEnabled(can_redo)
-        
-        logger.debug(f"FilterMate: Updated undo/redo buttons - undo: {can_undo}, redo: {can_redo}")
+            # Fallback: disable both buttons
+            undo_btn.setEnabled(False)
+            redo_btn.setEnabled(False)
     
     def handle_undo(self):
         """
         Handle undo operation with intelligent layer selection logic.
         
+        v4.0: Delegated to UndoRedoHandler for God Class reduction.
+        
         Logic:
         - If pushButton_checkable_filtering_layers_to_filter is checked AND has remote layers: undo all layers globally
         - If pushButton_checkable_filtering_layers_to_filter is unchecked: undo only source layer
-        
-        v2.9.29: Added _filtering_in_progress protection to prevent layer change signals
-        from triggering widget synchronization during undo, which could reset combobox state.
         """
         if not self.dockwidget or not self.dockwidget.current_layer:
             logger.warning("FilterMate: No current layer for undo")
             return
         
-        # v2.9.29: CRITICAL - Set filtering protection to prevent layer change signals
-        # from triggering widget synchronization during undo operation
-        self.dockwidget._filtering_in_progress = True
-        logger.info("v2.9.29: 🔒 handle_undo - Filtering protection enabled")
-        
-        try:
+        # v4.0: Delegate to handler if available
+        if self._undo_redo_handler:
             source_layer = self.dockwidget.current_layer
-
-            # Guard: ensure layer is usable
-            if not is_layer_source_available(source_layer):
-                logger.warning("handle_undo: source layer invalid or source missing; aborting.")
-                iface.messageBar().pushWarning(
-                    "FilterMate",
-                    "Impossible d'annuler: couche invalide ou source introuvable."
-                )
-                return
+            layers_to_filter = self.dockwidget.PROJECT_LAYERS.get(
+                source_layer.id(), {}
+            ).get("filtering", {}).get("layers_to_filter", [])
             
-            # STABILITY FIX: Verify layer exists in PROJECT_LAYERS before access
-            if source_layer.id() not in self.dockwidget.PROJECT_LAYERS:
-                logger.warning(f"handle_undo: layer {source_layer.name()} not in PROJECT_LAYERS; aborting.")
-                return
-            
-            layers_to_filter = self.dockwidget.PROJECT_LAYERS[source_layer.id()]["filtering"].get("layers_to_filter", [])
-            
-            # Check if the "Layers to filter" button is checked and has remote layers selected
             button_is_checked = self.dockwidget.pushButton_checkable_filtering_layers_to_filter.isChecked()
-            has_remote_layers = bool(layers_to_filter)
             
-            # Use global undo if button is checked and remote layers are selected
-            use_global_undo = button_is_checked and has_remote_layers
+            # Set filtering protection
+            self.dockwidget._filtering_in_progress = True
+            logger.info("v4.0: 🔒 handle_undo - Filtering protection enabled (delegated)")
             
-            if use_global_undo:
-                # Global undo
-                logger.info("FilterMate: Performing global undo (remote layers are filtered)")
-                global_state = self.history_manager.undo_global()
-                
-                if global_state:
-                    # Apply state to source layer
-                    safe_set_subset_string(source_layer, global_state.source_expression)
-                    self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = bool(global_state.source_expression)
-                    logger.info(f"FilterMate: Restored source layer: {global_state.source_expression[:60] if global_state.source_expression else 'no filter'}")
-                    
-                    # Apply state to ALL remote layers from the saved state
-                    restored_count = 0
-                    restored_layers = []
-                    for remote_id, (expression, _) in global_state.remote_layers.items():
-                        # Check if layer still exists in project
-                        if remote_id not in self.PROJECT_LAYERS:
-                            logger.warning(f"FilterMate: Remote layer {remote_id} no longer exists, skipping")
-                            continue
-                        
-                        remote_layers = [l for l in self.PROJECT.mapLayers().values() if l.id() == remote_id]
-                        if remote_layers:
-                            remote_layer = remote_layers[0]
-                            if not is_layer_source_available(remote_layer):
-                                logger.warning(
-                                    f"Global undo: skipping remote layer '{remote_layer.name()}' (invalid or missing source)"
-                                )
-                                continue
-                            safe_set_subset_string(remote_layer, expression)
-                            self.PROJECT_LAYERS[remote_id]["infos"]["is_already_subset"] = bool(expression)
-                            logger.info(f"FilterMate: Restored remote layer {remote_layer.name()}: {expression[:60] if expression else 'no filter'}")
-                            restored_count += 1
-                            restored_layers.append(remote_layer)
-                        else:
-                            logger.warning(f"FilterMate: Remote layer {remote_id} not found in project")
-                    
-                    # Refresh ALL affected layers (source + remotes), not just source
-                    source_layer.updateExtents()
-                    source_layer.triggerRepaint()
-                    for remote_layer in restored_layers:
-                        remote_layer.updateExtents()
-                        remote_layer.triggerRepaint()
-                    self.iface.mapCanvas().refreshAllLayers()
-                    self.iface.mapCanvas().refresh()
-                    
-                    logger.info(f"FilterMate: Global undo completed - restored {restored_count + 1} layers")
-                else:
-                    logger.info("FilterMate: No global undo history available")
-            else:
-                # Source layer only undo
-                logger.info("FilterMate: Performing source layer undo only")
-                history = self.history_manager.get_history(source_layer.id())
-                
-                if history and history.can_undo():
-                    previous_state = history.undo()
-                    if previous_state:
-                        safe_set_subset_string(source_layer, previous_state.expression)
-                        self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = bool(previous_state.expression)
-                        logger.info(f"FilterMate: Undo source layer to: {previous_state.description}")
-                        
-                        # Refresh
-                        self._refresh_layers_and_canvas(source_layer)
-                else:
-                    logger.info("FilterMate: No undo history for source layer")
-            
-            # Update button states after undo
-            self.update_undo_redo_buttons()
-        
-        finally:
-            # v3.0.15: CRITICAL - Set time-based protection BEFORE resetting filtering flag
-            # This ensures delayed canvas refresh signals don't reset the combobox
-            if self.dockwidget:
-                import time
-                self.dockwidget._filter_completed_time = time.time()
-                # Save current layer ID for protection window
-                if self.dockwidget.current_layer:
-                    self.dockwidget._saved_layer_id_before_filter = self.dockwidget.current_layer.id()
-                    saved_layer_id = self.dockwidget.current_layer.id()
-                    
-                    # v3.0.17: CRITICAL - Add delayed combobox verification checks
-                    # Same as in filter_engine_task_completed() to catch async changes
-                    def restore_combobox_if_needed():
-                        """Check and restore combobox to saved layer if it was changed."""
-                        try:
-                            if not self.dockwidget:
-                                return
-                            saved_layer = QgsProject.instance().mapLayer(saved_layer_id)
-                            if saved_layer and saved_layer.isValid():
-                                current_combo = self.dockwidget.comboBox_filtering_current_layer.currentLayer()
-                                current_name = current_combo.name() if current_combo else "(None)"
-                                if not current_combo or current_combo.id() != saved_layer.id():
-                                    from qgis.core import QgsMessageLog, Qgis
-                                    QgsMessageLog.logMessage(
-                                        f"v3.0.17: 🔧 UNDO DELAYED CHECK - Restoring from '{current_name}' to '{saved_layer.name()}'",
-                                        "FilterMate", Qgis.Warning
-                                    )
-                                    self.dockwidget.comboBox_filtering_current_layer.blockSignals(True)
-                                    self.dockwidget.comboBox_filtering_current_layer.setLayer(saved_layer)
-                                    self.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
-                                    self.dockwidget.current_layer = saved_layer
-                        except Exception as e:
-                            logger.debug(f"v3.0.17: Error in delayed undo combobox check: {e}")
-                    
-                    # Schedule multiple checks to catch async signal-triggered changes
-                    from qgis.PyQt.QtCore import QTimer
-                    for delay in [200, 600, 1000, 1500, 2000]:
-                        QTimer.singleShot(delay, restore_combobox_if_needed)
-                    logger.info(f"v3.0.17: 📋 handle_undo - Scheduled 5 delayed combobox verification checks")
-                    
-                logger.info("v3.0.15: ⏱️ handle_undo - 2000ms protection window enabled")
-                
-                # v2.9.29: ALWAYS reset filtering protection
+            try:
+                result = self._undo_redo_handler.handle_undo(
+                    source_layer=source_layer,
+                    layers_to_filter=layers_to_filter,
+                    use_global=button_is_checked,
+                    dockwidget=self.dockwidget
+                )
+                if result:
+                    self.update_undo_redo_buttons()
+            finally:
                 self.dockwidget._filtering_in_progress = False
-                logger.info("v2.9.29: 🔓 handle_undo - Filtering protection disabled")
+                logger.info("v4.0: 🔓 handle_undo - Filtering protection disabled")
+        else:
+            # Legacy fallback - should not happen in normal operation
+            logger.warning("FilterMate: UndoRedoHandler not available, undo skipped")
     
     def handle_redo(self):
         """
         Handle redo operation with intelligent layer selection logic.
         
+        v4.0: Delegated to UndoRedoHandler for God Class reduction.
+        
         Logic:
         - If pushButton_checkable_filtering_layers_to_filter is checked AND has remote layers: redo all layers globally
         - If pushButton_checkable_filtering_layers_to_filter is unchecked: redo only source layer
-        
-        v2.9.29: Added _filtering_in_progress protection to prevent layer change signals
-        from triggering widget synchronization during redo, which could reset combobox state.
         """
         if not self.dockwidget or not self.dockwidget.current_layer:
             logger.warning("FilterMate: No current layer for redo")
             return
         
-        # v2.9.29: CRITICAL - Set filtering protection to prevent layer change signals
-        # from triggering widget synchronization during redo operation
-        self.dockwidget._filtering_in_progress = True
-        logger.info("v2.9.29: 🔒 handle_redo - Filtering protection enabled")
-        
-        try:
+        # v4.0: Delegate to handler if available
+        if self._undo_redo_handler:
             source_layer = self.dockwidget.current_layer
-
-            # Guard: ensure layer is usable
-            if not is_layer_source_available(source_layer):
-                logger.warning("handle_redo: source layer invalid or source missing; aborting.")
-                iface.messageBar().pushWarning(
-                    "FilterMate",
-                    "Impossible de rétablir: couche invalide ou source introuvable."
-                )
-                return
+            layers_to_filter = self.dockwidget.PROJECT_LAYERS.get(
+                source_layer.id(), {}
+            ).get("filtering", {}).get("layers_to_filter", [])
             
-            # STABILITY FIX: Verify layer exists in PROJECT_LAYERS before access
-            if source_layer.id() not in self.dockwidget.PROJECT_LAYERS:
-                logger.warning(f"handle_redo: layer {source_layer.name()} not in PROJECT_LAYERS; aborting.")
-                return
-            
-            layers_to_filter = self.dockwidget.PROJECT_LAYERS[source_layer.id()]["filtering"].get("layers_to_filter", [])
-            
-            # Check if the "Layers to filter" button is checked and has remote layers selected
             button_is_checked = self.dockwidget.pushButton_checkable_filtering_layers_to_filter.isChecked()
-            has_remote_layers = bool(layers_to_filter)
             
-            # Use global redo if button is checked and remote layers are selected
-            use_global_redo = button_is_checked and has_remote_layers
+            # Set filtering protection
+            self.dockwidget._filtering_in_progress = True
+            logger.info("v4.0: 🔒 handle_redo - Filtering protection enabled (delegated)")
             
-            if use_global_redo and self.history_manager.can_redo_global():
-                # Global redo
-                logger.info("FilterMate: Performing global redo")
-                global_state = self.history_manager.redo_global()
-                
-                if global_state:
-                    # Apply state to source layer
-                    safe_set_subset_string(source_layer, global_state.source_expression)
-                    self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = bool(global_state.source_expression)
-                    logger.info(f"FilterMate: Restored source layer: {global_state.source_expression[:60] if global_state.source_expression else 'no filter'}")
-                    
-                    # Apply state to ALL remote layers from the saved state
-                    restored_count = 0
-                    restored_layers = []
-                    for remote_id, (expression, _) in global_state.remote_layers.items():
-                        # Check if layer still exists in project
-                        if remote_id not in self.PROJECT_LAYERS:
-                            logger.warning(f"FilterMate: Remote layer {remote_id} no longer exists, skipping")
-                            continue
-                        
-                        remote_layers = [l for l in self.PROJECT.mapLayers().values() if l.id() == remote_id]
-                        if remote_layers:
-                            remote_layer = remote_layers[0]
-                            if not is_layer_source_available(remote_layer):
-                                logger.warning(
-                                    f"Global redo: skipping remote layer '{remote_layer.name()}' (invalid or missing source)"
-                                )
-                                continue
-                            safe_set_subset_string(remote_layer, expression)
-                            self.PROJECT_LAYERS[remote_id]["infos"]["is_already_subset"] = bool(expression)
-                            logger.info(f"FilterMate: Restored remote layer {remote_layer.name()}: {expression[:60] if expression else 'no filter'}")
-                            restored_count += 1
-                            restored_layers.append(remote_layer)
-                        else:
-                            logger.warning(f"FilterMate: Remote layer {remote_id} not found in project")
-                    
-                    # Refresh ALL affected layers (source + remotes), not just source
-                    source_layer.updateExtents()
-                    source_layer.triggerRepaint()
-                    for remote_layer in restored_layers:
-                        remote_layer.updateExtents()
-                        remote_layer.triggerRepaint()
-                    self.iface.mapCanvas().refreshAllLayers()
-                    self.iface.mapCanvas().refresh()
-                    
-                    logger.info(f"FilterMate: Global redo completed - restored {restored_count + 1} layers")
-                else:
-                    logger.info("FilterMate: No global redo history available")
-            else:
-                # Source layer only redo
-                logger.info("FilterMate: Performing source layer redo only")
-                history = self.history_manager.get_history(source_layer.id())
-                
-                if history and history.can_redo():
-                    next_state = history.redo()
-                    if next_state:
-                        safe_set_subset_string(source_layer, next_state.expression)
-                        self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = bool(next_state.expression)
-                        logger.info(f"FilterMate: Redo source layer to: {next_state.description}")
-                        
-                        # Refresh
-                        self._refresh_layers_and_canvas(source_layer)
-                else:
-                    logger.info("FilterMate: No redo history for source layer")
-            
-            # Update button states after redo
-            self.update_undo_redo_buttons()
-        
-        finally:
-            # v3.0.15: CRITICAL - Set time-based protection BEFORE resetting filtering flag
-            # This ensures delayed canvas refresh signals don't reset the combobox
-            if self.dockwidget:
-                import time
-                self.dockwidget._filter_completed_time = time.time()
-                # Save current layer ID for protection window
-                if self.dockwidget.current_layer:
-                    self.dockwidget._saved_layer_id_before_filter = self.dockwidget.current_layer.id()
-                    saved_layer_id = self.dockwidget.current_layer.id()
-                    
-                    # v3.0.17: CRITICAL - Add delayed combobox verification checks
-                    # Same as in filter_engine_task_completed() to catch async changes
-                    def restore_combobox_if_needed():
-                        """Check and restore combobox to saved layer if it was changed."""
-                        try:
-                            if not self.dockwidget:
-                                return
-                            saved_layer = QgsProject.instance().mapLayer(saved_layer_id)
-                            if saved_layer and saved_layer.isValid():
-                                current_combo = self.dockwidget.comboBox_filtering_current_layer.currentLayer()
-                                current_name = current_combo.name() if current_combo else "(None)"
-                                if not current_combo or current_combo.id() != saved_layer.id():
-                                    from qgis.core import QgsMessageLog, Qgis
-                                    QgsMessageLog.logMessage(
-                                        f"v3.0.17: 🔧 REDO DELAYED CHECK - Restoring from '{current_name}' to '{saved_layer.name()}'",
-                                        "FilterMate", Qgis.Warning
-                                    )
-                                    self.dockwidget.comboBox_filtering_current_layer.blockSignals(True)
-                                    self.dockwidget.comboBox_filtering_current_layer.setLayer(saved_layer)
-                                    self.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
-                                    self.dockwidget.current_layer = saved_layer
-                        except Exception as e:
-                            logger.debug(f"v3.0.17: Error in delayed redo combobox check: {e}")
-                    
-                    # Schedule multiple checks to catch async signal-triggered changes
-                    from qgis.PyQt.QtCore import QTimer
-                    for delay in [200, 600, 1000, 1500, 2000]:
-                        QTimer.singleShot(delay, restore_combobox_if_needed)
-                    logger.info(f"v3.0.17: 📋 handle_redo - Scheduled 5 delayed combobox verification checks")
-                    
-                logger.info("v3.0.15: ⏱️ handle_redo - 2000ms protection window enabled")
-                
-                # v2.9.29: ALWAYS reset filtering protection
+            try:
+                result = self._undo_redo_handler.handle_redo(
+                    source_layer=source_layer,
+                    layers_to_filter=layers_to_filter,
+                    use_global=button_is_checked,
+                    dockwidget=self.dockwidget
+                )
+                if result:
+                    self.update_undo_redo_buttons()
+            finally:
                 self.dockwidget._filtering_in_progress = False
-                logger.info("v2.9.29: 🔓 handle_redo - Filtering protection disabled")
+                logger.info("v4.0: 🔓 handle_redo - Filtering protection disabled")
+        else:
+            # Legacy fallback - should not happen in normal operation
+            logger.warning("FilterMate: UndoRedoHandler not available, redo skipped")
     
     def _clear_filter_history(self, source_layer, task_parameters):
         """
         Clear filter history for source and associated layers.
         
+        v4.0: Delegated to UndoRedoHandler for God Class reduction.
+        
         Args:
             source_layer (QgsVectorLayer): Source layer whose history to clear
             task_parameters (dict): Task parameters containing layers info
         """
-        # Clear history for source layer
-        history = self.history_manager.get_history(source_layer.id())
-        if history:
-            history.clear()
-            logger.info(f"FilterMate: Cleared filter history for source layer {source_layer.id()}")
-        
-        # Clear global history
-        self.history_manager.clear_global_history()
-        
-        # Clear history for associated layers
-        for layer_props in task_parameters.get("task", {}).get("layers", []):
-            if layer_props["layer_id"] in self.PROJECT_LAYERS:
-                layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"]) 
-                         if layer.id() == layer_props["layer_id"]]
-                if len(layers) == 1:
-                    assoc_layer = layers[0]
-                    assoc_history = self.history_manager.get_history(assoc_layer.id())
-                    if assoc_history:
-                        assoc_history.clear()
-                        logger.info(f"FilterMate: Cleared filter history for layer {assoc_layer.name()}")
+        if self._undo_redo_handler:
+            remote_layer_ids = [
+                lp.get("layer_id") 
+                for lp in task_parameters.get("task", {}).get("layers", [])
+                if lp.get("layer_id")
+            ]
+            self._undo_redo_handler.clear_filter_history(source_layer, remote_layer_ids)
+        else:
+            # Legacy fallback
+            history = self.history_manager.get_history(source_layer.id())
+            if history:
+                history.clear()
+            self.history_manager.clear_global_history()
     
     def _show_task_completion_message(self, task_name, source_layer, provider_type, layer_count, is_fallback=False):
         """
@@ -5097,310 +4000,37 @@ class FilterMateApp:
                 safe_set_subset_string(layer, '')
                 self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
 
-    def _save_single_property(self, layer, cursor, key_group, key, value):
-        """
-        Save a single property to QGIS variable and Spatialite database.
-        
-        Helper method to eliminate code duplication in save_variables_from_layer.
-        
-        Args:
-            layer (QgsVectorLayer): Layer to save property for
-            cursor: SQLite cursor for database operations
-            key_group (str): Property group ('infos', 'exploring', 'filtering')
-            key (str): Property key name
-            value: Property value to save
-        """
-        # CRASH FIX (v2.3.18): Check if QGIS is still alive before any operations
-        if not is_qgis_alive():
-            logger.debug(f"_save_single_property: QGIS is shutting down, skipping save for {key_group}.{key}")
-            return
-        
-        # CRASH FIX (v2.4.11): Check if dockwidget is in the middle of a layer change
-        # When setCollapsed() processes Qt events, deferred operations run during
-        # _reconnect_layer_signals which can cause access violations if we try to
-        # call setLayerVariable during this unstable state.
-        skip_qgis_variable = False
-        if hasattr(self, 'dockwidget') and self.dockwidget is not None:
-            if getattr(self.dockwidget, '_updating_current_layer', False):
-                logger.debug(f"_save_single_property: layer change in progress, deferring QGIS variable for {key_group}.{key}")
-                skip_qgis_variable = True
-        
-        # CRASH FIX (v2.3.15): Use is_valid_layer() for robust validation
-        # This prevents Windows access violations when layer's C++ object is deleted
-        # during signal processing (e.g., backend change, layer switch, project unload)
-        if not is_valid_layer(layer):
-            logger.debug(f"_save_single_property: layer is invalid or deleted, skipping save for {key_group}.{key}")
-            return
-        
-        # Double-check layer ID is accessible (defensive programming)
-        try:
-            layer_id = layer.id()
-            if not layer_id:
-                return
-        except (RuntimeError, OSError, SystemError):
-            logger.debug(f"_save_single_property: layer.id() failed, C++ object likely deleted")
-            return
-        
-        # CRASH FIX (v2.3.16): Re-fetch fresh layer reference from QGIS project
-        # This is CRITICAL for preventing Windows access violations. The original layer
-        # reference may be stale (C++ object deleted) even if previous checks passed.
-        # Windows access violations CANNOT be caught by try/except - they crash the app.
-        # By re-fetching from QgsProject, we get a valid reference or None.
-        fresh_layer = QgsProject.instance().mapLayer(layer_id)
-        if fresh_layer is None:
-            logger.debug(f"_save_single_property: layer {layer_id} no longer in project, skipping {key_group}.{key}")
-            return
-        
-        # Final validation of the fresh layer reference
-        if not is_valid_layer(fresh_layer):
-            logger.debug(f"_save_single_property: fresh layer reference is invalid, skipping {key_group}.{key}")
-            return
-        
-        value_typped, type_returned = self.return_typped_value(value, 'save')
-        if type_returned in (list, dict):
-            value_typped = json.dumps(value_typped)
-        
-        variable_key = f"filterMate_{key_group}_{key}"
-        
-        # CRASH FIX (v2.3.18): Check if layer is still in project - most reliable check
-        # If layer was removed from project, QgsProject.mapLayer() returns None.
-        # This is more reliable than sip.isdeleted() for detecting deleted layers.
-        project_layer = QgsProject.instance().mapLayer(layer_id)
-        if project_layer is None:
-            logger.debug(f"_save_single_property: layer {layer_id} removed from project, skipping QGIS variable for {key_group}.{key}")
-            # Still save to database below (layer_id is valid even if layer is gone)
-        elif skip_qgis_variable:
-            # CRASH FIX (v2.4.11): Layer change is in progress, skip QGIS variable update
-            # but still save to database below
-            pass
-        else:
-            # CRASH FIX (v2.3.18): Triple-check with sip.isdeleted() IMMEDIATELY before Qt call
-            # This is the last line of defense against Windows access violations.
-            if sip.isdeleted(project_layer):
-                logger.debug(f"_save_single_property: project_layer sip deleted just before setLayerVariable, skipping {key_group}.{key}")
-                # Still save to database below
-            else:
-                # CRASH FIX (v2.3.20): Cancel running tasks for this layer before modifying variables
-                # This prevents the race condition where background tasks iterate features
-                # while setLayerVariable modifies the layer state, causing access violations.
-                self._cancel_layer_tasks(layer_id)
-                
-                # CRASH FIX (v2.4.14): Use safe_set_layer_variable from object_safety module
-                # This function handles ALL the complexity of Windows access violation prevention:
-                # - Re-fetches layer from project registry
-                # - Checks sip deletion status multiple times
-                # - Flushes pending Qt events on Windows before C++ call
-                # - Uses setCustomProperty instead of setLayerVariable (safer)
-                # - Returns False on failure instead of crashing
-                variable_name = f"{key_group}_{key}"
-                if not safe_set_layer_variable(layer_id, variable_name, value_typped):
-                    logger.debug(f"_save_single_property: safe_set_layer_variable returned False for {layer_id}.{variable_name}")
-                    # Continue to database save - don't return
-        
-        # CRASH FIX (v2.3.16): Use layer_id instead of layer.id() to avoid accessing stale reference
-        cursor.execute(
-            """INSERT INTO fm_project_layers_properties 
-               VALUES(?, datetime(), ?, ?, ?, ?, ?)""",
-            (str(uuid.uuid4()), str(self.project_uuid), layer_id, 
-             key_group, key, str(value_typped))
-        )
-
     def save_variables_from_layer(self, layer, layer_properties=None):
         """
         Save layer filtering properties to both QGIS variables and Spatialite database.
         
-        Stores layer properties in two locations:
-        1. QGIS layer variables (for runtime access)
-        2. Spatialite database (for persistence across sessions)
-        
-        CRASH FIX (v2.3.15): Added is_valid_layer() check to prevent Windows access
-        violations when layer's C++ object is deleted during signal processing.
+        v4.0: Delegates to VariablesPersistenceManager.
         
         Args:
             layer (QgsVectorLayer): Layer to save properties for
             layer_properties (list): List of tuples (key_group, key, value, type)
-                Example: [('filtering', 'layer_filter_expression', 'population > 1000', 'str')]
                 If None or empty, saves all properties
-                
-        Notes:
-            - Uses parameterized SQL queries to prevent injection
-            - Converts string values to proper types before storing
-            - Creates filterMate_{key_group}_{key} variable names
-            - Stores in fm_project_layers_properties table
-            - Uses context manager for automatic connection cleanup
         """
-
-        if layer_properties is None:
-            layer_properties = []
-        
-        layer_all_properties_flag = False
-
-        # CRASH FIX (v2.3.15): Use is_valid_layer() for robust validation
-        # This catches deleted C++ objects that would cause access violations
-        if not is_valid_layer(layer):
-            logger.debug(f"save_variables_from_layer: layer is invalid or deleted, skipping save")
-            return
-
-        if len(layer_properties) == 0:
-            layer_all_properties_flag = True
-        
-        # Debug logging for persistence tracking
-        # CRASH FIX (v2.3.15): Wrap layer access in try/except for extra safety
-        try:
-            if layer_all_properties_flag:
-                logger.debug(f"💾 Saving ALL properties for layer '{layer.name()}' ({layer.id()})")
-            else:
-                logger.debug(f"💾 Saving {len(layer_properties)} specific properties for layer '{layer.name()}' ({layer.id()})")
-                for prop in layer_properties[:3]:  # Log first 3 properties
-                    # Handle both tuple formats: (key_group, key) or (key_group, key, value, type)
-                    if len(prop) >= 3:
-                        value_str = str(prop[2])[:50] + "..." if len(str(prop[2])) > 50 else str(prop[2])
-                        logger.debug(f"  - {prop[0]}.{prop[1]} = {value_str}")
-                    else:
-                        logger.debug(f"  - {prop[0]}.{prop[1]}")
-        except (RuntimeError, OSError, SystemError) as e:
-            logger.debug(f"save_variables_from_layer: layer access failed during logging: {e}")
-            return
-
-        if layer.id() not in self.PROJECT_LAYERS.keys():
-            logger.warning(f"Layer {layer.name()} not in PROJECT_LAYERS, cannot save properties")
-            return
-        
-        conn = self.get_spatialite_connection()
-        if conn is None:
-            return
-        
-        with conn:
-            cur = conn.cursor()
-            
-            if layer_all_properties_flag:
-                # Save all properties from all groups
-                for key_group in ("infos", "exploring", "filtering"):
-                    for key, value in self.PROJECT_LAYERS[layer.id()][key_group].items():
-                        self._save_single_property(layer, cur, key_group, key, value)
-            else:
-                # Save specific properties
-                for layer_property in layer_properties:
-                    key_group, key = layer_property[0], layer_property[1]
-                    if key_group not in ("infos", "exploring", "filtering"):
-                        continue
-                    
-                    if (key_group in self.PROJECT_LAYERS[layer.id()] and 
-                        key in self.PROJECT_LAYERS[layer.id()][key_group]):
-                        value = self.PROJECT_LAYERS[layer.id()][key_group][key]
-                        self._save_single_property(layer, cur, key_group, key, value)
+        if self._variables_manager:
+            self._variables_manager.save_variables_from_layer(layer, layer_properties)
+        else:
+            logger.warning("VariablesPersistenceManager not available, cannot save layer variables")
 
     def remove_variables_from_layer(self, layer, layer_properties=None):
         """
         Remove layer filtering properties from QGIS variables and Spatialite database.
         
-        Clears stored properties from both runtime variables and persistent storage.
-        Used when resetting filters or cleaning up removed layers.
-        
-        CRASH FIX (v2.3.17): Added sip.isdeleted() and is_valid_layer() checks
-        to prevent Windows access violations when layer C++ object is deleted.
+        v4.0: Delegates to VariablesPersistenceManager.
         
         Args:
             layer (QgsVectorLayer): Layer to remove properties from
-            layer_properties (list): List of tuples (key_group, key, value, type)
+            layer_properties (list): List of tuples (key_group, key)
                 If None or empty, removes ALL filterMate variables for the layer
-                
-        Notes:
-            - Sets QGIS variables to empty string (effectively removes them)
-            - Deletes corresponding rows from Spatialite database
-            - Uses parameterized queries for SQL injection protection
-            - Handles both selective and bulk removal
-            - Uses context manager for safe database operations
         """
-        
-        if layer_properties is None:
-            layer_properties = []
-        
-        layer_all_properties_flag = False
-
-        # CRASH FIX (v2.3.17): Use is_valid_layer() for robust validation
-        if not is_valid_layer(layer):
-            logger.debug("remove_variables_from_layer: layer is invalid or deleted, skipping")
-            return
-        
-        # Extract layer_id early and re-fetch layer for safety
-        try:
-            layer_id = layer.id()
-            if not layer_id:
-                return
-        except (RuntimeError, OSError, SystemError):
-            logger.debug("remove_variables_from_layer: layer.id() failed, C++ object likely deleted")
-            return
-        
-        # Re-fetch fresh layer reference from project
-        fresh_layer = QgsProject.instance().mapLayer(layer_id)
-        if fresh_layer is None:
-            logger.debug(f"remove_variables_from_layer: layer {layer_id} no longer in project, skipping")
-            return
-        
-        # Final validation of fresh layer
-        if not is_valid_layer(fresh_layer):
-            logger.debug("remove_variables_from_layer: fresh layer reference is invalid, skipping")
-            return
-        
-        # Debug logging for deletion tracking
-        try:
-            layer_name = fresh_layer.name()
-            if len(layer_properties) == 0:
-                layer_all_properties_flag = True
-                logger.debug(f"🗑️ Removing ALL properties for layer '{layer_name}' ({layer_id})")
-            else:
-                logger.debug(f"🗑️ Removing {len(layer_properties)} specific properties for layer '{layer_name}' ({layer_id})")
-        except (RuntimeError, OSError, SystemError) as e:
-            logger.debug(f"remove_variables_from_layer: layer access failed during logging: {e}")
-            return
-        
-        if layer_id not in self.PROJECT_LAYERS.keys():
-            logger.warning(f"Layer {layer_id} not in PROJECT_LAYERS, cannot remove properties")
-            return
-        
-        conn = self.get_spatialite_connection()
-        if conn is None:
-            return
-        
-        with conn:
-            cur = conn.cursor()
-            
-            if layer_all_properties_flag:
-                # Remove all properties for layer
-                cur.execute(
-                    """DELETE FROM fm_project_layers_properties 
-                       WHERE fk_project = ? and layer_id = ?""",
-                    (str(self.project_uuid), layer_id)
-                )
-                # CRASH FIX (v2.3.17): Final sip check before Qt call
-                if not sip.isdeleted(fresh_layer):
-                    try:
-                        QgsExpressionContextUtils.setLayerVariables(fresh_layer, {})
-                    except (RuntimeError, OSError, SystemError) as e:
-                        logger.warning(f"remove_variables_from_layer: setLayerVariables failed: {e}")
-            else:
-                # Remove specific properties
-                for layer_property in layer_properties:
-                    key_group, key = layer_property[0], layer_property[1]
-                    if key_group not in ("infos", "exploring", "filtering"):
-                        continue
-                    
-                    if (key_group in self.PROJECT_LAYERS[layer_id] and 
-                        key in self.PROJECT_LAYERS[layer_id][key_group]):
-                        cur.execute(
-                            """DELETE FROM fm_project_layers_properties  
-                               WHERE fk_project = ? and layer_id = ? 
-                               and meta_type = ? and meta_key = ?""",
-                            (str(self.project_uuid), layer_id, key_group, key)
-                        )
-                        variable_key = f"filterMate_{key_group}_{key}"
-                        # CRASH FIX (v2.3.17): Final sip check before Qt call
-                        if not sip.isdeleted(fresh_layer):
-                            try:
-                                QgsExpressionContextUtils.setLayerVariable(fresh_layer, variable_key, '')
-                            except (RuntimeError, OSError, SystemError) as e:
-                                logger.warning(f"remove_variables_from_layer: setLayerVariable failed for {key}: {e}")
+        if self._variables_manager:
+            self._variables_manager.remove_variables_from_layer(layer, layer_properties)
+        else:
+            logger.warning("VariablesPersistenceManager not available, cannot remove layer variables")
 
 
       
@@ -5420,301 +4050,43 @@ class FilterMateApp:
         }
         processing.run('qgis:createspatialindex', alg_params_createspatialindex)
     
-    def _ensure_db_directory(self):
-        """
-        Ensure database directory exists, create if missing.
-        
-        Returns:
-            bool: True if directory exists or was created, False on error
-        """
-        db_dir = os.path.dirname(self.db_file_path)
-        if not os.path.exists(db_dir):
-            try:
-                os.makedirs(db_dir, exist_ok=True)
-                logger.info(f"Created database directory: {db_dir}")
-                return True
-            except OSError as error:
-                error_msg = f"Could not create database directory {db_dir}: {error}"
-                logger.error(error_msg)
-                show_error(error_msg)
-                return False
-        return True
-    
-    def _create_db_file(self, crs):
-        """
-        Create Spatialite database file if it doesn't exist.
-        
-        Args:
-            crs: QgsCoordinateReferenceSystem for database creation
-            
-        Returns:
-            bool: True if file exists or was created, False on error
-        """
-        if os.path.exists(self.db_file_path):
-            return True
-            
-        memory_uri = 'NoGeometry?field=plugin_name:string(255,0)&field=_created_at:date(0,0)&field=_updated_at:date(0,0)&field=_version:string(255,0)'
-        layer_name = 'filterMate_db'
-        layer = QgsVectorLayer(memory_uri, layer_name, "memory")
-        
-        try:
-            # Use modern QgsVectorFileWriter.create() instead of deprecated writeAsVectorFormat()
-            save_options = QgsVectorFileWriter.SaveVectorOptions()
-            save_options.driverName = "SQLite"
-            save_options.fileEncoding = "utf-8"
-            save_options.datasourceOptions = ["SPATIALITE=YES", "SQLITE_MAX_LENGTH=100000000"]
-            
-            writer = QgsVectorFileWriter.create(
-                self.db_file_path,
-                layer.fields(),
-                layer.wkbType(),
-                crs,
-                QgsCoordinateTransformContext(),
-                save_options
-            )
-            
-            if writer.hasError() != QgsVectorFileWriter.NoError:
-                logger.error(f"Error creating database file: {writer.errorMessage()}")
-                return False
-            
-            del writer  # Ensure file is closed
-            return True
-        except Exception as error:
-            error_msg = f"Failed to create database file {self.db_file_path}: {error}"
-            logger.error(error_msg)
-            show_error(error_msg)
-            return False
-    
-    def _initialize_schema(self, cursor, project_settings):
-        """
-        Initialize database schema with fresh tables and project entry.
-        
-        Args:
-            cursor: Database cursor
-            project_settings: Project configuration dictionary
-        """
-        cursor.execute("""INSERT INTO filterMate_db VALUES(1, '{plugin_name}', datetime(), datetime(), '{version}');""".format(
-            plugin_name='FilterMate',
-            version='1.6'
-        ))
-
-        cursor.execute("""CREATE TABLE fm_projects (
-                        project_id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                        _created_at DATETIME NOT NULL,
-                        _updated_at DATETIME NOT NULL,
-                        project_name VARYING CHARACTER(255) NOT NULL,
-                        project_path VARYING CHARACTER(255) NOT NULL,
-                        project_settings TEXT NOT NULL);
-                        """)
-
-        cursor.execute("""CREATE TABLE fm_subset_history (
-                        id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                        _updated_at DATETIME NOT NULL,
-                        fk_project VARYING CHARACTER(255) NOT NULL,
-                        layer_id VARYING CHARACTER(255) NOT NULL,
-                        layer_source_id VARYING CHARACTER(255) NOT NULL,
-                        seq_order INTEGER NOT NULL,
-                        subset_string TEXT NOT NULL,
-                        FOREIGN KEY (fk_project)  
-                        REFERENCES fm_projects(project_id));
-                        """)
-        
-        cursor.execute("""CREATE TABLE fm_project_layers_properties (
-                        id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                        _updated_at DATETIME NOT NULL,
-                        fk_project VARYING CHARACTER(255) NOT NULL,
-                        layer_id VARYING CHARACTER(255) NOT NULL,
-                        meta_type VARYING CHARACTER(255) NOT NULL,
-                        meta_key VARYING CHARACTER(255) NOT NULL,
-                        meta_value TEXT NOT NULL,
-                        FOREIGN KEY (fk_project)  
-                        REFERENCES fm_projects(project_id),
-                        CONSTRAINT property_unicity
-                        UNIQUE(fk_project, layer_id, meta_type, meta_key) ON CONFLICT REPLACE);
-                        """)
-        
-        # Create indexes for better query performance
-        cursor.execute("""CREATE INDEX IF NOT EXISTS idx_layer_properties_lookup 
-                        ON fm_project_layers_properties(fk_project, layer_id, meta_type);""")
-        
-        cursor.execute("""CREATE INDEX IF NOT EXISTS idx_layer_properties_by_project 
-                        ON fm_project_layers_properties(fk_project);""")
-        
-        cursor.execute("""CREATE INDEX IF NOT EXISTS idx_subset_history_by_project 
-                        ON fm_subset_history(fk_project, layer_id);""")
-        
-        logger.info("✓ Created database indexes for optimized queries")
-        
-        self.project_uuid = uuid.uuid4()
-    
-        cursor.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', '{project_settings}');""".format(
-            project_id=self.project_uuid,
-            project_name=self.project_file_name,
-            project_path=self.project_file_path,
-            project_settings=json.dumps(project_settings).replace("'", "''")
-        ))
-
-        # Set the project UUID for newly initialized database
-        QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
-    
-    def _migrate_schema_if_needed(self, cursor):
-        """
-        Migrate database schema if needed (add fm_subset_history table for v1.6+).
-        
-        Args:
-            cursor: Database cursor
-            
-        Returns:
-            bool: True if subset history table exists
-        """
-        cursor.execute("""SELECT count(*) FROM sqlite_master WHERE type='table' AND name='fm_subset_history';""")
-        subset_history_exists = cursor.fetchone()[0] > 0
-        
-        if not subset_history_exists:
-            logger.info("Migrating database: creating fm_subset_history table")
-            cursor.execute("""CREATE TABLE fm_subset_history (
-                            id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                            _updated_at DATETIME NOT NULL,
-                            fk_project VARYING CHARACTER(255) NOT NULL,
-                            layer_id VARYING CHARACTER(255) NOT NULL,
-                            layer_source_id VARYING CHARACTER(255) NOT NULL,
-                            seq_order INTEGER NOT NULL,
-                            subset_string TEXT NOT NULL,
-                            FOREIGN KEY (fk_project)  
-                            REFERENCES fm_projects(project_id));
-                            """)
-            logger.info("Migration completed: fm_subset_history table created")
-            
-        return subset_history_exists
-    
-    def _load_or_create_project(self, cursor, project_settings):
-        """
-        Load existing project from database or create new entry.
-        
-        Args:
-            cursor: Database cursor
-            project_settings: Project configuration dictionary
-        """
-        # Check if this project exists
-        cursor.execute("""SELECT * FROM fm_projects WHERE project_name = '{project_name}' AND project_path = '{project_path}' LIMIT 1;""".format(
-            project_name=self.project_file_name,
-            project_path=self.project_file_path
-        ))
-
-        results = cursor.fetchall()
-
-        if len(results) == 1:
-            result = results[0]
-            project_settings_str = result[-1].replace("''", "'")
-            self.project_uuid = result[0]
-            self.CONFIG_DATA["CURRENT_PROJECT"] = json.loads(project_settings_str)
-            QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
-        else:
-            self.project_uuid = uuid.uuid4()
-            cursor.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', '{project_settings}');""".format(
-                project_id=self.project_uuid,
-                project_name=self.project_file_name,
-                project_path=self.project_file_path,
-                project_settings=json.dumps(project_settings).replace("'", "''")
-            ))
-            QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
-
     def init_filterMate_db(self):
         """
         Initialize FilterMate Spatialite database with required schema.
         
-        Creates database file and tables if they don't exist. Sets up schema for
+        v4.0: Delegates to DatabaseManager.
+        
+        Creates database file and tables if they do not exist. Sets up schema for
         storing project configurations, layer properties, and datasource information.
         
         Tables created:
         - fm_projects: Project metadata and UUIDs
         - fm_project_layers_properties: Layer filtering/export settings
         - fm_project_datasources: Data source connection info
-        
-        Notes:
-            - Database location: <project_dir>/.filterMate/<project_name>.db
-            - Enables Spatialite extension for spatial operations
-            - Idempotent: safe to call multiple times
-            - Sets up project UUID in QGIS variables
-            - Creates directory structure if missing
         """
-
-        if self.PROJECT is not None:
-
-            self.project_file_name = os.path.basename(self.PROJECT.absoluteFilePath())
-            self.project_file_path = self.PROJECT.absolutePath()
+        if self.PROJECT is None:
+            return
+        
+        self.project_file_name = os.path.basename(self.PROJECT.absoluteFilePath())
+        self.project_file_path = self.PROJECT.absolutePath()
+        
+        if not self._database_manager:
+            logger.error("DatabaseManager not available, cannot initialize database")
+            return
+        
+        fresh_reload = self.CONFIG_DATA.get("APP", {}).get("OPTIONS", {}).get("FRESH_RELOAD_FLAG", False)
+        success, self.CONFIG_DATA = self._database_manager.initialize_database(
+            config_data=self.CONFIG_DATA,
+            fresh_reload=fresh_reload,
+            config_json_path=ENV_VARS["CONFIG_JSON_PATH"]
+        )
+        
+        if success:
+            # Sync db_file_path and project_uuid from DatabaseManager
+            self.db_file_path = self._database_manager.db_file_path
+            self.project_uuid = self._database_manager.project_uuid
             
-            # Ensure database directory exists
-            if not self._ensure_db_directory():
-                return
-
-            logger.debug(f"Database file path: {self.db_file_path}")
-
-            if self.CONFIG_DATA["APP"]["OPTIONS"]["FRESH_RELOAD_FLAG"] is True:
-                try: 
-                    os.remove(self.db_file_path)
-                    self.CONFIG_DATA["APP"]["OPTIONS"]["FRESH_RELOAD_FLAG"] = False
-                    with open(ENV_VARS["CONFIG_JSON_PATH"], 'w') as outfile:
-                        outfile.write(json.dumps(self.CONFIG_DATA, indent=4))  
-                except OSError as error: 
-                    logger.error(f"Failed to remove database file: {error}")
-            
-            project_settings = self.CONFIG_DATA["CURRENT_PROJECT"]
-            logger.debug(f"Project settings: {project_settings}")
-
-            # Create database file if missing
-            crs = QgsCoordinateReferenceSystem("epsg:4326")
-            if not self._create_db_file(crs):
-                return
-            
-            try:
-                conn = self.get_spatialite_connection()
-                if conn is None:
-                    error_msg = "Cannot initialize FilterMate database: connection failed"
-                    logger.error(error_msg)
-                    show_error(error_msg)
-                    return
-            except Exception as e:
-                error_msg = f"Critical error connecting to database: {str(e)}"
-                logger.error(error_msg)
-                show_error(error_msg)
-                return
-
-            try:
-                with conn:
-                    cur = conn.cursor()
-                    cur.execute("""PRAGMA foreign_keys = ON;""")
-                    
-                    # Check if database is already initialized
-                    cur.execute("""SELECT count(*) FROM sqlite_master WHERE type='table' AND name='fm_projects';""")
-                    tables_exist = cur.fetchone()[0] > 0
-                    
-                    if not tables_exist:
-                        # Initialize fresh schema
-                        self._initialize_schema(cur, project_settings)
-                        conn.commit()
-                    else:
-                        # Database already initialized - migrate if needed
-                        self._migrate_schema_if_needed(cur)
-                        
-                        # Load or create project entry
-                        self._load_or_create_project(cur, project_settings)
-                        conn.commit()
-
-            except Exception as e:
-                error_msg = f"Error during database initialization: {str(e)}"
-                logger.error(error_msg)
-                show_error(error_msg)
-                return
-            finally:
-                if conn:
-                    try:
-                        cur.close()
-                        conn.close()
-                    except (OSError, AttributeError, sqlite3.Error) as e:
-                        logger.debug(f"Error closing database connection: {e}")
-            
-            # Configure FavoritesManager to use SQLite database
+            # Configure FavoritesManager with SQLite database
             if hasattr(self, 'favorites_manager') and self.db_file_path and self.project_uuid:
                 self.favorites_manager.set_database(self.db_file_path, str(self.project_uuid))
                 self.favorites_manager.load_from_project()
@@ -5753,43 +4125,33 @@ class FilterMateApp:
 
             
     def save_project_variables(self, name=None):
+        """
+        Save project variables to database.
         
+        v4.0: Delegates to DatabaseManager.
+        """
         global ENV_VARS
 
-        if self.dockwidget is not None:
-            self.CONFIG_DATA = self.dockwidget.CONFIG_DATA
-            conn = None
-            cur = None
-            try:
-                conn = self.get_spatialite_connection()
-                if conn is None:
-                    return
-                cur = conn.cursor()
-
-                if name is not None:
-                    self.project_file_name = name
-                    self.project_file_path = self.PROJECT.absolutePath()    
-
-                project_settings = self.CONFIG_DATA["CURRENT_PROJECT"]    
-
-                # Use parameterized query
-                cur.execute(
-                    """UPDATE fm_projects SET 
-                       _updated_at = datetime(),
-                       project_name = ?,
-                       project_path = ?,
-                       project_settings = ?
-                       WHERE project_id = ?""",
-                    (self.project_file_name, self.project_file_path, 
-                     json.dumps(project_settings), str(self.project_uuid))
-                )
-                conn.commit()
-            finally:
-                if cur:
-                    cur.close()
-                if conn:
-                    conn.close()
-
+        if self.dockwidget is None:
+            return
+        
+        self.CONFIG_DATA = self.dockwidget.CONFIG_DATA
+        
+        if not self._database_manager:
+            logger.warning("DatabaseManager not available, cannot save project variables")
+            return
+        
+        if name is not None:
+            self.project_file_name = name
+            self.project_file_path = self.PROJECT.absolutePath()
+        
+        success = self._database_manager.save_project_variables(
+            config_data=self.CONFIG_DATA,
+            project_name=name
+        )
+        
+        if success:
+            # Also save to config file
             with open(ENV_VARS["CONFIG_JSON_PATH"], 'w') as outfile:
                 outfile.write(json.dumps(self.CONFIG_DATA, indent=4))
             
@@ -5808,10 +4170,10 @@ class FilterMateApp:
         
         Args:
             result_project_layers (dict): Updated PROJECT_LAYERS dictionary with all layer metadata
-            task_name (str): Type of task completed ('add_layers', 'remove_layers', etc.)
+            task_name (str): Type of task completed (add_layers, remove_layers, etc.)
             
         Notes:
-            - Updates dockwidget's PROJECT_LAYERS reference
+            - Updates dockwidget PROJECT_LAYERS reference
             - Calls get_project_layers_from_app() to refresh UI
             - Handles special cases for layer removal and project reset
             - Updates layer comboboxes and enables/disables controls
@@ -6045,7 +4407,7 @@ class FilterMateApp:
         Force complete UI refresh after force_reload_layers.
         
         This method ensures the UI is updated even if PROJECT_LAYERS was empty initially.
-        It retries a few times with increasing delays if layers aren't ready yet.
+        It retries a few times with increasing delays if layers are not ready yet.
         """
         from qgis.PyQt.QtCore import QTimer
         
@@ -6329,26 +4691,6 @@ class FilterMateApp:
                     cursor.execute(sql_request)
             except Exception as e:
                 logger.error(f"Failed to create foreign data wrapper: {e}")
-
-            
-        
-
-
-
-    def can_cast(self, dest_type, source_value):
-        """
-        Check if a value can be cast to a destination type.
-        Delegates to centralized type_utils.can_cast().
-        """
-        return can_cast(dest_type, source_value)
-
-
-    def return_typped_value(self, value_as_string, action=None):
-        """
-        Convert string value to typed value with type detection.
-        Delegates to centralized type_utils.return_typed_value().
-        """
-        return return_typed_value(value_as_string, action)
 
 
 def zoom_to_features(layer, t0):
