@@ -3048,7 +3048,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.exploring_groupbox_changed(groupbox)
 
     def _update_exploring_buttons_state(self):
-        """v3.1 Sprint 11: Simplified - update identify/zoom buttons based on selection."""
+        """v4.0 Sprint 8: Optimized - update identify/zoom buttons based on selection."""
         if not self.widgets_initialized or not self.current_layer:
             self.pushButton_exploring_identify.setEnabled(False)
             self.pushButton_exploring_zoom.setEnabled(False)
@@ -3056,21 +3056,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         has_features = False
         try:
+            w = self.widgets.get("EXPLORING", {})
             if self.current_exploring_groupbox == "single_selection":
-                picker = self.widgets.get("EXPLORING", {}).get("SINGLE_SELECTION_FEATURES", {}).get("WIDGET")
-                if picker:
+                if picker := w.get("SINGLE_SELECTION_FEATURES", {}).get("WIDGET"):
                     f = picker.feature()
                     has_features = f is not None and (not hasattr(f, 'isValid') or f.isValid())
             elif self.current_exploring_groupbox == "multiple_selection":
-                combo = self.widgets.get("EXPLORING", {}).get("MULTIPLE_SELECTION_FEATURES", {}).get("WIDGET")
-                if combo:
+                if combo := w.get("MULTIPLE_SELECTION_FEATURES", {}).get("WIDGET"):
                     has_features = bool(combo.checkedItems())
             elif self.current_exploring_groupbox == "custom_selection":
-                expr = self.widgets.get("EXPLORING", {}).get("CUSTOM_SELECTION_EXPRESSION", {}).get("WIDGET")
-                if expr:
+                if expr := w.get("CUSTOM_SELECTION_EXPRESSION", {}).get("WIDGET"):
                     has_features = bool(expr.expression() and expr.expression().strip())
-        except (AttributeError, RuntimeError):
-            pass
+        except: pass
         
         self.pushButton_exploring_identify.setEnabled(has_features)
         self.pushButton_exploring_zoom.setEnabled(has_features)
@@ -4343,42 +4340,37 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def filtering_buffer_property_changed(self):
-        """v3.1 Sprint 11: Simplified - handle buffer property override button changes."""
-        if not self.widgets_initialized or not self.has_loaded_layers:
-            return
+        """v4.0 Sprint 8: Optimized - handle buffer property override button changes."""
+        if not self.widgets_initialized or not self.has_loaded_layers: return
 
         self.manageSignal(["FILTERING","BUFFER_VALUE_PROPERTY"], 'disconnect')
 
-        has_buffer_checked = self.widgets["FILTERING"]["HAS_BUFFER_VALUE"]["WIDGET"].isChecked()
-        is_active = self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].isActive()
+        w = self.widgets["FILTERING"]
+        has_buffer_checked = w["HAS_BUFFER_VALUE"]["WIDGET"].isChecked()
+        is_active = w["BUFFER_VALUE_PROPERTY"]["WIDGET"].isActive()
         has_valid_expr = False
         
         layer_id = self.current_layer.id()
+        lf = self.PROJECT_LAYERS[layer_id]["filtering"]
+        
         if is_active:
-            qgs_prop = self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].toProperty()
+            qgs_prop = w["BUFFER_VALUE_PROPERTY"]["WIDGET"].toProperty()
             if qgs_prop.propertyType() == QgsProperty.ExpressionBasedProperty:
                 expr = qgs_prop.asExpression()
-                if expr and expr.strip():
-                    self.PROJECT_LAYERS[layer_id]["filtering"]["buffer_value_expression"] = expr
-                    self.PROJECT_LAYERS[layer_id]["filtering"]["buffer_value_property"] = True
-                    has_valid_expr = True
-                else:
-                    self.PROJECT_LAYERS[layer_id]["filtering"]["buffer_value_expression"] = ''
-                    self.PROJECT_LAYERS[layer_id]["filtering"]["buffer_value_property"] = False
+                has_valid_expr = bool(expr and expr.strip())
+                lf["buffer_value_expression"] = expr if has_valid_expr else ''
+                lf["buffer_value_property"] = has_valid_expr
             else:
-                self.PROJECT_LAYERS[layer_id]["filtering"]["buffer_value_expression"] = ''
-                self.PROJECT_LAYERS[layer_id]["filtering"]["buffer_value_property"] = False
+                lf["buffer_value_expression"], lf["buffer_value_property"] = '', False
         else:
-            self.PROJECT_LAYERS[layer_id]["filtering"]["buffer_value_expression"] = ''
-            self.PROJECT_LAYERS[layer_id]["filtering"]["buffer_value_property"] = False
-            self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setToProperty(QgsProperty())
+            lf["buffer_value_expression"], lf["buffer_value_property"] = '', False
+            w["BUFFER_VALUE_PROPERTY"]["WIDGET"].setToProperty(QgsProperty())
 
         if self._controller_integration:
             self._controller_integration.delegate_filtering_set_buffer_property_active(is_active and has_valid_expr)
 
-        spinbox_enabled = has_buffer_checked and not (is_active and has_valid_expr)
-        self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(spinbox_enabled)
-        self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setEnabled(has_buffer_checked)
+        w["BUFFER_VALUE"]["WIDGET"].setEnabled(has_buffer_checked and not (is_active and has_valid_expr))
+        w["BUFFER_VALUE_PROPERTY"]["WIDGET"].setEnabled(has_buffer_checked)
 
         self.manageSignal(["FILTERING","BUFFER_VALUE_PROPERTY"], 'connect')
 
