@@ -3452,8 +3452,8 @@ class FilterEngineTask(QgsTask):
         """
         Convert QGIS expression to PostGIS SQL.
         
-        v4.0 DELEGATION: This method now delegates to ExpressionService.
-        Legacy implementation preserved as fallback.
+        v4.0 DELEGATION: Fully delegated to ExpressionService.
+        Legacy fallback removed in Phase E4 Session 1.
         
         Args:
             expression: QGIS expression string
@@ -3468,59 +3468,10 @@ class FilterEngineTask(QgsTask):
         geom_col = getattr(self, 'param_source_geom', None) or 'geometry'
         
         # v4.0: Delegate to ExpressionService (consolidated implementation)
-        try:
-            from core.services.expression_service import ExpressionService
-            from core.domain.filter_expression import ProviderType
-            service = ExpressionService()
-            return service.to_sql(expression, ProviderType.POSTGRESQL, geom_col)
-        except ImportError:
-            logger.debug("ExpressionService not available, using legacy implementation")
-            pass
-        
-        # LEGACY FALLBACK: Original implementation (to be removed in v5.0)
-        # 1. Convert QGIS spatial functions to PostGIS
-        spatial_conversions = {
-            '$area': f'ST_Area("{geom_col}")',
-            '$length': f'ST_Length("{geom_col}")',
-            '$perimeter': f'ST_Perimeter("{geom_col}")',
-            '$x': f'ST_X("{geom_col}")',
-            '$y': f'ST_Y("{geom_col}")',
-            '$geometry': f'"{geom_col}"',
-            'buffer': 'ST_Buffer',
-            'area': 'ST_Area',
-            'length': 'ST_Length',
-            'perimeter': 'ST_Perimeter',
-        }
-        
-        for qgis_func, postgis_func in spatial_conversions.items():
-            expression = expression.replace(qgis_func, postgis_func)
-        
-        # 2. Convert IF statements to CASE WHEN
-        if expression.find('if') >= 0:
-            expression = re.sub(r'if\s*\(\s*([^,]+),\s*([^,]+),\s*([^)]+)\)', r'CASE WHEN \1 THEN \2 ELSE \3 END', expression, flags=re.IGNORECASE)
-            logger.debug(f"Expression after IF conversion: {expression}")
-
-        # 3. Add type casting for numeric operations
-        expression = expression.replace('" >', '"::numeric >').replace('">', '"::numeric >')
-        expression = expression.replace('" <', '"::numeric <').replace('"<', '"::numeric <')
-        expression = expression.replace('" +', '"::numeric +').replace('"+', '"::numeric +')
-        expression = expression.replace('" -', '"::numeric -').replace('"-', '"::numeric -')
-
-        # 4. Normalize SQL keywords (case-insensitive replacements)
-        expression = re.sub(r'\bcase\b', ' CASE ', expression, flags=re.IGNORECASE)
-        expression = re.sub(r'\bwhen\b', ' WHEN ', expression, flags=re.IGNORECASE)
-        expression = re.sub(r'\bis\b', ' IS ', expression, flags=re.IGNORECASE)
-        expression = re.sub(r'\bthen\b', ' THEN ', expression, flags=re.IGNORECASE)
-        expression = re.sub(r'\belse\b', ' ELSE ', expression, flags=re.IGNORECASE)
-        expression = re.sub(r'\bilike\b', ' ILIKE ', expression, flags=re.IGNORECASE)
-        expression = re.sub(r'\blike\b', ' LIKE ', expression, flags=re.IGNORECASE)
-        expression = re.sub(r'\bnot\b', ' NOT ', expression, flags=re.IGNORECASE)
-
-        # 5. Add type casting for text operations
-        expression = expression.replace('" NOT ILIKE', '"::text NOT ILIKE').replace('" ILIKE', '"::text ILIKE')
-        expression = expression.replace('" NOT LIKE', '"::text NOT LIKE').replace('" LIKE', '"::text LIKE')
-
-        return expression
+        from core.services.expression_service import ExpressionService
+        from core.domain.filter_expression import ProviderType
+        service = ExpressionService()
+        return service.to_sql(expression, ProviderType.POSTGRESQL, geom_col)
 
 
     def qgis_expression_to_spatialite(self, expression):

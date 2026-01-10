@@ -2853,70 +2853,49 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 except: pass
 
     def force_reconnect_action_signals(self):
-        """v3.1 Sprint 12: Simplified - force reconnect ACTION signals bypassing cache."""
-        if 'ACTION' not in self.widgets:
-            return
+        """v4.0 Sprint 8: Ultra-simplified - force reconnect ACTION signals bypassing cache."""
+        if 'ACTION' not in self.widgets: return
         
-        for widget_name in ['FILTER', 'UNFILTER', 'UNDO_FILTER', 'REDO_FILTER', 'EXPORT']:
-            if widget_name not in self.widgets['ACTION']:
-                continue
-            widget_obj = self.widgets['ACTION'][widget_name]
-            for signal_tuple in widget_obj.get("SIGNALS", []):
-                if signal_tuple[-1] is None:
-                    continue
-                signal_name, handler = signal_tuple[0], signal_tuple[-1]
-                cache_key = f"ACTION.{widget_name}.{signal_name}"
-                self._signal_connection_states.pop(cache_key, None)
+        for w in ['FILTER', 'UNFILTER', 'UNDO_FILTER', 'REDO_FILTER', 'EXPORT']:
+            if w not in self.widgets['ACTION']: continue
+            for s_tuple in self.widgets['ACTION'][w].get("SIGNALS", []):
+                if not s_tuple[-1]: continue
+                key = f"ACTION.{w}.{s_tuple[0]}"
+                self._signal_connection_states.pop(key, None)
                 try:
-                    state = self.changeSignalState(['ACTION', widget_name], signal_name, handler, 'connect')
-                    self._signal_connection_states[cache_key] = state
-                except (AttributeError, RuntimeError, TypeError, SignalStateChangeError):
-                    pass
+                    state = self.changeSignalState(['ACTION', w], s_tuple[0], s_tuple[-1], 'connect')
+                    self._signal_connection_states[key] = state
+                except: pass
 
     def force_reconnect_exploring_signals(self):
         """
-        v3.1 Sprint 10: Simplified - force reconnect EXPLORING signals bypassing cache.
+        v4.0 Sprint 8: Ultra-simplified - force reconnect EXPLORING signals bypassing cache.
         """
         if 'EXPLORING' not in self.widgets:
             return
         
-        widgets_signals = {
-            'SINGLE_SELECTION_FEATURES': ['featureChanged'],
-            'SINGLE_SELECTION_EXPRESSION': ['fieldChanged'],
+        # Widget → expected signals mapping
+        ws = {
+            'SINGLE_SELECTION_FEATURES': ['featureChanged'], 'SINGLE_SELECTION_EXPRESSION': ['fieldChanged'],
             'MULTIPLE_SELECTION_FEATURES': ['updatingCheckedItemList', 'filteringCheckedItemList'],
-            'MULTIPLE_SELECTION_EXPRESSION': ['fieldChanged'],
-            'CUSTOM_SELECTION_EXPRESSION': ['fieldChanged'],
-            'IDENTIFY': ['clicked'],
-            'ZOOM': ['clicked'],
-            'IS_SELECTING': ['clicked'],
-            'IS_TRACKING': ['clicked'],
-            'IS_LINKING': ['clicked'],
-            'RESET_ALL_LAYER_PROPERTIES': ['clicked'],
+            'MULTIPLE_SELECTION_EXPRESSION': ['fieldChanged'], 'CUSTOM_SELECTION_EXPRESSION': ['fieldChanged'],
+            'IDENTIFY': ['clicked'], 'ZOOM': ['clicked'], 'IS_SELECTING': ['clicked'],
+            'IS_TRACKING': ['clicked'], 'IS_LINKING': ['clicked'], 'RESET_ALL_LAYER_PROPERTIES': ['clicked']
         }
         
-        for widget_name, expected_signals in widgets_signals.items():
-            if widget_name not in self.widgets['EXPLORING']:
-                continue
-            widget_obj = self.widgets['EXPLORING'][widget_name]
-            
-            for signal_tuple in widget_obj.get("SIGNALS", []):
-                if signal_tuple[-1] is None:
-                    continue
-                signal_name, handler = signal_tuple[0], signal_tuple[-1]
-                if signal_name not in expected_signals:
-                    continue
-                
-                cache_key = f"EXPLORING.{widget_name}.{signal_name}"
-                self._signal_connection_states.pop(cache_key, None)
-                
+        for w, signals in ws.items():
+            if w not in self.widgets['EXPLORING']: continue
+            for s_tuple in self.widgets['EXPLORING'][w].get("SIGNALS", []):
+                if not s_tuple[-1] or s_tuple[0] not in signals: continue
+                key = f"EXPLORING.{w}.{s_tuple[0]}"
+                self._signal_connection_states.pop(key, None)
                 try:
-                    state = self.changeSignalState(['EXPLORING', widget_name], signal_name, handler, 'connect')
-                    self._signal_connection_states[cache_key] = state
-                except (AttributeError, RuntimeError, TypeError, SignalStateChangeError):
-                    pass
+                    state = self.changeSignalState(['EXPLORING', w], s_tuple[0], s_tuple[-1], 'connect')
+                    self._signal_connection_states[key] = state
+                except: pass
 
     def manage_interactions(self):
-        """v3.1 Sprint 12: Simplified - initialize widget interactions and default values."""
+        """v4.0 Sprint 8: Optimized - initialize widget interactions and default values."""
         self.coordinateReferenceSystem = QgsCoordinateReferenceSystem()
         
         self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setExpressionsEnabled(True)
@@ -2930,11 +2909,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.connect_widgets_signals()
         else:
             self.set_widgets_enabled_state(False)
-            for signal_path in [["DOCK", "SINGLE_SELECTION"], ["DOCK", "MULTIPLE_SELECTION"], ["DOCK", "CUSTOM_SELECTION"]]:
-                try:
-                    self.manageSignal(signal_path, 'connect')
-                except (AttributeError, RuntimeError, TypeError, SignalStateChangeError):
-                    pass
+            for sp in [["DOCK", "SINGLE_SELECTION"], ["DOCK", "MULTIPLE_SELECTION"], ["DOCK", "CUSTOM_SELECTION"]]:
+                try: self.manageSignal(sp, 'connect')
+                except: pass
         
         self._connect_groupbox_signals_directly()
         self.filtering_populate_predicates_chekableCombobox()
@@ -2949,8 +2926,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.exploring_groupbox_init()
             self.current_layer_changed(self.init_layer)
             self.filtering_auto_current_layer_changed()
-
-            
     def select_tabTools_index(self):
         """v3.1 Sprint 12: Simplified - update action buttons based on active tab."""
         if not self.widgets_initialized:

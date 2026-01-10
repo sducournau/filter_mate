@@ -250,28 +250,88 @@ def qgis_expression_to_postgis(expression: str, geom_col: str = 'geometry') -> s
     return expression
 
 
-# TODO: Extract from filter_task.py line 6676
 def build_postgis_predicates(
     postgis_predicates: list,
     layer_props: dict,
     has_to_reproject: bool,
-    layer_crs_authid: str
-) -> str:
+    source_layer_crs_authid: str,
+    source_schema: str,
+    source_table: str,
+    source_geom: str
+) -> tuple:
     """
-    Build PostGIS spatial predicates for filtering.
+    Build PostGIS spatial predicates array for geometric filtering.
     
-    TODO: Extract implementation from filter_task.py (59 lines)
+    EPIC-1 Phase E4-S2: Extracted from filter_task.py line 6676 (59 lines)
+    
+    DEPRECATED: Not currently used. Expression building is now handled by
+    postgresql_backend.build_expression() which properly wraps table references
+    in EXISTS subqueries.
     
     Args:
-        postgis_predicates: List of spatial predicates
-        layer_props: Layer properties dictionary
-        has_to_reproject: Whether reprojection is needed
-        layer_crs_authid: Layer CRS authority ID
+        postgis_predicates: List of PostGIS predicate functions (ST_Intersects, etc.)
+        layer_props: Layer properties dict with schema, table, geometry field
+        has_to_reproject: Whether layer needs reprojection
+        source_layer_crs_authid: Source layer CRS authority ID
+        source_schema: Source schema name
+        source_table: Source table name
+        source_geom: Source geometry field name
         
     Returns:
-        str: PostGIS predicates SQL
+        tuple: (postgis_sub_expression_array, param_distant_geom_expression)
     """
-    raise NotImplementedError("EPIC-1 Phase E4: To be extracted from filter_task.py")
+    import logging
+    
+    logger = logging.getLogger('FilterMate.Adapters.Backends.PostgreSQL.FilterExecutor')
+    
+    param_distant_table = layer_props["layer_name"]
+    param_distant_geometry_field = layer_props["layer_geometry_field"]
+    
+    postgis_sub_expression_array = []
+    param_distant_geom_expression = (
+        '"{distant_table}"."{distant_geometry_field}"'.format(
+            distant_table=param_distant_table,
+            distant_geometry_field=param_distant_geometry_field
+        )
+    )
+    
+    # Use metric CRS from source layer for all calculations
+    target_crs_srid = (
+        source_layer_crs_authid.split(':')[1] 
+        if source_layer_crs_authid else '3857'
+    )
+    
+    for postgis_predicate in postgis_predicates:
+        current_geom_expr = param_distant_geom_expression
+        
+        if has_to_reproject:
+            # Reproject distant layer to same metric CRS as source
+            current_geom_expr = (
+                'ST_Transform({param_distant_geom_expression}, '
+                '{target_crs_srid})'.format(
+                    param_distant_geom_expression=param_distant_geom_expression,
+                    target_crs_srid=target_crs_srid
+                )
+            )
+            logger.debug(
+                f"Layer will be reprojected to {source_layer_crs_authid} "
+                "for comparison"
+            )
+        
+        # CRITICAL FIX: Use subquery with EXISTS to avoid "missing FROM-clause"
+        # setSubsetString cannot reference other tables directly, need subquery
+        postgis_sub_expression_array.append(
+            'EXISTS (SELECT 1 FROM "{source_schema}"."{source_table}" '
+            'AS __source WHERE {predicate}({distant_geom},{source_geom}))'.format(
+                source_schema=source_schema,
+                source_table=source_table,
+                predicate=postgis_predicate,
+                distant_geom=current_geom_expr,
+                source_geom='__source."{}"'.format(source_geom)
+            )
+        )
+    
+    return postgis_sub_expression_array, param_distant_geom_expression
 
 
 # TODO: Extract from filter_task.py line 1812

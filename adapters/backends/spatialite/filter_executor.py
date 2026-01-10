@@ -109,25 +109,77 @@ def qgis_expression_to_spatialite(expression: str, geom_col: str = 'geometry') -
     return expression
 
 
-# TODO: Extract from filter_task.py line 10616
 def build_spatialite_query(
     sql_subset_string: str,
     table_name: str,
     geom_key_name: str,
-    **kwargs
+    primary_key_name: str,
+    custom: bool,
+    buffer_expression: str = None,
+    buffer_value: float = None,
+    buffer_segments: int = 5,
+    buffer_type: str = "Round",
+    task_parameters: dict = None
 ) -> str:
     """
-    Build complete Spatialite query with geometry handling.
+    Build Spatialite query for simple or complex (buffered) subsets.
     
-    TODO: Extract implementation from filter_task.py (~50 lines)
+    EPIC-1 Phase E4-S2: Extracted from filter_task.py line 10616 (64 lines)
     
     Args:
-        sql_subset_string: SQL WHERE clause
-        table_name: Table name
-        geom_key_name: Geometry column name
-        **kwargs: Additional parameters
+        sql_subset_string: SQL query for subset
+        table_name: Source table name
+        geom_key_name: Geometry field name
+        primary_key_name: Primary key field name
+        custom: Whether custom buffer expression is used
+        buffer_expression: QGIS expression for dynamic buffer
+        buffer_value: Static buffer value in meters
+        buffer_segments: Number of segments for round buffers
+        buffer_type: Buffer type ('Round', 'Flat', 'Square')
+        task_parameters: Task parameters dict
         
     Returns:
-        str: Complete Spatialite query
+        str: Spatialite SELECT query
     """
-    raise NotImplementedError("EPIC-1 Phase E4: To be extracted from filter_task.py")
+    if custom is False:
+        # Simple subset - use query as-is
+        return sql_subset_string
+    
+    # Complex subset with buffer (adapt from PostgreSQL logic)
+    buffer_expr = (
+        qgis_expression_to_spatialite(buffer_expression)
+        if buffer_expression
+        else str(buffer_value)
+    )
+    
+    # Build ST_Buffer style parameters (quad_segs for segments, endcap for type)
+    buffer_type_mapping = {
+        "Round": "round",
+        "Flat": "flat",
+        "Square": "square"
+    }
+    buffer_type_str = (
+        task_parameters.get("filtering", {}).get("buffer_type", "Round")
+        if task_parameters
+        else buffer_type
+    )
+    endcap_style = buffer_type_mapping.get(buffer_type_str, "round")
+    quad_segs = buffer_segments
+    
+    # Build style string for Spatialite ST_Buffer
+    style_params = f"quad_segs={quad_segs}"
+    if endcap_style != 'round':
+        style_params += f" endcap={endcap_style}"
+    
+    # Build Spatialite SELECT (similar to PostgreSQL CREATE MATERIALIZED VIEW)
+    # Note: Spatialite uses same ST_Buffer syntax as PostGIS
+    query = f"""
+        SELECT 
+            ST_Buffer({geom_key_name}, {buffer_expr}, '{style_params}') as {geom_key_name},
+            {primary_key_name},
+            {buffer_expr} as buffer_value
+        FROM {table_name}
+        WHERE {primary_key_name} IN ({sql_subset_string})
+    """
+    
+    return query
