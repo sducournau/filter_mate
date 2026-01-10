@@ -128,8 +128,9 @@ except ImportError:
     SelectivityEstimator = None
 
 # Import expression evaluation task (v2.5.10)
+# EPIC-1: Migrated to core/tasks/ - import from new location
 try:
-    from .expression_evaluation_task import (
+    from core.tasks import (
         ExpressionEvaluationTask,
         ExpressionEvaluationManager,
         get_expression_manager

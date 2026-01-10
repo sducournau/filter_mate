@@ -123,10 +123,9 @@ from .infrastructure.cache import ExploringFeaturesCache
 from .filter_mate_dockwidget_base import Ui_FilterMateDockWidgetBase
 
 # Import async expression evaluation for large layers (v2.5.10)
+# EPIC-1: Migrated to core/tasks/
 try:
-    from .modules.tasks.expression_evaluation_task import (
-        get_expression_manager
-    )
+    from core.tasks import get_expression_manager
     ASYNC_EXPRESSION_AVAILABLE = True
 except ImportError:
     ASYNC_EXPRESSION_AVAILABLE = False
@@ -1226,118 +1225,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         v4.0 Sprint 4: Delegation to UILayoutController with fallback.
         """
-        # v4.0 Sprint 4: Try controller delegation first
+        # v4.0 Sprint 4: Delegated to UILayoutController
         if (hasattr(self, '_controller_integration') and 
             self._controller_integration and
             self._controller_integration.delegate_harmonize_checkable_pushbuttons()):
             logger.debug("_harmonize_checkable_pushbuttons: Delegated to UILayoutController")
             return
         
-        # FALLBACK: Original implementation
-        logger.debug("_harmonize_checkable_pushbuttons: Using fallback implementation")
-        try:
-            from qgis.PyQt.QtWidgets import QPushButton, QSizePolicy
-            from qgis.PyQt.QtCore import QSize
-            from .ui.config import UIConfig, DisplayProfile
-            
-            # Get dynamic dimensions from key_button config
-            key_button_config = UIConfig.get_config('key_button')
-            
-            # Profile-aware fallback values
-            current_profile = UIConfig.get_profile()
-            if key_button_config:
-                pushbutton_min_size = key_button_config.get('min_size', 26)
-                pushbutton_max_size = key_button_config.get('max_size', 32)
-                pushbutton_icon_size = key_button_config.get('icon_size', 16)
-                button_spacing = key_button_config.get('spacing', 2)
-            else:
-                # Fallback values based on profile if config not available
-                if current_profile == DisplayProfile.COMPACT:
-                    pushbutton_min_size = 26
-                    pushbutton_max_size = 32
-                    pushbutton_icon_size = 16
-                    button_spacing = 2
-                elif current_profile == DisplayProfile.HIDPI:
-                    pushbutton_min_size = 36
-                    pushbutton_max_size = 44
-                    pushbutton_icon_size = 24
-                    button_spacing = 6
-                else:  # NORMAL
-                    pushbutton_min_size = 30
-                    pushbutton_max_size = 36
-                    pushbutton_icon_size = 18
-                    button_spacing = 4
-            
-            # Get all checkable pushbuttons with consistent naming pattern
-            checkable_buttons = []
-            
-            # Exploring buttons (including non-checkable explore buttons)
-            exploring_button_names = [
-                'pushButton_exploring_identify',
-                'pushButton_exploring_zoom',
-                'pushButton_checkable_exploring_selecting',
-                'pushButton_checkable_exploring_tracking',
-                'pushButton_checkable_exploring_linking_widgets',
-                'pushButton_exploring_reset_layer_properties'
-            ]
-            
-            # Filtering buttons
-            filtering_button_names = [
-                'pushButton_checkable_filtering_auto_current_layer',
-                'pushButton_checkable_filtering_layers_to_filter',
-                'pushButton_checkable_filtering_current_layer_combine_operator',
-                'pushButton_checkable_filtering_geometric_predicates',
-                'pushButton_checkable_filtering_buffer_value',
-                'pushButton_checkable_filtering_buffer_type'
-            ]
-            
-            # Exporting buttons
-            exporting_button_names = [
-                'pushButton_checkable_exporting_layers',
-                'pushButton_checkable_exporting_projection',
-                'pushButton_checkable_exporting_styles',
-                'pushButton_checkable_exporting_datatype',
-                'pushButton_checkable_exporting_output_folder',
-                'pushButton_checkable_exporting_zip'
-            ]
-            
-            all_button_names = exploring_button_names + filtering_button_names + exporting_button_names
-            
-            # Apply consistent dimensions to all key pushbuttons
-            for button_name in all_button_names:
-                if hasattr(self, button_name):
-                    button = getattr(self, button_name)
-                    if isinstance(button, QPushButton):
-                        # Set consistent square size constraints
-                        button.setMinimumSize(pushbutton_min_size, pushbutton_min_size)
-                        button.setMaximumSize(pushbutton_max_size, pushbutton_max_size)
-                        
-                        # Set consistent icon size
-                        button.setIconSize(QSize(pushbutton_icon_size, pushbutton_icon_size))
-                        
-                        # Ensure consistent style properties
-                        button.setFlat(True)
-                        
-                        # Set consistent size policy - Fixed for uniform sizing
-                        button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-                        
-                        checkable_buttons.append(button_name)
-            
-            # Apply spacing to layout containers
-            for layout_name in ['verticalLayout_exploring_content', 
-                               'verticalLayout_filtering_keys',
-                               'verticalLayout_exporting_keys']:
-                if hasattr(self, layout_name):
-                    layout = getattr(self, layout_name)
-                    layout.setSpacing(button_spacing)
-            
-            mode_name = UIConfig.get_profile_name()
-            logger.debug(f"Harmonized {len(checkable_buttons)} key pushbuttons in {mode_name} mode: {pushbutton_min_size}-{pushbutton_max_size}px (icon: {pushbutton_icon_size}px)")
-            
-        except Exception as e:
-            logger.warning(f"Could not harmonize checkable pushbuttons: {e}")
-            import traceback
-            traceback.print_exc()
+        # No fallback - controller handles all logic
+        logger.warning("_harmonize_checkable_pushbuttons: Controller delegation failed")
     
     def _apply_layout_spacing(self):
         """
@@ -1348,119 +1244,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         v4.0 Sprint 4: Delegation to UILayoutController with fallback.
         """
-        # v4.0 Sprint 4: Try controller delegation first
+        # v4.0 Sprint 4: Delegated to UILayoutController
         if (hasattr(self, '_controller_integration') and 
             self._controller_integration and
             self._controller_integration.delegate_apply_layout_spacing()):
             logger.debug("_apply_layout_spacing: Delegated to UILayoutController")
             return
         
-        # FALLBACK: Original implementation
-        logger.debug("_apply_layout_spacing: Using fallback implementation")
-        try:
-            from .ui.config import UIConfig
-            
-            # Get harmonized layout spacing from config
-            layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 8
-            content_spacing = UIConfig.get_config('layout', 'spacing_content') or 6
-            section_spacing = UIConfig.get_config('layout', 'spacing_section') or 8
-            main_spacing = UIConfig.get_config('layout', 'spacing_main') or 8
-            
-            # Get key button spacing for harmonized key layouts
-            key_button_config = UIConfig.get_config('key_button')
-            button_spacing = key_button_config.get('spacing', 2) if key_button_config else 2
-            
-            # Apply main container spacing for better responsiveness
-            if hasattr(self, 'verticalLayout_main_content'):
-                self.verticalLayout_main_content.setSpacing(main_spacing)
-            
-            # Apply spacing to exploring layouts
-            exploring_layouts = [
-                'verticalLayout_exploring_single_selection',
-                'verticalLayout_exploring_multiple_selection',
-                'verticalLayout_exploring_custom_selection'
-            ]
-            for layout_name in exploring_layouts:
-                if hasattr(self, layout_name):
-                    getattr(self, layout_name).setSpacing(layout_spacing)
-            
-            # Apply spacing to filtering layouts - keys use button spacing, values use content spacing
-            if hasattr(self, 'verticalLayout_filtering_keys'):
-                self.verticalLayout_filtering_keys.setSpacing(button_spacing)
-            if hasattr(self, 'verticalLayout_filtering_values'):
-                self.verticalLayout_filtering_values.setSpacing(content_spacing)
-            
-            # Apply spacing to exporting layouts - keys use button spacing, values use content spacing
-            if hasattr(self, 'verticalLayout_exporting_keys'):
-                self.verticalLayout_exporting_keys.setSpacing(button_spacing)
-            if hasattr(self, 'verticalLayout_exporting_values'):
-                self.verticalLayout_exporting_values.setSpacing(content_spacing)
-            
-            # Apply spacing to exploring key layout
-            if hasattr(self, 'verticalLayout_exploring_content'):
-                self.verticalLayout_exploring_content.setSpacing(button_spacing)
-            
-            # Note: Content margins for horizontal_layouts are now handled by _align_key_layouts
-            # to ensure consistent vertical alignment of toolbar bars across all tabs
-            # Only apply spacing here, margins are set to 0 in _align_key_layouts
-            section_spacing_adjusted = UIConfig.get_config('layout', 'spacing_section') or 4
-            horizontal_layouts = [
-                'horizontalLayout_filtering_content',
-                'horizontalLayout_exporting_content'
-            ]
-            for layout_name in horizontal_layouts:
-                if hasattr(self, layout_name):
-                    layout = getattr(self, layout_name)
-                    layout.setSpacing(section_spacing_adjusted)
-            
-            # Apply harmonized margins to groupbox layouts
-            margins_frame = UIConfig.get_config('layout', 'margins_frame')
-            if margins_frame and isinstance(margins_frame, dict):
-                left = margins_frame.get('left', 8)
-                top = margins_frame.get('top', 8)
-                right = margins_frame.get('right', 8)
-                bottom = margins_frame.get('bottom', 10)
-                
-                # Exploring groupbox layouts
-                groupbox_layouts = [
-                    'gridLayout_exploring_single_content',
-                    'gridLayout_exploring_multiple_content',
-                    'verticalLayout_exploring_custom_container'
-                ]
-                
-                for layout_name in groupbox_layouts:
-                    if hasattr(self, layout_name):
-                        layout = getattr(self, layout_name)
-                        layout.setContentsMargins(left, top, right, bottom)
-                
-                # Apply to filtering/exporting value layouts
-                value_layouts = [
-                    'verticalLayout_filtering_values',
-                    'verticalLayout_exporting_values'
-                ]
-                for layout_name in value_layouts:
-                    if hasattr(self, layout_name):
-                        layout = getattr(self, layout_name)
-                        layout.setContentsMargins(left, top, right, bottom)
-                
-                logger.debug(f"Applied harmonized margins: {left}-{top}-{right}-{bottom}")
-            
-            # Apply action bar margins if available
-            margins_actions = UIConfig.get_config('layout', 'margins_actions')
-            if margins_actions and hasattr(self, 'frame_actions'):
-                layout = self.frame_actions.layout()
-                if layout:
-                    layout.setContentsMargins(
-                        margins_actions.get('left', 8),
-                        margins_actions.get('top', 6),
-                        margins_actions.get('right', 8),
-                        margins_actions.get('bottom', 12)
-                    )
-            
-            logger.debug(f"Applied harmonized layout spacing: {layout_spacing}px")
-            
-        except Exception as e:
-            logger.debug(f"Could not apply layout spacing: {e}")
+        # No fallback - controller handles all logic
+        logger.warning("_apply_layout_spacing: Controller delegation failed")
     
     def _harmonize_spacers(self):
         """
@@ -1609,150 +1401,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         v4.0 Sprint 4: Delegation to UILayoutController with fallback.
         """
-        # v4.0 Sprint 4: Try controller delegation first
+        # v4.0 Sprint 4: Delegated to UILayoutController
         if (hasattr(self, '_controller_integration') and 
             self._controller_integration and
             self._controller_integration.delegate_align_key_layouts()):
             logger.debug("_align_key_layouts: Delegated to UILayoutController")
             return
         
-        # FALLBACK: Original implementation
-        logger.debug("_align_key_layouts: Using fallback implementation")
-        try:
-            from .ui.config import UIConfig
-            
-            # Get key button config for harmonized spacing
-            key_button_config = UIConfig.get_config('key_button')
-            button_spacing = key_button_config.get('spacing', 2) if key_button_config else 2
-            
-            # Get widget_keys config for container margins
-            widget_keys_config = UIConfig.get_config('widget_keys')
-            widget_keys_padding = widget_keys_config.get('padding', 2) if widget_keys_config else 2
-            
-            # Apply consistent spacing and alignment to ALL key layouts
-            key_layouts = [
-                ('verticalLayout_exploring_content', 'exploring content'),
-                ('verticalLayout_filtering_keys', 'filtering keys'),
-                ('verticalLayout_exporting_keys', 'exporting keys')
-            ]
-            
-            for layout_name, description in key_layouts:
-                if hasattr(self, layout_name):
-                    layout = getattr(self, layout_name)
-                    # Set consistent spacing between items (reduced for compact icons)
-                    layout.setSpacing(button_spacing)
-                    # Remove content margins for alignment
-                    layout.setContentsMargins(0, 0, 0, 0)
-                    # Center buttons vertically within their space
-                    layout.setAlignment(Qt.AlignVCenter | Qt.AlignHCenter)
-                    
-                    # Center each item horizontally within the layout
-                    for i in range(layout.count()):
-                        item = layout.itemAt(i)
-                        if item and item.widget():
-                            # Re-set alignment for each widget to center horizontally
-                            layout.setAlignment(item.widget(), Qt.AlignHCenter)
-            
-            # Apply consistent styling to parent container layouts (widget_*_keys_container)
-            container_layouts = [
-                ('verticalLayout_exploring_container', 'exploring'),
-                ('verticalLayout_filtering_keys_container', 'filtering'),
-                ('verticalLayout_exporting_keys_container', 'exporting')
-            ]
-            
-            for layout_name, section in container_layouts:
-                if hasattr(self, layout_name):
-                    layout = getattr(self, layout_name)
-                    # Consistent minimal margins: 2px all around
-                    layout.setContentsMargins(widget_keys_padding, widget_keys_padding, 
-                                            widget_keys_padding, widget_keys_padding)
-                    layout.setSpacing(0)
-            
-            # Apply consistent margins to parent horizontal/grid layouts for vertical alignment
-            # This ensures exploring bar aligns with filtering/exporting bars
-            parent_horizontal_layouts = [
-                ('gridLayout_main_actions', 'exploring parent'),
-                ('horizontalLayout_filtering_content', 'filtering parent'),
-                ('horizontalLayout_exporting_content', 'exporting parent')
-            ]
-            
-            for layout_name, description in parent_horizontal_layouts:
-                if hasattr(self, layout_name):
-                    layout = getattr(self, layout_name)
-                    # Consistent left margin (0) to align all vertical bars
-                    layout.setContentsMargins(0, 0, 0, 0)
-                    layout.setSpacing(4)
-            
-            # CRITICAL FIX: Configure column stretch for gridLayout_main_actions
-            # Column 0 = widget_exploring_keys (fixed width), Column 1 = groupboxes (should expand)
-            if hasattr(self, 'gridLayout_main_actions'):
-                self.gridLayout_main_actions.setColumnStretch(0, 0)  # Keys column: no stretch (fixed)
-                self.gridLayout_main_actions.setColumnStretch(1, 1)  # Content column: takes remaining space
-            
-            # Also ensure gridLayout_main_header expands properly
-            if hasattr(self, 'gridLayout_main_header'):
-                self.gridLayout_main_header.setColumnStretch(0, 1)  # Takes all available space
-            
-            # Apply consistent styling to parent widget containers
-            parent_widgets = [
-                ('widget_exploring_keys', 'exploring'),
-                ('widget_filtering_keys', 'filtering'),
-                ('widget_exporting_keys', 'exporting')
-            ]
-            
-            for widget_name, section in parent_widgets:
-                if hasattr(self, widget_name):
-                    widget = getattr(self, widget_name)
-                    # Get widget_keys dimensions from config
-                    min_width = widget_keys_config.get('min_width', 34) if widget_keys_config else 34
-                    max_width = widget_keys_config.get('max_width', 40) if widget_keys_config else 40
-                    widget.setMinimumWidth(min_width)
-                    widget.setMaximumWidth(max_width)
-                    
-                    parent_layout = widget.layout()
-                    if parent_layout:
-                        # Minimal horizontal margins, consistent vertical margins
-                        parent_layout.setContentsMargins(widget_keys_padding, widget_keys_padding, 
-                                                        widget_keys_padding, widget_keys_padding)
-                        # Center content
-                        parent_layout.setAlignment(Qt.AlignCenter)
-            
-            # Apply consistent spacing to content layouts (groupboxes for exploring, values for filtering/exporting)
-            # This ensures vertical alignment between the exploring groupboxes and filtering/exporting widgets
-            content_layouts = [
-                ('verticalLayout_exploring_tabs_content', 'exploring groupboxes'),
-                ('verticalLayout_filtering_values', 'filtering values'),
-                ('verticalLayout_exporting_values', 'exporting values')
-            ]
-            
-            content_spacing = 4  # Consistent spacing between content items
-            for layout_name, description in content_layouts:
-                if hasattr(self, layout_name):
-                    layout = getattr(self, layout_name)
-                    layout.setSpacing(content_spacing)
-                    # Consistent margins for all content layouts
-                    layout.setContentsMargins(0, 0, 0, 0)
-            
-            # Reduce padding on filtering and exporting main layouts to match exploring
-            # These are the top-level horizontal layouts inside the toolbox pages
-            main_page_layouts = [
-                ('horizontalLayout_filtering_main', 'filtering main'),
-                ('horizontalLayout_exporting_main', 'exporting main')
-            ]
-            
-            for layout_name, description in main_page_layouts:
-                if hasattr(self, layout_name):
-                    layout = getattr(self, layout_name)
-                    # Match the exploring section margins (2px all around)
-                    layout.setContentsMargins(2, 2, 2, 2)
-                    layout.setSpacing(4)
-            
-            logger.debug(f"Aligned key layouts with {button_spacing}px spacing, {widget_keys_padding}px padding")
-            
-        except Exception as e:
-            logger.warning(f"Could not align key layouts: {e}")
-            import traceback
-            traceback.print_exc()
+        # No fallback - controller handles all logic
+        logger.warning("_align_key_layouts: Controller delegation failed")
     
     def _adjust_row_spacing(self):
         """
@@ -3093,7 +2750,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Analyzes each layer's characteristics and sets the most appropriate backend.
         Shows summary message with results.
         """
-        # v4.0: Delegate to BackendController if available
+        # v4.0: Delegate to BackendController (Sprint 5: fallback removed)
         if self._controller_integration and self._controller_integration.backend_controller:
             try:
                 optimized_count = self._controller_integration.backend_controller.auto_select_optimal_backends()
@@ -3110,30 +2767,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     self._synchronize_layer_widgets(self.current_layer, layer_props)
                 return
             except Exception as e:
-                logger.warning(f"auto_select_optimal_backends delegation failed: {e}, using fallback")
+                logger.warning(f"auto_select_optimal_backends delegation failed: {e}")
         
-        # Fallback: minimal implementation
-        from qgis.core import QgsProject, QgsVectorLayer
-        
-        if not hasattr(self, 'PROJECT_LAYERS') or not self.PROJECT_LAYERS:
-            show_warning("FilterMate", "No layers loaded in project")
-            return
-        
-        project = QgsProject.instance()
-        layers = project.mapLayers().values()
-        
-        count = 0
-        for layer in layers:
-            if isinstance(layer, QgsVectorLayer) and layer.isValid():
-                optimal = self._get_optimal_backend_for_layer(layer)
-                if optimal and self._verify_backend_supports_layer(layer, optimal):
-                    self._set_forced_backend(layer.id(), optimal)
-                    count += 1
-        
-        if count > 0:
-            show_success("FilterMate", f"Optimized {count} layer(s)")
-        else:
-            show_info("FilterMate", "All layers using auto-selection")
+        # No fallback - controller handles all logic
+        logger.warning("auto_select_optimal_backends: Controller delegation failed")
+        show_warning("FilterMate", "Backend optimization unavailable")
 
     def _setup_action_bar_layout(self):
         """
@@ -3536,120 +3174,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Args:
             position: str - 'left' or 'right'
         """
-        # v4.0 Sprint 4: Try controller delegation first
+        # v4.0 Sprint 4: Delegated to UILayoutController
         if (hasattr(self, '_controller_integration') and 
             self._controller_integration and
             self._controller_integration.delegate_create_horizontal_wrapper_for_side_action_bar()):
             logger.debug("_create_horizontal_wrapper_for_side_action_bar: Delegated to UILayoutController")
             return
         
-        # FALLBACK: Original implementation
-        logger.debug("_create_horizontal_wrapper_for_side_action_bar: Using fallback implementation")
-        # Get alignment from config
-        alignment = self._get_action_bar_vertical_alignment()
-        
-        # Calculate the width of frame_actions
-        if UI_CONFIG_AVAILABLE:
-            action_button_size = UIConfig.get_button_height("action_button")
-            spacer_width = int(action_button_size * 1.3)
-        else:
-            spacer_width = 54  # Fallback width
-        
-        # Remove frame_actions from horizontalLayout_actions_container (its original position)
-        if self.horizontalLayout_actions_container.indexOf(self.frame_actions) >= 0:
-            self.horizontalLayout_actions_container.removeWidget(self.frame_actions)
-        
-        self.frame_actions.setParent(self.dockWidgetContents)
-        
-        if alignment == 'top':
-            # 'top' alignment: Action bar spans full height, next to splitter
-            if self.main_splitter is not None:
-                parent_layout = self.verticalLayout_main
-                splitter_idx = parent_layout.indexOf(self.main_splitter)
-                
-                if splitter_idx >= 0:
-                    # Remove splitter from its current position
-                    parent_layout.removeWidget(self.main_splitter)
-                    
-                    # Create a horizontal wrapper widget
-                    self._side_action_wrapper = QtWidgets.QWidget(self.dockWidgetContents)
-                    self._side_action_wrapper.setObjectName("side_action_wrapper")
-                    wrapper_layout = QtWidgets.QHBoxLayout(self._side_action_wrapper)
-                    wrapper_layout.setContentsMargins(0, 0, 0, 0)
-                    wrapper_layout.setSpacing(0)
-                    
-                    # Add action bar and splitter in correct order
-                    if position == 'left':
-                        wrapper_layout.addWidget(self.frame_actions, 0)
-                        wrapper_layout.addWidget(self.main_splitter, 1)
-                    else:  # right
-                        wrapper_layout.addWidget(self.main_splitter, 1)
-                        wrapper_layout.addWidget(self.frame_actions, 0)
-                    
-                    # Insert wrapper at same position
-                    parent_layout.insertWidget(splitter_idx, self._side_action_wrapper)
-                    
-                    # Add spacer to actions_container to align with action bar above
-                    self._vertical_action_spacer = QtWidgets.QSpacerItem(
-                        spacer_width, 0, 
-                        QtWidgets.QSizePolicy.Fixed, 
-                        QtWidgets.QSizePolicy.Minimum
-                    )
-                    if position == 'left':
-                        self.horizontalLayout_actions_container.insertItem(0, self._vertical_action_spacer)
-                    else:
-                        self.horizontalLayout_actions_container.addItem(self._vertical_action_spacer)
-                    
-                    logger.info(f"Created side action bar wrapper (position={position}, alignment=top)")
-        
-        else:  # alignment == 'bottom'
-            # 'bottom' alignment: Action bar only in actions container area
-            # Place frame_actions in horizontalLayout_actions_container
-            if position == 'left':
-                self.horizontalLayout_actions_container.insertWidget(0, self.frame_actions)
-            else:  # right
-                self.horizontalLayout_actions_container.addWidget(self.frame_actions)
-            
-            # Add spacer next to splitter to align with action bar below
-            if self.main_splitter is not None:
-                parent_layout = self.verticalLayout_main
-                splitter_idx = parent_layout.indexOf(self.main_splitter)
-                
-                if splitter_idx >= 0:
-                    # Remove splitter from its current position
-                    parent_layout.removeWidget(self.main_splitter)
-                    
-                    # Create a horizontal wrapper widget with spacer
-                    self._side_action_wrapper = QtWidgets.QWidget(self.dockWidgetContents)
-                    self._side_action_wrapper.setObjectName("side_action_wrapper")
-                    wrapper_layout = QtWidgets.QHBoxLayout(self._side_action_wrapper)
-                    wrapper_layout.setContentsMargins(0, 0, 0, 0)
-                    wrapper_layout.setSpacing(0)
-                    
-                    # Create spacer widget for alignment
-                    spacer_widget = QtWidgets.QWidget(self._side_action_wrapper)
-                    spacer_widget.setFixedWidth(spacer_width)
-                    spacer_widget.setObjectName("side_action_spacer_widget")
-                    
-                    # Add spacer and splitter in correct order
-                    if position == 'left':
-                        wrapper_layout.addWidget(spacer_widget, 0)
-                        wrapper_layout.addWidget(self.main_splitter, 1)
-                    else:  # right
-                        wrapper_layout.addWidget(self.main_splitter, 1)
-                        wrapper_layout.addWidget(spacer_widget, 0)
-                    
-                    # Insert wrapper at same position
-                    parent_layout.insertWidget(splitter_idx, self._side_action_wrapper)
-                    
-                    # Note: Header margin adjustment is handled by _adjust_header_for_side_position
-                    
-                    logger.info(f"Created side action bar wrapper (position={position}, alignment=bottom)")
-        
-        # Mark that we're in side action bar mode
-        self._side_action_bar_active = True
-        self._side_action_bar_position = position
-        self._side_action_bar_alignment = alignment
+        # No fallback - controller handles all logic
+        logger.warning("_create_horizontal_wrapper_for_side_action_bar: Controller delegation failed")
 
     def _restore_side_action_bar_layout(self):
         """
@@ -7555,151 +7088,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             Contrairement aux versions précédentes qui étaient additives,
             cette synchronisation reflète maintenant EXACTEMENT la sélection QGIS.
         """
-        # v4.0 Sprint 4: Try controller delegation first
+        # v4.0 Sprint 4: Delegated to UILayoutController
         if (hasattr(self, '_controller_integration') and 
             self._controller_integration and
             self._controller_integration.delegate_sync_multiple_selection_from_qgis()):
             logger.debug("_sync_multiple_selection_from_qgis: Delegated to UILayoutController")
             return
         
-        # FALLBACK: Original implementation
-        logger.debug("_sync_multiple_selection_from_qgis: Using fallback implementation")
-        try:
-            # Multiple selection: check all selected features in the widget
-            multiple_widget = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
-            
-            if not hasattr(multiple_widget, 'list_widgets'):
-                logger.debug("_sync_multiple_selection_from_qgis: No list_widgets attribute")
-                return
-            
-            # Get layer properties to find the primary key field name
-            layer_props = self.PROJECT_LAYERS.get(self.current_layer.id(), {})
-            pk_field_name = layer_props.get("infos", {}).get("primary_key_name", None)
-            
-            if not pk_field_name:
-                logger.warning("_sync_multiple_selection_from_qgis: No primary_key_name found")
-                return
-            
-            # v3.0.5: Check if feature list is ready (widget exists and has items)
-            # If not ready, store the pending selection to be applied after loadFeaturesList
-            list_widget = None
-            list_ready = False
-            
-            if self.current_layer.id() in multiple_widget.list_widgets:
-                list_widget = multiple_widget.list_widgets[self.current_layer.id()]
-                list_ready = list_widget.count() > 0
-            
-            # Also get the identifier field name from the widget itself for comparison
-            widget_identifier_field = None
-            if list_widget and hasattr(list_widget, 'getIdentifierFieldName'):
-                widget_identifier_field = list_widget.getIdentifierFieldName()
-            
-            logger.info(f"_sync_multiple_selection_from_qgis: pk_field_name={pk_field_name}, widget_identifier_field={widget_identifier_field}, selected_count={selected_count}, list_ready={list_ready}")
-            
-            # CRITICAL: Use the widget's identifier field name if it differs from pk_field_name
-            # The widget stores data using its own identifier_field_name setting
-            effective_pk_field = widget_identifier_field if widget_identifier_field else pk_field_name
-            
-            # Get selected PRIMARY KEY VALUES from QGIS (NOT feature IDs!)
-            # data(3) in the widget stores primary key values, not feature.id()
-            # CRITICAL: Convert to strings for consistent comparison since widget stores string values
-            selected_pk_values = set()
-            for f in selected_features:
-                try:
-                    pk_value = f[effective_pk_field]
-                    # Convert to string for consistent comparison with widget data
-                    selected_pk_values.add(str(pk_value) if pk_value is not None else pk_value)
-                    logger.debug(f"  Selected feature: {effective_pk_field}={pk_value} (type: {type(pk_value).__name__})")
-                except (KeyError, IndexError) as e:
-                    # Fallback to feature ID if attribute not found
-                    logger.warning(f"  Could not get field '{effective_pk_field}' from feature (available: {[field.name() for field in f.fields()]}): {e}")
-                    selected_pk_values.add(str(f.id()))
-            
-            logger.info(f"_sync_multiple_selection_from_qgis: selected_pk_values={selected_pk_values}")
-            
-            # v3.0.5: If list is not ready yet (still loading), store pending selection
-            if not list_ready:
-                if selected_pk_values:
-                    logger.info(f"_sync_multiple_selection_from_qgis: List not ready yet, storing {len(selected_pk_values)} PKs as pending selection")
-                    multiple_widget.setPendingQgisSelection(selected_pk_values, self.current_layer.id())
-                else:
-                    logger.debug("_sync_multiple_selection_from_qgis: List not ready and no selection, clearing pending")
-                    multiple_widget.clearPendingQgisSelection()
-                return
-            
-            # Clear any pending selection since we're applying now
-            multiple_widget.clearPendingQgisSelection()
-            
-            # DEBUG: Show first few widget items for comparison
-            if list_widget.count() > 0:
-                sample_items = []
-                for i in range(min(3, list_widget.count())):
-                    item = list_widget.item(i)
-                    sample_items.append(f"'{item.data(0)}': pk={item.data(3)} (type={type(item.data(3)).__name__})")
-                logger.info(f"_sync_multiple_selection_from_qgis: Widget sample items: {sample_items}")
-            
-            # SYNCHRONISATION COMPLÈTE: reflète exactement la sélection QGIS
-            # - COCHE les features dont la PK est sélectionnée dans QGIS
-            # - DÉCOCHE les features dont la PK n'est PAS sélectionnée dans QGIS
-            
-            # CRITICAL FIX: Set sync flag BEFORE modifying checkStates to prevent infinite recursion
-            # setCheckState() can trigger signals that call exploring_features_changed → select() → 
-            # on_layer_selection_changed → _sync_multiple_selection_from_qgis (infinite loop)
-            self._syncing_from_qgis = True
-            
-            try:
-                checked_count = 0
-                unchecked_count = 0
-                found_pk_values = set()
-                for i in range(list_widget.count()):
-                    item = list_widget.item(i)
-                    item_pk_value = item.data(3)  # data(3) contains PRIMARY KEY value
-                    # Convert to string for consistent comparison
-                    item_pk_str = str(item_pk_value) if item_pk_value is not None else item_pk_value
-                    found_pk_values.add(item_pk_str)
-                    
-                    if item_pk_str in selected_pk_values:
-                        # CHECK features sélectionnées dans QGIS
-                        if item.checkState() != Qt.Checked:
-                            item.setCheckState(Qt.Checked)
-                            checked_count += 1
-                            logger.debug(f"  CHECKING item: {item.data(0)} (pk={item_pk_str})")
-                    else:
-                        # UNCHECK features NON sélectionnées dans QGIS
-                        if item.checkState() == Qt.Checked:
-                            item.setCheckState(Qt.Unchecked)
-                            unchecked_count += 1
-                            logger.debug(f"  UNCHECKING item: {item.data(0)} (pk={item_pk_str})")
-                
-                logger.info(f"_sync_multiple_selection_from_qgis: checked={checked_count}, unchecked={unchecked_count}")
-                
-                # Update display if any changes were made
-                if checked_count > 0 or unchecked_count > 0:
-                    # Manually update the items display and emit signal
-                    # (similar to what updateFeatures does in the task)
-                    selection_data = []
-                    for i in range(list_widget.count()):
-                        item = list_widget.item(i)
-                        if item.checkState() == Qt.Checked:
-                            selection_data.append([item.data(0), item.data(3), bool(item.data(4))])
-                    
-                    selection_data.sort(key=lambda k: k[0])
-                    multiple_widget.items_le.setText(', '.join([data[0] for data in selection_data]))
-                    list_widget.setSelectedFeaturesList(selection_data)
-                    
-                    # Emit the signal to notify exploring_features_changed
-                    # This ensures FilterMate updates its internal state
-                    # NOTE: This could trigger exploring_features_changed which might update QGIS selection
-                    # if is_selecting is active. The _syncing_from_qgis flag prevents infinite loops.
-                    multiple_widget.updatingCheckedItemList.emit(selection_data, True)
-            finally:
-                # Always clear the sync flag
-                self._syncing_from_qgis = False
-                
-        except Exception as e:
-            # Make sure to reset sync flag even on error
-            self._syncing_from_qgis = False
-            logger.error(f"Error in _sync_multiple_selection_from_qgis: {type(e).__name__}: {e}")
+        # No fallback - controller handles all logic
+        logger.warning("_sync_multiple_selection_from_qgis: Controller delegation failed")
 
 
     def exploring_source_params_changed(self, expression=None, groupbox_override=None, change_source=None):
@@ -8460,182 +7857,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         v4.0 Sprint 3: Delegates to LayerSyncController when available.
         v2.9.42: Added protection to prevent combobox changes during post-filter window.
         """
-        # v4.0 Sprint 3: Try delegation to LayerSyncController first
+        # v4.0 Sprint 3: Delegation to LayerSyncController (Sprint 5: fallback removed)
         if self._controller_integration and self._controller_integration.layer_sync_controller:
             try:
                 if self._controller_integration.delegate_synchronize_layer_widgets(layer, layer_props):
                     logger.debug("_synchronize_layer_widgets: delegated to LayerSyncController")
                     return
             except Exception as e:
-                logger.debug(f"_synchronize_layer_widgets delegation failed, using fallback: {e}")
+                logger.debug(f"_synchronize_layer_widgets delegation failed: {e}")
         
-        # Fallback: Original implementation
-        # Detect multi-step filter: auto-enable additive filter if existing subsets detected
-        self._detect_multi_step_filter(layer, layer_props)
-        
-        # v2.9.42: Check if we're within the post-filter protection window
-        # Skip combobox synchronization if we're protecting the layer selection
-        import time
-        skip_combobox_sync = False
-        # v3.0.12: Extended protection window from 500ms to 2000ms
-        # v3.0.10: CRITICAL FIX - Extended to 5000ms to cover all async refresh timers
-        # The canvas refresh can be scheduled up to 1500ms after filter completion
-        # (see _single_canvas_refresh in filter_task.py), plus layer.reload() can
-        # trigger async provider refresh that takes longer on large datasets
-        POST_FILTER_PROTECTION_WINDOW = 5.0  # seconds
-        if getattr(self, '_filter_completed_time', 0) > 0:
-            elapsed = time.time() - self._filter_completed_time
-            if elapsed < POST_FILTER_PROTECTION_WINDOW:
-                saved_layer_id = getattr(self, '_saved_layer_id_before_filter', None)
-                # v3.0.17: CRITICAL FIX - Also block if layer is None during protection window
-                # Previously only blocked if layer was different from saved_layer_id,
-                # but if layer=None, this check failed and combobox could be changed
-                if saved_layer_id:
-                    if layer is None or layer.id() != saved_layer_id:
-                        skip_combobox_sync = True
-                        layer_name = layer.name() if layer else "(None)"
-                        logger.info(f"v3.0.17: 🛡️ _synchronize_layer_widgets BLOCKED combobox sync - layer={layer_name} during protection window (elapsed={elapsed:.3f}s)")
-        
-        # Always synchronize comboBox_filtering_current_layer with current_layer
-        # v2.9.42: Skip if within post-filter protection window
-        if not skip_combobox_sync:
-            lastLayer = self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].currentLayer()
-            if lastLayer is None or lastLayer.id() != self.current_layer.id():
-                self.manageSignal(["FILTERING","CURRENT_LAYER"], 'disconnect')
-                self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].setLayer(self.current_layer)
-                self.manageSignal(["FILTERING","CURRENT_LAYER"], 'connect', 'layerChanged')
-        
-        # Update backend indicator with PostgreSQL connection availability flag
-        # CRITICAL: Pass forced backend if set to show the actual backend being used
-        forced_backend = None
-        if hasattr(self, 'forced_backends') and layer.id() in self.forced_backends:
-            forced_backend = self.forced_backends[layer.id()]
-        
-        if layer.id() in self.PROJECT_LAYERS:
-            infos = layer_props.get('infos', {})
-            if 'layer_provider_type' in infos:
-                provider_type = infos['layer_provider_type']
-                postgresql_conn = infos.get('postgresql_connection_available', None)
-                self._update_backend_indicator(provider_type, postgresql_conn, actual_backend=forced_backend)
-        else:
-            provider_type = layer.providerType()
-            if provider_type == 'postgres':
-                self._update_backend_indicator(PROVIDER_POSTGRES, actual_backend=forced_backend)
-            elif provider_type == 'spatialite':
-                self._update_backend_indicator(PROVIDER_SPATIALITE, actual_backend=forced_backend)
-            elif provider_type == 'ogr':
-                self._update_backend_indicator(PROVIDER_OGR, actual_backend=forced_backend)
-            else:
-                self._update_backend_indicator(provider_type, actual_backend=forced_backend)
-        
-        # Initialize buffer property widget with current layer
-        self.filtering_init_buffer_property()
-        
-        # Update all layer property widgets
-        for group_name in self.layer_properties_tuples_dict:
-            tuple_group = self.layer_properties_tuples_dict[group_name]
-            group_state = True
-            # NOTE: 'source_layer' group excluded because use_centroids_source_layer checkbox
-            # should always be enabled (no parent toggle controls it)
-            if group_name not in ('is', 'selection_expression', 'source_layer'):
-                group_enabled_property = tuple_group[0]
-                group_state = layer_props[group_enabled_property[0]][group_enabled_property[1]]
-                if group_state is False:
-                    self.properties_group_state_reset_to_default(tuple_group, group_name, group_state)
-                else:
-                    self.properties_group_state_enabler(tuple_group)
-            
-            if group_state is True:
-                for i, property_tuple in enumerate(tuple_group):
-                    # Skip tuples that don't have a corresponding widget (data-only properties)
-                    if property_tuple[0].upper() not in self.widgets:
-                        continue
-                    if property_tuple[1].upper() not in self.widgets[property_tuple[0].upper()]:
-                        continue
-                    
-                    widget_type = self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["TYPE"]
-                    if widget_type == 'PushButton':
-                        if all(key in self.widgets[property_tuple[0].upper()][property_tuple[1].upper()] for key in ["ICON_ON_TRUE", "ICON_ON_FALSE"]):
-                            self.switch_widget_icon(property_tuple, layer_props[property_tuple[0]][property_tuple[1]])
-                        if self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].isCheckable():
-                            # CRITICAL: Block signals during setChecked to avoid triggering actions (select/zoom/etc)
-                            # during state restoration - we only want to restore the visual state
-                            widget = self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"]
-                            widget.blockSignals(True)
-                            widget.setChecked(layer_props[property_tuple[0]][property_tuple[1]])
-                            widget.blockSignals(False)
-                    elif widget_type == 'CheckableComboBox':
-                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCheckedItems(layer_props[property_tuple[0]][property_tuple[1]])
-                    elif widget_type == 'CustomCheckableComboBox':
-                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["CUSTOM_LOAD_FUNCTION"]
-                    elif widget_type == 'ComboBox':
-                        widget = self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"]
-                        value = layer_props[property_tuple[0]][property_tuple[1]]
-                        
-                        # FIX v2.5.12: For combine_operator comboboxes, use index-based lookup
-                        # to handle translated values (ET, OU, NON) from older projects
-                        if property_tuple[1] in ('source_layer_combine_operator', 'other_layers_combine_operator'):
-                            index = self._combine_operator_to_index(value)
-                        else:
-                            index = widget.findText(value)
-                            if index == -1:
-                                index = 0  # Default to first item
-                        
-                        widget.setCurrentIndex(index)
-                    elif widget_type == 'QgsFieldExpressionWidget':
-                        # CRITICAL: Block signals during setLayer/setExpression to prevent
-                        # circular signal loop (fieldChanged -> layer_property_changed ->
-                        # setLayerVariable) that causes access violation crash
-                        widget = self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"]
-                        widget.blockSignals(True)
-                        widget.setLayer(self.current_layer)
-                        widget.setFilters(QgsFieldProxyModel.AllTypes)
-                        widget.setExpression(layer_props[property_tuple[0]][property_tuple[1]])
-                        widget.blockSignals(False)
-                    elif widget_type == 'QgsDoubleSpinBox':
-                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setValue(layer_props[property_tuple[0]][property_tuple[1]])
-                    elif widget_type == 'QgsSpinBox':
-                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setValue(layer_props[property_tuple[0]][property_tuple[1]])
-                    elif widget_type == 'CheckBox':
-                        # Synchronize CheckBox state from layer properties
-                        # v2.9.31: Standard per-layer save/restore behavior (default: False)
-                        widget = self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"]
-                        stored_value = layer_props[property_tuple[0]][property_tuple[1]]
-                        
-                        # VERIFICATION v2.9.32: Log centroid checkbox synchronization
-                        if property_tuple[1] in ('use_centroids_source_layer', 'use_centroids_distant_layers'):
-                            logger.debug(f"🔍 Synchronizing {property_tuple[1]} checkbox: stored_value={stored_value}, "
-                                        f"current_checked={widget.isChecked()} for layer {layer.name() if layer else 'unknown'}")
-                        
-                        widget.blockSignals(True)
-                        widget.setChecked(stored_value)
-                        widget.blockSignals(False)
-                    elif widget_type == 'LineEdit':
-                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setText(layer_props[property_tuple[0]][property_tuple[1]])
-                    elif widget_type == 'QgsProjectionSelectionWidget':
-                        crs = QgsCoordinateReferenceSystem(layer_props[property_tuple[0]][property_tuple[1]])
-                        if crs.isValid():
-                            self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCrs(crs)
-                    elif widget_type == 'PropertyOverrideButton':
-                        if layer_props[property_tuple[0]][property_tuple[1]] is False:
-                            self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setActive(False)
-                        elif layer_props[property_tuple[0]][property_tuple[1]] is True:
-                            self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setActive(True)
-        
-        # Populate layers combobox with signals disconnected
-        self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'disconnect')
-        self.filtering_populate_layers_chekableCombobox()
-        self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
-        
-        # Synchronize checkable button associated widgets enabled state
-        self.filtering_layers_to_filter_state_changed()
-        self.filtering_combine_operator_state_changed()
-        self.filtering_geometric_predicates_state_changed()
-        self.filtering_buffer_property_changed()
-        self.filtering_buffer_type_state_changed()
-        
-        # Update centroids source checkbox state based on current layer combobox
-        self._update_centroids_source_checkbox_state()
+        # No fallback - controller handles all logic
+        logger.warning("_synchronize_layer_widgets: Controller delegation failed")
     
     def _reload_exploration_widgets(self, layer, layer_props):
         """
@@ -8767,104 +7999,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         v3.0.4: Added IDENTIFY and ZOOM to the exclusion list since they're now
         reconnected in _reload_exploration_widgets().
         """
-        # v4.0 Sprint 3: Try delegation to LayerSyncController first
+        # v4.0 Sprint 3: Delegation to LayerSyncController (Sprint 5: fallback removed)
         if self._controller_integration and self._controller_integration.layer_sync_controller:
             try:
                 if self._controller_integration.delegate_reconnect_layer_signals(widgets_to_reconnect, layer_props):
                     logger.debug("_reconnect_layer_signals: delegated to LayerSyncController")
                     return
             except Exception as e:
-                logger.debug(f"_reconnect_layer_signals delegation failed, using fallback: {e}")
+                logger.debug(f"_reconnect_layer_signals delegation failed: {e}")
         
-        # Fallback: Original implementation
-        # Filter out exploring widget signals - they are already reconnected in _reload_exploration_widgets()
-        exploring_signal_prefixes = [
-            ["EXPLORING", "SINGLE_SELECTION_FEATURES"],
-            ["EXPLORING", "SINGLE_SELECTION_EXPRESSION"],
-            ["EXPLORING", "MULTIPLE_SELECTION_FEATURES"],
-            ["EXPLORING", "MULTIPLE_SELECTION_EXPRESSION"],
-            ["EXPLORING", "CUSTOM_SELECTION_EXPRESSION"],
-            ["EXPLORING", "IDENTIFY"],
-            ["EXPLORING", "ZOOM"]
-        ]
-        
-        # Reconnect only non-exploring signals
-        for widget_path in widgets_to_reconnect:
-            # Skip exploring widget signals - already handled in _reload_exploration_widgets()
-            if widget_path not in exploring_signal_prefixes:
-                self.manageSignal(widget_path, 'connect')
-        
-        # Reconnect legend link if enabled - ALWAYS reconnect the signal first
-        if self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"] is True:
-            # First reconnect the signal to ensure bidirectional sync continues working
-            widget_path = ["QGIS","LAYER_TREE_VIEW"]
-            self.manageSignal(widget_path, 'connect')
-            
-            # Then sync the Layer Tree View with current_layer (ComboBox → Layer Tree View sync)
-            if self.current_layer is not None:
-                active_layer = self.iface.activeLayer()
-                if active_layer is None or active_layer.id() != self.current_layer.id():
-                    # Block the signal temporarily to avoid recursive call
-                    self.manageSignal(widget_path, 'disconnect')
-                    self.widgets["QGIS"]["LAYER_TREE_VIEW"]["WIDGET"].setCurrentLayer(self.current_layer)
-                    self.manageSignal(widget_path, 'connect')
-        
-        # Connect selectionChanged signal for current layer to enable tracking
-        if self.current_layer is not None:
-            try:
-                self.current_layer.selectionChanged.connect(self.on_layer_selection_changed)
-                self.current_layer_selection_connection = True
-            except (TypeError, RuntimeError) as e:
-                logger.warning(f"Could not connect selectionChanged signal: {type(e).__name__}: {e}")
-                self.current_layer_selection_connection = None
-        
-        # Restore exploring groupbox UI state only (no widget updates - already done in _reload_exploration_widgets)
-        # This replaces the previous call to exploring_groupbox_changed() which caused double processing
-        if "current_exploring_groupbox" in layer_props.get("exploring", {}):
-            saved_groupbox = layer_props["exploring"]["current_exploring_groupbox"]
-            if saved_groupbox:
-                self._restore_groupbox_ui_state(saved_groupbox)
-        elif self.current_exploring_groupbox:
-            self._restore_groupbox_ui_state(self.current_exploring_groupbox)
-        else:
-            self._restore_groupbox_ui_state("single_selection")
-        
-        # Link widgets and restore feature selection state
-        if self.current_layer is not None:
-            self.exploring_link_widgets()
-            
-            # Trigger feature update based on current groupbox mode
-            # NOTE: This only updates feature selection/tracking, NOT layer filters
-            # IMPORTANT: Only trigger if there are selected features to avoid clearing existing filters
-            if self.current_exploring_groupbox == "single_selection":
-                if "SINGLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
-                    selected_feature = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
-                    # Only trigger if feature is valid to avoid clearing layer filter
-                    if selected_feature is not None and selected_feature.isValid():
-                        self.exploring_features_changed(selected_feature)
-                        
-            elif self.current_exploring_groupbox == "multiple_selection":
-                if "MULTIPLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
-                    selected_features = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures()
-                    # Only trigger if there are selected features
-                    if selected_features:
-                        self.exploring_features_changed(selected_features, True)
-                        
-            elif self.current_exploring_groupbox == "custom_selection":
-                custom_expression = layer_props["exploring"].get("custom_selection_expression", "")
-                # Only trigger if there's an expression to avoid clearing layer filter
-                if custom_expression:
-                    self.exploring_custom_selection()
-            
-            # FIX v2.8.6: Initialize selection sync when is_selecting is already enabled on project load
-            # When opening a project with is_selecting=True, the widget is checked with blockSignals(True)
-            # in _synchronize_layer_widgets, so exploring_select_features() is never called.
-            # This means the bidirectional sync between canvas selection tool and widgets is not active.
-            # We need to explicitly call exploring_select_features() here to initialize the sync.
-            is_selecting = layer_props.get("exploring", {}).get("is_selecting", False)
-            if is_selecting:
-                logger.debug(f"_reconnect_layer_signals: is_selecting=True, initializing selection sync")
-                self.exploring_select_features()
+        # No fallback - controller handles all logic
+        logger.warning("_reconnect_layer_signals: Controller delegation failed")
 
     
     def _ensure_valid_current_layer(self, requested_layer):
@@ -9239,7 +8384,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         v4.0 Sprint 3: Delegates to PropertyController when available.
         """
-        # v4.0 Sprint 3: Try delegation to PropertyController first
+        # v4.0 Sprint 3: Delegation to PropertyController (Sprint 5: fallback removed)
         if self._controller_integration and self._controller_integration.property_controller:
             try:
                 if self._controller_integration.delegate_change_project_property(
@@ -9248,88 +8393,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     logger.debug("project_property_changed: delegated to PropertyController")
                     return
             except Exception as e:
-                logger.debug(f"project_property_changed delegation failed, using fallback: {e}")
+                logger.debug(f"project_property_changed delegation failed: {e}")
         
-        # Fallback: Original implementation
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
-
-            properties_group_key = None
-            property_path = None
-            index = None
-            state = None
-            group_state = True
-            flag_value_changed = False
-
-            if isinstance(input_data, dict) or isinstance(input_data, list) or isinstance(input_data, str):
-                if len(input_data) >= 0:
-                    state = True
-                else:
-                    state = False
-            elif isinstance(input_data, int) or isinstance(input_data, float):
-                if int(input_data) >= 0:
-                    state = True
-                else:
-                    state = False
-                if isinstance(input_data, float):
-                    input_data = truncate(input_data, 2)
-            elif isinstance(input_data, bool):
-                state = input_data
-            
-
-            for properties_tuples_key in self.export_properties_tuples_dict:
-                if input_property.find(properties_tuples_key) >= 0:
-                    properties_group_key = properties_tuples_key
-                    properties_tuples = self.export_properties_tuples_dict[properties_tuples_key]
-                    for i, property_tuple in enumerate(properties_tuples):
-                        if property_tuple[1] == input_property:
-                            property_path = property_tuple
-                            index = i
-                            break
-                    break
-            
-            group_enabled_property = properties_tuples[0]
-            group_state = self.widgets[group_enabled_property[0].upper()][group_enabled_property[1].upper()]["WIDGET"].isChecked()
-
-            if group_state is False:
-                self.properties_group_state_reset_to_default(properties_tuples, properties_group_key, group_state)            
-
-            else:
-                self.properties_group_state_enabler(properties_tuples)
-                widget_type = self.widgets[property_path[0].upper()][property_path[1].upper()]["TYPE"]
-                if widget_type == 'PushButton':
-                    if self.project_props[property_path[0].upper()][property_path[1].upper()] is not input_data and input_data is True:
-                        self.project_props[property_path[0].upper()][property_path[1].upper()] = input_data
-                        flag_value_changed = True
-                        if "ON_TRUE" in custom_functions:
-                            custom_functions["ON_TRUE"](0)
-
-                    elif self.project_props[property_path[0].upper()][property_path[1].upper()] is not input_data and input_data is False:
-                        self.project_props[property_path[0].upper()][property_path[1].upper()] = input_data
-                        flag_value_changed = True
-                        if "ON_FALSE" in custom_functions:
-                            custom_functions["ON_FALSE"](0)
-                else:    
-                    # For non-PushButton widgets (CheckBox, ComboBox, etc.)
-                    # Update the value if the parent group is enabled
-                    if self.project_props[properties_tuples[0][0].upper()][properties_tuples[0][1].upper()] is True:
-                        # Get the value from custom function or use input_data directly
-                        new_value = custom_functions["CUSTOM_DATA"](0) if "CUSTOM_DATA" in custom_functions else input_data
-                        
-                        # Only mark as changed if value actually changed
-                        if self.project_props[property_path[0].upper()][property_path[1].upper()] != new_value:
-                            self.project_props[property_path[0].upper()][property_path[1].upper()] = new_value
-                            flag_value_changed = True
-                            
-                            if new_value and "ON_TRUE" in custom_functions:
-                                custom_functions["ON_TRUE"](0)
-                            elif not new_value and "ON_FALSE" in custom_functions:
-                                custom_functions["ON_FALSE"](0)
-
-            if flag_value_changed is True:
-                if "ON_CHANGE" in custom_functions:
-                    custom_functions["ON_CHANGE"](0)
-                self.CONFIG_DATA['CURRENT_PROJECT']['EXPORTING'] = self.project_props['EXPORTING']
-                self.setProjectVariablesEvent()
+        # No fallback - controller handles all logic
+        logger.warning("project_property_changed: Controller delegation failed")
 
 
     def _parse_property_data(self, input_data):
@@ -9660,40 +8727,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         For point and line geometries, the minimum value is set to 0 to prevent
         negative buffer input.
         """
-        # v4.0: Delegate to PropertyController if available
+        # v4.0: Delegate to PropertyController (Sprint 5: fallback removed)
         if self._controller_integration and self._controller_integration.property_controller:
             try:
                 self._controller_integration.delegate_update_buffer_validation()
                 return
             except Exception as e:
-                logger.debug(f"_update_buffer_validation delegation failed: {e}, using fallback")
+                logger.debug(f"_update_buffer_validation delegation failed: {e}")
         
-        # Fallback for when controller is not available
-        from qgis.core import QgsWkbTypes
-        
-        spinbox = self.mQgsDoubleSpinBox_filtering_buffer_value
-        if spinbox is None:
-            return
-        
-        # Default: allow negative buffers (for polygons)
-        min_value = -1000000.0
-        tooltip = self.tr("Buffer value in meters (positive=expand, negative=shrink polygons)")
-        
-        if self.current_layer is not None:
-            try:
-                geom_type = self.current_layer.geometryType()
-                
-                if geom_type == QgsWkbTypes.PointGeometry:
-                    min_value = 0.0
-                    tooltip = self.tr("Buffer value in meters (points require positive buffer)")
-                elif geom_type == QgsWkbTypes.LineGeometry:
-                    min_value = 0.0
-                    tooltip = self.tr("Buffer value in meters (lines require positive buffer)")
-            except Exception as e:
-                logger.debug(f"_update_buffer_validation fallback: Error: {e}")
-        
-        spinbox.setMinimum(min_value)
-        spinbox.setToolTip(tooltip)
+        # No fallback - controller handles all logic
+        logger.warning("_update_buffer_validation: Controller delegation failed")
 
     def set_exporting_properties(self):
 
@@ -9802,124 +8845,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         v4.0 Sprint 3: Delegates to PropertyController when available.
         """
-        # v4.0 Sprint 3: Try delegation to PropertyController first
+        # v4.0 Sprint 3: Delegation to PropertyController (Sprint 5: fallback removed)
         if self._controller_integration and self._controller_integration.property_controller:
             try:
                 if self._controller_integration.delegate_reset_property_group(tuple_group, group_name, state):
                     logger.debug("properties_group_state_reset_to_default: delegated to PropertyController")
                     return
             except Exception as e:
-                logger.debug(f"properties_group_state_reset_to_default delegation failed, using fallback: {e}")
+                logger.debug(f"properties_group_state_reset_to_default delegation failed: {e}")
         
-        # Fallback: Original implementation
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
-            for i, property_path in enumerate(tuple_group):
-                # Skip tuples that don't have a corresponding widget (data-only properties)
-                if property_path[0].upper() not in self.widgets:
-                    continue
-                if property_path[1].upper() not in self.widgets[property_path[0].upper()]:
-                    continue
-                    
-                if state is False:
-                    widget_type = self.widgets[property_path[0].upper()][property_path[1].upper()]["TYPE"]
-                    self.manageSignal([property_path[0].upper(),property_path[1].upper()], 'disconnect')
-
-                    if group_name in self.layer_properties_tuples_dict:
-                        if widget_type == 'PushButton':
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setChecked(state)
-                            self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].isChecked()
-                        elif widget_type == 'CheckableComboBox':
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].deselectAllOptions()
-                            self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].checkedItems()
-                        elif widget_type == 'ComboBox':
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setCurrentIndex(0)
-                            self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].currentText()
-                        elif widget_type == 'QgsFieldExpressionWidget':
-                            # Ensure widget is linked to current layer before setting field
-                            if self.current_layer is not None:
-                                self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setLayer(self.current_layer)
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setField(self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["primary_key_name"])
-                            self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].expression()
-                        elif widget_type == 'QgsDoubleSpinBox':
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].clearValue()
-                            self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].value()
-                        elif widget_type == 'LineEdit':
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setText('')
-                            self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].text()
-                        elif widget_type == 'QgsProjectionSelectionWidget':
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setCrs(self.PROJECT.crs())
-                            self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].crs().authid()
-                        elif widget_type == 'PropertyOverrideButton':
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setActive(False)
-                            self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = False
-
-
-                    elif group_name in self.export_properties_tuples_dict:
-                        if widget_type == 'PushButton':
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setChecked(state)
-                            self.project_props[property_path[0].upper()][property_path[1].upper()] = self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].isChecked()
-                        elif widget_type == 'CheckBox':
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setChecked(state)
-                            self.project_props[property_path[0].upper()][property_path[1].upper()] = self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].isChecked()
-                        elif widget_type == 'CheckableComboBox':
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].deselectAllOptions()
-                            self.project_props[property_path[0].upper()][property_path[1].upper()] = self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].checkedItems()
-                        elif widget_type == 'ComboBox':
-                            index = self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].findText('GPKG')
-                            if index < 0:
-                                index = 0
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setCurrentIndex(index)
-                            self.project_props[property_path[0].upper()][property_path[1].upper()] = self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].currentText()
-                        elif widget_type == 'QgsFieldExpressionWidget':
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setField(self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["primary_key_name"])
-                            self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].expression()    
-                        elif widget_type == 'QgsDoubleSpinBox':
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].clearValue()
-                            self.project_props[property_path[0].upper()][property_path[1].upper()] = self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].value()
-                        elif widget_type == 'LineEdit':
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setText('')
-                            self.project_props[property_path[0].upper()][property_path[1].upper()] = self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].text()
-                        elif widget_type == 'QgsProjectionSelectionWidget':
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setCrs(self.PROJECT.crs())
-                            self.project_props[property_path[0].upper()][property_path[1].upper()] = self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].crs().authid()
-                        elif widget_type == 'PropertyOverrideButton':
-                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setActive(False)
-                            self.project_props[property_path[0].upper()][property_path[1].upper()] = False
-
-                    self.manageSignal([property_path[0].upper(), property_path[1].upper()], 'connect')
-                    
-                if i == 0 and property_path[1].upper().find('HAS') >= 0:
-                    self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setEnabled(True)
-                else:
-                    self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setEnabled(state)
-            
-            # CRITICAL FIX: Persist reset properties to database
-            # When resetting properties, we update PROJECT_LAYERS in memory but must also save to DB
-            # Otherwise, on project reload, old values come back from database
-            if state is False and self.current_layer is not None:
-                if group_name in self.layer_properties_tuples_dict:
-                    # Collect properties that were reset for layer properties
-                    properties_to_save = []
-                    for property_path in tuple_group:
-                        # Only save layer properties (not project properties)
-                        if property_path[0] in ("infos", "exploring", "filtering"):
-                            if property_path[0] in self.PROJECT_LAYERS[self.current_layer.id()]:
-                                if property_path[1] in self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]]:
-                                    value = self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]]
-                                    properties_to_save.append((
-                                        property_path[0],  # key_group: 'infos', 'exploring', or 'filtering'
-                                        property_path[1],  # key: property name
-                                        value,             # value: reset value
-                                        type(value)        # type: for proper serialization
-                                    ))
-                    
-                    # Save reset properties to database via FilterMateApp
-                    if properties_to_save and hasattr(self, 'app') and self.app is not None:
-                        try:
-                            logger.debug(f"💾 Persisting {len(properties_to_save)} reset properties for layer {self.current_layer.name()}")
-                            self.app.save_variables_from_layer(self.current_layer, properties_to_save)
-                        except Exception as e:
-                            logger.warning(f"Failed to persist reset properties to DB: {e}")
+        # No fallback - controller handles all logic
+        logger.warning("properties_group_state_reset_to_default: Controller delegation failed")
 
     def filtering_init_buffer_property(self):
 
