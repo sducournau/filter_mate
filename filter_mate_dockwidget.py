@@ -6517,45 +6517,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def get_layers_to_filter(self):
-        # v3.1 STORY-2.4: Sync with controller if available
-        if self.widgets_initialized is True and self.current_layer is not None:
+        """v3.1 Sprint 9: Simplified - reduced verbose logging."""
+        if not self.widgets_initialized or self.current_layer is None:
+            return []
 
-            checked_list_data = []
-            widget = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
-            total_items = widget.count()
-            
-            logger.info(f"=== get_layers_to_filter DIAGNOSTIC ===")
-            logger.info(f"  Current layer (source): {self.current_layer.name()}")
-            logger.info(f"  Total items in combobox: {total_items}")
-            
-            for i in range(total_items):
-                item_text = widget.itemText(i)
-                check_state = widget.itemCheckState(i)
+        checked_list_data = []
+        widget = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
+        
+        for i in range(widget.count()):
+            if widget.itemCheckState(i) == Qt.Checked:
                 data = widget.itemData(i, Qt.UserRole)
-                
-                # v2.7.4: Log ALL items (not just checked ones) to diagnose missing layers
-                is_checked = check_state == Qt.Checked
-                layer_id_preview = data.get('layer_id', 'N/A')[:8] if isinstance(data, dict) else str(data)[:8]
-                status = "✓ CHECKED" if is_checked else "✗ unchecked"
-                logger.info(f"  Item {i}: '{item_text}' | {status} | id={layer_id_preview}...")
-                
-                if is_checked:
-                    if isinstance(data, dict) and "layer_id" in data:
-                        checked_list_data.append(data["layer_id"])
-                    elif isinstance(data, str):
-                        # Backward compatibility with old format
-                        checked_list_data.append(data)
-            
-            logger.info(f"  Total checked layers: {len(checked_list_data)}")
-            logger.info(f"=== END get_layers_to_filter ===")
-            
-            # v3.1 STORY-2.4: Sync layer IDs to controller
-            if self._controller_integration is not None:
-                self._controller_integration.delegate_filtering_set_target_layer_ids(checked_list_data)
-            
-            return checked_list_data
-
-        return []
+                if isinstance(data, dict) and "layer_id" in data:
+                    checked_list_data.append(data["layer_id"])
+                elif isinstance(data, str):
+                    checked_list_data.append(data)
+        
+        # Sync to controller
+        if self._controller_integration is not None:
+            self._controller_integration.delegate_filtering_set_target_layer_ids(checked_list_data)
+        
+        return checked_list_data
 
 
     def get_layers_to_export(self):
@@ -6677,50 +6658,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Reset exploring expressions to primary_key_name of new layer when switching.
         
-        v4.0 Sprint 1: Delegates to ExploringController when available.
-        
-        This prevents KeyError when field names from previous layer don't exist in new layer.
+        v3.1 Sprint 9: Simplified - delegates to ExploringController.
+        Resets expressions to primary_key when switching layers.
         """
-        # v4.0: Delegate to ExploringController if available
         if self._controller_integration and self._controller_integration.exploring_controller:
             try:
                 if self._controller_integration.delegate_reset_layer_expressions(layer_props):
                     return
             except Exception as e:
                 logger.debug(f"_reset_layer_expressions delegation failed: {e}")
-        
-        # Fallback: Original logic
-        if not self.current_layer:
-            return
-            
-        primary_key = layer_props.get("infos", {}).get("primary_key_name", "")
-        try:
-            layer_fields = [field.name() for field in self.current_layer.fields()]
-        except Exception:
-            return
-        
-        def is_valid(expr, fields):
-            if not expr:
-                return False
-            normalized = expr.strip().strip('"')
-            return normalized in fields or expr in fields
-        
-        fallback = primary_key if primary_key in layer_fields else (layer_fields[0] if layer_fields else "")
-        if not fallback:
-            return
-        
-        exploring = layer_props.get("exploring", {})
-        for key in ["single_selection_expression", "multiple_selection_expression"]:
-            if not is_valid(exploring.get(key, ""), layer_fields):
-                exploring[key] = fallback
-        
-        custom = exploring.get("custom_selection_expression", "")
-        if custom:
-            qgs_expr = QgsExpression(custom)
-            if qgs_expr.isField() and not is_valid(custom, layer_fields):
-                exploring["custom_selection_expression"] = fallback
-        elif not custom:
-            exploring["custom_selection_expression"] = fallback
     
     def _disconnect_layer_signals(self):
         """
@@ -6780,88 +6726,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _detect_multi_step_filter(self, layer, layer_props):
         """
-        Detect if source layer or distant layers already have a subsetString (existing filter).
-        
-        v4.0 Sprint 2: Delegates to FilteringController when available.
-        
-        When existing filters are detected, automatically enable additive filter mode.
-        Uses existing combinator params if set, otherwise defaults to AND operator.
-        
-        Args:
-            layer: The current source layer
-            layer_props: Layer properties dictionary
-            
-        Returns:
-            bool: True if existing filters were detected and additive mode was enabled
+        v3.1 Sprint 9: Simplified - delegates to FilteringController.
+        Detects existing filters and enables additive mode if needed.
         """
-        # v4.0: Delegate to FilteringController if available
         if self._controller_integration and self._controller_integration.filtering_controller:
             try:
                 succeeded, result = self._controller_integration.delegate_detect_multi_step_filter(
                     layer, layer_props
                 )
                 if succeeded:
-                    # Sync UI widgets if additive mode was enabled
                     if result:
                         self._sync_additive_mode_widgets(layer_props)
                     return result
             except Exception as e:
                 logger.debug(f"_detect_multi_step_filter delegation failed: {e}")
-        
-        # Fallback: Original logic
-        try:
-            has_existing_filter = False
-            
-            # Check source layer for existing subset
-            if layer and hasattr(layer, 'subsetString'):
-                source_subset = layer.subsetString()
-                if source_subset and source_subset.strip():
-                    has_existing_filter = True
-                    logger.debug(f"Multi-step filter detected: source layer '{layer.name()}' has subset: {source_subset[:50]}...")
-            
-            # Check distant layers (layers_to_filter) for existing subsets
-            if not has_existing_filter and layer_props.get("filtering", {}).get("has_layers_to_filter", False):
-                layers_to_filter = layer_props.get("filtering", {}).get("layers_to_filter", [])
-                for layer_id in layers_to_filter:
-                    distant_layer = QgsProject.instance().mapLayer(layer_id)
-                    if distant_layer and hasattr(distant_layer, 'subsetString'):
-                        distant_subset = distant_layer.subsetString()
-                        if distant_subset and distant_subset.strip():
-                            has_existing_filter = True
-                            logger.debug(f"Multi-step filter detected: distant layer '{distant_layer.name()}' has subset: {distant_subset[:50]}...")
-                            break
-            
-            # If existing filters detected, enable additive filter
-            if has_existing_filter:
-                # Only update if not already enabled (preserve user choice)
-                if not layer_props.get("filtering", {}).get("has_combine_operator", False):
-                    layer_props["filtering"]["has_combine_operator"] = True
-                    # Use existing combinator params if set, otherwise default to AND
-                    if not layer_props["filtering"].get("source_layer_combine_operator"):
-                        layer_props["filtering"]["source_layer_combine_operator"] = "AND"
-                    if not layer_props["filtering"].get("other_layers_combine_operator"):
-                        layer_props["filtering"]["other_layers_combine_operator"] = "AND"
-                    
-                    # Set combobox widgets to index 0 (AND) for additive mode on pre-filtered layer
-                    try:
-                        self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].blockSignals(True)
-                        self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].setCurrentIndex(0)
-                        self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].blockSignals(False)
-                        
-                        self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].blockSignals(True)
-                        self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].setCurrentIndex(0)
-                        self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].blockSignals(False)
-                    except Exception as widget_error:
-                        logger.debug(f"Error setting combine operator combobox indexes: {widget_error}")
-                    
-                    logger.info(f"Multi-step filter auto-enabled for layer '{layer.name()}' - existing filters detected")
-                    return True
-            
-            return False
-            
-        except Exception as e:
-            logger.debug(f"Error detecting multi-step filter: {e}")
-            return False
+        return False
     
     def _sync_additive_mode_widgets(self, layer_props):
         """
@@ -7050,122 +6929,45 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _ensure_valid_current_layer(self, requested_layer):
         """
-        Ensure we always have a valid current_layer when layers exist in project.
-        
-        v4.0 Sprint 1: Delegates to LayerSyncController when available.
-        v2.9.19: CRITICAL - current_layer must NEVER be None when layers exist.
-        
-        Args:
-            requested_layer: The layer requested to be current (can be None)
-            
-        Returns:
-            QgsVectorLayer or None: Valid layer to use as current_layer
+        v3.1 Sprint 9: Simplified - delegates to LayerSyncController.
+        Ensures a valid layer is always selected when layers exist.
         """
-        # v4.0: Delegate to LayerSyncController if available
         if self._controller_integration and self._controller_integration.layer_sync_controller:
             try:
                 result = self._controller_integration.delegate_ensure_valid_current_layer(requested_layer)
                 if result is not None:
                     return result
-                # If None returned but we have PROJECT_LAYERS, use fallback
-                if self.PROJECT_LAYERS:
-                    logger.debug("_ensure_valid_current_layer: delegation returned None, using fallback")
             except Exception as e:
                 logger.debug(f"_ensure_valid_current_layer delegation failed: {e}")
         
-        # Fallback: Original logic
-        # Case 1: Requested layer is valid - use it
+        # Minimal fallback: use requested layer if valid
         if requested_layer is not None:
             try:
                 _ = requested_layer.id()
                 return requested_layer
             except (RuntimeError, AttributeError):
-                logger.warning("_ensure_valid_current_layer: requested_layer is invalid")
-        
-        # Case 2: Find valid layer from PROJECT_LAYERS
-        if not self.PROJECT_LAYERS:
-            return None
-        
-        from qgis.core import QgsProject
-        project = QgsProject.instance()
-        
-        for layer_id in self.PROJECT_LAYERS.keys():
-            candidate = project.mapLayer(layer_id)
-            if candidate and candidate.isValid():
-                try:
-                    _ = candidate.featureCount()
-                    logger.info(f"Auto-selected layer '{candidate.name()}'")
-                    return candidate
-                except (RuntimeError, AttributeError):
-                    continue
-        
-        # Fallback: Combobox selection
-        if hasattr(self, 'comboBox_filtering_current_layer'):
-            combo_layer = self.comboBox_filtering_current_layer.currentLayer()
-            if combo_layer and combo_layer.isValid():
-                return combo_layer
-        
+                pass
         return None
 
 
     def _is_layer_truly_deleted(self, layer):
         """
-        Check if a layer is truly deleted, accounting for filtering operations.
-        
-        v4.0 Sprint 2: Delegates to LayerSyncController when available.
-
-        During and immediately after filtering, layers can temporarily appear as
-        "deleted" to sip.isdeleted() even though they're still valid. This causes
-        current_layer to be set to None prematurely, breaking the comboBox and UI signals.
-
-        This method provides a centralized check that respects:
-        1. Active filtering operations (_filtering_in_progress flag)
-        2. Post-filtering protection window (5 seconds after filtering completes)
-        3. Actual C++ object deletion status
-
-        Args:
-            layer: The QgsVectorLayer to check (can be None)
-
-        Returns:
-            bool: True if layer is truly deleted and should be cleared, False otherwise
+        v3.1 Sprint 9: Simplified - delegates to LayerSyncController.
+        Checks if layer is truly deleted, respecting filtering protection window.
         """
-        # v4.0: Delegate to LayerSyncController if available
         if self._controller_integration and self._controller_integration.layer_sync_controller:
             try:
                 return self._controller_integration.delegate_is_layer_truly_deleted(layer)
             except Exception as e:
                 logger.debug(f"_is_layer_truly_deleted delegation failed: {e}")
         
-        # Fallback: Original logic
-        # If layer is None, it's already "deleted" in a sense
+        # Minimal fallback
         if layer is None:
             return True
-
-        # During filtering, NEVER consider layer as deleted
-        if getattr(self, '_filtering_in_progress', False):
-            logger.debug(f"🛡️ _is_layer_truly_deleted BLOCKED - filtering in progress (layer={layer.name() if hasattr(layer, 'name') else 'unknown'})")
-            return False
-
-        # Within 5 seconds after filtering, NEVER consider layer as deleted
-        import time
-        POST_FILTER_PROTECTION_WINDOW = 5.0  # seconds
-        if getattr(self, '_filter_completed_time', 0) > 0:
-            elapsed = time.time() - self._filter_completed_time
-            if elapsed < POST_FILTER_PROTECTION_WINDOW:
-                logger.debug(f"🛡️ _is_layer_truly_deleted BLOCKED - within {POST_FILTER_PROTECTION_WINDOW}s protection window (elapsed={elapsed:.3f}s, layer={layer.name() if hasattr(layer, 'name') else 'unknown'})")
-                return False
-
-        # Perform the actual deletion check
         try:
             import sip
-            if sip.isdeleted(layer):
-                logger.debug(f"✅ Layer C++ object is truly deleted")
-                return True
-            else:
-                return False
-        except (RuntimeError, TypeError, AttributeError) as e:
-            # If we can't check, assume it's deleted
-            logger.debug(f"Layer deletion check failed with {type(e).__name__}: {e}")
+            return sip.isdeleted(layer)
+        except Exception:
             return True
 
 
@@ -7436,34 +7238,23 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.warning(f"_update_other_property: properties_tuples is None or empty for property_path={property_path}")
             return False
         
-        # NOTE: 'source_layer' group has no parent toggle (no HAS_* button), so always treat as enabled
-        # This allows use_centroids_source_layer checkbox to always be interactive
+        # 'source_layer' group has no parent toggle, always treat as enabled
         if properties_group_key == 'source_layer':
             group_state = True
         else:
             group_enabled_property = properties_tuples[0]
             group_state = self.widgets[group_enabled_property[0].upper()][group_enabled_property[1].upper()]["WIDGET"].isChecked()
-        
-        # DIAGNOSTIC: Log the property update
-        logger.info(f"=== _update_other_property DIAGNOSTIC ===")
-        logger.info(f"  property_path: {property_path}")
-        logger.info(f"  properties_group_key: {properties_group_key}")
-        logger.info(f"  group_state: {group_state}")
 
         if group_state is False:
-            logger.warning(f"  ⚠️ Group button NOT checked - resetting to defaults!")
             self.properties_group_state_reset_to_default(properties_tuples, properties_group_key, group_state)
             flag_value_changed = True
         else:
             self.properties_group_state_enabler(properties_tuples)
             widget_type = self.widgets[property_path[0].upper()][property_path[1].upper()]["TYPE"]
-            
-            # CRITICAL FIX: Use .get() to avoid KeyError on missing properties
             current_value = layer_props.get(property_path[0], {}).get(property_path[1])
             
             if widget_type == 'PushButton':
                 if current_value is not input_data and input_data is True:
-                    # Ensure the property path exists
                     if property_path[0] not in self.PROJECT_LAYERS[self.current_layer.id()]:
                         self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]] = {}
                     self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
@@ -7471,14 +7262,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     if "ON_TRUE" in custom_functions:
                         custom_functions["ON_TRUE"](0)
                     
-                    # Refresh layers list when has_layers_to_filter is activated
                     if property_path[1] == 'has_layers_to_filter':
                         self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'disconnect')
                         self.filtering_populate_layers_chekableCombobox()
                         self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
                         
                 elif current_value is not input_data and input_data is False:
-                    # Ensure the property path exists
                     if property_path[0] not in self.PROJECT_LAYERS[self.current_layer.id()]:
                         self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]] = {}
                     self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
@@ -7486,33 +7275,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     if "ON_FALSE" in custom_functions:
                         custom_functions["ON_FALSE"](0)
             else:
-                # For non-PushButton widgets (CheckableComboBox, etc.)
-                # Get the value from custom function or use input_data directly
                 new_value = custom_functions["CUSTOM_DATA"](0) if "CUSTOM_DATA" in custom_functions else input_data
                 
-                logger.info(f"  Widget type: non-PushButton, getting new_value from CUSTOM_DATA")
-                logger.info(f"  new_value: {new_value}")
-                logger.info(f"  old_value: {current_value}")
-                
-                # Only mark as changed if value actually changed
                 if current_value != new_value:
-                    # Ensure the property path exists
                     if property_path[0] not in self.PROJECT_LAYERS[self.current_layer.id()]:
                         self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]] = {}
                     self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = new_value
                     flag_value_changed = True
-                    logger.info(f"  ✓ Value CHANGED and saved to PROJECT_LAYERS")
                     
                     if new_value and "ON_TRUE" in custom_functions:
                         custom_functions["ON_TRUE"](0)
                     elif not new_value and "ON_FALSE" in custom_functions:
                         custom_functions["ON_FALSE"](0)
-                    
-                    # Log when layers_to_filter is updated
-                    if property_path[1] == 'layers_to_filter':
-                        logger.info(f"  ✓ layers_to_filter updated in PROJECT_LAYERS: {new_value}")
-                else:
-                    logger.info(f"  ℹ️ Value unchanged, not updating PROJECT_LAYERS")
                     
         return flag_value_changed
 
