@@ -3993,7 +3993,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         spinbox = self.mQgsDoubleSpinBox_filtering_buffer_value
         
         if buffer_value is not None and buffer_value < 0:
-            # Negative buffer (erosion) - use distinctive orange/yellow style
+            # Negative buffer (erosion) - use distinctive orange# orange/yellow style
             spinbox.setStyleSheet("""
                 QgsDoubleSpinBox {
                     background-color: #FFF3CD;

@@ -1,7 +1,7 @@
 # EPIC-1 Phase E4: Backend Consolidation - Implementation Plan
 
-**Status:** PLANNED (stub modules created)  
-**Date:** January 10, 2026  
+**Status:** IN PROGRESS (~640/3500 lines extracted, 18%)  
+**Date:** January 10, 2026 (Updated: January 11, 2026)  
 **Estimated Effort:** 3-4 hours (2-3 sessions)
 
 ## Overview
@@ -139,9 +139,9 @@ Phase E4 extracts ~3,500 lines of backend-specific code from `filter_task.py` to
 | Performance regression       | MEDIUM | Benchmark before/after, profile critical paths   |
 | Missing dependencies         | LOW    | Extract in dependency order, stub if needed      |
 
-## Progress Summary (Updated: January 10, 2026 - E4-S2)
+## Progress Summary (Updated: January 11, 2026 - E4-S3b)
 
-**Phase E4 Status**: IN PROGRESS - Partial extraction completed
+**Phase E4 Status**: IN PROGRESS - ~640/3500 lines extracted (18%)
 
 ### Completed Extractions
 
@@ -158,7 +158,30 @@ Phase E4 extracts ~3,500 lines of backend-specific code from `filter_task.py` to
 - `build_spatialite_query()` → spatialite/filter_executor.py (64 lines)
 - Commit: MIG-211
 
-**Total Extracted**: ~373 lines / ~3,500 target (10.6%)
+✅ **Session 3a (E4-S3a)**: MEDIUM methods batch 1 (~140 lines)
+
+- `apply_postgresql_type_casting()` → postgresql/filter_executor.py (40 lines)
+- `build_ogr_filter_from_selection()` → ogr/filter_executor.py (57 lines)
+- `apply_spatialite_subset()` → spatialite/filter_executor.py (44 lines)
+- Commit: MIG-213
+
+✅ **Session 3b (E4-S3b)**: PostgreSQL helpers (~127 lines)
+
+- `build_spatial_join_query()` → postgresql/filter_executor.py (95 lines)
+- `apply_combine_operator()` → postgresql/filter_executor.py (32 lines)
+- `get_spatialite_datasource()` → spatialite/filter_executor.py (35 lines)
+- Commit: MIG-214, Sprint 18
+
+**Total Extracted**: ~640 lines / ~3,500 target (18%)
+
+### Backend Module Sizes
+
+| Module                        | Lines   | Status |
+| ----------------------------- | ------- | ------ |
+| postgresql/filter_executor.py | 505     | Active |
+| spatialite/filter_executor.py | 305     | Active |
+| ogr/filter_executor.py        | 141     | Active |
+| **Total**                     | **951** | ✅     |
 
 ### Deferred for Refactoring
 
