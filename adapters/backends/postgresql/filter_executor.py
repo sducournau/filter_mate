@@ -23,7 +23,6 @@ import logging
 logger = logging.getLogger('FilterMate.Adapters.Backends.PostgreSQL.FilterExecutor')
 
 
-# TODO: Extract from filter_task.py line 3583
 def prepare_postgresql_source_geom(
     source_table: str,
     source_schema: str,
@@ -32,27 +31,147 @@ def prepare_postgresql_source_geom(
     buffer_expression: str = None,
     use_centroids: bool = False,
     buffer_segments: int = 5,
-    buffer_type: str = "Round"
-) -> str:
+    buffer_type: str = "Round",
+    primary_key_name: str = None
+) -> tuple:
     """
-    Prepare PostgreSQL source geometry expression with optional buffer and centroid.
+    Prepare PostgreSQL source geometry with buffer/centroid transformations.
     
-    TODO: Extract implementation from filter_task.py (122 lines)
+    EPIC-1 Phase E4-S1: Extracted from filter_task.py line 3583 (122 lines)
+    
+    Handles:
+    - Geometry buffer (static value or expression)
+    - Centroid optimization (simplify complex polygons to points)
+    - Materialized view creation (for buffer expressions)
+    - Negative buffer handling (erosion with ST_MakeValid)
     
     Args:
-        source_table: Source table name
-        source_schema: Source schema name
-        source_geom: Source geometry column name
-        buffer_value: Static buffer value in meters (optional)
-        buffer_expression: Dynamic buffer expression (optional)
-        use_centroids: Whether to use ST_Centroid
-        buffer_segments: Number of segments for round buffers
-        buffer_type: Buffer type ('Round', 'Flat', 'Square')
+        source_table: Table name
+        source_schema: Schema name
+        source_geom: Geometry column name
+        buffer_expression: Dynamic buffer expression (creates materialized view)
+        buffer_value: Static buffer value in meters
+        buffer_segments: Number of segments for buffer (quad_segs)
+        buffer_type: "Round", "Flat", or "Square"
+        use_centroids: Apply ST_Centroid to source geometry
+        primary_key_name: Primary key column (for materialized views)
         
     Returns:
-        str: PostgreSQL geometry expression
+        tuple: (postgresql_source_geom_expr, materialized_view_name or None)
     """
-    raise NotImplementedError("EPIC-1 Phase E4: To be extracted from filter_task.py")
+    import re
+    from modules.appUtils import sanitize_sql_identifier
+    
+    logger = logging.getLogger('FilterMate.Adapters.Backends.PostgreSQL.FilterExecutor')
+    
+    # CRITICAL FIX: Include schema in geometry reference for PostgreSQL
+    # Format: "schema"."table"."geom" to avoid "missing FROM-clause entry" errors
+    base_geom = '"{source_schema}"."{source_table}"."{source_geom}"'.format(
+        source_schema=source_schema,
+        source_table=source_table,
+        source_geom=source_geom
+    )
+    
+    # Initialize return values
+    postgresql_source_geom = base_geom
+    materialized_view_name = None
+    
+    # CENTROID OPTIMIZATION: Wrap geometry in ST_Centroid if enabled for source layer
+    # This significantly speeds up queries for complex polygons (e.g., buildings)
+    # CENTROID + BUFFER OPTIMIZATION v2.5.13: Combine centroid and buffer when both are enabled
+    # Order: ST_Buffer(ST_Centroid(geom)) - buffer is applied to the centroid point
+    
+    if buffer_expression is not None and buffer_expression != '':
+        # Buffer expression mode (dynamic buffer from field/expression)
+        
+        # Adjust field references to include table name
+        if buffer_expression.find('"') == 0 and buffer_expression.find(source_table) != 1:
+            buffer_expression = '"{source_table}".'.format(source_table=source_table) + buffer_expression
+        
+        buffer_expression = re.sub(' "', ' "mv_{source_table}"."'.format(source_table=source_table), buffer_expression)
+        
+        buffer_expression = qgis_expression_to_postgis(buffer_expression)
+        
+        # NOTE: Materialized view creation is handled by the caller
+        # This function only prepares the geometry expression
+        
+        # Use sanitize_sql_identifier to handle all special chars (em-dash, etc.)
+        materialized_view_name = sanitize_sql_identifier(source_table + '_buffer_expr')
+        
+        postgresql_source_geom = '"mv_{materialized_view_name}_dump"."{source_geom}"'.format(
+            source_geom=source_geom,
+            materialized_view_name=materialized_view_name
+        )
+        
+        # NOTE: Centroids are not supported with buffer expressions (materialized views)
+        # because the view already contains buffered geometries
+        if use_centroids:
+            logger.warning("⚠️ PostgreSQL: Centroid option ignored when using buffer expression (materialized view)")
+    
+    elif buffer_value is not None and buffer_value != 0:
+        # Static buffer value mode
+        
+        # CRITICAL FIX: For simple numeric buffer values, apply buffer directly in SQL
+        # Don't create materialized views - just wrap geometry in ST_Buffer()
+        
+        # Build ST_Buffer style parameters (quad_segs for segments, endcap for buffer type)
+        buffer_type_mapping = {"Round": "round", "Flat": "flat", "Square": "square"}
+        endcap_style = buffer_type_mapping.get(buffer_type, "round")
+        
+        # Build style string for PostGIS ST_Buffer
+        style_params = f"quad_segs={buffer_segments}"
+        if endcap_style != 'round':
+            style_params += f" endcap={endcap_style}"
+        
+        # CENTROID + BUFFER: Determine the geometry to buffer
+        # If centroid is enabled, buffer the centroid point instead of the full geometry
+        if use_centroids:
+            geom_to_buffer = (
+                f'ST_Centroid("{source_schema}"."{source_table}".'
+                f'"{source_geom}")'
+            )
+            logger.info(
+                "✓ PostgreSQL: Using ST_Centroid + ST_Buffer "
+                "for source layer"
+            )
+        else:
+            geom_to_buffer = '"{source_schema}"."{source_table}"."{source_geom}"'.format(
+                source_schema=source_schema,
+                source_table=source_table,
+                source_geom=source_geom
+            )
+        
+        # Build base ST_Buffer expression with style parameters
+        base_buffer_expr = f"ST_Buffer({geom_to_buffer}, {buffer_value}, '{style_params}')"
+        
+        # CRITICAL FIX v2.5.6: Handle negative buffers (erosion) properly
+        # Negative buffers can produce empty geometries which must be handled
+        # with ST_MakeValid() and ST_IsEmpty() to prevent matching issues
+        if buffer_value < 0:
+            logger.info(f"📐 Applying NEGATIVE buffer (erosion): {buffer_value}m")
+            logger.info(f"  🛡️ Wrapping in ST_MakeValid() + ST_IsEmpty check for empty geometry handling")
+            validated_expr = f"ST_MakeValid({base_buffer_expr})"
+            postgresql_source_geom = f"CASE WHEN ST_IsEmpty({validated_expr}) THEN NULL ELSE {validated_expr} END"
+            logger.info(f"  📝 Generated expression: {postgresql_source_geom[:150]}...")
+        else:
+            postgresql_source_geom = base_buffer_expr
+        
+        buffer_type_desc = "expansion" if buffer_value > 0 else "erosion"
+        centroid_desc = " (on centroids)" if use_centroids else ""
+        logger.info(f"✓ PostgreSQL source geom prepared with {buffer_value}m buffer ({buffer_type_desc}, endcap={endcap_style}, segments={buffer_segments}){centroid_desc}")
+        logger.debug(f"Using simple buffer: ST_Buffer with {buffer_value}m ({buffer_type_desc}){centroid_desc}")
+    
+    else:
+        # No buffer - just apply centroid if enabled
+        if use_centroids:
+            postgresql_source_geom = f"ST_Centroid({base_geom})"
+            logger.info(f"✓ PostgreSQL: Using ST_Centroid for source layer geometry simplification")
+        else:
+            postgresql_source_geom = base_geom
+    
+    logger.debug(f"prepare_postgresql_source_geom: {postgresql_source_geom}")
+    
+    return postgresql_source_geom, materialized_view_name
 
 
 def qgis_expression_to_postgis(expression: str, geom_col: str = 'geometry') -> str:
