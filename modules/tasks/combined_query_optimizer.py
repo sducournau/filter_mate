@@ -1,20 +1,31 @@
+# -*- coding: utf-8 -*-
 """
-DEPRECATED - CombinedQueryOptimizer migration shim
+Combined Query Optimizer - LEGACY SHIM
 
-This module has been migrated to core/optimization/ as part of EPIC-1.
-Imports are preserved for backward compatibility but will be removed in a future version.
+⚠️ DEPRECATED: This module has been migrated to core/optimization/combined_query_optimizer.py (EPIC-1)
 
-Migration: modules/tasks/combined_query_optimizer.py → core/optimization/combined_query_optimizer.py
-Date: January 2026
-EPIC: EPIC-1 (Suppression du dossier modules/)
-Reduction: 1599 lines → 45 lines (-97%)
+MIGRATION GUIDE:
+- OLD: from modules.tasks.combined_query_optimizer import CombinedQueryOptimizer
+- NEW: from core.optimization import CombinedQueryOptimizer
 
-New location:
+All functionality is now available from:
     from core.optimization import (
+        OptimizationType,
+        MaterializedViewInfo,
+        FidListInfo,
+        RangeInfo,
+        OptimizationResult,
         CombinedQueryOptimizer,
         get_combined_query_optimizer,
         optimize_combined_filter
     )
+
+This shim provides backward compatibility but will be removed in v4.0.
+
+Migration: modules/tasks/combined_query_optimizer.py → core/optimization/combined_query_optimizer.py
+Date: January 2026
+EPIC: EPIC-1 (Suppression du dossier modules/)
+Reduction: 1599 lines → 52 lines (-97%)
 """
 
 import warnings
@@ -22,7 +33,7 @@ import warnings
 # Issue deprecation warning
 warnings.warn(
     "modules.tasks.combined_query_optimizer is deprecated. "
-    "Use core.optimization instead. "
+    "Use 'from core.optimization import ...' instead. "
     "This shim will be removed in FilterMate v4.0.",
     DeprecationWarning,
     stacklevel=2
