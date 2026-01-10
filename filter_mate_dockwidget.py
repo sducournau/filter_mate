@@ -4418,9 +4418,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def filtering_buffer_type_state_changed(self):
-        """v3.1 Sprint 11: Simplified - handle buffer type button changes."""
-        if not self.widgets_initialized or not self.has_loaded_layers:
-            return
+        """v4.0 Sprint 8: Optimized - handle buffer type button changes."""
+        if not self.widgets_initialized or not self.has_loaded_layers: return
         is_checked = self.widgets["FILTERING"]["HAS_BUFFER_TYPE"]["WIDGET"].isChecked()
         if self._controller_integration:
             self._controller_integration.delegate_filtering_buffer_type_state_changed(is_checked)
@@ -4428,12 +4427,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.widgets["FILTERING"]["BUFFER_SEGMENTS"]["WIDGET"].setEnabled(is_checked)
 
     def _update_centroids_source_checkbox_state(self):
-        """v3.1 Sprint 12: Simplified - update centroids checkbox enabled state."""
-        if not self.widgets_initialized:
-            return
-        combo = self.widgets.get("FILTERING", {}).get("CURRENT_LAYER", {}).get("WIDGET")
-        checkbox = self.widgets.get("FILTERING", {}).get("USE_CENTROIDS_SOURCE_LAYER", {}).get("WIDGET")
-        if combo and checkbox:
+        """v4.0 Sprint 8: Optimized - update centroids checkbox enabled state."""
+        if not self.widgets_initialized: return
+        if (combo := self.widgets.get("FILTERING", {}).get("CURRENT_LAYER", {}).get("WIDGET")) and \
+           (checkbox := self.widgets.get("FILTERING", {}).get("USE_CENTROIDS_SOURCE_LAYER", {}).get("WIDGET")):
             checkbox.setEnabled(combo.currentLayer() is not None and combo.isEnabled())
 
               

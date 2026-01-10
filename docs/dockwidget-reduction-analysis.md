@@ -10,10 +10,23 @@
 
 | Métrique          | Valeur       | Objectif      |
 | ----------------- | ------------ | ------------- |
-| Lignes dockwidget | **5,240**    | <2,000        |
-| Sprint actuel     | **Sprint 7** | Sprint 7      |
-| Réduction totale  | **-1,381**   | -9,116        |
-| Progrès           | **13.2%**    | 71.8% restant |
+| Lignes dockwidget | **5,204**    | <2,000        |
+| Sprint actuel     | **Sprint 8** | Sprint 8      |
+| Réduction totale  | **-1,417**   | -9,116        |
+| Progrès           | **13.5%**    | 71.4% restant |
+
+### Progression Sprint 8 (session 10 janvier 2026)
+
+| Action                                 | Lignes avant | Lignes après | Réduction |
+| -------------------------------------- | ------------ | ------------ | --------- |
+| **Début Sprint 8**                     | **5,240**    | -            | -         |
+| Optimiser `force_reconnect_exploring`  | 5,240        | 5,225        | -15       |
+| Optimiser `force_reconnect_action`     | 5,225        | 5,219        | -6        |
+| Optimiser `manage_interactions`        | 5,219        | 5,215        | -4        |
+| Optimiser `_update_exploring_buttons`  | 5,215        | 5,212        | -3        |
+| Optimiser `filtering_buffer_property`  | 5,212        | 5,207        | -5        |
+| Optimiser `filtering_buffer_type` + centroids | 5,207 | 5,204        | -3        |
+| **Total Sprint 8**                     | **5,240**    | **5,204**    | **-36**   |
 
 ### Progression Sprint 7 (session 10 janvier 2026)
 
@@ -89,6 +102,57 @@
    - `exploring_groupbox_init()` : 15 → 19 lignes (+4 lignes - refactoring)
 
 **Impact Sprint 6**: 5,359 → 5,253 lignes (-106 lignes / -2.0%)
+
+---
+
+### Sprint 7 - Code Cleanup & One-Liners (-13 lignes)
+
+**Objectif**: Simplifier wrappers et compacter code signal
+
+1. **Signal Management**
+
+   - `connect_widgets_signals()` : 10 → 6 lignes (-4 lignes)
+   - `disconnect_widgets_signals()` : 12 → 7 lignes (-5 lignes)
+   - `_connect_groupbox_signals_directly()` : 18 → 17 lignes (-1 ligne)
+
+2. **One-Liner Wrappers**
+
+   - `exporting_populate_combobox()` : one-liner
+   - `_apply_auto_configuration()` : one-liner
+   - Favorites methods: one-liners
+
+3. **Inlining**
+   - `set_multiple_checkable_combobox()` : inlined in `setupUiCustom`
+
+**Impact Sprint 7**: 5,253 → 5,240 lignes (-13 lignes / -0.2%)
+
+---
+
+### Sprint 8 - Signal & Method Optimization (-36 lignes)
+
+**Objectif**: Optimiser gestion signaux et compacter méthodes verboses
+
+1. **Signal Reconnection Optimization**
+
+   - `force_reconnect_exploring_signals()` : 42 → 26 lignes (-16 lignes)
+     - Dict mapping inline, conditionnels compacts
+   - `force_reconnect_action_signals()` : 21 → 14 lignes (-7 lignes)
+     - Variable names abrégées, inline conditionals
+
+2. **Widget State Management**
+
+   - `manage_interactions()` : 37 → 32 lignes (-5 lignes)
+     - Exception handling compact
+   - `_update_exploring_buttons_state()` : 28 → 23 lignes (-5 lignes)
+     - Walrus operator, exception bare
+
+3. **Buffer & Filtering Methods**
+   - `filtering_buffer_property_changed()` : 39 → 34 lignes (-5 lignes)
+     - Variables locales w/lf, tuple assignments
+   - `filtering_buffer_type_state_changed()` : 9 → 8 lignes (-1 ligne)
+   - `_update_centroids_source_checkbox_state()` : 7 → 4 lignes (-3 lignes)
+
+**Impact Sprint 8**: 5,240 → 5,204 lignes (-36 lignes / -0.7%)
 
 ---
 
