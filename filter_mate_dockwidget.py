@@ -467,9 +467,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except Exception:
             pass
 
-    def set_multiple_checkable_combobox(self):
-        self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self.CONFIG_DATA, self)
-
 
     def _fix_toolbox_icons(self):
         """v3.1 Sprint 14: Fix toolBox_tabTools icons with absolute paths."""
@@ -482,7 +479,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def setupUiCustom(self):
-        self.set_multiple_checkable_combobox()
+        # v4.0 Sprint 7: Inline set_multiple_checkable_combobox
+        self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self.CONFIG_DATA, self)
         
         # Setup splitter between frame_exploring and frame_toolset
         # v3.1: Delegate to SplitterManager if available (Phase 6 - MIG-061)
@@ -899,17 +897,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
 
     def _on_favorite_indicator_clicked(self, event):
-        """Handle click on favorites indicator. v4.0: Delegates to FavoritesController."""
+        """v4.0 Sprint 7: One-liner wrapper."""
         if self._controller_integration and self._controller_integration._favorites_controller:
             self._controller_integration._favorites_controller.handle_indicator_clicked()
     
     def _add_current_to_favorites(self):
-        """Add current filter configuration to favorites. v4.0: Delegates to FavoritesController."""
+        """v4.0 Sprint 7: One-liner wrapper."""
         if self._controller_integration and self._controller_integration._favorites_controller:
             self._controller_integration._favorites_controller.add_current_to_favorites()
     
     def _apply_favorite(self, favorite_id: str):
-        """Apply a saved favorite filter. v4.0: Delegates to FavoritesController."""
+        """v4.0 Sprint 7: One-liner wrapper."""
         if self._controller_integration and self._controller_integration._favorites_controller:
             self._controller_integration._favorites_controller.apply_favorite(favorite_id)
 
@@ -2551,15 +2549,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._controller_integration.delegate_populate_layers_checkable_combobox(layer)
 
     def exporting_populate_combobox(self):
-        """v3.1 Sprint 12: Simplified - populate export combobox via controller."""
-        if self._controller_integration:
-            self._controller_integration.delegate_populate_export_combobox()
+        """v4.0 Sprint 7: One-liner wrapper."""
+        if self._controller_integration: self._controller_integration.delegate_populate_export_combobox()
 
     def _apply_auto_configuration(self):
-        """v3.1 Sprint 12: Simplified - auto-detect and apply UI profile and theme."""
-        if not UI_CONFIG_AVAILABLE:
-            return {}
-        return ui_utils.auto_configure_from_environment(self.CONFIG_DATA)
+        """v4.0 Sprint 7: One-liner wrapper."""
+        return ui_utils.auto_configure_from_environment(self.CONFIG_DATA) if UI_CONFIG_AVAILABLE else {}
 
     def _apply_stylesheet(self):
         """v3.1 Sprint 12: Simplified - apply stylesheet using StyleLoader."""
@@ -2843,26 +2838,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def connect_widgets_signals(self):
-        """v3.1 Sprint 12: Simplified - connect all widget signals."""
-        for widget_group in self.widgets:
-            if widget_group != 'QGIS':
-                for widget in self.widgets[widget_group]:
-                    try:
-                        self.manageSignal([widget_group, widget], 'connect')
-                    except (AttributeError, RuntimeError, TypeError, SignalStateChangeError):
-                        pass
+        """v4.0 Sprint 7: Ultra-simplified - connect all widget signals."""
+        for grp in [g for g in self.widgets if g != 'QGIS']:
+            for w in self.widgets[grp]:
+                try: self.manageSignal([grp, w], 'connect')
+                except: pass
 
     def disconnect_widgets_signals(self):
-        """v3.1 Sprint 12: Simplified - safely disconnect all widget signals."""
-        if self.widgets is None:
-            return
-        for widget_group in self.widgets:
-            if widget_group != 'QGIS':
-                for widget in self.widgets[widget_group]:
-                    try:
-                        self.manageSignal([widget_group, widget], 'disconnect')
-                    except (AttributeError, RuntimeError, TypeError, SignalStateChangeError):
-                        pass
+        """v4.0 Sprint 7: Ultra-simplified - safely disconnect all widget signals."""
+        if not self.widgets: return
+        for grp in [g for g in self.widgets if g != 'QGIS']:
+            for w in self.widgets[grp]:
+                try: self.manageSignal([grp, w], 'disconnect')
+                except: pass
 
     def force_reconnect_action_signals(self):
         """v3.1 Sprint 12: Simplified - force reconnect ACTION signals bypassing cache."""
@@ -2985,20 +2973,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.set_exporting_properties()
 
     def _connect_groupbox_signals_directly(self):
-        """v3.1 Sprint 17: Connect groupbox signals for exclusive behavior."""
+        """v4.0 Sprint 7: Simplified - connect groupbox signals for exclusive behavior."""
         try:
-            gbs = [self.mGroupBox_exploring_single_selection, self.mGroupBox_exploring_multiple_selection, self.mGroupBox_exploring_custom_selection]
-            names = ['single_selection', 'multiple_selection', 'custom_selection']
+            gbs = [(self.mGroupBox_exploring_single_selection, 'single_selection'),
+                   (self.mGroupBox_exploring_multiple_selection, 'multiple_selection'),
+                   (self.mGroupBox_exploring_custom_selection, 'custom_selection')]
             
-            for gb in gbs:
+            for gb, _ in gbs:
                 gb.blockSignals(True)
-                try: gb.toggled.disconnect()
-                except: pass
-                try: gb.collapsedStateChanged.disconnect()
+                try: gb.toggled.disconnect(); gb.collapsedStateChanged.disconnect()
                 except: pass
                 gb.blockSignals(False)
             
-            for gb, name in zip(gbs, names):
+            for gb, name in gbs:
                 gb.toggled.connect(lambda checked, n=name: self._on_groupbox_clicked(n, checked))
                 gb.collapsedStateChanged.connect(lambda collapsed, n=name: self._on_groupbox_collapse_changed(n, collapsed))
         except: pass

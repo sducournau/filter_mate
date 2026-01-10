@@ -56,22 +56,57 @@ def prepare_spatialite_source_geom(
     raise NotImplementedError("EPIC-1 Phase E4: To be extracted from filter_task.py")
 
 
-# TODO: Extract from filter_task.py line 3526
-def qgis_expression_to_spatialite(expression: str) -> str:
+def qgis_expression_to_spatialite(expression: str, geom_col: str = 'geometry') -> str:
     """
     Convert QGIS expression to Spatialite SQL.
     
-    TODO: Extract implementation from filter_task.py (58 lines)
+    EPIC-1 Phase E4-S1: Extracted from filter_task.py line 3526 (58 lines)
     
-    Spatialite spatial functions are ~90% compatible with PostGIS.
+    Spatialite spatial functions are ~90% compatible with PostGIS, but differences:
+    - Type casting: PostgreSQL uses :: operator, Spatialite uses CAST() function
+    - String comparison is case-sensitive by default
+    - No ILIKE operator (use LOWER() + LIKE instead)
     
     Args:
         expression: QGIS expression string
+        geom_col: Geometry column name (default: 'geometry')
         
     Returns:
         str: Spatialite SQL expression
     """
-    raise NotImplementedError("EPIC-1 Phase E4: To be extracted from filter_task.py")
+    import re
+    import logging
+    
+    logger = logging.getLogger('FilterMate.Adapters.Backends.Spatialite.FilterExecutor')
+    
+    if not expression:
+        return expression
+    
+    # Handle CASE expressions
+    expression = re.sub('case', ' CASE ', expression, flags=re.IGNORECASE)
+    expression = re.sub('when', ' WHEN ', expression, flags=re.IGNORECASE)
+    expression = re.sub(' is ', ' IS ', expression, flags=re.IGNORECASE)
+    expression = re.sub('then', ' THEN ', expression, flags=re.IGNORECASE)
+    expression = re.sub('else', ' ELSE ', expression, flags=re.IGNORECASE)
+    
+    # Handle LIKE/ILIKE - Spatialite doesn't have ILIKE, use LIKE with LOWER()
+    # IMPORTANT: Process ILIKE first, before processing LIKE, to avoid double-replacement
+    expression = re.sub(
+        r'(\w+)\s+ILIKE\s+',
+        r'LOWER(\1) LIKE LOWER(',
+        expression,
+        flags=re.IGNORECASE
+    )
+    expression = re.sub(r'\bNOT\b', ' NOT ', expression, flags=re.IGNORECASE)
+    expression = re.sub(r'\bLIKE\b', ' LIKE ', expression, flags=re.IGNORECASE)
+    
+    # Convert PostgreSQL :: type casting to Spatialite CAST() function
+    expression = re.sub(r'(["\w]+)::numeric', r'CAST(\1 AS REAL)', expression)
+    expression = re.sub(r'(["\w]+)::integer', r'CAST(\1 AS INTEGER)', expression)
+    expression = re.sub(r'(["\w]+)::text', r'CAST(\1 AS TEXT)', expression)
+    expression = re.sub(r'(["\w]+)::double', r'CAST(\1 AS REAL)', expression)
+    
+    return expression
 
 
 # TODO: Extract from filter_task.py line 10616

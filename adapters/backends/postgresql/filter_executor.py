@@ -55,20 +55,80 @@ def prepare_postgresql_source_geom(
     raise NotImplementedError("EPIC-1 Phase E4: To be extracted from filter_task.py")
 
 
-# TODO: Extract from filter_task.py line 3451
-def qgis_expression_to_postgis(expression: str) -> str:
+def qgis_expression_to_postgis(expression: str, geom_col: str = 'geometry') -> str:
     """
     Convert QGIS expression to PostGIS SQL.
     
-    TODO: Extract implementation from filter_task.py (68 lines)
+    EPIC-1 Phase E4-S1: Extracted from filter_task.py line 3451 (68 lines)
+    
+    Converts QGIS expression syntax to PostgreSQL/PostGIS SQL:
+    - Spatial functions ($area, $length, etc.) → ST_Area, ST_Length
+    - IF statements → CASE WHEN
+    - Type casting for numeric/text operations
     
     Args:
         expression: QGIS expression string
+        geom_col: Geometry column name (default: 'geometry')
         
     Returns:
         str: PostGIS SQL expression
     """
-    raise NotImplementedError("EPIC-1 Phase E4: To be extracted from filter_task.py")
+    import re
+    import logging
+    
+    logger = logging.getLogger('FilterMate.Adapters.Backends.PostgreSQL.FilterExecutor')
+    
+    if not expression:
+        return expression
+    
+    # 1. Convert QGIS spatial functions to PostGIS
+    spatial_conversions = {
+        '$area': f'ST_Area("{geom_col}")',
+        '$length': f'ST_Length("{geom_col}")',
+        '$perimeter': f'ST_Perimeter("{geom_col}")',
+        '$x': f'ST_X("{geom_col}")',
+        '$y': f'ST_Y("{geom_col}")',
+        '$geometry': f'"{geom_col}"',
+        'buffer': 'ST_Buffer',
+        'area': 'ST_Area',
+        'length': 'ST_Length',
+        'perimeter': 'ST_Perimeter',
+    }
+    
+    for qgis_func, postgis_func in spatial_conversions.items():
+        expression = expression.replace(qgis_func, postgis_func)
+    
+    # 2. Convert IF statements to CASE WHEN
+    if expression.find('if') >= 0:
+        expression = re.sub(
+            r'if\s*\(\s*([^,]+),\s*([^,]+),\s*([^)]+)\)',
+            r'CASE WHEN \1 THEN \2 ELSE \3 END',
+            expression,
+            flags=re.IGNORECASE
+        )
+        logger.debug(f"Expression after IF conversion: {expression}")
+
+    # 3. Add type casting for numeric operations
+    expression = expression.replace('" >', '"::numeric >').replace('">', '"::numeric >')
+    expression = expression.replace('" <', '"::numeric <').replace('"<', '"::numeric <')
+    expression = expression.replace('" +', '"::numeric +').replace('"+', '"::numeric +')
+    expression = expression.replace('" -', '"::numeric -').replace('"-', '"::numeric -')
+
+    # 4. Normalize SQL keywords (case-insensitive replacements)
+    expression = re.sub(r'\bcase\b', ' CASE ', expression, flags=re.IGNORECASE)
+    expression = re.sub(r'\bwhen\b', ' WHEN ', expression, flags=re.IGNORECASE)
+    expression = re.sub(r'\bis\b', ' IS ', expression, flags=re.IGNORECASE)
+    expression = re.sub(r'\bthen\b', ' THEN ', expression, flags=re.IGNORECASE)
+    expression = re.sub(r'\belse\b', ' ELSE ', expression, flags=re.IGNORECASE)
+    expression = re.sub(r'\bilike\b', ' ILIKE ', expression, flags=re.IGNORECASE)
+    expression = re.sub(r'\blike\b', ' LIKE ', expression, flags=re.IGNORECASE)
+    expression = re.sub(r'\bnot\b', ' NOT ', expression, flags=re.IGNORECASE)
+
+    # 5. Add type casting for text operations
+    expression = expression.replace('" NOT ILIKE', '"::text NOT ILIKE').replace('" ILIKE', '"::text ILIKE')
+    expression = expression.replace('" NOT LIKE', '"::text NOT LIKE').replace('" LIKE', '"::text LIKE')
+
+    return expression
 
 
 # TODO: Extract from filter_task.py line 6676

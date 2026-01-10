@@ -10,52 +10,63 @@
 
 | Métrique          | Valeur       | Objectif      |
 | ----------------- | ------------ | ------------- |
-| Lignes dockwidget | **5,253**    | <2,000        |
-| Sprint actuel     | **Sprint 6** | Sprint 6      |
-| Réduction totale  | **-1,368**   | -9,129        |
-| Progrès           | **13.0%**    | 72.0% restant |
+| Lignes dockwidget | **5,240**    | <2,000        |
+| Sprint actuel     | **Sprint 7** | Sprint 7      |
+| Réduction totale  | **-1,381**   | -9,116        |
+| Progrès           | **13.2%**    | 71.8% restant |
+
+### Progression Sprint 7 (session 10 janvier 2026)
+
+| Action                               | Lignes avant | Lignes après | Réduction |
+| ------------------------------------ | ------------ | ------------ | --------- |
+| **Début Sprint 7**                   | **5,253**    | -            | -         |
+| Simplifier `connect_widgets_signals` | 5,253        | 5,247        | -6        |
+| Simplifier `disconnect_widgets_*`    | 5,247        | 5,245        | -2        |
+| One-liner wrappers (×4 méthodes)     | 5,245        | 5,240        | -5        |
+| **Total Sprint 7**                   | **5,253**    | **5,240**    | **-13**   |
 
 ### Progression Sprint 6 (session 10 janvier 2026)
 
-| Action                                | Lignes avant | Lignes après | Réduction |
-| ------------------------------------- | ------------ | ------------ | --------- |
-| **Début Sprint 6**                    | **5,359**    | -            | -         |
-| Créer ConfigurationManager            | 5,359        | 5,267        | -92       |
-| Simplifier `exploring_identify_*`     | 5,267        | 5,253        | -14       |
-| **Total Sprint 6**                    | **5,359**    | **5,253**    | **-106**  |
+| Action                            | Lignes avant | Lignes après | Réduction |
+| --------------------------------- | ------------ | ------------ | --------- |
+| **Début Sprint 6**                | **5,359**    | -            | -         |
+| Créer ConfigurationManager        | 5,359        | 5,267        | -92       |
+| Simplifier `exploring_identify_*` | 5,267        | 5,253        | -14       |
+| **Total Sprint 6**                | **5,359**    | **5,253**    | **-106**  |
 
 ### Progression Sprint 5 (session 10 janvier 2026)
 
-| Action                                | Lignes avant | Lignes après | Réduction |
-| ------------------------------------- | ------------ | ------------ | --------- |
-| Session précédente                    | 11,364       | 10,300       | -1,064    |
-| Simplification `zooming_to_features`  | 10,300       | 10,157       | -143      |
-| Simplification `exploring_*_clicked`  | 10,157       | 10,109       | -48       |
+| Action                               | Lignes avant | Lignes après | Réduction |
+| ------------------------------------ | ------------ | ------------ | --------- |
+| Session précédente                   | 11,364       | 10,300       | -1,064    |
+| Simplification `zooming_to_features` | 10,300       | 10,157       | -143      |
+| Simplification `exploring_*_clicked` | 10,157       | 10,109       | -48       |
+
 | Simplification t Managers (v4.0)
 
-| Controller/Manager          | Lignes     | Rôle                 | Sprint    |
-| --------------------------- | ---------- | -------------------- | --------- |
-| integration.py              | 2,481      | Orchestration        | S1-S5     |
-| **exploring_controller.py** | **2,405**  | **Exploration**      | **S1-S5** |
-| layer_sync_controller.py    | 1,170      | Sync couches         | S3        |
-| property_controller.py      | 1,251      | Propriétés           | S3        |
-| filtering_controller.py     | 1,066      | Filtrage             | S1        |
-| **configuration_manager.py**| **729**    | **Widget Config**    | **S6**    |
-| config_controller.py        | 708        | Configuration        | S1        |
-| exporting_controller.py     | 697        | Export               | S1        |
-| favorites_controller.py     | 682        | Favoris              | S4        |
-| backend_controller.py       | 581        | Backends             | S1        |
-| ui_layout_controller.py     | 444        | UI Layout            | S4        |
-| **Total controllers**       | **12,214** | -     *Exploration** | **S1-S5** |
-| layer_sync_controller.py    | 1,170      | Sync couches    | S3        |
-| property_controller.py      | 1,251      | Propriétés      | S3        |
-| filtering_controller.py     | 1,066      | Filtrage        | S1        |
-| config_controller.py        | 708        | Configuration   | S1        |
-| exporting_controller.py     | 697        | Export          | S1        |
-| favorites_controller.py     | 682        | Favoris         | S4        |
-| backend_controller.py       | 581        | Backends        | S1        |
-| ui_layout_controller.py     | 444        | UI Layout       | S4        |
-| **Total controllers**       | **11,485** | -               | -         |
+| Controller/Manager           | Lignes     | Rôle                | Sprint    |
+| ---------------------------- | ---------- | ------------------- | --------- |
+| integration.py               | 2,481      | Orchestration       | S1-S5     |
+| **exploring_controller.py**  | **2,405**  | **Exploration**     | **S1-S5** |
+| layer_sync_controller.py     | 1,170      | Sync couches        | S3        |
+| property_controller.py       | 1,251      | Propriétés          | S3        |
+| filtering_controller.py      | 1,066      | Filtrage            | S1        |
+| **configuration_manager.py** | **729**    | **Widget Config**   | **S6**    |
+| config_controller.py         | 708        | Configuration       | S1        |
+| exporting_controller.py      | 697        | Export              | S1        |
+| favorites_controller.py      | 682        | Favoris             | S4        |
+| backend_controller.py        | 581        | Backends            | S1        |
+| ui_layout_controller.py      | 444        | UI Layout           | S4        |
+| **Total controllers**        | **12,214** | - \*Exploration\*\* | **S1-S5** |
+| layer_sync_controller.py     | 1,170      | Sync couches        | S3        |
+| property_controller.py       | 1,251      | Propriétés          | S3        |
+| filtering_controller.py      | 1,066      | Filtrage            | S1        |
+| config_controller.py         | 708        | Configuration       | S1        |
+| exporting_controller.py      | 697        | Export              | S1        |
+| favorites_controller.py      | 682        | Favoris             | S4        |
+| backend_controller.py        | 581        | Backends            | S1        |
+| ui_layout_controller.py      | 444        | UI Layout           | S4        |
+| **Total controllers**        | **11,485** | -                   | -         |
 
 ---
 
@@ -66,6 +77,7 @@
 **Objectif**: Externaliser configuration widgets et simplifier méthodes exploration
 
 1. **Création ConfigurationManager** (NEW)
+
    - Fichier: `ui/managers/configuration_manager.py` (729 lignes)
    - Externalise `dockwidget_widgets_configuration()` : 164 → 20 lignes (-144 lignes)
    - Méthodes: `configure_widgets()`, `get_layer_properties_tuples_dict()`, `get_export_properties_tuples_dict()`
