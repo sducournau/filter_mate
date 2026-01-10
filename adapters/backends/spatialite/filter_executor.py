@@ -254,6 +254,39 @@ def apply_spatialite_subset(
     return True
 
 
+def get_spatialite_datasource(layer, db_file_path: str = None):
+    """
+    Get Spatialite datasource information from layer.
+    
+    Falls back to filterMate database for non-Spatialite layers.
+    
+    This is extracted from FilterTask._get_spatialite_datasource() for modularity.
+    
+    Args:
+        layer: QGIS vector layer
+        db_file_path: Path to filterMate database (for non-Spatialite fallback)
+        
+    Returns:
+        tuple: (db_path, table_name, layer_srid, is_native_spatialite)
+    """
+    from modules.appUtils import get_spatialite_datasource_from_layer
+    
+    # Get Spatialite datasource
+    db_path, table_name = get_spatialite_datasource_from_layer(layer)
+    layer_srid = layer.crs().postgisSrid()
+    
+    # Check if native Spatialite or OGR/Shapefile
+    is_native_spatialite = db_path is not None
+    
+    if not is_native_spatialite:
+        # Use filterMate_db for temp storage
+        db_path = db_file_path
+        if db_file_path:
+            logger.info("Non-Spatialite layer detected, will use QGIS subset string")
+    
+    return db_path, table_name, layer_srid, is_native_spatialite
+
+
 def prepare_spatialite_source_geom(*args, **kwargs):
     """
     Prepare geometry expression for Spatialite spatial filtering.
