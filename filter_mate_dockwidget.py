@@ -973,57 +973,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 show_warning("FilterMate", "No favorites imported")
     
     def _update_favorite_indicator(self):
-        """Update the favorites indicator badge with current count."""
-        if not hasattr(self, 'favorites_indicator_label') or not self.favorites_indicator_label:
-            return
+        """v3.1 Sprint 17: Update the favorites indicator badge with current count."""
+        if not hasattr(self, 'favorites_indicator_label') or not self.favorites_indicator_label: return
+        fm = getattr(self, '_favorites_manager', None)
+        count = fm.count if fm else 0
         
-        # Get favorites manager
-        favorites_manager = getattr(self, '_favorites_manager', None)
-        if favorites_manager is None:
-            count = 0
-        else:
-            count = favorites_manager.count
-        
-        # Update text
         if count > 0:
             self.favorites_indicator_label.setText(f"★ {count}")
-            tooltip = f"★ {count} Favorites saved\nClick to apply or manage"
-            # Brighter color when there are favorites
-            style = """
-                QLabel#label_favorites_indicator {
-                    color: white;
-                    font-size: 9pt;
-                    font-weight: 600;
-                    padding: 3px 10px;
-                    border-radius: 12px;
-                    border: none;
-                    background-color: #f39c12;
-                }
-                QLabel#label_favorites_indicator:hover {
-                    background-color: #d68910;
-                }
-            """
+            self.favorites_indicator_label.setToolTip(f"★ {count} Favorites saved\nClick to apply or manage")
+            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator { color: white; font-size: 9pt; font-weight: 600; padding: 3px 10px; border-radius: 12px; border: none; background-color: #f39c12; } QLabel#label_favorites_indicator:hover { background-color: #d68910; }")
         else:
             self.favorites_indicator_label.setText("★")
-            tooltip = "★ No favorites saved\nClick to add current filter"
-            # Muted color when empty
-            style = """
-                QLabel#label_favorites_indicator {
-                    color: #95a5a6;
-                    font-size: 9pt;
-                    font-weight: 600;
-                    padding: 3px 10px;
-                    border-radius: 12px;
-                    border: none;
-                    background-color: #ecf0f1;
-                }
-                QLabel#label_favorites_indicator:hover {
-                    background-color: #d5dbdb;
-                }
-            """
-        
-        self.favorites_indicator_label.setStyleSheet(style)
-        self.favorites_indicator_label.setToolTip(tooltip)
+            self.favorites_indicator_label.setToolTip("★ No favorites saved\nClick to add current filter")
+            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator { color: #95a5a6; font-size: 9pt; font-weight: 600; padding: 3px 10px; border-radius: 12px; border: none; background-color: #ecf0f1; } QLabel#label_favorites_indicator:hover { background-color: #d5dbdb; }")
         self.favorites_indicator_label.adjustSize()
 
     def _get_available_backends_for_layer(self, layer):
@@ -1508,64 +1470,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return False
     
     def should_use_centroid_for_layer(self, layer) -> bool:
-        """
-        Check if centroid optimization should be used for a layer.
-        
-        Considers:
-        1. User override for specific layer
-        2. Auto-centroid setting for distant layers
-        3. Layer analysis (if enabled)
-        
-        Args:
-            layer: QgsVectorLayer to check
-            
-        Returns:
-            bool: True if centroids should be used
-        """
-        # Check layer-specific override first
+        """v3.1 Sprint 17: Check if centroid optimization should be used for a layer."""
         if hasattr(self, '_layer_centroid_overrides'):
             override = self._layer_centroid_overrides.get(layer.id() if layer else None)
-            if override is not None:
-                return override
-        
-        # Check if auto-optimization is enabled
-        if not getattr(self, '_optimization_enabled', True):
-            return False
-        
-        # Check if auto-centroid is enabled
-        if not getattr(self, '_centroid_auto_enabled', True):
-            return False
-        
-        # Analyze the layer
+            if override is not None: return override
+        if not getattr(self, '_optimization_enabled', True) or not getattr(self, '_centroid_auto_enabled', True): return False
         try:
-            from .core.services.auto_optimizer import (
-                LayerAnalyzer, LayerLocationType, AUTO_OPTIMIZER_AVAILABLE
-            )
-            
-            if not AUTO_OPTIMIZER_AVAILABLE:
-                return False
-            
-            analyzer = LayerAnalyzer()
-            analysis = analyzer.analyze_layer(layer)
-            
-            if not analysis:
-                return False
-            
-            # Check if it's a distant layer
-            # v2.7.6: Use configurable threshold
-            thresholds = get_optimization_thresholds(ENV_VARS)
-            threshold = thresholds['centroid_optimization_threshold']
-            if hasattr(self, '_optimization_thresholds'):
-                threshold = self._optimization_thresholds.get('centroid_distant', threshold)
-            
-            if analysis.location_type in (LayerLocationType.REMOTE_SERVICE, 
-                                          LayerLocationType.REMOTE_DATABASE):
-                return analysis.feature_count >= threshold
-            
-        except Exception as e:
-            logger.debug(f"Error checking centroid for layer: {e}")
-        
-        return False
+            from .core.services.auto_optimizer import LayerAnalyzer, LayerLocationType, AUTO_OPTIMIZER_AVAILABLE
+            if not AUTO_OPTIMIZER_AVAILABLE: return False
+            analysis = LayerAnalyzer().analyze_layer(layer)
+            if not analysis: return False
+            threshold = get_optimization_thresholds(ENV_VARS).get('centroid_optimization_threshold', 1000)
+            if hasattr(self, '_optimization_thresholds'): threshold = self._optimization_thresholds.get('centroid_distant', threshold)
+            return analysis.location_type in (LayerLocationType.REMOTE_SERVICE, LayerLocationType.REMOTE_DATABASE) and analysis.feature_count >= threshold
+        except: return False
     
     def get_optimization_state(self) -> dict:
         """
@@ -1708,55 +1626,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return 'top'
 
     def _apply_action_bar_position(self, position):
-        """
-        Apply action bar position dynamically.
+        """v3.1 Sprint 17: Apply action bar position dynamically."""
+        if not hasattr(self, 'frame_actions'): return
         
-        Reorganizes the layout to place the action bar at the specified position.
-        Supports horizontal (top/bottom) and vertical (left/right) layouts with
-        appropriate spacers for each mode.
-        
-        Args:
-            position: str - 'top', 'bottom', 'left', 'right'
-        """
-        if not hasattr(self, 'frame_actions'):
-            return
-        
-        logger.info(f"Applying action bar position: {position}")
-        
-        # First, restore from any previous side action bar setup
         if hasattr(self, '_side_action_bar_active') and self._side_action_bar_active:
             self._restore_side_action_bar_layout()
         
-        # Get all action buttons
-        action_buttons = [
-            self.pushButton_action_filter,
-            self.pushButton_action_undo_filter,
-            self.pushButton_action_redo_filter,
-            self.pushButton_action_unfilter,
-            self.pushButton_action_export,
-            self.pushButton_action_about
-        ]
+        action_buttons = [self.pushButton_action_filter, self.pushButton_action_undo_filter, self.pushButton_action_redo_filter, 
+                          self.pushButton_action_unfilter, self.pushButton_action_export, self.pushButton_action_about]
         
-        # Step 1: Completely delete the old layout and create new one
         self._clear_action_bar_layout()
+        if position in ('top', 'bottom'): self._create_horizontal_action_layout(action_buttons)
+        else: self._create_vertical_action_layout(action_buttons)
         
-        # Step 2: Create new layout based on position (horizontal or vertical)
-        is_horizontal = position in ('top', 'bottom')
-        if is_horizontal:
-            self._create_horizontal_action_layout(action_buttons)
-        else:
-            self._create_vertical_action_layout(action_buttons)
-        
-        # Step 3: Apply size constraints based on orientation
         self._apply_action_bar_size_constraints(position)
-        
-        # Step 4: Reposition frame_actions in the main layout
         self._reposition_action_bar_in_main_layout(position)
-        
-        # Step 5: Adjust header for side positions (left/right)
         self._adjust_header_for_side_position(position)
-        
-        # Store current position for reference
         self._current_action_bar_position = position
 
     def _adjust_header_for_side_position(self, position):
@@ -2576,53 +2461,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def cancel_pending_config_changes(self):
-        """Cancel pending configuration changes when Cancel button is clicked"""
+        """v3.1 Sprint 17: Cancel pending configuration changes."""
+        if not self.config_changes_pending or not self.pending_config_changes: return
         
-        if not self.config_changes_pending or not self.pending_config_changes:
-            logger.info("No pending configuration changes to cancel")
-            return
-        
-        logger.info(f"Cancelling {len(self.pending_config_changes)} pending configuration change(s)")
-        
-        # Reload configuration from file to revert changes in tree view
         try:
-            config_json_path = ENV_VARS.get('CONFIG_JSON_PATH', self.plugin_dir + '/config/config.json')
-            with open(config_json_path, 'r') as infile:
-                self.CONFIG_DATA = json.load(infile)
+            config_path = ENV_VARS.get('CONFIG_JSON_PATH', self.plugin_dir + '/config/config.json')
+            with open(config_path, 'r') as f: self.CONFIG_DATA = json.load(f)
             
-            # Recreate model with original data
-            self.config_model = JsonModel(
-                data=self.CONFIG_DATA, 
-                editable_keys=False, 
-                editable_values=True, 
-                plugin_dir=self.plugin_dir
-            )
-            
-            # Update view
-            if hasattr(self, 'config_view') and self.config_view is not None:
+            self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=False, editable_values=True, plugin_dir=self.plugin_dir)
+            if hasattr(self, 'config_view') and self.config_view:
                 self.config_view.setModel(self.config_model)
                 self.config_view.model = self.config_model
             
-            # Clear pending changes
-            self.pending_config_changes = []
-            self.config_changes_pending = False
-            
-            # Disable buttons after cancelling changes
-            if hasattr(self, 'buttonBox'):
-                self.buttonBox.setEnabled(False)
-                logger.info("Configuration buttons disabled (changes cancelled)")
-            
-            # Message removed - button state change is sufficient feedback
-            logger.info("Configuration changes cancelled successfully")
-            
+            self.pending_config_changes, self.config_changes_pending = [], False
+            if hasattr(self, 'buttonBox'): self.buttonBox.setEnabled(False)
         except Exception as e:
-            logger.error(f"Error cancelling configuration changes: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            show_error(
-                "FilterMate",
-                f"Error cancelling changes: {str(e)}"
-            )
+            show_error("FilterMate", f"Error cancelling changes: {str(e)}")
 
 
     def on_config_buttonbox_accepted(self):
@@ -3334,55 +3188,23 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.set_exporting_properties()
 
     def _connect_groupbox_signals_directly(self):
-        """
-        Connect groupbox signals directly without going through manageSignal.
-        
-        This ensures the toggled and collapsedStateChanged signals are properly
-        connected for exclusive groupbox behavior.
-        """
-        logger.debug("_connect_groupbox_signals_directly called")
-        
+        """v3.1 Sprint 17: Connect groupbox signals for exclusive behavior."""
         try:
-            single_gb = self.mGroupBox_exploring_single_selection
-            multiple_gb = self.mGroupBox_exploring_multiple_selection
-            custom_gb = self.mGroupBox_exploring_custom_selection
+            gbs = [self.mGroupBox_exploring_single_selection, self.mGroupBox_exploring_multiple_selection, self.mGroupBox_exploring_custom_selection]
+            names = ['single_selection', 'multiple_selection', 'custom_selection']
             
-            # CRITICAL FIX: Disconnect all receivers using blockSignals instead of disconnect()
-            # disconnect() can cause freeze if called during initialization
-            # blockSignals is safer and non-blocking
-            for gb in [single_gb, multiple_gb, custom_gb]:
-                # Temporarily block to reset connections safely
-                was_blocked = gb.signalsBlocked()
+            for gb in gbs:
                 gb.blockSignals(True)
-                try:
-                    # Try to disconnect but don't block if it fails
-                    gb.toggled.disconnect()
-                except (TypeError, RuntimeError):
-                    pass
-                try:
-                    gb.collapsedStateChanged.disconnect()
-                except (TypeError, RuntimeError):
-                    pass
-                finally:
-                    # Restore signal state
-                    gb.blockSignals(was_blocked)
+                try: gb.toggled.disconnect()
+                except: pass
+                try: gb.collapsedStateChanged.disconnect()
+                except: pass
+                gb.blockSignals(False)
             
-            logger.debug("Groupbox signals disconnected safely")
-            
-            # Connect toggled signals
-            single_gb.toggled.connect(lambda checked: self._on_groupbox_clicked('single_selection', checked))
-            multiple_gb.toggled.connect(lambda checked: self._on_groupbox_clicked('multiple_selection', checked))
-            custom_gb.toggled.connect(lambda checked: self._on_groupbox_clicked('custom_selection', checked))
-            
-            # Connect collapsedStateChanged signals
-            single_gb.collapsedStateChanged.connect(lambda collapsed: self._on_groupbox_collapse_changed('single_selection', collapsed))
-            multiple_gb.collapsedStateChanged.connect(lambda collapsed: self._on_groupbox_collapse_changed('multiple_selection', collapsed))
-            custom_gb.collapsedStateChanged.connect(lambda collapsed: self._on_groupbox_collapse_changed('custom_selection', collapsed))
-            
-            logger.debug("Groupbox signals connected successfully")
-            
-        except Exception as e:
-            logger.error(f"Error connecting groupbox signals directly: {e}", exc_info=True)
+            for gb, name in zip(gbs, names):
+                gb.toggled.connect(lambda checked, n=name: self._on_groupbox_clicked(n, checked))
+                gb.collapsedStateChanged.connect(lambda collapsed, n=name: self._on_groupbox_collapse_changed(n, collapsed))
+        except: pass
 
     def _force_exploring_groupbox_exclusive(self, active_groupbox):
         """v3.1 Sprint 16: Force exclusive state for exploring groupboxes."""
@@ -3718,70 +3540,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def get_filtered_layer_extent(self, layer):
-        """
-        Calculate the actual bounding box of filtered features in a layer.
-        
-        This method correctly calculates the extent of only the visible/filtered
-        features, rather than using the cached layer extent which may include
-        features that are filtered out.
-        
-        v2.6.5 PERFORMANCE FIX: Added feature limit to prevent UI freeze on large layers.
-        For very large layers, uses updateExtents() instead of iterating all features.
-        
-        Args:
-            layer (QgsVectorLayer): Layer to calculate extent for
-            
-        Returns:
-            QgsRectangle: Bounding box of filtered features, or layer extent if empty
-        """
-        if layer is None:
-            return None
-            
+        """v3.1 Sprint 17: Calculate bounding box of filtered features with performance limit."""
+        if not layer: return None
         try:
-            # v2.6.5: PERFORMANCE FIX - Use updateExtents() for large layers
-            # Iterating 100k+ features causes QGIS freeze
-            MAX_FEATURES_FOR_EXTENT_CALC = 10000  # Beyond this, use updateExtents()
-            
-            # Force recalculation of extent for filtered features
+            MAX_FEATURES = 10000
             layer.updateExtents()
+            if layer.featureCount() > MAX_FEATURES: return layer.extent()
             
-            # Quick check: if layer has filter and provider supports extent calculation
-            filtered_count = layer.featureCount()
-            if filtered_count > MAX_FEATURES_FOR_EXTENT_CALC:
-                # For large filtered datasets, trust updateExtents() result
-                logger.debug(f"get_filtered_layer_extent: Large layer ({filtered_count} features), using updateExtents()")
-                return layer.extent()
-            
-            # Get extent from provider with current subset filter applied
-            extent = QgsRectangle()
-            
-            # Iterate through filtered features to compute real extent (with limit)
-            request = QgsFeatureRequest().setNoAttributes()
-            
-            feature_count = 0
-            for feature in layer.getFeatures(request):
-                if feature.hasGeometry() and not feature.geometry().isEmpty():
-                    if extent.isEmpty():
-                        extent = feature.geometry().boundingBox()
-                    else:
-                        extent.combineExtentWith(feature.geometry().boundingBox())
-                    feature_count += 1
-                    # Safety limit even for smaller layers
-                    if feature_count >= MAX_FEATURES_FOR_EXTENT_CALC:
-                        logger.debug(f"get_filtered_layer_extent: Reached limit of {MAX_FEATURES_FOR_EXTENT_CALC} features")
-                        break
-                    
-            if extent.isEmpty():
-                # Fallback to layer extent if no features with geometry
-                logger.debug(f"get_filtered_layer_extent: No features with geometry, using layer extent")
-                return layer.extent()
-                
-            logger.debug(f"get_filtered_layer_extent: Calculated extent from {feature_count} filtered features")
-            return extent
-            
-        except Exception as e:
-            logger.warning(f"get_filtered_layer_extent error: {e}, falling back to layer extent")
-            return layer.extent()
+            extent, count = QgsRectangle(), 0
+            for f in layer.getFeatures(QgsFeatureRequest().setNoAttributes()):
+                if f.hasGeometry() and not f.geometry().isEmpty():
+                    extent = f.geometry().boundingBox() if extent.isEmpty() else extent.combineExtentWith(f.geometry().boundingBox()) or extent
+                    count += 1
+                    if count >= MAX_FEATURES: break
+            return layer.extent() if extent.isEmpty() else extent
+        except: return layer.extent()
 
     def _compute_zoom_extent_for_mode(self):
         """
@@ -3904,56 +3677,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def exploring_custom_selection(self):
+        """v3.1 Sprint 17: Get features matching custom expression."""
+        if not self.widgets_initialized or not self.current_layer: return [], ''
+        if self.current_layer.id() not in self.PROJECT_LAYERS: return [], ''
 
-        if self.widgets_initialized is True and self.current_layer is not None:
-
-            # CRITICAL: Verify layer exists in PROJECT_LAYERS before access
-            if self.current_layer.id() not in self.PROJECT_LAYERS:
-                logger.warning(f"exploring_custom_selection: Layer {self.current_layer.name()} not in PROJECT_LAYERS")
-                return [], ''
-
-            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-            expression = layer_props["exploring"].get("custom_selection_expression", "")
-            features = []
-            
-            # Check if expression is just a field name (no comparison operators)
-            # In this case, we should NOT retrieve features - just pass the expression
-            # This allows "FIELD-BASED GEOMETRIC FILTER MODE" to work correctly:
-            # - The source layer keeps its existing subset filter
-            # - Distant layers are filtered by intersection with filtered source geometries
-            is_simple_field = False
-            if expression:
-                qgs_expr = QgsExpression(expression)
-                # FIX v2.3.9: Use case-insensitive check for operators (e.g., 'in' vs 'IN')
-                expr_upper = expression.upper()
-                is_simple_field = qgs_expr.isField() and not any(
-                    op in expr_upper for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']
-                )
-            
-            if is_simple_field:
-                # Field-only expression: return empty features list
-                # The filter task will use the existing subset string for source geometry
-                logger.debug(f"exploring_custom_selection: Field-only expression '{expression}' - returning empty features list")
-                return [], expression
-            
-            # PERFORMANCE: Check cache for complex expressions
-            layer_id = self.current_layer.id()
-            cached_features = self._get_cached_expression_result(layer_id, expression)
-            if cached_features is not None:
-                logger.debug(f"exploring_custom_selection: Using cached result for expression ({len(cached_features)} features)")
-                return cached_features, expression
-            
-            # Complex expression: get matching features
-            features = self.exploring_features_changed([], False, expression)
-            
-            # PERFORMANCE: Cache the result for future use
-            if features:
-                self._set_cached_expression_result(layer_id, expression, features)
-                logger.debug(f"exploring_custom_selection: Cached {len(features)} features for expression")
-
-            return features, expression
+        expression = self.PROJECT_LAYERS[self.current_layer.id()]["exploring"].get("custom_selection_expression", "")
+        if not expression: return [], expression
         
-        return [], ''
+        # Check if field-only expression (no operators) - used for field-based geometric filtering
+        qgs_expr = QgsExpression(expression)
+        if qgs_expr.isField() and not any(op in expression.upper() for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']):
+            return [], expression
+        
+        # Check cache
+        layer_id = self.current_layer.id()
+        cached = self._get_cached_expression_result(layer_id, expression)
+        if cached is not None: return cached, expression
+        
+        # Get matching features
+        features = self.exploring_features_changed([], False, expression)
+        if features: self._set_cached_expression_result(layer_id, expression, features)
+        return features, expression
     
 
     def exploring_deselect_features(self):
@@ -3981,58 +3725,25 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
 
     def exploring_select_features(self):
-        """
-        Activate QGIS selection tool on canvas and select features from the active exploration groupbox.
-        
-        When IS_SELECTING button is activated, this method:
-        1. Activates the QGIS rectangle selection tool on the canvas
-        2. Retrieves features from the current exploration mode (single/multiple/custom) 
-           and selects them on the layer.
-        
-        v3.1 STORY-2.3: Delegate to ExploringController when available.
-        """
-        if self.widgets_initialized is True and self.current_layer is not None:
-            
-            # v3.0.14: CRITICAL - Use centralized deletion check with full protection
-            if self._is_layer_truly_deleted(self.current_layer):
-                logger.debug("exploring_select_features: current_layer C++ object truly deleted")
-                self.current_layer = None
-                return
+        """v3.1 Sprint 17: Activate QGIS selection tool and select features from active groupbox."""
+        if not self.widgets_initialized or not self.current_layer: return
+        if self._is_layer_truly_deleted(self.current_layer):
+            self.current_layer = None
+            return
 
-            # v3.1 STORY-2.3: Delegate to ExploringController
-            if self._controller_integration is not None:
-                # Step 1: Activate selection tool via controller
-                if self._controller_integration.delegate_exploring_activate_selection_tool(self.current_layer):
-                    logger.debug("exploring_select_features: Selection tool delegated to controller")
-                    # Step 2: Get features and select them via controller
-                    features, expression = self.get_current_features()
-                    if len(features) > 0:
-                        feature_ids = [feature.id() for feature in features]
-                        if self._controller_integration.delegate_exploring_select_layer_features(feature_ids, self.current_layer):
-                            logger.debug(f"exploring_select_features: Selected {len(features)} features via controller")
-                            return
-            
-            # Legacy fallback: Activate QGIS selection tool on canvas
-            try:
-                self.iface.actionSelectRectangle().trigger()
-                logger.debug("exploring_select_features: Selection tool activated on canvas (legacy)")
-            except Exception as e:
-                logger.warning(f"exploring_select_features: Failed to activate selection tool: {e}")
-            
-            # Switch active layer in LayerTreeView to current layer
-            try:
-                self.iface.setActiveLayer(self.current_layer)
-                logger.debug(f"exploring_select_features: Active layer set to {self.current_layer.name()}")
-            except Exception as e:
-                logger.warning(f"exploring_select_features: Failed to set active layer: {e}")
-            
-            # Get features from the active groupbox
-            features, expression = self.get_current_features()
-            
-            # Select features on the layer
-            if len(features) > 0:
-                self.current_layer.removeSelection()
-                self.current_layer.select([feature.id() for feature in features])
+        if self._controller_integration:
+            if self._controller_integration.delegate_exploring_activate_selection_tool(self.current_layer):
+                features, _ = self.get_current_features()
+                if features and self._controller_integration.delegate_exploring_select_layer_features([f.id() for f in features], self.current_layer): return
+        
+        try: self.iface.actionSelectRectangle().trigger()
+        except: pass
+        try: self.iface.setActiveLayer(self.current_layer)
+        except: pass
+        features, _ = self.get_current_features()
+        if features:
+            self.current_layer.removeSelection()
+            self.current_layer.select([f.id() for f in features])
 
     def exploring_features_changed(self, input=[], identify_by_primary_key_name=False, custom_expression=None, preserve_filter_if_empty=False):
         """
@@ -4264,59 +3975,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.debug(f"_reset_layer_expressions delegation failed: {e}")
     
     def _disconnect_layer_signals(self):
-        """
-        Disconnect all layer-related widget signals before updating.
+        """v3.1 Sprint 17: Disconnect all layer-related widget signals before updating."""
+        exploring = ["SINGLE_SELECTION_FEATURES", "SINGLE_SELECTION_EXPRESSION", "MULTIPLE_SELECTION_FEATURES", "MULTIPLE_SELECTION_EXPRESSION", "CUSTOM_SELECTION_EXPRESSION", "IDENTIFY", "ZOOM", "IS_SELECTING", "IS_TRACKING", "IS_LINKING", "RESET_ALL_LAYER_PROPERTIES"]
+        filtering = ["CURRENT_LAYER", "HAS_LAYERS_TO_FILTER", "LAYERS_TO_FILTER", "HAS_COMBINE_OPERATOR", "SOURCE_LAYER_COMBINE_OPERATOR", "OTHER_LAYERS_COMBINE_OPERATOR", "HAS_GEOMETRIC_PREDICATES", "GEOMETRIC_PREDICATES", "HAS_BUFFER_VALUE", "BUFFER_VALUE", "BUFFER_VALUE_PROPERTY", "HAS_BUFFER_TYPE", "BUFFER_TYPE"]
+        widgets_to_stop = [["EXPLORING", w] for w in exploring] + [["FILTERING", w] for w in filtering]
         
-        Returns list of widget paths that were disconnected (for later reconnection).
+        for wp in widgets_to_stop: self.manageSignal(wp, 'disconnect')
         
-        v3.0.4: Added IDENTIFY and ZOOM buttons to ensure they are properly managed
-        during layer changes.
-        """
-        widgets_to_stop = [
-            ["EXPLORING","SINGLE_SELECTION_FEATURES"],
-            ["EXPLORING","SINGLE_SELECTION_EXPRESSION"],
-            ["EXPLORING","MULTIPLE_SELECTION_FEATURES"],
-            ["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"],
-            ["EXPLORING", "CUSTOM_SELECTION_EXPRESSION"],
-            ["EXPLORING", "IDENTIFY"],
-            ["EXPLORING", "ZOOM"],
-            ["EXPLORING", "IS_SELECTING"],
-            ["EXPLORING", "IS_TRACKING"],
-            ["EXPLORING", "IS_LINKING"],
-            ["EXPLORING", "RESET_ALL_LAYER_PROPERTIES"],
-            ["FILTERING","CURRENT_LAYER"],
-            ["FILTERING","HAS_LAYERS_TO_FILTER"],
-            ["FILTERING", "LAYERS_TO_FILTER"],
-            ["FILTERING","HAS_COMBINE_OPERATOR"],
-            ["FILTERING","SOURCE_LAYER_COMBINE_OPERATOR"],
-            ["FILTERING", "OTHER_LAYERS_COMBINE_OPERATOR"],
-            ["FILTERING","HAS_GEOMETRIC_PREDICATES"],
-            ["FILTERING", "GEOMETRIC_PREDICATES"],
-            ["FILTERING","HAS_BUFFER_VALUE"],
-            ["FILTERING","BUFFER_VALUE"],
-            ["FILTERING","BUFFER_VALUE_PROPERTY"],
-            ["FILTERING","HAS_BUFFER_TYPE"],
-            ["FILTERING","BUFFER_TYPE"]
-        ]
+        for expr_key in ["SINGLE_SELECTION_EXPRESSION", "MULTIPLE_SELECTION_EXPRESSION", "CUSTOM_SELECTION_EXPRESSION"]:
+            try: self.widgets.get("EXPLORING", {}).get(expr_key, {}).get("WIDGET", type('', (), {'setExpression': lambda s, x: None})()).setExpression("")
+            except: pass
         
-        for widget_path in widgets_to_stop:
-            self.manageSignal(widget_path, 'disconnect')
-        
-        # STABILITY FIX: Clear expressions before layer change to prevent residual values
-        try:
-            if "SINGLE_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
-                self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression("")
-            if "MULTIPLE_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
-                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression("")
-            if "CUSTOM_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
-                self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setExpression("")
-        except Exception as e:
-            logger.debug(f"Could not clear expressions before layer change: {e}")
-        
-        if self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"] is True:
-            widget_path = ["QGIS","LAYER_TREE_VIEW"]
-            self.manageSignal(widget_path, 'disconnect')
-        
+        if self.project_props.get("OPTIONS", {}).get("LAYERS", {}).get("LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"):
+            self.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'disconnect')
         return widgets_to_stop
     
     def _detect_multi_step_filter(self, layer, layer_props):
@@ -4749,64 +4420,32 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return False
 
     def layer_property_changed(self, input_property, input_data=None, custom_functions={}):
-        """
-        Handle property changes for the current layer.
-        Orchestrates property updates by type (is/selection_expression/other).
-        """
-        if self.widgets_initialized is True and self.current_layer is not None:
-            # STABILITY FIX: Guard against KeyError if layer not in PROJECT_LAYERS
-            if self.current_layer.id() not in self.PROJECT_LAYERS:
-                logger.warning(f"layer_property_changed: layer {self.current_layer.name()} not in PROJECT_LAYERS")
-                return
-            
-            # Disconnect exploring widgets
-            widgets_to_stop = [
-                ["EXPLORING","SINGLE_SELECTION_FEATURES"],
-                ["EXPLORING","SINGLE_SELECTION_EXPRESSION"],
-                ["EXPLORING","MULTIPLE_SELECTION_FEATURES"],
-                ["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"],
-                ["EXPLORING","CUSTOM_SELECTION_EXPRESSION"]
-            ]
-            for widget_path in widgets_to_stop:
-                self.manageSignal(widget_path, 'disconnect')
+        """v3.1 Sprint 17: Handle property changes for the current layer."""
+        if not self.widgets_initialized or not self.current_layer: return
+        if self.current_layer.id() not in self.PROJECT_LAYERS: return
+        
+        widgets = [["EXPLORING", w] for w in ["SINGLE_SELECTION_FEATURES", "SINGLE_SELECTION_EXPRESSION", "MULTIPLE_SELECTION_FEATURES", "MULTIPLE_SELECTION_EXPRESSION", "CUSTOM_SELECTION_EXPRESSION"]]
+        for wp in widgets: self.manageSignal(wp, 'disconnect')
 
-            # Parse and find property
-            input_data, state = self._parse_property_data(input_data)
-            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-            properties_group_key, property_path, properties_tuples, index = self._find_property_path(input_property)
+        input_data, state = self._parse_property_data(input_data)
+        layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+        properties_group_key, property_path, properties_tuples, index = self._find_property_path(input_property)
 
-            # Update by property type
-            flag_value_changed = False
-            if properties_group_key is None or property_path is None:
-                # Property not found in layer_properties_tuples_dict - skip update
-                logger.warning(f"layer_property_changed: property '{input_property}' not found in layer_properties_tuples_dict")
-            elif properties_group_key == 'is':
-                flag_value_changed = self._update_is_property(property_path, layer_props, input_data, custom_functions)
-            elif properties_group_key == 'selection_expression':
-                flag_value_changed = self._update_selection_expression_property(property_path, layer_props, input_data, custom_functions)
-            else:
-                flag_value_changed = self._update_other_property(property_path, properties_tuples, properties_group_key, layer_props, input_data, custom_functions)
+        flag_value_changed = False
+        if properties_group_key and property_path:
+            if properties_group_key == 'is': flag_value_changed = self._update_is_property(property_path, layer_props, input_data, custom_functions)
+            elif properties_group_key == 'selection_expression': flag_value_changed = self._update_selection_expression_property(property_path, layer_props, input_data, custom_functions)
+            else: flag_value_changed = self._update_other_property(property_path, properties_tuples, properties_group_key, layer_props, input_data, custom_functions)
 
-            # Trigger change callbacks
-            if flag_value_changed is True:
-                if "ON_CHANGE" in custom_functions:
-                    custom_functions["ON_CHANGE"](0)
-                self.setLayerVariableEvent(self.current_layer, [property_path])
+        if flag_value_changed:
+            if "ON_CHANGE" in custom_functions: custom_functions["ON_CHANGE"](0)
+            self.setLayerVariableEvent(self.current_layer, [property_path])
 
-            # CRITICAL FIX: Reconnect widgets using direct connection for featureChanged signal
-            # The manageSignal approach using isSignalConnected is unreliable
-            picker_widget = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
-            try:
-                picker_widget.featureChanged.disconnect(self.exploring_features_changed)
-            except TypeError:
-                pass
-            picker_widget.featureChanged.connect(self.exploring_features_changed)
-            
-            # Reconnect other widgets via manageSignal
-            self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'connect')
-            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect')
-            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'connect')
-            self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect')
+        picker = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+        try: picker.featureChanged.disconnect(self.exploring_features_changed)
+        except: pass
+        picker.featureChanged.connect(self.exploring_features_changed)
+        for wp in widgets[1:]: self.manageSignal(wp, 'connect')
 
     def layer_property_changed_with_buffer_style(self, input_property, input_data=None):
         """
@@ -5287,50 +4926,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     webbrowser.open(url)
 
     def reload_plugin(self):
-        """
-        Reload the FilterMate plugin to apply layout changes.
-        
-        This closes and reopens the dockwidget, applying any pending configuration changes
-        including action bar position changes.
-        """
+        """v3.1 Sprint 17: Reload the FilterMate plugin to apply layout changes."""
         try:
             from qgis.utils import plugins
+            from qgis.PyQt.QtCore import QTimer
             
-            logger.info("Reloading FilterMate plugin...")
-            
-            # Save configuration before reload
             self.save_configuration_model()
+            if 'filter_mate' not in plugins:
+                show_warning("FilterMate", "Could not reload plugin automatically. Please close and reopen.")
+                return
             
-            # Get the FilterMate plugin instance
-            if 'filter_mate' in plugins:
-                filter_mate_plugin = plugins['filter_mate']
-                
-                # Close the current dockwidget
-                self.close()
-                
-                # Reset the plugin state
-                filter_mate_plugin.pluginIsActive = False
-                filter_mate_plugin.app = None
-                
-                # Use QTimer to delay the reopen slightly
-                from qgis.PyQt.QtCore import QTimer
-                QTimer.singleShot(100, filter_mate_plugin.run)
-                
-                logger.info("FilterMate plugin reload initiated")
-            else:
-                logger.warning("FilterMate plugin not found in plugins dictionary")
-                show_warning(
-                    "FilterMate",
-                    "Could not reload plugin automatically. Please close and reopen the plugin."
-                )
+            fm = plugins['filter_mate']
+            self.close()
+            fm.pluginIsActive, fm.app = False, None
+            QTimer.singleShot(100, fm.run)
         except Exception as e:
-            logger.error(f"Error reloading plugin: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            show_error(
-                "FilterMate",
-                f"Error reloading plugin: {str(e)}"
-            )
+            show_error("FilterMate", f"Error reloading plugin: {str(e)}")
 
 
     def setLayerVariableEvent(self, layer=None, properties=None):
@@ -5455,57 +5066,23 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.debug(f"Error resetting exploring button states: {e}")
 
     def _reset_filtering_button_states(self, layer_props):
-        """Reset filtering button visual states based on layer properties."""
+        """v3.1 Sprint 17: Reset filtering button visual states based on layer properties."""
         try:
-            filtering = layer_props["filtering"]
+            f = layer_props["filtering"]
+            btns = {"HAS_LAYERS_TO_FILTER": f["has_layers_to_filter"], "HAS_COMBINE_OPERATOR": f["has_combine_operator"], "HAS_GEOMETRIC_PREDICATES": f["has_geometric_predicates"], "HAS_BUFFER_VALUE": f["has_buffer_value"], "HAS_BUFFER_TYPE": f["has_buffer_type"]}
             
-            # Get button widgets
-            buttons = {
-                "HAS_LAYERS_TO_FILTER": filtering["has_layers_to_filter"],
-                "HAS_COMBINE_OPERATOR": filtering["has_combine_operator"],
-                "HAS_GEOMETRIC_PREDICATES": filtering["has_geometric_predicates"],
-                "HAS_BUFFER_VALUE": filtering["has_buffer_value"],
-                "HAS_BUFFER_TYPE": filtering["has_buffer_type"]
-            }
+            for k, v in btns.items():
+                w = self.widgets["FILTERING"][k]["WIDGET"]
+                w.blockSignals(True); w.setChecked(v); w.blockSignals(False)
             
-            for widget_key, state in buttons.items():
-                widget = self.widgets["FILTERING"][widget_key]["WIDGET"]
-                widget.blockSignals(True)
-                widget.setChecked(state)
-                widget.blockSignals(False)
-                
-            # Reset comboboxes to index 0 (AND)
-            source_combo = self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"]
-            other_combo = self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"]
+            for combo in ["SOURCE_LAYER_COMBINE_OPERATOR", "OTHER_LAYERS_COMBINE_OPERATOR"]:
+                w = self.widgets["FILTERING"][combo]["WIDGET"]
+                w.blockSignals(True); w.setCurrentIndex(0); w.blockSignals(False)
             
-            source_combo.blockSignals(True)
-            source_combo.setCurrentIndex(0)  # AND
-            source_combo.blockSignals(False)
-            
-            other_combo.blockSignals(True)
-            other_combo.setCurrentIndex(0)  # AND
-            other_combo.blockSignals(False)
-            
-            # Reset buffer value spinbox
-            buffer_spinbox = self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"]
-            buffer_spinbox.blockSignals(True)
-            buffer_spinbox.setValue(0.0)
-            buffer_spinbox.blockSignals(False)
-            
-            # Reset geometric predicates
-            geo_combo = self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"]
-            geo_combo.blockSignals(True)
-            geo_combo.setCheckedItems([])
-            geo_combo.blockSignals(False)
-            
-            # Reset layers to filter
-            layers_combo = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
-            layers_combo.blockSignals(True)
-            layers_combo.setCheckedItems([])
-            layers_combo.blockSignals(False)
-            
-        except Exception as e:
-            logger.debug(f"Error resetting filtering button states: {e}")
+            for widget_key, val, method in [("BUFFER_VALUE", 0.0, "setValue"), ("GEOMETRIC_PREDICATES", [], "setCheckedItems"), ("LAYERS_TO_FILTER", [], "setCheckedItems")]:
+                w = self.widgets["FILTERING"][widget_key]["WIDGET"]
+                w.blockSignals(True); getattr(w, method)(val); w.blockSignals(False)
+        except: pass
 
     def setProjectVariablesEvent(self):
         if self.widgets_initialized is True:
@@ -5576,55 +5153,24 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.gettingProjectLayers.emit()
 
     def closeEvent(self, event):
-        """Clean up resources before closing."""
-        if self.widgets_initialized is True:
-            # CRITICAL: Reset QgsMapLayerComboBox to prevent access violations
-            # when layers are removed or project is closed
-            # NOTE: We only call setLayer(None) here, not clear() which can cause issues
-            # However, for closeEvent it's less critical since widget is being destroyed
-            try:
-                if hasattr(self, 'comboBox_filtering_current_layer'):
-                    self.comboBox_filtering_current_layer.setLayer(None)
-            except Exception as e:
-                logger.debug(f"FilterMate: Error resetting layer combo on close: {e}")
-            
-            # CRITICAL FIX: Reset QgsFeaturePickerWidget to prevent access violations
-            # The widget has an internal timer (scheduledReload) that can fire even after
-            # the layer is destroyed, causing QgsVectorLayerFeatureSource to crash.
-            # See stack trace: QgsFeaturePickerModelBase::scheduledReload -> QgsVectorLayerFeatureSource
-            try:
-                if hasattr(self, 'mFeaturePickerWidget_exploring_single_selection'):
-                    self.mFeaturePickerWidget_exploring_single_selection.setLayer(None)
-            except Exception as e:
-                logger.debug(f"FilterMate: Error resetting FeaturePickerWidget on close: {e}")
-            
-            # Clean up exploring cache
-            try:
-                if hasattr(self, '_exploring_cache'):
-                    stats = self._exploring_cache.get_stats()
-                    logger.info(f"Exploring cache stats on close: {stats}")
-                    self._exploring_cache.invalidate_all()
-            except Exception as e:
-                logger.debug(f"FilterMate: Error cleaning up exploring cache: {e}")
-            
-            # Clean up theme watcher
-            try:
-                if self._theme_watcher is not None:
-                    self._theme_watcher.remove_callback(self._on_qgis_theme_changed)
-                    logger.debug("Theme watcher callback removed")
-            except Exception as e:
-                logger.debug(f"FilterMate: Error cleaning up theme watcher: {e}")
-            
-            # v3.0: Teardown MVC controllers
-            try:
-                if self._controller_integration is not None:
-                    self._controller_integration.teardown()
-                    logger.debug("Controller integration teardown complete")
-            except Exception as e:
-                logger.debug(f"FilterMate: Error during controller teardown: {e}")
-            
-            self.closingPlugin.emit()
+        """v3.1 Sprint 17: Clean up resources before closing."""
+        if not self.widgets_initialized:
             event.accept()
+            return
+        
+        try: self.comboBox_filtering_current_layer.setLayer(None) if hasattr(self, 'comboBox_filtering_current_layer') else None
+        except: pass
+        try: self.mFeaturePickerWidget_exploring_single_selection.setLayer(None) if hasattr(self, 'mFeaturePickerWidget_exploring_single_selection') else None
+        except: pass
+        try: self._exploring_cache.invalidate_all() if hasattr(self, '_exploring_cache') else None
+        except: pass
+        try: self._theme_watcher.remove_callback(self._on_qgis_theme_changed) if self._theme_watcher else None
+        except: pass
+        try: self._controller_integration.teardown() if self._controller_integration else None
+        except: pass
+        
+        self.closingPlugin.emit()
+        event.accept()
 
     def get_exploring_cache_stats(self):
         """
@@ -5688,51 +5234,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.debug(f"Exploring cache: invalidated {layer_id[:8]}.../{groupbox_type}")
 
     def launchTaskEvent(self, state, task_name):
-        # v2.7.17: Enhanced logging for task launch diagnostics
-        logger.info(f"=" * 60)
-        logger.info(f"launchTaskEvent: task_name='{task_name}', state={state}")
-        logger.info(f"  widgets_initialized: {self.widgets_initialized}")
+        """v3.1 Sprint 17: Emit signal to launch a task."""
+        if not self.widgets_initialized: return
+        if not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS: return
         
-        if self.widgets_initialized is True:
-
-            # CRITICAL: Verify current_layer and its presence in PROJECT_LAYERS
-            if self.current_layer is None:
-                logger.warning(f"launchTaskEvent: Cannot launch task {task_name} - current_layer is None")
-                logger.info(f"=" * 60)
-                return
-            
-            if self.current_layer.id() not in self.PROJECT_LAYERS:
-                logger.warning(f"launchTaskEvent: Cannot launch task {task_name} - layer '{self.current_layer.name()}' not in PROJECT_LAYERS")
-                logger.info(f"  Layer ID: {self.current_layer.id()}")
-                logger.info(f"  PROJECT_LAYERS keys: {list(self.PROJECT_LAYERS.keys())[:5]}...")
-                logger.info(f"=" * 60)
-                return
-
-            # v2.7.17: Log custom selection expression state before launching
-            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-            exploring_groupbox = layer_props.get("exploring", {}).get("current_exploring_groupbox", "unknown")
-            custom_expr = layer_props.get("exploring", {}).get("custom_selection_expression", "")
-            logger.info(f"  current_layer: {self.current_layer.name()}")
-            logger.info(f"  current_exploring_groupbox: {exploring_groupbox}")
-            logger.info(f"  custom_selection_expression: '{custom_expr}'")
-            logger.info(f"  layer subset string: '{self.current_layer.subsetString()[:80] if self.current_layer.subsetString() else '(none)'}'...")
-            
-            # v2.9.29: Update layers_to_filter from combobox and persist to database
-            # This ensures the checked layers are properly saved before any filter/undo/redo operation
-            current_layers_to_filter = self.get_layers_to_filter()
-            self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = current_layers_to_filter
-            logger.info(f"  layers_to_filter count: {len(current_layers_to_filter)}")
-            
-            # v2.9.29: Also save to database to ensure persistence across widget repopulation
-            # This fixes an issue where combobox repopulation after undo/redo would lose checked items
-            self.setLayerVariableEvent(self.current_layer, [("filtering", "layers_to_filter")])
-            
-            logger.info(f"  → Emitting launchingTask signal for '{task_name}'")
-            logger.info(f"=" * 60)
-            self.launchingTask.emit(task_name)
-        else:
-            logger.warning(f"launchTaskEvent: widgets_initialized is False, cannot launch task")
-            logger.info(f"=" * 60)
+        current_layers_to_filter = self.get_layers_to_filter()
+        self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = current_layers_to_filter
+        self.setLayerVariableEvent(self.current_layer, [("filtering", "layers_to_filter")])
+        self.launchingTask.emit(task_name)
     
     def _setup_truncation_tooltips(self):
         """
