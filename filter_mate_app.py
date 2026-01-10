@@ -95,6 +95,7 @@ try:
     from .adapters.variables_manager import VariablesPersistenceManager  # v4.0: Variables persistence extraction
     from .core.services.task_orchestrator import TaskOrchestrator  # v4.1: Task orchestration extraction
     from .core.services.optimization_manager import OptimizationManager  # v4.2: Optimization management extraction
+    from .adapters.filter_result_handler import FilterResultHandler  # v4.3: Filter result handling extraction
     HEXAGONAL_AVAILABLE = True
 except ImportError:
     HEXAGONAL_AVAILABLE = False
@@ -108,6 +109,7 @@ except ImportError:
     VariablesPersistenceManager = None  # v4.0: Fallback
     TaskOrchestrator = None  # v4.1: Fallback
     OptimizationManager = None  # v4.2: Fallback
+    FilterResultHandler = None  # v4.3: Fallback
 
     def _init_hexagonal_services(config=None):
         """Fallback when hexagonal services unavailable."""
@@ -629,6 +631,21 @@ class FilterMateApp:
             logger.info("FilterMate: OptimizationManager initialized (v4.2 migration)")
         else:
             self._optimization_manager = None
+        
+        # v4.3: Initialize FilterResultHandler (extracted from FilterMateApp.filter_engine_task_completed)
+        if HEXAGONAL_AVAILABLE and FilterResultHandler:
+            self._filter_result_handler = FilterResultHandler(
+                refresh_layers_and_canvas_callback=self._refresh_layers_and_canvas,
+                push_filter_to_history_callback=self._push_filter_to_history,
+                clear_filter_history_callback=self._clear_filter_history,
+                update_undo_redo_buttons_callback=self.update_undo_redo_buttons,
+                get_project_layers_callback=lambda: self.PROJECT_LAYERS,
+                get_dockwidget_callback=lambda: self.dockwidget,
+                get_iface_callback=lambda: self.iface,
+            )
+            logger.info("FilterMate: FilterResultHandler initialized (v4.3 migration)")
+        else:
+            self._filter_result_handler = None
         
         # Note: Do NOT call self.run() here - it will be called from filter_mate.py
         # when the user actually activates the plugin to avoid QGIS initialization race conditions
@@ -3753,6 +3770,10 @@ class FilterMateApp:
         """
         Handle completion of filtering operations.
         
+        v4.3: Feature flag for FilterResultHandler delegation.
+        Set USE_FILTER_RESULT_HANDLER = True to enable new architecture.
+        Keep False during testing period for safe rollback.
+        
         Called when FilterEngineTask completes successfully. Applies results to layers,
         updates UI, saves layer variables, and shows success messages.
         
@@ -3768,6 +3789,27 @@ class FilterMateApp:
             - Shows success message with feature counts
             - Handles both single and multi-layer filtering
         """
+        
+        # v4.3: Feature flag for FilterResultHandler delegation
+        USE_FILTER_RESULT_HANDLER = False  # TODO: Enable after testing
+        
+        if USE_FILTER_RESULT_HANDLER and self._filter_result_handler is not None:
+            logger.info(f"v4.3: Delegating filter completion to FilterResultHandler")
+            try:
+                # Get current_layer_id_before_filter from instance variable if available
+                current_layer_id = getattr(self, '_current_layer_id_before_filter', None)
+                self._filter_result_handler.handle_task_completion(
+                    task_name=task_name,
+                    source_layer=source_layer,
+                    task_parameters=task_parameters,
+                    current_layer_id_before_filter=current_layer_id
+                )
+                return
+            except Exception as e:
+                logger.warning(f"v4.3: FilterResultHandler failed, falling back to legacy: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                # Fall through to legacy code
 
         if task_name not in ('filter', 'unfilter', 'reset'):
             return
