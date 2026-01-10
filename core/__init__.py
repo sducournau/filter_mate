@@ -58,6 +58,16 @@ from .export import (
     ExportValidationResult,
 )
 
+# v4.0 EPIC-1 Phase E2: Geometry module
+from .geometry import (
+    apply_qgis_buffer,
+    create_buffered_memory_layer,
+    BufferConfig,
+    aggressive_geometry_repair,
+    repair_invalid_geometries,
+    convert_geometry_collection_to_multipolygon,
+)
+
 __all__ = [
     # Domain
     'FilterExpression',
@@ -93,4 +103,11 @@ __all__ = [
     'save_layer_style',
     'validate_export_parameters',
     'ExportValidationResult',
+    # Geometry (v4.0 EPIC-1 Phase E2)
+    'apply_qgis_buffer',
+    'create_buffered_memory_layer',
+    'BufferConfig',
+    'aggressive_geometry_repair',
+    'repair_invalid_geometries',
+    'convert_geometry_collection_to_multipolygon',
 ]

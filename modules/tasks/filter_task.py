@@ -5278,6 +5278,19 @@ class FilterEngineTask(QgsTask):
         return layer
 
 
+    def _store_warning_message(self, message):
+        """
+        Store a warning message for display in UI thread (thread-safe callback).
+        
+        v4.0 HELPER (EPIC-1 Phase E2): Callback for delegated geometry functions.
+        
+        Args:
+            message: Warning message to store
+        """
+        if message and message not in self.warning_messages:
+            self.warning_messages.append(message)
+
+
     def _get_buffer_distance_parameter(self):
         """
         Get buffer distance parameter from task configuration.
@@ -5296,6 +5309,8 @@ class FilterEngineTask(QgsTask):
         """
         Apply buffer using QGIS processing algorithm.
         
+        v4.0 DELEGATION (EPIC-1 Phase E2): Delegates to core.geometry.apply_qgis_buffer
+        
         Args:
             layer: Input layer
             buffer_distance: QgsProperty or float
@@ -5306,92 +5321,120 @@ class FilterEngineTask(QgsTask):
         Raises:
             Exception: If buffer operation fails
         """
-        # DISABLED: Geometry repair - let invalid geometries pass through
-        # layer = self._repair_invalid_geometries(layer)
-        # layer = self._fix_invalid_geometries(layer, 'alg_source_layer_params_fixgeometries_buffer')
-        
-        # CRITICAL DIAGNOSTIC: Check CRS type
-        crs = layer.crs()
-        is_geographic = crs.isGeographic()
-        crs_units = crs.mapUnits()
-        
-        # Log layer info with enhanced CRS diagnostics
-        logger.info(f"QGIS buffer: {layer.featureCount()} features, "
-                   f"CRS: {crs.authid()}, "
-                   f"Geometry type: {layer.geometryType()}, "
-                   f"wkbType: {layer.wkbType()}, "
-                   f"buffer_distance: {buffer_distance}")
-        logger.info(f"CRS diagnostics: isGeographic={is_geographic}, mapUnits={crs_units}")
-        
-        # CRITICAL: Check if CRS is geographic with large buffer value
-        if is_geographic:
-            # Evaluate buffer distance to get actual value
-            eval_distance = buffer_distance
-            if isinstance(buffer_distance, QgsProperty):
-                features = list(layer.getFeatures())
-                if features:
-                    context = QgsExpressionContext()
-                    context.setFeature(features[0])
-                    eval_distance = buffer_distance.value(context, 0)
+        # v4.0 DELEGATION (EPIC-1 Phase E2): Use core.geometry module (Strangler Fig pattern)
+        try:
+            from core.geometry import apply_qgis_buffer, BufferConfig
             
-            if eval_distance and float(eval_distance) > 1:
-                logger.warning(
-                    f"⚠️ GEOGRAPHIC CRS DETECTED with large buffer value!\n"
-                    f"  CRS: {crs.authid()} (units: degrees)\n"
-                    f"  Buffer: {eval_distance} DEGREES (this is likely wrong!)\n"
-                    f"  → A buffer of {eval_distance}° = ~{float(eval_distance) * 111}km at equator\n"
-                    f"  → This will likely fail or create invalid geometries\n"
-                    f"  SOLUTION: Reproject layer to a projected CRS (e.g., EPSG:3857, EPSG:2154) first"
-                )
-                raise Exception(
-                    f"Cannot apply buffer: Geographic CRS detected ({crs.authid()}) with buffer value {eval_distance}. "
-                    f"Buffer units would be DEGREES, not meters. "
-                    f"Please reproject your layer to a projected coordinate system (e.g., EPSG:3857 Web Mercator, "
-                    f"or EPSG:2154 Lambert 93 for France) before applying buffer."
-                )
-        
-        # Apply buffer with dissolve
-        # CRITICAL: Configure to skip invalid geometries instead of failing
-        alg_params = {
-            'DISSOLVE': True,
-            'DISTANCE': buffer_distance,
-            'END_CAP_STYLE': int(self.param_buffer_type),  # Use configured buffer type (0=Round, 1=Flat, 2=Square)
-            'INPUT': layer,
-            'JOIN_STYLE': int(0),
-            'MITER_LIMIT': float(2),
-            'SEGMENTS': int(self.param_buffer_segments),  # Use configured buffer segments (default: 5)
-            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
-        }
-        
-        logger.debug(f"Calling processing.run('qgis:buffer') with params: {alg_params}")
-        
-        # CRITICAL: Configure processing context to skip invalid geometries
-        context = QgsProcessingContext()
-        context.setInvalidGeometryCheck(QgsFeatureRequest.GeometryNoCheck)
-        feedback = QgsProcessingFeedback()
-        
-        self.outputs['alg_source_layer_params_buffer'] = processing.run(
-            'qgis:buffer', 
-            alg_params, 
-            context=context, 
-            feedback=feedback
-        )
-        layer = self.outputs['alg_source_layer_params_buffer']['OUTPUT']
-        
-        # CRITICAL FIX: Convert GeometryCollection to MultiPolygon
-        # This prevents "Impossible d'ajouter l'objet avec une géométrie de type 
-        # GeometryCollection à une couche de type MultiPolygon" errors when using
-        # the buffer result for spatial operations on typed GPKG layers
-        layer = self._convert_geometry_collection_to_multipolygon(layer)
-        
-        # Create spatial index
-        processing.run('qgis:createspatialindex', {"INPUT": layer})
-        
-        return layer
+            # Create buffer configuration
+            config = BufferConfig(
+                buffer_type=self.param_buffer_type,
+                buffer_segments=self.param_buffer_segments,
+                dissolve=True
+            )
+            
+            # Delegate to extracted module
+            buffered_layer = apply_qgis_buffer(
+                layer=layer,
+                buffer_distance=buffer_distance,
+                config=config,
+                convert_geometry_collection_fn=self._convert_geometry_collection_to_multipolygon
+            )
+            
+            # Store output for backward compatibility
+            self.outputs['alg_source_layer_params_buffer'] = {'OUTPUT': buffered_layer}
+            
+            return buffered_layer
+            
+        except ImportError:
+            # LEGACY FALLBACK: Keep original implementation for backward compatibility
+            # DISABLED: Geometry repair - let invalid geometries pass through
+            # layer = self._repair_invalid_geometries(layer)
+            # layer = self._fix_invalid_geometries(layer, 'alg_source_layer_params_fixgeometries_buffer')
+            
+            # CRITICAL DIAGNOSTIC: Check CRS type
+            crs = layer.crs()
+            is_geographic = crs.isGeographic()
+            crs_units = crs.mapUnits()
+            
+            # Log layer info with enhanced CRS diagnostics
+            logger.info(f"QGIS buffer: {layer.featureCount()} features, "
+                       f"CRS: {crs.authid()}, "
+                       f"Geometry type: {layer.geometryType()}, "
+                       f"wkbType: {layer.wkbType()}, "
+                       f"buffer_distance: {buffer_distance}")
+            logger.info(f"CRS diagnostics: isGeographic={is_geographic}, mapUnits={crs_units}")
+            
+            # CRITICAL: Check if CRS is geographic with large buffer value
+            if is_geographic:
+                # Evaluate buffer distance to get actual value
+                eval_distance = buffer_distance
+                if isinstance(buffer_distance, QgsProperty):
+                    features = list(layer.getFeatures())
+                    if features:
+                        context = QgsExpressionContext()
+                        context.setFeature(features[0])
+                        eval_distance = buffer_distance.value(context, 0)
+                
+                if eval_distance and float(eval_distance) > 1:
+                    logger.warning(
+                        f"⚠️ GEOGRAPHIC CRS DETECTED with large buffer value!\n"
+                        f"  CRS: {crs.authid()} (units: degrees)\n"
+                        f"  Buffer: {eval_distance} DEGREES (this is likely wrong!)\n"
+                        f"  → A buffer of {eval_distance}° = ~{float(eval_distance) * 111}km at equator\n"
+                        f"  → This will likely fail or create invalid geometries\n"
+                        f"  SOLUTION: Reproject layer to a projected CRS (e.g., EPSG:3857, EPSG:2154) first"
+                    )
+                    raise Exception(
+                        f"Cannot apply buffer: Geographic CRS detected ({crs.authid()}) with buffer value {eval_distance}. "
+                        f"Buffer units would be DEGREES, not meters. "
+                        f"Please reproject your layer to a projected coordinate system (e.g., EPSG:3857 Web Mercator, "
+                        f"or EPSG:2154 Lambert 93 for France) before applying buffer."
+                    )
+            
+            # Apply buffer with dissolve
+            # CRITICAL: Configure to skip invalid geometries instead of failing
+            alg_params = {
+                'DISSOLVE': True,
+                'DISTANCE': buffer_distance,
+                'END_CAP_STYLE': int(self.param_buffer_type),  # Use configured buffer type (0=Round, 1=Flat, 2=Square)
+                'INPUT': layer,
+                'JOIN_STYLE': int(0),
+                'MITER_LIMIT': float(2),
+                'SEGMENTS': int(self.param_buffer_segments),  # Use configured buffer segments (default: 5)
+                'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+            }
+            
+            logger.debug(f"Calling processing.run('qgis:buffer') with params: {alg_params}")
+            
+            # CRITICAL: Configure processing context to skip invalid geometries
+            context = QgsProcessingContext()
+            context.setInvalidGeometryCheck(QgsFeatureRequest.GeometryNoCheck)
+            feedback = QgsProcessingFeedback()
+            
+            self.outputs['alg_source_layer_params_buffer'] = processing.run(
+                'qgis:buffer', 
+                alg_params, 
+                context=context, 
+                feedback=feedback
+            )
+            layer = self.outputs['alg_source_layer_params_buffer']['OUTPUT']
+            
+            # CRITICAL FIX: Convert GeometryCollection to MultiPolygon
+            # This prevents "Impossible d'ajouter l'objet avec une géométrie de type 
+            # GeometryCollection à une couche de type MultiPolygon" errors when using
+            # the buffer result for spatial operations on typed GPKG layers
+            layer = self._convert_geometry_collection_to_multipolygon(layer)
+            
+            # Create spatial index
+            processing.run('qgis:createspatialindex', {"INPUT": layer})
+            
+            return layer
 
     def _convert_geometry_collection_to_multipolygon(self, layer):
         """
         Convert GeometryCollection geometries in a layer to MultiPolygon.
+        
+        v4.0 DELEGATION (EPIC-1 Phase E2): Delegates to core.geometry.convert_geometry_collection_to_multipolygon
         
         STABILITY FIX v2.3.9: Uses geometry_safety module to prevent
         access violations when handling GeometryCollections.
@@ -5411,7 +5454,14 @@ class FilterEngineTask(QgsTask):
         Returns:
             QgsVectorLayer: Layer with geometries converted to MultiPolygon
         """
+        # v4.0 DELEGATION (EPIC-1 Phase E2): Use core.geometry module (Strangler Fig pattern)
         try:
+            from core.geometry import convert_geometry_collection_to_multipolygon
+            
+            return convert_geometry_collection_to_multipolygon(layer)
+            
+        except ImportError:
+            # LEGACY FALLBACK: Keep original implementation
             # Check if any features have GeometryCollection type
             has_geometry_collection = False
             for feature in layer.getFeatures():
@@ -5718,6 +5768,8 @@ class FilterEngineTask(QgsTask):
         """
         Manually buffer layer features and create memory layer (fallback method).
         
+        v4.0 DELEGATION (EPIC-1 Phase E2): Delegates to core.geometry.create_buffered_memory_layer
+        
         Args:
             layer: Input layer
             buffer_distance: QgsProperty or float
@@ -5728,9 +5780,23 @@ class FilterEngineTask(QgsTask):
         Raises:
             Exception: If no valid geometries could be buffered
         """
-        # DISABLED: Skip pre-validation, accept geometries as-is
-        logger.info("Manual buffer: geometry validation DISABLED")
-        # layer = self._repair_invalid_geometries(layer)
+        # v4.0 DELEGATION (EPIC-1 Phase E2): Use core.geometry module (Strangler Fig pattern)
+        try:
+            from core.geometry import create_buffered_memory_layer
+            
+            return create_buffered_memory_layer(
+                layer=layer,
+                buffer_distance=buffer_distance,
+                buffer_segments=self.param_buffer_segments,
+                verify_spatial_index_fn=self._verify_and_create_spatial_index,
+                warning_callback=self._store_warning_message
+            )
+            
+        except ImportError:
+            # LEGACY FALLBACK: Keep original implementation
+            # DISABLED: Skip pre-validation, accept geometries as-is
+            logger.info("Manual buffer: geometry validation DISABLED")
+            # layer = self._repair_invalid_geometries(layer)
         
         feature_count = layer.featureCount()
         logger.info(f"Manual buffer: Layer has {feature_count} features, geomType={layer.geometryType()}, wkbType={layer.wkbType()}")
@@ -5788,14 +5854,24 @@ class FilterEngineTask(QgsTask):
         """
         Try multiple repair strategies for a geometry.
         
+        v4.0 DELEGATION (EPIC-1 Phase E2): Delegates to core.geometry.aggressive_geometry_repair
+        
         Args:
             geom: QgsGeometry to repair
             
         Returns:
             QgsGeometry or None: Repaired geometry if successful, None otherwise
         """
-        # Log initial state
-        logger.debug(f"🔧 Attempting geometry repair: wkbType={geom.wkbType()}, isEmpty={geom.isEmpty()}, isValid={geom.isGeosValid()}")
+        # v4.0 DELEGATION (EPIC-1 Phase E2): Use core.geometry module (Strangler Fig pattern)
+        try:
+            from core.geometry import aggressive_geometry_repair
+            
+            return aggressive_geometry_repair(geom)
+            
+        except ImportError:
+            # LEGACY FALLBACK: Keep original implementation
+            # Log initial state
+            logger.debug(f"🔧 Attempting geometry repair: wkbType={geom.wkbType()}, isEmpty={geom.isEmpty()}, isValid={geom.isGeosValid()}")
         
         # Strategy 1: Standard makeValid()
         try:
@@ -5860,14 +5936,27 @@ class FilterEngineTask(QgsTask):
         Validate and repair invalid geometries in a layer.
         Creates a new memory layer with repaired geometries if needed.
         
+        v4.0 DELEGATION (EPIC-1 Phase E2): Delegates to core.geometry.repair_invalid_geometries
+        
         Args:
             layer: Input layer to check and repair
             
         Returns:
             QgsVectorLayer: Original layer if all valid, or new layer with repaired geometries
         """
-        total_features = layer.featureCount()
-        invalid_count = 0
+        # v4.0 DELEGATION (EPIC-1 Phase E2): Use core.geometry module (Strangler Fig pattern)
+        try:
+            from core.geometry import repair_invalid_geometries
+            
+            return repair_invalid_geometries(
+                layer=layer,
+                verify_spatial_index_fn=self._verify_and_create_spatial_index
+            )
+            
+        except ImportError:
+            # LEGACY FALLBACK: Keep original implementation
+            total_features = layer.featureCount()
+            invalid_count = 0
         repaired_count = 0
         
         # First pass: check for invalid geometries
