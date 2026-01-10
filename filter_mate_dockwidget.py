@@ -4486,102 +4486,46 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return icon
         
     def filtering_populate_predicates_chekableCombobox(self):
-        # v3.1 STORY-2.4: Get predicates from controller if available
-        if self._controller_integration is not None:
+        """v3.1 Sprint 12: Simplified - populate geometric predicates combobox."""
+        predicates = None
+        if self._controller_integration:
             predicates = self._controller_integration.delegate_filtering_get_available_predicates()
-            if predicates is not None:
-                self.predicates = predicates
-            else:
-                self.predicates = ["Intersect","Contain","Disjoint","Equal","Touch","Overlap","Are within","Cross"]
-        else:
-            self.predicates = ["Intersect","Contain","Disjoint","Equal","Touch","Overlap","Are within","Cross"]
+        self.predicates = predicates or ["Intersect","Contain","Disjoint","Equal","Touch","Overlap","Are within","Cross"]
         self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].clear()
         self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].addItems(self.predicates)
 
     def filtering_populate_buffer_type_combobox(self):
-        """Initialize buffer_type combobox with end cap style options.
-        
-        v3.1 STORY-2.4: Gets buffer types from controller if available.
-        """
-        # v3.1 STORY-2.4: Get buffer types from controller if available
-        if self._controller_integration is not None:
+        """v3.1 Sprint 12: Simplified - populate buffer type combobox."""
+        buffer_types = None
+        if self._controller_integration:
             buffer_types = self._controller_integration.delegate_filtering_get_available_buffer_types()
-            if buffer_types is None:
-                buffer_types = ["Round", "Flat", "Square"]
-        else:
-            buffer_types = ["Round", "Flat", "Square"]
         self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].clear()
-        self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].addItems(buffer_types)
-        # Set default to Round if not already set
-        if self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].currentText() == "":
+        self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].addItems(buffer_types or ["Round", "Flat", "Square"])
+        if not self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].currentText():
             self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].setCurrentIndex(0)
 
 
     def filtering_populate_layers_chekableCombobox(self, layer=None):
-        """
-        Populate layers-to-filter checkable combobox.
-        
-        v3.1 Sprint 5: Simplified - delegates to FilteringController.
-        """
+        """v3.1 Sprint 12: Simplified - populate layers-to-filter combobox via controller."""
         if not self.widgets_initialized:
             return
-        
-        # Delegate to controller
         if self._controller_integration:
-            if self._controller_integration.delegate_populate_layers_checkable_combobox(layer):
-                return
-        
-        # Minimal fallback: just log warning
-        logger.warning("filtering_populate_layers_chekableCombobox: Controller delegation failed")
+            self._controller_integration.delegate_populate_layers_checkable_combobox(layer)
 
     def exporting_populate_combobox(self):
-        """
-        Populate export combobox with available layers.
-        
-        v3.1 Sprint 5: Simplified - delegates to ExportingController.
-        """
-        # Delegate to controller
+        """v3.1 Sprint 12: Simplified - populate export combobox via controller."""
         if self._controller_integration:
-            if self._controller_integration.delegate_populate_export_combobox():
-                return
-        # No fallback - controller handles all logic
+            self._controller_integration.delegate_populate_export_combobox()
 
     def _apply_auto_configuration(self):
-        """
-        Auto-detect and apply UI profile and theme based on environment.
-        
-        Detects UI profile from screen resolution and theme from QGIS settings.
-        Logs configuration results for debugging.
-        
-        Returns:
-            dict: Auto-configuration results with detected profile and theme
-        """
+        """v3.1 Sprint 12: Simplified - auto-detect and apply UI profile and theme."""
         if not UI_CONFIG_AVAILABLE:
             return {}
-        
-        auto_config_result = ui_utils.auto_configure_from_environment(self.CONFIG_DATA)
-        
-        # Log auto-configuration results
-        logger.info(f"FilterMate auto-configuration completed:")
-        logger.info(f"  - Profile: {auto_config_result.get('profile_detected')} "
-                   f"({auto_config_result.get('profile_source')})")
-        logger.info(f"  - Theme: {auto_config_result.get('theme_detected')} "
-                   f"({auto_config_result.get('theme_source')})")
-        logger.info(f"  - Resolution: {auto_config_result.get('screen_resolution')}")
-        
-        return auto_config_result
+        return ui_utils.auto_configure_from_environment(self.CONFIG_DATA)
 
     def _apply_stylesheet(self):
-        """
-        Apply stylesheet using StyleLoader with config colors.
-        
-        Theme is automatically detected from config.json ACTIVE_THEME or QGIS.
-        StyleLoader handles QSS loading, color replacement, and caching.
-        """
-        StyleLoader.set_theme_from_config(
-            self.dockWidgetContents, 
-            self.CONFIG_DATA
-        )
+        """v3.1 Sprint 12: Simplified - apply stylesheet using StyleLoader."""
+        StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA)
 
     def _configure_pushbuttons(self, pushButton_config, icons_sizes, font):
         """
@@ -4970,176 +4914,65 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def set_widgets_enabled_state(self, state):
-        """
-        Enable or disable all plugin widgets.
-        
-        Iterates through all registered widgets and sets their enabled state.
-        Special handling for checkable buttons and collapsible groupboxes.
-        
-        Args:
-            state (bool): True to enable widgets, False to disable
-            
-        Notes:
-            - Excludes JsonTreeView, LayerTreeView, JsonModel, ToolBox from state changes
-            - Checkable buttons are unchecked when disabled
-            - GroupBoxes are collapsed when disabled
-            - Called during initialization and when layers are added/removed
-            - Central method for UI responsiveness control
-            - SAFETY: Blocks all signals during state changes to prevent race conditions
-        """
-        logger.debug(f"set_widgets_enabled_state({state}) called")
-        widget_count = 0
+        """v3.1 Sprint 12: Simplified - enable or disable all plugin widgets."""
         for widget_group in self.widgets:
             for widget_name in self.widgets[widget_group]:
                 if self.widgets[widget_group][widget_name]["TYPE"] not in ("JsonTreeView","LayerTreeView","JsonModel","ToolBox"):
                     widget = self.widgets[widget_group][widget_name]["WIDGET"]
-                    
-                    # SAFETY: Block signals to prevent race conditions during state changes
-                    # This prevents setChecked(False) from triggering toggled signals
-                    # that could cause access violations when layers are being destroyed
                     was_blocked = widget.blockSignals(True)
                     try:
                         if self.widgets[widget_group][widget_name]["TYPE"] in ("PushButton", "GroupBox"):
-                            if widget.isCheckable():
-                                if state is False:
-                                    widget.setChecked(state)
-                                    if self.widgets[widget_group][widget_name]["TYPE"] == "GroupBox":
-                                        widget.setCollapsed(True)
+                            if widget.isCheckable() and not state:
+                                widget.setChecked(False)
+                                if self.widgets[widget_group][widget_name]["TYPE"] == "GroupBox":
+                                    widget.setCollapsed(True)
                         widget.setEnabled(state)
                     finally:
-                        # Always restore signal blocking state
                         widget.blockSignals(was_blocked)
-                    
-                    widget_count += 1
-        logger.debug(f"{widget_count} widgets set to enabled={state}")
-
 
 
     def connect_widgets_signals(self):
-        """
-        Connect all widget signals to their respective slot handlers.
-        
-        Iterates through widget registry and establishes signal-slot connections
-        using manageSignal(). Errors are silently caught as some widgets may not
-        have signals available.
-        
-        Notes:
-            - Skips QGIS widget group (handled separately)
-            - Uses manageSignal() for centralized signal management
-            - Safe to call multiple times (idempotent)
-            - Called after layers are loaded or project changes
-            - Pairs with disconnect_widgets_signals()
-        """
+        """v3.1 Sprint 12: Simplified - connect all widget signals."""
         for widget_group in self.widgets:
             if widget_group != 'QGIS':
                 for widget in self.widgets[widget_group]:
                     try:
                         self.manageSignal([widget_group, widget], 'connect')
-                    except (AttributeError, RuntimeError, TypeError, SignalStateChangeError) as e:
-                        # Widget may not exist or signal not available
+                    except (AttributeError, RuntimeError, TypeError, SignalStateChangeError):
                         pass
 
     def disconnect_widgets_signals(self):
-        """
-        Safely disconnect all widget signals.
-        
-        Critical for preventing Qt access violations during task execution.
-        
-        Notes:
-            - CRITICAL FIX: Prevents crashes during task execution
-            - Handles already-deleted widgets gracefully
-            - Called before long-running tasks or layer removal
-            - Essential for plugin stability
-            - Pairs with connect_widgets_signals()
-            
-        Raises:
-            No exceptions propagated - all errors caught and logged
-        """
-        # CRITICAL FIX: Protect against Qt access violations during task execution
-        # DO NOT call processEvents() inside the loop - it can trigger widget destruction
-        # during iteration, causing access violations
-        
-        # Guard against None widgets (can happen during initialization or cleanup)
+        """v3.1 Sprint 12: Simplified - safely disconnect all widget signals."""
         if self.widgets is None:
-            logger.debug("disconnect_widgets_signals: widgets is None, skipping")
             return
-        
         for widget_group in self.widgets:
             if widget_group != 'QGIS':
                 for widget in self.widgets[widget_group]:
                     try:
                         self.manageSignal([widget_group, widget], 'disconnect')
-                    except (AttributeError, RuntimeError, TypeError, SignalStateChangeError) as e:
-                        # Widget may not exist, already deleted, or signal not connected
-                        logger.debug(f"Could not disconnect signal for {widget_group}.{widget}: {e}")
+                    except (AttributeError, RuntimeError, TypeError, SignalStateChangeError):
+                        pass
 
     def force_reconnect_action_signals(self):
-        """
-        Force reconnection of ACTION widget signals, bypassing the cache.
-        
-        v2.9.24: CRITICAL FIX for "actions don't trigger tasks after filter" bug.
-        
-        The signal connection cache (_signal_connection_states) can become desynchronized
-        with the actual signal state. This method bypasses the cache and forces direct
-        reconnection of ACTION signals (FILTER, UNFILTER, UNDO_FILTER, REDO_FILTER, EXPORT).
-        
-        Called after filter/unfilter/reset operations complete to ensure buttons work.
-        
-        Notes:
-            - Clears ACTION signal cache entries before reconnecting
-            - Uses changeSignalState directly for actual signal state check
-            - Safe to call multiple times (idempotent)
-            - Logs reconnection status for debugging
-        """
-        logger.info("v2.9.24: Force reconnecting ACTION signals (bypassing cache)")
-        
+        """v3.1 Sprint 12: Simplified - force reconnect ACTION signals bypassing cache."""
         if 'ACTION' not in self.widgets:
-            logger.warning("v2.9.24: ACTION widget group not found")
             return
         
-        action_widgets = ['FILTER', 'UNFILTER', 'UNDO_FILTER', 'REDO_FILTER', 'EXPORT']
-        reconnected_count = 0
-        
-        for widget_name in action_widgets:
+        for widget_name in ['FILTER', 'UNFILTER', 'UNDO_FILTER', 'REDO_FILTER', 'EXPORT']:
             if widget_name not in self.widgets['ACTION']:
                 continue
-                
             widget_obj = self.widgets['ACTION'][widget_name]
-            
             for signal_tuple in widget_obj.get("SIGNALS", []):
                 if signal_tuple[-1] is None:
-                    continue  # Skip signals with no handler
-                    
-                signal_name = signal_tuple[0]
-                handler = signal_tuple[-1]
-                
-                # Clear cache entry to force re-evaluation
+                    continue
+                signal_name, handler = signal_tuple[0], signal_tuple[-1]
                 cache_key = f"ACTION.{widget_name}.{signal_name}"
-                if cache_key in self._signal_connection_states:
-                    del self._signal_connection_states[cache_key]
-                
+                self._signal_connection_states.pop(cache_key, None)
                 try:
-                    # Use changeSignalState which checks actual signal state
-                    state = self.changeSignalState(
-                        ['ACTION', widget_name],
-                        signal_name,
-                        handler,
-                        'connect'
-                    )
-                    
-                    # Update cache with actual state
+                    state = self.changeSignalState(['ACTION', widget_name], signal_name, handler, 'connect')
                     self._signal_connection_states[cache_key] = state
-                    
-                    if state is True:
-                        reconnected_count += 1
-                        logger.debug(f"v2.9.24: ✅ {widget_name}.{signal_name} connected")
-                    else:
-                        logger.warning(f"v2.9.24: ⚠️ {widget_name}.{signal_name} state={state}")
-                        
-                except (AttributeError, RuntimeError, TypeError, SignalStateChangeError) as e:
-                    logger.error(f"v2.9.24: ❌ Failed to reconnect {widget_name}.{signal_name}: {e}")
-        
-        logger.info(f"v2.9.24: Reconnected {reconnected_count} ACTION signals")
+                except (AttributeError, RuntimeError, TypeError, SignalStateChangeError):
+                    pass
 
     def force_reconnect_exploring_signals(self):
         """
@@ -5184,13 +5017,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     pass
 
     def manage_interactions(self):
-        """
-        Initialize widget interactions and default values.
-        
-        Sets up initial widget states, default values, and connects signals
-        if layers are already loaded. Called once during dockwidget construction.
-        """
-        """INIT"""
+        """v3.1 Sprint 12: Simplified - initialize widget interactions and default values."""
         self.coordinateReferenceSystem = QgsCoordinateReferenceSystem()
         
         self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setExpressionsEnabled(True)
@@ -5199,101 +5026,52 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.PROJECT:
             self.widgets["EXPORTING"]["PROJECTION_TO_EXPORT"]["WIDGET"].setCrs(self.PROJECT.crs())
         
-        # Only enable widgets if PROJECT_LAYERS is already populated
-        # Otherwise, wait for get_project_layers_from_app() to enable them when data is ready
-        if self.has_loaded_layers is True and len(self.PROJECT_LAYERS) > 0:
+        if self.has_loaded_layers and self.PROJECT_LAYERS:
             self.set_widgets_enabled_state(True)
             self.connect_widgets_signals()
         else:
             self.set_widgets_enabled_state(False)
-            # CRITICAL: Connect DOCK groupbox signals even when no layers loaded
-            # These widgets control UI state and don't depend on layer data
-            try:
-                self.manageSignal(["DOCK", "SINGLE_SELECTION"], 'connect')
-                self.manageSignal(["DOCK", "MULTIPLE_SELECTION"], 'connect')
-                self.manageSignal(["DOCK", "CUSTOM_SELECTION"], 'connect')
-            except (AttributeError, RuntimeError, TypeError, SignalStateChangeError) as e:
-                logger.debug(f"Could not connect DOCK groupbox signals (no layers): {type(e).__name__}: {e}")
+            for signal_path in [["DOCK", "SINGLE_SELECTION"], ["DOCK", "MULTIPLE_SELECTION"], ["DOCK", "CUSTOM_SELECTION"]]:
+                try:
+                    self.manageSignal(signal_path, 'connect')
+                except (AttributeError, RuntimeError, TypeError, SignalStateChangeError):
+                    pass
         
-        # CRITICAL FIX: Connect groupbox signals DIRECTLY to ensure they work
-        # This bypasses the manageSignal system which may have caching issues
         self._connect_groupbox_signals_directly()
-        
         self.filtering_populate_predicates_chekableCombobox()
-        
         self.filtering_populate_buffer_type_combobox()
 
-        # Note: DOCK widget signals (SINGLE_SELECTION, MULTIPLE_SELECTION, CUSTOM_SELECTION, TOOLS)
-        # are already connected via connect_widgets_signals() above.
-        # No need for manual connection to avoid double signal firing.
-        
-        # Configuration model signal is now connected in manage_configuration_model()
-        # to ensure it's connected immediately after model creation
-        # self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].filterExpressionChanged()
-        
-        # self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].contextMenuEvent
-        # self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].contextMenuEvent
-
-        if self.init_layer is not None and isinstance(self.init_layer, QgsVectorLayer):
-            logger.info(f"FilterMate manage_interactions: init_layer found: {self.init_layer.name()}")
+        if self.init_layer and isinstance(self.init_layer, QgsVectorLayer):
             self.manage_output_name()
-            logger.debug("FilterMate manage_interactions: manage_output_name() done")
             self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'disconnect')
             self.exporting_populate_combobox()
-            logger.debug("FilterMate manage_interactions: exporting_populate_combobox() done")
             self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
             self.set_exporting_properties()
-            logger.debug("FilterMate manage_interactions: set_exporting_properties() done")
             self.exploring_groupbox_init()
-            logger.debug("FilterMate manage_interactions: exploring_groupbox_init() done")
             self.current_layer_changed(self.init_layer)
-            logger.debug("FilterMate manage_interactions: current_layer_changed() done")
             self.filtering_auto_current_layer_changed()
-            logger.info("FilterMate manage_interactions: init_layer processing complete")
 
             
     def select_tabTools_index(self):
+        """v3.1 Sprint 12: Simplified - update action buttons based on active tab."""
+        if not self.widgets_initialized:
+            return
+        self.tabTools_current_index = self.widgets["DOCK"]["TOOLS"]["WIDGET"].currentIndex()
         
-        if self.widgets_initialized is True:
-
-            self.tabTools_current_index = self.widgets["DOCK"]["TOOLS"]["WIDGET"].currentIndex()
-            
-            # Index 0: FILTERING panel active
-            if self.tabTools_current_index == 0:
-                # Enable filter, undo, redo, unfilter buttons
-                self.widgets["ACTION"]["FILTER"]["WIDGET"].setEnabled(True)
-                self.widgets["ACTION"]["UNDO_FILTER"]["WIDGET"].setEnabled(True)
-                self.widgets["ACTION"]["REDO_FILTER"]["WIDGET"].setEnabled(True)
-                self.widgets["ACTION"]["UNFILTER"]["WIDGET"].setEnabled(True)
-                # Disable export button
-                self.widgets["ACTION"]["EXPORT"]["WIDGET"].setEnabled(False)
-                # Keep about button enabled
-                self.widgets["ACTION"]["ABOUT"]["WIDGET"].setEnabled(True)
-            
-            # Index 1: EXPORTING panel active
-            elif self.tabTools_current_index == 1:
-                # Disable filter, undo, redo, unfilter buttons
-                self.widgets["ACTION"]["FILTER"]["WIDGET"].setEnabled(False)
-                self.widgets["ACTION"]["UNDO_FILTER"]["WIDGET"].setEnabled(False)
-                self.widgets["ACTION"]["REDO_FILTER"]["WIDGET"].setEnabled(False)
-                self.widgets["ACTION"]["UNFILTER"]["WIDGET"].setEnabled(False)
-                # Enable export button
-                self.widgets["ACTION"]["EXPORT"]["WIDGET"].setEnabled(True)
-                # Keep about button enabled
-                self.widgets["ACTION"]["ABOUT"]["WIDGET"].setEnabled(True)
-            
-            # Index 2: CONFIGURATION panel active
-            elif self.tabTools_current_index == 2:
-                # Disable filter, undo, redo, unfilter, export buttons
-                self.widgets["ACTION"]["FILTER"]["WIDGET"].setEnabled(False)
-                self.widgets["ACTION"]["UNDO_FILTER"]["WIDGET"].setEnabled(False)
-                self.widgets["ACTION"]["REDO_FILTER"]["WIDGET"].setEnabled(False)
-                self.widgets["ACTION"]["UNFILTER"]["WIDGET"].setEnabled(False)
-                self.widgets["ACTION"]["EXPORT"]["WIDGET"].setEnabled(False)
-                # Keep only about button enabled
-                self.widgets["ACTION"]["ABOUT"]["WIDGET"].setEnabled(True)
-
-            self.set_exporting_properties()
+        # Button states: (FILTER, UNDO, REDO, UNFILTER, EXPORT)
+        states = {
+            0: (True, True, True, True, False),   # Filtering tab
+            1: (False, False, False, False, True), # Exporting tab
+            2: (False, False, False, False, False) # Configuration tab
+        }
+        s = states.get(self.tabTools_current_index, (False, False, False, False, False))
+        self.widgets["ACTION"]["FILTER"]["WIDGET"].setEnabled(s[0])
+        self.widgets["ACTION"]["UNDO_FILTER"]["WIDGET"].setEnabled(s[1])
+        self.widgets["ACTION"]["REDO_FILTER"]["WIDGET"].setEnabled(s[2])
+        self.widgets["ACTION"]["UNFILTER"]["WIDGET"].setEnabled(s[3])
+        self.widgets["ACTION"]["EXPORT"]["WIDGET"].setEnabled(s[4])
+        self.widgets["ACTION"]["ABOUT"]["WIDGET"].setEnabled(True)
+        self.set_exporting_properties()
 
     def _connect_groupbox_signals_directly(self):
         """
@@ -7057,100 +6835,60 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def properties_group_state_enabler(self, tuple_group):
-
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
-            for tuple in tuple_group:
-                # Skip tuples that don't have a corresponding widget (data-only properties)
-                if tuple[0].upper() not in self.widgets:
-                    continue
-                if tuple[1].upper() not in self.widgets[tuple[0].upper()]:
-                    continue
-                    
-                widget_type = self.widgets[tuple[0].upper()][tuple[1].upper()]["TYPE"]
-                
-                # Special handling for output_folder and zip buttons - only enable if layers are selected
-                if tuple[1] in ['has_output_folder_to_export', 'has_zip_to_export']:
-                    # Check if any layers are selected
-                    has_layers_selected = False
-                    if hasattr(self, 'checkableComboBoxLayer_exporting_layers'):
-                        for i in range(self.checkableComboBoxLayer_exporting_layers.count()):
-                            if self.checkableComboBoxLayer_exporting_layers.itemCheckState(i) == Qt.Checked:
-                                has_layers_selected = True
-                                break
-                    self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setEnabled(has_layers_selected)
-                else:
-                    self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setEnabled(True)
-                
-                # Ensure QgsFieldExpressionWidget is always linked to current layer when enabled
-                if widget_type == 'QgsFieldExpressionWidget' and self.current_layer is not None:
-                    self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setLayer(self.current_layer)
+        """v3.1 Sprint 12: Simplified - enable widgets in a property group."""
+        if not self.widgets_initialized or not self.has_loaded_layers:
+            return
+        for t in tuple_group:
+            if t[0].upper() not in self.widgets or t[1].upper() not in self.widgets[t[0].upper()]:
+                continue
+            widget_entry = self.widgets[t[0].upper()][t[1].upper()]
+            if t[1] in ['has_output_folder_to_export', 'has_zip_to_export']:
+                has_layers = any(self.checkableComboBoxLayer_exporting_layers.itemCheckState(i) == Qt.Checked 
+                               for i in range(self.checkableComboBoxLayer_exporting_layers.count())) if hasattr(self, 'checkableComboBoxLayer_exporting_layers') else False
+                widget_entry["WIDGET"].setEnabled(has_layers)
+            else:
+                widget_entry["WIDGET"].setEnabled(True)
+            if widget_entry["TYPE"] == 'QgsFieldExpressionWidget' and self.current_layer:
+                widget_entry["WIDGET"].setLayer(self.current_layer)
 
 
     def properties_group_state_reset_to_default(self, tuple_group, group_name, state):
-        """
-        Reset a property group to its default values.
-        
-        v4.0 Sprint 3: Delegates to PropertyController when available.
-        """
-        # v4.0 Sprint 3: Delegation to PropertyController (Sprint 5: fallback removed)
+        """v3.1 Sprint 12: Simplified - reset property group to defaults via controller."""
         if self._controller_integration and self._controller_integration.property_controller:
             try:
                 if self._controller_integration.delegate_reset_property_group(tuple_group, group_name, state):
-                    logger.debug("properties_group_state_reset_to_default: delegated to PropertyController")
                     return
-            except Exception as e:
-                logger.debug(f"properties_group_state_reset_to_default delegation failed: {e}")
-        
-        # No fallback - controller handles all logic
-        logger.warning("properties_group_state_reset_to_default: Controller delegation failed")
+            except Exception:
+                pass
 
     def filtering_init_buffer_property(self):
+        """v3.1 Sprint 12: Simplified - init buffer property override widget."""
+        if not self.widgets_initialized or not self.has_loaded_layers:
+            return
+        if not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS:
+            return
 
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
-
-            # CRITICAL: Verify current_layer and its presence in PROJECT_LAYERS
-            if self.current_layer is None or self.current_layer.id() not in self.PROJECT_LAYERS:
-                logger.debug("filtering_init_buffer_property: No valid current_layer or not in PROJECT_LAYERS")
-                return
-
-            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]   
-
-            name = str("{}_buffer_property_definition".format(self.current_layer.id()))
-            description = str("Replace unique buffer value with values based on expression for {}".format(self.current_layer.id()))
-            property_definition = QgsPropertyDefinition(name, QgsPropertyDefinition.DataTypeNumeric, description, 'Expression must returns numeric values (unit is in meters)')
-            
-            buffer_expression = layer_props["filtering"]["buffer_value_expression"]
-            # Ensure buffer_expression is a string (handle legacy data with int/float values)
-            if not isinstance(buffer_expression, str):
-                buffer_expression = str(buffer_expression) if buffer_expression else ''
-                # Update stored value to string format
-                layer_props["filtering"]["buffer_value_expression"] = buffer_expression
-            
-            has_valid_expression = buffer_expression and buffer_expression.strip()
-            
-            if has_valid_expression:
-                property = QgsProperty.fromExpression(buffer_expression)
-            else:
-                property = QgsProperty()
-                
-            # Initialize the property button with the layer context
-            self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].init(0, property, property_definition, self.current_layer)
-            
-            # CRITICAL FIX: Check if HAS_BUFFER_VALUE button is checked
-            # The spinbox should only be enabled if this button is checked
-            has_buffer_value_checked = layer_props["filtering"].get("has_buffer_value", False)
-            
-            # Check if property button is active AND has valid expression
-            is_active = layer_props["filtering"]["buffer_value_property"]
-            
-            # Spinbox enabled only when:
-            # 1. HAS_BUFFER_VALUE button is checked
-            # 2. Property button is NOT active with valid expression
-            spinbox_enabled = has_buffer_value_checked and not (is_active and has_valid_expression)
-            self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(spinbox_enabled)
-            
-            # Also enable/disable the property override button based on HAS_BUFFER_VALUE state
-            self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setEnabled(has_buffer_value_checked)
+        layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+        layer_id = self.current_layer.id()
+        
+        name = f"{layer_id}_buffer_property_definition"
+        description = f"Replace unique buffer value with values based on expression for {layer_id}"
+        prop_def = QgsPropertyDefinition(name, QgsPropertyDefinition.DataTypeNumeric, description, 'Expression must returns numeric values (unit is in meters)')
+        
+        buffer_expr = layer_props["filtering"]["buffer_value_expression"]
+        if not isinstance(buffer_expr, str):
+            buffer_expr = str(buffer_expr) if buffer_expr else ''
+            layer_props["filtering"]["buffer_value_expression"] = buffer_expr
+        
+        prop = QgsProperty.fromExpression(buffer_expr) if buffer_expr and buffer_expr.strip() else QgsProperty()
+        self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].init(0, prop, prop_def, self.current_layer)
+        
+        has_buffer_checked = layer_props["filtering"].get("has_buffer_value", False)
+        is_active = layer_props["filtering"]["buffer_value_property"]
+        has_valid_expr = bool(buffer_expr and buffer_expr.strip())
+        
+        self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(has_buffer_checked and not (is_active and has_valid_expr))
+        self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setEnabled(has_buffer_checked)
 
 
     def filtering_buffer_property_changed(self):
@@ -7247,456 +6985,243 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.widgets["FILTERING"]["BUFFER_SEGMENTS"]["WIDGET"].setEnabled(is_checked)
 
     def _update_centroids_source_checkbox_state(self):
-        """Update enabled state of checkBox_filtering_use_centroids_source_layer.
-        
-        The checkbox should only be enabled when:
-        - comboBox_filtering_current_layer is not empty (has a valid layer)
-        - comboBox_filtering_current_layer is enabled
-        """
+        """v3.1 Sprint 12: Simplified - update centroids checkbox enabled state."""
         if not self.widgets_initialized:
             return
-        
-        # Check if comboBox_filtering_current_layer has a valid layer and is enabled
-        combo_widget = self.widgets.get("FILTERING", {}).get("CURRENT_LAYER", {}).get("WIDGET")
-        checkbox_widget = self.widgets.get("FILTERING", {}).get("USE_CENTROIDS_SOURCE_LAYER", {}).get("WIDGET")
-        
-        if combo_widget and checkbox_widget:
-            # Enable checkbox only if comboBox has a layer AND is enabled
-            current_layer = combo_widget.currentLayer()
-            combo_enabled = combo_widget.isEnabled()
-            
-            should_enable = current_layer is not None and combo_enabled
-            checkbox_widget.setEnabled(should_enable)
-            
-            logger.debug(f"_update_centroids_source_checkbox_state: layer={current_layer.name() if current_layer else 'None'}, "
-                        f"combo_enabled={combo_enabled}, checkbox_enabled={should_enable}")
+        combo = self.widgets.get("FILTERING", {}).get("CURRENT_LAYER", {}).get("WIDGET")
+        checkbox = self.widgets.get("FILTERING", {}).get("USE_CENTROIDS_SOURCE_LAYER", {}).get("WIDGET")
+        if combo and checkbox:
+            checkbox.setEnabled(combo.currentLayer() is not None and combo.isEnabled())
 
               
     def dialog_export_output_path(self):
+        """v3.1 Sprint 12: Simplified - dialog for export output path."""
+        if not self.widgets_initialized or not self.has_loaded_layers:
+            return
+        path = ''
+        state = self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].isChecked()
+        datatype = self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].currentText() if self.widgets["EXPORTING"]["HAS_DATATYPE_TO_EXPORT"]["WIDGET"].isChecked() else ''
 
-        if self.widgets_initialized and self.has_loaded_layers:
-
-            path = ''
-            datatype = ''
-
-            state = self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].isChecked()
-
-            if self.widgets["EXPORTING"]["HAS_DATATYPE_TO_EXPORT"]["WIDGET"].isChecked():  
-                datatype = self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].currentText()
-
-            if state:
-
-                if self.widgets["EXPORTING"]["HAS_LAYERS_TO_EXPORT"]["WIDGET"].isChecked():
-
-                    layers = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].checkedItems()
-                    if len(layers) == 1 and datatype != '':
-
-                        layer = layers[0]
-                        regexp_layer = re.search('.* ', layer)
-                        if regexp_layer is not None:
-                            layer = regexp_layer.group()
-                        path = str(QtWidgets.QFileDialog.getSaveFileName(self, 'Save your layer to a file', os.path.join(self.current_project_path, self.output_name + '_' + layer.strip()) ,'*.{}'.format(datatype))[0])
-
-                    elif datatype.upper() == 'GPKG':
-
-                        path = str(QtWidgets.QFileDialog.getSaveFileName(self, 'Save your layer to a file', os.path.join(self.current_project_path, self.output_name + '.gpkg') ,'*.gpkg')[0])
-                    
-                    else:
-                    
-                        path = str(QtWidgets.QFileDialog.getExistingDirectory(self, 'Select a folder where to export your layers', self.current_project_path))
-
+        if state:
+            if self.widgets["EXPORTING"]["HAS_LAYERS_TO_EXPORT"]["WIDGET"].isChecked():
+                layers = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].checkedItems()
+                if len(layers) == 1 and datatype:
+                    layer = layers[0]
+                    match = re.search('.* ', layer)
+                    layer = match.group() if match else layer
+                    path = str(QtWidgets.QFileDialog.getSaveFileName(self, 'Save your layer to a file', os.path.join(self.current_project_path, self.output_name + '_' + layer.strip()), f'*.{datatype}')[0])
+                elif datatype.upper() == 'GPKG':
+                    path = str(QtWidgets.QFileDialog.getSaveFileName(self, 'Save your layer to a file', os.path.join(self.current_project_path, self.output_name + '.gpkg'), '*.gpkg')[0])
                 else:
-                
                     path = str(QtWidgets.QFileDialog.getExistingDirectory(self, 'Select a folder where to export your layers', self.current_project_path))
-
-                if path is not None and path != '':
-                    path = os.path.normcase(path)
-                    self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].setText(path)
-                else:
-                    state = False
-                    self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear()
             else:
-                self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear()
+                path = str(QtWidgets.QFileDialog.getExistingDirectory(self, 'Select a folder where to export your layers', self.current_project_path))
 
-            self.project_property_changed('has_output_folder_to_export', state)
-            self.project_property_changed('output_folder_to_export', path)
+            if path:
+                self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].setText(os.path.normcase(path))
+            else:
+                state = False
+                self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear()
+        else:
+            self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear()
+
+        self.project_property_changed('has_output_folder_to_export', state)
+        self.project_property_changed('output_folder_to_export', path)
 
 
     def reset_export_output_path(self):
-
-        if self.widgets_initialized and self.has_loaded_layers:
-
-            if str(self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].text()) == '':
-                self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear()
-                self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].setChecked(False)
-                self.project_property_changed('has_output_folder_to_export', False)
-                self.project_property_changed('output_folder_to_export', '')
+        """v3.1 Sprint 12: Simplified - reset export output path."""
+        if not self.widgets_initialized or not self.has_loaded_layers:
+            return
+        if not self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].text():
+            self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear()
+            self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].setChecked(False)
+            self.project_property_changed('has_output_folder_to_export', False)
+            self.project_property_changed('output_folder_to_export', '')
 
     def dialog_export_output_pathzip(self):
-
-        if self.widgets_initialized and self.has_loaded_layers:
-            
-            path = ''
-            state = self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].isChecked()
-
-            if state:
-
-                path = str(QtWidgets.QFileDialog.getSaveFileName(self, 'Save your exported data to a zip file', os.path.join(self.current_project_path, self.output_name) ,'*.zip')[0])
-
-                if path is not None and path != '':
-                    path = os.path.normcase(path)
-                    self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].setText(path)
-                else:
-                    state = False
-                    self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].clear()
+        """v3.1 Sprint 12: Simplified - dialog for zip export path."""
+        if not self.widgets_initialized or not self.has_loaded_layers:
+            return
+        path = ''
+        state = self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].isChecked()
+        if state:
+            path = str(QtWidgets.QFileDialog.getSaveFileName(self, 'Save your exported data to a zip file', os.path.join(self.current_project_path, self.output_name), '*.zip')[0])
+            if path:
+                self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].setText(os.path.normcase(path))
             else:
+                state = False
                 self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].clear()
-                
-            self.project_property_changed('has_zip_to_export', state)
-            self.project_property_changed('zip_to_export', path)
-
+        else:
+            self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].clear()
+        self.project_property_changed('has_zip_to_export', state)
+        self.project_property_changed('zip_to_export', path)
 
     def reset_export_output_pathzip(self):
-
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
-                
-            if str(self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].text()) == '':
-                self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].clear()
-                self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].setChecked(False)
-                self.project_property_changed('has_zip_to_export', False)
-                self.project_property_changed('zip_to_export', '')
+        """v3.1 Sprint 12: Simplified - reset zip export path."""
+        if not self.widgets_initialized or not self.has_loaded_layers:
+            return
+        if not self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].text():
+            self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].clear()
+            self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].setChecked(False)
+            self.project_property_changed('has_zip_to_export', False)
+            self.project_property_changed('zip_to_export', '')
 
     def filtering_auto_current_layer_changed(self, state=None):
-
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
-
-            if state is None:
-                state = self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"]
-
-            self.widgets["FILTERING"]["AUTO_CURRENT_LAYER"]["WIDGET"].setChecked(state)
-
-            if state is True:
-                self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"] = state
-                result = self.manageSignal(["QGIS","LAYER_TREE_VIEW"], 'connect')
-
-            elif state is False:
-                self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"] = state
-                self.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'disconnect')
-                
-            self.setProjectVariablesEvent()
+        """v3.1 Sprint 12: Simplified - handle auto current layer toggle."""
+        if not self.widgets_initialized or not self.has_loaded_layers:
+            return
+        if state is None:
+            state = self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"]
+        self.widgets["FILTERING"]["AUTO_CURRENT_LAYER"]["WIDGET"].setChecked(state)
+        self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"] = state
+        self.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect' if state else 'disconnect')
+        self.setProjectVariablesEvent()
 
     def _update_project_layers_data(self, project_layers, project=None):
-        """
-        Update internal PROJECT and PROJECT_LAYERS references.
-        
-        Updates project reference if provided and stores layer data.
-        Sets has_loaded_layers flag based on layer count.
-        
-        Args:
-            project_layers (dict): Updated PROJECT_LAYERS dictionary
-            project (QgsProject, optional): QGIS project instance
-        """
-        if project is not None:    
+        """v3.1 Sprint 12: Simplified - update PROJECT and PROJECT_LAYERS references."""
+        if project is not None:
             self.PROJECT = project
-
         self.PROJECT_LAYERS = project_layers
-        
-        # Update has_loaded_layers flag based on PROJECT_LAYERS
-        if len(list(self.PROJECT_LAYERS)) > 0:
-            self.has_loaded_layers = True
-        else:
-            self.has_loaded_layers = False
-
-        logger.info(f"has_loaded_layers={self.has_loaded_layers}, widgets_initialized={self.widgets_initialized}")
+        self.has_loaded_layers = len(self.PROJECT_LAYERS) > 0
 
     def _determine_active_layer(self):
-        """
-        Determine which layer should be active for UI update.
-        
-        Attempts to find active layer in this priority order:
-        1. Current layer from current_layer attribute
-        2. QGIS active layer from iface
-        3. First available layer in PROJECT_LAYERS
-        
-        Returns:
-            QgsVectorLayer or None: Active layer to use for UI updates
-        """
-        layer = None
-        
+        """v3.1 Sprint 12: Simplified - determine active layer for UI."""
         try:
-            if self.current_layer is not None:
-                # STABILITY FIX: Guard against KeyError before accessing PROJECT_LAYERS
-                if self.current_layer.id() not in self.PROJECT_LAYERS:
-                    logger.debug(f"_determine_active_layer: layer {self.current_layer.name()} not in PROJECT_LAYERS")
-                    if self.iface.activeLayer():
-                        layer = self.iface.activeLayer()
-                else:
-                    layers = [layer for layer in self.PROJECT.mapLayersByName(
-                        self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["layer_name"]
-                    ) if layer.id() == self.current_layer.id()]
-                    
-                    if len(layers) == 0:
-                        if self.iface.activeLayer():
-                            layer = self.iface.activeLayer()
-                    elif len(layers) > 0:
-                        layer = layers[0]
-            else:
-                if self.iface.activeLayer():
-                    layer = self.iface.activeLayer()
-            
-            # CRITICAL: If no active layer found but PROJECT_LAYERS has layers,
-            # use the first available layer to enable the UI
-            if layer is None and len(self.PROJECT_LAYERS) > 0:
-                first_layer_id = list(self.PROJECT_LAYERS.keys())[0]
-                layer = self.PROJECT.mapLayer(first_layer_id)
-                logger.info(f"No active layer - using first available layer: {layer.name() if layer else 'None'}")
-                
-        except (AttributeError, KeyError, RuntimeError) as e:
-            logger.debug(f"Layer lookup failed, falling back to active layer: {e}")
+            if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
+                layers = [l for l in self.PROJECT.mapLayersByName(
+                    self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["layer_name"]
+                ) if l.id() == self.current_layer.id()]
+                if layers:
+                    return layers[0]
             if self.iface.activeLayer():
-                layer = self.iface.activeLayer()
-            # Fallback to first layer in PROJECT_LAYERS
-            elif len(self.PROJECT_LAYERS) > 0:
-                first_layer_id = list(self.PROJECT_LAYERS.keys())[0]
-                layer = self.PROJECT.mapLayer(first_layer_id)
-                logger.info(f"Exception occurred - using first available layer: {layer.name() if layer else 'None'}")
-        
-        return layer
+                return self.iface.activeLayer()
+            if self.PROJECT_LAYERS:
+                return self.PROJECT.mapLayer(list(self.PROJECT_LAYERS.keys())[0])
+        except (AttributeError, KeyError, RuntimeError):
+            if self.iface.activeLayer():
+                return self.iface.activeLayer()
+            if self.PROJECT_LAYERS:
+                return self.PROJECT.mapLayer(list(self.PROJECT_LAYERS.keys())[0])
+        return None
 
     def _activate_layer_ui(self):
-        """
-        Enable UI widgets and configure basic export functionality.
-        
-        Enables all widgets, populates export combobox, sets export properties,
-        and connects widget signals (only once to avoid duplicates).
-        
-        Also updates backend indicator based on first available layer type.
-        """
-        # Track if this is the first time we're activating (transition from empty to loaded)
+        """v3.1 Sprint 12: Simplified - enable UI widgets and configure export."""
         was_empty = not self.has_loaded_layers
-        
-        # Ensure flag is set
-        if self.has_loaded_layers is False:
-            self.has_loaded_layers = True
-        
-        # CRITICAL: Always enable widgets if PROJECT_LAYERS has layers
-        logger.info(f"About to enable UI: PROJECT_LAYERS count={len(self.PROJECT_LAYERS)}")
-        logger.info(f"Calling set_widgets_enabled_state(True)")
+        self.has_loaded_layers = True
         self.set_widgets_enabled_state(True)
-        logger.info(f"set_widgets_enabled_state(True) completed - UI should now be enabled")
         
-        # Always populate export combobox when layers exist
         self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'disconnect')
         self.exporting_populate_combobox()
         self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
         self.set_exporting_properties()
         
-        # Connect signals only once to avoid duplicate connections
         if not self._signals_connected:
             self.connect_widgets_signals()
             self._signals_connected = True
         
-        # Update backend indicator even if no specific layer is selected
-        if len(self.PROJECT_LAYERS) > 0:
+        # Update backend indicator
+        if self.PROJECT_LAYERS:
             first_layer_id = list(self.PROJECT_LAYERS.keys())[0]
-            if first_layer_id in self.PROJECT_LAYERS:
-                layer_props = self.PROJECT_LAYERS[first_layer_id]
-                infos = layer_props.get('infos', {})
-                if 'layer_provider_type' in infos:
-                    provider_type = infos['layer_provider_type']
-                    postgresql_conn = infos.get('postgresql_connection_available', None)
-                    # Check for forced backend
-                    forced_backend = None
-                    if hasattr(self, 'forced_backends') and first_layer_id in self.forced_backends:
-                        forced_backend = self.forced_backends[first_layer_id]
-                    self._update_backend_indicator(provider_type, postgresql_conn, actual_backend=forced_backend)
+            layer_props = self.PROJECT_LAYERS.get(first_layer_id, {})
+            infos = layer_props.get('infos', {})
+            if 'layer_provider_type' in infos:
+                forced = self.forced_backends.get(first_layer_id) if hasattr(self, 'forced_backends') else None
+                self._update_backend_indicator(infos['layer_provider_type'], infos.get('postgresql_connection_available'), actual_backend=forced)
         
-        # Notify user when transitioning from empty to loaded state
-        if was_empty and len(self.PROJECT_LAYERS) > 0:
-            show_success(
-                "FilterMate",
-                f"Plugin activé avec {len(self.PROJECT_LAYERS)} couche(s) vectorielle(s)"
-            )
-            logger.info(f"FilterMate: Plugin activated with {len(self.PROJECT_LAYERS)} layer(s) after being empty")
+        if was_empty and self.PROJECT_LAYERS:
+            show_success("FilterMate", f"Plugin activé avec {len(self.PROJECT_LAYERS)} couche(s) vectorielle(s)")
 
     def _refresh_layer_specific_widgets(self, layer):
-        """
-        Refresh UI widgets specific to the active layer.
-        
-        Updates output name, backend indicator, triggers layer change event,
-        initializes exploring groupbox, and refreshes filtering combobox.
-        
-        Args:
-            layer (QgsVectorLayer): Active layer for widget refresh
-        """
-        if layer is None or not isinstance(layer, QgsVectorLayer):
+        """v3.1 Sprint 12: Simplified - refresh UI widgets for active layer."""
+        if not layer or not isinstance(layer, QgsVectorLayer):
             return
         
-        # Layer-specific initialization
         if layer.id() in self.PROJECT_LAYERS:
-            layer_props = self.PROJECT_LAYERS[layer.id()]
-            if 'layer_provider_type' in layer_props.get('infos', {}):
-                # Check for forced backend
-                forced_backend = None
-                if hasattr(self, 'forced_backends') and layer.id() in self.forced_backends:
-                    forced_backend = self.forced_backends[layer.id()]
-                self._update_backend_indicator(layer_props['infos']['layer_provider_type'], actual_backend=forced_backend)
+            infos = self.PROJECT_LAYERS[layer.id()].get('infos', {})
+            if 'layer_provider_type' in infos:
+                forced = self.forced_backends.get(layer.id()) if hasattr(self, 'forced_backends') else None
+                self._update_backend_indicator(infos['layer_provider_type'], actual_backend=forced)
         
         self.manage_output_name()
         self.select_tabTools_index()
         self.current_layer_changed(layer)
         
-        # CRITICAL: Only initialize exploring groupbox if layer exists in PROJECT_LAYERS
         if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
             self.exploring_groupbox_init()
-        else:
-            logger.warning(f"Skipping exploring_groupbox_init for layer {layer.name()} - not yet in PROJECT_LAYERS")
         
         self.filtering_auto_current_layer_changed()
         
-        # CRITICAL: Always refresh filtering combobox after layer changes
-        if self.current_layer is not None and isinstance(self.current_layer, QgsVectorLayer):
+        if self.current_layer and isinstance(self.current_layer, QgsVectorLayer):
             self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'disconnect')
             self.filtering_populate_layers_chekableCombobox(self.current_layer)
             self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
 
     def get_project_layers_from_app(self, project_layers, project=None):
-        """
-        Update dockwidget with latest layer information from FilterMateApp.
-        
-        Called when layer management tasks complete. Orchestrates UI refresh
-        by delegating to specialized methods for each concern.
-        
-        Args:
-            project_layers (dict): Updated PROJECT_LAYERS dictionary from app
-            project (QgsProject, optional): QGIS project instance
-            
-        Workflow:
-        1. Update PROJECT_LAYERS data
-        2. Determine active layer
-        3. Activate UI widgets
-        4. Refresh layer-specific widgets
-        
-        Notes:
-            - Always updates PROJECT_LAYERS even if widgets not initialized yet
-            - Only updates UI if widgets_initialized is True
-            - Handles cases with no layers gracefully
-            - Called from FilterMateApp.layer_management_engine_task_completed()
-        """
-        # v2.9.25: CRITICAL - Skip UI update if filtering is in progress
-        # This prevents current_layer from being reset during filter operations
+        """v3.1 Sprint 12: Simplified - update dockwidget with layer info from app."""
+        # Skip if filtering in progress
         if self._filtering_in_progress:
-            logger.info("v2.9.25: Skipping get_project_layers_from_app - filtering in progress")
-            # Only update PROJECT_LAYERS data, don't touch UI or current_layer
             if project_layers is not None:
                 self.PROJECT_LAYERS = project_layers
             if project is not None:
                 self.PROJECT = project
             return
         
-        # CRITICAL: Prevent recursive/multiple simultaneous calls
+        # Prevent recursive calls
         if self._updating_layers:
-            logger.warning("Blocking recursive call to get_project_layers_from_app")
             return
         
-        # STABILITY FIX: Validate input parameters
         if project_layers is None:
-            logger.warning("get_project_layers_from_app received None for project_layers, using empty dict")
             project_layers = {}
             
         self._updating_layers = True
-        self._plugin_busy = True  # STABILITY FIX: Block other operations during layer update
-        
-        logger.info(f"get_project_layers_from_app called: widgets_initialized={self.widgets_initialized}, PROJECT_LAYERS count={len(project_layers)}")
+        self._plugin_busy = True
         
         try:
-            # Always update data, even if widgets not initialized yet
             self._update_project_layers_data(project_layers, project)
 
-            # Only update UI if widgets are initialized
-            if self.widgets_initialized is True:
-                logger.info(f"Updating UI: PROJECT is not None={self.PROJECT is not None}, PROJECT_LAYERS count={len(list(self.PROJECT_LAYERS))}")
-
-                if self.PROJECT is not None and len(list(self.PROJECT_LAYERS)) > 0:
-                    # CRITICAL: Force reconnect signals if _signals_connected flag is False
-                    # This can happen after a project change when signals were disconnected
-                    if not self._signals_connected:
-                        logger.info("Reconnecting widget signals after project change")
-                        self.connect_widgets_signals()
-                        self._signals_connected = True
-                    
-                    # Determine which layer to use for UI
-                    layer = self._determine_active_layer()
-                    
-                    # Enable UI and configure basic functionality
-                    self._activate_layer_ui()
-                    
-                    # Refresh layer-specific widgets if layer is available
-                    if layer is not None:
-                        self._refresh_layer_specific_widgets(layer)
-                    else:
-                        # No active layer - widgets enabled but awaiting user selection
-                        logger.info(f"UI enabled with {len(self.PROJECT_LAYERS)} layers but no active layer selected")
-                        logger.info("User can click on a layer in the QGIS layer panel to activate it")
-                    
-                    return
-                else:
-                    # No project or no layers - BUT check if we still have a valid current_layer
-                    logger.warning(f"Cannot update UI: PROJECT is None={self.PROJECT is None}, PROJECT_LAYERS empty={len(list(self.PROJECT_LAYERS)) == 0}")
-                    
-                    # v2.9.23: CRITICAL - NEVER disable UI if current_layer is still valid
-                    # During transient states (filtering, layer operations), PROJECT_LAYERS can be temporarily empty
-                    # but current_layer is still valid. If we disable UI here, filtering becomes impossible!
-                    has_valid_current_layer = (self.current_layer is not None and self.current_layer.isValid())
-                    
-                    if has_valid_current_layer:
-                        # TRANSIENT STATE: PROJECT_LAYERS empty but current_layer valid
-                        # Keep UI ENABLED to allow continued operations (filter, unfilter, undo)
-                        logger.info(f"v2.9.23: ⚠️ TRANSIENT STATE: PROJECT_LAYERS empty but current_layer '{self.current_layer.name()}' valid - KEEPING UI ENABLED")
-                        
-                        # v2.9.23: CRITICAL - Ensure signals are connected in transient state
-                        # If signals were disconnected, we MUST reconnect them or buttons won't work!
-                        if not self._signals_connected:
-                            logger.warning("v2.9.23: ⚠️ TRANSIENT STATE: Signals were disconnected - RECONNECTING NOW")
-                            self.connect_widgets_signals()
-                            self._signals_connected = True
-                            logger.info("v2.9.23: ✅ Signals reconnected in transient state")
-                        
-                        # Don't touch has_loaded_layers or widget state
-                        # This allows the user to continue working
-                        return
-                    else:
-                        # TRULY NO LAYERS: Both PROJECT_LAYERS empty AND no valid current_layer
-                        # NOW we can safely disable the UI
-                        logger.info("v2.9.23: No valid layers - disabling UI")
-                        self.has_loaded_layers = False
-                        self.current_layer = None
-                        self.disconnect_widgets_signals()
-                        self._signals_connected = False
-                        self.set_widgets_enabled_state(False)
-                    # Update backend indicator to show waiting state (badge style)
-                    if self.backend_indicator_label:
-                        self.backend_indicator_label.setText("...")
-                        self.backend_indicator_label.setStyleSheet("""
-                            QLabel#label_backend_indicator {
-                                color: #7f8c8d;
-                                font-size: 9pt;
-                                font-weight: 600;
-                                padding: 3px 10px;
-                                border-radius: 12px;
-                                border: none;
-                                background-color: #ecf0f1;
-                            }
-                        """)
-                    return
-            else:
-                # Widgets not initialized yet - set flag to refresh later
-                logger.debug(f"Widgets not initialized yet, setting pending flag. PROJECT_LAYERS count: {len(self.PROJECT_LAYERS)}")
+            if not self.widgets_initialized:
                 self._pending_layers_update = True
+                return
+
+            if self.PROJECT and self.PROJECT_LAYERS:
+                if not self._signals_connected:
+                    self.connect_widgets_signals()
+                    self._signals_connected = True
+                
+                layer = self._determine_active_layer()
+                self._activate_layer_ui()
+                
+                if layer:
+                    self._refresh_layer_specific_widgets(layer)
+                return
+            
+            # Check for valid current_layer in transient state
+            if self.current_layer and self.current_layer.isValid():
+                if not self._signals_connected:
+                    self.connect_widgets_signals()
+                    self._signals_connected = True
+                return
+            
+            # Truly no layers - disable UI
+            self.has_loaded_layers = False
+            self.current_layer = None
+            self.disconnect_widgets_signals()
+            self._signals_connected = False
+            self.set_widgets_enabled_state(False)
+            
+            if self.backend_indicator_label:
+                self.backend_indicator_label.setText("...")
+                self.backend_indicator_label.setStyleSheet("""
+                    QLabel#label_backend_indicator {
+                        color: #7f8c8d; font-size: 9pt; font-weight: 600;
+                        padding: 3px 10px; border-radius: 12px; border: none;
+                        background-color: #ecf0f1;
+                    }
+                """)
         finally:
-            # CRITICAL: Always release the lock, even if an error occurred
             self._updating_layers = False
-            self._plugin_busy = False  # STABILITY FIX: Release busy flag
+            self._plugin_busy = False
 
 
     def open_project_page(self):
