@@ -581,6 +581,26 @@ class ControllerIntegration:
                 return False
         return False
     
+    def delegate_get_current_features(self, use_cache: bool = True) -> tuple:
+        """
+        Delegate getting current selected features to ExploringController.
+        
+        v3.1 Sprint 6: Full migration of get_current_features logic.
+        
+        Args:
+            use_cache: If True, return cached features if available
+        
+        Returns:
+            tuple: (features, expression) or ([], '') on failure
+        """
+        if self._exploring_controller:
+            try:
+                return self._exploring_controller.get_current_features(use_cache)
+            except Exception as e:
+                logger.warning(f"delegate_get_current_features failed: {e}")
+                return [], ''
+        return [], ''
+    
     def delegate_exploring_get_current_features(self) -> list:
         """
         Delegate getting current selected features.

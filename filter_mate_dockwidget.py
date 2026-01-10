@@ -5990,271 +5990,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Get the currently selected features based on the active exploring groupbox.
         
-        This method retrieves features from the appropriate widget (single selection,
-        multiple selection, or custom expression) and caches them for subsequent
-        operations like flash, zoom, and identify.
+        v3.1 Sprint 6: Simplified - delegates to ExploringController.
         
         Args:
             use_cache: If True, return cached features if available (default: True).
-                       Set to False to force refresh from widgets.
         
         Returns:
-            tuple: (features, expression) where features is a list of QgsFeature
-                   and expression is the QGIS expression string used for selection.
+            tuple: (features, expression)
         """
-        if self.widgets_initialized is True and self.current_layer is not None:
-
-            # v3.0.14: Use centralized deletion check with filtering protection
-            if self._is_layer_truly_deleted(self.current_layer):
-                logger.debug("get_current_features: current_layer C++ object truly deleted")
-                self.current_layer = None
-                return [], ''
-
-            layer_id = self.current_layer.id()
-            groupbox_type = self.current_exploring_groupbox
-            
-            # CACHE CHECK: Try to get cached features if use_cache is True
-            if use_cache and hasattr(self, '_exploring_cache') and groupbox_type:
-                cached = self._exploring_cache.get(layer_id, groupbox_type)
-                if cached:
-                    # FIX v2.3.9: For custom_selection, verify the cached expression matches
-                    # the current widget expression before using the cache.
-                    # This prevents stale cache hits when the expression widget changes
-                    # but cache invalidation wasn't triggered (e.g., signal blocked).
-                    if groupbox_type == "custom_selection":
-                        current_widget_expr = self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].expression()
-                        cached_expr = cached.get('expression', '')
-                        if current_widget_expr != cached_expr:
-                            logger.debug(f"get_current_features: CACHE STALE for custom_selection - "
-                                        f"widget='{current_widget_expr[:30]}...' != cached='{cached_expr[:30] if cached_expr else ''}...'")
-                            # Invalidate stale cache entry
-                            self._exploring_cache.invalidate(layer_id, groupbox_type)
-                        else:
-                            logger.debug(f"get_current_features: CACHE HIT for {layer_id[:8]}.../{groupbox_type}")
-                            return cached['features'], cached['expression'] or ''
-                    else:
-                        logger.debug(f"get_current_features: CACHE HIT for {layer_id[:8]}.../{groupbox_type}")
-                        return cached['features'], cached['expression'] or ''
-
-            features = []    
-            expression = ''
-
-            # Log current groupbox state for filtering diagnostics (debug level to reduce noise)
-            logger.debug(f"get_current_features: groupbox='{self.current_exploring_groupbox}', layer='{self.current_layer.name()}'")
-            
-            if self.current_exploring_groupbox == "single_selection":
-                input = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
-                
-                # NOTE: QgsFeaturePickerWidget emits featureChanged with invalid features during
-                # typing/searching. This is normal behavior - only log at debug level.
-                # Only log at info level when a valid feature is actually selected.
-                if input is None or (hasattr(input, 'isValid') and not input.isValid()):
-                    # v2.9.20: Try to recover using saved FID from last valid selection
-                    layer_id = self.current_layer.id() if self.current_layer else None
-                    if (hasattr(self, '_last_single_selection_fid') 
-                        and self._last_single_selection_fid is not None
-                        and layer_id == self._last_single_selection_layer_id):
-                        
-                        saved_fid = self._last_single_selection_fid
-                        logger.info(f"   ⚠️ SINGLE_SELECTION: Widget lost selection, recovering from saved FID={saved_fid}")
-                        
-                        try:
-                            recovered_feature = self.current_layer.getFeature(saved_fid)
-                            if recovered_feature.isValid() and recovered_feature.hasGeometry():
-                                logger.info(f"   ✓ SINGLE_SELECTION: Recovered feature id={saved_fid}")
-                                input = recovered_feature
-                                # Continue with normal processing below
-                            else:
-                                logger.warning(f"   ⚠️ SINGLE_SELECTION: Recovered feature {saved_fid} is invalid or has no geometry")
-                                from qgis.core import QgsMessageLog, Qgis
-                                QgsMessageLog.logMessage(
-                                    f"⚠️ SINGLE_SELECTION: Could not recover feature {saved_fid}!",
-                                    "FilterMate", Qgis.Warning
-                                )
-                                return [], ''
-                        except Exception as e:
-                            logger.warning(f"   ⚠️ SINGLE_SELECTION: Error recovering feature {saved_fid}: {e}")
-                            from qgis.core import QgsMessageLog, Qgis
-                            QgsMessageLog.logMessage(
-                                f"⚠️ SINGLE_SELECTION: Error recovering feature: {e}",
-                                "FilterMate", Qgis.Warning
-                            )
-                            return [], ''
-                    else:
-                        # No saved FID to recover from - v3.0.6: Try QGIS canvas selection as fallback
-                        # This handles the case where user selected features on canvas but widgets
-                        # were not synchronized (is_selecting was not enabled or sync failed)
-                        # v3.0.7: Log at debug level to reduce noise
-                        logger.debug(f"   SINGLE_SELECTION: No valid feature in widget and no saved FID, checking QGIS canvas...")
-                        
-                        # v3.0.6: Check if QGIS has selected features on canvas for current layer
-                        qgis_selected = self.current_layer.selectedFeatures() if self.current_layer else []
-                        if len(qgis_selected) > 0:
-                            logger.info(f"   🔄 SINGLE_SELECTION: Found {len(qgis_selected)} features selected in QGIS canvas!")
-                            
-                            if len(qgis_selected) == 1:
-                                # Use the single QGIS-selected feature
-                                input = qgis_selected[0]
-                                logger.info(f"   ✓ SINGLE_SELECTION: Using QGIS selection feature id={input.id()}")
-                                # Save FID for future recovery
-                                self._last_single_selection_fid = input.id()
-                                self._last_single_selection_layer_id = self.current_layer.id()
-                                # Continue with normal processing below
-                            else:
-                                # Multiple features selected - switch to multiple_selection mode
-                                logger.info(f"   🔄 AUTO-SWITCH: {len(qgis_selected)} features selected, using MULTIPLE_SELECTION mode")
-                                from qgis.core import QgsMessageLog, Qgis
-                                QgsMessageLog.logMessage(
-                                    f"ℹ️ Auto-switching to MULTIPLE_SELECTION mode ({len(qgis_selected)} features from QGIS selection)",
-                                    "FilterMate", Qgis.Info
-                                )
-                                # Build features list from QGIS selection
-                                features, expression = self.get_exploring_features(qgis_selected, True)
-                                logger.info(f"   RESULT: {len(features)} features, expression='{expression}'")
-                                
-                                # Save FIDs for recovery
-                                self._last_multiple_selection_fids = [f.id() for f in qgis_selected]
-                                self._last_multiple_selection_layer_id = self.current_layer.id()
-                                
-                                # Cache and return
-                                if features and hasattr(self, '_exploring_cache') and groupbox_type:
-                                    self._exploring_cache.put(layer_id, groupbox_type, features, expression)
-                                return features, expression
-                        else:
-                            # No QGIS selection either - log at DEBUG level to reduce noise
-                            # v3.0.7: Throttle warnings to avoid log spam when user rapidly changes layers
-                            # The warning is only shown once per layer, not on every call
-                            layer_id_short = self.current_layer.id()[:8] if self.current_layer else 'unknown'
-                            throttle_key = f"single_selection_warning_{layer_id_short}"
-                            
-                            # Check if we already warned for this layer recently
-                            if not hasattr(self, '_warning_throttle'):
-                                self._warning_throttle = {}
-                            
-                            import time
-                            current_time = time.time()
-                            last_warning_time = self._warning_throttle.get(throttle_key, 0)
-                            
-                            # Only log warning if more than 5 seconds since last warning for this layer
-                            if current_time - last_warning_time > 5.0:
-                                logger.debug(f"   ❌ SINGLE_SELECTION: No QGIS canvas selection either!")
-                                from qgis.core import QgsMessageLog, Qgis
-                                QgsMessageLog.logMessage(
-                                    f"⚠️ SINGLE_SELECTION: Widget has no valid feature selected!",
-                                    "FilterMate", Qgis.Warning
-                                )
-                                self._warning_throttle[throttle_key] = current_time
-                            else:
-                                # Log at debug level only
-                                logger.debug(f"   SINGLE_SELECTION: No feature selected (throttled)")
-                            
-                            return [], ''
-                
-                # Valid feature selected - log at info level
-                logger.info(f"   SINGLE_SELECTION valid feature: id={input.id()}")
-                if hasattr(input, 'geometry') and input.hasGeometry():
-                    geom = input.geometry()
-                    bbox = geom.boundingBox()
-                    logger.debug(f"      geometry bbox = ({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})")
-                
-                features, expression = self.get_exploring_features(input, True)
-                logger.debug(f"   RESULT: features count = {len(features)}, expression = '{expression}'")
-
-            elif self.current_exploring_groupbox == "multiple_selection":
-                input = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].checkedItems()
-                logger.debug(f"   MULTIPLE_SELECTION checked items: {len(input) if input else 0}")
-                
-                # v2.9.29: If no checked items but we have saved FIDs, try to recover
-                # This fixes multi-step additive filtering where the widget loses checked items after refresh
-                if (not input or len(input) == 0) and hasattr(self, '_last_multiple_selection_fids') and self._last_multiple_selection_fids:
-                    layer_id = self.current_layer.id() if self.current_layer else None
-                    if layer_id == getattr(self, '_last_multiple_selection_layer_id', None):
-                        saved_fids = self._last_multiple_selection_fids
-                        logger.info(f"   ⚠️ MULTIPLE_SELECTION: Widget has no checked items, recovering from saved FIDs: {len(saved_fids)}")
-                        
-                        try:
-                            # Reconstruct input format: [[display_value, pk_value, font, brush], ...]
-                            # We only need display and pk for get_exploring_features
-                            input = [[str(fid), fid, None, None] for fid in saved_fids]
-                            logger.info(f"   ✓ MULTIPLE_SELECTION: Recovered {len(input)} items from saved FIDs")
-                        except Exception as e:
-                            logger.warning(f"   ⚠️ MULTIPLE_SELECTION: Error recovering from saved FIDs: {e}")
-                            input = []
-                    else:
-                        logger.debug(f"   MULTIPLE_SELECTION: Saved FIDs are for different layer, not recovering")
-                
-                # v3.0.6: If still no input, try QGIS canvas selection as final fallback
-                # This handles the case where user selected features on canvas but widgets
-                # were not synchronized (is_selecting was not enabled or sync failed)
-                if not input or len(input) == 0:
-                    qgis_selected = self.current_layer.selectedFeatures() if self.current_layer else []
-                    if len(qgis_selected) > 0:
-                        logger.info(f"   🔄 MULTIPLE_SELECTION: Using {len(qgis_selected)} features from QGIS canvas selection!")
-                        from qgis.core import QgsMessageLog, Qgis
-                        QgsMessageLog.logMessage(
-                            f"ℹ️ Using QGIS canvas selection ({len(qgis_selected)} features) for MULTIPLE_SELECTION",
-                            "FilterMate", Qgis.Info
-                        )
-                        # Build features list directly from QGIS selection
-                        features, expression = self.get_exploring_features(qgis_selected, True)
-                        logger.info(f"   RESULT: {len(features)} features, expression='{expression}'")
-                        
-                        # Save FIDs for recovery
-                        self._last_multiple_selection_fids = [f.id() for f in qgis_selected]
-                        self._last_multiple_selection_layer_id = self.current_layer.id()
-                        
-                        # Cache and return
-                        if features and hasattr(self, '_exploring_cache') and groupbox_type:
-                            self._exploring_cache.put(layer_id, groupbox_type, features, expression)
-                        return features, expression
-                        
-                features, expression = self.get_exploring_features(input, True)
-                logger.debug(f"   RESULT: features count = {len(features)}, expression = '{expression}'")
-
-            elif self.current_exploring_groupbox == "custom_selection":
-                expression = self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].expression()
-                logger.info(f"   CUSTOM_SELECTION expression from widget: '{expression}'")
-                
-                # v2.7.17: Additional diagnostics for custom selection
-                if not expression or not expression.strip():
-                    logger.warning(f"   ⚠️ CUSTOM_SELECTION: Empty expression!")
-                else:
-                    # Check expression validity
-                    qgs_expr = QgsExpression(expression)
-                    if qgs_expr.hasParserError():
-                        logger.warning(f"   ⚠️ CUSTOM_SELECTION: Expression parse error: {qgs_expr.parserErrorString()}")
-                    else:
-                        logger.info(f"   CUSTOM_SELECTION: Expression is valid")
-                    # Log layer subset state
-                    if self.current_layer.subsetString():
-                        logger.info(f"   CUSTOM_SELECTION: Layer has active subset - features will be from filtered set")
-                
-                # Save expression to layer_props before calling exploring_custom_selection
-                if self.current_layer.id() in self.PROJECT_LAYERS:
-                    self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["custom_selection_expression"] = expression
-                
-                # Process expression (whether field or complex expression)
-                features, expression = self.exploring_custom_selection()
-                logger.info(f"   CUSTOM_SELECTION RESULT: {len(features)} features, expression='{expression}'")
-                
-                # v2.7.17: Warn if no features found with valid expression
-                if len(features) == 0 and expression:
-                    logger.warning(f"   ⚠️ CUSTOM_SELECTION: 0 features matched expression '{expression}'")
-                    if self.current_layer.subsetString():
-                        logger.warning(f"      Note: Layer is already filtered - expression evaluated on {self.current_layer.featureCount()} filtered features")
-                        logger.warning(f"      Consider: Reset layer filters before applying new custom expression")
-
-            else:
-                logger.warning(f"   ⚠️ current_exploring_groupbox '{self.current_exploring_groupbox}' does not match any known groupbox!")
-            
-            # CACHE UPDATE: Store features in cache for subsequent operations
-            if features and hasattr(self, '_exploring_cache') and groupbox_type:
-                self._exploring_cache.put(layer_id, groupbox_type, features, expression)
-                logger.debug(f"get_current_features: Cached {len(features)} features for {layer_id[:8]}.../{groupbox_type}")
-                
-            return features, expression
+        # Delegate to controller
+        if self._controller_integration:
+            result = self._controller_integration.delegate_get_current_features(use_cache)
+            if result != ([], ''):
+                return result
         
-        logger.warning(f"🔍 get_current_features: widgets_initialized={self.widgets_initialized}, current_layer={self.current_layer}")
+        # No fallback - controller handles all logic
         return [], ''
         
 
@@ -7667,212 +7417,51 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Handle current layer change event.
         
+        v3.1 Sprint 6: Simplified - delegates protection logic to LayerSyncController.
         Orchestrates layer change by validating, disconnecting signals, 
         synchronizing widgets, and reconnecting signals.
         
-        v2.9.19: CRITICAL - Ensures current_layer is NEVER None when layers exist.
-        If layer parameter is None, automatically selects first available layer.
-        
-        STABILITY FIX: Added checks for plugin busy state and deferred processing
-        to prevent crashes during project load operations.
-        
-        v2.9.26: Added filtering protection - ignore layer changes during filtering.
-        v3.0.12: Extended time-based protection from 500ms to 2000ms to cover delayed canvas refresh.
+        CRITICAL (CRIT-005): Protection against unwanted layer changes during filtering
+        is handled by LayerSyncController.
         """
-        # v3.0.17: DEBUG - Log every call to QGIS MessageLog for debugging
-        layer_name = layer.name() if layer else "(None)"
-        from qgis.core import QgsMessageLog, Qgis
-        import traceback
-        # Get abbreviated stack trace to identify caller
-        stack = traceback.extract_stack()
-        caller_info = " <- ".join([f"{frame.name}:{frame.lineno}" for frame in stack[-4:-1]])
-        QgsMessageLog.logMessage(
-            f"v3.0.17: ⚡ current_layer_changed CALLED with layer='{layer_name}' | caller: {caller_info}",
-            "FilterMate", Qgis.Warning
-        )
-        
-        # CRITICAL: Check lock BEFORE any processing
+        # Quick lock check
         if self._updating_current_layer:
             return
         
-        # v2.9.26: CRITICAL - Ignore layer change signals during filtering
-        # This prevents the comboBox from changing value when layerTreeView emits currentLayerChanged
-        if getattr(self, '_filtering_in_progress', False):
-            logger.debug(f"v2.9.26: 🛡️ current_layer_changed BLOCKED - filtering in progress")
-            return
-        
-        # v3.0.14: CRITICAL - Block layer changes for 2000ms after filtering completes
-        # Signals can be emitted asynchronously (e.g., from canvas refresh, layer tree updates)
-        # after _filtering_in_progress is set to False. The canvas refresh can be scheduled
-        # up to 1500ms after filter completion (_single_canvas_refresh in filter_task.py),
-        # so we need a 2000ms protection window to prevent unwanted layer changes.
-        import time
-        # v3.0.10: CRITICAL FIX - Extended to 5.0s to cover all async operations
-        # layer.reload() and canvas.refresh() can trigger signals >2s after filter completion
-        POST_FILTER_PROTECTION_WINDOW = 5.0  # seconds - must cover refresh_delay (1500ms) + layer.reload() + margin
-        if getattr(self, '_filter_completed_time', 0) > 0:
-            elapsed = time.time() - self._filter_completed_time
-            if elapsed < POST_FILTER_PROTECTION_WINDOW:
-                saved_layer_id = getattr(self, '_saved_layer_id_before_filter', None)
-
-                # v3.0.14: CRITICAL FIX - Block ALL layer change attempts during protection window
-                # Previously, we only blocked if layer was not None and different from saved_layer_id.
-                # But if layer=None, _ensure_valid_current_layer(None) could select wrong layer!
-                # Now we block ANY attempt to change layers during this window.
-
-                # Case 1: layer=None - BLOCK to prevent auto-selection of wrong layer
-                if layer is None:
-                    logger.info(f"v3.0.15: 🛡️ current_layer_changed BLOCKED - layer=None during protection window (elapsed={elapsed:.3f}s)")
-                    # Ensure combobox and current_layer stay on saved layer
-                    from qgis.core import QgsProject
-                    restore_layer = None
-                    
-                    # Try saved_layer_id first
-                    if saved_layer_id:
-                        restore_layer = QgsProject.instance().mapLayer(saved_layer_id)
-                    
-                    # v3.0.15: CRITICAL FIX - Fallback to current_layer if saved_layer_id unavailable
-                    # This fixes the OGR filtering bug where combobox becomes empty
-                    if not restore_layer and self.current_layer:
-                        try:
-                            if not sip.isdeleted(self.current_layer) and self.current_layer.isValid():
-                                restore_layer = self.current_layer
-                                logger.info(f"v3.0.15: 🔄 Using current_layer '{self.current_layer.name()}' as fallback (saved_layer_id unavailable)")
-                        except (RuntimeError, AttributeError):
-                            pass
-                    
-                    # v3.0.15: Last resort - get current combobox layer
-                    if not restore_layer:
-                        combo_layer = self.comboBox_filtering_current_layer.currentLayer()
-                        if combo_layer and combo_layer.isValid():
-                            restore_layer = combo_layer
-                            logger.info(f"v3.0.15: 🔄 Using combobox layer '{combo_layer.name()}' as last resort")
-                    
-                    if restore_layer and restore_layer.isValid():
-                        if not self.current_layer or self.current_layer.id() != restore_layer.id():
-                            # v3.0.19: Don't change blockSignals state - might already be blocked by filter_mate_app
-                            # Just set the layer directly - setLayer() works even with signals blocked
-                            self.comboBox_filtering_current_layer.setLayer(restore_layer)
-                            self.current_layer = restore_layer
-                            logger.info(f"v3.0.19: ✅ Restored to '{restore_layer.name()}' after blocking layer=None (signals kept blocked)")
-                            QgsMessageLog.logMessage(
-                                f"v3.0.19: ✅ RESTORED combobox to '{restore_layer.name()}' (layer was None)",
-                                "FilterMate", Qgis.Info
-                            )
-                        else:
-                            # Just ensure combobox shows the correct layer
-                            current_combo = self.comboBox_filtering_current_layer.currentLayer()
-                            if not current_combo or current_combo.id() != self.current_layer.id():
-                                # v3.0.19: Don't toggle blockSignals - keep existing state
-                                self.comboBox_filtering_current_layer.setLayer(self.current_layer)
-                                logger.info(f"v3.0.19: ✅ Synced combobox to existing current_layer '{self.current_layer.name()}' (signals kept blocked)")
-                    else:
-                        logger.warning(f"v3.0.15: ⚠️ No valid layer to restore during protection window")
-                    return
-
-                # Case 2: layer is different from saved layer - BLOCK to prevent unwanted change
-                if saved_layer_id and layer.id() != saved_layer_id:
-                    logger.info(f"v3.0.19: 🛡️ current_layer_changed BLOCKED - requested '{layer.name()}' != saved during protection window (elapsed={elapsed:.3f}s)")
-                    QgsMessageLog.logMessage(
-                        f"v3.0.19: 🛡️ BLOCKED attempt to change from saved layer to '{layer.name()}'",
-                        "FilterMate", Qgis.Warning
-                    )
-                    # Restore the combobox to the saved layer
-                    from qgis.core import QgsProject
-                    saved_layer = QgsProject.instance().mapLayer(saved_layer_id)
-                    if saved_layer and saved_layer.isValid():
-                        # v3.0.19: Don't toggle blockSignals - keep existing state from filter_mate_app
-                        self.comboBox_filtering_current_layer.setLayer(saved_layer)
-                        self.current_layer = saved_layer
-                        logger.info(f"v3.0.19: ✅ Restored combobox and current_layer to '{saved_layer.name()}' (signals kept blocked)")
-                        QgsMessageLog.logMessage(
-                            f"v3.0.19: ✅ FORCE RESTORED to '{saved_layer.name()}'",
-                            "FilterMate", Qgis.Info
-                        )
-                    return
-
-                # Case 3: layer is same as saved layer - ALLOW but log
-                logger.debug(f"v3.0.14: ✓ current_layer_changed ALLOWED - same layer '{layer.name()}' during protection window (elapsed={elapsed:.3f}s)")
-        
-        # v2.9.19: CRITICAL - Ensure we have a valid layer when layers exist in project
-        # Never allow current_layer to be None if PROJECT_LAYERS has layers
-        layer = self._ensure_valid_current_layer(layer)
-        
-        # If still None after _ensure_valid_current_layer, truly no layers available
-        if layer is None:
-            if len(self.PROJECT_LAYERS) > 0:
-                logger.error("v2.9.19: ❌ CRITICAL - Could not find valid layer despite PROJECT_LAYERS having entries!")
-            else:
-                logger.debug("v2.9.19: No layers in project - current_layer remains None")
-            # Don't process further if no valid layer
-            return
-        
-        # CACHE INVALIDATION: When changing layers, we don't need to invalidate 
-        # the cache for the old layer (it stays valid for when we switch back).
-        # The cache key includes layer_id, so each layer has its own cache entries.
-        # This is intentional: cached features remain valid until selection changes.
-        
-        # STABILITY FIX: If plugin is busy (loading project, etc.), defer the layer change
-        if self._plugin_busy:
-            from qgis.PyQt.QtCore import QTimer
-            from qgis.core import QgsProject
-            logger.debug(f"Plugin is busy, deferring layer change for: {layer.name() if layer else 'None'}")
-            # STABILITY FIX: Use weakref to prevent access violations
-            weak_self = weakref.ref(self)
-            # CRASH FIX (v2.3.16): Store layer ID, not layer object reference
-            # The layer object may become invalid (C++ deleted) by the time timer fires.
-            # Re-fetch from QgsProject to get a fresh, valid reference.
-            try:
-                captured_layer_id = layer.id() if layer else None
-            except (RuntimeError, OSError, SystemError):
-                captured_layer_id = None
-            
-            def safe_layer_change():
-                strong_self = weak_self()
-                if strong_self is not None:
-                    # CRASH FIX (v2.3.16): Re-fetch layer from project using ID
-                    if captured_layer_id:
-                        fresh_layer = QgsProject.instance().mapLayer(captured_layer_id)
-                        if fresh_layer is not None:
-                            strong_self.current_layer_changed(fresh_layer)
-                        else:
-                            logger.debug(f"safe_layer_change: layer {captured_layer_id} no longer exists, skipping")
-                    else:
-                        strong_self.current_layer_changed(None)
-            QTimer.singleShot(150, safe_layer_change)
-            return
-        
-        # STABILITY FIX: Verify layer is valid before accessing properties
-        if layer is not None:
-            try:
-                # Test if the layer C++ object is still valid
-                layer_name = layer.name()
-                layer_id = layer.id()
-            except (RuntimeError, AttributeError):
-                logger.warning("current_layer_changed received invalid layer object, ignoring")
+        # v3.1 Sprint 6: Delegate protection logic to LayerSyncController
+        if self._controller_integration:
+            # Controller returns False if layer change is blocked
+            if not self._controller_integration.delegate_current_layer_changed(layer):
+                logger.debug(f"current_layer_changed BLOCKED by LayerSyncController")
                 return
         
-        # DEBUG: Log layer information
-        logger.debug(f"current_layer_changed called with layer: {layer.name() if layer else 'None'} (id: {layer.id() if layer else 'None'})")
+        # Validate layer - ensure we have a valid layer when layers exist
+        layer = self._ensure_valid_current_layer(layer)
+        if layer is None:
+            if len(self.PROJECT_LAYERS) > 0:
+                logger.error("CRITICAL - Could not find valid layer despite PROJECT_LAYERS having entries!")
+            return
         
-        # Set lock immediately
+        # STABILITY FIX: If plugin is busy, defer the layer change
+        if self._plugin_busy:
+            self._defer_layer_change(layer)
+            return
+        
+        # Verify layer C++ object is still valid
+        try:
+            _ = layer.name()
+            _ = layer.id()
+        except (RuntimeError, AttributeError):
+            logger.warning("current_layer_changed received invalid layer object, ignoring")
+            return
+        
+        logger.debug(f"current_layer_changed: processing layer '{layer.name()}'")
+        
+        # Set lock
         self._updating_current_layer = True
         
-        # v2.9.20: Reset saved single_selection FID when changing source layer
-        # The saved FID is only valid for the layer it was saved from
-        if hasattr(self, '_last_single_selection_layer_id'):
-            if layer is None or layer.id() != self._last_single_selection_layer_id:
-                logger.debug(f"current_layer_changed: Clearing saved single_selection FID (layer changed)")
-                self._last_single_selection_fid = None
-                self._last_single_selection_layer_id = None
-        
-        # v2.9.29: Reset saved multiple_selection FIDs when changing source layer
-        # The saved FIDs are only valid for the layer they were saved from
-        if hasattr(self, '_last_multiple_selection_layer_id'):
-            if layer is None or layer.id() != self._last_multiple_selection_layer_id:
-                logger.debug(f"current_layer_changed: Clearing saved multiple_selection FIDs (layer changed)")
-                self._last_multiple_selection_fids = None
-                self._last_multiple_selection_layer_id = None
+        # Reset selection tracking for new layer
+        self._reset_selection_tracking_for_layer(layer)
             
         try:
             # Validate layer and prepare for change
@@ -7892,10 +7481,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Reload exploration widgets with validated layer
             self._reload_exploration_widgets(validated_layer, layer_props)
             
-            # v2.9.41: CRITICAL - Update exploring buttons state after layer change
-            # This ensures zoom/identify buttons reflect the current selection state,
-            # preventing them from being stuck in disabled state when switching layers
-            # especially important for Spatialite backend in multi-step filtering scenarios
+            # Update exploring buttons state after layer change
             self._update_exploring_buttons_state()
             
             # Reconnect all signals and restore state
@@ -7904,8 +7490,42 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except Exception as e:
             logger.error(f"Error in current_layer_changed: {type(e).__name__}: {e}")
         finally:
-            # CRITICAL: Always release the lock
             self._updating_current_layer = False
+    
+    def _defer_layer_change(self, layer):
+        """Defer layer change when plugin is busy."""
+        from qgis.PyQt.QtCore import QTimer
+        from qgis.core import QgsProject
+        
+        logger.debug(f"Plugin is busy, deferring layer change for: {layer.name() if layer else 'None'}")
+        weak_self = weakref.ref(self)
+        try:
+            captured_layer_id = layer.id() if layer else None
+        except (RuntimeError, OSError, SystemError):
+            captured_layer_id = None
+        
+        def safe_layer_change():
+            strong_self = weak_self()
+            if strong_self is not None and captured_layer_id:
+                fresh_layer = QgsProject.instance().mapLayer(captured_layer_id)
+                if fresh_layer is not None:
+                    strong_self.current_layer_changed(fresh_layer)
+        
+        QTimer.singleShot(150, safe_layer_change)
+    
+    def _reset_selection_tracking_for_layer(self, layer):
+        """Reset selection tracking when layer changes."""
+        # Reset single_selection FID
+        if hasattr(self, '_last_single_selection_layer_id'):
+            if layer is None or layer.id() != self._last_single_selection_layer_id:
+                self._last_single_selection_fid = None
+                self._last_single_selection_layer_id = None
+        
+        # Reset multiple_selection FIDs
+        if hasattr(self, '_last_multiple_selection_layer_id'):
+            if layer is None or layer.id() != self._last_multiple_selection_layer_id:
+                self._last_multiple_selection_fids = None
+                self._last_multiple_selection_layer_id = None
 
 
     def project_property_changed(self, input_property, input_data=None, custom_functions={}):

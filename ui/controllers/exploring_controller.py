@@ -1146,6 +1146,179 @@ class ExploringController(BaseController, LayerSelectionMixin):
 
         self._dockwidget.iface.mapCanvas().refresh()
 
+    def get_current_features(self, use_cache: bool = True):
+        """
+        Get the currently selected features based on the active exploring groupbox.
+        
+        v3.1 Sprint 6: Migrated from dockwidget to controller.
+        
+        This method retrieves features from the appropriate widget (single selection,
+        multiple selection, or custom expression) and caches them for subsequent
+        operations like flash, zoom, and identify.
+        
+        Args:
+            use_cache: If True, return cached features if available (default: True).
+                       Set to False to force refresh from widgets.
+        
+        Returns:
+            tuple: (features, expression) where features is a list of QgsFeature
+                   and expression is the QGIS expression string used for selection.
+        """
+        dw = self._dockwidget
+        
+        if not dw.widgets_initialized or dw.current_layer is None:
+            logger.debug("get_current_features: widgets not initialized or no current layer")
+            return [], ''
+        
+        # Use centralized deletion check
+        if dw._is_layer_truly_deleted(dw.current_layer):
+            logger.debug("get_current_features: current_layer C++ object truly deleted")
+            dw.current_layer = None
+            return [], ''
+        
+        layer_id = dw.current_layer.id()
+        groupbox_type = dw.current_exploring_groupbox
+        
+        # CACHE CHECK
+        if use_cache and hasattr(dw, '_exploring_cache') and groupbox_type:
+            cached = dw._exploring_cache.get(layer_id, groupbox_type)
+            if cached:
+                # Validate cache for custom_selection
+                if groupbox_type == "custom_selection":
+                    current_expr = dw.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].expression()
+                    cached_expr = cached.get('expression', '')
+                    if current_expr != cached_expr:
+                        logger.debug(f"get_current_features: CACHE STALE for custom_selection")
+                        dw._exploring_cache.invalidate(layer_id, groupbox_type)
+                    else:
+                        logger.debug(f"get_current_features: CACHE HIT for {layer_id[:8]}.../{groupbox_type}")
+                        return cached['features'], cached['expression'] or ''
+                else:
+                    logger.debug(f"get_current_features: CACHE HIT for {layer_id[:8]}.../{groupbox_type}")
+                    return cached['features'], cached['expression'] or ''
+        
+        features = []
+        expression = ''
+        
+        logger.debug(f"get_current_features: groupbox='{groupbox_type}', layer='{dw.current_layer.name()}'")
+        
+        if groupbox_type == "single_selection":
+            features, expression = self._get_single_selection_features()
+        elif groupbox_type == "multiple_selection":
+            features, expression = self._get_multiple_selection_features()
+        elif groupbox_type == "custom_selection":
+            features, expression = self._get_custom_selection_features()
+        else:
+            logger.warning(f"get_current_features: Unknown groupbox '{groupbox_type}'")
+        
+        # Cache update
+        if features and hasattr(dw, '_exploring_cache') and groupbox_type:
+            dw._exploring_cache.put(layer_id, groupbox_type, features, expression)
+            logger.debug(f"get_current_features: Cached {len(features)} features")
+        
+        return features, expression
+    
+    def _get_single_selection_features(self):
+        """Handle single selection feature retrieval with recovery logic."""
+        dw = self._dockwidget
+        widget = dw.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+        input_feature = widget.feature()
+        
+        # Check if feature is valid
+        if input_feature is None or (hasattr(input_feature, 'isValid') and not input_feature.isValid()):
+            # Try recovery from saved FID
+            if (hasattr(dw, '_last_single_selection_fid') 
+                and dw._last_single_selection_fid is not None
+                and dw.current_layer.id() == getattr(dw, '_last_single_selection_layer_id', None)):
+                try:
+                    recovered = dw.current_layer.getFeature(dw._last_single_selection_fid)
+                    if recovered.isValid() and recovered.hasGeometry():
+                        logger.info(f"SINGLE_SELECTION: Recovered feature id={dw._last_single_selection_fid}")
+                        input_feature = recovered
+                    else:
+                        return [], ''
+                except Exception as e:
+                    logger.warning(f"SINGLE_SELECTION: Recovery failed: {e}")
+                    return [], ''
+            else:
+                # Try QGIS canvas selection
+                qgis_selected = dw.current_layer.selectedFeatures()
+                if len(qgis_selected) == 1:
+                    input_feature = qgis_selected[0]
+                    dw._last_single_selection_fid = input_feature.id()
+                    dw._last_single_selection_layer_id = dw.current_layer.id()
+                    logger.info(f"SINGLE_SELECTION: Using QGIS selection feature id={input_feature.id()}")
+                elif len(qgis_selected) > 1:
+                    # Multiple selected - use multiple selection mode
+                    features, expression = self.get_exploring_features(qgis_selected, True)
+                    dw._last_multiple_selection_fids = [f.id() for f in qgis_selected]
+                    dw._last_multiple_selection_layer_id = dw.current_layer.id()
+                    return features, expression
+                else:
+                    logger.debug("SINGLE_SELECTION: No feature selected")
+                    return [], ''
+        
+        logger.info(f"SINGLE_SELECTION valid feature: id={input_feature.id()}")
+        return self.get_exploring_features(input_feature, True)
+    
+    def _get_multiple_selection_features(self):
+        """Handle multiple selection feature retrieval with recovery logic."""
+        dw = self._dockwidget
+        widget = dw.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
+        input_items = widget.checkedItems()
+        
+        # Try recovery if no items
+        if not input_items or len(input_items) == 0:
+            if (hasattr(dw, '_last_multiple_selection_fids') 
+                and dw._last_multiple_selection_fids
+                and dw.current_layer.id() == getattr(dw, '_last_multiple_selection_layer_id', None)):
+                try:
+                    input_items = [[str(fid), fid, None, None] for fid in dw._last_multiple_selection_fids]
+                    logger.info(f"MULTIPLE_SELECTION: Recovered {len(input_items)} items from saved FIDs")
+                except Exception as e:
+                    logger.warning(f"MULTIPLE_SELECTION: Recovery failed: {e}")
+                    input_items = []
+        
+        # Try QGIS canvas selection as fallback
+        if not input_items or len(input_items) == 0:
+            qgis_selected = dw.current_layer.selectedFeatures()
+            if len(qgis_selected) > 0:
+                logger.info(f"MULTIPLE_SELECTION: Using {len(qgis_selected)} features from QGIS canvas")
+                features, expression = self.get_exploring_features(qgis_selected, True)
+                dw._last_multiple_selection_fids = [f.id() for f in qgis_selected]
+                dw._last_multiple_selection_layer_id = dw.current_layer.id()
+                return features, expression
+        
+        logger.debug(f"MULTIPLE_SELECTION: {len(input_items) if input_items else 0} checked items")
+        return self.get_exploring_features(input_items, True)
+    
+    def _get_custom_selection_features(self):
+        """Handle custom expression feature retrieval."""
+        dw = self._dockwidget
+        from qgis.core import QgsExpression
+        
+        expression = dw.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].expression()
+        logger.info(f"CUSTOM_SELECTION expression: '{expression}'")
+        
+        if not expression or not expression.strip():
+            logger.warning("CUSTOM_SELECTION: Empty expression!")
+            return [], ''
+        
+        # Validate expression
+        qgs_expr = QgsExpression(expression)
+        if qgs_expr.hasParserError():
+            logger.warning(f"CUSTOM_SELECTION: Expression parse error: {qgs_expr.parserErrorString()}")
+        
+        # Save expression to layer_props
+        if dw.current_layer.id() in dw.PROJECT_LAYERS:
+            dw.PROJECT_LAYERS[dw.current_layer.id()]["exploring"]["custom_selection_expression"] = expression
+        
+        # Process expression
+        features, expression = dw.exploring_custom_selection()
+        logger.info(f"CUSTOM_SELECTION: {len(features)} features")
+        
+        return features, expression
+
     def get_exploring_features(self, input, identify_by_primary_key_name=False, custom_expression=None):
         """
         Get features based on input (QgsFeature, list, or expression).
