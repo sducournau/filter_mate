@@ -45,6 +45,19 @@ from .services import (
     HistoryEntry,
 )
 
+# v4.0 EPIC-1 Phase E1: Export module
+from .export import (
+    LayerExporter,
+    ExportConfig,
+    ExportResult,
+    ExportFormat,
+    StyleExporter,
+    StyleFormat,
+    save_layer_style,
+    validate_export_parameters,
+    ExportValidationResult,
+)
+
 __all__ = [
     # Domain
     'FilterExpression',
@@ -70,4 +83,14 @@ __all__ = [
     'ValidationResult',
     'HistoryService',
     'HistoryEntry',
+    # Export (v4.0 EPIC-1 Phase E1)
+    'LayerExporter',
+    'ExportConfig',
+    'ExportResult',
+    'ExportFormat',
+    'StyleExporter',
+    'StyleFormat',
+    'save_layer_style',
+    'validate_export_parameters',
+    'ExportValidationResult',
 ]

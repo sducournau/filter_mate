@@ -9254,6 +9254,8 @@ class FilterEngineTask(QgsTask):
         """
         Validate and extract export parameters from task configuration.
         
+        v4.0 DELEGATION: Delegates to core.export.validate_export_parameters()
+        
         Returns:
             dict: Export configuration or None if validation fails
                 {
@@ -9265,6 +9267,30 @@ class FilterEngineTask(QgsTask):
                     'zip_path': zip file path or None
                 }
         """
+        # v4.0: Delegate to export validator
+        try:
+            from core.export import validate_export_parameters
+            result = validate_export_parameters(self.task_parameters, ENV_VARS)
+            if result.valid:
+                return {
+                    'layers': result.layers,
+                    'projection': result.projection,
+                    'styles': result.styles,
+                    'datatype': result.datatype,
+                    'output_folder': result.output_folder,
+                    'zip_path': result.zip_path,
+                    'batch_output_folder': result.batch_output_folder,
+                    'batch_zip': result.batch_zip
+                }
+            else:
+                logger.error(result.error_message)
+                return None
+        except ImportError:
+            logger.debug("Export validator not available, using legacy validation")
+        except Exception as e:
+            logger.debug(f"Export validator failed: {e}, using legacy validation")
+        
+        # LEGACY FALLBACK
         config = self.task_parameters["task"]['EXPORTING']
         
         # Validate layers
@@ -9354,12 +9380,25 @@ class FilterEngineTask(QgsTask):
         """
         Save layer style to file if format supports it.
         
+        v4.0 DELEGATION: Delegates to core.export.save_layer_style()
+        
         Args:
             layer: QgsVectorLayer
             output_path: Base path for export (without extension)
             style_format: Style file format (e.g., 'qml', 'sld', 'lyrx')
             datatype: Export datatype (to check if styles are supported)
         """
+        # v4.0: Delegate to style exporter
+        try:
+            from core.export import save_layer_style
+            save_layer_style(layer, output_path, style_format, datatype)
+            return
+        except ImportError:
+            logger.debug("Style exporter not available, using legacy")
+        except Exception as e:
+            logger.debug(f"Style exporter failed: {e}, using legacy")
+        
+        # LEGACY FALLBACK
         if datatype == 'XLSX' or not style_format:
             return
         
