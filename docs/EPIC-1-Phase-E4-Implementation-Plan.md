@@ -146,12 +146,14 @@ Phase E4 extracts ~3,500 lines of backend-specific code from `filter_task.py` to
 ### Completed Extractions
 
 ✅ **Session 1 (E4-S1)**: Core expression converters (~250 lines)
+
 - `qgis_expression_to_postgis()` → postgresql/filter_executor.py (68 lines)
-- `qgis_expression_to_spatialite()` → spatialite/filter_executor.py (58 lines)  
+- `qgis_expression_to_spatialite()` → spatialite/filter_executor.py (58 lines)
 - `prepare_postgresql_source_geom()` → postgresql/filter_executor.py (122 lines)
 - Commit: MIG-210
 
 ✅ **Session 2 (E4-S2)**: Predicate builders (~123 lines)
+
 - `build_postgis_predicates()` → postgresql/filter_executor.py (59 lines)
 - `build_spatialite_query()` → spatialite/filter_executor.py (64 lines)
 - Commit: MIG-211
@@ -163,27 +165,32 @@ Phase E4 extracts ~3,500 lines of backend-specific code from `filter_task.py` to
 The following methods require significant refactoring before extraction:
 
 #### ⚠️ prepare_spatialite_source_geom() (629 lines)
+
 **Reason**: Extreme complexity - thread-safety, caching, dissolve optimization
 **Dependencies**:
+
 - `_get_optimization_thresholds()` (33 lines)
 - `_geometry_to_wkt()` (73 lines)
 - `_simplify_geometry_adaptive()` (122 lines)
 - `safe_unary_union()`, `safe_collect_geometry()` (geometry utilities)
 - Advanced WKT simplification logic
 - GeometryCache integration
-**Recommendation**: Refactor into smaller, testable components first
+  **Recommendation**: Refactor into smaller, testable components first
 
 #### ⚠️ prepare_ogr_source_geom() (382 lines)
+
 **Reason**: Many helper method dependencies
 **Dependencies**:
+
 - `_copy_filtered_layer_to_memory()`
 - `_create_memory_layer_from_features()`
 - `_reproject_layer()`
 - `_convert_layer_to_centroids()`
 - `_repair_invalid_geometries()`
-**Recommendation**: Extract helper methods to shared utilities first
+  **Recommendation**: Extract helper methods to shared utilities first
 
-#### ⚠️ _execute_ogr_spatial_selection() (159 lines)
+#### ⚠️ \_execute_ogr_spatial_selection() (159 lines)
+
 **Dependencies**: QGIS processing algorithms, selection handling
 **Recommendation**: Extract after prepare_ogr_source_geom()
 
