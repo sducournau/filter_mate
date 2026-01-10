@@ -376,3 +376,130 @@ def apply_postgresql_type_casting(expression: str, layer=None) -> str:
         expression = re.sub(numeric_comparison_pattern, add_numeric_cast, expression)
     
     return expression
+
+
+def build_spatial_join_query(
+    layer_props: dict,
+    param_postgis_sub_expression: str,
+    sub_expression: str,
+    current_materialized_view_name: str = None,
+    current_materialized_view_schema: str = None,
+    source_schema: str = None,
+    source_table: str = None,
+    expression: str = None,
+    has_combine_operator: bool = False
+) -> str:
+    """
+    Build SELECT query with spatial JOIN for filtering.
+    
+    EPIC-1 Phase E4-S3b: Extracted from filter_task.py line 6676 (56 lines)
+    
+    Constructs a PostgreSQL subquery using INNER JOIN for spatial filtering.
+    The subquery returns primary key values that match the spatial predicate.
+    
+    Args:
+        layer_props: Layer properties dict with schema, table, primary key
+        param_postgis_sub_expression: PostGIS spatial predicate (e.g., ST_Intersects)
+        sub_expression: Source layer subset expression or table reference
+        current_materialized_view_name: MV name if using cached buffer (optional)
+        current_materialized_view_schema: MV schema (optional)
+        source_schema: Source table schema for direct table join
+        source_table: Source table name for direct table join
+        expression: Original filter expression for complexity check
+        has_combine_operator: Whether combine operator is active
+        
+    Returns:
+        str: SELECT query with INNER JOIN for use in IN clause
+    """
+    from qgis.core import QgsExpression
+    
+    logger = logging.getLogger('FilterMate.Adapters.Backends.PostgreSQL.FilterExecutor')
+    
+    param_distant_primary_key_name = layer_props["primary_key_name"]
+    param_distant_schema = layer_props["layer_schema"]
+    param_distant_table = layer_props["layer_name"]
+    
+    # Determine source reference (materialized view or direct table)
+    if current_materialized_view_name:
+        source_ref = f'"{current_materialized_view_schema}"."mv_{current_materialized_view_name}_dump"'
+    else:
+        source_ref = sub_expression
+    
+    # Check if expression is a simple field reference
+    is_field = False
+    if expression:
+        try:
+            is_field = QgsExpression(expression).isField()
+        except Exception:
+            pass
+    
+    # Build query based on combine operator and expression type
+    if has_combine_operator:
+        # With combine operator - no WHERE clause needed
+        query = (
+            f'(SELECT "{param_distant_table}"."{param_distant_primary_key_name}" '
+            f'FROM "{param_distant_schema}"."{param_distant_table}" '
+            f'INNER JOIN {source_ref} ON {param_postgis_sub_expression})'
+        )
+    else:
+        # Without combine operator - add WHERE clause if not a field
+        if is_field:
+            # For field expressions, use simple JOIN
+            query = (
+                f'(SELECT "{param_distant_table}"."{param_distant_primary_key_name}" '
+                f'FROM "{param_distant_schema}"."{param_distant_table}" '
+                f'INNER JOIN {source_ref} ON {param_postgis_sub_expression})'
+            )
+        else:
+            # For complex expressions, add WHERE clause
+            if current_materialized_view_name:
+                # Materialized view has WHERE embedded
+                query = (
+                    f'(SELECT "{param_distant_table}"."{param_distant_primary_key_name}" '
+                    f'FROM "{param_distant_schema}"."{param_distant_table}" '
+                    f'INNER JOIN {source_ref} ON {param_postgis_sub_expression} '
+                    f'WHERE {sub_expression})'
+                )
+            else:
+                # Direct table JOIN with WHERE
+                query = (
+                    f'(SELECT "{param_distant_table}"."{param_distant_primary_key_name}" '
+                    f'FROM "{param_distant_schema}"."{param_distant_table}" '
+                    f'INNER JOIN "{source_schema}"."{source_table}" '
+                    f'ON {param_postgis_sub_expression} WHERE {sub_expression})'
+                )
+    
+    logger.debug(f"Built spatial join query: {query[:150]}...")
+    return query
+
+
+def apply_combine_operator(
+    primary_key_name: str,
+    param_expression: str,
+    param_old_subset: str = None,
+    param_combine_operator: str = None
+) -> str:
+    """
+    Apply SQL set operator to combine with existing subset.
+    
+    EPIC-1 Phase E4-S3b: Extracted from filter_task.py line 6735 (20 lines)
+    
+    Wraps the subquery in an IN clause and optionally combines with
+    existing subset using UNION, INTERSECT, or EXCEPT.
+    
+    Args:
+        primary_key_name: Primary key field name
+        param_expression: The subquery expression (from build_spatial_join_query)
+        param_old_subset: Existing subset to combine with (optional)
+        param_combine_operator: SQL set operator (UNION, INTERSECT, EXCEPT)
+        
+    Returns:
+        str: Complete IN expression with optional combine operator
+    """
+    if param_old_subset and param_combine_operator:
+        return (
+            f'"{primary_key_name}" IN ( {param_old_subset} '
+            f'{param_combine_operator} {param_expression} )'
+        )
+    else:
+        return f'"{primary_key_name}" IN {param_expression}'

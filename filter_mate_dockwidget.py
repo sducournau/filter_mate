@@ -1503,50 +1503,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         show_warning("FilterMate", "Backend optimization unavailable")
 
     def _setup_action_bar_layout(self):
-        """
-        Setup the action bar layout based on configuration.
+        """v3.1 Sprint 18: Setup action bar layout based on configuration."""
+        if not hasattr(self, 'frame_actions'): return
         
-        Reads ACTION_BAR_POSITION from config and applies the appropriate layout:
-        - 'top': Action bar at top (default horizontal layout)
-        - 'bottom': Action bar at bottom (horizontal layout)
-        - 'left': Action bar on left side (vertical layout)
-        - 'right': Action bar on right side (vertical layout)
+        if self._action_bar_manager:
+            try: self._action_bar_manager.setup(); return
+            except: pass
         
-        v3.1 Phase 6 (MIG-064): Delegates to ActionBarManager if available.
-        """
-        if not hasattr(self, 'frame_actions'):
-            return
-        
-        # v3.1: Delegate to ActionBarManager (Phase 6 - MIG-064)
-        if self._action_bar_manager is not None:
-            try:
-                self._action_bar_manager.setup()
-                logger.debug("Action bar setup delegated to ActionBarManager (v3.1)")
-                return
-            except Exception as e:
-                logger.warning(f"ActionBarManager.setup() failed, falling back to legacy: {e}")
-        
-        # Legacy fallback - original implementation
-        # Get configured position
         position = self._get_action_bar_position()
-        logger.info(f"Setting up action bar with position: {position}")
+        self._side_action_bar_active, self._side_action_bar_position = False, None
+        self._side_action_bar_alignment, self._vertical_action_spacer, self._side_action_wrapper = None, None, None
         
-        # Initialize tracking attributes
-        self._side_action_bar_active = False
-        self._side_action_bar_position = None
-        self._side_action_bar_alignment = None
-        self._vertical_action_spacer = None
-        self._side_action_wrapper = None
-        
-        # Apply the position
-        if position in ('left', 'right'):
-            # For side positions, we need to set up the wrapper layout
-            self._apply_action_bar_position(position)
+        if position in ('left', 'right'): self._apply_action_bar_position(position)
         else:
-            # For top/bottom, use the default horizontal layout
             self.frame_actions.show()
             self._current_action_bar_position = position
-            logger.info(f"Action bar: Using '{position}' position")
 
     def _get_action_bar_position(self):
         """
@@ -2211,48 +2182,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def apply_pending_config_changes(self):
-        """
-        Apply all pending configuration changes when OK button is clicked.
-        
-        Orchestrates the application of different config change types by delegating
-        to specialized methods.
-        """
-        if not self.config_changes_pending or not self.pending_config_changes:
-            logger.info("No pending configuration changes to apply")
-            return
-        
-        logger.info(f"Applying {len(self.pending_config_changes)} pending configuration change(s)")
+        """v3.1 Sprint 18: Apply all pending configuration changes."""
+        if not self.config_changes_pending or not self.pending_config_changes: return
         
         changes_summary = []
-        
         for change in self.pending_config_changes:
-            items_keys_values_path = change['path']
-            
-            # Handle ICONS changes
-            if 'ICONS' in items_keys_values_path:
-                self.set_widget_icon(items_keys_values_path)
-                changes_summary.append(f"Icon: {' → '.join(items_keys_values_path[-2:])}")
-            
-            # Apply specialized change handlers
+            path = change['path']
+            if 'ICONS' in path: self.set_widget_icon(path); changes_summary.append(f"Icon: {' → '.join(path[-2:])}")
             self._apply_theme_change(change, changes_summary)
             self._apply_ui_profile_change(change, changes_summary)
             self._apply_action_bar_position_change(change, changes_summary)
             self._apply_export_style_change(change, changes_summary)
             self._apply_export_format_change(change, changes_summary)
-            
-            # Save configuration after each change
             self.save_configuration_model()
         
-        # Clear pending changes after applying them
-        self.pending_config_changes = []
-        self.config_changes_pending = False
-        
-        # Disable OK/Cancel buttons after changes have been applied
-        if hasattr(self, 'buttonBox'):
-            self.buttonBox.setEnabled(False)
-            logger.info("Configuration buttons disabled (changes applied)")
-        
-        logger.info("All pending configuration changes have been applied and saved")
+        self.pending_config_changes, self.config_changes_pending = [], False
+        if hasattr(self, 'buttonBox'): self.buttonBox.setEnabled(False)
 
 
     def cancel_pending_config_changes(self):
@@ -2338,47 +2283,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def manage_configuration_model(self):
-        """Manage the qtreeview model configuration"""
-
+        """v3.1 Sprint 18: Manage the qtreeview model configuration."""
         try:
-            # Create model with data
             self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=False, editable_values=True, plugin_dir=self.plugin_dir)
-
-            # Create view with model - setModel() is called in JsonView.__init__()
             self.config_view = JsonView(self.config_model, self.plugin_dir)
-            
-            # Insert into layout
             self.CONFIGURATION.layout().insertWidget(0, self.config_view)
-
-            # Note: setModel() is already called in JsonView constructor - do NOT call again
-            # Calling setModel() after insertion can cause Qt crashes
-
             self.config_view.setAnimated(True)
             self.config_view.setEnabled(True)
             self.config_view.show()
-            
-            # CRITICAL: Connect itemChanged signal immediately after model creation
-            # This ensures changes are detected and OK button is enabled
             self.config_model.itemChanged.connect(self.data_changed_configuration_model)
-            logger.info("Configuration model itemChanged signal connected")
-            
-            # Add Reload Plugin button
             self._setup_reload_button()
-            
-            # Disable OK/Cancel buttons by default (no changes pending)
             if hasattr(self, 'buttonBox'):
                 self.buttonBox.setEnabled(False)
-                logger.info("Configuration buttons disabled (no pending changes)")
-            
-            # Connect OK/Cancel button signals
-            if hasattr(self, 'buttonBox'):
                 self.buttonBox.accepted.connect(self.on_config_buttonbox_accepted)
                 self.buttonBox.rejected.connect(self.on_config_buttonbox_rejected)
-                logger.info("Configuration button signals connected")
         except Exception as e:
             logger.error(f"Error creating configuration model: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
 
     def _setup_reload_button(self):
         """
@@ -3642,45 +3562,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return self.widgets["EXPORTING"]["PROJECTION_TO_EXPORT"]["WIDGET"].crs().authid()
     
     def _validate_and_prepare_layer(self, layer):
-        """
-        v3.1 Sprint 10: Simplified validation and preparation for layer change.
-        Returns: (should_continue, layer, layer_props)
-        """
-        # Quick guards
-        if self._plugin_busy or not self.PROJECT_LAYERS or not self.widgets_initialized:
-            return (False, None, None)
+        """v3.1 Sprint 18: Simplified validation and preparation for layer change."""
+        if self._plugin_busy or not self.PROJECT_LAYERS or not self.widgets_initialized: return (False, None, None)
+        if not layer or not isinstance(layer, QgsVectorLayer): return (False, None, None)
         
-        # Skip raster layers and None
-        if layer is None or not isinstance(layer, QgsVectorLayer):
-            return (False, None, None)
+        try: _ = layer.id()
+        except RuntimeError: return (False, None, None)
         
-        # Verify C++ object validity
-        try:
-            _ = layer.id()
-        except RuntimeError:
-            return (False, None, None)
-        
-        # Verify layer source is available
         try:
             if not is_layer_source_available(layer):
                 show_warning("FilterMate", "La couche sélectionnée est invalide ou sa source est introuvable.")
                 return (False, None, None)
-        except Exception:
-            return (False, None, None)
+        except: return (False, None, None)
         
-        # Disconnect selectionChanged from previous layer
-        if self.current_layer is not None and self.current_layer_selection_connection is not None:
-            try:
-                self.current_layer.selectionChanged.disconnect(self.on_layer_selection_changed)
-            except (TypeError, RuntimeError):
-                pass
+        if self.current_layer and self.current_layer_selection_connection:
+            try: self.current_layer.selectionChanged.disconnect(self.on_layer_selection_changed)
+            except: pass
             self.current_layer_selection_connection = None
         
         self.current_layer = layer
-        
-        if self.current_layer.id() not in self.PROJECT_LAYERS:
-            return (False, None, None)
-        
+        if self.current_layer.id() not in self.PROJECT_LAYERS: return (False, None, None)
         self.currentLayerChanged.emit()
         return (True, layer, self.PROJECT_LAYERS[self.current_layer.id()])
     
@@ -3911,50 +3812,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def project_property_changed(self, input_property, input_data=None, custom_functions={}):
-        """
-        Handle property changes for project-level (export) properties.
-        
-        v4.0 Sprint 3: Delegates to PropertyController when available.
-        """
-        # v4.0 Sprint 3: Delegation to PropertyController (Sprint 5: fallback removed)
+        """v4.0 Sprint 9: Handle project property changes - delegates to PropertyController."""
         if self._controller_integration and self._controller_integration.property_controller:
-            try:
-                if self._controller_integration.delegate_change_project_property(
-                    input_property, input_data, custom_functions
-                ):
-                    logger.debug("project_property_changed: delegated to PropertyController")
-                    return
-            except Exception as e:
-                logger.debug(f"project_property_changed delegation failed: {e}")
-        
-        # No fallback - controller handles all logic
-        logger.warning("project_property_changed: Controller delegation failed")
-
+            try: self._controller_integration.delegate_change_project_property(input_property, input_data, custom_functions)
+            except: pass
 
     def _parse_property_data(self, input_data):
-        """
-        Parse and validate input data for property updates.
-        
-        Args:
-            input_data: Property value (dict, list, str, int, float, bool, or None)
-            
-        Returns:
-            tuple: (parsed_data, state) where state indicates if data is valid/enabled
-        """
-        state = None
-        
-        if isinstance(input_data, dict) or isinstance(input_data, list) or isinstance(input_data, str):
-            state = len(input_data) >= 0
-        elif isinstance(input_data, int) or isinstance(input_data, float):
-            state = int(input_data) >= 0
-            if isinstance(input_data, float):
-                input_data = truncate(input_data, 2)
-        elif isinstance(input_data, bool):
-            state = input_data
-        elif input_data is None:
-            state = False
-            
-        return input_data, state
+        """v4.0 Sprint 9: Parse and validate input data for property updates."""
+        if isinstance(input_data, (dict, list, str)):
+            return input_data, len(input_data) >= 0
+        if isinstance(input_data, (int, float)):
+            return (truncate(input_data, 2) if isinstance(input_data, float) else input_data), int(input_data) >= 0
+        if isinstance(input_data, bool):
+            return input_data, input_data
+        return input_data, False
 
     def _find_property_path(self, input_property):
         """
