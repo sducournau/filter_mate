@@ -25,6 +25,22 @@ from .validation_utils import (
     safe_get_layer_id,
     safe_get_layer_source,
 )
+from .layer_utils import (
+    detect_layer_provider_type,
+    get_datasource_connexion_from_layer,
+    get_data_source_uri,
+    get_primary_key_name,
+    get_best_display_field,
+    validate_and_cleanup_postgres_layers,
+    POSTGRESQL_AVAILABLE,
+    PSYCOPG2_AVAILABLE,
+    CRS_UTILS_AVAILABLE,
+    DEFAULT_METRIC_CRS,
+    PROVIDER_POSTGRES,
+    PROVIDER_SPATIALITE,
+    PROVIDER_OGR,
+    PROVIDER_MEMORY,
+)
 
 __all__ = [
     # Provider utils
@@ -47,4 +63,19 @@ __all__ = [
     'safe_get_layer_name',
     'safe_get_layer_id',
     'safe_get_layer_source',
+    # Layer utils (EPIC-1 migration)
+    'detect_layer_provider_type',
+    'get_datasource_connexion_from_layer',
+    'get_data_source_uri',
+    'get_primary_key_name',
+    'get_best_display_field',
+    'validate_and_cleanup_postgres_layers',
+    'POSTGRESQL_AVAILABLE',
+    'PSYCOPG2_AVAILABLE',
+    'CRS_UTILS_AVAILABLE',
+    'DEFAULT_METRIC_CRS',
+    'PROVIDER_POSTGRES',
+    'PROVIDER_SPATIALITE',
+    'PROVIDER_OGR',
+    'PROVIDER_MEMORY',
 ]

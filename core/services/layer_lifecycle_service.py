@@ -89,8 +89,7 @@ class LayerLifecycleService:
             - Uses is_valid_layer() from object_safety module
             - More permissive with PostgreSQL layers (connection may be initializing)
         """
-        from modules.object_safety import is_sip_deleted, is_valid_layer
-        from modules.appUtils import is_layer_source_available
+        from infrastructure.utils import is_sip_deleted, is_layer_valid as is_valid_layer, is_layer_source_available
         
         try:
             input_count = len(layers or [])
@@ -184,8 +183,7 @@ class LayerLifecycleService:
             - Validates all layers before adding
             - Retries PostgreSQL layers that may not be immediately valid
         """
-        from modules.object_safety import is_sip_deleted
-        from modules.appUtils import validate_and_cleanup_postgres_layers
+        from infrastructure.utils import is_sip_deleted, validate_and_cleanup_postgres_layers
         from infrastructure.feedback import show_warning
         
         # STABILITY: Debounce rapid layer additions
@@ -256,7 +254,7 @@ class LayerLifecycleService:
         retry_attempt: int = 1
     ) -> None:
         """Schedule retry for PostgreSQL layers that may become valid."""
-        from modules.object_safety import is_sip_deleted
+        from infrastructure.utils import is_sip_deleted
         
         logger.info(f"FilterMate: {len(pending_layers)} PostgreSQL layers pending - scheduling retry #{retry_attempt}")
         
@@ -320,7 +318,7 @@ class LayerLifecycleService:
             return
         
         from infrastructure.resilience import get_postgresql_breaker, CircuitOpenError
-        from modules.appUtils import get_datasource_connexion_from_layer
+        from infrastructure.utils import get_datasource_connexion_from_layer
         
         # Check circuit breaker before attempting PostgreSQL operations
         pg_breaker = get_postgresql_breaker()

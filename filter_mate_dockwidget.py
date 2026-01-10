@@ -8402,8 +8402,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         Updates comboboxes, field expression widgets, and backend indicator.
         
+        v4.0 Sprint 3: Delegates to LayerSyncController when available.
         v2.9.42: Added protection to prevent combobox changes during post-filter window.
         """
+        # v4.0 Sprint 3: Try delegation to LayerSyncController first
+        if self._controller_integration and self._controller_integration.layer_sync_controller:
+            try:
+                if self._controller_integration.delegate_synchronize_layer_widgets(layer, layer_props):
+                    logger.debug("_synchronize_layer_widgets: delegated to LayerSyncController")
+                    return
+            except Exception as e:
+                logger.debug(f"_synchronize_layer_widgets delegation failed, using fallback: {e}")
+        
+        # Fallback: Original implementation
         # Detect multi-step filter: auto-enable additive filter if existing subsets detected
         self._detect_multi_step_filter(layer, layer_props)
         
@@ -8684,6 +8695,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         Also restores exploring groupbox UI state and connects layer selection signal.
         
+        v4.0 Sprint 3: Delegates to LayerSyncController when available.
+        
         NOTE: This method now uses _restore_groupbox_ui_state() instead of 
         exploring_groupbox_changed() to avoid double processing of widgets.
         The widget layer updates are already done in _reload_exploration_widgets().
@@ -8699,6 +8712,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         v3.0.4: Added IDENTIFY and ZOOM to the exclusion list since they're now
         reconnected in _reload_exploration_widgets().
         """
+        # v4.0 Sprint 3: Try delegation to LayerSyncController first
+        if self._controller_integration and self._controller_integration.layer_sync_controller:
+            try:
+                if self._controller_integration.delegate_reconnect_layer_signals(widgets_to_reconnect, layer_props):
+                    logger.debug("_reconnect_layer_signals: delegated to LayerSyncController")
+                    return
+            except Exception as e:
+                logger.debug(f"_reconnect_layer_signals delegation failed, using fallback: {e}")
+        
+        # Fallback: Original implementation
         # Filter out exploring widget signals - they are already reconnected in _reload_exploration_widgets()
         exploring_signal_prefixes = [
             ["EXPLORING", "SINGLE_SELECTION_FEATURES"],
@@ -9156,7 +9179,23 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def project_property_changed(self, input_property, input_data=None, custom_functions={}):
-
+        """
+        Handle property changes for project-level (export) properties.
+        
+        v4.0 Sprint 3: Delegates to PropertyController when available.
+        """
+        # v4.0 Sprint 3: Try delegation to PropertyController first
+        if self._controller_integration and self._controller_integration.property_controller:
+            try:
+                if self._controller_integration.delegate_change_project_property(
+                    input_property, input_data, custom_functions
+                ):
+                    logger.debug("project_property_changed: delegated to PropertyController")
+                    return
+            except Exception as e:
+                logger.debug(f"project_property_changed delegation failed, using fallback: {e}")
+        
+        # Fallback: Original implementation
         if self.widgets_initialized is True and self.has_loaded_layers is True:
 
             properties_group_key = None
@@ -9703,7 +9742,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def properties_group_state_reset_to_default(self, tuple_group, group_name, state):
-
+        """
+        Reset a property group to its default values.
+        
+        v4.0 Sprint 3: Delegates to PropertyController when available.
+        """
+        # v4.0 Sprint 3: Try delegation to PropertyController first
+        if self._controller_integration and self._controller_integration.property_controller:
+            try:
+                if self._controller_integration.delegate_reset_property_group(tuple_group, group_name, state):
+                    logger.debug("properties_group_state_reset_to_default: delegated to PropertyController")
+                    return
+            except Exception as e:
+                logger.debug(f"properties_group_state_reset_to_default delegation failed, using fallback: {e}")
+        
+        # Fallback: Original implementation
         if self.widgets_initialized is True and self.has_loaded_layers is True:
             for i, property_path in enumerate(tuple_group):
                 # Skip tuples that don't have a corresponding widget (data-only properties)

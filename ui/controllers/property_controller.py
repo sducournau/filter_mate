@@ -856,3 +856,396 @@ class PropertyController(BaseController):
                 project_layers[layer.id()]["filtering"]["buffer_value"] = value
             except (KeyError, TypeError):
                 pass  # Structure not as expected
+
+    # =========================================================================
+    # Sprint 3: Property Reset and Project Property Methods
+    # =========================================================================
+
+    def reset_property_group_to_default(
+        self,
+        tuple_group: list,
+        group_name: str,
+        state: bool
+    ) -> bool:
+        """
+        Reset a property group to its default values.
+        
+        Migrated from filter_mate_dockwidget.properties_group_state_reset_to_default.
+        
+        v4.0 Sprint 3: Full migration from dockwidget.
+        
+        Args:
+            tuple_group: List of property tuples in the group
+            group_name: Name of the property group
+            state: Target state (usually False for reset)
+            
+        Returns:
+            True if reset was performed
+        """
+        dw = self.dockwidget
+        
+        # Guard: widgets must be initialized
+        if not getattr(dw, 'widgets_initialized', False):
+            return False
+        if not getattr(dw, 'has_loaded_layers', False):
+            return False
+        
+        current_layer = getattr(dw, 'current_layer', None)
+        if current_layer is None:
+            return False
+        
+        widgets = getattr(dw, 'widgets', {})
+        project_layers = getattr(dw, 'PROJECT_LAYERS', {})
+        project_props = getattr(dw, 'project_props', {})
+        layer_properties_dict = getattr(dw, 'layer_properties_tuples_dict', {})
+        export_properties_dict = getattr(dw, 'export_properties_tuples_dict', {})
+        
+        layer_id = current_layer.id()
+        if layer_id not in project_layers:
+            return False
+        
+        properties_to_save = []
+        
+        for i, property_path in enumerate(tuple_group):
+            # Skip data-only properties
+            if property_path[0].upper() not in widgets:
+                continue
+            if property_path[1].upper() not in widgets.get(property_path[0].upper(), {}):
+                continue
+            
+            if state is False:
+                widget_info = widgets[property_path[0].upper()][property_path[1].upper()]
+                widget_type = widget_info.get("TYPE")
+                widget = widget_info.get("WIDGET")
+                
+                if widget is None:
+                    continue
+                
+                # Disconnect signal
+                if hasattr(dw, 'manageSignal'):
+                    dw.manageSignal([property_path[0].upper(), property_path[1].upper()], 'disconnect')
+                
+                # Reset based on property dict type
+                if group_name in layer_properties_dict:
+                    self._reset_layer_property_widget(
+                        widget, widget_type, property_path, layer_id,
+                        project_layers, current_layer, state, dw
+                    )
+                    # Track for persistence
+                    if property_path[0] in ("infos", "exploring", "filtering"):
+                        value = project_layers[layer_id].get(
+                            property_path[0], {}
+                        ).get(property_path[1])
+                        properties_to_save.append((
+                            property_path[0],
+                            property_path[1],
+                            value,
+                            type(value)
+                        ))
+                        
+                elif group_name in export_properties_dict:
+                    self._reset_export_property_widget(
+                        widget, widget_type, property_path,
+                        project_props, state, dw
+                    )
+                
+                # Reconnect signal
+                if hasattr(dw, 'manageSignal'):
+                    dw.manageSignal([property_path[0].upper(), property_path[1].upper()], 'connect')
+            
+            # Handle widget enabled state
+            if i == 0 and property_path[1].upper().find('HAS') >= 0:
+                widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setEnabled(True)
+            else:
+                widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setEnabled(state)
+        
+        # Persist reset properties to database
+        if state is False and properties_to_save:
+            self._persist_reset_properties(current_layer, properties_to_save, dw)
+        
+        return True
+
+    def _reset_layer_property_widget(
+        self,
+        widget,
+        widget_type: str,
+        property_path: tuple,
+        layer_id: str,
+        project_layers: dict,
+        current_layer,
+        state: bool,
+        dw
+    ) -> None:
+        """
+        Reset a layer property widget to its default value.
+        
+        Args:
+            widget: The widget to reset
+            widget_type: Type of widget
+            property_path: Property path tuple
+            layer_id: Current layer ID
+            project_layers: PROJECT_LAYERS dict
+            current_layer: Current layer reference
+            state: Target state
+            dw: Dockwidget reference
+        """
+        try:
+            if widget_type == 'PushButton':
+                widget.setChecked(state)
+                project_layers[layer_id][property_path[0]][property_path[1]] = widget.isChecked()
+                
+            elif widget_type == 'CheckableComboBox':
+                widget.deselectAllOptions()
+                project_layers[layer_id][property_path[0]][property_path[1]] = widget.checkedItems()
+                
+            elif widget_type == 'ComboBox':
+                widget.setCurrentIndex(0)
+                project_layers[layer_id][property_path[0]][property_path[1]] = widget.currentText()
+                
+            elif widget_type == 'QgsFieldExpressionWidget':
+                if current_layer is not None:
+                    widget.setLayer(current_layer)
+                pk_name = project_layers[layer_id].get("infos", {}).get("primary_key_name", "")
+                widget.setField(pk_name)
+                project_layers[layer_id][property_path[0]][property_path[1]] = widget.expression()
+                
+            elif widget_type == 'QgsDoubleSpinBox':
+                widget.clearValue()
+                project_layers[layer_id][property_path[0]][property_path[1]] = widget.value()
+                
+            elif widget_type == 'LineEdit':
+                widget.setText('')
+                project_layers[layer_id][property_path[0]][property_path[1]] = widget.text()
+                
+            elif widget_type == 'QgsProjectionSelectionWidget':
+                project = getattr(dw, 'PROJECT', None)
+                if project:
+                    widget.setCrs(project.crs())
+                    project_layers[layer_id][property_path[0]][property_path[1]] = widget.crs().authid()
+                    
+            elif widget_type == 'PropertyOverrideButton':
+                widget.setActive(False)
+                project_layers[layer_id][property_path[0]][property_path[1]] = False
+                
+        except Exception as e:
+            logger.warning(f"Error resetting layer property {property_path}: {e}")
+
+    def _reset_export_property_widget(
+        self,
+        widget,
+        widget_type: str,
+        property_path: tuple,
+        project_props: dict,
+        state: bool,
+        dw
+    ) -> None:
+        """
+        Reset an export property widget to its default value.
+        
+        Args:
+            widget: The widget to reset
+            widget_type: Type of widget
+            property_path: Property path tuple
+            project_props: Project properties dict
+            state: Target state
+            dw: Dockwidget reference
+        """
+        try:
+            key_upper = property_path[0].upper()
+            prop_upper = property_path[1].upper()
+            
+            if widget_type == 'PushButton':
+                widget.setChecked(state)
+                project_props[key_upper][prop_upper] = widget.isChecked()
+                
+            elif widget_type == 'CheckBox':
+                widget.setChecked(state)
+                project_props[key_upper][prop_upper] = widget.isChecked()
+                
+            elif widget_type == 'CheckableComboBox':
+                widget.deselectAllOptions()
+                project_props[key_upper][prop_upper] = widget.checkedItems()
+                
+            elif widget_type == 'ComboBox':
+                index = widget.findText('GPKG')
+                if index < 0:
+                    index = 0
+                widget.setCurrentIndex(index)
+                project_props[key_upper][prop_upper] = widget.currentText()
+                
+            elif widget_type == 'QgsDoubleSpinBox':
+                widget.clearValue()
+                project_props[key_upper][prop_upper] = widget.value()
+                
+            elif widget_type == 'LineEdit':
+                widget.setText('')
+                project_props[key_upper][prop_upper] = widget.text()
+                
+            elif widget_type == 'QgsProjectionSelectionWidget':
+                project = getattr(dw, 'PROJECT', None)
+                if project:
+                    widget.setCrs(project.crs())
+                    project_props[key_upper][prop_upper] = widget.crs().authid()
+                    
+            elif widget_type == 'PropertyOverrideButton':
+                widget.setActive(False)
+                project_props[key_upper][prop_upper] = False
+                
+        except Exception as e:
+            logger.warning(f"Error resetting export property {property_path}: {e}")
+
+    def _persist_reset_properties(
+        self,
+        current_layer,
+        properties_to_save: list,
+        dw
+    ) -> None:
+        """
+        Persist reset properties to database.
+        
+        Args:
+            current_layer: Current layer
+            properties_to_save: List of property tuples to save
+            dw: Dockwidget reference
+        """
+        app = getattr(dw, 'app', None)
+        if not app or not properties_to_save:
+            return
+        
+        try:
+            logger.debug(
+                f"💾 Persisting {len(properties_to_save)} reset properties "
+                f"for layer {current_layer.name()}"
+            )
+            app.save_variables_from_layer(current_layer, properties_to_save)
+        except Exception as e:
+            logger.warning(f"Failed to persist reset properties to DB: {e}")
+
+    def change_project_property(
+        self,
+        input_property: str,
+        input_data: Any = None,
+        custom_functions: Optional[Dict[str, Callable]] = None
+    ) -> bool:
+        """
+        Handle property changes for project-level (export) properties.
+        
+        Migrated from filter_mate_dockwidget.project_property_changed.
+        
+        v4.0 Sprint 3: Full migration from dockwidget.
+        
+        Args:
+            input_property: Property identifier string
+            input_data: New value
+            custom_functions: Optional callbacks dict
+            
+        Returns:
+            True if property was changed
+        """
+        if custom_functions is None:
+            custom_functions = {}
+        
+        dw = self.dockwidget
+        
+        # Guard: widgets must be initialized
+        if not getattr(dw, 'widgets_initialized', False):
+            return False
+        if not getattr(dw, 'has_loaded_layers', False):
+            return False
+        
+        project_props = getattr(dw, 'project_props', None)
+        export_properties_dict = getattr(dw, 'export_properties_tuples_dict', {})
+        widgets = getattr(dw, 'widgets', {})
+        
+        if project_props is None:
+            return False
+        
+        # Parse input data
+        parsed_data, state = self._parse_property_data(input_data)
+        
+        # Find property path in export properties
+        properties_group_key = None
+        property_path = None
+        properties_tuples = None
+        
+        for key, tuples in export_properties_dict.items():
+            if input_property.find(key) >= 0:
+                properties_group_key = key
+                properties_tuples = tuples
+                for i, prop_tuple in enumerate(tuples):
+                    if prop_tuple[1] == input_property:
+                        property_path = prop_tuple
+                        break
+                break
+        
+        if property_path is None or properties_tuples is None:
+            logger.warning(f"change_project_property: property '{input_property}' not found")
+            return False
+        
+        # Get group enabled state
+        group_property = properties_tuples[0]
+        group_widget = widgets.get(
+            group_property[0].upper(), {}
+        ).get(group_property[1].upper(), {}).get("WIDGET")
+        
+        group_state = group_widget.isChecked() if group_widget else True
+        
+        flag_value_changed = False
+        
+        if not group_state:
+            # Group disabled - reset to defaults
+            self.reset_property_group_to_default(
+                properties_tuples, properties_group_key, group_state
+            )
+            flag_value_changed = True
+        else:
+            # Group enabled - enable widgets
+            if hasattr(dw, 'properties_group_state_enabler'):
+                dw.properties_group_state_enabler(properties_tuples)
+            
+            widget_info = widgets.get(
+                property_path[0].upper(), {}
+            ).get(property_path[1].upper(), {})
+            widget_type = widget_info.get("TYPE")
+            
+            key_upper = property_path[0].upper()
+            prop_upper = property_path[1].upper()
+            current_value = project_props.get(key_upper, {}).get(prop_upper)
+            
+            if widget_type == 'PushButton':
+                if current_value != parsed_data:
+                    project_props[key_upper][prop_upper] = parsed_data
+                    flag_value_changed = True
+                    
+                    if parsed_data is True and "ON_TRUE" in custom_functions:
+                        custom_functions["ON_TRUE"](0)
+                    elif parsed_data is False and "ON_FALSE" in custom_functions:
+                        custom_functions["ON_FALSE"](0)
+            else:
+                # Non-PushButton widgets
+                new_value = custom_functions.get("CUSTOM_DATA", lambda x: parsed_data)(0)
+                
+                if current_value != new_value:
+                    project_props[key_upper][prop_upper] = new_value
+                    flag_value_changed = True
+                    
+                    if new_value and "ON_TRUE" in custom_functions:
+                        custom_functions["ON_TRUE"](0)
+                    elif not new_value and "ON_FALSE" in custom_functions:
+                        custom_functions["ON_FALSE"](0)
+        
+        # Trigger change callbacks
+        if flag_value_changed:
+            if "ON_CHANGE" in custom_functions:
+                custom_functions["ON_CHANGE"](0)
+            
+            # Update config
+            config_data = getattr(dw, 'CONFIG_DATA', {})
+            if 'CURRENT_PROJECT' in config_data:
+                config_data['CURRENT_PROJECT']['EXPORTING'] = project_props.get('EXPORTING', {})
+            
+            # Set project variables
+            if hasattr(dw, 'setProjectVariablesEvent'):
+                dw.setProjectVariablesEvent()
+        
+        return flag_value_changed

@@ -378,12 +378,12 @@ class BackendController(BaseController):
             Optimal backend ('postgresql', 'spatialite', 'ogr') or None for auto
         """
         try:
-            from modules.appUtils import detect_layer_provider_type, POSTGRESQL_AVAILABLE
+            from infrastructure.utils import detect_layer_provider_type, POSTGRESQL_AVAILABLE
             from adapters.backends.factory import should_use_memory_optimization
         except ImportError:
             # Fallback imports for different package structures
             try:
-                from ...modules.appUtils import detect_layer_provider_type, POSTGRESQL_AVAILABLE
+                from ...infrastructure.utils import detect_layer_provider_type, POSTGRESQL_AVAILABLE
                 from ...adapters.backends.factory import should_use_memory_optimization
             except ImportError:
                 logger.warning("Could not import backend detection functions")
@@ -449,10 +449,10 @@ class BackendController(BaseController):
             True if backend supports this layer
         """
         try:
-            from modules.appUtils import detect_layer_provider_type, POSTGRESQL_AVAILABLE
+            from infrastructure.utils import detect_layer_provider_type, POSTGRESQL_AVAILABLE
         except ImportError:
             try:
-                from ...modules.appUtils import detect_layer_provider_type, POSTGRESQL_AVAILABLE
+                from ...infrastructure.utils import detect_layer_provider_type, POSTGRESQL_AVAILABLE
             except ImportError:
                 return True  # Assume compatible if can't check
         

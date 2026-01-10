@@ -1009,7 +1009,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
             QgsCoordinateReferenceSystem, QgsProject,
             QgsExpression, QgsFeatureRequest
         )
-        from modules.appUtils import CRS_UTILS_AVAILABLE, DEFAULT_METRIC_CRS
+        from infrastructure.utils import CRS_UTILS_AVAILABLE, DEFAULT_METRIC_CRS
         if CRS_UTILS_AVAILABLE:
             from adapters.qgis.crs_utils import is_geographic_crs, get_optimal_metric_crs
 
@@ -1721,7 +1721,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
             return
         
         from qgis.core import QgsExpression
-        from modules.appUtils import get_best_display_field, is_valid_layer
+        from infrastructure.utils import get_best_display_field, is_layer_valid
         
         try:
             # Disconnect ALL exploration signals before updating widgets

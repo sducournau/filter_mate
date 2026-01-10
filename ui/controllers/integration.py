@@ -2031,6 +2031,221 @@ class ControllerIntegration:
                 return False
         return False
 
+    # =========================================================================
+    # Sprint 3: Layer Sync Controller Delegation Methods
+    # =========================================================================
+
+    def delegate_synchronize_layer_widgets(
+        self,
+        layer,
+        layer_props: dict
+    ) -> bool:
+        """
+        Delegate layer widget synchronization to LayerSyncController.
+        
+        v4.0 Sprint 3: Migrated from dockwidget._synchronize_layer_widgets.
+        
+        Args:
+            layer: The current layer to sync widgets to
+            layer_props: Layer properties from PROJECT_LAYERS
+            
+        Returns:
+            True if delegated successfully, False otherwise
+        """
+        if self._layer_sync_controller:
+            try:
+                return self._layer_sync_controller.synchronize_layer_widgets(
+                    layer, layer_props
+                )
+            except Exception as e:
+                logger.warning(f"delegate_synchronize_layer_widgets failed: {e}")
+                return False
+        return False
+
+    def delegate_reconnect_layer_signals(
+        self,
+        widgets_to_reconnect: list,
+        layer_props: dict
+    ) -> bool:
+        """
+        Delegate layer signal reconnection to LayerSyncController.
+        
+        v4.0 Sprint 3: Migrated from dockwidget._reconnect_layer_signals.
+        
+        Args:
+            widgets_to_reconnect: List of widget paths to reconnect
+            layer_props: Layer properties from PROJECT_LAYERS
+            
+        Returns:
+            True if delegated successfully, False otherwise
+        """
+        if self._layer_sync_controller:
+            try:
+                self._layer_sync_controller.reconnect_layer_signals(
+                    widgets_to_reconnect, layer_props
+                )
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_reconnect_layer_signals failed: {e}")
+                return False
+        return False
+
+    def delegate_get_project_layers_data(
+        self,
+        project_layers: dict,
+        project = None
+    ) -> Optional[dict]:
+        """
+        Delegate project layers data processing to LayerSyncController.
+        
+        v4.0 Sprint 3: Migrated from dockwidget.get_project_layers_from_app.
+        
+        Args:
+            project_layers: Updated PROJECT_LAYERS dictionary from app
+            project: QGIS project instance
+            
+        Returns:
+            dict with status info or None if delegation failed
+        """
+        if self._layer_sync_controller:
+            try:
+                return self._layer_sync_controller.get_project_layers_data(
+                    project_layers, project
+                )
+            except Exception as e:
+                logger.warning(f"delegate_get_project_layers_data failed: {e}")
+                return None
+        return None
+
+    def delegate_is_layer_truly_deleted(self, layer) -> Optional[bool]:
+        """
+        Delegate layer deletion check to LayerSyncController.
+        
+        v4.0 Sprint 3: Centralized layer deletion check with protection.
+        
+        Args:
+            layer: The layer to check
+            
+        Returns:
+            True if truly deleted, False if not, None if delegation failed
+        """
+        if self._layer_sync_controller:
+            try:
+                return self._layer_sync_controller.is_layer_truly_deleted(layer)
+            except Exception as e:
+                logger.warning(f"delegate_is_layer_truly_deleted failed: {e}")
+                return None
+        return None
+
+    # =========================================================================
+    # Sprint 3: Property Controller Delegation Methods
+    # =========================================================================
+
+    def delegate_reset_property_group(
+        self,
+        tuple_group: list,
+        group_name: str,
+        state: bool
+    ) -> bool:
+        """
+        Delegate property group reset to PropertyController.
+        
+        v4.0 Sprint 3: Migrated from dockwidget.properties_group_state_reset_to_default.
+        
+        Args:
+            tuple_group: List of property tuples in the group
+            group_name: Name of the property group
+            state: Target state (usually False for reset)
+            
+        Returns:
+            True if delegated successfully, False otherwise
+        """
+        if self._property_controller:
+            try:
+                return self._property_controller.reset_property_group_to_default(
+                    tuple_group, group_name, state
+                )
+            except Exception as e:
+                logger.warning(f"delegate_reset_property_group failed: {e}")
+                return False
+        return False
+
+    def delegate_change_project_property(
+        self,
+        input_property: str,
+        input_data = None,
+        custom_functions: dict = None
+    ) -> bool:
+        """
+        Delegate project property change to PropertyController.
+        
+        v4.0 Sprint 3: Migrated from dockwidget.project_property_changed.
+        
+        Args:
+            input_property: Property identifier string
+            input_data: New value
+            custom_functions: Optional callbacks dict
+            
+        Returns:
+            True if delegated successfully, False otherwise
+        """
+        if self._property_controller:
+            try:
+                return self._property_controller.change_project_property(
+                    input_property, input_data, custom_functions
+                )
+            except Exception as e:
+                logger.warning(f"delegate_change_project_property failed: {e}")
+                return False
+        return False
+
+    def delegate_change_layer_property(
+        self,
+        input_property: str,
+        input_data = None,
+        custom_functions: dict = None
+    ) -> bool:
+        """
+        Delegate layer property change to PropertyController.
+        
+        v4.0 Sprint 3: Alternative to dockwidget.layer_property_changed.
+        
+        Args:
+            input_property: Property identifier string
+            input_data: New value
+            custom_functions: Optional callbacks dict
+            
+        Returns:
+            True if delegated successfully, False otherwise
+        """
+        if self._property_controller:
+            try:
+                return self._property_controller.change_property(
+                    input_property, input_data, custom_functions
+                )
+            except Exception as e:
+                logger.warning(f"delegate_change_layer_property failed: {e}")
+                return False
+        return False
+
+    def delegate_update_buffer_validation(self) -> bool:
+        """
+        Delegate buffer validation update to PropertyController.
+        
+        v4.0 Sprint 3: Migrated from dockwidget._update_buffer_validation.
+        
+        Returns:
+            True if delegated successfully, False otherwise
+        """
+        if self._property_controller:
+            try:
+                self._property_controller.update_buffer_validation()
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_update_buffer_validation failed: {e}")
+                return False
+        return False
+
     def __repr__(self) -> str:
         """String representation."""
         status = "active" if self._is_setup else "inactive"
