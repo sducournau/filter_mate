@@ -43,6 +43,9 @@ from osgeo import ogr
 # Import logging for error handling
 from .infrastructure.logging import get_app_logger
 logger = get_app_logger()
+
+# v4.0 Sprint 6: Widget configuration management
+from .ui.managers import ConfigurationManager
 from qgis.PyQt import QtGui, QtWidgets, QtCore
 from qgis.PyQt.QtCore import (
     Qt,
@@ -279,6 +282,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # Loading state tracking for UI feedback
         self._expression_loading = False
+        
+        # v4.0 Sprint 6: Configuration manager for widgets
+        self._configuration_manager = None
         
         # Initialize layer state
         self._initialize_layer_state()
@@ -1997,120 +2003,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return {'AND': 0, 'AND NOT': 1, 'OR': 2, 'ET': 0, 'ET NON': 1, 'OU': 2}.get(op, 0)
 
     def dockwidget_widgets_configuration(self):
-
-        self.layer_properties_tuples_dict =   {
-                                                "is":(("exploring","is_selecting"),("exploring","is_tracking"),("exploring","is_linking")),
-                                                "selection_expression":(("exploring","single_selection_expression"),("exploring","multiple_selection_expression"),("exploring","custom_selection_expression")),
-                                                "source_layer":(("filtering","use_centroids_source_layer"),),
-                                                "layers_to_filter":(("filtering","has_layers_to_filter"),("filtering","layers_to_filter"),("filtering","use_centroids_distant_layers")),
-                                                "combine_operator":(("filtering", "has_combine_operator"), ("filtering", "source_layer_combine_operator"),("filtering", "other_layers_combine_operator")),
-                                                "buffer_type":(("filtering","has_buffer_type"),("filtering","buffer_type"),("filtering","buffer_segments")),
-                                                "buffer_value":(("filtering", "has_buffer_value"),("filtering","has_buffer_type"),("filtering", "buffer_value"),("filtering", "buffer_value_expression"),("filtering", "buffer_value_property")),
-                                                "geometric_predicates":(("filtering","has_geometric_predicates"),("filtering","has_buffer_value"),("filtering","has_buffer_type"),("filtering","geometric_predicates")),
-                                                "use_centroids_distant_layers":(("filtering","use_centroids_distant_layers"),),
-                                                "use_centroids_source_layer":(("filtering","use_centroids_source_layer"),)
-                                                }
+        """
+        Configure widgets using ConfigurationManager.
         
-        self.export_properties_tuples_dict =   {
-                                                "layers_to_export":(("exporting","has_layers_to_export"),("exporting","layers_to_export")),
-                                                "projection_to_export":(("exporting","has_projection_to_export"),("exporting","projection_to_export")),
-                                                "styles_to_export":(("exporting","has_styles_to_export"),("exporting","styles_to_export")),
-                                                "datatype_to_export":(("exporting","has_datatype_to_export"),("exporting","datatype_to_export")),
-                                                "output_folder_to_export":(("exporting","has_output_folder_to_export"),("exporting","batch_output_folder"),("exporting","output_folder_to_export")),
-                                                "zip_to_export":(("exporting", "has_zip_to_export"), ("exporting", "batch_zip"), ("exporting", "zip_to_export")),
-                                                "batch_output_folder":(("exporting","has_output_folder_to_export"),("exporting","batch_output_folder"),("exporting","output_folder_to_export")),
-                                                "batch_zip":(("exporting", "has_zip_to_export"), ("exporting", "batch_zip"), ("exporting", "zip_to_export"))
-                                                }
-
-        self.widgets = {"DOCK":{}, "ACTION":{}, "EXPLORING":{}, "FILTERING":{}, "EXPORTING":{}, "QGIS":{}}
-            
-        # CRITICAL: GroupBoxes use "toggled" signal to detect checkbox state changes
-        # and "collapsedStateChanged" (arrow) signal for collapse/expand via arrow
-        # The toggled signal receives 'checked' (bool) - True when checked, False when unchecked
-        # We only activate a groupbox when it becomes CHECKED (checked=True)
-        self.widgets["DOCK"] = {
-                                "SINGLE_SELECTION":{"TYPE":"GroupBox", "WIDGET":self.mGroupBox_exploring_single_selection, "SIGNALS":[("toggled", lambda checked, x='single_selection': self._on_groupbox_clicked(x, checked)), ("collapsedStateChanged", lambda collapsed, x='single_selection': self._on_groupbox_collapse_changed(x, collapsed))]},
-                                "MULTIPLE_SELECTION":{"TYPE":"GroupBox","WIDGET":self.mGroupBox_exploring_multiple_selection, "SIGNALS":[("toggled", lambda checked, x='multiple_selection': self._on_groupbox_clicked(x, checked)), ("collapsedStateChanged", lambda collapsed, x='multiple_selection': self._on_groupbox_collapse_changed(x, collapsed))]},
-                                "CUSTOM_SELECTION":{"TYPE":"GroupBox","WIDGET":self.mGroupBox_exploring_custom_selection, "SIGNALS":[("toggled", lambda checked, x='custom_selection': self._on_groupbox_clicked(x, checked)), ("collapsedStateChanged", lambda collapsed, x='custom_selection': self._on_groupbox_collapse_changed(x, collapsed))]},
-                                "CONFIGURATION_TREE_VIEW":{"TYPE":"JsonTreeView","WIDGET":self.config_view, "SIGNALS":[("collapsed", None),("expanded", None)]},
-                                "CONFIGURATION_MODEL":{"TYPE":"JsonModel","WIDGET":self.config_model, "SIGNALS":[("itemChanged", None)]},
-                                "CONFIGURATION_BUTTONBOX":{"TYPE":"DialogButtonBox","WIDGET":self.buttonBox, "SIGNALS":[("accepted", None),("rejected", None)]},
-                                "TOOLS":{"TYPE":"ToolBox","WIDGET":self.toolBox_tabTools, "SIGNALS":[("currentChanged", self.select_tabTools_index)]}
-                                }   
-
-        self.widgets["ACTION"] = {
-                                "FILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_filter, "SIGNALS":[("clicked", lambda state, x='filter': self.launchTaskEvent(state, x))], "ICON":None},
-                                "UNDO_FILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_undo_filter, "SIGNALS":[("clicked", lambda state, x='undo': self.launchTaskEvent(state, x))], "ICON":None},
-                                "REDO_FILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_redo_filter, "SIGNALS":[("clicked", lambda state, x='redo': self.launchTaskEvent(state, x))], "ICON":None},
-                                "UNFILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_unfilter, "SIGNALS":[("clicked", lambda state, x='unfilter': self.launchTaskEvent(state, x))], "ICON":None},
-                                "EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_export, "SIGNALS":[("clicked", lambda state, x='export': self.launchTaskEvent(state, x))], "ICON":None},
-                                "ABOUT":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_about, "SIGNALS":[("clicked", self.open_project_page)], "ICON":None}
-                                }        
-
-
-        self.widgets["EXPLORING"] = {
-                                    "IDENTIFY":{"TYPE":"PushButton", "WIDGET":self.pushButton_exploring_identify, "SIGNALS":[("clicked", self.exploring_identify_clicked)], "ICON":None},
-                                    "ZOOM":{"TYPE":"PushButton", "WIDGET":self.pushButton_exploring_zoom, "SIGNALS":[("clicked", self.exploring_zoom_clicked)], "ICON":None},
-                                    "IS_SELECTING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_selecting, "SIGNALS":[("toggled", lambda state, x='is_selecting', custom_functions={"ON_TRUE": lambda x: self.exploring_select_features(), "ON_FALSE": lambda x: self.exploring_deselect_features()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "IS_TRACKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_tracking, "SIGNALS":[("toggled", lambda state, x='is_tracking', custom_functions={"ON_TRUE": lambda x: self.exploring_zoom_clicked()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "IS_LINKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_linking_widgets, "SIGNALS":[("toggled", lambda state, x='is_linking', custom_functions={"ON_CHANGE": lambda x: self.exploring_link_widgets()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "RESET_ALL_LAYER_PROPERTIES":{"TYPE":"PushButton", "WIDGET":self.pushButton_exploring_reset_layer_properties, "SIGNALS":[("clicked", lambda: self.resetLayerVariableEvent())], "ICON":None},
-                                    
-                                    "SINGLE_SELECTION_FEATURES":{"TYPE":"FeatureComboBox", "WIDGET":self.mFeaturePickerWidget_exploring_single_selection, "SIGNALS":[("featureChanged", self.exploring_features_changed)]},
-                                    # NOTE: fieldChanged signal handled by _setup_expression_widget_direct_connections() with debounce
-                                    "SINGLE_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_single_selection, "SIGNALS":[("fieldChanged", None)]},
-                                    
-                                    "MULTIPLE_SELECTION_FEATURES":{"TYPE":"CustomCheckableFeatureComboBox", "WIDGET":self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, "SIGNALS":[("updatingCheckedItemList", self.exploring_features_changed),("filteringCheckedItemList", lambda: self.exploring_source_params_changed(groupbox_override="multiple_selection"))]},
-                                    # NOTE: fieldChanged signal handled by _setup_expression_widget_direct_connections() with debounce
-                                    "MULTIPLE_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_multiple_selection, "SIGNALS":[("fieldChanged", None)]},
-                                    
-                                    # NOTE: fieldChanged signal handled by _setup_expression_widget_direct_connections() with debounce
-                                    "CUSTOM_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_custom_selection, "SIGNALS":[("fieldChanged", None)]}
-                                    }
-
-
-        self.widgets["FILTERING"] = {
-                                    "AUTO_CURRENT_LAYER":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_auto_current_layer, "SIGNALS":[("clicked", lambda state : self.filtering_auto_current_layer_changed(state))], "ICON":None},
-                                    "HAS_LAYERS_TO_FILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_layers_to_filter, "SIGNALS":[("clicked", lambda state, x='has_layers_to_filter', custom_functions={"ON_CHANGE": lambda x: self.filtering_layers_to_filter_state_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "HAS_COMBINE_OPERATOR":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_current_layer_combine_operator, "SIGNALS":[("clicked", lambda state, x='has_combine_operator', custom_functions={"ON_CHANGE": lambda x: self.filtering_combine_operator_state_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "HAS_GEOMETRIC_PREDICATES":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_geometric_predicates, "SIGNALS":[("clicked", lambda state, x='has_geometric_predicates', custom_functions={"ON_CHANGE": lambda x: self.filtering_geometric_predicates_state_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "HAS_BUFFER_VALUE":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_buffer_value, "SIGNALS":[("clicked", lambda state, x='has_buffer_value', custom_functions={"ON_CHANGE": lambda x: self.filtering_buffer_property_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "HAS_BUFFER_TYPE":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_buffer_type, "SIGNALS":[("clicked", lambda state, x='has_buffer_type', custom_functions={"ON_CHANGE": lambda x: self.filtering_buffer_type_state_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "CURRENT_LAYER":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_current_layer, "SIGNALS":[("layerChanged", self.current_layer_changed)]},
-                                    "LAYERS_TO_FILTER":{"TYPE":"CustomCheckableLayerComboBox", "WIDGET":self.checkableComboBoxLayer_filtering_layers_to_filter, "CUSTOM_LOAD_FUNCTION": lambda x: self.get_layers_to_filter(), "SIGNALS":[("checkedItemsChanged", lambda state, custom_functions={"CUSTOM_DATA": lambda x: self.get_layers_to_filter()}, x='layers_to_filter': self.layer_property_changed(x, state, custom_functions))]},
-                                    "SOURCE_LAYER_COMBINE_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_source_layer_combine_operator, "SIGNALS":[("currentIndexChanged", lambda index, x='source_layer_combine_operator': self.layer_property_changed(x, self._index_to_combine_operator(index)))]},
-                                    "OTHER_LAYERS_COMBINE_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_other_layers_combine_operator, "SIGNALS":[("currentIndexChanged", lambda index, x='other_layers_combine_operator': self.layer_property_changed(x, self._index_to_combine_operator(index)))]},
-                                    "GEOMETRIC_PREDICATES":{"TYPE":"CheckableComboBox", "WIDGET":self.comboBox_filtering_geometric_predicates, "SIGNALS":[("checkedItemsChanged", lambda state, x='geometric_predicates': self.layer_property_changed(x, state))]},
-                                    "USE_CENTROIDS_SOURCE_LAYER":{"TYPE":"CheckBox", "WIDGET":self.checkBox_filtering_use_centroids_source_layer, "SIGNALS":[("stateChanged", lambda state, x='use_centroids_source_layer', custom_functions={"ON_CHANGE": lambda x: self._update_buffer_validation()}: self.layer_property_changed(x, bool(state), custom_functions))]},
-                                    "USE_CENTROIDS_DISTANT_LAYERS":{"TYPE":"CheckBox", "WIDGET":self.checkBox_filtering_use_centroids_distant_layers, "SIGNALS":[("stateChanged", lambda state, x='use_centroids_distant_layers': self.layer_property_changed(x, bool(state)))]},
-                                    "BUFFER_VALUE":{"TYPE":"QgsDoubleSpinBox", "WIDGET":self.mQgsDoubleSpinBox_filtering_buffer_value, "SIGNALS":[("valueChanged", lambda state, x='buffer_value': self.layer_property_changed_with_buffer_style(x, state))]},
-                                    "BUFFER_VALUE_PROPERTY":{"TYPE":"PropertyOverrideButton", "WIDGET":self.mPropertyOverrideButton_filtering_buffer_value_property, "SIGNALS":[("changed", lambda state=None, x='buffer_value_property', custom_functions={"ON_CHANGE": lambda x: self.filtering_buffer_property_changed(), "CUSTOM_DATA": lambda x: self.get_buffer_property_state()}: self.layer_property_changed(x, state, custom_functions))]},
-                                    "BUFFER_TYPE":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_buffer_type, "SIGNALS":[("currentTextChanged", lambda state, x='buffer_type': self.layer_property_changed(x, state))]},
-                                    "BUFFER_SEGMENTS":{"TYPE":"QgsSpinBox", "WIDGET":self.mQgsSpinBox_filtering_buffer_segments, "SIGNALS":[("valueChanged", lambda state, x='buffer_segments': self.layer_property_changed(x, state))]},
-                                    }
+        v4.0 Sprint 6: Simplified to wrapper - delegates to ConfigurationManager.
+        Reduced from 164 lines to ~30 lines.
+        """
+        # Create ConfigurationManager if not exists
+        if self._configuration_manager is None:
+            self._configuration_manager = ConfigurationManager(self)
         
-        self.widgets["EXPORTING"] = {
-                                    "HAS_LAYERS_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_layers, "SIGNALS":[("clicked", lambda state, x='has_layers_to_export': self.project_property_changed(x, state))], "ICON":None},
-                                    "HAS_PROJECTION_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_projection, "SIGNALS":[("clicked", lambda state, x='has_projection_to_export': self.project_property_changed(x, state))], "ICON":None},
-                                    "HAS_STYLES_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_styles, "SIGNALS":[("clicked", lambda state, x='has_styles_to_export': self.project_property_changed(x, state))], "ICON":None},
-                                    "HAS_DATATYPE_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_datatype, "SIGNALS":[("clicked", lambda state, x='has_datatype_to_export': self.project_property_changed(x, state))], "ICON":None},
-                                    "HAS_OUTPUT_FOLDER_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_output_folder, "SIGNALS":[("clicked", lambda state, x='has_output_folder_to_export', custom_functions={"ON_CHANGE": lambda x: self.dialog_export_output_path()}: self.project_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "HAS_ZIP_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_zip, "SIGNALS":[("clicked", lambda state, x='has_zip_to_export', custom_functions={"ON_CHANGE": lambda x: self.dialog_export_output_pathzip()}: self.project_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "BATCH_OUTPUT_FOLDER":{"TYPE":"CheckBox", "WIDGET":self.checkBox_batch_exporting_output_folder, "SIGNALS":[("stateChanged", lambda state, x='batch_output_folder': self.project_property_changed(x, bool(state)))], "ICON":None},
-                                    "BATCH_ZIP":{"TYPE":"CheckBox", "WIDGET":self.checkBox_batch_exporting_zip, "SIGNALS":[("stateChanged", lambda state, x='batch_zip': self.project_property_changed(x, bool(state)))], "ICON":None},
-                                    "LAYERS_TO_EXPORT":{"TYPE":"CustomCheckableLayerComboBox", "WIDGET":self.checkableComboBoxLayer_exporting_layers, "CUSTOM_LOAD_FUNCTION": lambda x: self.get_layers_to_export(), "SIGNALS":[("checkedItemsChanged", lambda state, custom_functions={"CUSTOM_DATA": lambda x: self.get_layers_to_export()}, x='layers_to_export': self.project_property_changed(x, state, custom_functions))]},
-                                    "PROJECTION_TO_EXPORT":{"TYPE":"QgsProjectionSelectionWidget", "WIDGET":self.mQgsProjectionSelectionWidget_exporting_projection, "SIGNALS":[("crsChanged", lambda state, x='projection_to_export', custom_functions={"CUSTOM_DATA": lambda x: self.get_current_crs_authid()}: self.project_property_changed(x, state, custom_functions))]},
-                                    "STYLES_TO_EXPORT":{"TYPE":"ComboBox", "WIDGET":self.comboBox_exporting_styles, "SIGNALS":[("currentTextChanged", lambda state, x='styles_to_export': self.project_property_changed(x, state))]},
-                                    "DATATYPE_TO_EXPORT":{"TYPE":"ComboBox", "WIDGET":self.comboBox_exporting_datatype, "SIGNALS":[("currentTextChanged", lambda state, x='datatype_to_export': self.project_property_changed(x, state))]},
-                                    "OUTPUT_FOLDER_TO_EXPORT":{"TYPE":"LineEdit", "WIDGET":self.lineEdit_exporting_output_folder, "SIGNALS":[("textEdited", lambda state, x='output_folder_to_export', custom_functions={"ON_CHANGE": lambda x: self.reset_export_output_path()}: self.project_property_changed(x, state, custom_functions))]},
-                                    "ZIP_TO_EXPORT":{"TYPE":"LineEdit", "WIDGET":self.lineEdit_exporting_zip, "SIGNALS":[("textEdited", lambda state, x='zip_to_export', custom_functions={"ON_CHANGE": lambda x: self.reset_export_output_pathzip()}: self.project_property_changed(x, state, custom_functions))]}
-                                    }
-            
-
-    
-        self.widgets["QGIS"] = {
-                                "LAYER_TREE_VIEW":{"TYPE":"LayerTreeView", "WIDGET":self.iface.layerTreeView(), "SIGNALS":[("currentLayerChanged", self.current_layer_changed)]}
-                                }
+        # Get property mappings
+        self.layer_properties_tuples_dict = self._configuration_manager.get_layer_properties_tuples_dict()
+        self.export_properties_tuples_dict = self._configuration_manager.get_export_properties_tuples_dict()
+        
+        # Configure all widgets
+        self.widgets = self._configuration_manager.configure_widgets()
         
         self.widgets_initialized = True
         logger.info(f"✓ Widgets fully initialized with {len(self.PROJECT_LAYERS)} layers")
@@ -3158,20 +3066,24 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.exploring_groupbox_changed(groupbox)
 
     def exploring_groupbox_init(self):
-
+        """
+        Initialize exploring groupbox to default or saved state.
+        
+        v4.0 Sprint 6: Simplified - reduced conditional checks.
+        """
         if not self.widgets_initialized:
             return
         
-        self.properties_group_state_enabler(self.layer_properties_tuples_dict["selection_expression"]) 
-        exploring_groupbox = "single_selection"
+        self.properties_group_state_enabler(self.layer_properties_tuples_dict["selection_expression"])
         
-        # Try to restore from PROJECT_LAYERS
+        # Restore saved groupbox or use default
+        groupbox = "single_selection"
         if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
-            saved = self.PROJECT_LAYERS[self.current_layer.id()].get("exploring", {}).get("current_exploring_groupbox")
-            if saved:
-                exploring_groupbox = saved
+            groupbox = self.PROJECT_LAYERS[self.current_layer.id()].get("exploring", {}).get(
+                "current_exploring_groupbox", "single_selection"
+            )
         
-        self.exploring_groupbox_changed(exploring_groupbox)
+        self.exploring_groupbox_changed(groupbox)
 
     def _update_exploring_buttons_state(self):
         """v3.1 Sprint 11: Simplified - update identify/zoom buttons based on selection."""
@@ -3329,8 +3241,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def exploring_identify_clicked(self):
         """
-        v3.1 Sprint 8: Simplified - delegates flash to ExploringController.
         Flash the currently selected features on the map canvas.
+        
+        v4.0 Sprint 6: Simplified to pure wrapper - delegates to ExploringController.
+        Reduced from 34 lines to ~10 lines.
         """
         if not self.widgets_initialized or self.current_layer is None:
             return
@@ -3338,27 +3252,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self._is_layer_truly_deleted(self.current_layer):
             self.current_layer = None
             return
-
-        # Get feature IDs from cache or current selection
-        feature_ids = None
-        if hasattr(self, '_exploring_cache') and self.current_exploring_groupbox:
-            feature_ids = self._exploring_cache.get_feature_ids(self.current_layer.id(), self.current_exploring_groupbox)
-        
-        if not feature_ids:
-            features, _ = self.get_current_features()
-            if features:
-                feature_ids = [f.id() for f in features]
-        
-        if not feature_ids:
-            return
         
         # Delegate to controller
         if self._controller_integration:
-            if self._controller_integration.delegate_flash_features(feature_ids, self.current_layer):
-                return
-        
-        # Minimal fallback
-        self.iface.mapCanvas().flashFeatureIds(self.current_layer, feature_ids)
+            features, _ = self.get_current_features()
+            if features:
+                self._controller_integration.delegate_flash_features(
+                    [f.id() for f in features], self.current_layer
+                )
 
 
     def get_current_features(self, use_cache: bool = True):
@@ -3387,26 +3288,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Zoom the map canvas to the currently selected features.
         
-        v4.0 Sprint 5: Simplified - uses zooming_to_features which delegates to controller.
-        
-        Args:
-            features: Optional list of features to zoom to (if empty, uses current selection)
-            expression: Optional expression string associated with the features
+        v4.0 Sprint 6: Simplified to pure wrapper - delegates to zooming_to_features.
+        Reduced from 24 lines to ~8 lines.
         """
         if not self.widgets_initialized or self.current_layer is None:
             return
 
-        # v3.0.14: Use centralized deletion check
         if self._is_layer_truly_deleted(self.current_layer):
-            logger.debug("exploring_zoom_clicked: current_layer C++ object truly deleted")
             self.current_layer = None
             return
 
-        # If no features provided, get from current selection
-        if not features or len(features) == 0:
+        # Get features if not provided, then delegate
+        if not features:
             features, expression = self.get_current_features()
-        
-        # Delegate to zooming_to_features (which handles controller delegation)
         self.zooming_to_features(features, expression)
 
 

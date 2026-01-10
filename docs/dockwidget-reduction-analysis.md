@@ -10,10 +10,19 @@
 
 | Métrique          | Valeur       | Objectif      |
 | ----------------- | ------------ | ------------- |
-| Lignes dockwidget | **5,359**    | <2,000        |
-| Sprint actuel     | **Sprint 5** | Sprint 5      |
-| Réduction totale  | **-1,262**   | -9,235        |
-| Progrès           | **12.0%**    | 73.0% restant |
+| Lignes dockwidget | **5,253**    | <2,000        |
+| Sprint actuel     | **Sprint 6** | Sprint 6      |
+| Réduction totale  | **-1,368**   | -9,129        |
+| Progrès           | **13.0%**    | 72.0% restant |
+
+### Progression Sprint 6 (session 10 janvier 2026)
+
+| Action                                | Lignes avant | Lignes après | Réduction |
+| ------------------------------------- | ------------ | ------------ | --------- |
+| **Début Sprint 6**                    | **5,359**    | -            | -         |
+| Créer ConfigurationManager            | 5,359        | 5,267        | -92       |
+| Simplifier `exploring_identify_*`     | 5,267        | 5,253        | -14       |
+| **Total Sprint 6**                    | **5,359**    | **5,253**    | **-106**  |
 
 ### Progression Sprint 5 (session 10 janvier 2026)
 
@@ -22,21 +31,22 @@
 | Session précédente                    | 11,364       | 10,300       | -1,064    |
 | Simplification `zooming_to_features`  | 10,300       | 10,157       | -143      |
 | Simplification `exploring_*_clicked`  | 10,157       | 10,109       | -48       |
-| Simplification méthodes favorites     | 10,109       | 10,073       | -36       |
-| Simplification `exploring_deselect`   | 10,073       | 10,051       | -22       |
-| **Session 10 jan 2026**               | **5,488**    | **5,359**    | **-129**  |
-| Migrer `_configure_*_groupbox` (×3)   | 5,488        | 5,470        | -18       |
-| Simplifier `_combine_operator_*` (×2) | 5,470        | 5,408        | -62       |
-| Supprimer `_verify_backend_supports`  | 5,408        | 5,364        | -44       |
-| Supprimer `_deferred_manage_*` (vide) | 5,364        | 5,359        | -5        |
-| **Total session 10 jan**              | **5,488**    | **5,359**    | **-129**  |
+| Simplification t Managers (v4.0)
 
-### Controllers existants (v4.0)
-
-| Controller                  | Lignes     | Rôle            | Sprint    |
-| --------------------------- | ---------- | --------------- | --------- |
-| integration.py              | 2,481      | Orchestration   | S1-S5     |
-| **exploring_controller.py** | **2,405**  | **Exploration** | **S1-S5** |
+| Controller/Manager          | Lignes     | Rôle                 | Sprint    |
+| --------------------------- | ---------- | -------------------- | --------- |
+| integration.py              | 2,481      | Orchestration        | S1-S5     |
+| **exploring_controller.py** | **2,405**  | **Exploration**      | **S1-S5** |
+| layer_sync_controller.py    | 1,170      | Sync couches         | S3        |
+| property_controller.py      | 1,251      | Propriétés           | S3        |
+| filtering_controller.py     | 1,066      | Filtrage             | S1        |
+| **configuration_manager.py**| **729**    | **Widget Config**    | **S6**    |
+| config_controller.py        | 708        | Configuration        | S1        |
+| exporting_controller.py     | 697        | Export               | S1        |
+| favorites_controller.py     | 682        | Favoris              | S4        |
+| backend_controller.py       | 581        | Backends             | S1        |
+| ui_layout_controller.py     | 444        | UI Layout            | S4        |
+| **Total controllers**       | **12,214** | -     *Exploration** | **S1-S5** |
 | layer_sync_controller.py    | 1,170      | Sync couches    | S3        |
 | property_controller.py      | 1,251      | Propriétés      | S3        |
 | filtering_controller.py     | 1,066      | Filtrage        | S1        |
@@ -51,9 +61,30 @@
 
 ## ✅ Session 10 Janvier 2026 - Résumé
 
-### Travaux Accomplis
+### Sprint 6 - ConfigurationManager (-106 lignes)
 
-1. **Migration groupbox vers ExploringController** (NEW)
+**Objectif**: Externaliser configuration widgets et simplifier méthodes exploration
+
+1. **Création ConfigurationManager** (NEW)
+   - Fichier: `ui/managers/configuration_manager.py` (729 lignes)
+   - Externalise `dockwidget_widgets_configuration()` : 164 → 20 lignes (-144 lignes)
+   - Méthodes: `configure_widgets()`, `get_layer_properties_tuples_dict()`, `get_export_properties_tuples_dict()`
+   - Intégration: Import dans dockwidget, instance `_configuration_manager`
+
+2. **Simplifications Exploring** (NEW)
+   - `exploring_identify_clicked()` : 34 → 21 lignes (-13 lignes)
+   - `exploring_zoom_clicked()` : 24 → 18 lignes (-6 lignes)
+   - `exploring_groupbox_init()` : 15 → 19 lignes (+4 lignes - refactoring)
+
+**Impact Sprint 6**: 5,359 → 5,253 lignes (-106 lignes / -2.0%)
+
+---
+
+### Sprint 5 - Groupbox Migration (-129 lignes)
+
+**Objectif**: Migrer logique groupbox vers ExploringController
+
+1. **Migration groupbox vers ExploringController**
 
    - Ajout méthode `configure_groupbox()` dans `ExploringController`
    - Ajout délégation `delegate_exploring_configure_groupbox()` dans `integration.py`
@@ -180,6 +211,7 @@ Gestion des features et zoom.
 ### Utilisation des Controllers
 
 Le dockwidget délègue activement aux controllers :
+
 - **159 appels** à `_controller_integration`
 - **126 accès** à `self.widgets[]` pour gestion UI
 - **68 accès** à `PROJECT_LAYERS` pour données métier
@@ -187,21 +219,22 @@ Le dockwidget délègue activement aux controllers :
 ### Patterns de Délégation
 
 Méthodes déléguées avec succès :
+
 - ✅ `configure_groupbox()` → ExploringController
-- ✅ `index_to_combine_operator()` → FilteringController  
+- ✅ `index_to_combine_operator()` → FilteringController
 - ✅ `combine_operator_to_index()` → FilteringController
 - ✅ `auto_select_optimal_backends()` → BackendController
 - ✅ `populate_*_combobox()` → Controllers respectifs
 
 ### Méthodes Restantes (Priorité Refactoring)
 
-| Méthode | Lignes | Complexité | Action Recommandée |
-|---------|--------|------------|-------------------|
-| `dockwidget_widgets_configuration` | 164 | Configuration | Externaliser vers ConfigManager |
-| `__init__` | 69 | Initialisation | Garder (nécessaire) |
-| `_initialize_layer_state` | 60 | Initialisation | Simplifier managers |
-| `_setup_action_bar_layout` | 46 | Délégation | Déjà délègue à ActionBarManager |
-| `apply_pending_config_changes` | 45 | Config | Migrer vers ConfigController |
+| Méthode                            | Lignes | Complexité     | Action Recommandée              |
+| ---------------------------------- | ------ | -------------- | ------------------------------- |
+| `dockwidget_widgets_configuration` | 164    | Configuration  | Externaliser vers ConfigManager |
+| `__init__`                         | 69     | Initialisation | Garder (nécessaire)             |
+| `_initialize_layer_state`          | 60     | Initialisation | Simplifier managers             |
+| `_setup_action_bar_layout`         | 46     | Délégation     | Déjà délègue à ActionBarManager |
+| `apply_pending_config_changes`     | 45     | Config         | Migrer vers ConfigController    |
 
 ---
 
@@ -210,11 +243,13 @@ Méthodes déléguées avec succès :
 ### Cibles Prioritaires
 
 1. **Configuration Externalization** (164+ lignes)
+
    - Créer `ConfigurationManager` pour `dockwidget_widgets_configuration`
    - Externaliser dictionnaires de config vers JSON/YAML
    - Réduire méthode à simple loader
 
 2. **Exploration Methods** (~300 lignes totales)
+
    - Migrer `exploring_source_params_changed` vers ExploringController
    - Migrer `exploring_link_widgets` vers ExploringController
    - Migrer `_reload_exploration_widgets` vers ExploringController
