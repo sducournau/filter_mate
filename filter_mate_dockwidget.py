@@ -1615,85 +1615,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
 
     def _on_favorite_indicator_clicked(self, event):
-        """
-        Handle click on favorites indicator to show favorites menu.
-        
-        v4.0: Delegates to FavoritesController.
-        """
-        # v4.0: Delegate to controller
-        if (self._controller_integration 
-            and hasattr(self._controller_integration, '_favorites_controller')
-            and self._controller_integration._favorites_controller):
+        """Handle click on favorites indicator. v4.0: Delegates to FavoritesController."""
+        if self._controller_integration and self._controller_integration._favorites_controller:
             self._controller_integration._favorites_controller.handle_indicator_clicked()
-            return
-        
-        # Fallback: show warning
-        from .infrastructure.feedback import show_warning
-        show_warning("FilterMate", "Favorites controller not available")
     
     def _add_current_to_favorites(self):
-        """
-        Add current filter configuration to favorites.
-        
-        v4.0: Delegates to FavoritesController.
-        """
-        # v4.0: Delegate to controller
-        if (self._controller_integration 
-            and hasattr(self._controller_integration, '_favorites_controller')
-            and self._controller_integration._favorites_controller):
+        """Add current filter configuration to favorites. v4.0: Delegates to FavoritesController."""
+        if self._controller_integration and self._controller_integration._favorites_controller:
             self._controller_integration._favorites_controller.add_current_to_favorites()
-            return
-        
-        # Fallback: show warning
-        from .infrastructure.feedback import show_warning
-        show_warning("FilterMate", "Could not add favorite - controller not available")
     
     def _apply_favorite(self, favorite_id: str):
-        """
-        Apply a saved favorite filter.
-        
-        v4.0: Delegates to FavoritesController.
-        """
-        # v4.0: Delegate to controller
-        if (self._controller_integration 
-            and hasattr(self._controller_integration, '_favorites_controller')
-            and self._controller_integration._favorites_controller):
+        """Apply a saved favorite filter. v4.0: Delegates to FavoritesController."""
+        if self._controller_integration and self._controller_integration._favorites_controller:
             self._controller_integration._favorites_controller.apply_favorite(favorite_id)
-            return
-        
-        # Fallback: show warning
-        from .infrastructure.feedback import show_warning
-        show_warning("FilterMate", f"Could not apply favorite {favorite_id}")
 
     def _show_favorites_manager_dialog(self):
-        """
-        Show the favorites management dialog.
-        
-        v4.0: Delegates to FavoritesController/FavoritesManagerDialog.
-        Legacy implementation removed (-376 lines).
-        """
-        # v4.0: Delegate to controller integration
-        if (self._controller_integration 
-            and self._controller_integration.delegate_favorites_show_manager_dialog()):
+        """Show the favorites management dialog. v4.0: Delegates to FavoritesController."""
+        if self._controller_integration and self._controller_integration.delegate_favorites_show_manager_dialog():
             return
-        
-        # Fallback: use dialog directly
-        try:
-            from .ui.dialogs import FavoritesManagerDialog
-            from qgis.PyQt.QtWidgets import QMessageBox
-            if not self._favorites_manager or self._favorites_manager.count == 0:
-                QMessageBox.information(
-                    self,
-                    "Favorites Manager",
-                    "No favorites saved yet.\n\nClick the star indicator and select "
-                    "'Add current filter to favorites' to save your first favorite."
-                )
-                return
-            dialog = FavoritesManagerDialog(self._favorites_manager, self)
-            dialog.exec_()
-        except ImportError as e:
-            from .infrastructure.feedback import show_warning
-            show_warning("FilterMate", f"Could not load favorites dialog: {e}")
+        # Minimal fallback
+        from .infrastructure.feedback import show_warning
+        show_warning("FilterMate", "Favorites manager not available")
     
     def _export_favorites(self):
         """Export favorites to a JSON file."""
@@ -4576,254 +4518,33 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def filtering_populate_layers_chekableCombobox(self, layer=None):
-
-        if self.widgets_initialized is True:
-
-            if layer is None:
-                layer = self.current_layer
-            else:
-                if not isinstance(layer, QgsVectorLayer):
-                    logger.error(f"filtering_populate_layers_chekableCombobox: Expected QgsVectorLayer, got {type(layer).__name__}")
-                    return
-            try:    
-                self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].clear()
-                
-                # CRITICAL: Check if layer exists in PROJECT_LAYERS before accessing
-                if layer.id() not in self.PROJECT_LAYERS:
-                    logger.info(f"Layer {layer.name()} not in PROJECT_LAYERS yet, skipping")
-                    return
-                
-                layer_props = self.PROJECT_LAYERS[layer.id()]
-                
-                # FIX v2.7.5: Diagnostic to identify layers missing from combobox
-                qgis_vector_layers = [l for l in self.PROJECT.mapLayers().values() 
-                                      if isinstance(l, QgsVectorLayer) and l.id() != layer.id()]
-                logger.info(f"=== filtering_populate_layers_chekableCombobox DIAGNOSTIC ===")
-                logger.info(f"  Source layer: {layer.name()}")
-                logger.info(f"  PROJECT_LAYERS count: {len(self.PROJECT_LAYERS)}")
-                logger.info(f"  QGIS vector layers (excl. source): {len(qgis_vector_layers)}")
-                
-                # List layers in QGIS but NOT in PROJECT_LAYERS
-                missing_from_project_layers = []
-                for qgis_layer in qgis_vector_layers:
-                    if qgis_layer.id() not in self.PROJECT_LAYERS:
-                        missing_from_project_layers.append(qgis_layer.name())
-                
-                if missing_from_project_layers:
-                    logger.warning(f"  ⚠️ Layers in QGIS but NOT in PROJECT_LAYERS: {missing_from_project_layers}")
-                    logger.warning(f"     These layers won't appear in distant layers combobox!")
-                    logger.warning(f"     Solution: Remove and re-add these layers to the QGIS project")
-
-                if layer_props["filtering"]["has_layers_to_filter"]:
-                    i = 0
-                    
-                    # Create a copy of keys to avoid RuntimeError if dictionary changes during iteration
-                    for key in list(self.PROJECT_LAYERS.keys()):
-                        # Verify required keys exist in layer info
-                        if key not in self.PROJECT_LAYERS or "infos" not in self.PROJECT_LAYERS[key]:
-                            continue
-                        
-                        layer_info = self.PROJECT_LAYERS[key]["infos"]
-                        required_keys = ["layer_id", "layer_name", "layer_crs_authid", "layer_geometry_type"]
-                        if any(k not in layer_info or layer_info[k] is None for k in required_keys):
-                            continue
-                        
-                        if layer_info["is_already_subset"] is False:
-                            layer_info["subset_history"] = []
-
-                        layer_id = layer_info["layer_id"]
-                        layer_name = layer_info["layer_name"]
-                        layer_crs_authid = layer_info["layer_crs_authid"]
-                        layer_icon = self.icon_per_geometry_type(layer_info["layer_geometry_type"])
-
-                        # Only add usable vector layers (skip raster and broken layers)
-                        layer_obj = self.PROJECT.mapLayer(layer_id)
-                        if (key != layer.id()
-                            and layer_obj and isinstance(layer_obj, QgsVectorLayer)
-                            and is_layer_source_available(layer_obj, require_psycopg2=False)):
-                            self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs_authid), {"layer_id": key, "layer_geometry_type": layer_info["layer_geometry_type"]})
-                            item = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].model().item(i)
-                            if len(layer_props["filtering"]["layers_to_filter"]) > 0:
-                                if layer_id in list(layer_id for layer_id in list(layer_props["filtering"]["layers_to_filter"])):
-                                    item.setCheckState(Qt.Checked)
-                                else:
-                                    item.setCheckState(Qt.Unchecked) 
-                            else:
-                                item.setCheckState(Qt.Unchecked)
-                            i += 1    
-                else:
-                    i = 0
-                    # Create a copy of keys to avoid RuntimeError if dictionary changes during iteration
-                    for key in list(self.PROJECT_LAYERS.keys()):
-                        # Verify required keys exist in layer info
-                        if key not in self.PROJECT_LAYERS or "infos" not in self.PROJECT_LAYERS[key]:
-                            continue
-                        
-                        layer_info = self.PROJECT_LAYERS[key]["infos"]
-                        required_keys = ["layer_id", "layer_name", "layer_crs_authid", "layer_geometry_type"]
-                        if any(k not in layer_info or layer_info[k] is None for k in required_keys):
-                            continue
-                        
-                        layer_id = layer_info["layer_id"]
-                        layer_name = layer_info["layer_name"]
-                        layer_crs_authid = layer_info["layer_crs_authid"]
-                        layer_icon = self.icon_per_geometry_type(layer_info["layer_geometry_type"])
-                        
-                        # Only add usable vector layers (skip raster and broken layers)
-                        layer_obj = self.PROJECT.mapLayer(layer_id)
-                        if (key != layer.id()
-                            and layer_obj and isinstance(layer_obj, QgsVectorLayer)
-                            and is_layer_source_available(layer_obj, require_psycopg2=False)):
-                            self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs_authid), {"layer_id": key, "layer_geometry_type": layer_info["layer_geometry_type"]})
-                            item = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].model().item(i)
-                            item.setCheckState(Qt.Unchecked)
-                            i += 1    
-            
-            except Exception as e:
-                # Log the error without storing in self.exception
-                logger.warning(f"Error in filtering_populate_layers_chekableCombobox: {type(e).__name__}: {e}")
-                
-                # v3.0.14: CRITICAL - Check if layer is still valid (not deleted) using centralized method
-                if not self._is_layer_truly_deleted(layer):
-                    # Pass explicitly typed empty list for properties parameter
-                    empty_properties = []
-                    self.resetLayerVariableOnErrorEvent(layer, empty_properties)
-                else:
-                    # Layer has been deleted
-                    logger.debug("Cannot reset layer variable - layer has been deleted")
+        """
+        Populate layers-to-filter checkable combobox.
+        
+        v3.1 Sprint 5: Simplified - delegates to FilteringController.
+        """
+        if not self.widgets_initialized:
+            return
+        
+        # Delegate to controller
+        if self._controller_integration:
+            if self._controller_integration.delegate_populate_layers_checkable_combobox(layer):
+                return
+        
+        # Minimal fallback: just log warning
+        logger.warning("filtering_populate_layers_chekableCombobox: Controller delegation failed")
 
     def exporting_populate_combobox(self):
-
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
-
-            layers_to_export = []
-            datatype_to_export = ''
-
-            if self.project_props['EXPORTING']['HAS_LAYERS_TO_EXPORT'] is True:
-                layers_to_export = self.project_props['EXPORTING']['LAYERS_TO_EXPORT']
-            
-            if self.project_props['EXPORTING']['HAS_DATATYPE_TO_EXPORT'] is True:
-                datatype_to_export = self.project_props['EXPORTING']['DATATYPE_TO_EXPORT']
-
-            # Import REMOTE_PROVIDERS constant for detecting remote layers
-            from .modules.constants import REMOTE_PROVIDERS
-            
-            # Debug: Log PROJECT_LAYERS count vs QGIS project layers count
-            qgis_layers = [l for l in self.PROJECT.mapLayers().values() if isinstance(l, QgsVectorLayer)]
-            postgres_layers = [l for l in qgis_layers if l.providerType() == 'postgres']
-            # Remote layers: WFS, ArcGIS Feature Service, etc.
-            remote_layers = [l for l in qgis_layers if l.providerType() in REMOTE_PROVIDERS]
-            postgres_in_project_layers = sum(1 for lid in self.PROJECT_LAYERS.keys() 
-                                             if self.PROJECT.mapLayer(lid) and 
-                                             self.PROJECT.mapLayer(lid).providerType() == 'postgres')
-            logger.info(f"exporting_populate_combobox: PROJECT_LAYERS has {len(self.PROJECT_LAYERS)} entries ({postgres_in_project_layers} PostgreSQL), QGIS project has {len(qgis_layers)} vector layers ({len(postgres_layers)} PostgreSQL, {len(remote_layers)} remote)")
-            
-            # Check for PostgreSQL layers missing from PROJECT_LAYERS
-            missing_postgres = [l for l in postgres_layers if l.id() not in self.PROJECT_LAYERS]
-            if missing_postgres:
-                logger.warning(f"exporting_populate_combobox: {len(missing_postgres)} PostgreSQL layer(s) in QGIS project but NOT in PROJECT_LAYERS: {[l.name() for l in missing_postgres]}")
-            
-            # Check for remote layers (WFS, ArcGIS, etc.) missing from PROJECT_LAYERS
-            missing_remote = [l for l in remote_layers if l.id() not in self.PROJECT_LAYERS]
-            if missing_remote:
-                logger.warning(f"exporting_populate_combobox: {len(missing_remote)} remote layer(s) in QGIS project but NOT in PROJECT_LAYERS: {[l.name() for l in missing_remote]}")
-
-            self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].clear()
-            item_index = 0  # Track actual item position in widget
-            skipped_postgres_count = 0  # Track skipped PostgreSQL layers
-            # Create a copy of keys to avoid RuntimeError if dictionary changes during iteration
-            for key in list(self.PROJECT_LAYERS.keys()):
-                # Verify required keys exist in layer info
-                if key not in self.PROJECT_LAYERS or "infos" not in self.PROJECT_LAYERS[key]:
-                    logger.debug(f"exporting_populate_combobox: Skipping layer {key} - missing from PROJECT_LAYERS or no 'infos' key")
-                    continue
-                
-                layer_info = self.PROJECT_LAYERS[key]["infos"]
-                required_keys = ["layer_id", "layer_name", "layer_crs_authid", "layer_geometry_type"]
-                if any(k not in layer_info or layer_info[k] is None for k in required_keys):
-                    missing_keys = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
-                    logger.debug(f"exporting_populate_combobox: Skipping layer {key} - missing required keys: {missing_keys}")
-                    continue
-                
-                layer_id = layer_info["layer_id"]
-                layer_name = layer_info["layer_name"]
-                layer_crs_authid = layer_info["layer_crs_authid"]
-                layer_icon = self.icon_per_geometry_type(layer_info["layer_geometry_type"])
-                
-                # Only add usable vector layers (skip raster and broken layers)
-                # Note: require_psycopg2=False because export uses QGIS API (QgsVectorFileWriter)
-                # which handles PostgreSQL connections internally, without needing psycopg2
-                layer_obj = self.PROJECT.mapLayer(layer_id)
-                if layer_obj and isinstance(layer_obj, QgsVectorLayer) and is_layer_source_available(layer_obj, require_psycopg2=False):
-                    layer_name = layer_name + ' [%s]' % (layer_crs_authid)
-                    self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].addItem(layer_icon, layer_name, key)
-                    item = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].model().item(item_index)
-                    if key in layers_to_export:
-                        item.setCheckState(Qt.Checked)
-                    else:
-                        item.setCheckState(Qt.Unchecked)
-                    item_index += 1  # Increment only when item is actually added
-                else:
-                    # Debug: Log why layer was skipped
-                    if not layer_obj:
-                        logger.debug(f"exporting_populate_combobox: Skipping layer '{layer_name}' ({layer_id}) - layer_obj is None (not in QGIS project)")
-                    elif not isinstance(layer_obj, QgsVectorLayer):
-                        logger.debug(f"exporting_populate_combobox: Skipping layer '{layer_name}' ({layer_id}) - not a QgsVectorLayer")
-                    else:
-                        # More detailed logging for source availability issues
-                        provider_type = layer_obj.providerType() if layer_obj else 'unknown'
-                        is_valid = layer_obj.isValid() if layer_obj else False
-                        logger.debug(f"exporting_populate_combobox: Skipping layer '{layer_name}' ({layer_id}) - is_layer_source_available returned False (provider={provider_type}, isValid={is_valid})")
-                        if provider_type == 'postgres':
-                            skipped_postgres_count += 1
-            
-            # FIX: Add PostgreSQL layers that are in QGIS project but missing from PROJECT_LAYERS
-            # These layers can still be exported using QGIS API (QgsVectorFileWriter)
-            for postgres_layer in missing_postgres:
-                if postgres_layer.isValid() and is_layer_source_available(postgres_layer, require_psycopg2=False):
-                    layer_name_display = f"{postgres_layer.name()} [{postgres_layer.crs().authid()}]"
-                    # Convert geometry type integer to legacy string format for icon_per_geometry_type
-                    geom_type_str = get_geometry_type_string(postgres_layer.geometryType(), legacy_format=True)
-                    layer_icon = self.icon_per_geometry_type(geom_type_str)
-                    self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].addItem(layer_icon, layer_name_display, postgres_layer.id())
-                    item = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].model().item(item_index)
-                    if postgres_layer.id() in layers_to_export:
-                        item.setCheckState(Qt.Checked)
-                    else:
-                        item.setCheckState(Qt.Unchecked)
-                    item_index += 1
-                    logger.info(f"exporting_populate_combobox: Added missing PostgreSQL layer '{postgres_layer.name()}' to export list")
-            
-            # FIX v2.3.13: Add remote layers (WFS, ArcGIS, etc.) that are in QGIS project but missing from PROJECT_LAYERS
-            for remote_layer in missing_remote:
-                if remote_layer.isValid() and is_layer_source_available(remote_layer, require_psycopg2=False):
-                    layer_name_display = f"{remote_layer.name()} [{remote_layer.crs().authid()}]"
-                    # Convert geometry type integer to legacy string format for icon_per_geometry_type
-                    geom_type_str = get_geometry_type_string(remote_layer.geometryType(), legacy_format=True)
-                    layer_icon = self.icon_per_geometry_type(geom_type_str)
-                    self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].addItem(layer_icon, layer_name_display, remote_layer.id())
-                    item = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].model().item(item_index)
-                    if remote_layer.id() in layers_to_export:
-                        item.setCheckState(Qt.Checked)
-                    else:
-                        item.setCheckState(Qt.Unchecked)
-                    item_index += 1
-                    logger.info(f"exporting_populate_combobox: Added missing remote layer '{remote_layer.name()}' (provider={remote_layer.providerType()}) to export list")
-            
-            logger.info(f"exporting_populate_combobox: Added {item_index} layers to export combobox")
-            if skipped_postgres_count > 0:
-                logger.warning(f"exporting_populate_combobox: {skipped_postgres_count} PostgreSQL layer(s) skipped - check layer validity")
-            
-            ogr_driver_list = [ogr.GetDriver(i).GetDescription() for i in range(ogr.GetDriverCount())]
-            ogr_driver_list.sort()
-            self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].clear()
-            self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].addItems(ogr_driver_list)
+        """
+        Populate export combobox with available layers.
         
-            if datatype_to_export != '':
-                self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].setCurrentIndex(self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].findText(datatype_to_export))
-            else:
-                self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].setCurrentIndex(self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].findText('GPKG'))
-
+        v3.1 Sprint 5: Simplified - delegates to ExportingController.
+        """
+        # Delegate to controller
+        if self._controller_integration:
+            if self._controller_integration.delegate_populate_export_combobox():
+                return
+        # No fallback - controller handles all logic
 
     def _apply_auto_configuration(self):
         """
@@ -6220,78 +5941,49 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Flash the currently selected features on the map canvas.
         
-        This method uses cached feature IDs when available for optimal performance.
-        The flash animation highlights the selected features with a red pulse effect.
-        
-        v3.0 MIG-024: Added controller delegation path for gradual migration.
-        v3.1 Vague 2: Delegate flash to ExploringController when available.
+        v4.0 Sprint 5: Simplified - delegates flash to ExploringController.
+        Full implementation is in ExploringController.flash_features().
         """
-        if self.widgets_initialized is True and self.current_layer is not None:
+        if not self.widgets_initialized or self.current_layer is None:
+            return
 
-            # v3.0.14: Use centralized deletion check with filtering protection
-            if self._is_layer_truly_deleted(self.current_layer):
-                logger.debug("exploring_identify_clicked: current_layer C++ object truly deleted")
-                self.current_layer = None
-                return
+        # v3.0.14: Use centralized deletion check
+        if self._is_layer_truly_deleted(self.current_layer):
+            logger.debug("exploring_identify_clicked: current_layer C++ object truly deleted")
+            self.current_layer = None
+            return
 
-            layer_id = self.current_layer.id()
-            groupbox_type = self.current_exploring_groupbox
-            
-            # OPTIMIZATION: Try to get cached feature IDs directly for fast flash
-            if hasattr(self, '_exploring_cache') and groupbox_type:
-                # FIX v2.3.9: For custom_selection, verify cached expression matches widget
-                # before using cached feature IDs. This prevents flashing wrong features
-                # when expression changed but cache wasn't invalidated.
-                use_cached_ids = True
-                if groupbox_type == "custom_selection":
-                    cached = self._exploring_cache.get(layer_id, groupbox_type)
-                    if cached:
-                        current_widget_expr = self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].expression()
-                        cached_expr = cached.get('expression', '')
-                        if current_widget_expr != cached_expr:
-                            logger.debug(f"exploring_identify_clicked: CACHE STALE - invalidating")
-                            self._exploring_cache.invalidate(layer_id, groupbox_type)
-                            use_cached_ids = False
-                
-                if use_cached_ids:
-                    feature_ids = self._exploring_cache.get_feature_ids(layer_id, groupbox_type)
-                    if feature_ids:
-                        logger.debug(f"exploring_identify_clicked: Using cached feature_ids ({len(feature_ids)} features)")
-                        # v3.1 Vague 2: Try controller delegation first
-                        if hasattr(self, '_controller_integration') and self._controller_integration:
-                            if self._controller_integration.delegate_flash_features(feature_ids):
-                                return
-                        # Legacy fallback: direct QGIS flash
-                        self.iface.mapCanvas().flashFeatureIds(
-                            self.current_layer, 
-                            feature_ids, 
-                            startColor=QColor(235, 49, 42, 255), 
-                            endColor=QColor(237, 97, 62, 25), 
-                            flashes=6, 
-                            duration=400
-                        )
-                        return
-            
-            # Fallback: get features from widgets (will also populate cache)
-            features, expression = self.get_current_features()
-            
-            if len(features) == 0:
+        layer_id = self.current_layer.id()
+        groupbox_type = self.current_exploring_groupbox
+        
+        # Try to get cached feature IDs first (fast path)
+        feature_ids = None
+        if hasattr(self, '_exploring_cache') and groupbox_type:
+            feature_ids = self._exploring_cache.get_feature_ids(layer_id, groupbox_type)
+        
+        # If no cached IDs, get features and extract IDs
+        if not feature_ids:
+            features, _ = self.get_current_features()
+            if features:
+                feature_ids = [f.id() for f in features]
+        
+        if not feature_ids:
+            return
+        
+        # v4.0 Sprint 5: Delegate to controller
+        if self._controller_integration:
+            if self._controller_integration.delegate_flash_features(feature_ids, self.current_layer):
                 return
-            else:
-                feature_ids = [feature.id() for feature in features]
-                # v3.1 Vague 2: Try controller delegation first
-                if hasattr(self, '_controller_integration') and self._controller_integration:
-                    if self._controller_integration.delegate_flash_features(feature_ids):
-                        return
-                # Legacy fallback: direct QGIS flash
-                self.iface.mapCanvas().flashFeatureIds(
-                    self.current_layer, 
-                    feature_ids, 
-                    startColor=QColor(235, 49, 42, 255), 
-                    endColor=QColor(237, 97, 62, 25), 
-                    flashes=6, 
-                    duration=400
-                )
+        
+        # Minimal fallback: direct QGIS flash
+        self.iface.mapCanvas().flashFeatureIds(
+            self.current_layer, 
+            feature_ids, 
+            startColor=QColor(235, 49, 42, 255), 
+            endColor=QColor(237, 97, 62, 25), 
+            flashes=6, 
+            duration=400
+        )
 
 
     def get_current_features(self, use_cache: bool = True):
@@ -6570,75 +6262,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Zoom the map canvas to the currently selected features.
         
-        This method uses cached bounding boxes when available for optimal performance.
-        If the bounding box is cached, the zoom is nearly instantaneous.
-        
-        v4.0: Can delegate to ExploringController when features are provided.
+        v4.0 Sprint 5: Simplified - uses zooming_to_features which delegates to controller.
         
         Args:
             features: Optional list of features to zoom to (if empty, uses current selection)
             expression: Optional expression string associated with the features
         """
-        if self.widgets_initialized is True and self.current_layer is not None:
+        if not self.widgets_initialized or self.current_layer is None:
+            return
 
-            # v3.0.14: Use centralized deletion check with filtering protection
-            if self._is_layer_truly_deleted(self.current_layer):
-                logger.debug("exploring_zoom_clicked: current_layer C++ object truly deleted")
-                self.current_layer = None
-                return
+        # v3.0.14: Use centralized deletion check
+        if self._is_layer_truly_deleted(self.current_layer):
+            logger.debug("exploring_zoom_clicked: current_layer C++ object truly deleted")
+            self.current_layer = None
+            return
 
-            # v4.0 MIG-072: Try delegation if features provided
-            if features and len(features) > 0:
-                if (self._controller_integration 
-                    and self._controller_integration.exploring_controller):
-                    if self._controller_integration.delegate_zoom_to_features(features, expression):
-                        return
-
-            layer_id = self.current_layer.id()
-            groupbox_type = self.current_exploring_groupbox
-            
-            # OPTIMIZATION: Try to use cached bounding box for instant zoom
-            if not features or len(features) == 0:
-                if hasattr(self, '_exploring_cache') and groupbox_type:
-                    # FIX v2.3.9: For custom_selection, verify cached expression matches widget
-                    # before using cached bbox. This prevents zooming to wrong extent
-                    # when expression changed but cache wasn't invalidated.
-                    use_cached_bbox = True
-                    if groupbox_type == "custom_selection":
-                        cached = self._exploring_cache.get(layer_id, groupbox_type)
-                        if cached:
-                            current_widget_expr = self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].expression()
-                            cached_expr = cached.get('expression', '')
-                            if current_widget_expr != cached_expr:
-                                logger.debug(f"exploring_zoom_clicked: CACHE STALE - invalidating")
-                                self._exploring_cache.invalidate(layer_id, groupbox_type)
-                                use_cached_bbox = False
-                    
-                    if use_cached_bbox:
-                        cached_bbox = self._exploring_cache.get_bbox(layer_id, groupbox_type)
-                        if cached_bbox and not cached_bbox.isEmpty():
-                            logger.debug(f"exploring_zoom_clicked: Using cached bbox for instant zoom")
-                            # Apply padding to bbox (10% or minimum 5 units)
-                            width_padding = max(cached_bbox.width() * 0.1, 5)
-                            height_padding = max(cached_bbox.height() * 0.1, 5)
-                            padded_bbox = QgsRectangle(cached_bbox)
-                            padded_bbox.grow(max(width_padding, height_padding))
-                            
-                            # Transform to canvas CRS if needed
-                            layer_crs = self.current_layer.crs()
-                            canvas_crs = self.iface.mapCanvas().mapSettings().destinationCrs()
-                            if layer_crs != canvas_crs:
-                                transform = QgsCoordinateTransform(layer_crs, canvas_crs, QgsProject.instance())
-                                padded_bbox = transform.transformBoundingBox(padded_bbox)
-                            
-                            self.iface.mapCanvas().zoomToFeatureExtent(padded_bbox)
-                            self.iface.mapCanvas().refresh()
-                            return
-                
-                # Fallback: get features from widgets (will also populate cache)
-                features, expression = self.get_current_features()
-            
-            self.zooming_to_features(features, expression)
+        # If no features provided, get from current selection
+        if not features or len(features) == 0:
+            features, expression = self.get_current_features()
+        
+        # Delegate to zooming_to_features (which handles controller delegation)
+        self.zooming_to_features(features, expression)
 
 
     def get_filtered_layer_extent(self, layer):
@@ -6723,154 +6367,40 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Zoom to provided features on the map canvas.
         
-        v3.1 STORY-2.3: Try controller delegation first for cleaner architecture.
+        v4.0 Sprint 5: Simplified - delegates to ExploringController.
+        Full implementation is in ExploringController.zooming_to_features().
         """
-        if self.widgets_initialized is True and self.current_layer is not None:
+        if not self.widgets_initialized or self.current_layer is None:
+            return
 
-            # v3.0.14: CRITICAL - Use centralized deletion check with full protection
-            if self._is_layer_truly_deleted(self.current_layer):
-                logger.debug("zooming_to_features: current_layer C++ object truly deleted")
-                self.current_layer = None
+        # v3.0.14: CRITICAL - Use centralized deletion check
+        if self._is_layer_truly_deleted(self.current_layer):
+            logger.debug("zooming_to_features: current_layer C++ object truly deleted")
+            self.current_layer = None
+            return
+
+        # v4.0 Sprint 5: Delegate to controller (full implementation there)
+        if self._controller_integration is not None:
+            # Controller handles all cases including empty features with expression
+            if self._controller_integration.delegate_zoom_to_features(features, expression, self.current_layer):
+                logger.debug("zooming_to_features: Delegated to controller successfully")
+                return
+            # If delegation failed but controller exists, use controller directly
+            if self._controller_integration.exploring_controller:
+                self._controller_integration.exploring_controller.zooming_to_features(features, expression)
                 return
 
-            # v3.1 STORY-2.3: Try controller delegation first
-            if features and len(features) > 0 and self._controller_integration is not None:
-                if self._controller_integration.delegate_zoom_to_features(features, expression, self.current_layer):
-                    logger.debug("zooming_to_features: Delegated to controller successfully")
-                    return
-
-            # DIAGNOSTIC: Log incoming features
-            logger.info(f"🔍 zooming_to_features DIAGNOSTIC (legacy path):")
-            logger.info(f"   features count: {len(features) if features else 0}")
-            logger.info(f"   expression: '{expression}'")
-            if features and len(features) > 0:
-                for i, f in enumerate(features[:3]):
-                    has_geom = f.hasGeometry() if hasattr(f, 'hasGeometry') else 'N/A'
-                    fid = f.id() if hasattr(f, 'id') else 'N/A'
-                    logger.info(f"   feature[{i}]: id={fid}, hasGeometry={has_geom}")
-                    if has_geom and f.hasGeometry():
-                        geom = f.geometry()
-                        logger.info(f"      geometry: type={geom.type()}, isEmpty={geom.isEmpty()}")
-            
-            # IMPROVED: If features list is empty but we have an expression, try to fetch features
-            if (not features or not isinstance(features, list) or len(features) == 0) and expression:
-                logger.debug(f"zooming_to_features: Empty features list, trying to fetch from expression: {expression}")
-                try:
-                    qgs_expr = QgsExpression(expression)
-                    if qgs_expr.isValid():
-                        request = QgsFeatureRequest(qgs_expr)
-                        # PERFORMANCE FIX: Limit features fetched for zoom
-                        request.setLimit(5000)  # Enough for zoom extent calculation
-                        features = list(self.current_layer.getFeatures(request))
-                        logger.debug(f"zooming_to_features: Fetched {len(features)} features from expression")
-                except Exception as e:
-                    logger.warning(f"zooming_to_features: Failed to fetch features from expression: {e}")
-            
-            # Safety check: ensure features is a list
-            if not features or not isinstance(features, list) or len(features) == 0:
-                # IMPROVED: Zoom to extent based on current exploring mode
-                logger.debug("zooming_to_features: No features provided, computing extent based on mode")
-                extent = self._compute_zoom_extent_for_mode()
-                if extent and not extent.isEmpty():
-                    self.iface.mapCanvas().zoomToFeatureExtent(extent)
-                else:
-                    logger.debug("zooming_to_features: Empty extent, using canvas refresh")
-                    self.iface.mapCanvas().refresh() 
-
-            else: 
-                # CRITICAL FIX: For features without geometry, try to reload from layer
-                features_with_geometry = []
-                for feature in features:
-                    if feature.hasGeometry() and not feature.geometry().isEmpty():
-                        features_with_geometry.append(feature)
-                    else:
-                        # Try to reload feature with geometry from layer
-                        try:
-                            reloaded = self.current_layer.getFeature(feature.id())
-                            if reloaded.isValid() and reloaded.hasGeometry() and not reloaded.geometry().isEmpty():
-                                features_with_geometry.append(reloaded)
-                                logger.debug(f"Reloaded feature {feature.id()} with geometry for zoom")
-                            else:
-                                logger.warning(f"Could not reload feature {feature.id()} with valid geometry")
-                        except Exception as e:
-                            logger.warning(f"Error reloading feature {feature.id()}: {e}")
-
-                logger.info(f"   features_with_geometry count: {len(features_with_geometry)}")
-
-                if len(features_with_geometry) == 0:
-                    # IMPROVED: Zoom to extent based on current exploring mode
-                    logger.debug("zooming_to_features: No features have geometry, computing extent based on mode")
-                    extent = self._compute_zoom_extent_for_mode()
-                    if extent and not extent.isEmpty():
-                        self.iface.mapCanvas().zoomToFeatureExtent(extent)
-                    return
-
-                if len(features_with_geometry) == 1:
-                    feature = features_with_geometry[0]
-                    # CRITICAL: Create a copy to avoid modifying the original geometry
-                    geom = QgsGeometry(feature.geometry())
-                    
-                    # Get CRS information
-                    layer_crs = self.current_layer.crs()
-                    canvas_crs = self.iface.mapCanvas().mapSettings().destinationCrs()
-                    
-                    # IMPROVED v2.5.7: Use crs_utils for better CRS detection
-                    if CRS_UTILS_AVAILABLE:
-                        is_geographic = is_geographic_crs(layer_crs)
-                    else:
-                        is_geographic = layer_crs.isGeographic()
-                    
-                    # CRITICAL: For geographic coordinates, switch to a metric CRS for buffer calculations
-                    # This ensures accurate buffer distances in meters instead of imprecise degrees
-                    if is_geographic:
-                        # IMPROVED v2.5.7: Use optimal metric CRS (UTM or Web Mercator)
-                        if CRS_UTILS_AVAILABLE:
-                            metric_crs_authid = get_optimal_metric_crs(
-                                project=QgsProject.instance(),
-                                source_crs=layer_crs,
-                                extent=geom.boundingBox(),
-                                prefer_utm=True
-                            )
-                            work_crs = QgsCoordinateReferenceSystem(metric_crs_authid)
-                            logger.debug(f"FilterMate: Using optimal metric CRS {metric_crs_authid} for zoom buffer")
-                        else:
-                            # Fallback to Web Mercator
-                            work_crs = QgsCoordinateReferenceSystem(DEFAULT_METRIC_CRS)
-                            logger.debug(f"FilterMate: Using Web Mercator ({DEFAULT_METRIC_CRS}) for zoom buffer")
-                        
-                        to_metric = QgsCoordinateTransform(layer_crs, work_crs, QgsProject.instance())
-                        geom.transform(to_metric)
-                    else:
-                        # Already in projected coordinates, use layer CRS
-                        work_crs = layer_crs
-                    
-                    if str(feature.geometry().type()) == 'GeometryType.Point':
-                        # Points need a buffer since they have no bounding box
-                        buffer_distance = 50  # 50 meters for all points
-                        box = geom.buffer(buffer_distance, 5).boundingBox()
-                    else:
-                        # IMPROVED: For polygons/lines, zoom to the actual feature bounding box
-                        # with a small percentage-based padding for better visibility
-                        box = geom.boundingBox()
-                        if not box.isEmpty():
-                            # Add 10% padding based on feature size (minimum 5 meters)
-                            width_padding = max(box.width() * 0.1, 5)
-                            height_padding = max(box.height() * 0.1, 5)
-                            box.grow(max(width_padding, height_padding))
-                        else:
-                            # Fallback for empty bounding box
-                            box.grow(10)
-                    
-                    # Transform box to canvas CRS if needed
-                    if work_crs != canvas_crs:
-                        transform = QgsCoordinateTransform(work_crs, canvas_crs, QgsProject.instance())
-                        box = transform.transformBoundingBox(box)
-
-                    self.iface.mapCanvas().zoomToFeatureExtent(box)
-                else:
-                    self.iface.mapCanvas().zoomToFeatureIds(self.current_layer, [feature.id() for feature in features_with_geometry])
-
-            self.iface.mapCanvas().refresh()
+        # Minimal fallback: simple zoom if no controller
+        logger.warning("zooming_to_features: No controller available, using simple fallback")
+        if features and len(features) > 0:
+            feature_ids = [f.id() for f in features if hasattr(f, 'id')]
+            if feature_ids:
+                self.iface.mapCanvas().zoomToFeatureIds(self.current_layer, feature_ids)
+        else:
+            extent = self._compute_zoom_extent_for_mode()
+            if extent and not extent.isEmpty():
+                self.iface.mapCanvas().zoomToFeatureExtent(extent)
+        self.iface.mapCanvas().refresh()
 
 
     def on_layer_selection_changed(self, selected, deselected, clearAndSelect):
@@ -7169,24 +6699,24 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Deselect all features on the current layer.
         
-        v3.1 Phase 6 (STORY-2.3): Delegates to ExploringController if available.
+        v4.0 Sprint 5: Simplified - delegates to ExploringController.
         """
-        if self.widgets_initialized is True and self.current_layer is not None:
+        if not self.widgets_initialized or self.current_layer is None:
+            return
 
-            # v3.0.14: CRITICAL - Use centralized deletion check with full protection
-            if self._is_layer_truly_deleted(self.current_layer):
-                logger.debug("exploring_deselect_features: current_layer C++ object truly deleted")
-                self.current_layer = None
+        # CRITICAL - Use centralized deletion check
+        if self._is_layer_truly_deleted(self.current_layer):
+            logger.debug("exploring_deselect_features: current_layer C++ object truly deleted")
+            self.current_layer = None
+            return
+
+        # Delegate to ExploringController
+        if self._controller_integration is not None:
+            if self._controller_integration.delegate_exploring_clear_selection():
                 return
-
-            # v3.1: Delegate to ExploringController (STORY-2.3)
-            if self._controller_integration is not None:
-                if self._controller_integration.delegate_exploring_clear_selection():
-                    logger.debug("exploring_deselect_features: delegated to controller")
-                    return
-            
-            # Legacy fallback
-            self.current_layer.removeSelection()
+        
+        # Minimal fallback
+        self.current_layer.removeSelection()
         
 
     def exploring_select_features(self):

@@ -191,6 +191,146 @@ class ExportingController(BaseController):
         """Get list of layer IDs selected for export."""
         return self._layer_ids.copy()
     
+    def populate_export_combobox(self) -> bool:
+        """
+        Populate the export layers combobox with available layers.
+        
+        v3.1 Sprint 5: Migrated from dockwidget to controller.
+        
+        This method:
+        - Clears existing items
+        - Adds all valid vector layers from PROJECT_LAYERS
+        - Handles PostgreSQL and remote layers missing from PROJECT_LAYERS
+        - Sets check state based on saved preferences
+        - Populates the datatype/format combobox with OGR drivers
+        
+        Returns:
+            True if population succeeded, False otherwise
+        """
+        try:
+            dockwidget = self._dockwidget
+            if not dockwidget:
+                return False
+            
+            # Check preconditions
+            if not dockwidget.widgets_initialized or not dockwidget.has_loaded_layers:
+                return False
+            
+            # Get saved preferences
+            layers_to_export = []
+            datatype_to_export = ''
+            
+            if dockwidget.project_props.get('EXPORTING', {}).get('HAS_LAYERS_TO_EXPORT'):
+                layers_to_export = dockwidget.project_props['EXPORTING']['LAYERS_TO_EXPORT']
+            
+            if dockwidget.project_props.get('EXPORTING', {}).get('HAS_DATATYPE_TO_EXPORT'):
+                datatype_to_export = dockwidget.project_props['EXPORTING']['DATATYPE_TO_EXPORT']
+            
+            # Import required modules
+            from qgis.core import QgsVectorLayer, QgsProject
+            from qgis.PyQt.QtCore import Qt
+            from ..modules.constants import REMOTE_PROVIDERS, get_geometry_type_string
+            from ..modules.appUtils import is_layer_source_available
+            import logging
+            logger = logging.getLogger(__name__)
+            
+            try:
+                from osgeo import ogr
+                ogr_available = True
+            except ImportError:
+                ogr_available = False
+            
+            project = QgsProject.instance()
+            
+            # Collect diagnostic info
+            qgis_layers = [l for l in project.mapLayers().values() if isinstance(l, QgsVectorLayer)]
+            postgres_layers = [l for l in qgis_layers if l.providerType() == 'postgres']
+            remote_layers = [l for l in qgis_layers if l.providerType() in REMOTE_PROVIDERS]
+            
+            # Find layers missing from PROJECT_LAYERS
+            missing_postgres = [l for l in postgres_layers if l.id() not in dockwidget.PROJECT_LAYERS]
+            missing_remote = [l for l in remote_layers if l.id() not in dockwidget.PROJECT_LAYERS]
+            
+            if missing_postgres:
+                logger.warning(f"populate_export_combobox: {len(missing_postgres)} PostgreSQL layer(s) missing from PROJECT_LAYERS")
+            if missing_remote:
+                logger.warning(f"populate_export_combobox: {len(missing_remote)} remote layer(s) missing from PROJECT_LAYERS")
+            
+            # Clear and populate layers widget
+            layers_widget = dockwidget.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"]
+            layers_widget.clear()
+            item_index = 0
+            
+            # Add layers from PROJECT_LAYERS
+            for key in list(dockwidget.PROJECT_LAYERS.keys()):
+                if key not in dockwidget.PROJECT_LAYERS or "infos" not in dockwidget.PROJECT_LAYERS[key]:
+                    continue
+                
+                layer_info = dockwidget.PROJECT_LAYERS[key]["infos"]
+                required_keys = ["layer_id", "layer_name", "layer_crs_authid", "layer_geometry_type"]
+                if any(k not in layer_info or layer_info[k] is None for k in required_keys):
+                    continue
+                
+                layer_id = layer_info["layer_id"]
+                layer_name = layer_info["layer_name"]
+                layer_crs_authid = layer_info["layer_crs_authid"]
+                layer_icon = dockwidget.icon_per_geometry_type(layer_info["layer_geometry_type"])
+                
+                # Validate layer is usable
+                layer_obj = project.mapLayer(layer_id)
+                if layer_obj and isinstance(layer_obj, QgsVectorLayer) and is_layer_source_available(layer_obj, require_psycopg2=False):
+                    display_name = f"{layer_name} [{layer_crs_authid}]"
+                    layers_widget.addItem(layer_icon, display_name, key)
+                    item = layers_widget.model().item(item_index)
+                    item.setCheckState(Qt.Checked if key in layers_to_export else Qt.Unchecked)
+                    item_index += 1
+            
+            # Add missing PostgreSQL layers
+            for pg_layer in missing_postgres:
+                if pg_layer.isValid() and is_layer_source_available(pg_layer, require_psycopg2=False):
+                    display_name = f"{pg_layer.name()} [{pg_layer.crs().authid()}]"
+                    geom_type_str = get_geometry_type_string(pg_layer.geometryType(), legacy_format=True)
+                    layer_icon = dockwidget.icon_per_geometry_type(geom_type_str)
+                    layers_widget.addItem(layer_icon, display_name, pg_layer.id())
+                    item = layers_widget.model().item(item_index)
+                    item.setCheckState(Qt.Checked if pg_layer.id() in layers_to_export else Qt.Unchecked)
+                    item_index += 1
+                    logger.info(f"populate_export_combobox: Added missing PostgreSQL layer '{pg_layer.name()}'")
+            
+            # Add missing remote layers
+            for remote_layer in missing_remote:
+                if remote_layer.isValid() and is_layer_source_available(remote_layer, require_psycopg2=False):
+                    display_name = f"{remote_layer.name()} [{remote_layer.crs().authid()}]"
+                    geom_type_str = get_geometry_type_string(remote_layer.geometryType(), legacy_format=True)
+                    layer_icon = dockwidget.icon_per_geometry_type(geom_type_str)
+                    layers_widget.addItem(layer_icon, display_name, remote_layer.id())
+                    item = layers_widget.model().item(item_index)
+                    item.setCheckState(Qt.Checked if remote_layer.id() in layers_to_export else Qt.Unchecked)
+                    item_index += 1
+                    logger.info(f"populate_export_combobox: Added missing remote layer '{remote_layer.name()}'")
+            
+            logger.info(f"populate_export_combobox: Added {item_index} layers to export combobox")
+            
+            # Populate datatype/format combobox
+            if ogr_available:
+                datatype_widget = dockwidget.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"]
+                datatype_widget.clear()
+                ogr_driver_list = sorted([ogr.GetDriver(i).GetDescription() for i in range(ogr.GetDriverCount())])
+                datatype_widget.addItems(ogr_driver_list)
+                
+                if datatype_to_export:
+                    idx = datatype_widget.findText(datatype_to_export)
+                    datatype_widget.setCurrentIndex(idx if idx >= 0 else datatype_widget.findText('GPKG'))
+                else:
+                    datatype_widget.setCurrentIndex(datatype_widget.findText('GPKG'))
+            
+            return True
+            
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"populate_export_combobox failed: {e}")
+            return False
+    
     def set_layers_to_export(self, layer_ids: List[str]) -> None:
         """
         Set layers to export.

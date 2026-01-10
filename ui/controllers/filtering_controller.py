@@ -347,6 +347,113 @@ class FilteringController(BaseController, LayerSelectionMixin):
         """
         self.set_target_layers(layer_ids)
     
+    def populate_layers_checkable_combobox(self, layer: Optional['QgsVectorLayer'] = None) -> bool:
+        """
+        Populate the layers-to-filter checkable combobox.
+        
+        v3.1 Sprint 5: Migrated from dockwidget to controller.
+        
+        This method:
+        - Clears existing items
+        - Adds all valid vector layers from PROJECT_LAYERS (except source layer)
+        - Sets check state based on saved preferences
+        
+        Args:
+            layer: Source layer (uses current layer if None)
+        
+        Returns:
+            True if population succeeded, False otherwise
+        """
+        try:
+            dockwidget = self._dockwidget
+            if not dockwidget or not dockwidget.widgets_initialized:
+                return False
+            
+            # Imports
+            from qgis.core import QgsVectorLayer, QgsProject
+            from qgis.PyQt.QtCore import Qt
+            from ..modules.appUtils import is_layer_source_available
+            import logging
+            logger = logging.getLogger(__name__)
+            
+            # Determine source layer
+            if layer is None:
+                layer = dockwidget.current_layer
+            
+            if layer is None or not isinstance(layer, QgsVectorLayer):
+                logger.debug("populate_layers_checkable_combobox: No valid source layer")
+                return False
+            
+            # Check layer exists in PROJECT_LAYERS
+            if layer.id() not in dockwidget.PROJECT_LAYERS:
+                logger.info(f"Layer {layer.name()} not in PROJECT_LAYERS yet, skipping")
+                return False
+            
+            layer_props = dockwidget.PROJECT_LAYERS[layer.id()]
+            project = QgsProject.instance()
+            
+            # Clear widget
+            layers_widget = dockwidget.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
+            layers_widget.clear()
+            
+            # Get saved layers to filter
+            has_layers = layer_props.get("filtering", {}).get("has_layers_to_filter", False)
+            layers_to_filter = layer_props.get("filtering", {}).get("layers_to_filter", [])
+            
+            # Diagnostic logging
+            qgis_vector_layers = [l for l in project.mapLayers().values() 
+                                  if isinstance(l, QgsVectorLayer) and l.id() != layer.id()]
+            missing = [l.name() for l in qgis_vector_layers if l.id() not in dockwidget.PROJECT_LAYERS]
+            if missing:
+                logger.warning(f"Layers in QGIS but NOT in PROJECT_LAYERS: {missing}")
+            
+            # Populate widget
+            item_index = 0
+            for key in list(dockwidget.PROJECT_LAYERS.keys()):
+                # Skip source layer
+                if key == layer.id():
+                    continue
+                
+                # Validate layer info
+                if key not in dockwidget.PROJECT_LAYERS or "infos" not in dockwidget.PROJECT_LAYERS[key]:
+                    continue
+                
+                layer_info = dockwidget.PROJECT_LAYERS[key]["infos"]
+                required_keys = ["layer_id", "layer_name", "layer_crs_authid", "layer_geometry_type"]
+                if any(k not in layer_info or layer_info[k] is None for k in required_keys):
+                    continue
+                
+                # Reset subset history if needed
+                if layer_info.get("is_already_subset") is False:
+                    layer_info["subset_history"] = []
+                
+                layer_id = layer_info["layer_id"]
+                layer_name = layer_info["layer_name"]
+                layer_crs = layer_info["layer_crs_authid"]
+                layer_icon = dockwidget.icon_per_geometry_type(layer_info["layer_geometry_type"])
+                
+                # Validate layer is usable
+                layer_obj = project.mapLayer(layer_id)
+                if layer_obj and isinstance(layer_obj, QgsVectorLayer) and is_layer_source_available(layer_obj, require_psycopg2=False):
+                    display_name = f"{layer_name} [{layer_crs}]"
+                    item_data = {"layer_id": key, "layer_geometry_type": layer_info["layer_geometry_type"]}
+                    layers_widget.addItem(layer_icon, display_name, item_data)
+                    
+                    item = layers_widget.model().item(item_index)
+                    if has_layers and layer_id in layers_to_filter:
+                        item.setCheckState(Qt.Checked)
+                    else:
+                        item.setCheckState(Qt.Unchecked)
+                    item_index += 1
+            
+            logger.info(f"populate_layers_checkable_combobox: Added {item_index} layers")
+            return True
+            
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"populate_layers_checkable_combobox failed: {e}")
+            return False
+    
     # === Predicate Configuration ===
     
     def get_predicate(self) -> PredicateType:

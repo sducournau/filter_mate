@@ -1,19 +1,31 @@
 # Analyse Réduction Dockwidget - FilterMate v4.0
 
 **Date**: 10 janvier 2026  
-**Version analysée**: v4.0 (commit d8fdb9e)  
+**Version analysée**: v4.0  
 **Fichier cible**: `filter_mate_dockwidget.py`
 
 ---
 
 ## 📈 État Actuel
 
-| Métrique          | Valeur      | Objectif      |
-| ----------------- | ----------- | ------------- |
-| Lignes dockwidget | 11,364      | <2,000        |
-| Sprint actuel     | Sprint 4    | Sprint 5      |
-| Réduction totale  | -884 lignes | -9,364        |
-| Progrès           | 7.8%        | 82.4% restant |
+| Métrique          | Valeur       | Objectif      |
+| ----------------- | ------------ | ------------- |
+| Lignes dockwidget | **10,051**   | <2,000        |
+| Sprint actuel     | **Sprint 5** | Sprint 5      |
+| Réduction totale  | **-1,133**   | -9,364        |
+| Progrès           | **10.1%**    | 81.3% restant |
+
+### Progression Sprint 5 (session actuelle)
+
+| Action                                       | Lignes avant | Lignes après | Réduction |
+| -------------------------------------------- | ------------ | ------------ | --------- |
+| Session précédente                           | 11,364       | 10,300       | -1,064    |
+| Simplification `zooming_to_features`         | 10,300       | 10,157       | -143      |
+| Simplification `exploring_identify_clicked`  | 10,157       | 10,109       | -48       |
+| Simplification `exploring_zoom_clicked`      | -            | -            | incl.     |
+| Simplification méthodes favorites            | 10,109       | 10,073       | -36       |
+| Simplification `exploring_deselect_features` | 10,073       | 10,051       | -22       |
+| **Total session**                            | **10,300**   | **10,051**   | **-249**  |
 
 ### Controllers existants (v4.0)
 

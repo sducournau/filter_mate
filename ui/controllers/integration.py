@@ -989,6 +989,26 @@ class ControllerIntegration:
                 return False
         return False
 
+    def delegate_populate_layers_checkable_combobox(self, layer=None) -> bool:
+        """
+        Delegate populating the layers-to-filter checkable combobox.
+        
+        v3.1 Sprint 5: Migrated from dockwidget.
+        
+        Args:
+            layer: Source layer (optional, uses current if None)
+        
+        Returns:
+            True if population succeeded, False otherwise
+        """
+        if self._filtering_controller:
+            try:
+                return self._filtering_controller.populate_layers_checkable_combobox(layer)
+            except Exception as e:
+                logger.warning(f"delegate_populate_layers_checkable_combobox failed: {e}")
+                return False
+        return False
+
     def delegate_filtering_get_available_predicates(self) -> Optional[list]:
         """
         Delegate getting available predicates list.
@@ -1102,6 +1122,23 @@ class ControllerIntegration:
                 logger.warning(f"delegate_export_get_output_path failed: {e}")
                 return None
         return None
+    
+    def delegate_populate_export_combobox(self) -> bool:
+        """
+        Delegate populating the export layers combobox.
+        
+        v3.1 Sprint 5: Migrated from dockwidget.
+        
+        Returns:
+            True if population succeeded, False otherwise
+        """
+        if self._exporting_controller:
+            try:
+                return self._exporting_controller.populate_export_combobox()
+            except Exception as e:
+                logger.warning(f"delegate_populate_export_combobox failed: {e}")
+                return False
+        return False
     
     def delegate_export_set_output_path(self, path: str) -> bool:
         """
