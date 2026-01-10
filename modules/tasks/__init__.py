@@ -98,14 +98,15 @@ __all__ = [
 ]
 
 # Import progressive filter components
+# EPIC-1: Migrated to core/strategies/ - import from new location
 try:
-    from .progressive_filter import (
+    from core.strategies import (
         ProgressiveFilterExecutor,
         TwoPhaseFilter,
         LazyResultIterator,
-        FilterStrategy,
+        ProgressiveFilterStrategy as FilterStrategy,
         LayerProperties,
-        FilterResult
+        ProgressiveFilterResult as FilterResult
     )
 except ImportError:
     ProgressiveFilterExecutor = None
@@ -114,8 +115,9 @@ except ImportError:
     FilterStrategy = None
 
 # Import multi-step filter components (v2.5.10)
+# EPIC-1: Migrated to core/strategies/ - import from new location
 try:
-    from .multi_step_filter import (
+    from core.strategies import (
         MultiStepFilterOptimizer,
         FilterPlanBuilder,
         SelectivityEstimator,
