@@ -68,6 +68,19 @@ from .geometry import (
     convert_geometry_collection_to_multipolygon,
 )
 
+# v4.0 EPIC-1 Phase E3: Filter/Expression module
+from .filter import (
+    build_feature_id_expression,
+    build_combined_filter_expression,
+    sanitize_subset_string,
+    optimize_duplicate_in_clauses,
+    is_pk_numeric,
+    format_pk_values_for_sql,
+    apply_combine_operator,
+    combine_with_old_subset,
+    CombineOperator,
+)
+
 __all__ = [
     # Domain
     'FilterExpression',
@@ -110,4 +123,14 @@ __all__ = [
     'aggressive_geometry_repair',
     'repair_invalid_geometries',
     'convert_geometry_collection_to_multipolygon',
+    # Filter/Expression (v4.0 EPIC-1 Phase E3)
+    'build_feature_id_expression',
+    'build_combined_filter_expression',
+    'sanitize_subset_string',
+    'optimize_duplicate_in_clauses',
+    'is_pk_numeric',
+    'format_pk_values_for_sql',
+    'apply_combine_operator',
+    'combine_with_old_subset',
+    'CombineOperator',
 ]
