@@ -8885,69 +8885,50 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Reset exploring expressions to primary_key_name of new layer when switching.
         
+        v4.0 Sprint 1: Delegates to ExploringController when available.
+        
         This prevents KeyError when field names from previous layer don't exist in new layer.
-        Normalizes expressions by removing quotes before comparison with layer fields.
         """
-        primary_key = layer_props["infos"]["primary_key_name"]
-        layer_fields = [field.name() for field in self.current_layer.fields()]
+        # v4.0: Delegate to ExploringController if available
+        if self._controller_integration and self._controller_integration.exploring_controller:
+            try:
+                if self._controller_integration.delegate_reset_layer_expressions(layer_props):
+                    return
+            except Exception as e:
+                logger.debug(f"_reset_layer_expressions delegation failed: {e}")
         
-        logger.debug(f"_reset_layer_expressions: Layer '{self.current_layer.name()}', primary_key='{primary_key}', fields={layer_fields}")
+        # Fallback: Original logic
+        if not self.current_layer:
+            return
+            
+        primary_key = layer_props.get("infos", {}).get("primary_key_name", "")
+        try:
+            layer_fields = [field.name() for field in self.current_layer.fields()]
+        except Exception:
+            return
         
-        def normalize_field_name(expr):
-            """Remove surrounding quotes from field expression for comparison."""
-            if not expr:
-                return ""
-            # Remove surrounding double quotes (QGIS field syntax)
-            normalized = expr.strip().strip('"')
-            return normalized
-        
-        def is_valid_field_expression(expr, fields):
-            """Check if expression is a valid field name for this layer."""
+        def is_valid(expr, fields):
             if not expr:
                 return False
-            normalized = normalize_field_name(expr)
-            # Check if it's a simple field name (not a complex expression)
-            if normalized in fields:
-                return True
-            # Also check the original in case it's a valid expression
-            if expr in fields:
-                return True
-            return False
+            normalized = expr.strip().strip('"')
+            return normalized in fields or expr in fields
         
-        # Ensure primary_key itself is valid; if not, use the first available field
-        fallback_field = primary_key
-        if primary_key and primary_key not in layer_fields:
-            if layer_fields:
-                fallback_field = layer_fields[0]
-                logger.warning(f"Primary key '{primary_key}' not found in layer '{self.current_layer.name()}'. Using fallback field '{fallback_field}'")
-            else:
-                logger.error(f"Layer '{self.current_layer.name()}' has no fields available")
-                return
+        fallback = primary_key if primary_key in layer_fields else (layer_fields[0] if layer_fields else "")
+        if not fallback:
+            return
         
-        # Reset single_selection_expression if invalid for current layer
-        single_expr = layer_props["exploring"].get("single_selection_expression", "")
-        logger.debug(f"Checking single_selection_expression: '{single_expr}' - valid: {is_valid_field_expression(single_expr, layer_fields)}")
-        if not is_valid_field_expression(single_expr, layer_fields):
-            logger.info(f"Resetting single_selection_expression from '{single_expr}' to '{fallback_field}' (field not in layer)")
-            layer_props["exploring"]["single_selection_expression"] = fallback_field
+        exploring = layer_props.get("exploring", {})
+        for key in ["single_selection_expression", "multiple_selection_expression"]:
+            if not is_valid(exploring.get(key, ""), layer_fields):
+                exploring[key] = fallback
         
-        # Reset multiple_selection_expression if invalid for current layer
-        multiple_expr = layer_props["exploring"].get("multiple_selection_expression", "")
-        logger.debug(f"Checking multiple_selection_expression: '{multiple_expr}' - valid: {is_valid_field_expression(multiple_expr, layer_fields)}")
-        if not is_valid_field_expression(multiple_expr, layer_fields):
-            logger.info(f"Resetting multiple_selection_expression from '{multiple_expr}' to '{fallback_field}' (field not in layer)")
-            layer_props["exploring"]["multiple_selection_expression"] = fallback_field
-        
-        # Reset custom_selection_expression if invalid for current layer
-        custom_expr = layer_props["exploring"].get("custom_selection_expression", "")
-        # For custom expressions, only reset if it's a field expression that doesn't exist
-        if custom_expr:
-            qgs_expr = QgsExpression(custom_expr)
-            if qgs_expr.isField() and not is_valid_field_expression(custom_expr, layer_fields):
-                logger.debug(f"Resetting custom_selection_expression from '{custom_expr}' to '{fallback_field}' (field not in layer)")
-                layer_props["exploring"]["custom_selection_expression"] = fallback_field
-        elif not custom_expr:
-            layer_props["exploring"]["custom_selection_expression"] = fallback_field
+        custom = exploring.get("custom_selection_expression", "")
+        if custom:
+            qgs_expr = QgsExpression(custom)
+            if qgs_expr.isField() and not is_valid(custom, layer_fields):
+                exploring["custom_selection_expression"] = fallback
+        elif not custom:
+            exploring["custom_selection_expression"] = fallback
     
     def _disconnect_layer_signals(self):
         """
@@ -9688,59 +9669,59 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Ensure we always have a valid current_layer when layers exist in project.
         
+        v4.0 Sprint 1: Delegates to LayerSyncController when available.
         v2.9.19: CRITICAL - current_layer must NEVER be None when layers exist.
-        This prevents UI freezing and signal disconnection issues.
         
         Args:
             requested_layer: The layer requested to be current (can be None)
             
         Returns:
             QgsVectorLayer or None: Valid layer to use as current_layer
-            
-        Logic:
-            1. If requested_layer is valid → use it
-            2. If requested_layer is None but PROJECT_LAYERS has layers → use first available
-            3. If no layers in project → return None (UI will be disabled)
         """
+        # v4.0: Delegate to LayerSyncController if available
+        if self._controller_integration and self._controller_integration.layer_sync_controller:
+            try:
+                result = self._controller_integration.delegate_ensure_valid_current_layer(requested_layer)
+                if result is not None:
+                    return result
+                # If None returned but we have PROJECT_LAYERS, use fallback
+                if self.PROJECT_LAYERS:
+                    logger.debug("_ensure_valid_current_layer: delegation returned None, using fallback")
+            except Exception as e:
+                logger.debug(f"_ensure_valid_current_layer delegation failed: {e}")
+        
+        # Fallback: Original logic
         # Case 1: Requested layer is valid - use it
         if requested_layer is not None:
             try:
-                # Verify it's actually valid and not C++ deleted
                 _ = requested_layer.id()
                 return requested_layer
             except (RuntimeError, AttributeError):
-                logger.warning(f"_ensure_valid_current_layer: requested_layer is invalid/deleted")
+                logger.warning("_ensure_valid_current_layer: requested_layer is invalid")
         
-        # Case 2: requested_layer is None or invalid - try to find a valid layer
-        logger.info("v2.9.19: current_layer is None, searching for valid layer in PROJECT_LAYERS")
-        
-        if not self.PROJECT_LAYERS or len(self.PROJECT_LAYERS) == 0:
-            logger.warning("v2.9.19: No layers in PROJECT_LAYERS - current_layer will be None")
+        # Case 2: Find valid layer from PROJECT_LAYERS
+        if not self.PROJECT_LAYERS:
             return None
         
-        # Try to find a valid vector layer from PROJECT_LAYERS
         from qgis.core import QgsProject
         project = QgsProject.instance()
         
         for layer_id in self.PROJECT_LAYERS.keys():
-            candidate_layer = project.mapLayer(layer_id)
-            if candidate_layer and candidate_layer.isValid():
+            candidate = project.mapLayer(layer_id)
+            if candidate and candidate.isValid():
                 try:
-                    # Extra validation
-                    _ = candidate_layer.featureCount()
-                    logger.info(f"v2.9.19: ✅ Auto-selected layer '{candidate_layer.name()}' as current_layer")
-                    return candidate_layer
+                    _ = candidate.featureCount()
+                    logger.info(f"Auto-selected layer '{candidate.name()}'")
+                    return candidate
                 except (RuntimeError, AttributeError):
                     continue
         
-        # Fallback: Try current combobox selection
+        # Fallback: Combobox selection
         if hasattr(self, 'comboBox_filtering_current_layer'):
             combo_layer = self.comboBox_filtering_current_layer.currentLayer()
             if combo_layer and combo_layer.isValid():
-                logger.info(f"v2.9.19: ✅ Using combobox layer '{combo_layer.name()}' as current_layer")
                 return combo_layer
         
-        logger.warning("v2.9.19: ⚠️ Could not find any valid layer - current_layer will be None")
         return None
 
 

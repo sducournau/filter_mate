@@ -1267,6 +1267,47 @@ class ControllerIntegration:
                 return False
         return False
     
+    def delegate_ensure_valid_current_layer(self, layer) -> 'Optional[QgsVectorLayer]':
+        """
+        Delegate layer validation to layer sync controller.
+        
+        v4.0 Sprint 1: Migrated from dockwidget._ensure_valid_current_layer.
+        
+        Args:
+            layer: Proposed layer (can be None)
+            
+        Returns:
+            Valid layer or None
+        """
+        if self._layer_sync_controller:
+            try:
+                return self._layer_sync_controller._ensure_valid_current_layer(layer)
+            except Exception as e:
+                logger.warning(f"delegate_ensure_valid_current_layer failed: {e}")
+                return None
+        return None
+    
+    def delegate_reset_layer_expressions(self, layer_props: dict) -> bool:
+        """
+        Delegate expression reset to exploring controller.
+        
+        v4.0 Sprint 1: Migrated from dockwidget._reset_layer_expressions.
+        
+        Args:
+            layer_props: Layer properties dict
+            
+        Returns:
+            True if delegation succeeded
+        """
+        if self._exploring_controller:
+            try:
+                self._exploring_controller.reset_layer_expressions(layer_props)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_reset_layer_expressions failed: {e}")
+                return False
+        return False
+    
     # === State Synchronization ===
     
     def sync_from_dockwidget(self) -> None:

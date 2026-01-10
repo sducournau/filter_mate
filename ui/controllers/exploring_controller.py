@@ -760,6 +760,94 @@ class ExploringController(BaseController, LayerSelectionMixin):
             logger.warning(f"ExploringController: Failed to select features: {e}")
             return False
 
+    # === Layer Expression Management ===
+    
+    def reset_layer_expressions(self, layer_props: Dict[str, Any]) -> None:
+        """
+        Reset exploring expressions to primary_key_name when switching layers.
+        
+        v4.0 Sprint 1: Migrated from dockwidget._reset_layer_expressions.
+        
+        Prevents KeyError when field names from previous layer don't exist in new layer.
+        
+        Args:
+            layer_props: Layer properties dict with infos and exploring sections
+        """
+        current_layer = getattr(self.dockwidget, 'current_layer', None)
+        if not current_layer:
+            logger.warning("reset_layer_expressions: No current layer")
+            return
+        
+        primary_key = layer_props.get("infos", {}).get("primary_key_name", "")
+        try:
+            layer_fields = [field.name() for field in current_layer.fields()]
+        except Exception as e:
+            logger.warning(f"reset_layer_expressions: Cannot get fields: {e}")
+            return
+        
+        logger.debug(
+            f"reset_layer_expressions: layer='{current_layer.name()}', "
+            f"primary_key='{primary_key}'"
+        )
+        
+        # Ensure primary_key is valid, fallback to first field
+        fallback_field = primary_key
+        if primary_key and primary_key not in layer_fields:
+            if layer_fields:
+                fallback_field = layer_fields[0]
+                logger.warning(
+                    f"Primary key '{primary_key}' not found, "
+                    f"using fallback '{fallback_field}'"
+                )
+            else:
+                logger.error(f"Layer '{current_layer.name()}' has no fields")
+                return
+        
+        exploring = layer_props.get("exploring", {})
+        
+        # Reset single_selection_expression
+        single_expr = exploring.get("single_selection_expression", "")
+        if not self._is_valid_field_expression(single_expr, layer_fields):
+            logger.info(f"Resetting single_selection_expression to '{fallback_field}'")
+            exploring["single_selection_expression"] = fallback_field
+        
+        # Reset multiple_selection_expression
+        multiple_expr = exploring.get("multiple_selection_expression", "")
+        if not self._is_valid_field_expression(multiple_expr, layer_fields):
+            logger.info(f"Resetting multiple_selection_expression to '{fallback_field}'")
+            exploring["multiple_selection_expression"] = fallback_field
+        
+        # Reset custom_selection_expression if it's an invalid field
+        custom_expr = exploring.get("custom_selection_expression", "")
+        if custom_expr:
+            try:
+                from qgis.core import QgsExpression
+                qgs_expr = QgsExpression(custom_expr)
+                if qgs_expr.isField() and not self._is_valid_field_expression(custom_expr, layer_fields):
+                    logger.info(f"Resetting custom_selection_expression to '{fallback_field}'")
+                    exploring["custom_selection_expression"] = fallback_field
+            except Exception:
+                pass
+        elif not custom_expr:
+            exploring["custom_selection_expression"] = fallback_field
+    
+    def _is_valid_field_expression(self, expr: str, fields: List[str]) -> bool:
+        """
+        Check if expression is a valid field name for a layer.
+        
+        Args:
+            expr: Field expression to check
+            fields: List of valid field names
+            
+        Returns:
+            True if expression is a valid field
+        """
+        if not expr:
+            return False
+        # Normalize by removing quotes
+        normalized = expr.strip().strip('"')
+        return normalized in fields or expr in fields
+
     # === Cache Management ===
 
     def clear_cache(self) -> None:
