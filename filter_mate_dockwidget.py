@@ -1045,50 +1045,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         else:
             return 'ogr'
 
-    def _verify_backend_supports_layer(self, layer, backend_type):
-        """
-        Verify that a backend can actually support a layer.
-        
-        Uses the backend's supports_layer() method to test actual compatibility
-        (not just theoretical availability).
-        
-        Args:
-            layer: QgsVectorLayer instance
-            backend_type: Backend type string ('postgresql', 'spatialite', 'ogr')
-        
-        Returns:
-            bool: True if backend can support this layer
-        """
-        from .adapters.backends.postgresql import PostgreSQLGeometricFilter
-        from .adapters.backends.spatialite import SpatialiteGeometricFilter
-        from .adapters.backends.ogr import OGRGeometricFilter
-        from .modules.backends import POSTGRESQL_AVAILABLE
-        
-        if not layer or not layer.isValid():
-            return False
-        
-        # Create backend instance with minimal params
-        task_params = {}
-        
-        try:
-            if backend_type == 'postgresql':
-                if not POSTGRESQL_AVAILABLE:
-                    return False
-                backend = PostgreSQLGeometricFilter(task_params)
-            elif backend_type == 'spatialite':
-                backend = SpatialiteGeometricFilter(task_params)
-            elif backend_type == 'ogr':
-                backend = OGRGeometricFilter(task_params)
-            else:
-                return False
-            
-            # Test actual compatibility
-            return backend.supports_layer(layer)
-            
-        except Exception as e:
-            logger.warning(f"Error testing backend {backend_type} for layer {layer.name()}: {e}")
-            return False
-    
     def _set_forced_backend(self, layer_id, backend_type):
         """
         Force a specific backend for a layer.
@@ -2031,81 +1987,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.iface.mapCanvas().setSelectionColor(QColor(237, 97, 62, 75))
 
     def _index_to_combine_operator(self, index):
-        """
-        Convert combobox index to SQL combine operator.
-        
-        v3.1 STORY-2.4: Delegates to FilteringController when available.
-        
-        This ensures language-independent operator handling.
-        The combobox items are:
-          Index 0: AND
-          Index 1: AND NOT
-          Index 2: OR
-        
-        Args:
-            index (int): Combobox index
-            
-        Returns:
-            str: SQL operator ('AND', 'AND NOT', 'OR') or 'AND' as default
-        """
-        # v3.1 STORY-2.4: Try controller delegation first
+        """v4.0 Sprint 5: Delegates to FilteringController."""
         if self._controller_integration is not None:
             return self._controller_integration.delegate_filtering_index_to_combine_operator(index)
-        
-        # Legacy fallback
-        operators = {0: 'AND', 1: 'AND NOT', 2: 'OR'}
-        return operators.get(index, 'AND')
+        return {0: 'AND', 1: 'AND NOT', 2: 'OR'}.get(index, 'AND')
     
     def _combine_operator_to_index(self, operator):
-        """
-        Convert SQL combine operator to combobox index.
-        
-        v3.1 STORY-2.4: Delegates to FilteringController when available.
-        FIX v2.5.12: Handle translated operator values (ET, OU, NON) from
-        older project files or when QGIS locale is non-English.
-        
-        Args:
-            operator (str): SQL operator or translated equivalent
-            
-        Returns:
-            int: Combobox index (0=AND, 1=AND NOT, 2=OR) or 0 as default
-        """
-        # v3.1 STORY-2.4: Try controller delegation first
+        """v4.0 Sprint 5: Delegates to FilteringController."""
         if self._controller_integration is not None:
             return self._controller_integration.delegate_filtering_combine_operator_to_index(operator)
-        
-        # Legacy fallback
         if not operator:
-            return 0  # Default to AND
-        
-        op_upper = operator.upper().strip()
-        
-        # Map of all possible operator values (including translations) to indices
-        operator_map = {
-            # English (canonical)
-            'AND': 0,
-            'AND NOT': 1,
-            'OR': 2,
-            # French
-            'ET': 0,
-            'ET NON': 1,
-            'OU': 2,
-            # German
-            'UND': 0,
-            'UND NICHT': 1,
-            'ODER': 2,
-            # Spanish
-            'Y': 0,
-            'Y NO': 1,
-            'O': 2,
-            # Italian
-            'E': 0,
-            'E NON': 1,
-            # Portuguese
-            'E NÃO': 1,
-        }
-        
-        return operator_map.get(op_upper, 0)
+            return 0
+        op = operator.upper().strip()
+        return {'AND': 0, 'AND NOT': 1, 'OR': 2, 'ET': 0, 'ET NON': 1, 'OU': 2}.get(op, 0)
 
     def dockwidget_widgets_configuration(self):
 
@@ -3313,121 +3207,103 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.pushButton_exploring_zoom.setEnabled(has_features)
 
     def _configure_single_selection_groupbox(self):
-        """v3.1 Sprint 11: Simplified - configure UI for single feature selection mode."""
+        """v4.0 Sprint 5: Simplified - delegates to ExploringController."""
         self.current_exploring_groupbox = "single_selection"
         
-        if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
-            self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = "single_selection"
-            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-            
-            # Disconnect signals before updating
+        if not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS:
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
-            self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'disconnect')
-            
-            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
-            self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
-            
-            try:
-                picker = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
-                picker.setLayer(self.current_layer)
-                picker.setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
-                picker.setAllowNull(True)
-                self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-                
-                # Reconnect feature picker signal
-                try:
-                    picker.featureChanged.disconnect(self.exploring_features_changed)
-                except TypeError:
-                    pass
-                picker.featureChanged.connect(self.exploring_features_changed)
-            except (AttributeError, KeyError, RuntimeError) as e:
-                logger.error(f"Error configuring single selection: {e}")
-            
-            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
-            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
-            
-            self.exploring_link_widgets()
-            
-            if not self._syncing_from_qgis:
-                feature = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
-                if feature and feature.isValid():
-                    self.exploring_features_changed(feature)
-        else:
-            self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
-            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+            self._update_exploring_buttons_state()
+            return True
+        
+        self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = "single_selection"
+        layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+        
+        # Delegate widget configuration to controller
+        if self._controller_integration:
+            self._controller_integration.delegate_exploring_configure_groupbox(
+                "single_selection", self.current_layer, layer_props)
+        
+        # Signal management and linking
+        self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
+        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
+        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
+        
+        self.exploring_link_widgets()
+        
+        if not self._syncing_from_qgis:
+            feature = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
+            if feature and feature.isValid():
+                self.exploring_features_changed(feature)
         
         self._update_exploring_buttons_state()
         return True
 
     def _configure_multiple_selection_groupbox(self):
-        """v3.1 Sprint 11: Simplified - configure UI for multiple features selection mode."""
+        """v4.0 Sprint 5: Simplified - delegates to ExploringController."""
         self.current_exploring_groupbox = "multiple_selection"
         
-        if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
-            self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = "multiple_selection"
-            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-            
-            # Disconnect signals before updating
+        if not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS:
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
-            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'disconnect')
-
-            self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
-            self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
-            
-            try:
-                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
-            except (AttributeError, KeyError, RuntimeError) as e:
-                logger.error(f"Error configuring multiple selection: {e}")
-            
-            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect')
-            self.exploring_link_widgets()
-            
-            if not self._syncing_from_qgis:
-                features = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures()
-                if features:
-                    self.exploring_features_changed(features, True)
-        else:
-            self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
-            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+            self._update_exploring_buttons_state()
+            return True
+        
+        self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = "multiple_selection"
+        layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+        
+        # Delegate widget configuration to controller
+        if self._controller_integration:
+            self._controller_integration.delegate_exploring_configure_groupbox(
+                "multiple_selection", self.current_layer, layer_props)
+        
+        # Signal management
+        self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
+        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect')
+        
+        self.exploring_link_widgets()
+        
+        if not self._syncing_from_qgis:
+            features = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures()
+            if features:
+                self.exploring_features_changed(features, True)
         
         self._update_exploring_buttons_state()
         return True
 
     def _configure_custom_selection_groupbox(self):
-        """v3.1 Sprint 11: Simplified - configure UI for custom expression-based selection mode."""
+        """v4.0 Sprint 5: Simplified - delegates to ExploringController."""
         self.current_exploring_groupbox = "custom_selection"
         
-        if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
-            self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = "custom_selection"
-            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-            
-            # Disconnect signals before updating
+        if not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS:
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
-            self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'disconnect')
-
-            self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
-            try:
-                self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-            except (AttributeError, KeyError, RuntimeError) as e:
-                logger.error(f"Error configuring custom selection: {e}")
-            
-            self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
-            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
-            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
-            
-            self.exploring_link_widgets()
-            
-            # Only apply custom expression if set, or if no existing filter
-            custom_expr = layer_props["exploring"].get("custom_selection_expression", "")
-            if custom_expr or not self.current_layer.subsetString():
-                self.exploring_custom_selection()
-        else:
-            self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
-            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+            self._update_exploring_buttons_state()
+            return True
+        
+        self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = "custom_selection"
+        layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+        
+        # Delegate widget configuration to controller
+        if self._controller_integration:
+            self._controller_integration.delegate_exploring_configure_groupbox(
+                "custom_selection", self.current_layer, layer_props)
+        
+        # Signal management
+        self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
+        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+        self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
+        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
+        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
+        
+        self.exploring_link_widgets()
+        
+        # Only apply custom expression if set, or if no existing filter
+        custom_expr = layer_props["exploring"].get("custom_selection_expression", "")
+        if custom_expr or not self.current_layer.subsetString():
+            self.exploring_custom_selection()
         
         self._update_exploring_buttons_state()
         return True

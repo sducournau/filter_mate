@@ -740,6 +740,29 @@ class ControllerIntegration:
                 logger.warning(f"delegate_exploring_get_groupbox_mode failed: {e}")
                 return 'single_selection'
         return 'single_selection'
+
+    def delegate_exploring_configure_groupbox(self, mode: str, layer=None, 
+                                               layer_props: dict = None) -> bool:
+        """
+        Delegate groupbox configuration to ExploringController.
+        
+        v4.0 Sprint 5: Full groupbox configuration delegation.
+        
+        Args:
+            mode: 'single_selection', 'multiple_selection', or 'custom_selection'
+            layer: Optional layer to configure widgets for
+            layer_props: Optional layer properties dict
+        
+        Returns:
+            True if delegation succeeded, False otherwise
+        """
+        if self._exploring_controller:
+            try:
+                return self._exploring_controller.configure_groupbox(mode, layer, layer_props)
+            except Exception as e:
+                logger.warning(f"delegate_exploring_configure_groupbox failed: {e}")
+                return False
+        return False
     
     def delegate_exploring_zoom_to_selected(self) -> bool:
         """

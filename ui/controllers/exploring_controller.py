@@ -676,6 +676,104 @@ class ExploringController(BaseController, LayerSelectionMixin):
         
         return True
 
+    def configure_groupbox(self, mode: str, layer: 'QgsVectorLayer' = None, 
+                           layer_props: Dict[str, Any] = None) -> bool:
+        """
+        Configure exploring groupbox for the specified mode.
+        
+        v4.0 Sprint 5: Full migration from dockwidget._configure_*_groupbox methods.
+        
+        This method handles:
+        - Setting the current groupbox mode
+        - Configuring widgets for the mode
+        - Setting layer on expression widgets
+        - Managing signal connections
+        
+        Args:
+            mode: 'single_selection', 'multiple_selection', or 'custom_selection'
+            layer: Optional layer to configure widgets for
+            layer_props: Optional layer properties dict
+        
+        Returns:
+            True if configuration succeeded, False otherwise
+        """
+        if not self.set_groupbox_mode(mode):
+            return False
+        
+        target_layer = layer or self._current_layer
+        if not target_layer:
+            logger.debug(f"ExploringController.configure_groupbox: No layer for mode {mode}")
+            return False
+        
+        try:
+            dw = self._dockwidget
+            if not dw or not hasattr(dw, 'widgets') or not dw.widgets:
+                return False
+            
+            exploring_widgets = dw.widgets.get("EXPLORING", {})
+            if not exploring_widgets:
+                return False
+            
+            # Map mode to widget keys
+            mode_config = {
+                'single_selection': {
+                    'features_widget': 'SINGLE_SELECTION_FEATURES',
+                    'expression_widget': 'SINGLE_SELECTION_EXPRESSION',
+                    'expression_key': 'single_selection_expression'
+                },
+                'multiple_selection': {
+                    'features_widget': 'MULTIPLE_SELECTION_FEATURES',
+                    'expression_widget': 'MULTIPLE_SELECTION_EXPRESSION',
+                    'expression_key': 'multiple_selection_expression'
+                },
+                'custom_selection': {
+                    'features_widget': None,
+                    'expression_widget': 'CUSTOM_SELECTION_EXPRESSION',
+                    'expression_key': 'custom_selection_expression'
+                }
+            }
+            
+            config = mode_config.get(mode)
+            if not config:
+                return False
+            
+            # Configure expression widget
+            expr_key = config['expression_widget']
+            if expr_key and expr_key in exploring_widgets:
+                expr_widget = exploring_widgets[expr_key].get("WIDGET")
+                if expr_widget:
+                    expr_widget.setEnabled(True)
+                    try:
+                        expr_widget.setLayer(target_layer)
+                    except (AttributeError, RuntimeError) as e:
+                        logger.warning(f"Could not set layer on {expr_key}: {e}")
+            
+            # Configure features widget (single/multiple selection only)
+            feat_key = config['features_widget']
+            if feat_key and feat_key in exploring_widgets:
+                feat_widget = exploring_widgets[feat_key].get("WIDGET")
+                if feat_widget:
+                    feat_widget.setEnabled(True)
+                    try:
+                        if mode == 'single_selection':
+                            feat_widget.setLayer(target_layer)
+                            if layer_props:
+                                expr = layer_props.get("exploring", {}).get(config['expression_key'], "")
+                                if expr:
+                                    feat_widget.setDisplayExpression(expr)
+                            feat_widget.setAllowNull(True)
+                        elif mode == 'multiple_selection' and layer_props:
+                            feat_widget.setLayer(target_layer, layer_props)
+                    except (AttributeError, RuntimeError) as e:
+                        logger.warning(f"Could not configure {feat_key}: {e}")
+            
+            logger.debug(f"ExploringController: Configured groupbox for mode '{mode}'")
+            return True
+            
+        except Exception as e:
+            logger.error(f"ExploringController.configure_groupbox error: {e}")
+            return False
+
     # === Signal Connections ===
 
     def _connect_signals(self) -> None:
