@@ -94,6 +94,7 @@ try:
     from .adapters.database_manager import DatabaseManager  # v4.0: Database operations extraction
     from .adapters.variables_manager import VariablesPersistenceManager  # v4.0: Variables persistence extraction
     from .core.services.task_orchestrator import TaskOrchestrator  # v4.1: Task orchestration extraction
+    from .core.services.optimization_manager import OptimizationManager  # v4.2: Optimization management extraction
     HEXAGONAL_AVAILABLE = True
 except ImportError:
     HEXAGONAL_AVAILABLE = False
@@ -106,6 +107,7 @@ except ImportError:
     DatabaseManager = None  # v4.0: Fallback
     VariablesPersistenceManager = None  # v4.0: Fallback
     TaskOrchestrator = None  # v4.1: Fallback
+    OptimizationManager = None  # v4.2: Fallback
 
     def _init_hexagonal_services(config=None):
         """Fallback when hexagonal services unavailable."""
@@ -616,6 +618,17 @@ class FilterMateApp:
             logger.info("FilterMate: TaskOrchestrator initialized (v4.1 migration)")
         else:
             self._task_orchestrator = None
+        
+        # v4.2: Initialize OptimizationManager (extracted from FilterMateApp)
+        if HEXAGONAL_AVAILABLE and OptimizationManager:
+            self._optimization_manager = OptimizationManager(
+                get_dockwidget=lambda: self.dockwidget,
+                get_project=lambda: self.PROJECT,
+                get_project_layers=lambda: self.PROJECT_LAYERS,
+            )
+            logger.info("FilterMate: OptimizationManager initialized (v4.2 migration)")
+        else:
+            self._optimization_manager = None
         
         # Note: Do NOT call self.run() here - it will be called from filter_mate.py
         # when the user actually activates the plugin to avoid QGIS initialization race conditions
@@ -2445,6 +2458,9 @@ class FilterMateApp:
         """
         Check for optimization opportunities and ask user for confirmation.
         
+        .. deprecated:: 4.2.0
+            Delegates to OptimizationManager.check_and_confirm_optimizations().
+        
         This method analyzes the layers being filtered and determines if any
         optimizations (like centroid usage) would benefit the operation.
         If optimizations are available and the "ask before apply" setting is
@@ -2459,6 +2475,17 @@ class FilterMateApp:
                 - approved_optimizations: {layer_id: {optimization_type: bool}}
                 - auto_apply_optimizations: True if auto-apply is enabled
         """
+        # v4.2: Delegate to OptimizationManager when available
+        if self._optimization_manager is not None:
+            try:
+                return self._optimization_manager.check_and_confirm_optimizations(
+                    current_layer, task_parameters
+                )
+            except Exception as e:
+                logger.warning(f"v4.2: OptimizationManager failed, falling back to legacy: {e}")
+                # Fall through to legacy code
+        
+        # Legacy code path (fallback)
         approved_optimizations = {}
         auto_apply = False
         
@@ -2703,6 +2730,9 @@ class FilterMateApp:
         """
         Apply accepted optimization choices to UI widgets.
         
+        .. deprecated:: 4.2.0
+            Delegates to OptimizationManager.apply_optimization_to_ui_widgets().
+        
         When user accepts optimizations in the confirmation dialog, this method
         updates the corresponding checkboxes and other UI controls to reflect
         their choices. This ensures visual consistency between the dialog
@@ -2714,7 +2744,17 @@ class FilterMateApp:
         
         v2.7.1: New method for UI synchronization after optimization acceptance
         v2.8.7: Added support for use_centroid_distant optimization type
+        v4.2.0: Delegates to OptimizationManager
         """
+        # v4.2: Delegate to OptimizationManager when available
+        if self._optimization_manager is not None:
+            try:
+                self._optimization_manager.apply_optimization_to_ui_widgets(selected_optimizations)
+                return
+            except Exception as e:
+                logger.warning(f"v4.2: OptimizationManager UI update failed, falling back: {e}")
+        
+        # Legacy code path (fallback)
         if not self.dockwidget or not selected_optimizations:
             return
         
