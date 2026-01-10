@@ -96,6 +96,7 @@ try:
     from .core.services.task_orchestrator import TaskOrchestrator  # v4.1: Task orchestration extraction
     from .core.services.optimization_manager import OptimizationManager  # v4.2: Optimization management extraction
     from .adapters.filter_result_handler import FilterResultHandler  # v4.3: Filter result handling extraction
+    from .core.services.app_initializer import AppInitializer  # v4.4: App initialization extraction
     HEXAGONAL_AVAILABLE = True
 except ImportError:
     HEXAGONAL_AVAILABLE = False
@@ -110,6 +111,7 @@ except ImportError:
     TaskOrchestrator = None  # v4.1: Fallback
     OptimizationManager = None  # v4.2: Fallback
     FilterResultHandler = None  # v4.3: Fallback
+    AppInitializer = None  # v4.4: Fallback
 
     def _init_hexagonal_services(config=None):
         """Fallback when hexagonal services unavailable."""
@@ -647,6 +649,41 @@ class FilterMateApp:
         else:
             self._filter_result_handler = None
         
+        # v4.4: Initialize AppInitializer (extracted from FilterMateApp.run)
+        if HEXAGONAL_AVAILABLE and AppInitializer:
+            self._app_initializer = AppInitializer(
+                init_filtermate_db_callback=self.init_filterMate_db,
+                get_spatialite_connection_callback=self.get_spatialite_connection,
+                cleanup_corrupted_layer_filters_callback=cleanup_corrupted_layer_filters,
+                filter_usable_layers_callback=self._filter_usable_layers,
+                manage_task_callback=self.manage_task,
+                get_project_layers_callback=lambda: self.PROJECT_LAYERS,
+                get_config_data_callback=lambda: self.CONFIG_DATA,
+                get_project_callback=lambda: self.PROJECT,
+                get_plugin_dir_callback=lambda: self.plugin_dir,
+                get_dock_position_callback=self._get_dock_position,
+                get_iface_callback=lambda: self.iface,
+                get_dockwidget_callback=lambda: self.dockwidget,
+                set_dockwidget_callback=lambda dw: setattr(self, 'dockwidget', dw),
+                get_task_orchestrator_callback=lambda: self._task_orchestrator,
+                get_favorites_manager_callback=lambda: self.favorites_manager,
+                get_signals_connected_callback=lambda: self._signals_connected,
+                set_signals_connected_callback=lambda val: setattr(self, '_signals_connected', val),
+                get_dockwidget_signals_connected_callback=lambda: self._dockwidget_signals_connected,
+                set_dockwidget_signals_connected_callback=lambda val: setattr(self, '_dockwidget_signals_connected', val),
+                get_map_layer_store_callback=lambda: self.MapLayerStore,
+                set_map_layer_store_callback=lambda mls: setattr(self, 'MapLayerStore', mls),
+                on_widgets_initialized_callback=self._on_widgets_initialized,
+                on_layers_added_callback=self._on_layers_added,
+                update_undo_redo_buttons_callback=self.update_undo_redo_buttons,
+                save_variables_from_layer_callback=self.save_variables_from_layer,
+                remove_variables_from_layer_callback=self.remove_variables_from_layer,
+                save_project_variables_callback=self.save_project_variables,
+            )
+            logger.info("FilterMate: AppInitializer initialized (v4.4 migration)")
+        else:
+            self._app_initializer = None
+        
         # Note: Do NOT call self.run() here - it will be called from filter_mate.py
         # when the user actually activates the plugin to avoid QGIS initialization race conditions
 
@@ -854,6 +891,10 @@ class FilterMateApp:
         """
         Initialize and display the FilterMate dockwidget.
         
+        v4.4: Feature flag for AppInitializer delegation.
+        Set USE_APP_INITIALIZER = True to enable new architecture.
+        Keep False during testing period for safe rollback.
+        
         Creates the dockwidget if it doesn't exist, initializes the database,
         connects signals for layer management, and displays the UI.
         Also processes any existing layers in the project on first run.
@@ -864,6 +905,26 @@ class FilterMateApp:
         - First call: creates dockwidget and initializes everything
         - Subsequent calls: shows existing dockwidget and refreshes layers if needed
         """
+        
+        # v4.4: Feature flag for AppInitializer delegation
+        USE_APP_INITIALIZER = False  # TODO: Enable after testing
+        
+        if USE_APP_INITIALIZER and self._app_initializer is not None:
+            logger.info(f"v4.4: Delegating application initialization to AppInitializer")
+            try:
+                is_first_run = (self.dockwidget is None)
+                success = self._app_initializer.initialize_application(is_first_run)
+                if success:
+                    return
+                else:
+                    logger.warning(f"v4.4: AppInitializer failed, falling back to legacy")
+                    # Fall through to legacy code
+            except Exception as e:
+                logger.warning(f"v4.4: AppInitializer failed with exception, falling back to legacy: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                # Fall through to legacy code
+        
         if self.dockwidget is None:
 
             
