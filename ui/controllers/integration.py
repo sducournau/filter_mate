@@ -26,6 +26,7 @@ from .layer_sync_controller import LayerSyncController
 from .config_controller import ConfigController
 from .favorites_controller import FavoritesController
 from .property_controller import PropertyController
+from .ui_layout_controller import UILayoutController
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
@@ -84,6 +85,7 @@ class ControllerIntegration:
         self._config_controller: Optional[ConfigController] = None
         self._favorites_controller: Optional[FavoritesController] = None
         self._property_controller: Optional[PropertyController] = None
+        self._ui_layout_controller: Optional[UILayoutController] = None
         
         # Connection tracking
         self._connections: list = []
@@ -138,6 +140,11 @@ class ControllerIntegration:
     def property_controller(self) -> Optional[PropertyController]:
         """Get the property controller."""
         return self._property_controller
+    
+    @property
+    def ui_layout_controller(self) -> Optional[UILayoutController]:
+        """Get the UI layout controller."""
+        return self._ui_layout_controller
     
     def setup(self) -> bool:
         """
@@ -205,6 +212,7 @@ class ControllerIntegration:
             self._config_controller = None
             self._favorites_controller = None
             self._property_controller = None
+            self._ui_layout_controller = None
             self._registry = None
             self._is_setup = False
             
@@ -262,6 +270,11 @@ class ControllerIntegration:
         self._property_controller = PropertyController(
             dockwidget=self._dockwidget,
             signal_manager=self._signal_manager
+        )
+        
+        # v4.0 Sprint 4: Create UILayoutController
+        self._ui_layout_controller = UILayoutController(
+            dockwidget=self._dockwidget
         )
         
         logger.debug("All controllers created")
@@ -324,6 +337,13 @@ class ControllerIntegration:
             'property',
             self._property_controller,
             tab_index=TabIndex.FILTERING  # Property controller active on filtering tab
+        )
+        
+        # v4.0 Sprint 4: Register UILayoutController
+        self._registry.register(
+            'ui_layout',
+            self._ui_layout_controller,
+            tab_index=TabIndex.FILTERING  # UI layout controller active on all tabs
         )
         
         logger.debug("All controllers registered")
@@ -2243,6 +2263,101 @@ class ControllerIntegration:
                 return True
             except Exception as e:
                 logger.warning(f"delegate_update_buffer_validation failed: {e}")
+                return False
+        return False
+
+    # ============================================================================
+    # DELEGATION - UILayoutController
+    # v4.0 Sprint 4: UI Layout Management delegation methods
+    # ============================================================================
+
+    def delegate_sync_multiple_selection_from_qgis(self) -> bool:
+        """
+        Delegate synchronization of multiple selection from QGIS to UILayoutController.
+        
+        v4.0 Sprint 4: Migrated from dockwidget._sync_multiple_selection_from_qgis.
+        
+        Returns:
+            True if delegated successfully, False otherwise
+        """
+        if self._ui_layout_controller:
+            try:
+                self._ui_layout_controller.sync_multiple_selection_from_qgis()
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_sync_multiple_selection_from_qgis failed: {e}")
+                return False
+        return False
+
+    def delegate_align_key_layouts(self) -> bool:
+        """
+        Delegate alignment of key layouts to UILayoutController.
+        
+        v4.0 Sprint 4: Migrated from dockwidget._align_key_layouts.
+        
+        Returns:
+            True if delegated successfully, False otherwise
+        """
+        if self._ui_layout_controller:
+            try:
+                self._ui_layout_controller.align_key_layouts()
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_align_key_layouts failed: {e}")
+                return False
+        return False
+
+    def delegate_create_horizontal_wrapper_for_side_action_bar(self) -> bool:
+        """
+        Delegate creation of horizontal wrapper for side action bar to UILayoutController.
+        
+        v4.0 Sprint 4: Migrated from dockwidget._create_horizontal_wrapper_for_side_action_bar.
+        
+        Returns:
+            True if delegated successfully, False otherwise
+        """
+        if self._ui_layout_controller:
+            try:
+                self._ui_layout_controller.create_horizontal_wrapper_for_side_action_bar()
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_create_horizontal_wrapper_for_side_action_bar failed: {e}")
+                return False
+        return False
+
+    def delegate_harmonize_checkable_pushbuttons(self) -> bool:
+        """
+        Delegate harmonization of checkable pushbuttons to UILayoutController.
+        
+        v4.0 Sprint 4: Migrated from dockwidget._harmonize_checkable_pushbuttons.
+        
+        Returns:
+            True if delegated successfully, False otherwise
+        """
+        if self._ui_layout_controller:
+            try:
+                self._ui_layout_controller.harmonize_checkable_pushbuttons()
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_harmonize_checkable_pushbuttons failed: {e}")
+                return False
+        return False
+
+    def delegate_apply_layout_spacing(self) -> bool:
+        """
+        Delegate application of layout spacing to UILayoutController.
+        
+        v4.0 Sprint 4: Migrated from dockwidget._apply_layout_spacing.
+        
+        Returns:
+            True if delegated successfully, False otherwise
+        """
+        if self._ui_layout_controller:
+            try:
+                self._ui_layout_controller.apply_layout_spacing()
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_apply_layout_spacing failed: {e}")
                 return False
         return False
 

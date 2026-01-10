@@ -1223,7 +1223,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Applies consistent sizing to exploring, filtering, and exporting pushbuttons
         based on the active UI profile (compact/normal/hidpi) using key_button dimensions
         from UIConfig.
+        
+        v4.0 Sprint 4: Delegation to UILayoutController with fallback.
         """
+        # v4.0 Sprint 4: Try controller delegation first
+        if (hasattr(self, '_controller_integration') and 
+            self._controller_integration and
+            self._controller_integration.delegate_harmonize_checkable_pushbuttons()):
+            logger.debug("_harmonize_checkable_pushbuttons: Delegated to UILayoutController")
+            return
+        
+        # FALLBACK: Original implementation
+        logger.debug("_harmonize_checkable_pushbuttons: Using fallback implementation")
         try:
             from qgis.PyQt.QtWidgets import QPushButton, QSizePolicy
             from qgis.PyQt.QtCore import QSize
@@ -1334,7 +1345,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         Uses harmonized spacing values from UIConfig to ensure
         uniform visual appearance across the entire UI.
+        
+        v4.0 Sprint 4: Delegation to UILayoutController with fallback.
         """
+        # v4.0 Sprint 4: Try controller delegation first
+        if (hasattr(self, '_controller_integration') and 
+            self._controller_integration and
+            self._controller_integration.delegate_apply_layout_spacing()):
+            logger.debug("_apply_layout_spacing: Delegated to UILayoutController")
+            return
+        
+        # FALLBACK: Original implementation
+        logger.debug("_apply_layout_spacing: Using fallback implementation")
         try:
             from .ui.config import UIConfig
             
@@ -1584,7 +1606,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         Sets consistent spacing, margins, and alignment for all key widget layouts
         and their parent containers. Harmonizes vertical bars of pushbuttons.
+        
+        v4.0 Sprint 4: Delegation to UILayoutController with fallback.
         """
+        # v4.0 Sprint 4: Try controller delegation first
+        if (hasattr(self, '_controller_integration') and 
+            self._controller_integration and
+            self._controller_integration.delegate_align_key_layouts()):
+            logger.debug("_align_key_layouts: Delegated to UILayoutController")
+            return
+        
+        # FALLBACK: Original implementation
+        logger.debug("_align_key_layouts: Using fallback implementation")
         try:
             from .ui.config import UIConfig
             
@@ -3498,9 +3531,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         - 'top': Action bar spans the full height (next to splitter)
         - 'bottom': Action bar is only in the bottom actions area
         
+        v4.0 Sprint 4: Delegation to UILayoutController with fallback.
+        
         Args:
             position: str - 'left' or 'right'
         """
+        # v4.0 Sprint 4: Try controller delegation first
+        if (hasattr(self, '_controller_integration') and 
+            self._controller_integration and
+            self._controller_integration.delegate_create_horizontal_wrapper_for_side_action_bar()):
+            logger.debug("_create_horizontal_wrapper_for_side_action_bar: Delegated to UILayoutController")
+            return
+        
+        # FALLBACK: Original implementation
+        logger.debug("_create_horizontal_wrapper_for_side_action_bar: Using fallback implementation")
         # Get alignment from config
         alignment = self._get_action_bar_vertical_alignment()
         
@@ -7505,10 +7549,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         v3.0.5: Handles async loading - if feature list not ready yet, stores pending
         selection to be applied when loadFeaturesList task completes.
         
+        v4.0 Sprint 4: Delegation to UILayoutController with fallback.
+        
         Note:
             Contrairement aux versions précédentes qui étaient additives,
             cette synchronisation reflète maintenant EXACTEMENT la sélection QGIS.
         """
+        # v4.0 Sprint 4: Try controller delegation first
+        if (hasattr(self, '_controller_integration') and 
+            self._controller_integration and
+            self._controller_integration.delegate_sync_multiple_selection_from_qgis()):
+            logger.debug("_sync_multiple_selection_from_qgis: Delegated to UILayoutController")
+            return
+        
+        # FALLBACK: Original implementation
+        logger.debug("_sync_multiple_selection_from_qgis: Using fallback implementation")
         try:
             # Multiple selection: check all selected features in the widget
             multiple_widget = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
