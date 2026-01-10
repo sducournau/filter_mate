@@ -695,6 +695,414 @@ class GeometryPreparationAdapter:
             valid_count=len(geometries)
         )
     
+    def features_to_wkt_with_simplification(
+        self,
+        features: List[QgsFeature],
+        target_crs: Optional[QgsCoordinateReferenceSystem] = None,
+        source_crs: Optional[QgsCoordinateReferenceSystem] = None,
+        dissolve: bool = True,
+        use_centroids: bool = False,
+        max_wkt_length: Optional[int] = None,
+        buffer_value: Optional[float] = None,
+        buffer_segments: int = 5,
+        buffer_type: int = 0
+    ) -> GeometryPreparationResult:
+        """
+        Convert features to WKT with automatic simplification for large geometries.
+        
+        Combines features_to_wkt and simplify_geometry_adaptive for optimal
+        WKT generation. Automatically applies simplification if result exceeds
+        max_wkt_length.
+        
+        Args:
+            features: List of features with geometries
+            target_crs: Target CRS (if reprojection needed)
+            source_crs: Source CRS (required if reprojecting)
+            dissolve: Whether to dissolve geometries
+            use_centroids: Convert to centroids before processing
+            max_wkt_length: Maximum WKT length before simplification
+            buffer_value: Buffer value for tolerance calculation
+            buffer_segments: Buffer segments
+            buffer_type: Buffer end cap type
+            
+        Returns:
+            GeometryPreparationResult with WKT string (possibly simplified)
+        """
+        if not features:
+            return GeometryPreparationResult(
+                success=False,
+                error_message="No features provided"
+            )
+        
+        # First, collect and dissolve geometries
+        transform = None
+        if target_crs and source_crs:
+            transform = QgsCoordinateTransform(
+                source_crs, target_crs, self._project
+            )
+        
+        geometries = []
+        for feature in features:
+            if not feature.hasGeometry():
+                continue
+            
+            geom = QgsGeometry(feature.geometry())
+            if geom.isEmpty():
+                continue
+            
+            if use_centroids:
+                centroid = geom.centroid()
+                if centroid and not centroid.isEmpty():
+                    geom = centroid
+            
+            if transform:
+                geom.transform(transform)
+            
+            if self._config.validate_geometries and not geom.isGeosValid():
+                if self._config.repair_geometries:
+                    geom = self._repair_geometry(geom)
+                    if not geom or not geom.isGeosValid():
+                        continue
+                else:
+                    continue
+            
+            geometries.append(geom)
+        
+        if not geometries:
+            return GeometryPreparationResult(
+                success=False,
+                error_message="No valid geometries found"
+            )
+        
+        # Dissolve geometries
+        if dissolve and len(geometries) > 1:
+            try:
+                collected = QgsGeometry.collectGeometry(geometries)
+                if collected and not collected.isEmpty():
+                    dissolved = collected.unaryUnion()
+                    final_geom = dissolved if dissolved and not dissolved.isEmpty() else collected
+                else:
+                    final_geom = geometries[0]
+            except Exception as e:
+                logger.warning(f"Dissolve failed: {e}")
+                final_geom = geometries[0]
+        else:
+            final_geom = geometries[0] if len(geometries) == 1 else QgsGeometry.collectGeometry(geometries)
+        
+        # Determine CRS for precision
+        crs = target_crs or source_crs
+        crs_authid = crs.authid() if crs else None
+        wkt_precision = self._get_wkt_precision(crs)
+        
+        # Generate initial WKT
+        wkt = final_geom.asWkt(wkt_precision)
+        
+        # Check if simplification needed
+        if max_wkt_length is None:
+            max_wkt_length = self._config.max_wkt_length
+        
+        if len(wkt) > max_wkt_length:
+            logger.info(
+                f"WKT too large ({len(wkt)} chars), applying adaptive simplification"
+            )
+            
+            simplify_result = self.simplify_geometry_adaptive(
+                geometry=final_geom,
+                max_wkt_length=max_wkt_length,
+                crs_authid=crs_authid,
+                buffer_value=buffer_value,
+                buffer_segments=buffer_segments,
+                buffer_type=buffer_type
+            )
+            
+            if simplify_result.success and simplify_result.wkt:
+                return GeometryPreparationResult(
+                    success=True,
+                    geometry=simplify_result.geometry,
+                    wkt=simplify_result.wkt,
+                    feature_count=len(features),
+                    valid_count=len(geometries)
+                )
+        
+        # Return original WKT (escaped)
+        wkt_escaped = wkt.replace("'", "''")
+        self._metrics['wkt_generated'] += 1
+        
+        return GeometryPreparationResult(
+            success=True,
+            geometry=final_geom,
+            wkt=wkt_escaped,
+            feature_count=len(features),
+            valid_count=len(geometries)
+        )
+    
+    # =========================================================================
+    # Geometry Simplification
+    # =========================================================================
+    
+    def simplify_geometry_adaptive(
+        self,
+        geometry: QgsGeometry,
+        max_wkt_length: Optional[int] = None,
+        crs_authid: Optional[str] = None,
+        buffer_value: Optional[float] = None,
+        buffer_segments: int = 5,
+        buffer_type: int = 0
+    ) -> GeometryPreparationResult:
+        """
+        Simplify geometry adaptively to fit within WKT size limit.
+        
+        Progressive simplification algorithm that:
+        1. Estimates optimal tolerance based on geometry extent and target size
+        2. Uses topology-preserving simplification
+        3. Progressively increases tolerance until target size is reached
+        4. Falls back to convexHull/boundingBox for extreme cases
+        
+        Args:
+            geometry: QgsGeometry to simplify
+            max_wkt_length: Maximum WKT string length (default from config)
+            crs_authid: CRS authority ID for unit-aware simplification
+            buffer_value: Buffer value for tolerance calculation
+            buffer_segments: Buffer segments (affects precision)
+            buffer_type: Buffer end cap type (0=round, 1=flat, 2=square)
+            
+        Returns:
+            GeometryPreparationResult with simplified geometry
+        """
+        if not geometry or geometry.isEmpty():
+            return GeometryPreparationResult(
+                success=False,
+                error_message="Empty or None geometry"
+            )
+        
+        # Use configured max if not specified
+        if max_wkt_length is None:
+            max_wkt_length = self._config.max_wkt_length
+        
+        # Determine WKT precision
+        wkt_precision = self._get_wkt_precision_from_authid(crs_authid)
+        
+        # Check if simplification needed
+        original_wkt = geometry.asWkt(wkt_precision)
+        original_length = len(original_wkt)
+        
+        if original_length <= max_wkt_length:
+            return GeometryPreparationResult(
+                success=True,
+                geometry=geometry,
+                wkt=original_wkt.replace("'", "''")
+            )
+        
+        logger.info(
+            f"Simplifying geometry: {original_length} chars → target {max_wkt_length}"
+        )
+        
+        # Calculate reduction ratio needed
+        reduction_ratio = max_wkt_length / original_length
+        
+        # Get geometry extent for tolerance calculation
+        extent = geometry.boundingBox()
+        extent_size = max(extent.width(), extent.height())
+        
+        # Determine if geographic CRS
+        is_geographic = self._is_geographic_crs(crs_authid)
+        
+        # Calculate initial tolerance
+        initial_tolerance = self._calculate_simplification_tolerance(
+            extent_size=extent_size,
+            reduction_ratio=reduction_ratio,
+            is_geographic=is_geographic,
+            buffer_value=buffer_value,
+            buffer_segments=buffer_segments,
+            buffer_type=buffer_type
+        )
+        
+        # Progressive simplification
+        tolerance = initial_tolerance
+        best_simplified = geometry
+        best_wkt_length = original_length
+        max_attempts = 15
+        tolerance_multiplier = 2.0
+        
+        # Get tolerance limits
+        min_tolerance = 0.1 / 111000.0 if is_geographic else 0.1
+        max_tolerance = 100.0 / 111000.0 if is_geographic else 100.0
+        
+        # Increase max tolerance for extreme reductions
+        if reduction_ratio < 0.01:
+            max_tolerance *= min(1.0 / reduction_ratio, 100)
+        
+        for attempt in range(max_attempts):
+            if tolerance > max_tolerance:
+                break
+            
+            simplified = geometry.simplify(tolerance)
+            
+            if simplified is None or simplified.isEmpty():
+                tolerance *= 1.5
+                continue
+            
+            # Check geometry type preserved
+            if QgsWkbTypes.geometryType(simplified.wkbType()) != QgsWkbTypes.geometryType(geometry.wkbType()):
+                tolerance *= tolerance_multiplier
+                continue
+            
+            simplified_wkt = simplified.asWkt(wkt_precision)
+            wkt_length = len(simplified_wkt)
+            
+            if wkt_length < best_wkt_length:
+                best_simplified = simplified
+                best_wkt_length = wkt_length
+            
+            if wkt_length <= max_wkt_length:
+                reduction_pct = (1 - wkt_length / original_length) * 100
+                logger.info(
+                    f"Simplified: {original_length} → {wkt_length} chars "
+                    f"({reduction_pct:.1f}% reduction)"
+                )
+                return GeometryPreparationResult(
+                    success=True,
+                    geometry=simplified,
+                    wkt=simplified_wkt.replace("'", "''")
+                )
+            
+            tolerance *= tolerance_multiplier
+        
+        # Try fallbacks for extreme cases
+        fallback_result = self._try_simplification_fallbacks(
+            geometry, max_wkt_length, wkt_precision
+        )
+        if fallback_result and fallback_result.success:
+            return fallback_result
+        
+        # Return best result even if not under limit
+        final_wkt = best_simplified.asWkt(wkt_precision)
+        reduction_pct = (1 - len(final_wkt) / original_length) * 100
+        logger.warning(
+            f"Could not reach target, using best: {original_length} → "
+            f"{len(final_wkt)} chars ({reduction_pct:.1f}% reduction)"
+        )
+        
+        return GeometryPreparationResult(
+            success=True,  # Partial success
+            geometry=best_simplified,
+            wkt=final_wkt.replace("'", "''")
+        )
+    
+    def _calculate_simplification_tolerance(
+        self,
+        extent_size: float,
+        reduction_ratio: float,
+        is_geographic: bool,
+        buffer_value: Optional[float] = None,
+        buffer_segments: int = 5,
+        buffer_type: int = 0
+    ) -> float:
+        """Calculate initial tolerance for simplification."""
+        import math
+        
+        # If buffer is applied, use buffer-aware tolerance
+        if buffer_value and buffer_value != 0:
+            abs_buffer = abs(buffer_value)
+            angle_per_segment = math.pi / (2 * buffer_segments)
+            max_arc_error = abs_buffer * (1 - math.cos(angle_per_segment / 2))
+            tolerance_factor = 2.0 if buffer_type in [1, 2] else 1.0
+            base_tolerance = max_arc_error * tolerance_factor
+        else:
+            if is_geographic:
+                base_tolerance = extent_size * 0.0001
+            else:
+                base_tolerance = extent_size * 0.001
+        
+        # Scale based on reduction needed
+        if reduction_ratio < 0.01:
+            scale = 50
+        elif reduction_ratio < 0.05:
+            scale = 20
+        elif reduction_ratio < 0.1:
+            scale = 10
+        elif reduction_ratio < 0.5:
+            scale = 5
+        else:
+            scale = 2
+        
+        return base_tolerance * scale
+    
+    def _try_simplification_fallbacks(
+        self,
+        geometry: QgsGeometry,
+        max_wkt_length: int,
+        wkt_precision: int
+    ) -> Optional[GeometryPreparationResult]:
+        """Try aggressive fallbacks for extreme simplification needs."""
+        
+        # Fallback 1: Convex Hull
+        try:
+            hull = geometry.convexHull()
+            if hull and not hull.isEmpty():
+                hull_wkt = hull.asWkt(wkt_precision)
+                if len(hull_wkt) <= max_wkt_length:
+                    logger.warning("Using Convex Hull fallback - precision lost")
+                    return GeometryPreparationResult(
+                        success=True,
+                        geometry=hull,
+                        wkt=hull_wkt.replace("'", "''")
+                    )
+        except Exception:
+            pass
+        
+        # Fallback 2: Oriented Bounding Box
+        try:
+            oriented_bbox = geometry.orientedMinimumBoundingBox()[0]
+            if oriented_bbox and not oriented_bbox.isEmpty():
+                bbox_wkt = oriented_bbox.asWkt(wkt_precision)
+                if len(bbox_wkt) <= max_wkt_length:
+                    logger.warning("Using Oriented BBox fallback - precision lost")
+                    return GeometryPreparationResult(
+                        success=True,
+                        geometry=oriented_bbox,
+                        wkt=bbox_wkt.replace("'", "''")
+                    )
+        except Exception:
+            pass
+        
+        # Fallback 3: Simple Bounding Box
+        try:
+            bbox = geometry.boundingBox()
+            if not bbox.isEmpty():
+                bbox_geom = QgsGeometry.fromRect(bbox)
+                if bbox_geom and not bbox_geom.isEmpty():
+                    bbox_wkt = bbox_geom.asWkt(wkt_precision)
+                    logger.warning("Using Bounding Box fallback - maximum precision lost")
+                    return GeometryPreparationResult(
+                        success=True,
+                        geometry=bbox_geom,
+                        wkt=bbox_wkt.replace("'", "''")
+                    )
+        except Exception:
+            pass
+        
+        return None
+    
+    def _is_geographic_crs(self, crs_authid: Optional[str]) -> bool:
+        """Check if CRS is geographic based on auth ID."""
+        if not crs_authid:
+            return False
+        try:
+            if ':' in crs_authid:
+                srid = int(crs_authid.split(':')[1])
+            else:
+                srid = int(crs_authid)
+            return srid == 4326 or (4000 < srid < 5000)
+        except (ValueError, IndexError):
+            return False
+    
+    def _get_wkt_precision_from_authid(self, crs_authid: Optional[str]) -> int:
+        """Get WKT precision from CRS auth ID string."""
+        if self._is_geographic_crs(crs_authid):
+            return 8
+        return 3
+    
     # =========================================================================
     # Private Helper Methods
     # =========================================================================

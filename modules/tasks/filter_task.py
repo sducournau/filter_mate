@@ -3904,14 +3904,8 @@ class FilterEngineTask(QgsTask):
         """
         Simplify geometry adaptively to fit within WKT size limit while preserving topology.
         
-        v2.7.6: New adaptive simplification algorithm that:
-        1. Estimates optimal tolerance based on geometry extent and target size
-        2. Uses topology-preserving simplification
-        3. Progressively increases tolerance until target size is reached
-        4. Never produces empty or invalid geometries
-        5. Respects configuration parameters for tolerance limits
-        
-        v2.7.11: Enhanced to use buffer parameters (segments, type) for smarter tolerance.
+        v4.0 DELEGATION: Delegates to GeometryPreparationAdapter.simplify_geometry_adaptive().
+        Legacy implementation preserved as fallback.
         
         Args:
             geometry: QgsGeometry to simplify
@@ -3926,6 +3920,33 @@ class FilterEngineTask(QgsTask):
         if not geometry or geometry.isEmpty():
             return geometry
         
+        # v4.0: Delegate to GeometryPreparationAdapter
+        try:
+            from adapters.qgis.geometry_preparation import GeometryPreparationAdapter
+            adapter = GeometryPreparationAdapter()
+            
+            # Get buffer parameters for tolerance calculation
+            buffer_value = getattr(self, 'param_buffer_value', None)
+            buffer_segments = getattr(self, 'param_buffer_segments', 5)
+            buffer_type = getattr(self, 'param_buffer_type', 0)
+            
+            result = adapter.simplify_geometry_adaptive(
+                geometry=geometry,
+                max_wkt_length=max_wkt_length,
+                crs_authid=crs_authid,
+                buffer_value=buffer_value,
+                buffer_segments=buffer_segments,
+                buffer_type=buffer_type
+            )
+            
+            if result.success and result.geometry:
+                return result.geometry
+        except ImportError:
+            logger.debug("GeometryPreparationAdapter not available, using legacy")
+        except Exception as e:
+            logger.debug(f"GeometryPreparationAdapter simplify failed: {e}, using legacy")
+        
+        # LEGACY FALLBACK (to be removed in v5.0)
         # Get configuration
         config = self._get_simplification_config()
         
