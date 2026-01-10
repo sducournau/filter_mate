@@ -581,6 +581,30 @@ class ControllerIntegration:
                 return False
         return False
     
+    def delegate_handle_layer_selection_changed(self, selected, deselected, clear_and_select) -> bool:
+        """
+        Delegate layer selection change handling to ExploringController.
+        
+        v3.1 Sprint 7: Full migration of on_layer_selection_changed logic.
+        
+        Args:
+            selected: List of added feature IDs
+            deselected: List of removed feature IDs
+            clear_and_select: Boolean indicating if selection was cleared
+        
+        Returns:
+            True if handled successfully, False otherwise
+        """
+        if self._exploring_controller:
+            try:
+                return self._exploring_controller.handle_layer_selection_changed(
+                    selected, deselected, clear_and_select
+                )
+            except Exception as e:
+                logger.warning(f"delegate_handle_layer_selection_changed failed: {e}")
+                return False
+        return False
+    
     def delegate_get_current_features(self, use_cache: bool = True) -> tuple:
         """
         Delegate getting current selected features to ExploringController.

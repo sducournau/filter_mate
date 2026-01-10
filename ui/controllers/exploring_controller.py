@@ -2060,6 +2060,159 @@ class ExploringController(BaseController, LayerSelectionMixin):
             if isinstance(e, KeyError):
                 logger.debug(f"Missing key: {error_details}")
 
+    # === Layer Selection Synchronization (v3.1 Sprint 7) ===
+    
+    def handle_layer_selection_changed(self, selected, deselected, clear_and_select) -> bool:
+        """
+        Handle QGIS layer selection change event.
+        
+        v3.1 Sprint 7: Migrated from dockwidget.on_layer_selection_changed.
+        Synchronizes QGIS selection with FilterMate widgets when is_selecting is active.
+        If is_tracking is active, zooms to selected features.
+        
+        Args:
+            selected: List of added feature IDs
+            deselected: List of removed feature IDs
+            clear_and_select: Boolean indicating if selection was cleared
+            
+        Returns:
+            True if handled successfully, False otherwise
+        """
+        try:
+            # Check recursion prevention flag
+            if getattr(self._dockwidget, '_syncing_from_qgis', False):
+                logger.debug("handle_layer_selection_changed: Skipping (sync in progress)")
+                return True
+            
+            # Block during filtering operations
+            if getattr(self._dockwidget, '_filtering_in_progress', False):
+                logger.debug("handle_layer_selection_changed: Skipping (filtering in progress)")
+                return True
+            
+            if not self._dockwidget.widgets_initialized or not self._dockwidget.current_layer:
+                return False
+            
+            layer_props = self._dockwidget.PROJECT_LAYERS.get(self._dockwidget.current_layer.id())
+            if not layer_props:
+                logger.warning(f"handle_layer_selection_changed: No layer_props for layer")
+                return False
+            
+            is_selecting = layer_props.get("exploring", {}).get("is_selecting", False)
+            is_tracking = layer_props.get("exploring", {}).get("is_tracking", False)
+            
+            logger.info(f"handle_layer_selection_changed: is_selecting={is_selecting}, is_tracking={is_tracking}")
+            
+            # Sync widgets when is_selecting is active
+            if is_selecting:
+                self._sync_widgets_from_qgis_selection()
+            
+            # Zoom to selection when is_tracking is active
+            if is_tracking:
+                selected_ids = self._dockwidget.current_layer.selectedFeatureIds()
+                if len(selected_ids) > 0:
+                    from qgis.core import QgsFeatureRequest
+                    request = QgsFeatureRequest().setFilterFids(selected_ids)
+                    features = list(self._dockwidget.current_layer.getFeatures(request))
+                    logger.info(f"Tracking: zooming to {len(features)} features")
+                    self.zooming_to_features(features)
+            
+            return True
+            
+        except Exception as e:
+            logger.warning(f"Error in handle_layer_selection_changed: {type(e).__name__}: {e}")
+            return False
+    
+    def _sync_widgets_from_qgis_selection(self) -> None:
+        """
+        Synchronize single and multiple selection widgets with QGIS selection.
+        
+        v3.1 Sprint 7: Migrated from dockwidget._sync_widgets_from_qgis_selection.
+        Auto-switches groupbox based on selection count.
+        """
+        try:
+            if not self._dockwidget.current_layer or not self._dockwidget.widgets_initialized:
+                return
+            
+            selected_features = self._dockwidget.current_layer.selectedFeatures()
+            selected_count = len(selected_features)
+            
+            layer_props = self._dockwidget.PROJECT_LAYERS.get(self._dockwidget.current_layer.id())
+            if not layer_props:
+                return
+            
+            current_groupbox = self._dockwidget.current_exploring_groupbox
+            
+            # Auto-switch groupbox based on selection count
+            if selected_count == 1 and current_groupbox == "multiple_selection":
+                logger.info("Auto-switching to single_selection groupbox (1 feature)")
+                self._dockwidget._syncing_from_qgis = True
+                try:
+                    self._dockwidget._force_exploring_groupbox_exclusive("single_selection")
+                    self._dockwidget._configure_single_selection_groupbox()
+                finally:
+                    self._dockwidget._syncing_from_qgis = False
+                    
+            elif selected_count > 1 and current_groupbox == "single_selection":
+                logger.info(f"Auto-switching to multiple_selection groupbox ({selected_count} features)")
+                self._dockwidget._syncing_from_qgis = True
+                try:
+                    self._dockwidget._force_exploring_groupbox_exclusive("multiple_selection")
+                    self._dockwidget._configure_multiple_selection_groupbox()
+                finally:
+                    self._dockwidget._syncing_from_qgis = False
+            
+            # Sync both widgets
+            self._sync_single_selection_from_qgis(selected_features, selected_count)
+            self._sync_multiple_selection_from_qgis(selected_features, selected_count)
+            
+        except Exception as e:
+            logger.warning(f"Error in _sync_widgets_from_qgis_selection: {type(e).__name__}: {e}")
+    
+    def _sync_single_selection_from_qgis(self, selected_features, selected_count) -> None:
+        """
+        Sync single selection widget with QGIS selection.
+        
+        v3.1 Sprint 7: Migrated from dockwidget._sync_single_selection_from_qgis.
+        """
+        try:
+            if selected_count < 1:
+                return
+            
+            feature = selected_features[0]
+            feature_id = feature.id()
+            
+            feature_picker = self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+            current_feature = feature_picker.feature()
+            
+            # Skip if already showing this feature
+            if current_feature and current_feature.isValid() and current_feature.id() == feature_id:
+                return
+            
+            logger.info(f"Syncing single selection to feature ID {feature_id}")
+            
+            self._dockwidget._syncing_from_qgis = True
+            try:
+                feature_picker.setFeature(feature_id)
+            finally:
+                self._dockwidget._syncing_from_qgis = False
+                
+        except Exception as e:
+            logger.warning(f"Error in _sync_single_selection_from_qgis: {type(e).__name__}: {e}")
+    
+    def _sync_multiple_selection_from_qgis(self, selected_features, selected_count) -> None:
+        """
+        Sync multiple selection widget with QGIS selection.
+        
+        v3.1 Sprint 7: Delegates to UILayoutController if available.
+        """
+        # Delegate to UILayoutController via dockwidget
+        if hasattr(self._dockwidget, '_controller_integration'):
+            ci = self._dockwidget._controller_integration
+            if ci and ci.delegate_sync_multiple_selection_from_qgis():
+                return
+        
+        logger.debug("_sync_multiple_selection_from_qgis: No UILayoutController available")
+
     # === Utility ===
 
     def __repr__(self) -> str:

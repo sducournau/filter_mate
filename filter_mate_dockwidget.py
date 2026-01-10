@@ -6155,198 +6155,44 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def on_layer_selection_changed(self, selected, deselected, clearAndSelect):
         """
-        Slot appelé lorsque la sélection de la couche change.
-        Synchronise la sélection QGIS avec les widgets FilterMate si is_selecting est activé.
-        Si is_tracking est activé, zoom sur les features sélectionnées.
+        Handle layer selection change from QGIS.
         
-        Args:
-            selected: List of added feature IDs
-            deselected: List of removed feature IDs  
-            clearAndSelect: Boolean indicating if selection was cleared
-            
-        Note:
-            La synchronisation QGIS → widgets n'est active QUE si is_selecting est coché.
-            Cela garantit une synchronisation bidirectionnelle cohérente.
-            
-        v3.0.9: Added _filtering_in_progress protection to prevent selection sync
-        during filtering operations, which can cause UI glitches and task cancellation.
+        v3.1 Sprint 7: Simplified - delegates to ExploringController.
+        Synchronizes QGIS selection with FilterMate widgets when is_selecting is active.
+        If is_tracking is active, zooms to selected features.
         """
-        try:
-            # CRITICAL: Prevent infinite recursion - skip if we're the ones updating QGIS
-            if self._syncing_from_qgis:
-                logger.debug("on_layer_selection_changed: Skipping (sync in progress)")
+        # Delegate to controller
+        if self._controller_integration:
+            if self._controller_integration.delegate_handle_layer_selection_changed(
+                selected, deselected, clearAndSelect
+            ):
                 return
-            
-            # v3.0.9: CRITICAL - Block selection sync during filtering operations
-            # processing.run("native:selectbylocation") modifies layer selection,
-            # which can trigger this handler and cause UI issues or task cancellation
-            if getattr(self, '_filtering_in_progress', False):
-                logger.debug("on_layer_selection_changed: Skipping (filtering in progress)")
-                return
-            
-            if self.widgets_initialized is True and self.current_layer is not None:
-                layer_props = self.PROJECT_LAYERS.get(self.current_layer.id())
-                
-                if not layer_props:
-                    logger.warning(f"on_layer_selection_changed: No layer_props for {self.current_layer.name()}")
-                    return
-                
-                # Get flags
-                is_selecting = layer_props.get("exploring", {}).get("is_selecting", False)
-                is_tracking = layer_props.get("exploring", {}).get("is_tracking", False)
-                
-                logger.info(f"on_layer_selection_changed: layer={self.current_layer.name()}, is_selecting={is_selecting}, is_tracking={is_tracking}")
-                
-                # SYNCHRONISATION: Update FilterMate widgets when QGIS selection changes
-                # Active SEULEMENT si is_selecting est coché pour synchronisation bidirectionnelle
-                if is_selecting is True:
-                    self._sync_widgets_from_qgis_selection()
-                
-                # TRACKING: Zoom to selected features if tracking is enabled
-                if is_tracking is True:
-                    # Get currently selected features with geometry
-                    selected_feature_ids = self.current_layer.selectedFeatureIds()
-                    
-                    logger.info(f"TRACKING MODE: {len(selected_feature_ids)} features selected")
-                    
-                    if len(selected_feature_ids) > 0:
-                        # CRITICAL: Fetch features with geometry explicitly
-                        request = QgsFeatureRequest().setFilterFids(selected_feature_ids)
-                        selected_features = list(self.current_layer.getFeatures(request))
-                        
-                        logger.info(f"Tracking: zooming to {len(selected_features)} features (IDs: {list(selected_feature_ids)[:5]})")
-                        self.zooming_to_features(selected_features)
-                    else:
-                        logger.debug("on_layer_selection_changed: No features selected for tracking")
-                else:
-                    logger.debug(f"on_layer_selection_changed: Tracking disabled (is_tracking={is_tracking})")
-            else:
-                logger.warning(f"on_layer_selection_changed: widgets_initialized={self.widgets_initialized}, current_layer={self.current_layer}")
-        except (AttributeError, KeyError, RuntimeError) as e:
-            logger.warning(f"Error in on_layer_selection_changed: {type(e).__name__}: {e}")
+        
+        # Minimal fallback - no-op if controller not available
+        logger.debug("on_layer_selection_changed: Controller not available")
 
     
     def _sync_widgets_from_qgis_selection(self):
         """
-        Synchronise les widgets single et multiple selection avec la sélection QGIS.
-        
-        Cette méthode est appelée quand la sélection QGIS change ET que is_selecting est activé.
-        Cela permet une synchronisation bidirectionnelle cohérente.
-        
-        COMPORTEMENT v2.5.9+:
-        - Synchronise TOUJOURS les DEUX widgets (single ET multiple) quelle que soit la groupbox active
-        - Single selection: sélectionne la première feature si au moins une est sélectionnée
-        - Multiple selection: synchronisation complète (coche/décoche toutes les features)
-        - Custom selection: pas de synchronisation automatique (basé sur expression)
-        
-        COMPORTEMENT v2.5.11+:
-        - Auto-switch groupbox basé sur le nombre de features sélectionnées depuis le canvas:
-          - 1 feature sélectionnée ET groupbox = multiple_selection → bascule vers single_selection
-          - > 1 features sélectionnées ET groupbox = single_selection → bascule vers multiple_selection
-        - Cela garantit que get_current_features() utilise le bon widget
-        
-        Note:
-            Le bouton is_selecting active la synchronisation bidirectionnelle:
-            - widgets → QGIS : sélection dans QGIS quand widget change
-            - QGIS → widgets : mise à jour widget quand sélection QGIS change
+        v3.1 Sprint 7: Simplified - delegates to ExploringController.
+        Synchronizes single and multiple selection widgets with QGIS selection.
         """
-        try:
-            if not self.current_layer or not self.widgets_initialized:
-                return
-            
-            # Get selected features from QGIS
-            selected_features = self.current_layer.selectedFeatures()
-            selected_count = len(selected_features)
-            
-            # Get layer properties
-            layer_props = self.PROJECT_LAYERS.get(self.current_layer.id())
-            if not layer_props:
-                return
-            
-            # FIX v2.5.11+: Auto-switch groupbox based on selection count from canvas
-            # This ensures get_current_features() reads from the correct widget.
-            # - 1 feature selected → switch to single_selection
-            # - > 1 features selected → switch to multiple_selection
-            if selected_count == 1 and self.current_exploring_groupbox == "multiple_selection":
-                logger.info(f"_sync_widgets_from_qgis_selection: 1 feature selected, "
-                           f"switching from multiple_selection to single_selection groupbox")
-                # Switch groupbox to single_selection
-                self._syncing_from_qgis = True
-                try:
-                    self._force_exploring_groupbox_exclusive("single_selection")
-                    self._configure_single_selection_groupbox()
-                finally:
-                    self._syncing_from_qgis = False
-            elif selected_count > 1 and self.current_exploring_groupbox == "single_selection":
-                logger.info(f"_sync_widgets_from_qgis_selection: {selected_count} features selected, "
-                           f"switching from single_selection to multiple_selection groupbox")
-                # Switch groupbox to multiple_selection
-                self._syncing_from_qgis = True
-                try:
-                    self._force_exploring_groupbox_exclusive("multiple_selection")
-                    self._configure_multiple_selection_groupbox()
-                finally:
-                    self._syncing_from_qgis = False
-            
-            # SYNC BOTH WIDGETS regardless of active groupbox (v2.5.9+)
-            # This ensures both widgets always reflect the current QGIS selection
-            self._sync_single_selection_from_qgis(selected_features, selected_count)
-            self._sync_multiple_selection_from_qgis(selected_features, selected_count)
-            
-        except Exception as e:
-            logger.warning(f"Error in _sync_widgets_from_qgis_selection: {type(e).__name__}: {e}")
+        if self._controller_integration and self._controller_integration.exploring_controller:
+            self._controller_integration.exploring_controller._sync_widgets_from_qgis_selection()
+            return
+        logger.debug("_sync_widgets_from_qgis_selection: Controller not available")
 
     
     def _sync_single_selection_from_qgis(self, selected_features, selected_count):
         """
-        Synchronise le widget single selection avec la sélection QGIS.
-        Appelé AUTOMATIQUEMENT quand is_selecting est actif.
-        
-        Comportement v2.5.9+:
-        - ≥1 feature sélectionnée : synchronise le widget avec la PREMIÈRE feature
-        - 0 features : ne modifie pas le widget (garde la valeur actuelle)
-        
-        IMPORTANT: On n'utilise PAS blockSignals() car cela empêche aussi la mise à jour
-        visuelle interne du widget. Le flag _syncing_from_qgis est utilisé dans
-        exploring_features_changed() pour éviter les boucles infinies.
+        v3.1 Sprint 7: Simplified - delegates to ExploringController.
         """
-        try:
-            # Single selection: sync with first feature if at least 1 is selected
-            if selected_count >= 1:
-                feature = selected_features[0]
-                feature_id = feature.id()
-                
-                feature_picker = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
-                
-                # Vérifier si la feature est déjà sélectionnée pour éviter des mises à jour inutiles
-                current_feature = feature_picker.feature()
-                
-                if current_feature and current_feature.isValid() and current_feature.id() == feature_id:
-                    logger.debug(f"_sync_single_selection_from_qgis: Feature {feature_id} already selected, skipping")
-                    return
-                
-                logger.info(f"_sync_single_selection_from_qgis: Syncing widget to feature ID {feature_id} (first of {selected_count} selected)")
-                
-                # CRITICAL FIX: Set _syncing_from_qgis flag to prevent infinite loops
-                # The signal featureChanged will be emitted and call exploring_features_changed,
-                # but that function checks _syncing_from_qgis and won't update QGIS selection
-                self._syncing_from_qgis = True
-                try:
-                    # Set the feature by ID - this triggers internal model update and visual refresh
-                    # DO NOT use blockSignals() as it prevents the widget's internal visual update
-                    feature_picker.setFeature(feature_id)
-                finally:
-                    self._syncing_from_qgis = False
-                
-                # Verify the update worked
-                updated_feature = feature_picker.feature()
-                if updated_feature and updated_feature.isValid():
-                    logger.info(f"_sync_single_selection_from_qgis: Widget now shows feature ID {updated_feature.id()}")
-                else:
-                    logger.warning(f"_sync_single_selection_from_qgis: Widget update may have failed - feature() returned invalid")
-                
-        except Exception as e:
-            logger.warning(f"Error in _sync_single_selection_from_qgis: {type(e).__name__}: {e}")
+        if self._controller_integration and self._controller_integration.exploring_controller:
+            self._controller_integration.exploring_controller._sync_single_selection_from_qgis(
+                selected_features, selected_count
+            )
+            return
+        logger.debug("_sync_single_selection_from_qgis: Controller not available")
 
     
     def _sync_multiple_selection_from_qgis(self, selected_features, selected_count):
