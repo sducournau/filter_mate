@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 # Re-export from adapters.backends.spatialite
 try:
-    from adapters.backends.spatialite import (
+    from ...adapters.backends.spatialite import (
         SpatialiteBackend,
         spatialite_connect,
         SpatialiteCache,

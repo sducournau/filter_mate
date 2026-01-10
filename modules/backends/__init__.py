@@ -20,7 +20,7 @@ warnings.warn(
 
 # Re-export from adapters.backends
 try:
-    from adapters.backends import (
+    from ...adapters.backends import (
         BackendFactory,
         BackendSelector,
         create_backend_factory,

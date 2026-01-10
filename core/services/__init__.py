@@ -8,6 +8,7 @@ Services:
 - ExpressionService: Expression parsing, validation, and SQL conversion
 - FilterService: Main filter orchestration
 - HistoryService: Undo/redo history management
+- BufferService: Buffer calculations and geometry simplification
 
 All services are pure Python with no QGIS dependencies,
 enabling true unit testing and clear separation of concerns.
@@ -26,6 +27,15 @@ from .history_service import (
     HistoryService,
     HistoryEntry,
     HistoryState,
+)
+from .buffer_service import (
+    BufferService,
+    BufferConfig,
+    BufferEndCapStyle,
+    BufferJoinStyle,
+    SimplificationConfig,
+    SimplificationResult,
+    create_buffer_service,
 )
 
 # Note: BackendService is NOT exported here because:
@@ -58,4 +68,12 @@ __all__ = [
     'HistoryService',
     'HistoryEntry',
     'HistoryState',
+    # Buffer Service
+    'BufferService',
+    'BufferConfig',
+    'BufferEndCapStyle',
+    'BufferJoinStyle',
+    'SimplificationConfig',
+    'SimplificationResult',
+    'create_buffer_service',
 ]

@@ -307,163 +307,64 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return self.PROJECT_LAYERS[layer_id]
     
     def _initialize_layer_state(self):
-        """Initialize layer-related state during __init__."""
-        # Check for vector layers in the project, not just PROJECT_LAYERS
-        # PROJECT_LAYERS may be empty on initialization even if vector layers exist
+        """v3.1 Sprint 15: Initialize layer state and managers."""
+        # Initialize layer from project
+        self.init_layer, self.has_loaded_layers = None, False
         if self.PROJECT:
-            vector_layers = [layer for layer in self.PROJECT.mapLayers().values() 
-                           if isinstance(layer, QgsVectorLayer)]
-            if len(vector_layers) > 0:
-                self.init_layer = self.iface.activeLayer() if self.iface.activeLayer() is not None else vector_layers[0]
+            vector_layers = [l for l in self.PROJECT.mapLayers().values() if isinstance(l, QgsVectorLayer)]
+            if vector_layers:
+                self.init_layer = self.iface.activeLayer() or vector_layers[0]
                 self.has_loaded_layers = True
-            else:
-                self.init_layer = None
-                self.has_loaded_layers = False
-        else:
-            self.init_layer = None
-            self.has_loaded_layers = False
 
-
-        self.widgets = None
-        self.widgets_initialized = False
-        self.current_exploring_groupbox = None
-        self.tabTools_current_index = 0
-        self.backend_indicator_label = None
-        self.plugin_title_label = None
-        self.frame_header = None
-
-        # Initialize exploring features cache for flash/zoom/identify operations
-        # Cache stores selected features and pre-computed bounding boxes per groupbox
+        # Core state initialization
+        self.widgets, self.widgets_initialized = None, False
+        self.current_exploring_groupbox, self.tabTools_current_index = None, 0
+        self.backend_indicator_label, self.plugin_title_label, self.frame_header = None, None, None
         self._exploring_cache = ExploringFeaturesCache(max_layers=50, max_age_seconds=300.0)
-        logger.debug("Initialized exploring features cache")
         
-        # v3.1: Initialize Layout Managers (Phase 6 - MIG-060+)
-        # Splitter manager handles main splitter configuration
-        self._splitter_manager = None
-        if LAYOUT_MANAGERS_AVAILABLE and SplitterManager:
-            try:
-                self._splitter_manager = SplitterManager(self)
-                logger.debug("SplitterManager created (v3.1 Phase 6)")
-            except Exception as e:
-                logger.warning(f"Could not create SplitterManager: {e}")
-                self._splitter_manager = None
+        # Layout managers (v3.1 Phase 6)
+        self._splitter_manager = self._dimensions_manager = self._spacing_manager = self._action_bar_manager = None
+        if LAYOUT_MANAGERS_AVAILABLE:
+            for name, cls in [('_splitter_manager', SplitterManager), ('_dimensions_manager', DimensionsManager),
+                              ('_spacing_manager', SpacingManager), ('_action_bar_manager', ActionBarManager)]:
+                try: setattr(self, name, cls(self) if cls else None)
+                except: pass
         
-        # v3.1: DimensionsManager handles widget dimensions (Phase 6 - MIG-062)
-        self._dimensions_manager = None
-        if LAYOUT_MANAGERS_AVAILABLE and DimensionsManager:
-            try:
-                self._dimensions_manager = DimensionsManager(self)
-                logger.debug("DimensionsManager created (v3.1 Phase 6 - MIG-062)")
-            except Exception as e:
-                logger.warning(f"Could not create DimensionsManager: {e}")
-                self._dimensions_manager = None
-        
-        # v3.1: SpacingManager handles layout spacing (Phase 6 - MIG-063)
-        self._spacing_manager = None
-        if LAYOUT_MANAGERS_AVAILABLE and SpacingManager:
-            try:
-                self._spacing_manager = SpacingManager(self)
-                logger.debug("SpacingManager created (v3.1 Phase 6 - MIG-063)")
-            except Exception as e:
-                logger.warning(f"Could not create SpacingManager: {e}")
-                self._spacing_manager = None
-        
-        # v3.1: ActionBarManager handles action bar layout (Phase 6 - MIG-064)
-        self._action_bar_manager = None
-        if LAYOUT_MANAGERS_AVAILABLE and ActionBarManager:
-            try:
-                self._action_bar_manager = ActionBarManager(self)
-                logger.debug("ActionBarManager created (v3.1 Phase 6 - MIG-064)")
-            except Exception as e:
-                logger.warning(f"Could not create ActionBarManager: {e}")
-                self._action_bar_manager = None
-        
-        # v3.1: Style Managers (Phase 6 - MIG-070+)
-        self._theme_manager = None
-        self._icon_manager = None
-        self._button_styler = None
+        # Style managers (v3.1 Phase 6)
+        self._theme_manager = self._icon_manager = self._button_styler = None
         if STYLE_MANAGERS_AVAILABLE:
-            try:
-                self._theme_manager = ThemeManager(self)
-                self._icon_manager = IconManager(self)
-                self._button_styler = ButtonStyler(self)
-                logger.debug("Style managers created (v3.1 Phase 6 - MIG-070+)")
-            except Exception as e:
-                logger.warning(f"Could not create style managers: {e}")
-                self._theme_manager = None
-                self._icon_manager = None
-                self._button_styler = None
+            try: self._theme_manager, self._icon_manager, self._button_styler = ThemeManager(self), IconManager(self), ButtonStyler(self)
+            except: pass
         
-        # v3.0: Initialize MVC Controller Integration (Strangler Fig pattern)
-        # Controllers are created but legacy code still handles most operations
-        # Gradually delegate functionality to controllers over time
+        # Controller integration (v3.0 Strangler Fig)
         self._controller_integration = None
         if CONTROLLERS_AVAILABLE:
             try:
-                # v3.0: Inject FilterService from hexagonal architecture if available
-                filter_service = None
-                if is_hexagonal_initialized() and get_filter_service:
-                    try:
-                        filter_service = get_filter_service()
-                        logger.debug("FilterService obtained for controller injection")
-                    except Exception as svc_err:
-                        logger.debug(f"FilterService not available: {svc_err}")
-                
-                self._controller_integration = ControllerIntegration(
-                    dockwidget=self,
-                    filter_service=filter_service,
-                    enabled=True  # Enable controllers for migration
-                )
-                logger.info("Controller integration initialized (v3.0 migration)")
-            except Exception as e:
-                logger.warning(f"Could not initialize controller integration: {e}")
-                self._controller_integration = None
+                filter_service = get_filter_service() if is_hexagonal_initialized() and get_filter_service else None
+                self._controller_integration = ControllerIntegration(dockwidget=self, filter_service=filter_service, enabled=True)
+            except: pass
         
-        # v2.9.20: Track last selected feature ID for single_selection mode
-        # This allows recovery when QgsFeaturePickerWidget loses its selection after layer refresh
-        self._last_single_selection_fid = None
-        self._last_single_selection_layer_id = None
-        
-        # v2.9.29: Track last selected feature IDs for multiple_selection mode
-        # This allows recovery when widget loses checked items after layer refresh (multi-step filtering)
-        self._last_multiple_selection_fids = None
-        self._last_multiple_selection_layer_id = None
+        # Feature selection tracking
+        self._last_single_selection_fid = self._last_single_selection_layer_id = None
+        self._last_multiple_selection_fids = self._last_multiple_selection_layer_id = None
 
-        self.predicates = None
+        # Property state
+        self.predicates = self.project_props = self.layer_properties_tuples_dict = self.export_properties_tuples_dict = None
         self.buffer_property_has_been_init = False
-        self.project_props = None
-        self.layer_properties_tuples_dict = None
-        self.export_properties_tuples_dict = None
         self.json_template_project_exporting = '{"has_layers_to_export":false,"layers_to_export":[],"has_projection_to_export":false,"projection_to_export":"","has_styles_to_export":false,"styles_to_export":"","has_datatype_to_export":false,"datatype_to_export":"","datatype_to_export":"","has_output_folder_to_export":false,"output_folder_to_export":"","has_zip_to_export":false,"zip_to_export":"","batch_output_folder":false,"batch_zip":false }'
+        self.pending_config_changes, self.config_changes_pending = [], False
 
-        # Initialize config changes tracking
-        self.pending_config_changes = []
-        self.config_changes_pending = False
-
-        # Initialize IconThemeManager early (before any icons are set)
+        # IconThemeManager early init
         if ICON_THEME_AVAILABLE:
-            try:
-                current_theme = StyleLoader.detect_qgis_theme()
-                IconThemeManager.set_theme(current_theme)
-                logger.debug(f"Early IconThemeManager init: {current_theme}")
-            except Exception as e:
-                logger.warning(f"Could not initialize IconThemeManager early: {e}")
+            try: IconThemeManager.set_theme(StyleLoader.detect_qgis_theme())
+            except: pass
 
-        logger.info("FilterMate DockWidget: Starting setupUi()")
+        # Setup UI
         self.setupUi(self)
-        logger.info("FilterMate DockWidget: setupUi() complete, starting setupUiCustom()")
         self.setupUiCustom()
-        logger.info("FilterMate DockWidget: setupUiCustom() complete, starting manage_ui_style()")
         self.manage_ui_style()
-        logger.info("FilterMate DockWidget: manage_ui_style() complete")
-        
-        # Call manage_interactions() synchronously
-        logger.info("FilterMate DockWidget: Calling manage_interactions() synchronously")
-        try:
-            self.manage_interactions()
-            logger.info("FilterMate DockWidget: manage_interactions() complete")
-        except Exception as e:
-            logger.error(f"FilterMate DockWidget: Error in manage_interactions(): {e}", exc_info=True)
+        try: self.manage_interactions()
+        except Exception as e: logger.error(f"Error in manage_interactions: {e}")
     
     def _deferred_manage_interactions(self):
         """Deferred initialization - NOT USED during debugging."""
@@ -487,140 +388,52 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return None
 
     def manageSignal(self, widget_path, custom_action=None, custom_signal_name=None):
-        current_signal_name = None
-        current_triggered_function = None
+        """v3.1 Sprint 15: Manage signal connection/disconnection."""
+        if not isinstance(widget_path, list) or len(widget_path) != 2:
+            raise SignalStateChangeError(None, widget_path, 'Incorrect input parameters')
+        
+        widget_object = self.widgets[widget_path[0]][widget_path[1]]
         state = None
-        widget_object = None
-
-        if isinstance(widget_path, list) and len(widget_path) == 2:
-            widget_object = self.widgets[widget_path[0]][widget_path[1]]
-        else:
-            raise SignalStateChangeError(state, widget_path, 'Incorrect input parameters')
-
-        if custom_signal_name is not None:
-           for signal in widget_object["SIGNALS"]:
-               if signal[0] == custom_signal_name and signal[-1] is not None:
-                    current_signal_name = custom_signal_name
-                    current_triggered_function = signal[-1]
-                    
-                    # OPTIMIZATION: Check cached state to avoid redundant operations
-                    state_key = f"{widget_path[0]}.{widget_path[1]}.{current_signal_name}"
-                    cached_state = self._signal_connection_states.get(state_key)
-                    
-                    if custom_action == 'connect' and cached_state is True:
-                        # Already connected, skip
-                        state = True
-                        continue
-                    elif custom_action == 'disconnect' and cached_state is False:
-                        # Already disconnected, skip
-                        state = False
-                        continue
-                    
-                    state = self.changeSignalState(widget_path, current_signal_name, current_triggered_function, custom_action)
-                    # Update cached state
-                    self._signal_connection_states[state_key] = state
-
-        else:
-            for signal in widget_object["SIGNALS"]:
-                if signal[-1] is not None:
-                    current_signal_name = str(signal[0])
-                    current_triggered_function = signal[-1]
-                    
-                    # OPTIMIZATION: Check cached state to avoid redundant operations
-                    state_key = f"{widget_path[0]}.{widget_path[1]}.{current_signal_name}"
-                    cached_state = self._signal_connection_states.get(state_key)
-                    
-                    if custom_action == 'connect' and cached_state is True:
-                        # Already connected, skip
-                        state = True
-                        continue
-                    elif custom_action == 'disconnect' and cached_state is False:
-                        # Already disconnected, skip
-                        state = False
-                        continue
-                    
-                    state = self.changeSignalState(widget_path, current_signal_name, current_triggered_function, custom_action)
-                    # Update cached state
-                    self._signal_connection_states[state_key] = state
         
-        # PERFORMANCE FIX: If state is None but there are signals with None handlers,
-        # that means signals are intentionally handled elsewhere (e.g., with debounce).
-        # Return True to indicate success rather than raising an error.
-        if state is None:
-            # Check if there are any signals defined (even with None handlers)
-            if len(widget_object["SIGNALS"]) > 0:
-                # Signals exist but all have None handlers - this is intentional
-                return True
-            raise SignalStateChangeError(state, widget_path)
-
-        return state
+        signals_to_process = [(s[0], s[-1]) for s in widget_object["SIGNALS"] 
+                              if s[-1] is not None and (custom_signal_name is None or s[0] == custom_signal_name)]
         
-
+        for signal_name, func in signals_to_process:
+            state_key = f"{widget_path[0]}.{widget_path[1]}.{signal_name}"
+            cached = self._signal_connection_states.get(state_key)
+            if (custom_action == 'connect' and cached is True) or (custom_action == 'disconnect' and cached is False):
+                state = cached
+                continue
+            state = self.changeSignalState(widget_path, signal_name, func, custom_action)
+            self._signal_connection_states[state_key] = state
         
-
-    def changeSignalState(self, widget_path, current_signal_name, current_triggered_function, custom_action=None):
-        state = None
-
-        if isinstance(widget_path, list) and len(widget_path) == 2:
-            if hasattr(self.widgets[widget_path[0]][widget_path[1]]["WIDGET"], current_signal_name):
-                # Special handling for LAYER_TREE_VIEW to use specific handler disconnect
-                is_layer_tree_view = (widget_path == ["QGIS", "LAYER_TREE_VIEW"])
-                
-                if is_layer_tree_view:
-                    # Use our own flag to track connection state
-                    state = self._layer_tree_view_signal_connected
-                else:
-                    state = self.widgets[widget_path[0]][widget_path[1]]["WIDGET"].isSignalConnected(self.getSignal(self.widgets[widget_path[0]][widget_path[1]]["WIDGET"], current_signal_name))
-                
-                if custom_action is not None:
-                    if custom_action == 'disconnect' and state is True:
-                        try:
-                            # Use specific handler for disconnect to not break other connections
-                            getattr(self.widgets[widget_path[0]][widget_path[1]]["WIDGET"], current_signal_name).disconnect(current_triggered_function)
-                            if is_layer_tree_view:
-                                self._layer_tree_view_signal_connected = False
-                        except TypeError:
-                            # Signal was not connected or already disconnected
-                            if is_layer_tree_view:
-                                self._layer_tree_view_signal_connected = False
-                    elif custom_action == 'connect' and state is False:
-                        try:
-                            getattr(self.widgets[widget_path[0]][widget_path[1]]["WIDGET"], current_signal_name).connect(current_triggered_function)
-                            if is_layer_tree_view:
-                                self._layer_tree_view_signal_connected = True
-                        except TypeError:
-                            # Already connected
-                            if is_layer_tree_view:
-                                self._layer_tree_view_signal_connected = True
-                    elif custom_action == 'connect' and state is True:
-                        pass  # Already connected, skip
-                else:
-                    if state is True:
-                        try:
-                            getattr(self.widgets[widget_path[0]][widget_path[1]]["WIDGET"], current_signal_name).disconnect(current_triggered_function)
-                            if is_layer_tree_view:
-                                self._layer_tree_view_signal_connected = False
-                        except TypeError:
-                            if is_layer_tree_view:
-                                self._layer_tree_view_signal_connected = False
-                    else:
-                        try:
-                            getattr(self.widgets[widget_path[0]][widget_path[1]]["WIDGET"], current_signal_name).connect(current_triggered_function)
-                            if is_layer_tree_view:
-                                self._layer_tree_view_signal_connected = True
-                        except TypeError:
-                            if is_layer_tree_view:
-                                self._layer_tree_view_signal_connected = True
-
-                if is_layer_tree_view:
-                    state = self._layer_tree_view_signal_connected
-                else:
-                    state = self.widgets[widget_path[0]][widget_path[1]]["WIDGET"].isSignalConnected(self.getSignal(self.widgets[widget_path[0]][widget_path[1]]["WIDGET"], current_signal_name))
-                
-                return state
-        
+        return True if state is None and widget_object["SIGNALS"] else state
         if state is None:
             raise SignalStateChangeError(state, widget_path)
+
+    def changeSignalState(self, widget_path, signal_name, func, custom_action=None):
+        """v3.1 Sprint 15: Change signal connection state."""
+        if not isinstance(widget_path, list) or len(widget_path) != 2:
+            raise SignalStateChangeError(None, widget_path)
+        
+        widget = self.widgets[widget_path[0]][widget_path[1]]["WIDGET"]
+        if not hasattr(widget, signal_name):
+            raise SignalStateChangeError(None, widget_path)
+        
+        is_ltv = widget_path == ["QGIS", "LAYER_TREE_VIEW"]
+        state = self._layer_tree_view_signal_connected if is_ltv else widget.isSignalConnected(self.getSignal(widget, signal_name))
+        signal = getattr(widget, signal_name)
+        
+        should_connect = (custom_action == 'connect' and not state) or (custom_action is None and not state)
+        should_disconnect = (custom_action == 'disconnect' and state) or (custom_action is None and state)
+        
+        try:
+            if should_disconnect: signal.disconnect(func)
+            elif should_connect: signal.connect(func)
+        except TypeError: pass
+        
+        if is_ltv: self._layer_tree_view_signal_connected = should_connect
+        return self._layer_tree_view_signal_connected if is_ltv else widget.isSignalConnected(self.getSignal(widget, signal_name))
 
     def reset_multiple_checkable_combobox(self):
         """v3.1 Sprint 14: Reset and recreate multiple checkable combobox widget."""
@@ -1004,107 +817,51 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             pass
 
     def _setup_backend_indicator(self):
-        """
-        Create and configure header bar with plugin title, favorites indicator, and backend indicator.
-        
-        Sets up a header bar at the top of the plugin with:
-        - Favorites indicator badge (★ count) aligned right (before backend)
-        - Backend indicator badge (PostgreSQL/Spatialite/OGR) aligned right
-        """
-        # Create header frame container
+        """v3.1 Sprint 15: Create header bar with favorites and backend indicators."""
         self.frame_header = QtWidgets.QFrame(self.dockWidgetContents)
         self.frame_header.setObjectName("frame_header")
         self.frame_header.setFrameShape(QtWidgets.QFrame.NoFrame)
         self.frame_header.setMaximumHeight(22)
         self.frame_header.setMinimumHeight(18)
         
-        # Header layout - compact (favorites + backend indicators)
         header_layout = QtWidgets.QHBoxLayout(self.frame_header)
         header_layout.setContentsMargins(10, 1, 10, 1)
         header_layout.setSpacing(8)
-        
-        # Expanding spacer before indicators (pushes indicators to right)
         header_layout.addSpacerItem(QtWidgets.QSpacerItem(40, 10, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))
         
-        # Keep title label reference for compatibility but don't add to layout
         self.plugin_title_label = None
         
-        # === FAVORITES INDICATOR (left of backend indicator) ===
-        self.favorites_indicator_label = QtWidgets.QLabel(self.frame_header)
-        self.favorites_indicator_label.setObjectName("label_favorites_indicator")
-        self.favorites_indicator_label.setText("★")
+        # Favorites and backend indicators with common badge style
+        badge_base = "color:white;font-size:9pt;font-weight:600;padding:3px 10px;border-radius:12px;border:none;"
         
-        # Modern badge style - gold/amber color for favorites
-        self.favorites_indicator_label.setStyleSheet("""
-            QLabel#label_favorites_indicator {
-                color: white;
-                font-size: 9pt;
-                font-weight: 600;
-                padding: 3px 10px;
-                border-radius: 12px;
-                border: none;
-                background-color: #f39c12;
-            }
-            QLabel#label_favorites_indicator:hover {
-                background-color: #d68910;
-                cursor: pointer;
-            }
-        """)
-        self.favorites_indicator_label.setAlignment(Qt.AlignCenter)
-        self.favorites_indicator_label.setMinimumWidth(35)
-        self.favorites_indicator_label.setMaximumHeight(20)
-        
-        # Make clickable for favorites menu
-        self.favorites_indicator_label.setCursor(Qt.PointingHandCursor)
-        self.favorites_indicator_label.setToolTip("★ Favorites\nClick to manage filter favorites")
-        self.favorites_indicator_label.mousePressEvent = self._on_favorite_indicator_clicked
-        
+        self.favorites_indicator_label = self._create_indicator_label("label_favorites_indicator", "★", 
+            badge_base + "background-color:#f39c12;", badge_base + "background-color:#d68910;",
+            "★ Favorites\nClick to manage", self._on_favorite_indicator_clicked, 35)
         header_layout.addWidget(self.favorites_indicator_label)
         
-        # === BACKEND INDICATOR (right) ===
-        self.backend_indicator_label = QtWidgets.QLabel(self.frame_header)
-        self.backend_indicator_label.setObjectName("label_backend_indicator")
-        
-        # Display waiting message if no layers loaded
-        if self.has_loaded_layers:
-            self.backend_indicator_label.setText("OGR")
-        else:
-            self.backend_indicator_label.setText("...")
-        
-        # Modern badge style matching _update_backend_indicator design (OGR style as default)
-        self.backend_indicator_label.setStyleSheet("""
-            QLabel#label_backend_indicator {
-                color: white;
-                font-size: 9pt;
-                font-weight: 600;
-                padding: 3px 10px;
-                border-radius: 12px;
-                border: none;
-                background-color: #3498db;
-            }
-            QLabel#label_backend_indicator:hover {
-                background-color: #2980b9;
-                cursor: pointer;
-            }
-        """)
-        self.backend_indicator_label.setAlignment(Qt.AlignCenter)
-        self.backend_indicator_label.setMinimumWidth(40)
-        self.backend_indicator_label.setMaximumHeight(20)
-        
-        # Make clickable for backend selection
-        self.backend_indicator_label.setCursor(Qt.PointingHandCursor)
-        self.backend_indicator_label.setToolTip("Click to change backend\n(When '...' is shown: click to reload layers)")
-        self.backend_indicator_label.mousePressEvent = self._on_backend_indicator_clicked
-        
-        # Initialize backend preference storage
-        self.forced_backends = {}  # layer_id -> forced_backend_type
-        
+        self.backend_indicator_label = self._create_indicator_label("label_backend_indicator", 
+            "OGR" if self.has_loaded_layers else "...",
+            badge_base + "background-color:#3498db;", badge_base + "background-color:#2980b9;",
+            "Click to change backend", self._on_backend_indicator_clicked, 40)
         header_layout.addWidget(self.backend_indicator_label)
         
-        # Insert header frame at the top of verticalLayout_8 (main container)
+        self.forced_backends = {}
         if hasattr(self, 'verticalLayout_8'):
             self.verticalLayout_8.insertWidget(0, self.frame_header)
-            logger.debug("Header bar inserted at top with favorites and backend indicators")
+    
+    def _create_indicator_label(self, name, text, style, hover_style, tooltip, click_handler, min_width):
+        """v3.1 Sprint 15: Create styled indicator label."""
+        label = QtWidgets.QLabel(self.frame_header)
+        label.setObjectName(name)
+        label.setText(text)
+        label.setStyleSheet(f"QLabel#{name}{{{style}}}QLabel#{name}:hover{{{hover_style}}}")
+        label.setAlignment(Qt.AlignCenter)
+        label.setMinimumWidth(min_width)
+        label.setMaximumHeight(20)
+        label.setCursor(Qt.PointingHandCursor)
+        label.setToolTip(tooltip)
+        label.mousePressEvent = click_handler
+        return label
     
     def _on_backend_indicator_clicked(self, event):
         """
@@ -1502,587 +1259,264 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     # POSTGRESQL MAINTENANCE METHODS
     # ========================================
     
+    def _get_pg_session_context(self):
+        """v3.1 Sprint 15: Get PostgreSQL session context (app, session_id, schema, connection)."""
+        from .adapters.backends import POSTGRESQL_AVAILABLE, get_datasource_connexion_from_layer
+        if not POSTGRESQL_AVAILABLE:
+            return None, None, None, None
+        app = getattr(self, '_app_ref', None)
+        if not app:
+            parent = self.parent()
+            while parent:
+                if hasattr(parent, 'session_id'): app = parent; break
+                parent = parent.parent() if hasattr(parent, 'parent') else None
+        session_id = getattr(app, 'session_id', None) if app else None
+        schema = getattr(app, 'app_postgresql_temp_schema', 'filter_mate_temp') if app else 'filter_mate_temp'
+        connexion = None
+        for layer_info in (getattr(app, 'PROJECT_LAYERS', {}) if app else {}).values():
+            layer = layer_info.get('layer')
+            if layer and layer.isValid() and layer.providerType() == 'postgres':
+                connexion, _ = get_datasource_connexion_from_layer(layer)
+                if connexion: break
+        return app, session_id, schema, connexion
+    
     def _toggle_pg_auto_cleanup(self):
-        """
-        Toggle automatic cleanup of PostgreSQL session views on plugin unload.
-        """
-        current_state = getattr(self, '_pg_auto_cleanup_enabled', True)
-        self._pg_auto_cleanup_enabled = not current_state
-        
-        if self._pg_auto_cleanup_enabled:
-            show_success("FilterMate", "PostgreSQL auto-cleanup enabled. Session views will be dropped on plugin unload.")
-        else:
-            show_info("FilterMate", "PostgreSQL auto-cleanup disabled. Session views will remain after plugin unload.")
-        
-        logger.info(f"PostgreSQL auto-cleanup toggled: {self._pg_auto_cleanup_enabled}")
+        """v3.1 Sprint 15: Toggle PostgreSQL auto-cleanup."""
+        self._pg_auto_cleanup_enabled = not getattr(self, '_pg_auto_cleanup_enabled', True)
+        msg = "PostgreSQL auto-cleanup enabled" if self._pg_auto_cleanup_enabled else "PostgreSQL auto-cleanup disabled"
+        (show_success if self._pg_auto_cleanup_enabled else show_info)("FilterMate", msg)
     
     def _cleanup_postgresql_session_views(self):
-        """
-        Manually cleanup all PostgreSQL materialized views for the current session.
-        """
-        from .adapters.backends import POSTGRESQL_AVAILABLE, get_datasource_connexion_from_layer
-        
-        if not POSTGRESQL_AVAILABLE:
-            show_warning("FilterMate", "PostgreSQL not available")
-            return
-        
-        # Get session_id from app
-        app = getattr(self, '_app_ref', None)
-        if not app:
-            # Try to get from parent
-            parent = self.parent()
-            while parent:
-                if hasattr(parent, 'session_id'):
-                    app = parent
-                    break
-                parent = parent.parent() if hasattr(parent, 'parent') else None
-        
-        session_id = getattr(app, 'session_id', None) if app else None
-        schema = getattr(app, 'app_postgresql_temp_schema', 'filter_mate_temp') if app else 'filter_mate_temp'
-        
-        if not session_id:
-            show_warning("FilterMate", "Session ID not available. Cannot identify session views.")
-            return
-        
-        # Find a PostgreSQL layer to get connection
-        connexion = None
-        project_layers = getattr(app, 'PROJECT_LAYERS', {}) if app else {}
-        
-        for layer_id, layer_info in project_layers.items():
-            layer = layer_info.get('layer')
-            if layer and layer.isValid() and layer.providerType() == 'postgres':
-                connexion, _ = get_datasource_connexion_from_layer(layer)
-                if connexion:
-                    break
-        
+        """v3.1 Sprint 15: Cleanup PostgreSQL materialized views for current session."""
+        app, session_id, schema, connexion = self._get_pg_session_context()
         if not connexion:
             show_warning("FilterMate", "No PostgreSQL connection available")
             return
-        
+        if not session_id:
+            show_warning("FilterMate", "Session ID not available")
+            return
         try:
             with connexion.cursor() as cursor:
-                # Find all materialized views for this session
-                cursor.execute("""
-                    SELECT matviewname FROM pg_matviews 
-                    WHERE schemaname = %s AND matviewname LIKE %s
-                """, (schema, f"mv_{session_id}_%"))
-                views = cursor.fetchall()
-                
+                cursor.execute("SELECT matviewname FROM pg_matviews WHERE schemaname = %s AND matviewname LIKE %s", (schema, f"mv_{session_id}_%"))
+                views = [v[0] for v in cursor.fetchall()]
                 if not views:
-                    show_info("FilterMate", f"No materialized views found for session {session_id[:8]}")
+                    show_info("FilterMate", f"No views found for session {session_id[:8]}")
                     return
-                
-                count = 0
-                for (view_name,) in views:
-                    try:
-                        cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."{view_name}" CASCADE;')
-                        count += 1
-                    except Exception as e:
-                        logger.warning(f"Error dropping view {view_name}: {e}")
-                
+                for view in views:
+                    try: cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."{view}" CASCADE;')
+                    except: pass
                 connexion.commit()
-                show_success("FilterMate", f"Cleaned up {count} materialized view(s) for session {session_id[:8]}")
-                logger.info(f"Manually cleaned up {count} PostgreSQL materialized views for session {session_id}")
+                show_success("FilterMate", f"Cleaned up {len(views)} view(s) for session {session_id[:8]}")
         except Exception as e:
-            show_warning("FilterMate", f"Error cleaning up views: {str(e)[:50]}")
-            logger.error(f"Error cleaning PostgreSQL views: {e}")
+            show_warning("FilterMate", f"Error: {str(e)[:50]}")
         finally:
-            try:
-                connexion.close()
-            except Exception:
-                pass  # Connection already closed
+            try: connexion.close()
+            except: pass
     
     def _cleanup_postgresql_schema_if_empty(self):
-        """
-        Drop the filter_mate_temp schema if no other sessions are using it.
-        
-        Checks for existing materialized views from other sessions before dropping.
-        """
-        from .adapters.backends import POSTGRESQL_AVAILABLE, get_datasource_connexion_from_layer
-        
-        if not POSTGRESQL_AVAILABLE:
-            show_warning("FilterMate", "PostgreSQL not available")
-            return
-        
-        # Get session_id and schema from app
-        app = getattr(self, '_app_ref', None)
-        if not app:
-            parent = self.parent()
-            while parent:
-                if hasattr(parent, 'session_id'):
-                    app = parent
-                    break
-                parent = parent.parent() if hasattr(parent, 'parent') else None
-        
-        session_id = getattr(app, 'session_id', None) if app else None
-        schema = getattr(app, 'app_postgresql_temp_schema', 'filter_mate_temp') if app else 'filter_mate_temp'
-        
-        # Find a PostgreSQL layer to get connection
-        connexion = None
-        project_layers = getattr(app, 'PROJECT_LAYERS', {}) if app else {}
-        
-        for layer_id, layer_info in project_layers.items():
-            layer = layer_info.get('layer')
-            if layer and layer.isValid() and layer.providerType() == 'postgres':
-                connexion, _ = get_datasource_connexion_from_layer(layer)
-                if connexion:
-                    break
-        
+        """v3.1 Sprint 15: Drop schema if no other sessions are using it."""
+        from qgis.PyQt.QtWidgets import QMessageBox
+        app, session_id, schema, connexion = self._get_pg_session_context()
         if not connexion:
             show_warning("FilterMate", "No PostgreSQL connection available")
             return
-        
         try:
             with connexion.cursor() as cursor:
-                # Check if schema exists
-                cursor.execute("""
-                    SELECT COUNT(*) FROM information_schema.schemata 
-                    WHERE schema_name = %s
-                """, (schema,))
+                cursor.execute("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = %s", (schema,))
                 if cursor.fetchone()[0] == 0:
-                    show_info("FilterMate", f"Schema '{schema}' does not exist")
-                    return
+                    show_info("FilterMate", f"Schema '{schema}' does not exist"); return
                 
-                # Check for any materialized views in the schema
-                cursor.execute("""
-                    SELECT matviewname FROM pg_matviews 
-                    WHERE schemaname = %s
-                """, (schema,))
-                views = cursor.fetchall()
+                cursor.execute("SELECT matviewname FROM pg_matviews WHERE schemaname = %s", (schema,))
+                views = [v[0] for v in cursor.fetchall()]
+                other_views = [v for v in views if not (session_id and v.startswith(f"mv_{session_id}_"))]
                 
-                if views:
-                    # Filter out our own session's views
-                    other_session_views = []
-                    our_views = []
-                    for (view_name,) in views:
-                        if session_id and view_name.startswith(f"mv_{session_id}_"):
-                            our_views.append(view_name)
-                        else:
-                            other_session_views.append(view_name)
-                    
-                    if other_session_views:
-                        # Other sessions are active
-                        from qgis.PyQt.QtWidgets import QMessageBox
-                        msg = (f"Schema '{schema}' has {len(other_session_views)} view(s) from other sessions.\n\n"
-                               f"Other session views:\n" + 
-                               "\n".join(f"  • {v}" for v in other_session_views[:5]))
-                        if len(other_session_views) > 5:
-                            msg += f"\n  ... and {len(other_session_views) - 5} more"
-                        msg += f"\n\nOur session ({session_id[:8] if session_id else 'unknown'}): {len(our_views)} view(s)"
-                        msg += "\n\nDo you want to drop the ENTIRE schema anyway?\n⚠️ This will affect other FilterMate clients!"
-                        
-                        reply = QMessageBox.question(
-                            self, "Other Sessions Active", msg,
-                            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
-                        )
-                        
-                        if reply != QMessageBox.Yes:
-                            show_info("FilterMate", "Schema cleanup cancelled - other sessions are active")
-                            return
+                if other_views:
+                    msg = f"Schema '{schema}' has {len(other_views)} view(s) from other sessions.\nDrop anyway?"
+                    if QMessageBox.question(self, "Other Sessions Active", msg, QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
+                        show_info("FilterMate", "Schema cleanup cancelled"); return
                 
-                # Drop the schema
                 cursor.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE;')
                 connexion.commit()
-                
                 show_success("FilterMate", f"Schema '{schema}' dropped successfully")
-                logger.info(f"PostgreSQL schema '{schema}' dropped")
-                
         except Exception as e:
-            show_warning("FilterMate", f"Error dropping schema: {str(e)[:50]}")
-            logger.error(f"Error dropping PostgreSQL schema: {e}")
+            show_warning("FilterMate", f"Error: {str(e)[:50]}")
         finally:
-            try:
-                connexion.close()
-            except Exception:
-                pass  # Connection already closed
+            try: connexion.close()
+            except Exception: pass
     
     def _show_postgresql_session_info(self):
-        """
-        Show information about the current PostgreSQL session and materialized views.
-        """
-        from .adapters.backends import POSTGRESQL_AVAILABLE, get_datasource_connexion_from_layer
+        """v3.1 Sprint 15: Show PostgreSQL session information."""
         from qgis.PyQt.QtWidgets import QMessageBox
-        
-        if not POSTGRESQL_AVAILABLE:
-            show_warning("FilterMate", "PostgreSQL not available")
-            return
-        
-        # Get session info from app
-        app = getattr(self, '_app_ref', None)
-        if not app:
-            parent = self.parent()
-            while parent:
-                if hasattr(parent, 'session_id'):
-                    app = parent
-                    break
-                parent = parent.parent() if hasattr(parent, 'parent') else None
-        
-        session_id = getattr(app, 'session_id', None) if app else None
-        schema = getattr(app, 'app_postgresql_temp_schema', 'filter_mate_temp') if app else 'filter_mate_temp'
+        app, session_id, schema, connexion = self._get_pg_session_context()
         auto_cleanup = getattr(self, '_pg_auto_cleanup_enabled', True)
         
-        info_text = f"<b>Session Information</b><br><br>"
-        info_text += f"<b>Session ID:</b> {session_id or 'Not set'}<br>"
-        info_text += f"<b>Temp Schema:</b> {schema}<br>"
-        info_text += f"<b>Auto-cleanup:</b> {'Enabled' if auto_cleanup else 'Disabled'}<br><br>"
-        
-        # Try to get view count from database
-        connexion = None
-        project_layers = getattr(app, 'PROJECT_LAYERS', {}) if app else {}
-        
-        for layer_id, layer_info in project_layers.items():
-            layer = layer_info.get('layer')
-            if layer and layer.isValid() and layer.providerType() == 'postgres':
-                connexion, _ = get_datasource_connexion_from_layer(layer)
-                if connexion:
-                    break
+        info = f"<b>Session ID:</b> {session_id or 'Not set'}<br><b>Schema:</b> {schema}<br><b>Auto-cleanup:</b> {'Yes' if auto_cleanup else 'No'}<br>"
         
         if connexion:
             try:
                 with connexion.cursor() as cursor:
-                    # Count our session's views
-                    if session_id:
-                        cursor.execute("""
-                            SELECT COUNT(*) FROM pg_matviews 
-                            WHERE schemaname = %s AND matviewname LIKE %s
-                        """, (schema, f"mv_{session_id}_%"))
-                        our_count = cursor.fetchone()[0]
-                    else:
-                        our_count = 0
-                    
-                    # Count all views in schema
-                    cursor.execute("""
-                        SELECT COUNT(*) FROM pg_matviews 
-                        WHERE schemaname = %s
-                    """, (schema,))
-                    total_count = cursor.fetchone()[0]
-                    
-                    # Check if schema exists
-                    cursor.execute("""
-                        SELECT COUNT(*) FROM information_schema.schemata 
-                        WHERE schema_name = %s
-                    """, (schema,))
-                    schema_exists = cursor.fetchone()[0] > 0
-                    
-                    info_text += f"<b>Schema exists:</b> {'Yes' if schema_exists else 'No'}<br>"
-                    info_text += f"<b>Your session views:</b> {our_count}<br>"
-                    info_text += f"<b>Total views in schema:</b> {total_count}<br>"
-                    info_text += f"<b>Other sessions views:</b> {total_count - our_count}<br>"
-                    
+                    cursor.execute("SELECT COUNT(*) FROM pg_matviews WHERE schemaname = %s AND matviewname LIKE %s", (schema, f"mv_{session_id}_%")) if session_id else None
+                    our_count = cursor.fetchone()[0] if session_id else 0
+                    cursor.execute("SELECT COUNT(*) FROM pg_matviews WHERE schemaname = %s", (schema,))
+                    total = cursor.fetchone()[0]
+                    cursor.execute("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = %s", (schema,))
+                    exists = cursor.fetchone()[0] > 0
+                    info += f"<b>Schema exists:</b> {'Yes' if exists else 'No'}<br><b>Your views:</b> {our_count}<br><b>Total views:</b> {total}<br>"
             except Exception as e:
-                info_text += f"<b>Error querying database:</b> {str(e)[:50]}<br>"
+                info += f"<b>Error:</b> {str(e)[:40]}<br>"
             finally:
-                try:
-                    connexion.close()
-                except Exception:
-                    pass  # Connection already closed
+                try: connexion.close()
+                except: pass
         else:
-            info_text += "<b>Database:</b> No PostgreSQL connection available<br>"
-        
-        QMessageBox.information(self, "PostgreSQL Session Info", info_text)
+            info += "<b>Connection:</b> Not available<br>"
+        QMessageBox.information(self, "PostgreSQL Session Info", info)
 
     # ========================================
     # OPTIMIZATION SETTINGS METHODS
     # ========================================
     
     def _toggle_optimization_enabled(self):
-        """Toggle automatic optimization recommendations on/off."""
-        current_state = getattr(self, '_optimization_enabled', True)
-        self._optimization_enabled = not current_state
-        
-        if self._optimization_enabled:
-            show_success("FilterMate", "Auto-optimization enabled. Recommendations will be shown before filtering.")
-        else:
-            show_info("FilterMate", "Auto-optimization disabled. No optimization suggestions will be shown.")
-        
-        logger.info(f"Optimization toggled: {self._optimization_enabled}")
+        """v3.1 Sprint 15: Toggle optimization recommendations."""
+        self._optimization_enabled = not getattr(self, '_optimization_enabled', True)
+        (show_success if self._optimization_enabled else show_info)("FilterMate", "Auto-optimization " + ("enabled" if self._optimization_enabled else "disabled"))
     
     def _toggle_centroid_auto(self):
-        """Toggle automatic centroid suggestion for distant layers."""
-        current_state = getattr(self, '_centroid_auto_enabled', True)
-        self._centroid_auto_enabled = not current_state
-        
-        if self._centroid_auto_enabled:
-            show_success("FilterMate", "Auto-centroid enabled for distant layers (WFS, ArcGIS, remote PostgreSQL)")
-        else:
-            show_info("FilterMate", "Auto-centroid disabled. Centroids will not be auto-suggested.")
-        
-        logger.info(f"Centroid auto toggled: {self._centroid_auto_enabled}")
+        """v3.1 Sprint 15: Toggle auto-centroid for distant layers."""
+        self._centroid_auto_enabled = not getattr(self, '_centroid_auto_enabled', True)
+        (show_success if self._centroid_auto_enabled else show_info)("FilterMate", "Auto-centroid " + ("enabled" if self._centroid_auto_enabled else "disabled"))
     
     def _toggle_optimization_ask_before(self):
-        """Toggle whether to ask user before applying optimizations."""
-        current_state = getattr(self, '_optimization_ask_before', True)
-        self._optimization_ask_before = not current_state
-        
-        if self._optimization_ask_before:
-            show_success("FilterMate", "Confirmation dialog enabled. You will be asked before optimizations are applied.")
-        else:
-            show_info("FilterMate", "Confirmation dialog disabled. Optimizations will be applied automatically.")
-        
-        logger.info(f"Optimization ask before toggled: {self._optimization_ask_before}")
+        """v3.1 Sprint 15: Toggle confirmation dialog."""
+        self._optimization_ask_before = not getattr(self, '_optimization_ask_before', True)
+        (show_success if self._optimization_ask_before else show_info)("FilterMate", "Confirmation " + ("enabled" if self._optimization_ask_before else "disabled"))
     
     def _analyze_layer_optimizations(self):
-        """
-        Analyze the current layer and show optimization recommendations.
-        This shows the recommendation dialog even if no filter is being applied.
-        """
-        current_layer = self.current_layer
-        if not current_layer:
+        """v3.1 Sprint 15: Analyze layer and show optimization recommendations."""
+        if not self.current_layer:
             show_warning("FilterMate", "No layer selected. Please select a layer first.")
             return
         
         try:
-            from .core.services.auto_optimizer import (
-                LayerAnalyzer, AutoOptimizer, AUTO_OPTIMIZER_AVAILABLE
-            )
-            
+            from .core.services.auto_optimizer import LayerAnalyzer, AutoOptimizer, AUTO_OPTIMIZER_AVAILABLE
             if not AUTO_OPTIMIZER_AVAILABLE:
                 show_warning("FilterMate", "Auto-optimizer module not available")
                 return
             
-            # Analyze the layer
-            analyzer = LayerAnalyzer()
-            layer_analysis = analyzer.analyze_layer(current_layer)
-            
+            layer_analysis = LayerAnalyzer().analyze_layer(self.current_layer)
             if not layer_analysis:
-                show_info("FilterMate", f"Could not analyze layer '{current_layer.name()}'")
+                show_info("FilterMate", f"Could not analyze layer '{self.current_layer.name()}'")
                 return
             
-            # Check if centroid is already enabled by user (via checkbox or layer override)
-            user_centroid_enabled = self._is_centroid_already_enabled(current_layer)
+            # Get buffer and centroid status
+            has_buffer = getattr(self, 'mQgsDoubleSpinBox_filtering_buffer_value', None) and self.mQgsDoubleSpinBox_filtering_buffer_value.value() != 0.0
+            has_buffer_type = getattr(self, 'checkBox_filtering_buffer_type', None) and self.checkBox_filtering_buffer_type.isChecked()
             
-            # v2.8.9: Get buffer status to properly evaluate centroid recommendations
-            # Don't recommend centroids for polygon source layer when buffer is active
-            has_buffer = False
-            has_buffer_type = False
-            try:
-                buffer_value = self.mQgsDoubleSpinBox_filtering_buffer_value.value()
-                has_buffer = buffer_value != 0.0
-                has_buffer_type = getattr(self, 'checkBox_filtering_buffer_type', None) and \
-                                  self.checkBox_filtering_buffer_type.isChecked()
-            except Exception:
-                pass
-            
-            # Get recommendations - skip centroid if already enabled
-            # v2.8.9: Pass buffer parameters and is_source_layer=True for source layer
-            optimizer = AutoOptimizer()
-            recommendations = optimizer.get_recommendations(
-                layer_analysis, 
-                user_centroid_enabled=user_centroid_enabled,
-                has_buffer=has_buffer,
-                has_buffer_type=has_buffer_type,
-                is_source_layer=True
-            )
+            recommendations = AutoOptimizer().get_recommendations(
+                layer_analysis, user_centroid_enabled=self._is_centroid_already_enabled(self.current_layer),
+                has_buffer=has_buffer, has_buffer_type=has_buffer_type, is_source_layer=True)
             
             if not recommendations:
-                show_success("FilterMate", 
-                    f"Layer '{current_layer.name()}' is already optimally configured.\n"
-                    f"Type: {layer_analysis.location_type.value}\n"
-                    f"Features: {layer_analysis.feature_count:,}"
-                )
+                show_success("FilterMate", f"Layer '{self.current_layer.name()}' is already optimally configured.\nType: {layer_analysis.location_type.value}\nFeatures: {layer_analysis.feature_count:,}")
                 return
             
-            # Show the recommendations dialog
             from .modules.optimization_dialogs import OptimizationRecommendationDialog
+            dialog = OptimizationRecommendationDialog(layer_name=self.current_layer.name(), recommendations=[r.to_dict() for r in recommendations],
+                feature_count=layer_analysis.feature_count, location_type=layer_analysis.location_type.value, parent=self)
             
-            dialog = OptimizationRecommendationDialog(
-                layer_name=current_layer.name(),
-                recommendations=[r.to_dict() for r in recommendations],
-                feature_count=layer_analysis.feature_count,
-                location_type=layer_analysis.location_type.value,
-                parent=self
-            )
-            
-            result = dialog.exec_()
-            
-            if result:
-                selected = dialog.get_selected_optimizations()
-                
-                # Apply selected optimizations
-                applied = []
-                if selected.get('use_centroid_distant', False):
-                    # Store centroid preference for this layer
-                    if not hasattr(self, '_layer_centroid_overrides'):
-                        self._layer_centroid_overrides = {}
-                    self._layer_centroid_overrides[current_layer.id()] = True
-                    applied.append("Use Centroids")
-                
-                if selected.get('simplify_before_buffer', False):
-                    # Store simplify-before-buffer preference for this layer
-                    if not hasattr(self, '_layer_simplify_buffer_overrides'):
-                        self._layer_simplify_buffer_overrides = {}
-                    self._layer_simplify_buffer_overrides[current_layer.id()] = True
-                    applied.append("Simplify before buffer")
-                
-                if selected.get('reduce_buffer_segments', False):
-                    # Store reduced buffer segments preference for this layer
-                    if not hasattr(self, '_layer_reduced_segments_overrides'):
-                        self._layer_reduced_segments_overrides = {}
-                    self._layer_reduced_segments_overrides[current_layer.id()] = True
-                    # Also apply reduced segments to the UI
-                    self.mQgsSpinBox_filtering_buffer_segments.setValue(3)
-                    applied.append("Reduce buffer segments (3)")
-                
-                if applied:
-                    show_success("FilterMate", 
-                        f"Applied to '{current_layer.name()}':\n" + "\n".join(f"• {a}" for a in applied)
-                    )
-                else:
-                    show_info("FilterMate", "No optimizations selected to apply.")
-                    
+            if dialog.exec_():
+                self._apply_optimization_selections(dialog.get_selected_optimizations(), self.current_layer)
         except ImportError as e:
             show_warning("FilterMate", f"Auto-optimizer not available: {e}")
-            logger.warning(f"Could not import auto-optimizer: {e}")
         except Exception as e:
             show_warning("FilterMate", f"Error analyzing layer: {str(e)[:50]}")
-            logger.error(f"Error in layer analysis: {e}")
+
+    def _apply_optimization_selections(self, selected, layer):
+        """v3.1 Sprint 15: Apply selected optimization overrides."""
+        applied = []
+        overrides = [('use_centroid_distant', '_layer_centroid_overrides', "Use Centroids"),
+                     ('simplify_before_buffer', '_layer_simplify_buffer_overrides', "Simplify before buffer"),
+                     ('reduce_buffer_segments', '_layer_reduced_segments_overrides', "Reduce buffer segments (3)")]
+        for key, attr, label in overrides:
+            if selected.get(key, False):
+                if not hasattr(self, attr): setattr(self, attr, {})
+                getattr(self, attr)[layer.id()] = True
+                if key == 'reduce_buffer_segments':
+                    self.mQgsSpinBox_filtering_buffer_segments.setValue(3)
+                applied.append(label)
+        if applied:
+            show_success("FilterMate", f"Applied to '{layer.name()}':\n" + "\n".join(f"• {a}" for a in applied))
+        else:
+            show_info("FilterMate", "No optimizations selected to apply.")
     
     def _show_optimization_settings_dialog(self):
-        """Show the advanced optimization settings dialog with backend-specific options."""
+        """v3.1 Sprint 15: Show optimization settings dialog."""
         try:
-            # Try to use the new comprehensive backend optimization dialog
             from .modules.backend_optimization_widget import BackendOptimizationDialog
-            
             dialog = BackendOptimizationDialog(self)
-            result = dialog.exec_()
-            
-            if result:
-                all_settings = dialog.get_settings()
-                
-                # Apply global settings
-                global_settings = all_settings.get('global', {})
-                self._optimization_enabled = global_settings.get('auto_optimization_enabled', True)
-                self._centroid_auto_enabled = global_settings.get('auto_centroid', {}).get('enabled', True)
-                self._optimization_ask_before = global_settings.get('ask_before_apply', True)
-                
-                # Store thresholds
-                if not hasattr(self, '_optimization_thresholds'):
-                    self._optimization_thresholds = {}
-                self._optimization_thresholds['centroid_distant'] = global_settings.get(
-                    'auto_centroid', {}
-                ).get('distant_threshold', 5000)
-                
-                # Store backend-specific settings for later use
-                self._backend_optimization_settings = all_settings
-                
-                logger.info(f"Applied backend optimization settings: {list(all_settings.keys())}")
-                show_success("FilterMate", self.tr("Backend optimization settings saved"))
-                
+            if dialog.exec_():
+                self._apply_optimization_dialog_settings(dialog.get_settings())
         except ImportError:
-            # Fallback to simple optimization dialog
             try:
                 from .modules.optimization_dialogs import OptimizationSettingsDialog
-                
                 dialog = OptimizationSettingsDialog(self)
-                result = dialog.exec_()
-                
-                if result:
-                    settings = dialog.get_settings()
-                    
-                    # Apply settings
-                    self._optimization_enabled = settings.get('enabled', True)
-                    self._centroid_auto_enabled = settings.get('auto_centroid_for_distant', True)
-                    self._optimization_ask_before = settings.get('ask_before_apply', True)
-                    
-                    # Store thresholds - v2.7.6: Use configurable defaults
-                    if not hasattr(self, '_optimization_thresholds'):
-                        self._optimization_thresholds = {}
-                    thresholds = get_optimization_thresholds(ENV_VARS)
-                    self._optimization_thresholds['centroid_distant'] = settings.get(
-                        'centroid_threshold_distant', 
-                        thresholds['centroid_optimization_threshold']
-                    )
-                    
-                    logger.info(f"Applied optimization settings: {settings}")
+                if dialog.exec_():
+                    s = dialog.get_settings()
+                    self._optimization_enabled = s.get('enabled', True)
+                    self._centroid_auto_enabled = s.get('auto_centroid_for_distant', True)
+                    self._optimization_ask_before = s.get('ask_before_apply', True)
+                    if not hasattr(self, '_optimization_thresholds'): self._optimization_thresholds = {}
+                    self._optimization_thresholds['centroid_distant'] = s.get('centroid_threshold_distant', get_optimization_thresholds(ENV_VARS)['centroid_optimization_threshold'])
                     show_success("FilterMate", self.tr("Optimization settings saved"))
-                    
             except ImportError as e:
-                show_warning("FilterMate", f"Settings dialog not available: {e}")
-                logger.warning(f"Could not import optimization dialog: {e}")
+                show_warning("FilterMate", f"Dialog not available: {e}")
         except Exception as e:
-            show_warning("FilterMate", f"Error showing settings: {str(e)[:50]}")
-            logger.error(f"Error in optimization settings dialog: {e}")
+            show_warning("FilterMate", f"Error: {str(e)[:50]}")
+    
+    def _apply_optimization_dialog_settings(self, all_settings):
+        """v3.1 Sprint 15: Apply settings from optimization dialog."""
+        global_s = all_settings.get('global', {})
+        self._optimization_enabled = global_s.get('auto_optimization_enabled', True)
+        self._centroid_auto_enabled = global_s.get('auto_centroid', {}).get('enabled', True)
+        self._optimization_ask_before = global_s.get('ask_before_apply', True)
+        if not hasattr(self, '_optimization_thresholds'): self._optimization_thresholds = {}
+        self._optimization_thresholds['centroid_distant'] = global_s.get('auto_centroid', {}).get('distant_threshold', 5000)
+        self._backend_optimization_settings = all_settings
+        show_success("FilterMate", self.tr("Backend optimization settings saved"))
     
     def _show_backend_optimization_dialog(self):
-        """
-        Show the comprehensive backend optimization dialog.
-        
-        This dialog provides detailed settings for each backend type:
-        - PostgreSQL: Materialized views, two-phase filtering, connection pooling
-        - Spatialite: R-tree temp tables, interruptible queries, direct SQL
-        - OGR: Spatial indexing, small dataset optimization, progressive chunking
-        - Global: Auto-optimization, centroid, parallel filtering, streaming export
-        """
+        """v3.1 Sprint 15: Show backend optimization dialog."""
         try:
             from .modules.backend_optimization_widget import BackendOptimizationDialog
-            
             dialog = BackendOptimizationDialog(self)
-            result = dialog.exec_()
+            if not dialog.exec_():
+                return
             
-            if result:
-                all_settings = dialog.get_settings()
-                
-                # Store all settings for later use by backends
-                self._backend_optimization_settings = all_settings
-                
-                # Apply global settings immediately
-                global_settings = all_settings.get('global', {})
-                self._optimization_enabled = global_settings.get('auto_optimization_enabled', True)
-                self._centroid_auto_enabled = global_settings.get('auto_centroid', {}).get('enabled', True)
-                self._optimization_ask_before = global_settings.get('ask_before_apply', True)
-                
-                # Apply PostgreSQL settings - including auto_cleanup
-                pg_settings = all_settings.get('postgresql', {})
-                mv_settings = pg_settings.get('materialized_views', {})
-                self._pg_auto_cleanup_enabled = mv_settings.get('auto_cleanup', True)
-                
-                # Store thresholds
-                if not hasattr(self, '_optimization_thresholds'):
-                    self._optimization_thresholds = {}
-                self._optimization_thresholds['centroid_distant'] = global_settings.get(
-                    'auto_centroid', {}
-                ).get('distant_threshold', 5000)
-                self._optimization_thresholds['mv_threshold'] = mv_settings.get('threshold', 10000)
-                
-                # Log what was configured
-                backends_configured = [k for k, v in all_settings.items() if v]
-                logger.info(f"Backend optimization settings applied for: {backends_configured}")
-                
-                show_success(
-                    "FilterMate", 
-                    self.tr("Backend optimizations configured")
-                )
-                
+            all_settings = dialog.get_settings()
+            self._backend_optimization_settings = all_settings
+            
+            global_s = all_settings.get('global', {})
+            self._optimization_enabled = global_s.get('auto_optimization_enabled', True)
+            self._centroid_auto_enabled = global_s.get('auto_centroid', {}).get('enabled', True)
+            self._optimization_ask_before = global_s.get('ask_before_apply', True)
+            
+            pg_mv = all_settings.get('postgresql', {}).get('materialized_views', {})
+            self._pg_auto_cleanup_enabled = pg_mv.get('auto_cleanup', True)
+            
+            if not hasattr(self, '_optimization_thresholds'): self._optimization_thresholds = {}
+            self._optimization_thresholds['centroid_distant'] = global_s.get('auto_centroid', {}).get('distant_threshold', 5000)
+            self._optimization_thresholds['mv_threshold'] = pg_mv.get('threshold', 10000)
+            
+            show_success("FilterMate", self.tr("Backend optimizations configured"))
         except ImportError as e:
-            show_warning("FilterMate", f"Backend optimization dialog not available: {e}")
-            logger.warning(f"Could not import backend optimization dialog: {e}")
+            show_warning("FilterMate", f"Dialog not available: {e}")
         except Exception as e:
-            show_warning("FilterMate", f"Error showing backend settings: {str(e)[:50]}")
-            logger.error(f"Error in backend optimization dialog: {e}")
+            show_warning("FilterMate", f"Error: {str(e)[:50]}")
     
     def get_backend_optimization_setting(self, backend: str, setting_path: str, default=None):
-        """
-        Get a specific backend optimization setting.
-        
-        Args:
-            backend: Backend name ('postgresql', 'spatialite', 'ogr', 'global')
-            setting_path: Dot-separated path to setting (e.g., 'materialized_views.enabled')
-            default: Default value if setting not found
-            
-        Returns:
-            The setting value or default
-        """
-        settings = getattr(self, '_backend_optimization_settings', {})
-        backend_settings = settings.get(backend, {})
-        
-        # Navigate the path
-        parts = setting_path.split('.')
-        current = backend_settings
-        for part in parts:
-            if isinstance(current, dict) and part in current:
-                current = current[part]
-            else:
-                return default
+        """v3.1 Sprint 15: Get backend optimization setting by path."""
+        current = getattr(self, '_backend_optimization_settings', {}).get(backend, {})
+        for part in setting_path.split('.'):
+            current = current.get(part, default) if isinstance(current, dict) else default
         return current
     
     def _is_centroid_already_enabled(self, layer) -> bool:
@@ -3527,102 +2961,44 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA)
 
     def _configure_pushbuttons(self, pushButton_config, icons_sizes, font):
-        """
-        Configure all push button widgets with icons, sizes, and cursors.
-        
-        Applies dynamic dimensions based on button type (action/tool/default).
-        Sets proper size policies and icon sizes from UIConfig or fallback values.
-        
-        Args:
-            pushButton_config (dict): Push button configuration from config.json
-            icons_sizes (dict): Icon size dictionary with ACTION and OTHERS keys
-            font (QFont): Font to apply to buttons
-        """
-        # Get icons configuration directly
+        """v3.1 Sprint 15: Configure push buttons with icons, sizes, and cursors."""
         icons_config = pushButton_config.get("ICONS", {})
+        exploring_tooltips = {"IDENTIFY": self.tr("Identify selected feature"), "ZOOM": self.tr("Zoom to selected feature"),
+            "IS_SELECTING": self.tr("Toggle feature selection on map"), "IS_TRACKING": self.tr("Auto-zoom when feature changes"),
+            "IS_LINKING": self.tr("Link exploring widgets together"), "RESET_ALL_LAYER_PROPERTIES": self.tr("Reset all layer exploring properties")}
         
         for widget_group in self.widgets:
-            for widget_name in self.widgets[widget_group]:
-                widget_type = self.widgets[widget_group][widget_name]["TYPE"]
-                widget_obj = self.widgets[widget_group][widget_name]["WIDGET"]
+            for widget_name, widget_data in self.widgets[widget_group].items():
+                if widget_data["TYPE"] != "PushButton":
+                    continue
+                widget_obj = widget_data["WIDGET"]
                 
-                if widget_type == "PushButton":
-                    # Load icon directly from config
-                    try:
-                        icon_file = icons_config.get(widget_group, {}).get(widget_name)
-                        if icon_file:
-                            icon_path = os.path.join(self.plugin_dir, "icons", icon_file)
-                            if os.path.exists(icon_path):
-                                if ICON_THEME_AVAILABLE:
-                                    icon = get_themed_icon(icon_path)
-                                else:
-                                    icon = QtGui.QIcon(icon_path)
-                                widget_obj.setIcon(icon)
-                                # Store path in widgets dict for later reference
-                                self.widgets[widget_group][widget_name]["ICON"] = icon_path
-                                logger.debug(f"Icon set for {widget_group}/{widget_name}: {icon_file}")
-                            else:
-                                logger.warning(f"Icon file not found: {icon_path}")
-                    except Exception as e:
-                        logger.debug(f"Could not load icon for {widget_group}/{widget_name}: {e}")
-                    
-                    widget_obj.setCursor(Qt.PointingHandCursor)
-                    
-                    # Set tooltips for exploring buttons
-                    if widget_group == "EXPLORING":
-                        exploring_tooltips = {
-                            "IDENTIFY": self.tr("Identify selected feature"),
-                            "ZOOM": self.tr("Zoom to selected feature"),
-                            "IS_SELECTING": self.tr("Toggle feature selection on map"),
-                            "IS_TRACKING": self.tr("Auto-zoom when feature changes"),
-                            "IS_LINKING": self.tr("Link exploring widgets together"),
-                            "RESET_ALL_LAYER_PROPERTIES": self.tr("Reset all layer exploring properties")
-                        }
-                        if widget_name in exploring_tooltips:
-                            widget_obj.setToolTip(exploring_tooltips[widget_name])
-                    
-                    icon_size = icons_sizes.get(widget_group, icons_sizes["OTHERS"])
-                    
-                    # Apply dynamic dimensions based on button type
-                    if UI_CONFIG_AVAILABLE:
-                        # Determine button type for dynamic sizing
-                        if widget_group == "ACTION":
-                            button_height = UIConfig.get_button_height("action_button")
-                            button_icon_size = UIConfig.get_icon_size("action_button")
-                        elif widget_group in ["EXPLORING", "FILTERING", "EXPORTING"]:
-                            button_height = UIConfig.get_button_height("tool_button")
-                            button_icon_size = UIConfig.get_icon_size("tool_button")
-                        else:
-                            button_height = UIConfig.get_button_height("button")
-                            button_icon_size = UIConfig.get_icon_size("button")
-                        
-                        widget_obj.setMinimumHeight(button_height)
-                        widget_obj.setMaximumHeight(button_height)
-                        widget_obj.setMinimumWidth(button_height)
-                        widget_obj.setMaximumWidth(button_height)
-                        widget_obj.setIconSize(QtCore.QSize(button_icon_size, button_icon_size))
-                        
-                        # CRITICAL: Force Fixed size policy for sidebar buttons
-                        if widget_group in ["EXPLORING", "FILTERING", "EXPORTING"]:
-                            widget_obj.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-                    else:
-                        # Fallback to normal profile defaults
-                        widget_obj.setIconSize(QtCore.QSize(icon_size, icon_size))
-                        
-                        if widget_group in ["EXPLORING", "FILTERING", "EXPORTING"]:
-                            fallback_size = 36
-                            widget_obj.setMinimumHeight(fallback_size)
-                            widget_obj.setMaximumHeight(fallback_size)
-                            widget_obj.setMinimumWidth(fallback_size)
-                            widget_obj.setMaximumWidth(fallback_size)
-                        else:
-                            widget_obj.setMinimumHeight(icon_size * 2)
-                            widget_obj.setMaximumHeight(icon_size * 2)
-                            widget_obj.setMinimumWidth(icon_size * 2)
-                            widget_obj.setMaximumWidth(icon_size * 2)
-                    
-                    widget_obj.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-                    widget_obj.setFont(font)
+                # Load icon
+                icon_file = icons_config.get(widget_group, {}).get(widget_name)
+                if icon_file:
+                    icon_path = os.path.join(self.plugin_dir, "icons", icon_file)
+                    if os.path.exists(icon_path):
+                        widget_obj.setIcon(get_themed_icon(icon_path) if ICON_THEME_AVAILABLE else QtGui.QIcon(icon_path))
+                        widget_data["ICON"] = icon_path
+                
+                widget_obj.setCursor(Qt.PointingHandCursor)
+                if widget_group == "EXPLORING" and widget_name in exploring_tooltips:
+                    widget_obj.setToolTip(exploring_tooltips[widget_name])
+                
+                # Apply dimensions
+                icon_size = icons_sizes.get(widget_group, icons_sizes["OTHERS"])
+                if UI_CONFIG_AVAILABLE:
+                    btn_type = "action_button" if widget_group == "ACTION" else ("tool_button" if widget_group in ["EXPLORING", "FILTERING", "EXPORTING"] else "button")
+                    h, s = UIConfig.get_button_height(btn_type), UIConfig.get_icon_size(btn_type)
+                else:
+                    h = 36 if widget_group in ["EXPLORING", "FILTERING", "EXPORTING"] else icon_size * 2
+                    s = icon_size
+                
+                widget_obj.setMinimumSize(h, h)
+                widget_obj.setMaximumSize(h, h)
+                widget_obj.setIconSize(QtCore.QSize(s, s))
+                widget_obj.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+                widget_obj.setFont(font)
 
     def _configure_other_widgets(self, font):
         """
@@ -3696,67 +3072,32 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.frame_actions.setMaximumHeight(max(icon_size * 2, 56) + 15)
 
     def manage_ui_style(self):
-        """
-        Load and apply plugin stylesheet using StyleLoader with auto-detection.
-        
-        Orchestrates UI styling by:
-        1. Auto-detecting UI profile and theme
-        2. Applying stylesheet via StyleLoader
-        3. Initializing theme and icon manager
-        4. Configuring push buttons
-        5. Configuring other widgets
-        6. Setting key widget sizes
-        7. Starting QGIS theme watcher for automatic dark/light mode switching
-        
-        v3.1 Phase 6 (MIG-070+): Delegates to Style Managers if available.
-        """
-        # v3.1: Delegate to Style Managers (Phase 6 - MIG-070+)
-        if self._theme_manager is not None:
-            try:
-                self._theme_manager.setup()
-                logger.debug("Theme management delegated to ThemeManager (v3.1)")
-            except Exception as e:
-                logger.warning(f"ThemeManager.setup() failed, falling back to legacy: {e}")
-                self._apply_auto_configuration()
-                self._apply_stylesheet()
-                self._setup_theme_watcher()
+        """v3.1 Sprint 15: Load and apply plugin stylesheet."""
+        # Theme management
+        if self._theme_manager:
+            try: self._theme_manager.setup()
+            except: self._apply_auto_configuration(); self._apply_stylesheet(); self._setup_theme_watcher()
         else:
-            # Legacy theme configuration
-            self._apply_auto_configuration()
-            self._apply_stylesheet()
-            self._setup_theme_watcher()
+            self._apply_auto_configuration(); self._apply_stylesheet(); self._setup_theme_watcher()
         
-        # v3.1: Delegate icon management to IconManager
-        if self._icon_manager is not None:
-            try:
-                self._icon_manager.setup()
-                logger.debug("Icon management delegated to IconManager (v3.1)")
-            except Exception as e:
-                logger.warning(f"IconManager.setup() failed, falling back to legacy: {e}")
-                # Legacy icon initialization
-                if ICON_THEME_AVAILABLE:
-                    current_theme = StyleLoader.detect_qgis_theme()
-                    IconThemeManager.set_theme(current_theme)
-                    logger.info(f"IconThemeManager pre-initialized with theme: {current_theme}")
+        # Icon management  
+        if self._icon_manager:
+            try: self._icon_manager.setup()
+            except: self._init_icon_theme()
         else:
-            # Legacy icon initialization
-            if ICON_THEME_AVAILABLE:
-                current_theme = StyleLoader.detect_qgis_theme()
-                IconThemeManager.set_theme(current_theme)
-                logger.info(f"IconThemeManager pre-initialized with theme: {current_theme}")
+            self._init_icon_theme()
         
-        # v3.1: Delegate button styling to ButtonStyler
-        if self._button_styler is not None:
-            try:
-                self._button_styler.setup()
-                logger.debug("Button styling delegated to ButtonStyler (v3.1)")
-            except Exception as e:
-                logger.warning(f"ButtonStyler.setup() failed, falling back to legacy: {e}")
-                self._legacy_configure_widgets()
+        # Button styling
+        if self._button_styler:
+            try: self._button_styler.setup()
+            except: self._legacy_configure_widgets()
         else:
             self._legacy_configure_widgets()
-        
-        logger.info("UI style management complete (v3.1)")
+    
+    def _init_icon_theme(self):
+        """v3.1 Sprint 15: Initialize icon theme."""
+        if ICON_THEME_AVAILABLE:
+            IconThemeManager.set_theme(StyleLoader.detect_qgis_theme())
     
     def _legacy_configure_widgets(self):
         """Legacy widget configuration - used as fallback for ButtonStyler."""
@@ -6341,110 +5682,40 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def resetLayerVariableEvent(self, layer=None, properties=None):
-        """
-        Reset layer properties to default values for exploring and filtering.
-        
-        This method resets all layer-specific properties (exploring, filtering) to their
-        default values, updates PROJECT_LAYERS, saves to SQLite, and refreshes widgets.
-        
-        Args:
-            layer: QgsVectorLayer to reset, or None to use current_layer
-            properties: List of properties (unused, kept for backwards compatibility)
-        """
+        """v3.1 Sprint 15: Reset layer properties to default values."""
         if not self.widgets_initialized:
             return
-            
-        if layer is None:
-            layer = self.current_layer
-            
-        if layer is None or not is_valid_layer(layer):
-            logger.warning("resetLayerVariableEvent: No valid layer to reset")
-            return
-            
-        layer_id = layer.id()
-        if layer_id not in self.PROJECT_LAYERS:
-            logger.warning(f"resetLayerVariableEvent: Layer {layer.name()} not in PROJECT_LAYERS")
+        layer = layer or self.current_layer
+        if not layer or not is_valid_layer(layer) or layer.id() not in self.PROJECT_LAYERS:
             return
         
         try:
-            layer_props = self.PROJECT_LAYERS[layer_id]
+            layer_props = self.PROJECT_LAYERS[layer.id()]
+            best_field = get_best_display_field(layer) or layer_props.get("infos", {}).get("primary_key_name", "")
             
-            # Get best display field for exploring expressions
-            best_field = get_best_display_field(layer)
-            if not best_field:
-                # Fallback to primary key or first field
-                primary_key = layer_props.get("infos", {}).get("primary_key_name", "")
-                best_field = primary_key if primary_key else ""
-            
-            # Default exploring properties
-            default_exploring = {
-                "is_changing_all_layer_properties": True,
-                "is_tracking": False,
-                "is_selecting": False,
-                "is_linking": False,
-                "current_exploring_groupbox": "single_selection",
-                "single_selection_expression": best_field,
-                "multiple_selection_expression": best_field,
-                "custom_selection_expression": best_field
+            defaults = {
+                "exploring": {"is_changing_all_layer_properties": True, "is_tracking": False, "is_selecting": False, "is_linking": False,
+                    "current_exploring_groupbox": "single_selection", "single_selection_expression": best_field,
+                    "multiple_selection_expression": best_field, "custom_selection_expression": best_field},
+                "filtering": {"has_layers_to_filter": False, "layers_to_filter": [], "has_combine_operator": False,
+                    "source_layer_combine_operator": "AND", "other_layers_combine_operator": "AND", "has_geometric_predicates": False,
+                    "geometric_predicates": [], "has_buffer_value": False, "buffer_value": 0.0, "buffer_value_property": False,
+                    "buffer_value_expression": "", "has_buffer_type": False, "buffer_type": "Round"}
             }
             
-            # Default filtering properties
-            default_filtering = {
-                "has_layers_to_filter": False,
-                "layers_to_filter": [],
-                "has_combine_operator": False,
-                "source_layer_combine_operator": "AND",
-                "other_layers_combine_operator": "AND",
-                "has_geometric_predicates": False,
-                "geometric_predicates": [],
-                "has_buffer_value": False,
-                "buffer_value": 0.0,
-                "buffer_value_property": False,
-                "buffer_value_expression": "",
-                "has_buffer_type": False,
-                "buffer_type": "Round"
-            }
-            
-            # Update PROJECT_LAYERS with default values
-            layer_props["exploring"].update(default_exploring)
-            layer_props["filtering"].update(default_filtering)
-            
-            # Collect all properties to save
             properties_to_save = []
-            for key, value in default_exploring.items():
-                properties_to_save.append(("exploring", key))
-            for key, value in default_filtering.items():
-                properties_to_save.append(("filtering", key))
+            for category, props in defaults.items():
+                layer_props[category].update(props)
+                properties_to_save.extend((category, k) for k in props)
             
-            # Emit signal to save to SQLite and QGIS variables
             self.settingLayerVariable.emit(layer, properties_to_save)
-            
-            # Refresh widgets with new default values
             self._synchronize_layer_widgets(layer, layer_props)
-            
-            # Reset buffer spinbox style
             self._update_buffer_spinbox_style(0.0)
-            
-            # Reset checkable buttons visual state
             self._reset_exploring_button_states(layer_props)
             self._reset_filtering_button_states(layer_props)
-            
-            logger.info(f"✓ Reset layer '{layer.name()}' properties to defaults")
-            
-            # Show user feedback
-            from qgis.utils import iface
-            iface.messageBar().pushSuccess(
-                "FilterMate",
-                self.tr("Layer properties reset to defaults")
-            )
-            
+            self.iface.messageBar().pushSuccess("FilterMate", self.tr("Layer properties reset to defaults"))
         except Exception as e:
-            logger.error(f"Error resetting layer properties: {e}")
-            from qgis.utils import iface
-            iface.messageBar().pushCritical(
-                "FilterMate",
-                self.tr("Error resetting layer properties: {}").format(str(e))
-            )
+            self.iface.messageBar().pushCritical("FilterMate", self.tr("Error resetting layer properties: {}").format(str(e)))
 
     def _reset_exploring_button_states(self, layer_props):
         """Reset exploring button visual states based on layer properties."""

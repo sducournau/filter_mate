@@ -3452,11 +3452,8 @@ class FilterEngineTask(QgsTask):
         """
         Convert QGIS expression to PostGIS SQL.
         
-        Enhanced conversion with:
-        - Spatial function mapping ($area, $length, etc.)
-        - Type casting for numeric/text operations
-        - CASE WHEN support
-        - Pattern matching operators
+        v4.0 DELEGATION: This method now delegates to ExpressionService.
+        Legacy implementation preserved as fallback.
         
         Args:
             expression: QGIS expression string
@@ -3467,11 +3464,21 @@ class FilterEngineTask(QgsTask):
         if not expression:
             return expression
         
-        # Get the actual geometry column name from the layer (default to 'geometry' if not set)
+        # Get the actual geometry column name from the layer
         geom_col = getattr(self, 'param_source_geom', None) or 'geometry'
         
+        # v4.0: Delegate to ExpressionService (consolidated implementation)
+        try:
+            from core.services.expression_service import ExpressionService
+            from core.domain.filter_expression import ProviderType
+            service = ExpressionService()
+            return service.to_sql(expression, ProviderType.POSTGRESQL, geom_col)
+        except ImportError:
+            logger.debug("ExpressionService not available, using legacy implementation")
+            pass
+        
+        # LEGACY FALLBACK: Original implementation (to be removed in v5.0)
         # 1. Convert QGIS spatial functions to PostGIS
-        # Use the actual geometry column name from the layer
         spatial_conversions = {
             '$area': f'ST_Area("{geom_col}")',
             '$length': f'ST_Length("{geom_col}")',

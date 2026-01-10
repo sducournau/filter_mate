@@ -418,30 +418,75 @@ class ExpressionService:
         Handles:
         - $geometry -> column reference
         - QGIS functions -> PostGIS equivalents
-        - Syntax adjustments
+        - IF -> CASE WHEN conversion
+        - Type casting for numeric/text operations
+        - SQL keyword normalization
+        
+        Consolidated from legacy filter_task.py qgis_expression_to_postgis()
         """
         sql = expression
+        
+        if not sql:
+            return sql
 
-        # Replace $geometry with column reference
-        sql = re.sub(
-            r'\$geometry|\$geom',
-            f'"{geometry_column}"',
-            sql,
-            flags=re.IGNORECASE
-        )
+        # 1. Replace $geometry with column reference (including $area, $length, etc.)
+        spatial_conversions = {
+            r'\$area': f'ST_Area("{geometry_column}")',
+            r'\$length': f'ST_Length("{geometry_column}")',
+            r'\$perimeter': f'ST_Perimeter("{geometry_column}")',
+            r'\$x': f'ST_X("{geometry_column}")',
+            r'\$y': f'ST_Y("{geometry_column}")',
+            r'\$geometry|\$geom': f'"{geometry_column}"',
+        }
+        for pattern, replacement in spatial_conversions.items():
+            sql = re.sub(pattern, replacement, sql, flags=re.IGNORECASE)
 
-        # Replace QGIS functions with PostGIS equivalents
+        # 2. Replace QGIS functions with PostGIS equivalents
         for qgis_func, pg_func in self.POSTGIS_FUNCTIONS.items():
             pattern = rf'\b{qgis_func}\s*\('
             sql = re.sub(pattern, f'{pg_func}(', sql, flags=re.IGNORECASE)
 
-        # Handle NULL comparisons
+        # 3. Convert QGIS IF statements to SQL CASE WHEN
+        # Pattern: if(condition, value_true, value_false) -> CASE WHEN condition THEN value_true ELSE value_false END
+        sql = re.sub(
+            r'\bif\s*\(\s*([^,]+),\s*([^,]+),\s*([^)]+)\)',
+            r'CASE WHEN \1 THEN \2 ELSE \3 END',
+            sql,
+            flags=re.IGNORECASE
+        )
+
+        # 4. Normalize SQL keywords
+        sql = re.sub(r'\bcase\b', ' CASE ', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\bwhen\b', ' WHEN ', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\bthen\b', ' THEN ', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\belse\b', ' ELSE ', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\bend\b', ' END ', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\bilike\b', ' ILIKE ', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\blike\b', ' LIKE ', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\bnot\b', ' NOT ', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\bis\b', ' IS ', sql, flags=re.IGNORECASE)
+
+        # 5. Add type casting for numeric operations (comparison operators)
+        # "field" > value -> "field"::numeric > value
+        sql = re.sub(r'"(\w+)"\s*>', r'"\1"::numeric >', sql)
+        sql = re.sub(r'"(\w+)"\s*<', r'"\1"::numeric <', sql)
+        sql = re.sub(r'"(\w+)"\s*\+', r'"\1"::numeric +', sql)
+        sql = re.sub(r'"(\w+)"\s*-', r'"\1"::numeric -', sql)
+
+        # 6. Add type casting for text operations (LIKE/ILIKE)
+        sql = re.sub(r'"(\w+)"\s+(NOT\s+)?ILIKE', r'"\1"::text \2ILIKE', sql)
+        sql = re.sub(r'"(\w+)"\s+(NOT\s+)?LIKE', r'"\1"::text \2LIKE', sql)
+
+        # 7. Handle NULL comparisons
         sql = re.sub(r'\bIS\s+NULL\b', 'IS NULL', sql, flags=re.IGNORECASE)
         sql = re.sub(r'\bIS\s+NOT\s+NULL\b', 'IS NOT NULL', sql, flags=re.IGNORECASE)
 
-        # Handle boolean literals
+        # 8. Handle boolean literals
         sql = re.sub(r'\bTRUE\b', 'TRUE', sql, flags=re.IGNORECASE)
         sql = re.sub(r'\bFALSE\b', 'FALSE', sql, flags=re.IGNORECASE)
+        
+        # 9. Clean up extra spaces
+        sql = re.sub(r'\s+', ' ', sql).strip()
 
         return sql
 
@@ -452,11 +497,22 @@ class ExpressionService:
         Handles:
         - $geometry -> column reference
         - QGIS functions -> Spatialite equivalents
-        - Syntax adjustments
+        - PostgreSQL :: type casting -> CAST() function
+        - ILIKE -> LOWER(field) LIKE LOWER(pattern)
+        - SQL keyword normalization
+        
+        Consolidated from legacy filter_task.py qgis_expression_to_spatialite()
+        
+        Note:
+            Spatialite spatial functions are ~90% compatible with PostGIS.
+            Main differences: type casting syntax, no ILIKE, some function names.
         """
         sql = expression
+        
+        if not sql:
+            return sql
 
-        # Replace $geometry with column reference
+        # 1. Replace $geometry with column reference
         sql = re.sub(
             r'\$geometry|\$geom',
             f'"{geometry_column}"',
@@ -464,18 +520,58 @@ class ExpressionService:
             flags=re.IGNORECASE
         )
 
-        # Replace QGIS functions with Spatialite equivalents
+        # 2. Replace QGIS functions with Spatialite equivalents
         for qgis_func, sl_func in self.SPATIALITE_FUNCTIONS.items():
             pattern = rf'\b{qgis_func}\s*\('
             sql = re.sub(pattern, f'{sl_func}(', sql, flags=re.IGNORECASE)
 
-        # Handle NULL comparisons
+        # 3. Normalize CASE expressions
+        sql = re.sub(r'\bcase\b', ' CASE ', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\bwhen\b', ' WHEN ', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\bthen\b', ' THEN ', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\belse\b', ' ELSE ', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\bend\b', ' END ', sql, flags=re.IGNORECASE)
+        
+        # 4. Handle ILIKE - Spatialite doesn't have ILIKE, use LOWER() with LIKE
+        # IMPORTANT: Process ILIKE before LIKE to avoid double-replacement
+        # "field" ILIKE 'pattern' -> LOWER("field") LIKE LOWER('pattern')
+        sql = re.sub(
+            r'"(\w+)"\s+ILIKE\s+\'([^\']+)\'',
+            r'LOWER("\1") LIKE LOWER(\'\2\')',
+            sql,
+            flags=re.IGNORECASE
+        )
+        sql = re.sub(
+            r'"(\w+)"\s+NOT\s+ILIKE\s+\'([^\']+)\'',
+            r'LOWER("\1") NOT LIKE LOWER(\'\2\')',
+            sql,
+            flags=re.IGNORECASE
+        )
+        
+        # 5. Normalize LIKE and NOT
+        sql = re.sub(r'\bnot\b', ' NOT ', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\blike\b', ' LIKE ', sql, flags=re.IGNORECASE)
+
+        # 6. Convert PostgreSQL :: type casting to Spatialite CAST() function
+        # "field"::numeric -> CAST("field" AS REAL)
+        # "field"::integer -> CAST("field" AS INTEGER)
+        # "field"::text -> CAST("field" AS TEXT)
+        sql = re.sub(r'"(\w+)"::numeric', r'CAST("\1" AS REAL)', sql)
+        sql = re.sub(r'"(\w+)"::integer', r'CAST("\1" AS INTEGER)', sql)
+        sql = re.sub(r'"(\w+)"::text', r'CAST("\1" AS TEXT)', sql)
+        sql = re.sub(r'"(\w+)"::double', r'CAST("\1" AS REAL)', sql)
+        sql = re.sub(r'"(\w+)"::float', r'CAST("\1" AS REAL)', sql)
+
+        # 7. Handle NULL comparisons
         sql = re.sub(r'\bIS\s+NULL\b', 'IS NULL', sql, flags=re.IGNORECASE)
         sql = re.sub(r'\bIS\s+NOT\s+NULL\b', 'IS NOT NULL', sql, flags=re.IGNORECASE)
 
-        # Spatialite boolean handling
+        # 8. Spatialite boolean handling (uses 0/1 instead of TRUE/FALSE)
         sql = re.sub(r'\bTRUE\b', '1', sql, flags=re.IGNORECASE)
         sql = re.sub(r'\bFALSE\b', '0', sql, flags=re.IGNORECASE)
+        
+        # 9. Clean up extra spaces
+        sql = re.sub(r'\s+', ' ', sql).strip()
 
         return sql
 
