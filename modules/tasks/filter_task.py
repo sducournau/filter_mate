@@ -167,9 +167,7 @@ except ImportError:
 # Import from infrastructure (EPIC-1 migration)
 from infrastructure.cache import SourceGeometryCache, QueryExpressionCache, get_query_cache
 from infrastructure.streaming import StreamingExporter, StreamingConfig
-
-# Import parallel executor (Phase 4 optimization)
-from .parallel_executor import ParallelFilterExecutor, ParallelConfig
+from infrastructure.parallel import ParallelFilterExecutor, ParallelConfig
 
 # Import combined query optimizer (Phase 5 optimization - v2.8.0)
 from .combined_query_optimizer import get_combined_query_optimizer, optimize_combined_filter
