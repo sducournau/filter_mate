@@ -866,6 +866,1027 @@ class ExploringController(BaseController, LayerSelectionMixin):
             return self._features_cache.get_stats()
         return {}
 
+    # === Zoom & Navigation ===
+
+    def _compute_zoom_extent_for_mode(self):
+        """
+        Compute the appropriate zoom extent based on the current exploring mode.
+        
+        For single selection: zoom to the selected feature's bounding box
+        For multiple selection: zoom to the combined extent of selected features
+        For custom selection: zoom to the combined extent of features matching the expression
+        
+        Returns:
+            QgsRectangle: The computed extent, or None if no features found
+        """
+        if not self._dockwidget.widgets_initialized or self._dockwidget.current_layer is None:
+            return None
+            
+        try:
+            from qgis.core import QgsRectangle, QgsExpression, QgsFeatureRequest
+            
+            extent = QgsRectangle()
+            features_found = 0
+            
+            if self._dockwidget.current_exploring_groupbox == "single_selection":
+                # Single selection: get the feature from the picker widget
+                feature_picker = self._dockwidget.widgets.get("EXPLORING", {}).get("SINGLE_SELECTION_FEATURES", {}).get("WIDGET")
+                if feature_picker:
+                    feature = feature_picker.feature()
+                    if feature and feature.isValid():
+                        # Reload feature to ensure geometry is available
+                        try:
+                            reloaded = self._dockwidget.current_layer.getFeature(feature.id())
+                            if reloaded.isValid() and reloaded.hasGeometry() and not reloaded.geometry().isEmpty():
+                                extent = reloaded.geometry().boundingBox()
+                                features_found = 1
+                                logger.debug(f"_compute_zoom_extent_for_mode: Single feature extent computed")
+                        except Exception as e:
+                            logger.warning(f"_compute_zoom_extent_for_mode: Error reloading single feature: {e}")
+                            
+            elif self._dockwidget.current_exploring_groupbox == "multiple_selection":
+                # Multiple selection: get checked items and compute combined extent
+                combo = self._dockwidget.widgets.get("EXPLORING", {}).get("MULTIPLE_SELECTION_FEATURES", {}).get("WIDGET")
+                if combo:
+                    checked_items = combo.checkedItems()
+                    if checked_items:
+                        # PERFORMANCE FIX v2.6.5: Limit number of items to process
+                        MAX_ITEMS_FOR_EXTENT = 500  # Beyond this, use layer extent
+                        if len(checked_items) > MAX_ITEMS_FOR_EXTENT:
+                            logger.debug(f"_compute_zoom_extent_for_mode: Too many items ({len(checked_items)}), using layer extent")
+                            return self._dockwidget.get_filtered_layer_extent(self._dockwidget.current_layer)
+                        
+                        # Try to get features by their IDs
+                        layer_props = self._dockwidget.PROJECT_LAYERS.get(self._dockwidget.current_layer.id(), {})
+                        pk_name = layer_props.get("infos", {}).get("primary_key_name")
+                        pk_is_numeric = layer_props.get("infos", {}).get("primary_key_is_numeric", True)
+                        
+                        for item in checked_items:
+                            try:
+                                # item format: (display_value, pk_value, ...)
+                                if isinstance(item, (list, tuple)) and len(item) > 1:
+                                    pk_value = item[1]
+                                    # Build expression to fetch this feature
+                                    if pk_name:
+                                        if pk_is_numeric:
+                                            expr = f'"{pk_name}" = {pk_value}'
+                                        else:
+                                            expr = f'"{pk_name}" = \'{pk_value}\''
+                                        qgs_expr = QgsExpression(expr)
+                                        if qgs_expr.isValid():
+                                            for feat in self._dockwidget.current_layer.getFeatures(QgsFeatureRequest(qgs_expr)):
+                                                if feat.hasGeometry() and not feat.geometry().isEmpty():
+                                                    if extent.isEmpty():
+                                                        extent = feat.geometry().boundingBox()
+                                                    else:
+                                                        extent.combineExtentWith(feat.geometry().boundingBox())
+                                                    features_found += 1
+                                                    break  # Only one feature per pk_value
+                            except Exception as e:
+                                logger.debug(f"_compute_zoom_extent_for_mode: Error processing multiple item: {e}")
+                                
+            elif self._dockwidget.current_exploring_groupbox == "custom_selection":
+                # Custom selection: get expression and fetch matching features
+                expr_widget = self._dockwidget.widgets.get("EXPLORING", {}).get("CUSTOM_SELECTION_EXPRESSION", {}).get("WIDGET")
+                if expr_widget:
+                    expression = expr_widget.expression()
+                    if expression:
+                        qgs_expr = QgsExpression(expression)
+                        # Only process if it's a filter expression (not just a field name)
+                        if qgs_expr.isValid() and not qgs_expr.isField():
+                            try:
+                                request = QgsFeatureRequest(qgs_expr)
+                                # PERFORMANCE FIX: Limit features processed for extent calculation
+                                MAX_EXTENT_FEATURES = 5000  # Enough for good extent, prevents freeze
+                                for feat in self._dockwidget.current_layer.getFeatures(request):
+                                    if feat.hasGeometry() and not feat.geometry().isEmpty():
+                                        if extent.isEmpty():
+                                            extent = feat.geometry().boundingBox()
+                                        else:
+                                            extent.combineExtentWith(feat.geometry().boundingBox())
+                                        features_found += 1
+                                        # Safety limit to prevent UI freeze
+                                        if features_found >= MAX_EXTENT_FEATURES:
+                                            logger.debug(f"_compute_zoom_extent_for_mode: Stopped at {MAX_EXTENT_FEATURES} features for extent")
+                                            break
+                            except Exception as e:
+                                logger.warning(f"_compute_zoom_extent_for_mode: Error fetching custom features: {e}")
+            
+            if features_found > 0 and not extent.isEmpty():
+                # Add small padding (10% of extent size, minimum 10 units)
+                width_padding = max(extent.width() * 0.1, 10)
+                height_padding = max(extent.height() * 0.1, 10)
+                extent.grow(max(width_padding, height_padding))
+                logger.debug(f"_compute_zoom_extent_for_mode: Computed extent from {features_found} features for mode '{self._dockwidget.current_exploring_groupbox}'")
+                return extent
+            else:
+                # Fallback to filtered layer extent
+                logger.debug(f"_compute_zoom_extent_for_mode: No features found for mode '{self._dockwidget.current_exploring_groupbox}', using filtered layer extent")
+                return self._dockwidget.get_filtered_layer_extent(self._dockwidget.current_layer)
+                
+        except Exception as e:
+            logger.warning(f"_compute_zoom_extent_for_mode error: {e}")
+            return self._dockwidget.get_filtered_layer_extent(self._dockwidget.current_layer)
+
+    def zooming_to_features(self, features, expression=None):
+        """
+        Zoom to provided features on the map canvas.
+        
+        Migrated from dockwidget - v4.0 Sprint 2 (controller architecture).
+        """
+        if not self._dockwidget.widgets_initialized or self._dockwidget.current_layer is None:
+            return
+
+        # v3.0.14: CRITICAL - Use centralized deletion check with full protection
+        if self._dockwidget._is_layer_truly_deleted(self._dockwidget.current_layer):
+            logger.debug("zooming_to_features: current_layer C++ object truly deleted")
+            self._dockwidget.current_layer = None
+            return
+
+        # Import required QGIS modules
+        from qgis.core import (
+            QgsGeometry, QgsCoordinateTransform, 
+            QgsCoordinateReferenceSystem, QgsProject,
+            QgsExpression, QgsFeatureRequest
+        )
+        from modules.appUtils import CRS_UTILS_AVAILABLE, DEFAULT_METRIC_CRS
+        if CRS_UTILS_AVAILABLE:
+            from adapters.qgis.crs_utils import is_geographic_crs, get_optimal_metric_crs
+
+        # DIAGNOSTIC: Log incoming features
+        logger.info(f"🔍 zooming_to_features DIAGNOSTIC:")
+        logger.info(f"   features count: {len(features) if features else 0}")
+        logger.info(f"   expression: '{expression}'")
+        if features and len(features) > 0:
+            for i, f in enumerate(features[:3]):
+                has_geom = f.hasGeometry() if hasattr(f, 'hasGeometry') else 'N/A'
+                fid = f.id() if hasattr(f, 'id') else 'N/A'
+                logger.info(f"   feature[{i}]: id={fid}, hasGeometry={has_geom}")
+                if has_geom and f.hasGeometry():
+                    geom = f.geometry()
+                    logger.info(f"      geometry: type={geom.type()}, isEmpty={geom.isEmpty()}")
+        
+        # IMPROVED: If features list is empty but we have an expression, try to fetch features
+        if (not features or not isinstance(features, list) or len(features) == 0) and expression:
+            logger.debug(f"zooming_to_features: Empty features list, trying to fetch from expression: {expression}")
+            try:
+                qgs_expr = QgsExpression(expression)
+                if qgs_expr.isValid():
+                    request = QgsFeatureRequest(qgs_expr)
+                    # PERFORMANCE FIX: Limit features fetched for zoom
+                    request.setLimit(5000)  # Enough for zoom extent calculation
+                    features = list(self._dockwidget.current_layer.getFeatures(request))
+                    logger.debug(f"zooming_to_features: Fetched {len(features)} features from expression")
+            except Exception as e:
+                logger.warning(f"zooming_to_features: Failed to fetch features from expression: {e}")
+        
+        # Safety check: ensure features is a list
+        if not features or not isinstance(features, list) or len(features) == 0:
+            # IMPROVED: Zoom to extent based on current exploring mode
+            logger.debug("zooming_to_features: No features provided, computing extent based on mode")
+            extent = self._compute_zoom_extent_for_mode()
+            if extent and not extent.isEmpty():
+                self._dockwidget.iface.mapCanvas().zoomToFeatureExtent(extent)
+            else:
+                logger.debug("zooming_to_features: Empty extent, using canvas refresh")
+                self._dockwidget.iface.mapCanvas().refresh() 
+            return
+
+        # CRITICAL FIX: For features without geometry, try to reload from layer
+        features_with_geometry = []
+        for feature in features:
+            if feature.hasGeometry() and not feature.geometry().isEmpty():
+                features_with_geometry.append(feature)
+            else:
+                # Try to reload feature with geometry from layer
+                try:
+                    reloaded = self._dockwidget.current_layer.getFeature(feature.id())
+                    if reloaded.isValid() and reloaded.hasGeometry() and not reloaded.geometry().isEmpty():
+                        features_with_geometry.append(reloaded)
+                        logger.debug(f"Reloaded feature {feature.id()} with geometry for zoom")
+                    else:
+                        logger.warning(f"Could not reload feature {feature.id()} with valid geometry")
+                except Exception as e:
+                    logger.warning(f"Error reloading feature {feature.id()}: {e}")
+
+        logger.info(f"   features_with_geometry count: {len(features_with_geometry)}")
+
+        if len(features_with_geometry) == 0:
+            # IMPROVED: Zoom to extent based on current exploring mode
+            logger.debug("zooming_to_features: No features have geometry, computing extent based on mode")
+            extent = self._compute_zoom_extent_for_mode()
+            if extent and not extent.isEmpty():
+                self._dockwidget.iface.mapCanvas().zoomToFeatureExtent(extent)
+            return
+
+        if len(features_with_geometry) == 1:
+            feature = features_with_geometry[0]
+            # CRITICAL: Create a copy to avoid modifying the original geometry
+            geom = QgsGeometry(feature.geometry())
+            
+            # Get CRS information
+            layer_crs = self._dockwidget.current_layer.crs()
+            canvas_crs = self._dockwidget.iface.mapCanvas().mapSettings().destinationCrs()
+            
+            # IMPROVED v2.5.7: Use crs_utils for better CRS detection
+            if CRS_UTILS_AVAILABLE:
+                is_geographic = is_geographic_crs(layer_crs)
+            else:
+                is_geographic = layer_crs.isGeographic()
+            
+            # CRITICAL: For geographic coordinates, switch to a metric CRS for buffer calculations
+            # This ensures accurate buffer distances in meters instead of imprecise degrees
+            if is_geographic:
+                # IMPROVED v2.5.7: Use optimal metric CRS (UTM or Web Mercator)
+                if CRS_UTILS_AVAILABLE:
+                    metric_crs_authid = get_optimal_metric_crs(
+                        project=QgsProject.instance(),
+                        source_crs=layer_crs,
+                        extent=geom.boundingBox(),
+                        prefer_utm=True
+                    )
+                    work_crs = QgsCoordinateReferenceSystem(metric_crs_authid)
+                    logger.debug(f"FilterMate: Using optimal metric CRS {metric_crs_authid} for zoom buffer")
+                else:
+                    # Fallback to Web Mercator
+                    work_crs = QgsCoordinateReferenceSystem(DEFAULT_METRIC_CRS)
+                    logger.debug(f"FilterMate: Using Web Mercator ({DEFAULT_METRIC_CRS}) for zoom buffer")
+                
+                to_metric = QgsCoordinateTransform(layer_crs, work_crs, QgsProject.instance())
+                geom.transform(to_metric)
+            else:
+                # Already in projected coordinates, use layer CRS
+                work_crs = layer_crs
+            
+            if str(feature.geometry().type()) == 'GeometryType.Point':
+                # Points need a buffer since they have no bounding box
+                buffer_distance = 50  # 50 meters for all points
+                box = geom.buffer(buffer_distance, 5).boundingBox()
+            else:
+                # IMPROVED: For polygons/lines, zoom to the actual feature bounding box
+                # with a small percentage-based padding for better visibility
+                box = geom.boundingBox()
+                if not box.isEmpty():
+                    # Add 10% padding based on feature size (minimum 5 meters)
+                    width_padding = max(box.width() * 0.1, 5)
+                    height_padding = max(box.height() * 0.1, 5)
+                    box.grow(max(width_padding, height_padding))
+                else:
+                    # Fallback for empty bounding box
+                    box.grow(10)
+            
+            # Transform box to canvas CRS if needed
+            if work_crs != canvas_crs:
+                transform = QgsCoordinateTransform(work_crs, canvas_crs, QgsProject.instance())
+                box = transform.transformBoundingBox(box)
+
+            self._dockwidget.iface.mapCanvas().zoomToFeatureExtent(box)
+        else:
+            self._dockwidget.iface.mapCanvas().zoomToFeatureIds(self._dockwidget.current_layer, [feature.id() for feature in features_with_geometry])
+
+        self._dockwidget.iface.mapCanvas().refresh()
+
+    def get_exploring_features(self, input, identify_by_primary_key_name=False, custom_expression=None):
+        """
+        Get features based on input (QgsFeature, list, or expression).
+        
+        Migrated from dockwidget - v4.0 Sprint 2 (controller architecture).
+        """
+        if not self._dockwidget.widgets_initialized or self._dockwidget.current_layer is None:
+            return [], None
+
+        # v3.0.14: CRITICAL - Use centralized deletion check with full protection
+        if self._dockwidget._is_layer_truly_deleted(self._dockwidget.current_layer):
+            logger.debug("get_exploring_features: current_layer C++ object truly deleted")
+            self._dockwidget.current_layer = None
+            return [], None
+
+        if self._dockwidget.current_layer is None:
+            return [], None
+        
+        # Guard: Handle invalid input types (e.g., False from currentSelectedFeatures())
+        if input is False or input is None:
+            logger.debug("get_exploring_features: Input is False or None, returning empty")
+            return [], None
+        
+        # STABILITY FIX: Verify layer exists in PROJECT_LAYERS before access
+        if self._dockwidget.current_layer.id() not in self._dockwidget.PROJECT_LAYERS:
+            logger.warning(f"get_exploring_features: Layer {self._dockwidget.current_layer.name()} not in PROJECT_LAYERS")
+            return [], None
+        
+        from qgis.core import QgsFeature, QgsExpression, QgsFeatureRequest
+        
+        layer_props = self._dockwidget.PROJECT_LAYERS[self._dockwidget.current_layer.id()]
+        features = []
+        expression = None
+
+        if isinstance(input, QgsFeature):
+            # Check if input feature is valid
+            if not input.isValid():
+                logger.debug("get_exploring_features: Input feature is invalid, returning empty")
+                return [], None
+            
+            # DIAGNOSTIC: Log input feature state
+            logger.debug(f"get_exploring_features: input feature id={input.id()}, hasGeometry={input.hasGeometry()}")
+                
+            if identify_by_primary_key_name is True:
+                # CRITICAL FIX: Check if primary_key_name exists in layer properties
+                pk_name = layer_props["infos"].get("primary_key_name")
+                
+                if pk_name is None:
+                    # Primary key not detected - use universal $id fallback
+                    logger.debug(f"No primary_key_name in layer properties, using $id fallback")
+                    provider_type = layer_props["infos"].get("layer_provider_type", "")
+                    feature_id = input.id()
+                    
+                    # UNIVERSAL FALLBACK: Use $id which works for all providers
+                    # $id is QGIS internal feature ID, works regardless of provider
+                    expression = f'$id = {feature_id}'
+                    logger.debug(f"Using universal $id fallback expression: {expression}")
+                    
+                    # For OGR layers, also try "fid" field as alternative
+                    if provider_type == 'ogr':
+                        # Check if fid field exists
+                        fid_idx = self._dockwidget.current_layer.fields().indexFromName('fid')
+                        if fid_idx >= 0:
+                            expression = f'"fid" = {feature_id}'
+                            logger.debug(f"OGR layer: using fid field expression: {expression}")
+                    
+                    # Always reload feature to ensure geometry is available
+                    try:
+                        reloaded_feature = self._dockwidget.current_layer.getFeature(input.id())
+                        if reloaded_feature.isValid() and reloaded_feature.hasGeometry():
+                            features = [reloaded_feature]
+                            logger.debug(f"Reloaded feature {input.id()} with geometry")
+                        else:
+                            features = [input]
+                            logger.warning(f"Could not reload feature {input.id()} with geometry")
+                    except Exception as e:
+                        logger.debug(f"Could not reload feature: {e}")
+                        features = [input]
+                    return features, expression
+                
+                # Try to get the primary key value using multiple methods
+                pk_value = None
+                try:
+                    # First try with attribute() method
+                    pk_value = input.attribute(pk_name)
+                except (KeyError, IndexError):
+                    try:
+                        # Fallback to field index
+                        fields = input.fields()
+                        idx = fields.indexFromName(pk_name)
+                        if idx >= 0:
+                            pk_value = input.attributes()[idx]
+                    except (AttributeError, IndexError, KeyError) as e:
+                        logger.warning(f"Could not get primary key value for feature: {type(e).__name__}: {e}")
+                        logger.debug(f"pk_name: {pk_name}, feature fields: {[f.name() for f in input.fields()]}")
+                
+                if pk_value is not None:
+                    pk_is_numeric = layer_props["infos"].get("primary_key_is_numeric", False)
+                    provider_type = layer_props["infos"].get("layer_provider_type", "")
+                    
+                    # CRITICAL FIX: Field names must be quoted for QgsExpression to work
+                    # This applies to ALL providers (PostgreSQL, OGR, Spatialite)
+                    # Note: filter_task.py handles qualified names for PostgreSQL subsetString separately
+                    if pk_is_numeric is True: 
+                        expression = f'"{pk_name}" = {pk_value}'
+                    else:
+                        expression = f'"{pk_name}" = \'{pk_value}\''
+                    logger.debug(f"Generated expression for {provider_type}: {expression}")
+                    
+                    # CRITICAL: Also reload feature to ensure geometry is available for zoom
+                    try:
+                        reloaded_feature = self._dockwidget.current_layer.getFeature(input.id())
+                        if reloaded_feature.isValid() and reloaded_feature.hasGeometry():
+                            features = [reloaded_feature]
+                            logger.debug(f"Reloaded feature {input.id()} with geometry")
+                        else:
+                            features = [input]
+                    except Exception as e:
+                        logger.debug(f"Could not reload feature: {e}")
+                        features = [input]
+                else:
+                    # UNIVERSAL FALLBACK: If we can't get the primary key value, use $id
+                    provider_type = layer_props["infos"].get("layer_provider_type", "")
+                    feature_id = input.id()
+                    
+                    # Use $id as universal fallback - works for all providers
+                    expression = f'$id = {feature_id}'
+                    logger.debug(f"pk_value not found, using universal $id fallback: {expression}")
+                    
+                    # For OGR layers, also try "fid" field as alternative
+                    if provider_type == 'ogr':
+                        fid_idx = self._dockwidget.current_layer.fields().indexFromName('fid')
+                        if fid_idx >= 0:
+                            expression = f'"fid" = {feature_id}'
+                            logger.debug(f"OGR layer fallback: using fid field expression: {expression}")
+                    
+                    # Reload feature from layer by ID for geometry
+                    try:
+                        reloaded_feature = self._dockwidget.current_layer.getFeature(input.id())
+                        if reloaded_feature.isValid() and reloaded_feature.hasGeometry():
+                            features = [reloaded_feature]
+                        else:
+                            features = [input]
+                    except (RuntimeError, KeyError, AttributeError) as e:
+                        features = [input]
+                        logger.debug(f"Error reloading feature: {e}")
+                    logger.debug(f"Could not access primary key '{pk_name}' in feature. "
+                                f"Available fields: {[f.name() for f in input.fields()]}. Using $id fallback.")
+            else:
+                # CRITICAL: Reload feature from layer to ensure geometry is loaded
+                # QgsFeaturePickerWidget.featureChanged may emit features without geometry
+                try:
+                    reloaded_feature = self._dockwidget.current_layer.getFeature(input.id())
+                    if reloaded_feature.isValid() and reloaded_feature.hasGeometry():
+                        features = [reloaded_feature]
+                        logger.debug(f"Reloaded feature {input.id()} with geometry for tracking")
+                    else:
+                        features = [input]
+                except Exception as e:
+                    logger.debug(f"Could not reload feature {input.id()}: {e}")
+                    features = [input]
+
+        elif isinstance(input, list):
+            if len(input) == 0 and custom_expression is None:
+                return features, expression
+            
+            if identify_by_primary_key_name is True:
+                # FALLBACK FIX: Safely get primary key with fallback to feature ID ($id)
+                pk_name = layer_props["infos"].get("primary_key_name")
+                pk_is_numeric = layer_props["infos"].get("primary_key_is_numeric", True)
+                provider_type = layer_props["infos"].get("layer_provider_type", "")
+                
+                if pk_name is None:
+                    # FALLBACK: Use feature IDs directly when no primary key is available
+                    # input format from CustomCheckableFeatureComboBox: [(display_value, pk_value, ...), ...]
+                    # When pk_name is None, feat[1] may be the feature id
+                    logger.debug(f"No primary_key_name available for list input, using $id fallback")
+                    try:
+                        # Try to extract feature IDs from input
+                        # Format depends on how the list was built
+                        feature_ids = []
+                        for feat in input:
+                            if isinstance(feat, (list, tuple)) and len(feat) > 1:
+                                # Assume feat[1] contains an ID-like value
+                                feature_ids.append(str(feat[1]))
+                            elif isinstance(feat, QgsFeature):
+                                feature_ids.append(str(feat.id()))
+                        
+                        if feature_ids:
+                            expression = f'$id IN ({", ".join(feature_ids)})'
+                            logger.debug(f"Generated $id fallback expression: {expression}")
+                    except Exception as e:
+                        logger.warning(f"Could not generate fallback expression for list: {e}")
+                        # Return features directly without expression if we can't build one
+                        for feat in input:
+                            if isinstance(feat, QgsFeature):
+                                features.append(feat)
+                        return features, None
+                else:
+                    # CRITICAL FIX: Field names must be quoted for QgsExpression to work
+                    # This applies to ALL providers (PostgreSQL, OGR, Spatialite)
+                    if pk_is_numeric is True:
+                        input_ids = [str(feat[1]) for feat in input]  
+                        expression = f'"{pk_name}" IN ({", ".join(input_ids)})'
+                    else:
+                        input_ids = [str(feat[1]) for feat in input]
+                        quoted_ids = "', '".join(input_ids)
+                        expression = f'"{pk_name}" IN (\'{quoted_ids}\')'
+                    logger.debug(f"Generated list expression for {provider_type}: {expression}")
+            
+        if custom_expression is not None:
+                expression = custom_expression
+
+        if expression and QgsExpression(expression).isValid():
+            # Synchronous evaluation for layers
+            # PERFORMANCE FIX: Add limit to prevent UI freeze on unexpected large result sets
+            MAX_SYNC_FEATURES = 10000  # Limit synchronous iteration
+            features_iterator = self._dockwidget.current_layer.getFeatures(QgsFeatureRequest(QgsExpression(expression)))
+            done_looping = False
+            feature_count_iter = 0
+            
+            while not done_looping:
+                try:
+                    feature = next(features_iterator)
+                    features.append(feature)
+                    feature_count_iter += 1
+                    # Safety limit to prevent UI freeze
+                    if feature_count_iter >= MAX_SYNC_FEATURES:
+                        logger.warning(f"get_exploring_features: Stopped at {MAX_SYNC_FEATURES} features to prevent UI freeze")
+                        done_looping = True
+                except StopIteration:
+                    done_looping = True
+        else:
+            expression = None
+
+        return features, expression
+
+    def exploring_features_changed(self, input=[], identify_by_primary_key_name=False, custom_expression=None, preserve_filter_if_empty=False):
+        """
+        Handle feature selection changes in exploration widgets.
+        
+        NOTE: This function no longer automatically applies or clears layer filters.
+        Filters are only applied via pushbutton actions (Filter, Unfilter, Reset).
+        This function only handles feature selection, tracking (zoom), and expression storage.
+        
+        Args:
+            input: Features or feature list to process
+            identify_by_primary_key_name: Use primary key for identification
+            custom_expression: Custom filter expression
+            preserve_filter_if_empty: DEPRECATED - no longer needed since filters aren't auto-applied
+        """
+        if self._dockwidget.widgets_initialized is True and self._dockwidget.current_layer is not None and isinstance(self._dockwidget.current_layer, QgsVectorLayer):
+            
+            # CACHE INVALIDATION: Selection is changing, invalidate cache for current groupbox
+            # This ensures that subsequent flash/zoom operations use fresh data
+            if hasattr(self._dockwidget, '_exploring_cache') and self._dockwidget.current_exploring_groupbox:
+                layer_id = self._dockwidget.current_layer.id()
+                self._dockwidget._exploring_cache.invalidate(layer_id, self._dockwidget.current_exploring_groupbox)
+                logger.debug(f"exploring_features_changed: Invalidated cache for {layer_id[:8]}.../{self._dockwidget.current_exploring_groupbox}")
+            
+            # v2.9.20: Save FID for single_selection mode to allow recovery after layer refresh
+            # This is critical because QgsFeaturePickerWidget can lose its selection after
+            # layer operations (filter/unfilter), causing FALLBACK MODE to use all features
+            if self._dockwidget.current_exploring_groupbox == "single_selection" and isinstance(input, QgsFeature):
+                if input.isValid() and input.id() is not None:
+                    self._dockwidget._last_single_selection_fid = input.id()
+                    self._dockwidget._last_single_selection_layer_id = self._dockwidget.current_layer.id()
+                    logger.debug(f"exploring_features_changed: Saved single_selection FID={input.id()} for layer {self._dockwidget.current_layer.name()}")
+            
+            # v2.9.29: Save FIDs for multiple_selection mode to allow recovery after layer refresh
+            # This is critical for multi-step additive filtering where the widget is refreshed
+            # after the first filter, causing checked items to be lost.
+            elif self._dockwidget.current_exploring_groupbox == "multiple_selection" and isinstance(input, list):
+                if len(input) > 0:
+                    # Input is list of [[display, pk, ...], ...] from updatingCheckedItemList signal
+                    try:
+                        # Extract PK values (index 1) from input items
+                        checked_fids = [item[1] for item in input if len(item) > 1]
+                        if checked_fids:
+                            self._dockwidget._last_multiple_selection_fids = checked_fids
+                            self._dockwidget._last_multiple_selection_layer_id = self._dockwidget.current_layer.id()
+                            logger.debug(f"exploring_features_changed: Saved {len(checked_fids)} multiple_selection FIDs for layer {self._dockwidget.current_layer.name()}")
+                    except (IndexError, TypeError) as e:
+                        logger.debug(f"exploring_features_changed: Could not extract FIDs from input: {e}")
+            
+            # Update buffer validation when source features/layer changes
+            try:
+                self._dockwidget._update_buffer_validation()
+            except Exception as e:
+                logger.debug(f"Could not update buffer validation: {e}")
+            
+            # v3.0.14: CRITICAL - Use centralized deletion check with full protection
+            if self._dockwidget._is_layer_truly_deleted(self._dockwidget.current_layer):
+                logger.debug("exploring_features_changed: current_layer C++ object truly deleted")
+                self._dockwidget.current_layer = None
+                return []
+
+            # Guard: Check if current_layer is in PROJECT_LAYERS
+            if self._dockwidget.current_layer.id() not in self._dockwidget.PROJECT_LAYERS:
+                logger.warning(f"exploring_features_changed: Layer {self._dockwidget.current_layer.name()} not in PROJECT_LAYERS")
+                return []
+            
+            layer_props = self._dockwidget.PROJECT_LAYERS[self._dockwidget.current_layer.id()]
+            features, expression = self.get_exploring_features(input, identify_by_primary_key_name, custom_expression)
+            
+            # PERFORMANCE (v2.5.10): Handle async evaluation for large layers with custom expressions
+            # When get_exploring_features returns empty features but valid expression for large layers,
+            # it means we should use async evaluation to prevent UI freeze
+            if (len(features) == 0 and expression is not None 
+                and custom_expression is not None
+                and self._dockwidget.should_use_async_expression(custom_expression)):
+                
+                logger.info(f"exploring_features_changed: Using async evaluation for large layer")
+                
+                # Define callback to continue processing after async evaluation
+                def _on_async_complete(async_features, async_expression, layer_id):
+                    """Process features after async evaluation completes."""
+                    if layer_id != self._dockwidget.current_layer.id():
+                        logger.debug("Async evaluation completed for different layer, ignoring")
+                        return
+                    
+                    # Continue with normal flow using async results
+                    self._dockwidget._handle_exploring_features_result(
+                        async_features, 
+                        async_expression, 
+                        layer_props,
+                        identify_by_primary_key_name
+                    )
+                
+                def _on_async_error(error_msg, layer_id):
+                    """Handle async evaluation errors."""
+                    show_warning(
+                        self._dockwidget.tr("Expression Evaluation"),
+                        self._dockwidget.tr(f"Error evaluating expression: {error_msg}")
+                    )
+                
+                # Start async evaluation
+                self._dockwidget.get_exploring_features_async(
+                    expression=expression,
+                    on_complete=_on_async_complete,
+                    on_error=_on_async_error
+                )
+                
+                # Store expression even though features aren't loaded yet
+                if expression:
+                    layer_props["filtering"]["current_filter_expression"] = expression
+                
+                return []  # Features will be processed in callback
+     
+            # Normal synchronous flow for smaller layers or non-custom expressions
+            # Process results directly
+            return self._dockwidget._handle_exploring_features_result(
+                features, expression, layer_props, identify_by_primary_key_name
+            )
+        
+        return []
+
+    def exploring_link_widgets(self, expression=None, change_source=None):
+        """
+        Link single and multiple selection widgets based on IS_LINKING state.
+
+        Args:
+            expression: Optional filter expression to apply to single selection widget
+            change_source: Optional source of the change ("single_selection", "multiple_selection")
+                          Used for bidirectional display expression synchronization
+        """
+        if self._dockwidget.widgets_initialized and self._dockwidget.current_layer is not None:
+
+            # CRITICAL: Verify layer exists in PROJECT_LAYERS before access
+            if self._dockwidget.current_layer.id() not in self._dockwidget.PROJECT_LAYERS:
+                logger.debug(f"exploring_link_widgets: Layer {self._dockwidget.current_layer.name()} not in PROJECT_LAYERS")
+                return
+
+            layer_props = self._dockwidget.PROJECT_LAYERS[self._dockwidget.current_layer.id()]
+            custom_filter = None
+
+            # Ensure is_linking property exists (backward compatibility)
+            if "is_linking" not in layer_props["exploring"]:
+                layer_props["exploring"]["is_linking"] = False
+
+            # Helper function to set filter expression only if it changed
+            def _safe_set_single_filter(new_filter):
+                """Set filter expression on single selection widget only if changed."""
+                single_widget = self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+                current_filter = single_widget.filterExpression() if hasattr(single_widget, 'filterExpression') else ''
+                new_filter = new_filter or ''
+                current_filter = current_filter or ''
+                if new_filter.strip() != current_filter.strip():
+                    logger.debug(f"exploring_link_widgets: Updating single selection filter: '{current_filter[:30]}' -> '{new_filter[:30]}'")
+                    single_widget.setFilterExpression(new_filter)
+                    return True
+                return False
+
+            if layer_props["exploring"]["is_linking"]:
+                if QgsExpression(layer_props["exploring"]["custom_selection_expression"]).isValid():
+                    if not QgsExpression(layer_props["exploring"]["custom_selection_expression"]).isField():
+                        custom_filter = layer_props["exploring"]["custom_selection_expression"]
+                        self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression(custom_filter, layer_props)
+                
+                if expression is not None:
+                    _safe_set_single_filter(expression)
+                elif self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures() is not False:
+                    features, expression = self.get_exploring_features(self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures(), True)
+                    if len(features) > 0 and expression is not None:
+                        _safe_set_single_filter(expression)
+                elif self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentVisibleFeatures() is not False:
+                    features, expression = self.get_exploring_features(self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentVisibleFeatures(), True)
+                    if len(features) > 0 and expression is not None:
+                        _safe_set_single_filter(expression)
+                elif custom_filter is not None:
+                    _safe_set_single_filter(custom_filter)
+
+                # BIDIRECTIONAL DISPLAY EXPRESSION SYNCHRONIZATION
+                multiple_display_expression = layer_props["exploring"]["multiple_selection_expression"]
+                if QgsExpression(multiple_display_expression).isField():
+                    multiple_display_expression = multiple_display_expression.replace('"','')
+
+                single_display_expression = layer_props["exploring"]["single_selection_expression"]
+                if QgsExpression(single_display_expression).isField():
+                    single_display_expression = single_display_expression.replace('"','')
+
+                # PROTECTION: Avoid infinite sync loops
+                if change_source and change_source == self._dockwidget._last_expression_change_source:
+                    logger.debug(f"exploring_link_widgets: Bidirectional sync from {change_source}")
+                    self._dockwidget._last_expression_change_source = None
+
+                    if change_source == "single_selection":
+                        if single_display_expression != multiple_display_expression:
+                            if QgsExpression(single_display_expression).isValid():
+                                logger.info(f"🔗 SYNC: single -> multiple | '{single_display_expression}'")
+                                self._dockwidget.PROJECT_LAYERS[self._dockwidget.current_layer.id()]["exploring"]["multiple_selection_expression"] = single_display_expression
+                                self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(single_display_expression)
+                                self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(single_display_expression)
+
+                    elif change_source == "multiple_selection":
+                        if multiple_display_expression != single_display_expression:
+                            if QgsExpression(multiple_display_expression).isValid():
+                                logger.info(f"🔗 SYNC: multiple -> single | '{multiple_display_expression}'")
+                                self._dockwidget.PROJECT_LAYERS[self._dockwidget.current_layer.id()]["exploring"]["single_selection_expression"] = multiple_display_expression
+                                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(multiple_display_expression)
+                                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(multiple_display_expression)
+
+                # LEGACY BEHAVIOR: Keep existing primary key swap logic as fallback
+                elif QgsExpression(single_display_expression).isValid() and single_display_expression == layer_props["infos"]["primary_key_name"]:
+                    if QgsExpression(multiple_display_expression).isValid() and multiple_display_expression != layer_props["infos"]["primary_key_name"]:
+                        logger.debug(f"exploring_link_widgets: Swapping single (PK) -> multiple (descriptive)")
+                        self._dockwidget.PROJECT_LAYERS[self._dockwidget.current_layer.id()]["exploring"]["single_selection_expression"] = multiple_display_expression
+                        self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(multiple_display_expression)
+                        self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(multiple_display_expression)
+
+                elif QgsExpression(multiple_display_expression).isValid() and multiple_display_expression == layer_props["infos"]["primary_key_name"]:
+                    if QgsExpression(single_display_expression).isValid() and single_display_expression != layer_props["infos"]["primary_key_name"]:
+                        logger.debug(f"exploring_link_widgets: Swapping multiple (PK) -> single (descriptive)")
+                        self._dockwidget.PROJECT_LAYERS[self._dockwidget.current_layer.id()]["exploring"]["multiple_selection_expression"] = single_display_expression
+                        self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(single_display_expression)
+                        self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(single_display_expression)
+            else:
+                # When is_linking is False, only clear filter expressions if not already empty
+                single_widget = self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+                multiple_widget = self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
+                
+                current_single_filter = single_widget.filterExpression() if hasattr(single_widget, 'filterExpression') else ''
+                if current_single_filter and current_single_filter.strip() != '':
+                    logger.debug(f"exploring_link_widgets: is_linking=False, clearing single selection filter")
+                    single_widget.setFilterExpression('')
+                
+                if self._dockwidget.current_layer is not None and hasattr(multiple_widget, 'list_widgets') and self._dockwidget.current_layer.id() in multiple_widget.list_widgets:
+                    current_multiple_filter = multiple_widget.list_widgets[self._dockwidget.current_layer.id()].getFilterExpression()
+                    if current_multiple_filter and current_multiple_filter.strip() != '':
+                        logger.debug(f"exploring_link_widgets: is_linking=False, clearing multiple selection filter")
+                        multiple_widget.setFilterExpression('', layer_props)
+
+    def exploring_source_params_changed(self, expression=None, groupbox_override=None, change_source=None):
+        """
+        Handle changes to source parameters for exploring features.
+
+        Args:
+            expression: Optional expression to use
+            groupbox_override: Optional groupbox to target instead of current_exploring_groupbox
+            change_source: Optional source of the change for bidirectional sync
+        """
+        if self._dockwidget.widgets_initialized is True and self._dockwidget.current_layer is not None:
+
+            logger.debug(f"exploring_source_params_changed called with expression={expression}, groupbox_override={groupbox_override}, change_source={change_source}")
+
+            if self._dockwidget.current_layer.id() not in self._dockwidget.PROJECT_LAYERS:
+                logger.warning(f"exploring_source_params_changed: layer {self._dockwidget.current_layer.name()} not in PROJECT_LAYERS")
+                return
+
+            layer_props = self._dockwidget.PROJECT_LAYERS[self._dockwidget.current_layer.id()]
+            target_groupbox = groupbox_override if groupbox_override is not None else self._dockwidget.current_exploring_groupbox
+            logger.debug(f"target_groupbox={target_groupbox}")
+
+            if target_groupbox == "single_selection":
+                expression_widget = self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"]
+                expression = expression_widget.expression()
+                logger.debug(f"single_selection expression from widget: {expression}")
+                
+                if expression is not None and expression.strip() != '' and QgsExpression(expression).isValid():
+                    current_expression = layer_props["exploring"]["single_selection_expression"]
+                    if current_expression == expression:
+                        logger.debug("single_selection: Expression unchanged, skipping setDisplayExpression")
+                    else:
+                        self._dockwidget.PROJECT_LAYERS[self._dockwidget.current_layer.id()]["exploring"]["single_selection_expression"] = expression
+                        
+                        try:
+                            picker_widget = self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+                            picker_widget.setDisplayExpression(expression)
+                            picker_widget.update()
+                            logger.debug("single_selection: Updated display expression and forced widget refresh")
+                        except Exception as e:
+                            logger.warning(f"single_selection: Could not force widget refresh: {e}")
+                        
+                        self.exploring_link_widgets(change_source=change_source)
+                        self._dockwidget.invalidate_expression_cache(self._dockwidget.current_layer.id())
+                elif expression is not None and expression.strip() != '':
+                    logger.debug(f"single_selection: Expression '{expression}' is not valid, skipping update")
+
+            elif target_groupbox == "multiple_selection":
+                expression_widget = self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"]
+                expression = expression_widget.expression()
+                
+                if expression is not None and expression.strip() != '' and QgsExpression(expression).isValid():
+                    current_expression = layer_props["exploring"]["multiple_selection_expression"]
+                    if current_expression == expression:
+                        logger.debug("multiple_selection: Expression unchanged, skipping setDisplayExpression")
+                    else:
+                        self._dockwidget.PROJECT_LAYERS[self._dockwidget.current_layer.id()]["exploring"]["multiple_selection_expression"] = expression
+                        logger.debug(f"Calling setDisplayExpression with: {expression}")
+                        
+                        try:
+                            picker_widget = self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
+                            picker_widget.setDisplayExpression(expression)
+                            picker_widget.update()
+                            logger.debug("multiple_selection: Updated display expression and forced widget refresh")
+                        except Exception as e:
+                            logger.warning(f"multiple_selection: Could not force widget refresh: {e}")
+                        
+                        self.exploring_link_widgets(change_source=change_source)
+                        self._dockwidget.invalidate_expression_cache(self._dockwidget.current_layer.id())
+                elif expression is not None and expression.strip() != '':
+                    logger.debug(f"multiple_selection: Expression '{expression}' is not valid, skipping update")
+
+            elif target_groupbox == "custom_selection":
+                expression = self._dockwidget.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].expression()
+                if expression is not None:
+                    current_expression = layer_props["exploring"]["custom_selection_expression"]
+                    if current_expression != expression:
+                        self._dockwidget.PROJECT_LAYERS[self._dockwidget.current_layer.id()]["exploring"]["custom_selection_expression"] = expression
+                        self._dockwidget.invalidate_expression_cache(self._dockwidget.current_layer.id())
+                        
+                        if hasattr(self._dockwidget, '_exploring_cache'):
+                            self._dockwidget._exploring_cache.invalidate(self._dockwidget.current_layer.id(), "custom_selection")
+                            logger.debug(f"custom_selection: Invalidated exploring cache")
+                        
+                        logger.debug("custom_selection: Expression stored, skipping immediate feature evaluation")
+                        self._dockwidget._update_buffer_validation()
+                        self._dockwidget._update_exploring_buttons_state()
+                        return
+
+            self._dockwidget.get_current_features()
+            self._dockwidget._update_buffer_validation()
+
+    def _reload_exploration_widgets(self, layer, layer_props):
+        """
+        Force reload of ALL exploration widgets with new layer data.
+        
+        Args:
+            layer: The validated layer to use for widget updates
+            layer_props: Layer properties dictionary
+        """
+        if not self._dockwidget.widgets_initialized:
+            return
+        
+        from qgis.core import QgsExpression
+        from modules.appUtils import get_best_display_field, is_valid_layer
+        
+        try:
+            # Disconnect ALL exploration signals before updating widgets
+            self._dockwidget.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
+            self._dockwidget.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+            self._dockwidget.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'disconnect')
+            self._dockwidget.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'disconnect')
+            self._dockwidget.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'disconnect')
+            
+            # Auto-initialize empty expressions with best available field
+            expressions_updated = False
+            single_expr = layer_props["exploring"]["single_selection_expression"]
+            multiple_expr = layer_props["exploring"]["multiple_selection_expression"]
+            custom_expr = layer_props["exploring"]["custom_selection_expression"]
+            
+            if not single_expr or not multiple_expr or not custom_expr:
+                best_field = get_best_display_field(layer)
+                if best_field:
+                    if not single_expr:
+                        layer_props["exploring"]["single_selection_expression"] = best_field
+                        self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["single_selection_expression"] = best_field
+                        expressions_updated = True
+                    if not multiple_expr:
+                        layer_props["exploring"]["multiple_selection_expression"] = best_field
+                        self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["multiple_selection_expression"] = best_field
+                        expressions_updated = True
+                    if not custom_expr:
+                        layer_props["exploring"]["custom_selection_expression"] = best_field
+                        self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["custom_selection_expression"] = best_field
+                        expressions_updated = True
+                    
+                    if expressions_updated:
+                        logger.debug(f"Auto-initialized exploring expressions with field '{best_field}' for layer {layer.name()}")
+                        if is_valid_layer(layer):
+                            properties_to_save = []
+                            if not single_expr:
+                                properties_to_save.append(("exploring", "single_selection_expression"))
+                            if not multiple_expr:
+                                properties_to_save.append(("exploring", "multiple_selection_expression"))
+                            if not custom_expr:
+                                properties_to_save.append(("exploring", "custom_selection_expression"))
+                            self._dockwidget.settingLayerVariable.emit(layer, properties_to_save)
+                        else:
+                            logger.debug(f"_reload_exploration_widgets: layer became invalid, skipping signal emit")
+            
+            # Update expressions after potential auto-initialization
+            single_expr = layer_props["exploring"]["single_selection_expression"]
+            multiple_expr = layer_props["exploring"]["multiple_selection_expression"]
+            custom_expr = layer_props["exploring"]["custom_selection_expression"]
+            
+            # Single selection widget
+            if "SINGLE_SELECTION_FEATURES" in self._dockwidget.widgets.get("EXPLORING", {}):
+                saved_fid = None
+                saved_layer_id = None
+                picker_widget = self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+                
+                current_feature = picker_widget.feature() if picker_widget else None
+                if current_feature and current_feature.isValid() and current_feature.id() is not None:
+                    saved_fid = current_feature.id()
+                    if picker_widget.layer():
+                        saved_layer_id = picker_widget.layer().id()
+                    logger.debug(f"_reload_exploration_widgets: Saved current feature FID={saved_fid} from widget")
+                elif hasattr(self._dockwidget, '_last_single_selection_fid') and self._dockwidget._last_single_selection_fid is not None:
+                    saved_fid = self._dockwidget._last_single_selection_fid
+                    saved_layer_id = getattr(self._dockwidget, '_last_single_selection_layer_id', None)
+                    logger.debug(f"_reload_exploration_widgets: Using saved _last_single_selection_fid={saved_fid}")
+                
+                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(None)
+                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(layer)
+                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(single_expr)
+                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFetchGeometry(True)
+                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setShowBrowserButtons(True)
+                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setAllowNull(True)
+                
+                if saved_fid is not None and layer is not None:
+                    if saved_layer_id is None or saved_layer_id == layer.id():
+                        logger.info(f"_reload_exploration_widgets: Restoring feature FID={saved_fid} after widget refresh")
+                        try:
+                            self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFeature(saved_fid)
+                            self._dockwidget._last_single_selection_fid = saved_fid
+                            self._dockwidget._last_single_selection_layer_id = layer.id()
+                        except Exception as e:
+                            logger.warning(f"_reload_exploration_widgets: Failed to restore feature FID={saved_fid}: {e}")
+                    else:
+                        logger.debug(f"_reload_exploration_widgets: Layer changed, not restoring FID")
+            
+            # Multiple selection widget
+            if "MULTIPLE_SELECTION_FEATURES" in self._dockwidget.widgets.get("EXPLORING", {}):
+                saved_checked_fids = []
+                saved_multi_layer_id = None
+                multi_widget = self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
+                
+                if multi_widget and hasattr(multi_widget, 'checkedItems'):
+                    try:
+                        checked_items = multi_widget.checkedItems()
+                        if checked_items:
+                            saved_checked_fids = [item[1] for item in checked_items if len(item) > 1]
+                            if multi_widget.layer:
+                                saved_multi_layer_id = multi_widget.layer.id()
+                            logger.info(f"_reload_exploration_widgets: Saved {len(saved_checked_fids)} checked items FIDs")
+                    except Exception as e:
+                        logger.debug(f"_reload_exploration_widgets: Could not save checked items: {e}")
+                
+                if not saved_checked_fids:
+                    if hasattr(self._dockwidget, '_last_multiple_selection_fids') and self._dockwidget._last_multiple_selection_fids:
+                        saved_checked_fids = self._dockwidget._last_multiple_selection_fids
+                        saved_multi_layer_id = getattr(self._dockwidget, '_last_multiple_selection_layer_id', None)
+                        logger.info(f"_reload_exploration_widgets: Using backup fids: {len(saved_checked_fids)}")
+                
+                self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(layer, layer_props, skip_task=True)
+                self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(multiple_expr)
+                
+                if saved_checked_fids and layer is not None:
+                    if saved_multi_layer_id is None or saved_multi_layer_id == layer.id():
+                        logger.info(f"_reload_exploration_widgets: Restoring {len(saved_checked_fids)} checked items")
+                        try:
+                            if hasattr(multi_widget, 'list_widgets') and layer.id() in multi_widget.list_widgets:
+                                list_widget_wrapper = multi_widget.list_widgets[layer.id()]
+                                restored_selection = [[str(fid), fid, True] for fid in saved_checked_fids]
+                                list_widget_wrapper.setSelectedFeaturesList(restored_selection)
+                                logger.info(f"_reload_exploration_widgets: Restored {len(saved_checked_fids)} checked items")
+                            
+                            self._dockwidget._last_multiple_selection_fids = saved_checked_fids
+                            self._dockwidget._last_multiple_selection_layer_id = layer.id()
+                        except Exception as e:
+                            logger.warning(f"_reload_exploration_widgets: Failed to restore checked items: {e}")
+            
+            # Field expression widgets
+            if "SINGLE_SELECTION_EXPRESSION" in self._dockwidget.widgets.get("EXPLORING", {}):
+                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(layer)
+                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(single_expr)
+            
+            if "MULTIPLE_SELECTION_EXPRESSION" in self._dockwidget.widgets.get("EXPLORING", {}):
+                self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(layer)
+                self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(multiple_expr)
+            
+            if "CUSTOM_SELECTION_EXPRESSION" in self._dockwidget.widgets.get("EXPLORING", {}):
+                self._dockwidget.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setLayer(layer)
+                self._dockwidget.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setExpression(custom_expr)
+            
+            # Reconnect signals
+            self._dockwidget.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'connect', 'featureChanged')
+            self._dockwidget.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
+            self._dockwidget.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
+            self._dockwidget.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
+            self._dockwidget.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
+            self._dockwidget.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
+            self._dockwidget.manageSignal(["EXPLORING","IDENTIFY"], 'connect', 'clicked')
+            self._dockwidget.manageSignal(["EXPLORING","ZOOM"], 'connect', 'clicked')
+            
+            # DEBUG logging
+            picker_widget = self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+            logger.debug(f"_reload_exploration_widgets complete:")
+            logger.debug(f"  layer: {layer.name() if layer else 'None'}")
+            logger.debug(f"  single_expr: {single_expr}")
+            logger.debug(f"  picker layer: {picker_widget.layer().name() if picker_widget.layer() else 'None'}")
+        except (AttributeError, KeyError, RuntimeError) as e:
+            error_type = type(e).__name__
+            error_details = str(e)
+            logger.warning(f"Error in _reload_exploration_widgets: {error_type}: {error_details}")
+            logger.debug(f"Layer: {layer.name() if layer else 'None'}, widgets_initialized: {self._dockwidget.widgets_initialized}")
+            
+            if isinstance(e, KeyError):
+                logger.debug(f"Missing key: {error_details}")
+
     # === Utility ===
 
     def __repr__(self) -> str:
