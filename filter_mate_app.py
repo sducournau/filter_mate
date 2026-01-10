@@ -1448,7 +1448,7 @@ class FilterMateApp:
             Connection object or None if connection fails
         """
         # v4.5: Feature flag for DatasourceManager delegation
-        USE_DATASOURCE_MANAGER = False
+        USE_DATASOURCE_MANAGER = True  # Phase 4.6: ENABLED
         
         if USE_DATASOURCE_MANAGER and self._datasource_manager:
             try:
@@ -1788,7 +1788,7 @@ class FilterMateApp:
         # v4.1: Feature flag for TaskOrchestrator delegation
         # Set USE_TASK_ORCHESTRATOR = True to enable new architecture
         # Keep False during testing period for safe rollback
-        USE_TASK_ORCHESTRATOR = False  # TODO: Enable after testing
+        USE_TASK_ORCHESTRATOR = True  # Phase 4.6: ENABLED
         
         if USE_TASK_ORCHESTRATOR and self._task_orchestrator is not None:
             logger.info(f"v4.1: Delegating task '{task_name}' to TaskOrchestrator")
@@ -3886,7 +3886,7 @@ class FilterMateApp:
         """
         
         # v4.3: Feature flag for FilterResultHandler delegation
-        USE_FILTER_RESULT_HANDLER = False  # TODO: Enable after testing
+        USE_FILTER_RESULT_HANDLER = True  # Phase 4.6: ENABLED
         
         if USE_FILTER_RESULT_HANDLER and self._filter_result_handler is not None:
             logger.info(f"v4.3: Delegating filter completion to FilterResultHandler")
@@ -4463,7 +4463,7 @@ class FilterMateApp:
         v4.5 DELEGATION: Uses DatasourceManager.create_spatial_index_for_layer()
         """
         # v4.5: Feature flag for DatasourceManager delegation
-        USE_DATASOURCE_MANAGER = False
+        USE_DATASOURCE_MANAGER = True  # Phase 4.6: ENABLED
         
         if USE_DATASOURCE_MANAGER and self._datasource_manager:
             try:
@@ -4539,7 +4539,7 @@ class FilterMateApp:
             layer: PostgreSQL layer to get connection from
         """
         # v4.5: Feature flag for DatasourceManager delegation
-        USE_DATASOURCE_MANAGER = False
+        USE_DATASOURCE_MANAGER = True  # Phase 4.6: ENABLED
         
         if USE_DATASOURCE_MANAGER and self._datasource_manager:
             try:
@@ -5088,7 +5088,7 @@ class FilterMateApp:
         v4.5 DELEGATION: Uses DatasourceManager.update_datasource()
         """
         # v4.5: Feature flag for DatasourceManager delegation
-        USE_DATASOURCE_MANAGER = False
+        USE_DATASOURCE_MANAGER = True  # Phase 4.6: ENABLED
         
         if USE_DATASOURCE_MANAGER and self._datasource_manager:
             try:
@@ -5175,7 +5175,7 @@ class FilterMateApp:
             format: OGR format name (e.g., 'GPKG', 'ESRI Shapefile')
         """
         # v4.5: Feature flag for DatasourceManager delegation
-        USE_DATASOURCE_MANAGER = False
+        USE_DATASOURCE_MANAGER = True  # Phase 4.6: ENABLED
         
         if USE_DATASOURCE_MANAGER and self._datasource_manager:
             try:
