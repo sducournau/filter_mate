@@ -1910,1070 +1910,100 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._on_backend_indicator_clicked_legacy(event)
     
     def _on_backend_indicator_clicked_legacy(self, event):
-        """Legacy implementation of backend indicator click - kept for fallback."""
-        from qgis.PyQt.QtWidgets import QMenu
-        from qgis.PyQt.QtGui import QCursor
-        from .adapters.backends import POSTGRESQL_AVAILABLE
+        """
+        Legacy implementation of backend indicator click.
         
-        # NEW: If indicator shows "..." (waiting state), trigger reload instead
-        if hasattr(self, 'backend_indicator_label') and self.backend_indicator_label:
-            current_text = self.backend_indicator_label.text()
-            if current_text == "..." or current_text == "⟳":
-                logger.info("Backend indicator clicked while in waiting state - triggering reload")
-                self._trigger_reload_layers()
-                return
-        
-        current_layer = self.current_layer
-        if not current_layer:
-            # No current layer - trigger reload as fallback
-            logger.info("Backend indicator clicked with no current layer - triggering reload")
-            self._trigger_reload_layers()
-            return
-        
-        # Get available backends for this layer
-        available_backends = self._get_available_backends_for_layer(current_layer)
-        
-        if not available_backends:
-            show_warning("FilterMate", "No alternative backends available for this layer")
-            return
-        
-        # Create context menu
-        menu = QMenu(self)
-        menu.setStyleSheet("""
-            QMenu {
-                background-color: white;
-                border: 1px solid #cccccc;
-                padding: 5px;
-            }
-            QMenu::item {
-                padding: 5px 20px;
-            }
-            QMenu::item:selected {
-                background-color: #3498db;
-                color: white;
-            }
-        """)
-        
-        # Add header
-        header = menu.addAction("Select Backend:")
-        header.setEnabled(False)
-        menu.addSeparator()
-        
-        # Add available backends
-        current_forced = self.forced_backends.get(current_layer.id())
-        
-        for backend_type, backend_name, backend_icon in available_backends:
-            action_text = f"{backend_icon} {backend_name}"
-            if current_forced == backend_type:
-                action_text += " ✓"
-            action = menu.addAction(action_text)
-            action.setData(backend_type)
-        
-        menu.addSeparator()
-        
-        # Add "Auto" option (remove forced backend)
-        auto_action = menu.addAction("⚙️ Auto (Default)")
-        auto_action.setData(None)
-        if not current_forced:
-            auto_action.setText(auto_action.text() + " ✓")
-        
-        menu.addSeparator()
-        
-        # Add "Auto-select All" option
-        auto_all_action = menu.addAction("🎯 Auto-select Optimal for All Layers")
-        auto_all_action.setData('__AUTO_ALL__')
-        
-        # Add "Force All Layers" option - force current backend for all layers
-        menu.addSeparator()
-        # Detect current backend (forced or auto-detected)
-        current_backend = self._detect_current_backend(current_layer)
-        backend_name = current_backend.upper() if current_backend else "CURRENT"
-        force_all_text = f"🔒 Force {backend_name} for All Layers"
-        force_all_tooltip = f"Force all layers to use {backend_name} backend"
-        
-        force_all_action = menu.addAction(force_all_text)
-        force_all_action.setData('__FORCE_ALL__')
-        force_all_action.setToolTip(force_all_tooltip)
-        
-        # Add Optimization settings submenu
-        menu.addSeparator()
-        opt_submenu = menu.addMenu("🔧 Optimization Settings")
-        
-        # Get current optimization settings
-        opt_enabled = getattr(self, '_optimization_enabled', True)
-        centroid_auto = getattr(self, '_centroid_auto_enabled', True)
-        ask_before = getattr(self, '_optimization_ask_before', True)
-        
-        # Toggle optimization enabled
-        opt_enabled_text = "✓ Enable auto-optimization" if opt_enabled else "  Enable auto-optimization"
-        opt_enabled_action = opt_submenu.addAction(opt_enabled_text)
-        opt_enabled_action.setData('__OPT_TOGGLE_ENABLED__')
-        opt_enabled_action.setToolTip("Enable/disable automatic optimization recommendations")
-        
-        # Toggle centroid auto-detection
-        centroid_text = "✓ Auto-centroid for distant layers" if centroid_auto else "  Auto-centroid for distant layers"
-        centroid_action = opt_submenu.addAction(centroid_text)
-        centroid_action.setData('__OPT_TOGGLE_CENTROID__')
-        centroid_action.setToolTip("Automatically suggest centroids for WFS, ArcGIS, remote PostgreSQL layers")
-        
-        # Toggle ask before applying
-        ask_text = "✓ Ask before applying optimizations" if ask_before else "  Ask before applying optimizations"
-        ask_action = opt_submenu.addAction(ask_text)
-        ask_action.setData('__OPT_TOGGLE_ASK__')
-        ask_action.setToolTip("Show confirmation dialog before applying optimizations")
-        
-        opt_submenu.addSeparator()
-        
-        # Analyze current layer
-        analyze_action = opt_submenu.addAction("📊 Analyze current layer")
-        analyze_action.setData('__OPT_ANALYZE_LAYER__')
-        analyze_action.setToolTip("Show optimization recommendations for the current layer")
-        
-        opt_submenu.addSeparator()
-        
-        # Open simple settings dialog
-        settings_action = opt_submenu.addAction("⚙️ Quick settings...")
-        settings_action.setData('__OPT_SETTINGS_DIALOG__')
-        settings_action.setToolTip("Quick optimization settings")
-        
-        # Open advanced backend settings dialog (NEW)
-        backend_settings_action = opt_submenu.addAction("🔧 Backend optimizations...")
-        backend_settings_action.setData('__OPT_BACKEND_SETTINGS_DIALOG__')
-        backend_settings_action.setToolTip("Configure detailed optimizations for PostgreSQL, Spatialite, and OGR backends")
-        
-        # Add PostgreSQL maintenance section if PostgreSQL is available
-        if POSTGRESQL_AVAILABLE:
-            menu.addSeparator()
-            
-            # PostgreSQL maintenance submenu
-            pg_submenu = menu.addMenu("🐘 PostgreSQL Maintenance")
-            
-            # Auto cleanup toggle
-            auto_cleanup_enabled = getattr(self, '_pg_auto_cleanup_enabled', True)
-            cleanup_toggle_text = "✓ Auto-cleanup session views" if auto_cleanup_enabled else "  Auto-cleanup session views"
-            cleanup_toggle_action = pg_submenu.addAction(cleanup_toggle_text)
-            cleanup_toggle_action.setData('__PG_TOGGLE_CLEANUP__')
-            cleanup_toggle_action.setToolTip("Automatically drop materialized views when plugin unloads")
-            
-            pg_submenu.addSeparator()
-            
-            # Manual cleanup current session
-            cleanup_session_action = pg_submenu.addAction("🧹 Cleanup my session views now")
-            cleanup_session_action.setData('__PG_CLEANUP_SESSION__')
-            cleanup_session_action.setToolTip("Drop all materialized views created by this session")
-            
-            # Cleanup schema if no other sessions
-            cleanup_schema_action = pg_submenu.addAction("🗑️ Cleanup schema (if no other sessions)")
-            cleanup_schema_action.setData('__PG_CLEANUP_SCHEMA__')
-            cleanup_schema_action.setToolTip("Drop the filter_mate_temp schema if no other clients are using it")
-            
-            pg_submenu.addSeparator()
-            
-            # Show session info
-            session_info_action = pg_submenu.addAction("ℹ️ Show session info")
-            session_info_action.setData('__PG_SESSION_INFO__')
-        
-        # Show menu and handle selection
-        selected_action = menu.exec_(QCursor.pos())
-        
-        if selected_action:
-            selected_backend = selected_action.data()
-            
-            # Handle "Auto-select All" special action
-            if selected_backend == '__AUTO_ALL__':
-                self.auto_select_optimal_backends()
-                return
-            
-            # Handle "Force All Layers" special action
-            if selected_backend == '__FORCE_ALL__':
-                # Use detected backend (which may be forced or auto-detected)
-                backend_to_force = self._detect_current_backend(current_layer)
-                self._force_backend_for_all_layers(backend_to_force)
-                return
-            
-            # Handle PostgreSQL maintenance actions
-            if selected_backend == '__PG_TOGGLE_CLEANUP__':
-                self._toggle_pg_auto_cleanup()
-                return
-            
-            if selected_backend == '__PG_CLEANUP_SESSION__':
-                self._cleanup_postgresql_session_views()
-                return
-            
-            if selected_backend == '__PG_CLEANUP_SCHEMA__':
-                self._cleanup_postgresql_schema_if_empty()
-                return
-            
-            if selected_backend == '__PG_SESSION_INFO__':
-                self._show_postgresql_session_info()
-                return
-            
-            # Handle Optimization actions
-            if selected_backend == '__OPT_TOGGLE_ENABLED__':
-                self._toggle_optimization_enabled()
-                return
-            
-            if selected_backend == '__OPT_TOGGLE_CENTROID__':
-                self._toggle_centroid_auto()
-                return
-            
-            if selected_backend == '__OPT_TOGGLE_ASK__':
-                self._toggle_optimization_ask_before()
-                return
-            
-            if selected_backend == '__OPT_ANALYZE_LAYER__':
-                self._analyze_layer_optimizations()
-                return
-            
-            if selected_backend == '__OPT_SETTINGS_DIALOG__':
-                self._show_optimization_settings_dialog()
-                return
-            
-            if selected_backend == '__OPT_BACKEND_SETTINGS_DIALOG__':
-                self._show_backend_optimization_dialog()
-                return
-            
-            self._set_forced_backend(current_layer.id(), selected_backend)
-            
-            # Update indicator to reflect change
-            if selected_backend:
-                self._update_backend_indicator(self._current_provider_type, 
-                                              self._current_postgresql_available,
-                                              actual_backend=selected_backend)
-                show_success("FilterMate", f"Backend forced to {selected_backend.upper()} for layer '{current_layer.name()}'")
-            else:
-                # Reset to auto - no forced backend
-                self._update_backend_indicator(self._current_provider_type, 
-                                              self._current_postgresql_available,
-                                              actual_backend=None)
-                show_info("FilterMate", f"Backend set to Auto for layer '{current_layer.name()}'")
+        v4.0: Reduced - main logic moved to BackendController.
+        This fallback only logs a warning if called.
+        """
+        # v4.0: This should not be called if controller works properly
+        from .infrastructure.feedback import show_warning
+        import logging
+        logger = logging.getLogger('FilterMate')
+        logger.warning("_on_backend_indicator_clicked_legacy called - controller may not be working")
+        show_warning("FilterMate", "Backend controller not available - please report this issue")
     
 
-    # ========================================
-    # FAVORITES INDICATOR METHODS
-    # ========================================
-    
     def _on_favorite_indicator_clicked(self, event):
         """
         Handle click on favorites indicator to show favorites menu.
-        Allows user to:
-        - Add current filter as favorite
-        - Apply a saved favorite
-        - Manage favorites (edit, delete)
+        
+        v4.0: Delegates to FavoritesController.
         """
-        from qgis.PyQt.QtWidgets import QMenu
-        from qgis.PyQt.QtGui import QCursor
-        from qgis.core import QgsExpressionContextUtils
+        # v4.0: Delegate to controller
+        if (self._controller_integration 
+            and hasattr(self._controller_integration, '_favorites_controller')
+            and self._controller_integration._favorites_controller):
+            self._controller_integration._favorites_controller.handle_indicator_clicked()
+            return
         
-        # Get favorites manager from app (will be initialized there)
-        favorites_manager = getattr(self, '_favorites_manager', None)
-        if favorites_manager is None:
-            # Create temporary manager if not yet initialized
-            from .core.services.favorites_service import FavoritesManager
-            self._favorites_manager = FavoritesManager()
-            
-            # Try to get database path and project UUID from project variables
-            if self.PROJECT:
-                scope = QgsExpressionContextUtils.projectScope(self.PROJECT)
-                project_uuid = scope.variable('filterMate_db_project_uuid')
-                if project_uuid:
-                    # Construct db path from config
-                    from .config.config import ENV_VARS
-                    import os
-                    db_path = os.path.normpath(ENV_VARS.get("PLUGIN_CONFIG_DIRECTORY", "") + os.sep + 'filterMate_db.sqlite')
-                    if os.path.exists(db_path):
-                        self._favorites_manager.set_database(db_path, str(project_uuid))
-            
-            self._favorites_manager.load_from_project()
-            favorites_manager = self._favorites_manager
-        
-        # Create context menu
-        menu = QMenu(self)
-        menu.setStyleSheet("""
-            QMenu {
-                background-color: white;
-                border: 1px solid #cccccc;
-                padding: 5px;
-            }
-            QMenu::item {
-                padding: 5px 20px;
-            }
-            QMenu::item:selected {
-                background-color: #f39c12;
-                color: white;
-            }
-            QMenu::separator {
-                height: 1px;
-                background-color: #cccccc;
-                margin: 3px 10px;
-            }
-        """)
-        
-        # === ADD TO FAVORITES ===
-        add_action = menu.addAction("⭐ Add Current Filter to Favorites")
-        add_action.setData('__ADD_FAVORITE__')
-        
-        # Check if there's an expression to save
-        current_expression = self._get_current_filter_expression()
-        if not current_expression:
-            add_action.setEnabled(False)
-            add_action.setText("⭐ Add Current Filter (no filter active)")
-        
-        menu.addSeparator()
-        
-        # === FAVORITES LIST ===
-        favorites = favorites_manager.get_all_favorites()
-        
-        if favorites:
-            # Add header
-            header = menu.addAction(f"📋 Saved Favorites ({len(favorites)})")
-            header.setEnabled(False)
-            
-            # Show recent/most used first (up to 10)
-            recent_favs = favorites_manager.get_recent_favorites(limit=10)
-            for fav in recent_favs:
-                # Build display text with layers count
-                layers_count = fav.get_layers_count() if hasattr(fav, 'get_layers_count') else 1
-                fav_text = f"  ★ {fav.get_display_name(25)}"
-                if layers_count > 1:
-                    fav_text += f" [{layers_count}]"
-                if fav.use_count > 0:
-                    fav_text += f" ({fav.use_count}×)"
-                action = menu.addAction(fav_text)
-                action.setData(('apply', fav.id))
-                # Build tooltip with layer details
-                tooltip = fav.get_preview(80)
-                if fav.remote_layers:
-                    tooltip += f"\n\nLayers ({layers_count}):\n• {fav.layer_name or 'Source'}"
-                    for remote_name in list(fav.remote_layers.keys())[:5]:
-                        tooltip += f"\n• {remote_name}"
-                    if len(fav.remote_layers) > 5:
-                        tooltip += f"\n... and {len(fav.remote_layers) - 5} more"
-                action.setToolTip(tooltip)
-            
-            # Show "More..." if there are more favorites
-            if len(favorites) > 10:
-                more_action = menu.addAction(f"  ... {len(favorites) - 10} more favorites")
-                more_action.setData('__SHOW_ALL__')
-        else:
-            no_favs = menu.addAction("(No favorites saved)")
-            no_favs.setEnabled(False)
-        
-        menu.addSeparator()
-        
-        # === MANAGEMENT OPTIONS ===
-        manage_action = menu.addAction("⚙️ Manage Favorites...")
-        manage_action.setData('__MANAGE__')
-        
-        export_action = menu.addAction("📤 Export Favorites...")
-        export_action.setData('__EXPORT__')
-        
-        import_action = menu.addAction("📥 Import Favorites...")
-        import_action.setData('__IMPORT__')
-        
-        # Show menu and handle selection
-        selected_action = menu.exec_(QCursor.pos())
-        
-        if selected_action:
-            action_data = selected_action.data()
-            
-            if action_data == '__ADD_FAVORITE__':
-                self._add_current_to_favorites()
-            elif action_data == '__MANAGE__':
-                self._show_favorites_manager_dialog()
-            elif action_data == '__EXPORT__':
-                self._export_favorites()
-            elif action_data == '__IMPORT__':
-                self._import_favorites()
-            elif action_data == '__SHOW_ALL__':
-                self._show_favorites_manager_dialog()
-            elif isinstance(action_data, tuple) and action_data[0] == 'apply':
-                self._apply_favorite(action_data[1])
-    
-    def _get_current_filter_expression(self) -> str:
-        """
-        Get the current filter expression.
-        
-        Tries multiple sources in order:
-        1. Expression widget (if exists and has content)
-        2. Current layer's subsetString (the actual applied filter)
-        3. Source layer from combobox's subsetString
-        
-        Returns:
-            str: The current filter expression, or empty string if none
-        """
-        try:
-            # Source 1: Try to get expression from the expression widget
-            if hasattr(self, 'mQgsFieldExpressionWidget_filtering_active_expression'):
-                widget = self.mQgsFieldExpressionWidget_filtering_active_expression
-                if hasattr(widget, 'expression'):
-                    expr = widget.expression()
-                    if expr and expr.strip():
-                        return expr
-                elif hasattr(widget, 'currentText'):
-                    expr = widget.currentText()
-                    if expr and expr.strip():
-                        return expr
-            
-            # Source 2: Try to get subsetString from current layer
-            if hasattr(self, 'current_layer') and self.current_layer:
-                subset = self.current_layer.subsetString()
-                if subset and subset.strip():
-                    return subset
-            
-            # Source 3: Try to get from the filtering source layer combobox
-            if hasattr(self, 'comboBox_filtering_current_layer'):
-                layer = self.comboBox_filtering_current_layer.currentLayer()
-                if layer:
-                    subset = layer.subsetString()
-                    if subset and subset.strip():
-                        return subset
-            
-            return ""
-        except Exception as e:
-            logger.debug(f"Could not get current expression: {e}")
-            return ""
+        # Fallback: show warning
+        from .infrastructure.feedback import show_warning
+        show_warning("FilterMate", "Favorites controller not available")
     
     def _add_current_to_favorites(self):
-        """Add current filter configuration to favorites, including all filtered remote layers."""
-        from qgis.PyQt.QtWidgets import QLineEdit, QDialog, QVBoxLayout, QFormLayout, QDialogButtonBox, QTextEdit
-        from qgis.core import QgsProject
-        from .core.services.favorites_service import FilterFavorite
+        """
+        Add current filter configuration to favorites.
         
-        expression = self._get_current_filter_expression()
-        if not expression:
-            show_warning("FilterMate", "No active filter to save as favorite")
+        v4.0: Delegates to FavoritesController.
+        """
+        # v4.0: Delegate to controller
+        if (self._controller_integration 
+            and hasattr(self._controller_integration, '_favorites_controller')
+            and self._controller_integration._favorites_controller):
+            self._controller_integration._favorites_controller.add_current_to_favorites()
             return
         
-        # Collect all filtered layers (remote layers with active filters)
-        remote_layers_data = {}
-        project = QgsProject.instance()
-        source_layer_id = None
-        source_layer_name = None
-        
-        if hasattr(self, 'current_layer') and self.current_layer:
-            source_layer_id = self.current_layer.id()
-            source_layer_name = self.current_layer.name()
-        
-        # Iterate through all vector layers to find those with filters
-        for layer_id, layer in project.mapLayers().items():
-            # Skip non-vector layers
-            if not hasattr(layer, 'subsetString'):
-                continue
-            # Skip the source layer (already captured in main expression)
-            if layer_id == source_layer_id:
-                continue
-            # Check if layer has an active filter
-            subset = layer.subsetString()
-            if subset and subset.strip():
-                remote_layers_data[layer.name()] = {
-                    'expression': subset,
-                    'feature_count': layer.featureCount(),
-                    'layer_id': layer_id,
-                    'provider': layer.providerType()
-                }
-        
-        # Build default name and auto-description
-        layers_count = 1 + len(remote_layers_data)
-        default_name = ""
-        if layers_count > 1:
-            default_name = f"Filter ({layers_count} layers)"
-        
-        # Generate auto-description
-        auto_description = self._generate_favorite_description(
-            source_layer_name, expression, remote_layers_data
-        )
-        
-        # Create custom dialog for name + description
-        dialog = QDialog(self)
-        dialog.setWindowTitle("FilterMate - Add to Favorites")
-        dialog.setMinimumSize(380, 200)
-        dialog.resize(420, 260)
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(8)
-        
-        form_layout = QFormLayout()
-        
-        # Name input
-        name_edit = QLineEdit()
-        name_edit.setText(default_name)
-        name_edit.setPlaceholderText("Enter a name for this filter")
-        form_layout.addRow(f"Name ({layers_count} layer{'s' if layers_count > 1 else ''}):", name_edit)
-        
-        # Description input (auto-generated but editable)
-        desc_edit = QTextEdit()
-        desc_edit.setMaximumHeight(120)
-        desc_edit.setText(auto_description)
-        desc_edit.setPlaceholderText("Description (auto-generated, you can modify it)")
-        form_layout.addRow("Description:", desc_edit)
-        
-        layout.addLayout(form_layout)
-        
-        # Buttons
-        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        button_box.accepted.connect(dialog.accept)
-        button_box.rejected.connect(dialog.reject)
-        layout.addWidget(button_box)
-        
-        if dialog.exec_() == QDialog.Accepted:
-            name = name_edit.text().strip()
-            description = desc_edit.toPlainText().strip()
-            
-            if name:
-                # Get current layer info
-                layer_name = None
-                layer_provider = None
-                if hasattr(self, 'current_layer') and self.current_layer:
-                    layer_name = self.current_layer.name()
-                    layer_provider = self.current_layer.providerType()
-                
-                # Create favorite with remote layers and description
-                fav = FilterFavorite(
-                    name=name,
-                    expression=expression,
-                    layer_name=layer_name,
-                    layer_provider=layer_provider,
-                    remote_layers=remote_layers_data if remote_layers_data else None,
-                    description=description
-                )
-                
-                # Add to manager
-                self._favorites_manager.add_favorite(fav)
-                self._favorites_manager.save_to_project()
-                
-                # Update indicator
-                self._update_favorite_indicator()
-                
-                msg = f"Filter saved as '{name}'"
-                if remote_layers_data:
-                    msg += f" ({len(remote_layers_data) + 1} layers)"
-                show_success("FilterMate", msg)
-    
-    def _generate_favorite_description(self, source_layer_name: str, expression: str, 
-                                        remote_layers: dict) -> str:
-        """
-        Generate an automatic description for a favorite.
-        
-        Args:
-            source_layer_name: Name of the source layer
-            expression: Filter expression
-            remote_layers: Dict of remote layers data
-            
-        Returns:
-            str: Auto-generated description
-        """
-        from datetime import datetime
-        
-        lines = []
-        
-        # Add date
-        lines.append(f"Created: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-        lines.append("")
-        
-        # Source layer info
-        if source_layer_name:
-            lines.append(f"Source: {source_layer_name}")
-            # Extract key info from expression (first condition or truncated)
-            expr_preview = expression[:100] + "..." if len(expression) > 100 else expression
-            lines.append(f"Filter: {expr_preview}")
-        
-        # Remote layers summary
-        if remote_layers:
-            lines.append("")
-            lines.append(f"Remote layers ({len(remote_layers)}):")
-            for layer_name, data in list(remote_layers.items())[:5]:
-                feature_count = data.get('feature_count', '?')
-                lines.append(f"  • {layer_name} ({feature_count} features)")
-            if len(remote_layers) > 5:
-                lines.append(f"  ... and {len(remote_layers) - 5} more")
-        
-        return "\n".join(lines)
+        # Fallback: show warning
+        from .infrastructure.feedback import show_warning
+        show_warning("FilterMate", "Could not add favorite - controller not available")
     
     def _apply_favorite(self, favorite_id: str):
-        """Apply a saved favorite filter to all layers (source + remote)."""
-        from qgis.core import QgsProject
+        """
+        Apply a saved favorite filter.
         
-        fav = self._favorites_manager.get_favorite(favorite_id)
-        if not fav:
-            show_warning("FilterMate", "Favorite not found")
+        v4.0: Delegates to FavoritesController.
+        """
+        # v4.0: Delegate to controller
+        if (self._controller_integration 
+            and hasattr(self._controller_integration, '_favorites_controller')
+            and self._controller_integration._favorites_controller):
+            self._controller_integration._favorites_controller.apply_favorite(favorite_id)
             return
         
-        project = QgsProject.instance()
-        applied_count = 0
-        errors = []
-        
-        # Try to find and apply filter to source layer by name
-        source_layer = None
-        if fav.layer_name:
-            matching_layers = project.mapLayersByName(fav.layer_name)
-            if matching_layers:
-                source_layer = matching_layers[0]
-        
-        # Apply filter to source layer
-        if source_layer and fav.expression:
-            try:
-                source_layer.setSubsetString(fav.expression)
-                applied_count += 1
-                logger.info(f"Applied filter to source layer: {source_layer.name()}")
-            except Exception as e:
-                errors.append(f"{fav.layer_name}: {str(e)}")
-                logger.error(f"Failed to apply filter to {fav.layer_name}: {e}")
-        elif fav.expression:
-            # If source layer not found, try to apply to current layer
-            if hasattr(self, 'current_layer') and self.current_layer:
-                try:
-                    self.current_layer.setSubsetString(fav.expression)
-                    applied_count += 1
-                    logger.info(f"Applied filter to current layer: {self.current_layer.name()}")
-                except Exception as e:
-                    errors.append(f"Current layer: {str(e)}")
-        
-        # Apply filters to remote layers
-        if fav.remote_layers:
-            for layer_name, layer_data in fav.remote_layers.items():
-                expression = layer_data.get('expression', '')
-                if not expression:
-                    continue
-                
-                # Find layer by name
-                matching_layers = project.mapLayersByName(layer_name)
-                if matching_layers:
-                    layer = matching_layers[0]
-                    try:
-                        layer.setSubsetString(expression)
-                        applied_count += 1
-                        logger.info(f"Applied filter to remote layer: {layer_name}")
-                    except Exception as e:
-                        errors.append(f"{layer_name}: {str(e)}")
-                        logger.error(f"Failed to apply filter to {layer_name}: {e}")
-                else:
-                    logger.warning(f"Layer not found in project: {layer_name}")
-        
-        # Zoom to filtered source layer extent (using actual filtered extent, not cached)
-        # Always zoom when loading a favorite for better UX
-        target_layer = source_layer if source_layer else (self.current_layer if hasattr(self, 'current_layer') else None)
-        
-        try:
-            from qgis.utils import iface
-            
-            if target_layer and target_layer.featureCount() > 0:
-                # Force update extents after filter application
-                target_layer.updateExtents()
-                
-                # Use get_filtered_layer_extent for accurate bounding box of filtered features
-                extent = self.get_filtered_layer_extent(target_layer)
-                
-                if extent and not extent.isEmpty():
-                    iface.mapCanvas().zoomToFeatureExtent(extent)
-                    logger.info(f"Zoomed to filtered extent of layer: {target_layer.name()}")
-                else:
-                    iface.mapCanvas().refresh()
-            else:
-                # Just refresh if no features match the filter
-                iface.mapCanvas().refresh()
-                if target_layer:
-                    logger.debug(f"Canvas refreshed (no features match filter)")
-        except Exception as e:
-            logger.warning(f"Could not zoom to filtered extent: {e}")
-            try:
-                iface.mapCanvas().refresh()
-            except (RuntimeError, AttributeError):
-                pass  # Canvas may be unavailable during shutdown
-        
-        # Update usage stats
-        self._favorites_manager.mark_favorite_used(favorite_id)
-        self._favorites_manager.save_to_project()
-        
-        # Update indicator
-        self._update_favorite_indicator()
-        
-        # Show result
-        if errors:
-            show_warning("FilterMate", f"Applied filter to {applied_count} layers. Errors: {len(errors)}")
-        else:
-            total_layers = fav.get_layers_count() if hasattr(fav, 'get_layers_count') else applied_count
-            if applied_count > 1:
-                show_success("FilterMate", f"Applied '{fav.name}' to {applied_count} layers")
-            else:
-                show_success("FilterMate", f"Applied filter: {fav.name}")
-    
+        # Fallback: show warning
+        from .infrastructure.feedback import show_warning
+        show_warning("FilterMate", f"Could not apply favorite {favorite_id}")
+
     def _show_favorites_manager_dialog(self):
-        """Show the favorites management dialog with list, edit, delete, and search capabilities."""
-        from qgis.PyQt.QtWidgets import (
-            QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
-            QPushButton, QLabel, QLineEdit, QTextEdit, QMessageBox, QFormLayout,
-            QSplitter, QTreeWidget, QTreeWidgetItem, QHeaderView, QTabWidget,
-            QWidget
-        )
-        from qgis.PyQt.QtCore import Qt
+        """
+        Show the favorites management dialog.
         
-        if not self._favorites_manager or self._favorites_manager.count == 0:
-            QMessageBox.information(
-                self,
-                "Favorites Manager",
-                "No favorites saved yet.\n\nClick the ★ indicator and select 'Add current filter to favorites' to save your first favorite."
-            )
+        v4.0: Delegates to FavoritesController/FavoritesManagerDialog.
+        Legacy implementation removed (-376 lines).
+        """
+        # v4.0: Delegate to controller integration
+        if (self._controller_integration 
+            and self._controller_integration.delegate_favorites_show_manager_dialog()):
             return
         
-        dialog = QDialog(self)
-        dialog.setWindowTitle("FilterMate - Favorites Manager")
-        dialog.setMinimumSize(550, 400)
-        dialog.resize(650, 480)
-        dialog.setModal(True)
-        
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(8)
-        
-        # Header with search
-        header_layout = QHBoxLayout()
-        header_label = QLabel(f"<b>Saved Favorites ({self._favorites_manager.count})</b>")
-        header_label.setStyleSheet("font-size: 11pt; margin-bottom: 5px;")
-        header_layout.addWidget(header_label)
-        header_layout.addStretch()
-        layout.addLayout(header_layout)
-        
-        # Search box for filtering favorites
-        search_layout = QHBoxLayout()
-        search_label = QLabel("🔍")
-        search_label.setStyleSheet("font-size: 12pt;")
-        search_layout.addWidget(search_label)
-        
-        search_edit = QLineEdit()
-        search_edit.setPlaceholderText("Search by name, expression, tags, or description...")
-        search_edit.setClearButtonEnabled(True)
-        search_edit.setStyleSheet("padding: 4px 8px; border-radius: 4px;")
-        search_layout.addWidget(search_edit)
-        layout.addLayout(search_layout)
-        
-        # Main content with splitter
-        splitter = QSplitter(Qt.Horizontal)
-        
-        # Left panel: List of favorites
-        left_panel = QWidget()
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(0)
-        
-        list_widget = QListWidget()
-        list_widget.setMinimumWidth(180)
-        list_widget.setMaximumWidth(250)
-        list_widget.setContextMenuPolicy(Qt.CustomContextMenu)
-        
-        # Store all favorites for search filtering
-        all_favorites = self._favorites_manager.get_all_favorites()
-        
-        def populate_list(favorites_to_show):
-            """Populate list widget with given favorites."""
-            list_widget.clear()
-            for fav in favorites_to_show:
-                layers_count = fav.get_layers_count() if hasattr(fav, 'get_layers_count') else 1
-                item_text = f"★ {fav.name}"
-                if layers_count > 1:
-                    item_text += f" [{layers_count}]"
-                # Show tags in item if any
-                if fav.tags:
-                    item_text += f" 🏷️"
-                item = QListWidgetItem(item_text)
-                item.setData(Qt.UserRole, fav.id)
-                tooltip = f"Layer: {fav.layer_name}\nUsed: {fav.use_count} times"
-                if fav.tags:
-                    tooltip += f"\nTags: {', '.join(fav.tags)}"
-                if fav.description:
-                    tooltip += f"\n\n{fav.description}"
-                item.setToolTip(tooltip)
-                list_widget.addItem(item)
-        
-        def on_search_changed(text):
-            """Filter favorites based on search text."""
-            if not text.strip():
-                populate_list(all_favorites)
-            else:
-                filtered = self._favorites_manager.search_favorites(text)
-                populate_list(filtered)
-                # Update header with filtered count
-                header_label.setText(f"<b>Favorites ({len(filtered)}/{self._favorites_manager.count})</b>")
-        
-        search_edit.textChanged.connect(on_search_changed)
-        
-        # Initial population
-        populate_list(all_favorites)
-        
-        left_layout.addWidget(list_widget)
-        splitter.addWidget(left_panel)
-        
-        # Right panel: Details with tabs
-        right_panel = QWidget()
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(0)
-        
-        # Tab widget for details
-        tab_widget = QTabWidget()
-        
-        # === TAB 1: General Info ===
-        general_tab = QWidget()
-        general_layout = QFormLayout(general_tab)
-        general_layout.setContentsMargins(8, 8, 8, 8)
-        general_layout.setSpacing(6)
-        general_layout.setRowWrapPolicy(QFormLayout.DontWrapRows)
-        
-        name_edit = QLineEdit()
-        name_edit.setPlaceholderText("Favorite name")
-        general_layout.addRow("Name:", name_edit)
-        
-        description_edit = QTextEdit()
-        description_edit.setMaximumHeight(60)
-        description_edit.setPlaceholderText("Description (auto-generated, editable)")
-        general_layout.addRow("Description:", description_edit)
-        
-        # Tags editing field
-        tags_edit = QLineEdit()
-        tags_edit.setPlaceholderText("Enter tags separated by commas (e.g., urban, population, 2024)")
-        tags_edit.setToolTip("Tags help organize and search favorites.\nSeparate multiple tags with commas.")
-        general_layout.addRow("Tags:", tags_edit)
-        
-        layer_label = QLabel("-")
-        layer_label.setStyleSheet("color: #555;")
-        layer_label.setWordWrap(True)
-        general_layout.addRow("Source Layer:", layer_label)
-        
-        provider_label = QLabel("-")
-        provider_label.setStyleSheet("color: #777;")
-        general_layout.addRow("Provider:", provider_label)
-        
-        # Stats row
-        stats_layout = QHBoxLayout()
-        stats_layout.setContentsMargins(0, 0, 0, 0)
-        use_count_label = QLabel("-")
-        created_label = QLabel("-")
-        created_label.setStyleSheet("color: #777; font-size: 9pt;")
-        stats_layout.addWidget(QLabel("Used:"))
-        stats_layout.addWidget(use_count_label)
-        stats_layout.addStretch()
-        stats_layout.addWidget(QLabel("Created:"))
-        stats_layout.addWidget(created_label)
-        general_layout.addRow(stats_layout)
-        
-        tab_widget.addTab(general_tab, "📋 General")
-        
-        # === TAB 2: Source Expression ===
-        expr_tab = QWidget()
-        expr_layout = QVBoxLayout(expr_tab)
-        expr_layout.setContentsMargins(8, 8, 8, 8)
-        expr_layout.setSpacing(4)
-        
-        source_expr_label = QLabel("<b>Source Layer Expression:</b>")
-        expr_layout.addWidget(source_expr_label)
-        
-        expression_edit = QTextEdit()
-        expression_edit.setPlaceholderText("Filter expression for source layer")
-        expression_edit.setStyleSheet("font-family: monospace; font-size: 10pt;")
-        expr_layout.addWidget(expression_edit)
-        
-        tab_widget.addTab(expr_tab, "🔍 Expression")
-        
-        # === TAB 3: Remote Layers ===
-        remote_tab = QWidget()
-        remote_layout = QVBoxLayout(remote_tab)
-        remote_layout.setContentsMargins(8, 8, 8, 8)
-        remote_layout.setSpacing(4)
-        
-        remote_header = QLabel("<b>Filtered Remote Layers:</b>")
-        remote_layout.addWidget(remote_header)
-        
-        remote_tree = QTreeWidget()
-        remote_tree.setHeaderLabels(["Layer", "Features", "Expression"])
-        remote_tree.setColumnCount(3)
-        remote_tree.header().setStretchLastSection(True)
-        remote_tree.header().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        remote_tree.header().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        remote_tree.setAlternatingRowColors(True)
-        remote_layout.addWidget(remote_tree)
-        
-        no_remote_label = QLabel("<i>No remote layers in this favorite</i>")
-        no_remote_label.setStyleSheet("color: #888; padding: 10px;")
-        no_remote_label.setAlignment(Qt.AlignCenter)
-        remote_layout.addWidget(no_remote_label)
-        
-        tab_widget.addTab(remote_tab, "🗂️ Remote Layers")
-        
-        right_layout.addWidget(tab_widget)
-        splitter.addWidget(right_panel)
-        
-        # Set splitter proportions (30% list, 70% details)
-        splitter.setSizes([200, 450])
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 2)
-        layout.addWidget(splitter, 1)  # Stretch factor for splitter
-        
-        # Buttons
-        button_layout = QHBoxLayout()
-        button_layout.setContentsMargins(0, 8, 0, 0)
-        
-        apply_btn = QPushButton("▶ Apply")
-        apply_btn.setEnabled(False)
-        apply_btn.setStyleSheet("background-color: #27ae60; color: white; font-weight: bold; padding: 6px 12px;")
-        
-        save_btn = QPushButton("💾 Save Changes")
-        save_btn.setEnabled(False)
-        save_btn.setStyleSheet("padding: 6px 12px;")
-        
-        delete_btn = QPushButton("🗑️ Delete")
-        delete_btn.setEnabled(False)
-        delete_btn.setStyleSheet("background-color: #e74c3c; color: white; padding: 6px 12px;")
-        
-        close_btn = QPushButton("Close")
-        close_btn.setStyleSheet("padding: 6px 12px;")
-        
-        button_layout.addWidget(apply_btn)
-        button_layout.addWidget(save_btn)
-        button_layout.addStretch()
-        button_layout.addWidget(delete_btn)
-        button_layout.addWidget(close_btn)
-        layout.addLayout(button_layout)
-        
-        # Store current favorite id
-        current_fav_id = [None]
-        
-        def on_selection_changed():
-            item = list_widget.currentItem()
-            if item:
-                fav_id = item.data(Qt.UserRole)
-                fav = self._favorites_manager.get_favorite(fav_id)
-                if fav:
-                    current_fav_id[0] = fav_id
-                    name_edit.setText(fav.name)
-                    description_edit.setText(fav.description or "")
-                    # Load tags as comma-separated string
-                    tags_edit.setText(", ".join(fav.tags) if fav.tags else "")
-                    layer_label.setText(fav.layer_name or "-")
-                    provider_label.setText(fav.layer_provider or "-")
-                    expression_edit.setText(fav.expression)
-                    use_count_label.setText(f"{fav.use_count} times")
-                    created_label.setText(fav.created_at[:16] if fav.created_at else "-")
-                    
-                    # Populate remote layers tree
-                    remote_tree.clear()
-                    if fav.remote_layers and len(fav.remote_layers) > 0:
-                        no_remote_label.hide()
-                        remote_tree.show()
-                        for layer_name, layer_data in fav.remote_layers.items():
-                            expr = layer_data.get('expression', '')
-                            feature_count = layer_data.get('feature_count', '?')
-                            item = QTreeWidgetItem([
-                                layer_name,
-                                str(feature_count),
-                                expr[:80] + "..." if len(expr) > 80 else expr
-                            ])
-                            item.setToolTip(2, expr)  # Full expression in tooltip
-                            remote_tree.addTopLevelItem(item)
-                        # Update tab label with count
-                        tab_widget.setTabText(2, f"🗂️ Remote Layers ({len(fav.remote_layers)})")
-                    else:
-                        remote_tree.hide()
-                        no_remote_label.show()
-                        tab_widget.setTabText(2, "🗂️ Remote Layers")
-                    
-                    apply_btn.setEnabled(True)
-                    save_btn.setEnabled(True)
-                    delete_btn.setEnabled(True)
-        
-        def on_apply():
-            if current_fav_id[0]:
-                self._apply_favorite(current_fav_id[0])
-                dialog.accept()
-        
-        def on_save():
-            if current_fav_id[0]:
-                new_name = name_edit.text().strip()
-                new_expr = expression_edit.toPlainText().strip()
-                new_desc = description_edit.toPlainText().strip()
-                # Parse tags from comma-separated string
-                new_tags = [tag.strip() for tag in tags_edit.text().split(',') if tag.strip()]
-                if new_name:
-                    self._favorites_manager.update_favorite(
-                        current_fav_id[0],
-                        name=new_name,
-                        expression=new_expr,
-                        description=new_desc,
-                        tags=new_tags
-                    )
-                    self._favorites_manager.save_to_project()
-                    # Update list item
-                    item = list_widget.currentItem()
-                    if item:
-                        fav = self._favorites_manager.get_favorite(current_fav_id[0])
-                        layers_count = fav.get_layers_count() if fav and hasattr(fav, 'get_layers_count') else 1
-                        item_text = f"★ {new_name}"
-                        if layers_count > 1:
-                            item_text += f" [{layers_count}]"
-                        if new_tags:
-                            item_text += " 🏷️"
-                        item.setText(item_text)
-                    show_success("FilterMate", "Favorite updated")
-        
-        def on_delete():
-            if current_fav_id[0]:
-                fav = self._favorites_manager.get_favorite(current_fav_id[0])
-                if fav:
-                    reply = QMessageBox.question(
-                        dialog,
-                        "Delete Favorite",
-                        f"Delete favorite '{fav.name}'?",
-                        QMessageBox.Yes | QMessageBox.No
-                    )
-                    if reply == QMessageBox.Yes:
-                        self._favorites_manager.remove_favorite(current_fav_id[0])
-                        list_widget.takeItem(list_widget.currentRow())
-                        header_label.setText(f"<b>Saved Favorites ({self._favorites_manager.count})</b>")
-                        
-                        # Clear all fields in all tabs
-                        # Tab 1: General
-                        name_edit.clear()
-                        description_edit.clear()
-                        tags_edit.clear()
-                        layer_label.setText("-")
-                        provider_label.setText("-")
-                        use_count_label.setText("-")
-                        created_label.setText("-")
-                        
-                        # Tab 2: Expression
-                        expression_edit.clear()
-                        
-                        # Tab 3: Remote Layers
-                        remote_tree.clear()
-                        no_remote_label.show()
-                        remote_tree.hide()
-                        tab_widget.setTabText(2, "🗂️ Remote Layers")
-                        
-                        current_fav_id[0] = None
-                        apply_btn.setEnabled(False)
-                        save_btn.setEnabled(False)
-                        delete_btn.setEnabled(False)
-                        self._update_favorite_indicator()
-                        
-                        # Save changes to persist deletion
-                        self._favorites_manager.save_to_project()
-                        
-                        # Auto-select next available item after deletion
-                        if list_widget.count() > 0:
-                            list_widget.setCurrentRow(0)
-                            # Force trigger selection change (signal may not fire if row 0 was already selected)
-                            on_selection_changed()
-        
-        list_widget.currentItemChanged.connect(on_selection_changed)
-        apply_btn.clicked.connect(on_apply)
-        save_btn.clicked.connect(on_save)
-        delete_btn.clicked.connect(on_delete)
-        close_btn.clicked.connect(dialog.reject)
-        
-        # Select first item
-        if list_widget.count() > 0:
-            list_widget.setCurrentRow(0)
-        
-        dialog.exec_()
+        # Fallback: use dialog directly
+        try:
+            from .ui.dialogs import FavoritesManagerDialog
+            from qgis.PyQt.QtWidgets import QMessageBox
+            if not self._favorites_manager or self._favorites_manager.count == 0:
+                QMessageBox.information(
+                    self,
+                    "Favorites Manager",
+                    "No favorites saved yet.\n\nClick the star indicator and select "
+                    "'Add current filter to favorites' to save your first favorite."
+                )
+                return
+            dialog = FavoritesManagerDialog(self._favorites_manager, self)
+            dialog.exec_()
+        except ImportError as e:
+            from .infrastructure.feedback import show_warning
+            show_warning("FilterMate", f"Could not load favorites dialog: {e}")
     
     def _export_favorites(self):
         """Export favorites to a JSON file."""
@@ -3204,137 +2234,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Force a specific backend for all layers in the project.
         
-        For Spatialite backend on GeoPackage/OGR layers: forces even if support test fails,
-        because user explicitly requested this backend.
-        
-        Args:
-            backend_type: Backend type to force ('postgresql', 'spatialite', 'ogr', or None)
+        v4.0: Delegates to BackendController.
         """
-        from qgis.core import QgsProject
-        from .adapters.backends.postgresql import PostgreSQLGeometricFilter
-        from .adapters.backends.spatialite import SpatialiteGeometricFilter
-        from .adapters.backends.ogr import OGRGeometricFilter
-        from .modules.backends import POSTGRESQL_AVAILABLE
-        
-        if not backend_type:
-            show_warning("FilterMate", "No backend selected to force")
+        # v4.0: Delegate to controller
+        if (self._controller_integration 
+            and hasattr(self._controller_integration, '_backend_controller')
+            and self._controller_integration._backend_controller):
+            count = self._controller_integration._backend_controller.force_backend_for_all_layers(backend_type)
+            from .infrastructure.feedback import show_success
+            show_success("FilterMate", f"Forced {backend_type.upper()} for {count} layers")
             return
         
-        logger.info("=" * 60)
-        logger.info(f"FORCING {backend_type.upper()} BACKEND FOR ALL LAYERS")
-        logger.info("=" * 60)
-        
-        forced_count = 0
-        skipped_count = 0
-        warned_count = 0  # Layers forced with warning
-        incompatible_layers = []
-        
-        project = QgsProject.instance()
-        layers = project.mapLayers().values()
-        
-        # Create backend instance to test compatibility
-        task_params = {}  # Minimal params just for testing
-        if backend_type == 'postgresql':
-            if not POSTGRESQL_AVAILABLE:
-                show_warning(
-                    "FilterMate", 
-                    "PostgreSQL backend not available (psycopg2 not installed)"
-                )
-                return
-            backend = PostgreSQLGeometricFilter(task_params)
-        elif backend_type == 'spatialite':
-            backend = SpatialiteGeometricFilter(task_params)
-        elif backend_type == 'ogr':
-            backend = OGRGeometricFilter(task_params)
-        else:
-            show_warning("FilterMate", f"Unknown backend type: {backend_type}")
-            return
-        
-        from qgis.core import QgsVectorLayer
-        
-        for layer in layers:
-            # Skip non-vector layers (raster, mesh, etc.)
-            if not isinstance(layer, QgsVectorLayer):
-                continue
-            
-            if not layer.isValid():
-                skipped_count += 1
-                continue
-            
-            layer_name = layer.name()
-            logger.info(f"\nProcessing layer: {layer_name}")
-            logger.info(f"  Provider: {layer.providerType()}, Features: {layer.featureCount():,}")
-            
-            # Check if backend supports this layer
-            supports = backend.supports_layer(layer)
-            
-            if supports:
-                self._set_forced_backend(layer.id(), backend_type)
-                forced_count += 1
-                logger.info(f"  ✓ Forced backend to: {backend_type.upper()}")
-            else:
-                # SPECIAL CASE: For Spatialite backend on GeoPackage/OGR layers,
-                # force anyway because user explicitly requested it
-                # The support test may fail due to geometry column detection issues
-                source = layer.source()
-                source_path = source.split('|')[0] if '|' in source else source
-                is_gpkg_or_sqlite = (
-                    source_path.lower().endswith('.gpkg') or 
-                    source_path.lower().endswith('.sqlite')
-                )
-                is_ogr = layer.providerType() == 'ogr'
-                
-                if backend_type == 'spatialite' and (is_gpkg_or_sqlite or is_ogr):
-                    # Force Spatialite anyway for GeoPackage/SQLite/OGR layers
-                    self._set_forced_backend(layer.id(), backend_type)
-                    warned_count += 1
-                    logger.warning(
-                        f"  ⚠️ Forcing {backend_type.upper()} for {layer_name} despite support test failure. "
-                        f"GeoPackage/SQLite files should support Spatialite SQL functions."
-                    )
-                elif backend_type == 'ogr':
-                    # OGR is universal fallback - force for all vector layers
-                    self._set_forced_backend(layer.id(), backend_type)
-                    forced_count += 1
-                    logger.info(f"  ✓ Forced backend to: {backend_type.upper()} (universal fallback)")
-                else:
-                    incompatible_layers.append(layer_name)
-                    skipped_count += 1
-                    logger.info(f"  ⚠ Backend {backend_type.upper()} not compatible with this layer - skipping")
-        
-        total_forced = forced_count + warned_count
-        logger.info("\n" + "=" * 60)
-        logger.info("FORCE BACKEND COMPLETE")
-        logger.info(f"Forced: {forced_count} layers to {backend_type.upper()}")
-        if warned_count > 0:
-            logger.info(f"Forced with warning: {warned_count} layers (support test failed but forced anyway)")
-        logger.info(f"Skipped: {skipped_count} layers (incompatible or invalid)")
-        if incompatible_layers:
-            logger.info(f"Incompatible layers: {', '.join(incompatible_layers)}")
-        logger.info("=" * 60)
-        
-        # Show summary message with details
-        if total_forced > 0:
-            msg = f"Forced {total_forced} layer(s) to use {backend_type.upper()} backend"
-            if warned_count > 0:
-                msg += f" ({warned_count} with warnings)"
-            if skipped_count > 0:
-                msg += f" ({skipped_count} incompatible layer(s) skipped)"
-            show_success("FilterMate", msg)
-        else:
-            msg = f"No layers compatible with {backend_type.upper()} backend"
-            if incompatible_layers:
-                msg += f" - Incompatible: {', '.join(incompatible_layers[:3])}"
-                if len(incompatible_layers) > 3:
-                    msg += f" and {len(incompatible_layers) - 3} more"
-            show_warning("FilterMate", msg)
-        
-        # Update indicator for current layer
-        if self.current_layer:
-            # Get layer properties to pass to synchronization
-            _, _, layer_props = self._validate_and_prepare_layer(self.current_layer)
-            self._synchronize_layer_widgets(self.current_layer, layer_props)
-    
+        # Fallback warning
+        from .infrastructure.feedback import show_warning
+        show_warning("FilterMate", "Backend controller not available")
+
     def get_forced_backend_for_layer(self, layer_id):
         """
         Get forced backend for a layer, if any.
@@ -12899,152 +11813,31 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._update_backend_indicator_legacy(provider_type, postgresql_connection_available, actual_backend)
     
     def _update_backend_indicator_legacy(self, provider_type, postgresql_connection_available=None, actual_backend=None):
-        """Legacy implementation of backend indicator update - kept for fallback."""
-        if not hasattr(self, 'backend_indicator_label') or not self.backend_indicator_label:
-            return
-        
-        from .adapters.backends import POSTGRESQL_AVAILABLE
-        
-        # Store current provider for backend selection menu
-        self._current_provider_type = provider_type
-        self._current_postgresql_available = postgresql_connection_available
-        
-        # Determine backend text and badge style (modern colored badges)
-        base_style = """
-            QLabel#label_backend_indicator {{
-                font-size: 9pt;
-                font-weight: 600;
-                padding: 3px 10px;
-                border-radius: 12px;
-                border: none;
-                {custom_style}
-            }}
-            QLabel#label_backend_indicator:hover {{
-                opacity: 0.85;
-            }}
         """
+        Legacy implementation of backend indicator update.
         
-        # CRITICAL FIX: Check both POSTGRESQL_AVAILABLE and postgresql_connection_available
-        postgresql_usable = POSTGRESQL_AVAILABLE and (postgresql_connection_available is not False)
+        v4.0: Reduced - main logic moved to BackendController.
+        This fallback attempts basic update via controller.
+        """
+        # v4.0: Try to use controller instead
+        if (self._controller_integration 
+            and hasattr(self._controller_integration, '_backend_controller')
+            and self._controller_integration._backend_controller):
+            # Get current layer
+            layer = getattr(self, 'current_layer', None)
+            if layer:
+                self._controller_integration._backend_controller.update_for_layer(
+                    layer, 
+                    postgresql_available=postgresql_connection_available,
+                    actual_backend=actual_backend
+                )
+                return
         
-        # PRIORITY 1: Check if backend is forced by user (always takes precedence)
-        current_layer = self.current_layer
-        forced_backend_from_dict = None
-        if current_layer and hasattr(self, 'forced_backends'):
-            if current_layer.id() in self.forced_backends:
-                forced_backend_from_dict = self.forced_backends[current_layer.id()]
-        
-        # Determine actual backend being used
-        if actual_backend:
-            # Use actual backend name if provided as parameter (forced backend)
-            backend_type = actual_backend.lower()
-        elif forced_backend_from_dict:
-            # Use forced backend from dictionary (user selection via menu)
-            backend_type = forced_backend_from_dict.lower()
-        else:
-            # Auto mode: Apply same logic as BackendFactory to show real backend
-            # Get current layer to check feature count for optimization
-            feature_count = current_layer.featureCount() if current_layer else -1
-            
-            # Import optimization logic
-            from .adapters.backends.spatialite import SpatialiteGeometricFilter
-            
-            # Normalize provider type (QGIS uses 'postgres', we use 'postgresql')
-            normalized_provider = provider_type
-            if provider_type == 'postgres':
-                normalized_provider = 'postgresql'
-            
-            # PostgreSQL layers - check for both 'postgresql' and 'postgres'
-            is_postgresql = normalized_provider == 'postgresql'
-            
-            if is_postgresql and postgresql_usable:
-                # Small dataset optimization is DISABLED - always use PostgreSQL
-                backend_type = 'postgresql'
-            elif is_postgresql and not postgresql_usable:
-                backend_type = 'ogr_fallback'
-            # Spatialite layers (native spatialite provider)
-            elif provider_type == 'spatialite':
-                backend_type = 'spatialite'
-            # OGR layers - check if GeoPackage/SQLite with Spatialite support
-            elif provider_type == 'ogr':
-                # Check if this is a GeoPackage/SQLite that supports Spatialite
-                if current_layer:
-                    source = current_layer.source()
-                    source_path = source.split('|')[0] if '|' in source else source
-                    is_gpkg_or_sqlite = (
-                        source_path.lower().endswith('.gpkg') or 
-                        source_path.lower().endswith('.sqlite')
-                    )
-                    if is_gpkg_or_sqlite:
-                        # Test if Spatialite backend supports this layer
-                        spatialite_backend = SpatialiteGeometricFilter({})
-                        if spatialite_backend.supports_layer(current_layer):
-                            backend_type = 'spatialite'
-                        else:
-                            backend_type = 'ogr'
-                    else:
-                        backend_type = 'ogr'
-                else:
-                    backend_type = 'ogr'
-            else:
-                backend_type = 'unknown'
-        
-        # Set text and styling based on backend type
-        # Check if backend is forced (either by parameter or from dictionary)
-        is_forced = (actual_backend is not None) or (forced_backend_from_dict is not None)
-        is_auto_mode = not is_forced
-        feature_count = current_layer.featureCount() if current_layer else -1
-        
-        if backend_type == 'postgresql':
-            backend_text = "PostgreSQL"
-            custom = "color: white; background-color: #27ae60;"
-            tooltip = "Backend: PostgreSQL (High Performance)"
-        elif backend_type == 'spatialite':
-            backend_text = "Spatialite"
-            custom = "color: white; background-color: #9b59b6;"
-            tooltip = "Backend: Spatialite (Good Performance)"
-        elif backend_type == 'spatialite_fallback':
-            # v2.9.25: Spatialite backend with OGR fallback (complex geometry or MakeValid error)
-            backend_text = "Spatialite*"
-            custom = "color: white; background-color: #8e44ad;"  # Darker purple for fallback
-            tooltip = "Backend: Spatialite → OGR fallback\n(Complex geometry handled by OGR)"
-        elif backend_type == 'ogr':
-            backend_text = "OGR"
-            custom = "color: white; background-color: #3498db;"
-            # Provide context for OGR usage in auto mode
-            if is_auto_mode and provider_type == 'postgresql':
-                tooltip = f"Backend: OGR (Memory Optimization - {feature_count:,} features)"
-            elif is_auto_mode and provider_type == 'spatialite':
-                tooltip = f"Backend: OGR (Small Dataset - {feature_count:,} features)"
-            else:
-                tooltip = "Backend: OGR (Universal)"
-        elif backend_type == 'ogr_fallback':
-            backend_text = "OGR*"
-            custom = "color: white; background-color: #e67e22;"  # Orange for fallback
-            tooltip = "Backend: OGR (Fallback - PostgreSQL connection unavailable)"
-        elif backend_type == 'postgresql_fallback':
-            # v2.9.25: PostgreSQL backend with OGR fallback
-            backend_text = "PostgreSQL*"
-            custom = "color: white; background-color: #1e8449;"  # Darker green for fallback
-            tooltip = "Backend: PostgreSQL → OGR fallback\n(Complex geometry handled by OGR)"
-        else:
-            backend_text = provider_type[:6].upper() if provider_type else "..."
-            custom = "color: #7f8c8d; background-color: #ecf0f1;"
-            tooltip = f"Backend: {provider_type or 'Unknown'}"
-        
-        # Add forced indicator if backend was forced by user
-        if is_forced:
-            backend_text = f"{backend_text}⚡"
-            forced_backend_name = actual_backend or forced_backend_from_dict
-            tooltip += f"\n(Forced by user: {forced_backend_name.upper()})"
-        
-        tooltip += "\n\nClick to change backend"
-        
-        self.backend_indicator_label.setText(backend_text)
-        self.backend_indicator_label.setStyleSheet(base_style.format(custom_style=custom))
-        self.backend_indicator_label.setToolTip(tooltip)
-        self.backend_indicator_label.adjustSize()
-
+        # Fallback: Just update label text if available
+        if hasattr(self, 'backend_indicator_label') and self.backend_indicator_label:
+            text = actual_backend.upper() if actual_backend else provider_type.upper()[:3]
+            self.backend_indicator_label.setText(text)
+    
     def getProjectLayersEvent(self, event):
 
         if self.widgets_initialized is True:

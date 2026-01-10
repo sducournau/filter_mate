@@ -24,6 +24,7 @@ from .exporting_controller import ExportingController
 from .backend_controller import BackendController
 from .layer_sync_controller import LayerSyncController
 from .config_controller import ConfigController
+from .favorites_controller import FavoritesController
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
@@ -80,6 +81,7 @@ class ControllerIntegration:
         self._backend_controller: Optional[BackendController] = None
         self._layer_sync_controller: Optional[LayerSyncController] = None
         self._config_controller: Optional[ConfigController] = None
+        self._favorites_controller: Optional[FavoritesController] = None
         
         # Connection tracking
         self._connections: list = []
@@ -124,6 +126,11 @@ class ControllerIntegration:
     def config_controller(self) -> Optional[ConfigController]:
         """Get the config controller."""
         return self._config_controller
+
+    @property
+    def favorites_controller(self) -> Optional[FavoritesController]:
+        """Get the favorites controller."""
+        return self._favorites_controller
     
     def setup(self) -> bool:
         """
@@ -189,6 +196,7 @@ class ControllerIntegration:
             self._backend_controller = None
             self._layer_sync_controller = None
             self._config_controller = None
+            self._favorites_controller = None
             self._registry = None
             self._is_setup = False
             
@@ -237,6 +245,11 @@ class ControllerIntegration:
             signal_manager=self._signal_manager
         )
         
+        # v4.0: Create FavoritesController
+        self._favorites_controller = FavoritesController(
+            dockwidget=self._dockwidget
+        )
+        
         logger.debug("All controllers created")
     
     def _register_controllers(self) -> None:
@@ -283,6 +296,13 @@ class ControllerIntegration:
             'config',
             self._config_controller,
             tab_index=TabIndex.CONFIGURATION  # Tab for configuration
+        )
+        
+        # v4.0: Register FavoritesController
+        self._registry.register(
+            'favorites',
+            self._favorites_controller,
+            tab_index=TabIndex.FILTERING  # Favorites indicator visible on filtering tabs
         )
         
         logger.debug("All controllers registered")
@@ -1774,6 +1794,94 @@ class ControllerIntegration:
                 logger.warning(f"delegate_export_get_last_result failed: {e}")
                 return None
         return None
+
+    # === Favorites Controller Delegation (v4.0) ===
+    
+    def delegate_favorites_show_manager_dialog(self) -> bool:
+        """
+        Delegate favorites manager dialog display to FavoritesController.
+        
+        v4.0: Removes 376 lines of dialog code from dockwidget.
+        
+        Returns:
+            bool: True if delegated successfully, False otherwise
+        """
+        if self._favorites_controller:
+            try:
+                self._favorites_controller.show_manager_dialog()
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_favorites_show_manager_dialog failed: {e}")
+                return False
+        return False
+    
+    def delegate_favorites_add_current(self) -> bool:
+        """
+        Delegate adding current filter to favorites.
+        
+        Returns:
+            bool: True if delegated successfully, False otherwise
+        """
+        if self._favorites_controller:
+            try:
+                return self._favorites_controller.add_current_to_favorites()
+            except Exception as e:
+                logger.warning(f"delegate_favorites_add_current failed: {e}")
+                return False
+        return False
+    
+    def delegate_favorites_apply(self, favorite_id: str) -> bool:
+        """
+        Delegate applying a favorite filter.
+        
+        Args:
+            favorite_id: The favorite ID to apply
+            
+        Returns:
+            bool: True if delegated successfully, False otherwise
+        """
+        if self._favorites_controller:
+            try:
+                return self._favorites_controller.apply_favorite(favorite_id)
+            except Exception as e:
+                logger.warning(f"delegate_favorites_apply failed: {e}")
+                return False
+        return False
+    
+    def delegate_favorites_update_indicator(self) -> bool:
+        """
+        Delegate favorites indicator update.
+        
+        Returns:
+            bool: True if delegated successfully, False otherwise
+        """
+        if self._favorites_controller:
+            try:
+                self._favorites_controller.update_indicator()
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_favorites_update_indicator failed: {e}")
+                return False
+        return False
+    
+    def delegate_favorites_on_indicator_clicked(self, event) -> bool:
+        """
+        Delegate favorites indicator click handling.
+        
+        Args:
+            event: The mouse event
+            
+        Returns:
+            bool: True if delegated successfully, False otherwise
+        """
+        if self._favorites_controller:
+            try:
+                self._favorites_controller.on_indicator_clicked(event)
+                return True
+            except Exception as e:
+                logger.warning(f"delegate_favorites_on_indicator_clicked failed: {e}")
+                return False
+        return False
 
     def __repr__(self) -> str:
         """String representation."""
