@@ -3685,12 +3685,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return (True, layer, self.PROJECT_LAYERS[self.current_layer.id()])
     
     def _reset_layer_expressions(self, layer_props):
-        """
-        Reset exploring expressions to primary_key_name of new layer when switching.
-        
-        v3.1 Sprint 9: Simplified - delegates to ExploringController.
-        Resets expressions to primary_key when switching layers.
-        """
+        """v4.0 Sprint 9: Reset expressions to primary_key when switching layers."""
         if self._controller_integration and self._controller_integration.exploring_controller:
             try:
                 if self._controller_integration.delegate_reset_layer_expressions(layer_props):
@@ -3715,47 +3710,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return widgets_to_stop
     
     def _detect_multi_step_filter(self, layer, layer_props):
-        """
-        v3.1 Sprint 9: Simplified - delegates to FilteringController.
-        Detects existing filters and enables additive mode if needed.
-        """
+        """v4.0 Sprint 9: Detect filters, enable additive mode - delegates to FilteringController."""
         if self._controller_integration and self._controller_integration.filtering_controller:
             try:
-                succeeded, result = self._controller_integration.delegate_detect_multi_step_filter(
-                    layer, layer_props
-                )
-                if succeeded:
-                    if result:
-                        self._sync_additive_mode_widgets(layer_props)
+                ok, result = self._controller_integration.delegate_detect_multi_step_filter(layer, layer_props)
+                if ok:
+                    if result: self._sync_additive_mode_widgets(layer_props)
                     return result
-            except Exception as e:
-                logger.debug(f"_detect_multi_step_filter delegation failed: {e}")
+            except: pass
         return False
     
     def _sync_additive_mode_widgets(self, layer_props):
-        """
-        Synchronize UI widgets after additive mode is enabled by controller.
-        
-        v4.0 Sprint 2: Helper for controller delegation.
-        
-        Args:
-            layer_props: Layer properties dict with updated filtering state
-        """
+        """v4.0 Sprint 9: Sync UI widgets for additive mode."""
         try:
-            # Set combobox widgets to index 0 (AND) for additive mode
-            self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].blockSignals(True)
-            self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].setCurrentIndex(0)
-            self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].blockSignals(False)
-            
-            self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].blockSignals(True)
-            self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].setCurrentIndex(0)
-            self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].blockSignals(False)
-        except Exception as widget_error:
-            logger.debug(f"Error syncing additive mode widgets: {widget_error}")
+            for key in ["SOURCE_LAYER_COMBINE_OPERATOR", "OTHER_LAYERS_COMBINE_OPERATOR"]:
+                w = self.widgets["FILTERING"][key]["WIDGET"]
+                w.blockSignals(True); w.setCurrentIndex(0); w.blockSignals(False)
+        except: pass
     
     def _synchronize_layer_widgets(self, layer, layer_props):
-        """
-        Synchronize all widgets with the new current layer.
+        """v4.0 Sprint 9: Sync widgets with new layer - delegates to LayerSyncController."""
         
         Updates comboboxes, field expression widgets, and backend indicator.
         
@@ -3766,41 +3740,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self._controller_integration and self._controller_integration.layer_sync_controller:
             try:
                 if self._controller_integration.delegate_synchronize_layer_widgets(layer, layer_props):
-                    logger.debug("_synchronize_layer_widgets: delegated to LayerSyncController")
                     return
-            except Exception as e:
-                logger.debug(f"_synchronize_layer_widgets delegation failed: {e}")
-        
-        # No fallback - controller handles all logic
-        logger.warning("_synchronize_layer_widgets: Controller delegation failed")
+            except: pass
     
     def _reload_exploration_widgets(self, layer, layer_props):
-        """
-        WRAPPER: Delegates to ExploringController.
-        
-        Force reload of ALL exploration widgets with new layer data.
-        Migrated to ExploringController in v4.0 Sprint 2.
-        """
+        """v4.0 Sprint 9: Wrapper - delegates to ExploringController."""
         if self._controller_integration and self._controller_integration.exploring_controller:
-            self._controller_integration.exploring_controller._reload_exploration_widgets(
-                layer, layer_props
-            )
-            
-            import traceback
-            logger.debug(f"Traceback: {traceback.format_exc()}")
+            self._controller_integration.exploring_controller._reload_exploration_widgets(layer, layer_props)
 
 
     def _restore_groupbox_ui_state(self, groupbox_name):
-        """
-        v3.1 Sprint 10: Refactored - restore exploring groupbox visual state.
-        Sets collapsed/expanded state without triggering widget updates.
-        """
-        if not self.widgets_initialized:
-            return
+        """v4.0 Sprint 9: Restore exploring groupbox visual state."""
+        if not self.widgets_initialized: return
         
         self.current_exploring_groupbox = groupbox_name
-        
-        if self.current_layer is not None and self.current_layer.id() in self.PROJECT_LAYERS:
+        if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
             self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = groupbox_name
         
         # Map groupbox states: (checked, collapsed)
@@ -3832,28 +3786,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 gb.blockSignals(False)
     
     def _reconnect_layer_signals(self, widgets_to_reconnect, layer_props):
-        """
-        Reconnect all layer-related widget signals after updates.
-        
-        Also restores exploring groupbox UI state and connects layer selection signal.
-        
-        v4.0 Sprint 3: Delegates to LayerSyncController when available.
-        
-        NOTE: This method now uses _restore_groupbox_ui_state() instead of 
-        exploring_groupbox_changed() to avoid double processing of widgets.
-        The widget layer updates are already done in _reload_exploration_widgets().
-        
-        PRESERVE FILTER: When changing layers, the existing filter on the new layer
-        is preserved. We only trigger exploring_features_changed if there are selected
-        features or if the layer has no existing filter.
-        
-        SIGNAL HANDLING: Exploring widget signals are NOT reconnected here because
-        they are already correctly reconnected in _reload_exploration_widgets() with
-        the appropriate signal types for the active groupbox.
-        
-        v3.0.4: Added IDENTIFY and ZOOM to the exclusion list since they're now
-        reconnected in _reload_exploration_widgets().
-        """
+        """v4.0 Sprint 9: Reconnect layer signals - delegates to LayerSyncController."""
         # v4.0 Sprint 3: Delegation to LayerSyncController (Sprint 5: fallback removed)
         if self._controller_integration and self._controller_integration.layer_sync_controller:
             try:
@@ -3954,39 +3887,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._updating_current_layer = False
     
     def _defer_layer_change(self, layer):
-        """Defer layer change when plugin is busy."""
+        """v4.0 Sprint 9: Defer layer change when plugin is busy."""
         from qgis.PyQt.QtCore import QTimer
         from qgis.core import QgsProject
         
-        logger.debug(f"Plugin is busy, deferring layer change for: {layer.name() if layer else 'None'}")
         weak_self = weakref.ref(self)
-        try:
-            captured_layer_id = layer.id() if layer else None
-        except (RuntimeError, OSError, SystemError):
-            captured_layer_id = None
+        try: lid = layer.id() if layer else None
+        except: lid = None
         
-        def safe_layer_change():
-            strong_self = weak_self()
-            if strong_self is not None and captured_layer_id:
-                fresh_layer = QgsProject.instance().mapLayer(captured_layer_id)
-                if fresh_layer is not None:
-                    strong_self.current_layer_changed(fresh_layer)
+        def safe_change():
+            s = weak_self()
+            if s and lid and (l := QgsProject.instance().mapLayer(lid)): s.current_layer_changed(l)
         
-        QTimer.singleShot(150, safe_layer_change)
+        QTimer.singleShot(150, safe_change)
     
     def _reset_selection_tracking_for_layer(self, layer):
-        """Reset selection tracking when layer changes."""
-        # Reset single_selection FID
-        if hasattr(self, '_last_single_selection_layer_id'):
-            if layer is None or layer.id() != self._last_single_selection_layer_id:
-                self._last_single_selection_fid = None
-                self._last_single_selection_layer_id = None
-        
-        # Reset multiple_selection FIDs
-        if hasattr(self, '_last_multiple_selection_layer_id'):
-            if layer is None or layer.id() != self._last_multiple_selection_layer_id:
-                self._last_multiple_selection_fids = None
-                self._last_multiple_selection_layer_id = None
+        """v4.0 Sprint 9: Reset selection tracking when layer changes."""
+        lid = layer.id() if layer else None
+        if hasattr(self, '_last_single_selection_layer_id') and lid != self._last_single_selection_layer_id:
+            self._last_single_selection_fid = self._last_single_selection_layer_id = None
+        if hasattr(self, '_last_multiple_selection_layer_id') and lid != self._last_multiple_selection_layer_id:
+            self._last_multiple_selection_fids = self._last_multiple_selection_layer_id = None
 
 
     def project_property_changed(self, input_property, input_data=None, custom_functions={}):
