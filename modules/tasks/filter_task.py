@@ -169,8 +169,8 @@ from infrastructure.cache import SourceGeometryCache, QueryExpressionCache, get_
 from infrastructure.streaming import StreamingExporter, StreamingConfig
 from infrastructure.parallel import ParallelFilterExecutor, ParallelConfig
 
-# Import combined query optimizer (Phase 5 optimization - v2.8.0)
-from .combined_query_optimizer import get_combined_query_optimizer, optimize_combined_filter
+# Import from core (EPIC-1 migration)
+from core.optimization import get_combined_query_optimizer, optimize_combined_filter
 
 # v3.0 MIG-023: Import TaskBridge for Strangler Fig migration
 # TaskBridge allows using new v3 backends while keeping legacy code as fallback
