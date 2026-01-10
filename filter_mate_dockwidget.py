@@ -9766,15 +9766,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _is_layer_truly_deleted(self, layer):
         """
         Check if a layer is truly deleted, accounting for filtering operations.
+        
+        v4.0 Sprint 2: Delegates to LayerSyncController when available.
 
-        v3.0.14: CRITICAL FIX - During and immediately after filtering, layers can
-        temporarily appear as "deleted" to sip.isdeleted() even though they're still
-        valid. This causes current_layer to be set to None prematurely, breaking the
-        comboBox and UI signals.
+        During and immediately after filtering, layers can temporarily appear as
+        "deleted" to sip.isdeleted() even though they're still valid. This causes
+        current_layer to be set to None prematurely, breaking the comboBox and UI signals.
 
         This method provides a centralized check that respects:
         1. Active filtering operations (_filtering_in_progress flag)
-        2. Post-filtering protection window (2 seconds after filtering completes)
+        2. Post-filtering protection window (5 seconds after filtering completes)
         3. Actual C++ object deletion status
 
         Args:
@@ -9782,48 +9783,44 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         Returns:
             bool: True if layer is truly deleted and should be cleared, False otherwise
-
-        Usage:
-            # OLD (unsafe during filtering):
-            if sip.isdeleted(self.current_layer):
-                self.current_layer = None
-
-            # NEW (safe during filtering):
-            if self._is_layer_truly_deleted(self.current_layer):
-                self.current_layer = None
         """
+        # v4.0: Delegate to LayerSyncController if available
+        if self._controller_integration and self._controller_integration.layer_sync_controller:
+            try:
+                return self._controller_integration.delegate_is_layer_truly_deleted(layer)
+            except Exception as e:
+                logger.debug(f"_is_layer_truly_deleted delegation failed: {e}")
+        
+        # Fallback: Original logic
         # If layer is None, it's already "deleted" in a sense
         if layer is None:
             return True
 
-        # v3.0.14: CRITICAL - During filtering, NEVER consider layer as deleted
-        # The layer may appear deleted temporarily due to setSubsetString() operations
+        # During filtering, NEVER consider layer as deleted
         if getattr(self, '_filtering_in_progress', False):
-            logger.debug(f"v3.0.14: 🛡️ _is_layer_truly_deleted BLOCKED - filtering in progress (layer={layer.name() if hasattr(layer, 'name') else 'unknown'})")
+            logger.debug(f"🛡️ _is_layer_truly_deleted BLOCKED - filtering in progress (layer={layer.name() if hasattr(layer, 'name') else 'unknown'})")
             return False
 
-        # v3.0.14: CRITICAL - Within 5 seconds after filtering, NEVER consider layer as deleted
-        # Canvas refresh and layer tree updates can make the layer appear deleted temporarily
-        # v3.0.10: Extended to 5s to cover layer.reload() async operations on large datasets
+        # Within 5 seconds after filtering, NEVER consider layer as deleted
         import time
-        POST_FILTER_PROTECTION_WINDOW = 5.0  # seconds - must cover all delayed canvas refresh timers
+        POST_FILTER_PROTECTION_WINDOW = 5.0  # seconds
         if getattr(self, '_filter_completed_time', 0) > 0:
             elapsed = time.time() - self._filter_completed_time
             if elapsed < POST_FILTER_PROTECTION_WINDOW:
-                logger.debug(f"v3.0.14: 🛡️ _is_layer_truly_deleted BLOCKED - within {POST_FILTER_PROTECTION_WINDOW}s protection window (elapsed={elapsed:.3f}s, layer={layer.name() if hasattr(layer, 'name') else 'unknown'})")
+                logger.debug(f"🛡️ _is_layer_truly_deleted BLOCKED - within {POST_FILTER_PROTECTION_WINDOW}s protection window (elapsed={elapsed:.3f}s, layer={layer.name() if hasattr(layer, 'name') else 'unknown'})")
                 return False
 
-        # Now perform the actual deletion check
+        # Perform the actual deletion check
         try:
             import sip
             if sip.isdeleted(layer):
-                logger.debug(f"v3.0.14: ✅ Layer C++ object is truly deleted")
+                logger.debug(f"✅ Layer C++ object is truly deleted")
                 return True
             else:
                 return False
         except (RuntimeError, TypeError, AttributeError) as e:
             # If we can't check, assume it's deleted
-            logger.debug(f"v3.0.14: Layer deletion check failed with {type(e).__name__}: {e}")
+            logger.debug(f"Layer deletion check failed with {type(e).__name__}: {e}")
             return True
 
 

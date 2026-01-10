@@ -1287,6 +1287,28 @@ class ControllerIntegration:
                 return None
         return None
     
+    def delegate_is_layer_truly_deleted(self, layer: 'Optional[QgsVectorLayer]') -> bool:
+        """
+        Delegate layer deletion check to layer sync controller.
+        
+        v4.0 Sprint 2: Centralized layer deletion check with filtering protection.
+        
+        Args:
+            layer: Layer to check (can be None)
+            
+        Returns:
+            True if layer is truly deleted
+        """
+        if self._layer_sync_controller:
+            try:
+                return self._layer_sync_controller.is_layer_truly_deleted(layer)
+            except Exception as e:
+                logger.warning(f"delegate_is_layer_truly_deleted failed: {e}")
+                # On error, assume deleted (safe fallback)
+                return True
+        # No controller: use simple None check
+        return layer is None
+    
     def delegate_reset_layer_expressions(self, layer_props: dict) -> bool:
         """
         Delegate expression reset to exploring controller.
