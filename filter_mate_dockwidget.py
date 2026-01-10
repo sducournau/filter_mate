@@ -5939,29 +5939,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def exploring_identify_clicked(self):
         """
+        v3.1 Sprint 8: Simplified - delegates flash to ExploringController.
         Flash the currently selected features on the map canvas.
-        
-        v4.0 Sprint 5: Simplified - delegates flash to ExploringController.
-        Full implementation is in ExploringController.flash_features().
         """
         if not self.widgets_initialized or self.current_layer is None:
             return
 
-        # v3.0.14: Use centralized deletion check
         if self._is_layer_truly_deleted(self.current_layer):
-            logger.debug("exploring_identify_clicked: current_layer C++ object truly deleted")
             self.current_layer = None
             return
 
-        layer_id = self.current_layer.id()
-        groupbox_type = self.current_exploring_groupbox
-        
-        # Try to get cached feature IDs first (fast path)
+        # Get feature IDs from cache or current selection
         feature_ids = None
-        if hasattr(self, '_exploring_cache') and groupbox_type:
-            feature_ids = self._exploring_cache.get_feature_ids(layer_id, groupbox_type)
+        if hasattr(self, '_exploring_cache') and self.current_exploring_groupbox:
+            feature_ids = self._exploring_cache.get_feature_ids(self.current_layer.id(), self.current_exploring_groupbox)
         
-        # If no cached IDs, get features and extract IDs
         if not feature_ids:
             features, _ = self.get_current_features()
             if features:
@@ -5970,20 +5962,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if not feature_ids:
             return
         
-        # v4.0 Sprint 5: Delegate to controller
+        # Delegate to controller
         if self._controller_integration:
             if self._controller_integration.delegate_flash_features(feature_ids, self.current_layer):
                 return
         
-        # Minimal fallback: direct QGIS flash
-        self.iface.mapCanvas().flashFeatureIds(
-            self.current_layer, 
-            feature_ids, 
-            startColor=QColor(235, 49, 42, 255), 
-            endColor=QColor(237, 97, 62, 25), 
-            flashes=6, 
-            duration=400
-        )
+        # Minimal fallback
+        self.iface.mapCanvas().flashFeatureIds(self.current_layer, feature_ids)
 
 
     def get_current_features(self, use_cache: bool = True):
@@ -6115,42 +6100,25 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def zooming_to_features(self, features, expression=None):
         """
+        v3.1 Sprint 8: Simplified - delegates to ExploringController.
         Zoom to provided features on the map canvas.
-        
-        v4.0 Sprint 5: Simplified - delegates to ExploringController.
-        Full implementation is in ExploringController.zooming_to_features().
         """
         if not self.widgets_initialized or self.current_layer is None:
             return
 
-        # v3.0.14: CRITICAL - Use centralized deletion check
         if self._is_layer_truly_deleted(self.current_layer):
-            logger.debug("zooming_to_features: current_layer C++ object truly deleted")
             self.current_layer = None
             return
 
-        # v4.0 Sprint 5: Delegate to controller (full implementation there)
-        if self._controller_integration is not None:
-            # Controller handles all cases including empty features with expression
-            if self._controller_integration.delegate_zoom_to_features(features, expression, self.current_layer):
-                logger.debug("zooming_to_features: Delegated to controller successfully")
-                return
-            # If delegation failed but controller exists, use controller directly
-            if self._controller_integration.exploring_controller:
-                self._controller_integration.exploring_controller.zooming_to_features(features, expression)
-                return
+        # Delegate to controller
+        if self._controller_integration and self._controller_integration.exploring_controller:
+            self._controller_integration.exploring_controller.zooming_to_features(features, expression)
+            return
 
-        # Minimal fallback: simple zoom if no controller
-        logger.warning("zooming_to_features: No controller available, using simple fallback")
+        # Minimal fallback
         if features and len(features) > 0:
-            feature_ids = [f.id() for f in features if hasattr(f, 'id')]
-            if feature_ids:
-                self.iface.mapCanvas().zoomToFeatureIds(self.current_layer, feature_ids)
-        else:
-            extent = self._compute_zoom_extent_for_mode()
-            if extent and not extent.isEmpty():
-                self.iface.mapCanvas().zoomToFeatureExtent(extent)
-        self.iface.mapCanvas().refresh()
+            self.iface.mapCanvas().zoomToFeatureIds(self.current_layer, [f.id() for f in features])
+            self.iface.mapCanvas().refresh()
 
 
     def on_layer_selection_changed(self, selected, deselected, clearAndSelect):
@@ -6390,72 +6358,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         identify_by_primary_key_name=False
     ):
         """
+        v3.1 Sprint 8: Simplified - delegates to ExploringController.
         Handle the result of get_exploring_features (sync or async).
-        
-        This method processes the features and expression returned by get_exploring_features,
-        handling selection, tracking, and expression storage.
-        
-        Args:
-            features: List of QgsFeature objects
-            expression: Filter expression string
-            layer_props: Layer properties dict from PROJECT_LAYERS
-            identify_by_primary_key_name: Whether primary key was used
-            
-        Returns:
-            List of features processed
         """
-        if not self.widgets_initialized or self.current_layer is None:
-            return []
-     
-        # CRITICAL FIX: Only call exploring_link_widgets if is_linking is enabled
-        # When is_linking is False, calling link_widgets would refresh widgets unnecessarily
-        # and potentially interrupt user selection in progress
-        if layer_props["exploring"].get("is_linking", False):
-            # CRITICAL: Block signals on widgets before calling exploring_link_widgets to prevent
-            # recursive signal triggers when setFilterExpression modifies the feature picker
-            single_widget = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
-            multiple_widget = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
-            
-            single_widget.blockSignals(True)
-            multiple_widget.blockSignals(True)
-            
-            try:
-                self.exploring_link_widgets()
-            finally:
-                # Always unblock signals
-                single_widget.blockSignals(False)
-                multiple_widget.blockSignals(False)
-
-        # NOTE: Filter application is now ONLY triggered by pushbutton actions (Filter, Unfilter, Reset)
-        # This function no longer automatically applies or clears filters when features change.
-        # The expression is stored for use by the filter task when the user clicks Filter.
-        if expression is not None and expression != '':
-            # Store current expression for later use by filter task
-            layer_props["filtering"]["current_filter_expression"] = expression
-            logger.debug(f"_handle_exploring_features_result: Stored filter expression: {expression[:60]}...")
-
-        if len(features) == 0:
-            logger.debug("_handle_exploring_features_result: No features to process")
-            # Only clear selection if is_selecting is active AND we're not syncing from QGIS
-            if layer_props["exploring"].get("is_selecting", False) and not self._syncing_from_qgis:
-                self.current_layer.removeSelection()
-            return []
-    
-        # CRITICAL: Synchronize QGIS selection with FilterMate features when is_selecting is active
-        # Skip if we're currently syncing FROM QGIS to prevent infinite loops
-        if layer_props["exploring"].get("is_selecting", False) and not self._syncing_from_qgis:
-            self.current_layer.removeSelection()
-            self.current_layer.select([feature.id() for feature in features])
-            logger.debug(f"_handle_exploring_features_result: Synchronized QGIS selection ({len(features)} features)")
-
-        if layer_props["exploring"].get("is_tracking", False):
-            logger.debug(f"_handle_exploring_features_result: Tracking {len(features)} features")
-            self.zooming_to_features(features)  
-        
-        # Update button states after features are processed
-        self._update_exploring_buttons_state()
-
-        return features
+        if self._controller_integration and self._controller_integration.exploring_controller:
+            return self._controller_integration.exploring_controller.handle_exploring_features_result(
+                features, expression, layer_props, identify_by_primary_key_name
+            )
+        return []
 
 
     def get_exploring_features(self, input, identify_by_primary_key_name=False, custom_expression=None):

@@ -1640,8 +1640,8 @@ class ExploringController(BaseController, LayerSelectionMixin):
                         logger.debug("Async evaluation completed for different layer, ignoring")
                         return
                     
-                    # Continue with normal flow using async results
-                    self._dockwidget._handle_exploring_features_result(
+                    # v3.1 Sprint 8: Use controller method instead of dockwidget
+                    self.handle_exploring_features_result(
                         async_features, 
                         async_expression, 
                         layer_props,
@@ -1670,11 +1670,84 @@ class ExploringController(BaseController, LayerSelectionMixin):
      
             # Normal synchronous flow for smaller layers or non-custom expressions
             # Process results directly
-            return self._dockwidget._handle_exploring_features_result(
+            return self.handle_exploring_features_result(
                 features, expression, layer_props, identify_by_primary_key_name
             )
         
         return []
+    
+    def handle_exploring_features_result(
+        self,
+        features,
+        expression,
+        layer_props,
+        identify_by_primary_key_name=False
+    ):
+        """
+        Handle the result of get_exploring_features (sync or async).
+        
+        v3.1 Sprint 8: Migrated from dockwidget._handle_exploring_features_result.
+        
+        This method processes the features and expression returned by get_exploring_features,
+        handling selection, tracking, and expression storage.
+        
+        Args:
+            features: List of QgsFeature objects
+            expression: Filter expression string
+            layer_props: Layer properties dict from PROJECT_LAYERS
+            identify_by_primary_key_name: Whether primary key was used
+            
+        Returns:
+            List of features processed
+        """
+        dw = self._dockwidget
+        
+        if not dw.widgets_initialized or dw.current_layer is None:
+            return []
+        
+        # Link widgets if is_linking is enabled
+        if layer_props.get("exploring", {}).get("is_linking", False):
+            single_widget = dw.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+            multiple_widget = dw.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
+            
+            single_widget.blockSignals(True)
+            multiple_widget.blockSignals(True)
+            
+            try:
+                self.exploring_link_widgets()
+            finally:
+                single_widget.blockSignals(False)
+                multiple_widget.blockSignals(False)
+        
+        # Store expression for filter task
+        if expression is not None and expression != '':
+            layer_props["filtering"]["current_filter_expression"] = expression
+            logger.debug(f"handle_exploring_features_result: Stored expression: {expression[:60]}...")
+        
+        if len(features) == 0:
+            logger.debug("handle_exploring_features_result: No features to process")
+            # Clear selection if is_selecting is active
+            if layer_props.get("exploring", {}).get("is_selecting", False):
+                if not getattr(dw, '_syncing_from_qgis', False):
+                    dw.current_layer.removeSelection()
+            return []
+        
+        # Sync QGIS selection when is_selecting is active
+        if layer_props.get("exploring", {}).get("is_selecting", False):
+            if not getattr(dw, '_syncing_from_qgis', False):
+                dw.current_layer.removeSelection()
+                dw.current_layer.select([f.id() for f in features])
+                logger.debug(f"handle_exploring_features_result: Synced QGIS selection ({len(features)} features)")
+        
+        # Zoom if is_tracking is active
+        if layer_props.get("exploring", {}).get("is_tracking", False):
+            logger.debug(f"handle_exploring_features_result: Tracking {len(features)} features")
+            self.zooming_to_features(features)
+        
+        # Update button states
+        dw._update_exploring_buttons_state()
+        
+        return features
 
     def exploring_link_widgets(self, expression=None, change_source=None):
         """
