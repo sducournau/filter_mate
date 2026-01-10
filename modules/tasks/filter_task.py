@@ -3527,6 +3527,9 @@ class FilterEngineTask(QgsTask):
         """
         Convert QGIS expression to Spatialite SQL.
         
+        v4.0 DELEGATION: This method now delegates to ExpressionService.
+        Legacy implementation preserved as fallback.
+        
         Spatialite spatial functions are ~90% compatible with PostGIS, but there are some differences:
         - Type casting: PostgreSQL uses :: operator, Spatialite uses CAST() function
         - String comparison is case-sensitive by default
@@ -3537,12 +3540,24 @@ class FilterEngineTask(QgsTask):
         
         Returns:
             str: Spatialite SQL expression
-        
-        Note:
-            This function adapts QGIS expressions to Spatialite SQL syntax.
-            Most PostGIS spatial functions work in Spatialite with the same name.
         """
+        if not expression:
+            return expression
         
+        # Get the actual geometry column name from the layer
+        geom_col = getattr(self, 'param_source_geom', None) or 'geometry'
+        
+        # v4.0: Delegate to ExpressionService (consolidated implementation)
+        try:
+            from core.services.expression_service import ExpressionService
+            from core.domain.filter_expression import ProviderType
+            service = ExpressionService()
+            return service.to_sql(expression, ProviderType.SPATIALITE, geom_col)
+        except ImportError:
+            logger.debug("ExpressionService not available, using legacy implementation")
+            pass
+        
+        # LEGACY FALLBACK: Original implementation (to be removed in v5.0)
         # Handle CASE expressions
         expression = re.sub('case', ' CASE ', expression, flags=re.IGNORECASE)
         expression = re.sub('when', ' WHEN ', expression, flags=re.IGNORECASE)
@@ -3551,32 +3566,16 @@ class FilterEngineTask(QgsTask):
         expression = re.sub('else', ' ELSE ', expression, flags=re.IGNORECASE)
         
         # Handle LIKE/ILIKE - Spatialite doesn't have ILIKE, use LIKE with LOWER()
-        # For case-insensitive matching in Spatialite
         # IMPORTANT: Process ILIKE first, before processing LIKE, to avoid double-replacement
         expression = re.sub(r'(\w+)\s+ILIKE\s+', r'LOWER(\1) LIKE LOWER(', expression, flags=re.IGNORECASE)
         expression = re.sub(r'\bNOT\b', ' NOT ', expression, flags=re.IGNORECASE)
         expression = re.sub(r'\bLIKE\b', ' LIKE ', expression, flags=re.IGNORECASE)
         
         # Convert PostgreSQL :: type casting to Spatialite CAST() function
-        # PostgreSQL: "field"::numeric -> Spatialite: CAST("field" AS REAL)
         expression = re.sub(r'(["\w]+)::numeric', r'CAST(\1 AS REAL)', expression)
         expression = re.sub(r'(["\w]+)::integer', r'CAST(\1 AS INTEGER)', expression)
         expression = re.sub(r'(["\w]+)::text', r'CAST(\1 AS TEXT)', expression)
         expression = re.sub(r'(["\w]+)::double', r'CAST(\1 AS REAL)', expression)
-        
-        # CRITICAL FIX: Do NOT remove quotes from field names!
-        # Spatialite needs quotes for case-sensitive field names, just like PostgreSQL.
-        # Unlike the PostgreSQL version that adds ::numeric for type casting,
-        # Spatialite will do implicit type conversion when needed.
-        # The quotes MUST be preserved for field names like "HOMECOUNT".
-        #
-        # Note: The old code had these lines which REMOVED quotes:
-        #   expression = expression.replace('" >', ' ').replace('">', ' ')
-        # This was WRONG and caused "HOMECOUNT" > 100 to become HOMECOUNT > 100
-        
-        # Spatial functions compatibility (most are identical, but document them)
-        # ST_Buffer, ST_Intersects, ST_Contains, ST_Distance, ST_Union, ST_Transform
-        # all work the same in Spatialite as in PostGIS
         
         return expression
 
@@ -3794,15 +3793,7 @@ class FilterEngineTask(QgsTask):
         """
         Get appropriate WKT precision based on CRS units.
         
-        v2.7.14: New method to optimize WKT size by reducing coordinate precision.
-        
-        For metric CRS (e.g., EPSG:2154 Lambert 93):
-        - 2 decimal places = centimeter precision (sufficient for spatial filtering)
-        - Reduces WKT size by ~60-70% vs default 17 decimals
-        
-        For geographic CRS (e.g., EPSG:4326 WGS84):
-        - 8 decimal places = ~1mm precision at equator
-        - Reduces WKT size by ~50% vs default 17 decimals
+        v4.0 DELEGATION: Delegates to BufferService for consistency.
         
         Args:
             crs_authid: CRS authority ID (e.g., 'EPSG:2154', 'EPSG:4326')
@@ -3815,24 +3806,25 @@ class FilterEngineTask(QgsTask):
         if crs_authid is None:
             crs_authid = getattr(self, 'source_layer_crs_authid', None)
         
+        # v4.0: Delegate to BufferService
+        try:
+            from core.services.buffer_service import BufferService
+            service = BufferService()
+            return service.get_wkt_precision(crs_authid)
+        except ImportError:
+            pass
+        
+        # LEGACY FALLBACK
         if not crs_authid:
-            # Default to conservative precision for unknown CRS
             return 6
         
-        # Check if geographic CRS
         try:
             srid = int(crs_authid.split(':')[1]) if ':' in crs_authid else int(crs_authid)
-            # Geographic CRS: EPSG:4326, EPSG:4267, etc.
             is_geographic = srid == 4326 or (4000 <= srid < 5000)
         except (ValueError, IndexError):
             is_geographic = False
         
-        if is_geographic:
-            # Geographic: 8 decimals ≈ 1mm at equator
-            return 8
-        else:
-            # Projected/metric: 2 decimals = 1cm precision
-            return 2
+        return 8 if is_geographic else 2
 
     def _geometry_to_wkt(self, geometry, crs_authid: str = None) -> str:
         """
@@ -3865,15 +3857,7 @@ class FilterEngineTask(QgsTask):
         """
         Calculate optimal simplification tolerance based on buffer parameters.
         
-        v2.7.11: New method to compute tolerance that respects buffer precision.
-        
-        The idea is that when a buffer is applied with specific segments/type parameters,
-        the resulting geometry has a known precision. We can safely simplify up to that
-        precision level without losing meaningful detail.
-        
-        For a buffer with N segments per quarter-circle:
-        - Arc length per segment ≈ (π/2) * radius / N
-        - Maximum error from simplification ≈ radius * (1 - cos(π/(2*N)))
+        v4.0 DELEGATION: Delegates to BufferService.calculate_buffer_aware_tolerance().
         
         Args:
             buffer_value: Buffer distance in map units
@@ -3885,44 +3869,33 @@ class FilterEngineTask(QgsTask):
         Returns:
             float: Recommended simplification tolerance
         """
+        # v4.0: Delegate to BufferService
+        try:
+            from core.services.buffer_service import BufferService, BufferConfig, BufferEndCapStyle
+            service = BufferService()
+            config = BufferConfig(
+                distance=buffer_value or 0,
+                segments=buffer_segments,
+                end_cap_style=BufferEndCapStyle(buffer_type)
+            )
+            return service.calculate_buffer_aware_tolerance(config, extent_size, is_geographic)
+        except ImportError:
+            pass
+        
+        # LEGACY FALLBACK
         import math
         
         abs_buffer = abs(buffer_value) if buffer_value else 0
         
-        # Default tolerance if no buffer
         if abs_buffer == 0:
             base_tolerance = extent_size * 0.001
         else:
-            # Calculate maximum angular error per segment
-            # For N segments per quarter circle, each segment covers π/(2*N) radians
             angle_per_segment = math.pi / (2 * buffer_segments)
-            
-            # Maximum chord-to-arc error is: r * (1 - cos(θ/2))
-            # where θ is the angle per segment
             max_arc_error = abs_buffer * (1 - math.cos(angle_per_segment / 2))
-            
-            # For flat/square endcaps, tolerance can be more aggressive
-            # since the buffer edges are straight lines
-            if buffer_type in [1, 2]:  # Flat or Square
-                # Flat endcaps have no curves at ends, can simplify more
-                tolerance_factor = 2.0
-            else:  # Round
-                # Round endcaps have curves, be more conservative
-                tolerance_factor = 1.0
-            
-            # Base tolerance is the arc error (this is the inherent precision of the buffer)
+            tolerance_factor = 2.0 if buffer_type in [1, 2] else 1.0
             base_tolerance = max_arc_error * tolerance_factor
-            
-            # Log the calculation
-            logger.info(f"  📐 Buffer-aware tolerance calculation:")
-            logger.info(f"     buffer={buffer_value}m, segments={buffer_segments}, type={buffer_type}")
-            logger.info(f"     angle_per_segment={math.degrees(angle_per_segment):.2f}°")
-            logger.info(f"     max_arc_error={max_arc_error:.4f}m")
-            logger.info(f"     base_tolerance={base_tolerance:.4f} ({'degrees' if is_geographic else 'map units'})")
         
-        # Convert to degrees if geographic CRS
         if is_geographic:
-            # 1 degree ≈ 111km at equator
             base_tolerance = base_tolerance / 111000.0
         
         return base_tolerance
