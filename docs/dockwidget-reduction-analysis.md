@@ -17,16 +17,16 @@
 
 ### Progression Sprint 8 (session 10 janvier 2026)
 
-| Action                                 | Lignes avant | Lignes après | Réduction |
-| -------------------------------------- | ------------ | ------------ | --------- |
-| **Début Sprint 8**                     | **5,240**    | -            | -         |
-| Optimiser `force_reconnect_exploring`  | 5,240        | 5,225        | -15       |
-| Optimiser `force_reconnect_action`     | 5,225        | 5,219        | -6        |
-| Optimiser `manage_interactions`        | 5,219        | 5,215        | -4        |
-| Optimiser `_update_exploring_buttons`  | 5,215        | 5,212        | -3        |
-| Optimiser `filtering_buffer_property`  | 5,212        | 5,207        | -5        |
-| Optimiser `filtering_buffer_type` + centroids | 5,207 | 5,204        | -3        |
-| **Total Sprint 8**                     | **5,240**    | **5,204**    | **-36**   |
+| Action                                        | Lignes avant | Lignes après | Réduction |
+| --------------------------------------------- | ------------ | ------------ | --------- |
+| **Début Sprint 8**                            | **5,240**    | -            | -         |
+| Optimiser `force_reconnect_exploring`         | 5,240        | 5,225        | -15       |
+| Optimiser `force_reconnect_action`            | 5,225        | 5,219        | -6        |
+| Optimiser `manage_interactions`               | 5,219        | 5,215        | -4        |
+| Optimiser `_update_exploring_buttons`         | 5,215        | 5,212        | -3        |
+| Optimiser `filtering_buffer_property`         | 5,212        | 5,207        | -5        |
+| Optimiser `filtering_buffer_type` + centroids | 5,207        | 5,204        | -3        |
+| **Total Sprint 8**                            | **5,240**    | **5,204**    | **-36**   |
 
 ### Progression Sprint 7 (session 10 janvier 2026)
 

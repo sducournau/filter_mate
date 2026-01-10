@@ -334,18 +334,45 @@ def build_postgis_predicates(
     return postgis_sub_expression_array, param_distant_geom_expression
 
 
-# TODO: Extract from filter_task.py line 1812
 def apply_postgresql_type_casting(expression: str, layer=None) -> str:
     """
-    Apply PostgreSQL-specific type casting to expression.
+    Apply PostgreSQL type casting to fix common type mismatch errors.
     
-    TODO: Extract implementation from filter_task.py (40 lines)
+    EPIC-1 Phase E4-S3: Extracted from filter_task.py line 1812 (40 lines)
+    
+    Handles cases like "importance" < 4 where importance is varchar.
+    Adds ::numeric type casting for numeric comparisons.
     
     Args:
         expression: SQL expression
-        layer: Optional QGIS layer for context
+        layer: Optional layer to get field type information
         
     Returns:
         str: Expression with type casting applied
     """
-    raise NotImplementedError("EPIC-1 Phase E4: To be extracted from filter_task.py")
+    import re
+    
+    if not expression:
+        return expression
+    
+    # Add ::numeric type casting for numeric comparisons if not already present
+    # This handles cases like "importance" < 4 → "importance"::numeric < 4
+    # Pattern: "field" followed by comparison operator and number
+    # Only apply if not already cast (no :: before the operator)
+    
+    numeric_comparison_pattern = r'"([^"]+)"(\s*)(<|>|<=|>=)(\s*)(\d+(?:\.\d+)?)'
+    
+    def add_numeric_cast(match):
+        field = match.group(1)
+        space1 = match.group(2)
+        operator = match.group(3)
+        space2 = match.group(4)
+        number = match.group(5)
+        # Check if already has type casting
+        return f'"{field}"::numeric{space1}{operator}{space2}{number}'
+    
+    # Only apply if not already cast (check for :: before operator)
+    if '::numeric' not in expression:
+        expression = re.sub(numeric_comparison_pattern, add_numeric_cast, expression)
+    
+    return expression

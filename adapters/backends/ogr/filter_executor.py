@@ -73,23 +73,69 @@ def execute_ogr_spatial_selection(
     raise NotImplementedError("EPIC-1 Phase E4: To be extracted from filter_task.py")
 
 
-# TODO: Extract from filter_task.py line 7024
 def build_ogr_filter_from_selection(
     current_layer,
     layer_props: dict,
     distant_geom_expression: str = None
-) -> str:
+) -> tuple:
     """
-    Build OGR filter expression from spatial selection.
+    Build filter expression from selected features for OGR layers.
     
-    TODO: Extract implementation from filter_task.py (57 lines)
+    EPIC-1 Phase E4-S3: Extracted from filter_task.py line 6949 (57 lines)
     
     Args:
-        current_layer: Filter layer
-        layer_props: Layer properties dictionary
-        distant_geom_expression: Optional geometry expression
+        current_layer: Layer with selected features
+        layer_props: Layer properties dict
+        distant_geom_expression: Geometry field expression
         
     Returns:
-        str: OGR filter expression (fid IN (...))
+        tuple: (filter_expression, full_select_expression) or (False, None) if no selection
     """
-    raise NotImplementedError("EPIC-1 Phase E4: To be extracted from filter_task.py")
+    from qgis.core import QgsFeatureRequest
+    
+    param_distant_primary_key_name = layer_props["primary_key_name"]
+    param_distant_primary_key_is_numeric = layer_props["primary_key_is_numeric"]
+    param_distant_schema = layer_props["layer_schema"]
+    param_distant_table = layer_props["layer_name"]
+    param_distant_geometry_field = layer_props["layer_geometry_field"]
+    
+    # Extract feature IDs from selection
+    # CRITICAL FIX: Handle ctid (PostgreSQL internal identifier)
+    # ctid is not accessible via feature[field_name], use feature.id() instead
+    # FIX v3.1.3: Use thread-safe selectedFeatureIds() + getFeatures()
+    features_ids = []
+    selected_fids = list(current_layer.selectedFeatureIds())
+    if selected_fids:
+        request = QgsFeatureRequest().setFilterFids(selected_fids)
+        for feature in current_layer.getFeatures(request):
+            if param_distant_primary_key_name == 'ctid':
+                features_ids.append(str(feature.id()))
+            else:
+                features_ids.append(str(feature[param_distant_primary_key_name]))
+    
+    if len(features_ids) == 0:
+        return False, None
+    
+    # Build IN clause based on key type
+    if param_distant_primary_key_is_numeric:
+        param_expression = '"{pk}" IN '.format(
+            pk=param_distant_primary_key_name
+        ) + "(" + ", ".join(features_ids) + ")"
+    else:
+        param_expression = '"{pk}" IN '.format(
+            pk=param_distant_primary_key_name
+        ) + "('" + "', '".join(features_ids) + "')"
+    
+    # Build full SELECT expression for manage_layer_subset_strings
+    expression = (
+        'SELECT "{table}"."{pk}", {geom} '
+        'FROM "{schema}"."{table}" WHERE {expr}'.format(
+            pk=param_distant_primary_key_name,
+            geom=distant_geom_expression,
+            schema=param_distant_schema,
+            table=param_distant_table,
+            expr=param_expression
+        )
+    )
+    
+    return param_expression, expression
