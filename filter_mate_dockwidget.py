@@ -5468,87 +5468,42 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.exploring_groupbox_changed(exploring_groupbox)
 
     def _update_exploring_buttons_state(self):
-        """
-        Update the enabled/disabled state of exploring buttons based on:
-        1. Current exploring groupbox (single_selection, multiple_selection, custom_selection)
-        2. Number of features selected in the active groupbox
-        
-        Buttons affected: identify, zoom (other buttons like tracking, selecting, linking are always enabled)
-        
-        v2.9.34: Fix for Spatialite backend - buttons were not respecting groupbox/feature selection state
-        """
-        if not self.widgets_initialized or self.current_layer is None:
-            # Disable all buttons if no layer
+        """v3.1 Sprint 11: Simplified - update identify/zoom buttons based on selection."""
+        if not self.widgets_initialized or not self.current_layer:
             self.pushButton_exploring_identify.setEnabled(False)
             self.pushButton_exploring_zoom.setEnabled(False)
             return
         
         has_features = False
-        
         try:
-            # Check current groupbox for selected features
             if self.current_exploring_groupbox == "single_selection":
-                # Single selection: check if feature picker has a valid feature
-                feature_picker = self.widgets.get("EXPLORING", {}).get("SINGLE_SELECTION_FEATURES", {}).get("WIDGET")
-                if feature_picker:
-                    feature = feature_picker.feature()
-                    has_features = feature is not None and (not hasattr(feature, 'isValid') or feature.isValid())
-                    
+                picker = self.widgets.get("EXPLORING", {}).get("SINGLE_SELECTION_FEATURES", {}).get("WIDGET")
+                if picker:
+                    f = picker.feature()
+                    has_features = f is not None and (not hasattr(f, 'isValid') or f.isValid())
             elif self.current_exploring_groupbox == "multiple_selection":
-                # Multiple selection: check if any items are checked
                 combo = self.widgets.get("EXPLORING", {}).get("MULTIPLE_SELECTION_FEATURES", {}).get("WIDGET")
                 if combo:
-                    checked_items = combo.checkedItems()
-                    has_features = checked_items is not None and len(checked_items) > 0
-                    
+                    has_features = bool(combo.checkedItems())
             elif self.current_exploring_groupbox == "custom_selection":
-                # Custom selection: check if expression widget has a valid expression
-                expr_widget = self.widgets.get("EXPLORING", {}).get("CUSTOM_SELECTION_EXPRESSION", {}).get("WIDGET")
-                if expr_widget:
-                    expression = expr_widget.expression()
-                    # Enable buttons if there's a non-empty expression
-                    has_features = expression is not None and expression.strip() != ""
-                    
-        except (AttributeError, RuntimeError) as e:
-            logger.debug(f"_update_exploring_buttons_state: Error checking features: {e}")
-            has_features = False
+                expr = self.widgets.get("EXPLORING", {}).get("CUSTOM_SELECTION_EXPRESSION", {}).get("WIDGET")
+                if expr:
+                    has_features = bool(expr.expression() and expr.expression().strip())
+        except (AttributeError, RuntimeError):
+            pass
         
-        # Update button states
         self.pushButton_exploring_identify.setEnabled(has_features)
         self.pushButton_exploring_zoom.setEnabled(has_features)
-        
-        # Log state change for debugging
-        logger.debug(f"_update_exploring_buttons_state: groupbox='{self.current_exploring_groupbox}', has_features={has_features}")
 
     def _configure_single_selection_groupbox(self):
-        """
-        Configure UI for single feature selection mode.
-        
-        Sets groupbox states (expand single, collapse others), persists to PROJECT_LAYERS,
-        disconnects signals, updates widgets with current layer, reconnects signals,
-        and triggers feature update.
-        
-        Note: When the layer already has a filter (subsetString), the filter is preserved
-        if no feature is selected in the widget. This prevents unintended filter removal
-        when switching between groupboxes.
-        
-        Returns:
-            bool: True if configuration succeeded, False if layer not in PROJECT_LAYERS
-        """
+        """v3.1 Sprint 11: Simplified - configure UI for single feature selection mode."""
         self.current_exploring_groupbox = "single_selection"
         
-        # Save to PROJECT_LAYERS for persistence
-        if self.current_layer is not None and self.current_layer.id() in self.PROJECT_LAYERS:
+        if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
             self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = "single_selection"
-
-        if self.current_layer is not None:
-            # CRITICAL: Use safe getter to validate layer exists in PROJECT_LAYERS
-            layer_props = self._safe_get_layer_props(self.current_layer)
-            if layer_props is None:
-                logger.warning(f"Cannot initialize single_selection exploring - layer not in PROJECT_LAYERS. Skipping.")
-                return False
+            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
             
-            # CRITICAL: Disconnect signals BEFORE updating widgets
+            # Disconnect signals before updating
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'disconnect')
@@ -5556,83 +5511,47 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
             self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
             
-            # CRITICAL FIX: Update widget to use current layer
             try:
-                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer)
-                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
-                # SPATIALITE FIX: Allow the model to populate before further operations
-                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setAllowNull(True)
-            except (AttributeError, KeyError, RuntimeError) as e:
-                logger.error(f"Error setting single selection features widget: {type(e).__name__}: {e}")
-            
-            try:
+                picker = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+                picker.setLayer(self.current_layer)
+                picker.setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
+                picker.setAllowNull(True)
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+                
+                # Reconnect feature picker signal
+                try:
+                    picker.featureChanged.disconnect(self.exploring_features_changed)
+                except TypeError:
+                    pass
+                picker.featureChanged.connect(self.exploring_features_changed)
             except (AttributeError, KeyError, RuntimeError) as e:
-                logger.error(f"Error setting single selection expression widget: {type(e).__name__}: {e}")
-            
-            # CRITICAL: Reconnect signals AFTER updating widgets
-            # DEBUG: Use direct connection instead of manageSignal to ensure signal works
-            picker_widget = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
-            
-            # First try to disconnect any existing connection (ignore errors)
-            try:
-                picker_widget.featureChanged.disconnect(self.exploring_features_changed)
-            except TypeError:
-                pass  # Not connected
-            
-            # Now connect directly
-            picker_widget.featureChanged.connect(self.exploring_features_changed)
-            
-            # NOTE: fieldChanged signal is already connected in _setup_expression_widget_direct_connections()
-            # No need to reconnect here - it would create duplicate handlers
+                logger.error(f"Error configuring single selection: {e}")
             
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
-
-            # Trigger features update and link widgets
+            
             self.exploring_link_widgets()
             
-            # Update feature selection state if there's a selected feature
-            # CRITICAL FIX: Skip if syncing from QGIS - the widget hasn't been updated yet
-            # with the QGIS selection, so we would be using stale data.
-            # The sync will happen after in _sync_single_selection_from_qgis()
             if not self._syncing_from_qgis:
-                selected_feature = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
-                if selected_feature is not None and selected_feature.isValid():
-                    self.exploring_features_changed(selected_feature)
+                feature = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
+                if feature and feature.isValid():
+                    self.exploring_features_changed(feature)
         else:
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
         
-        # v2.9.41: Update button states based on current selection
-        # Ensures zoom/identify buttons reflect feature selection after groupbox switch
         self._update_exploring_buttons_state()
-        
         return True
 
     def _configure_multiple_selection_groupbox(self):
-        """
-        Configure UI for multiple features selection mode.
-        
-        Sets groupbox states (expand multiple, collapse others), persists to PROJECT_LAYERS,
-        disconnects signals, updates widgets with current layer, reconnects signals,
-        and triggers features update.
-        
-        Note: When the layer already has a filter (subsetString), the filter is preserved
-        if no features are selected in the widget. This prevents unintended filter removal
-        when switching between groupboxes.
-        
-        Returns:
-            bool: True if configuration succeeded
-        """
+        """v3.1 Sprint 11: Simplified - configure UI for multiple features selection mode."""
         self.current_exploring_groupbox = "multiple_selection"
         
-        # Save to PROJECT_LAYERS for persistence
-        if self.current_layer is not None and self.current_layer.id() in self.PROJECT_LAYERS:
+        if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
             self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = "multiple_selection"
-
-        if self.current_layer is not None:
-            # CRITICAL: Disconnect ALL signals BEFORE updating widgets
+            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+            
+            # Disconnect signals before updating
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'disconnect')
@@ -5642,74 +5561,33 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             try:
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-            except (AttributeError, KeyError, RuntimeError) as e:
-                logger.error(f"Error setting multiple selection expression widget: {type(e).__name__}: {e}")
-
-            # STABILITY FIX: Guard against KeyError if layer not in PROJECT_LAYERS
-            if self.current_layer.id() not in self.PROJECT_LAYERS:
-                logger.warning(f"exploring_multiple_selection: layer {self.current_layer.name()} not in PROJECT_LAYERS")
-                return
-            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-            try:
-                # FIX v2.5.14: setLayer already handles setDisplayExpression internally
-                # when the expression differs - no need to call it again here.
-                # Calling it twice was causing task cancellation issues where
-                # "Building features list" and "Loading features" were canceled
-                # immediately after being launched.
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
-                # NOTE: Removed duplicate setDisplayExpression call - setLayer handles it
             except (AttributeError, KeyError, RuntimeError) as e:
-                logger.error(f"Error setting multiple selection features widget: {type(e).__name__}: {e}")
+                logger.error(f"Error configuring multiple selection: {e}")
             
-            # CRITICAL: Reconnect signals AFTER updating widgets
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect')
-            
-            # NOTE: fieldChanged signal is already connected in _setup_expression_widget_direct_connections()
-            # No need to reconnect here - it would create duplicate handlers
-
-            # Trigger features update and link widgets
             self.exploring_link_widgets()
             
-            # Update feature selection state if there are selected features
-            # CRITICAL FIX: Skip if syncing from QGIS - the widget hasn't been updated yet
-            # with the QGIS selection, so we would be using stale data.
-            # The sync will happen after in _sync_multiple_selection_from_qgis()
             if not self._syncing_from_qgis:
-                selected_features = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures()
-                if selected_features:
-                    self.exploring_features_changed(selected_features, True)
+                features = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures()
+                if features:
+                    self.exploring_features_changed(features, True)
         else:
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
         
-        # Update button states based on current selection
         self._update_exploring_buttons_state()
-        
         return True
 
     def _configure_custom_selection_groupbox(self):
-        """
-        Configure UI for custom expression-based selection mode.
-        
-        Sets groupbox states (expand custom, collapse others), persists to PROJECT_LAYERS,
-        disconnects signals, updates expression widget with current layer, reconnects signals,
-        and triggers custom selection.
-        
-        Note: When the layer already has a filter (subsetString), the filter is preserved
-        if no custom expression is set. This prevents unintended filter removal when
-        switching between groupboxes.
-        
-        Returns:
-            bool: True if configuration succeeded
-        """
+        """v3.1 Sprint 11: Simplified - configure UI for custom expression-based selection mode."""
         self.current_exploring_groupbox = "custom_selection"
         
-        # Save to PROJECT_LAYERS for persistence
-        if self.current_layer is not None and self.current_layer.id() in self.PROJECT_LAYERS:
+        if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
             self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = "custom_selection"
-
-        if self.current_layer is not None:
-            # CRITICAL: Disconnect ALL signals BEFORE updating widgets
+            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+            
+            # Disconnect signals before updating
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
             self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'disconnect')
@@ -5718,100 +5596,47 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             try:
                 self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
             except (AttributeError, KeyError, RuntimeError) as e:
-                logger.error(f"Error setting custom selection expression widget: {type(e).__name__}: {e}")
+                logger.error(f"Error configuring custom selection: {e}")
             
-            # CRITICAL: Reconnect signals AFTER updating widgets
             self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
             
-            # Trigger link
             self.exploring_link_widgets()
             
-            # PRESERVE FILTER FIX: Only call exploring_custom_selection if there's a custom expression
-            # OR if the layer has no existing filter. This prevents clearing the filter when
-            # switching groupboxes on an already-filtered layer.
-            # STABILITY FIX: Guard against KeyError if layer not in PROJECT_LAYERS
-            if self.current_layer.id() not in self.PROJECT_LAYERS:
-                logger.warning(f"exploring_groupbox_changed: layer {self.current_layer.name()} not in PROJECT_LAYERS")
-                return
-            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-            custom_expression = layer_props["exploring"].get("custom_selection_expression", "")
-            current_filter = self.current_layer.subsetString()
-            
-            if custom_expression or not current_filter:
-                # Either we have an expression to apply, or there's no existing filter to preserve
+            # Only apply custom expression if set, or if no existing filter
+            custom_expr = layer_props["exploring"].get("custom_selection_expression", "")
+            if custom_expr or not self.current_layer.subsetString():
                 self.exploring_custom_selection()
-            else:
-                # Layer has an existing filter and no custom expression - preserve the filter
-                logger.debug(f"Preserving existing filter on groupbox change: {current_filter[:60]}...")
         else:
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
         
-        # Update button states based on current expression
         self._update_exploring_buttons_state()
-        
         return True
 
     def exploring_groupbox_changed(self, groupbox):
-        """
-        Handle exploring groupbox selection change with exclusive behavior.
+        """v3.1 Sprint 11: Simplified - handle groupbox change with exclusive behavior."""
+        if not self.widgets_initialized:
+            return
         
-        When a groupbox is clicked and becomes checked (activated), it expands and 
-        all other exploring groupboxes are unchecked and collapsed.
-        If a groupbox is unchecked, we still enforce exclusive behavior by checking it
-        (preventing all groupboxes from being unchecked simultaneously).
+        # Delegate cache invalidation to controller
+        if self._controller_integration:
+            self._controller_integration.delegate_exploring_set_groupbox_mode(groupbox)
+        elif hasattr(self, '_exploring_cache') and self.current_layer:
+            old = self.current_exploring_groupbox
+            if old and old != groupbox:
+                self._exploring_cache.invalidate(self.current_layer.id(), old)
         
-        The configuration methods (_configure_*_selection_groupbox) handle the 
-        exclusive state by checking/unchecking groupboxes and expanding/collapsing them.
+        # Force exclusive and configure
+        self._force_exploring_groupbox_exclusive(groupbox)
         
-        v3.1 STORY-2.3: Delegates mode change to ExploringController for cache invalidation.
-        
-        Args:
-            groupbox (str): Selected groupbox ('single_selection', 'multiple_selection', or 'custom_selection')
-        """
-        if self.widgets_initialized is True:
-            # v3.1 STORY-2.3: Delegate mode change to controller (handles cache invalidation)
-            if self._controller_integration is not None:
-                self._controller_integration.delegate_exploring_set_groupbox_mode(groupbox)
-            else:
-                # CACHE INVALIDATION: When groupbox changes, invalidate cache for the previous groupbox
-                # because the user is switching to a different selection mode
-                if hasattr(self, '_exploring_cache') and self.current_layer:
-                    layer_id = self.current_layer.id()
-                    old_groupbox = self.current_exploring_groupbox
-                    if old_groupbox and old_groupbox != groupbox:
-                        self._exploring_cache.invalidate(layer_id, old_groupbox)
-                        logger.debug(f"exploring_groupbox_changed: Invalidated cache for {layer_id[:8]}.../{old_groupbox}")
-            
-            # Get the widget that was clicked
-            triggering_widget = None
-            if groupbox == "single_selection":
-                triggering_widget = self.mGroupBox_exploring_single_selection
-            elif groupbox == "multiple_selection":
-                triggering_widget = self.mGroupBox_exploring_multiple_selection
-            elif groupbox == "custom_selection":
-                triggering_widget = self.mGroupBox_exploring_custom_selection
-            
-            if triggering_widget is None:
-                return
-            
-            # CRITICAL FIX: Always force exclusive behavior when a groupbox is clicked
-            # Even if the user is trying to uncheck, we force it to stay checked
-            # (there must always be one active groupbox)
-            
-            # First, force this groupbox to be the active one (checked and expanded)
-            # This also handles the case where user tries to uncheck the current groupbox
-            self._force_exploring_groupbox_exclusive(groupbox)
-            
-            # Then call the appropriate configuration method to set up widgets
-            if groupbox == "single_selection":
-                self._configure_single_selection_groupbox()
-            elif groupbox == "multiple_selection":
-                self._configure_multiple_selection_groupbox()
-            elif groupbox == "custom_selection":
-                self._configure_custom_selection_groupbox()
+        if groupbox == "single_selection":
+            self._configure_single_selection_groupbox()
+        elif groupbox == "multiple_selection":
+            self._configure_multiple_selection_groupbox()
+        elif groupbox == "custom_selection":
+            self._configure_custom_selection_groupbox()
 
 
     def exploring_identify_clicked(self):
@@ -6751,81 +6576,44 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def current_layer_changed(self, layer):
-        """
-        Handle current layer change event.
-        
-        v3.1 Sprint 6: Simplified - delegates protection logic to LayerSyncController.
-        Orchestrates layer change by validating, disconnecting signals, 
-        synchronizing widgets, and reconnecting signals.
-        
-        CRITICAL (CRIT-005): Protection against unwanted layer changes during filtering
-        is handled by LayerSyncController.
-        """
-        # Quick lock check
+        """v3.1 Sprint 11: Simplified - handle current layer change event."""
         if self._updating_current_layer:
             return
         
-        # v3.1 Sprint 6: Delegate protection logic to LayerSyncController
+        # Delegate protection to controller
         if self._controller_integration:
-            # Controller returns False if layer change is blocked
             if not self._controller_integration.delegate_current_layer_changed(layer):
-                logger.debug(f"current_layer_changed BLOCKED by LayerSyncController")
                 return
         
-        # Validate layer - ensure we have a valid layer when layers exist
         layer = self._ensure_valid_current_layer(layer)
         if layer is None:
-            if len(self.PROJECT_LAYERS) > 0:
-                logger.error("CRITICAL - Could not find valid layer despite PROJECT_LAYERS having entries!")
             return
         
-        # STABILITY FIX: If plugin is busy, defer the layer change
         if self._plugin_busy:
             self._defer_layer_change(layer)
             return
         
-        # Verify layer C++ object is still valid
         try:
-            _ = layer.name()
             _ = layer.id()
         except (RuntimeError, AttributeError):
-            logger.warning("current_layer_changed received invalid layer object, ignoring")
             return
         
-        logger.debug(f"current_layer_changed: processing layer '{layer.name()}'")
-        
-        # Set lock
         self._updating_current_layer = True
-        
-        # Reset selection tracking for new layer
         self._reset_selection_tracking_for_layer(layer)
             
         try:
-            # Validate layer and prepare for change
             should_continue, validated_layer, layer_props = self._validate_and_prepare_layer(layer)
             if not should_continue:
                 return
             
-            # Reset expressions for new layer
             self._reset_layer_expressions(layer_props)
-            
-            # Disconnect all signals before updates
             widgets_to_reconnect = self._disconnect_layer_signals()
-            
-            # Synchronize all widgets with new layer
             self._synchronize_layer_widgets(validated_layer, layer_props)
-            
-            # Reload exploration widgets with validated layer
             self._reload_exploration_widgets(validated_layer, layer_props)
-            
-            # Update exploring buttons state after layer change
             self._update_exploring_buttons_state()
-            
-            # Reconnect all signals and restore state
             self._reconnect_layer_signals(widgets_to_reconnect, layer_props)
-            
         except Exception as e:
-            logger.error(f"Error in current_layer_changed: {type(e).__name__}: {e}")
+            logger.error(f"Error in current_layer_changed: {e}")
         finally:
             self._updating_current_layer = False
     
@@ -7366,78 +7154,44 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def filtering_buffer_property_changed(self):
-        """Handle changes to the buffer property override button and HAS_BUFFER_VALUE state.
-        
-        v3.1 STORY-2.4: Delegates buffer property state to controller.
-        
-        The spinbox is enabled when:
-        - HAS_BUFFER_VALUE button is checked AND
-        - Property button is NOT active with a valid expression
-        
-        When property override is active (True): Use expression from property button
-        When property override is inactive (False): Use static value from spinbox
-        """
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
+        """v3.1 Sprint 11: Simplified - handle buffer property override button changes."""
+        if not self.widgets_initialized or not self.has_loaded_layers:
+            return
 
-            widgets_to_stop = [["FILTERING","BUFFER_VALUE_PROPERTY"]]
-            
-            for widget_path in widgets_to_stop:
-                self.manageSignal(widget_path, 'disconnect')
+        self.manageSignal(["FILTERING","BUFFER_VALUE_PROPERTY"], 'disconnect')
 
-            # CRITICAL FIX: Check if HAS_BUFFER_VALUE button is checked
-            # The spinbox should only be enabled if this button is checked
-            has_buffer_value_checked = self.widgets["FILTERING"]["HAS_BUFFER_VALUE"]["WIDGET"].isChecked()
-
-            # Use widget state directly instead of stored value (which may not be updated yet)
-            is_active = self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].isActive()
-            has_valid_expression = False
-            
-            if is_active:
-                # Property button is active: get expression from the widget
-                qgs_property = self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].toProperty()
-                if qgs_property.propertyType() == QgsProperty.ExpressionBasedProperty:
-                    expression = qgs_property.asExpression()
-                    if expression and expression.strip():
-                        self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value_expression"] = expression
-                        self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value_property"] = True
-                        has_valid_expression = True
-                        logger.debug(f"Property override ACTIVE with expression: '{expression}'")
-                    else:
-                        self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value_expression"] = ''
-                        self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value_property"] = False
-                        logger.debug("Property override ACTIVE but no valid expression")
+        has_buffer_checked = self.widgets["FILTERING"]["HAS_BUFFER_VALUE"]["WIDGET"].isChecked()
+        is_active = self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].isActive()
+        has_valid_expr = False
+        
+        layer_id = self.current_layer.id()
+        if is_active:
+            qgs_prop = self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].toProperty()
+            if qgs_prop.propertyType() == QgsProperty.ExpressionBasedProperty:
+                expr = qgs_prop.asExpression()
+                if expr and expr.strip():
+                    self.PROJECT_LAYERS[layer_id]["filtering"]["buffer_value_expression"] = expr
+                    self.PROJECT_LAYERS[layer_id]["filtering"]["buffer_value_property"] = True
+                    has_valid_expr = True
                 else:
-                    # No valid expression, clear it
-                    self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value_expression"] = ''
-                    self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value_property"] = False
-                    logger.debug("Property override ACTIVE but not expression-based")
+                    self.PROJECT_LAYERS[layer_id]["filtering"]["buffer_value_expression"] = ''
+                    self.PROJECT_LAYERS[layer_id]["filtering"]["buffer_value_property"] = False
             else:
-                # Property button is inactive: clear expression, use spinbox value
-                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value_expression"] = ''
-                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value_property"] = False
-                self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setToProperty(QgsProperty())
-                logger.debug("Property override INACTIVE - spinbox will be used")
+                self.PROJECT_LAYERS[layer_id]["filtering"]["buffer_value_expression"] = ''
+                self.PROJECT_LAYERS[layer_id]["filtering"]["buffer_value_property"] = False
+        else:
+            self.PROJECT_LAYERS[layer_id]["filtering"]["buffer_value_expression"] = ''
+            self.PROJECT_LAYERS[layer_id]["filtering"]["buffer_value_property"] = False
+            self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setToProperty(QgsProperty())
 
-            # v3.1 STORY-2.4: Sync buffer property state to controller
-            if self._controller_integration is not None:
-                self._controller_integration.delegate_filtering_set_buffer_property_active(is_active and has_valid_expression)
+        if self._controller_integration:
+            self._controller_integration.delegate_filtering_set_buffer_property_active(is_active and has_valid_expr)
 
-            # Enable/disable spinbox based on:
-            # 1. HAS_BUFFER_VALUE button must be checked
-            # 2. Property button must NOT be active with valid expression
-            spinbox_enabled = has_buffer_value_checked and not (is_active and has_valid_expression)
-            self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(spinbox_enabled)
-            
-            # Also enable/disable the property override button based on HAS_BUFFER_VALUE state
-            self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setEnabled(has_buffer_value_checked)
-            
-            if spinbox_enabled:
-                logger.debug(f"✓ Spinbox ENABLED (has_buffer_value={has_buffer_value_checked}, property_override={is_active and has_valid_expression})")
-            else:
-                logger.debug(f"✓ Spinbox DISABLED (has_buffer_value={has_buffer_value_checked}, property_override={is_active and has_valid_expression})")
+        spinbox_enabled = has_buffer_checked and not (is_active and has_valid_expr)
+        self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(spinbox_enabled)
+        self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setEnabled(has_buffer_checked)
 
-            for widget_path in widgets_to_stop:
-                self.manageSignal(widget_path, 'connect')
+        self.manageSignal(["FILTERING","BUFFER_VALUE_PROPERTY"], 'connect')
 
 
     def get_buffer_property_state(self):
@@ -7451,90 +7205,46 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def filtering_layers_to_filter_state_changed(self):
-        """Handle changes to the has_layers_to_filter checkable button.
-        
-        v3.1 STORY-2.4: Delegates state tracking to FilteringController.
-        
-        When checked (True): Enable layers_to_filter combobox and use_centroids_distant_layers checkbox
-        When unchecked (False): Disable these widgets
-        """
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
-            is_checked = self.widgets["FILTERING"]["HAS_LAYERS_TO_FILTER"]["WIDGET"].isChecked()
-            
-            # v3.1 STORY-2.4: Delegate state change to controller
-            if self._controller_integration is not None:
-                self._controller_integration.delegate_filtering_layers_to_filter_state_changed(is_checked)
-            
-            # UI widget enable/disable stays in dockwidget (tightly coupled to PyQt)
-            self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].setEnabled(is_checked)
-            self.widgets["FILTERING"]["USE_CENTROIDS_DISTANT_LAYERS"]["WIDGET"].setEnabled(is_checked)
-            
-            logger.debug(f"filtering_layers_to_filter_state_changed: is_checked={is_checked}")
+        """v3.1 Sprint 11: Simplified - handle layers_to_filter button changes."""
+        if not self.widgets_initialized or not self.has_loaded_layers:
+            return
+        is_checked = self.widgets["FILTERING"]["HAS_LAYERS_TO_FILTER"]["WIDGET"].isChecked()
+        if self._controller_integration:
+            self._controller_integration.delegate_filtering_layers_to_filter_state_changed(is_checked)
+        self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].setEnabled(is_checked)
+        self.widgets["FILTERING"]["USE_CENTROIDS_DISTANT_LAYERS"]["WIDGET"].setEnabled(is_checked)
 
 
     def filtering_combine_operator_state_changed(self):
-        """Handle changes to the has_combine_operator checkable button.
-        
-        v3.1 STORY-2.4: Delegates state tracking to FilteringController.
-        
-        When checked (True): Enable combine operator comboboxes
-        When unchecked (False): Disable these widgets
-        """
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
-            is_checked = self.widgets["FILTERING"]["HAS_COMBINE_OPERATOR"]["WIDGET"].isChecked()
-            
-            # v3.1 STORY-2.4: Delegate state change to controller
-            if self._controller_integration is not None:
-                self._controller_integration.delegate_filtering_combine_operator_state_changed(is_checked)
-            
-            # UI widget enable/disable stays in dockwidget
-            self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].setEnabled(is_checked)
-            self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].setEnabled(is_checked)
-            
-            logger.debug(f"filtering_combine_operator_state_changed: is_checked={is_checked}")
+        """v3.1 Sprint 11: Simplified - handle combine operator button changes."""
+        if not self.widgets_initialized or not self.has_loaded_layers:
+            return
+        is_checked = self.widgets["FILTERING"]["HAS_COMBINE_OPERATOR"]["WIDGET"].isChecked()
+        if self._controller_integration:
+            self._controller_integration.delegate_filtering_combine_operator_state_changed(is_checked)
+        self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].setEnabled(is_checked)
+        self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].setEnabled(is_checked)
 
 
     def filtering_geometric_predicates_state_changed(self):
-        """Handle changes to the has_geometric_predicates checkable button.
-        
-        v3.1 STORY-2.4: Delegates state tracking to FilteringController.
-        
-        When checked (True): Enable geometric predicates combobox
-        When unchecked (False): Disable this widget
-        """
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
-            is_checked = self.widgets["FILTERING"]["HAS_GEOMETRIC_PREDICATES"]["WIDGET"].isChecked()
-            
-            # v3.1 STORY-2.4: Delegate state change to controller
-            if self._controller_integration is not None:
-                self._controller_integration.delegate_filtering_geometric_predicates_state_changed(is_checked)
-            
-            # UI widget enable/disable stays in dockwidget
-            self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].setEnabled(is_checked)
-            
-            logger.debug(f"filtering_geometric_predicates_state_changed: is_checked={is_checked}")
+        """v3.1 Sprint 11: Simplified - handle geometric predicates button changes."""
+        if not self.widgets_initialized or not self.has_loaded_layers:
+            return
+        is_checked = self.widgets["FILTERING"]["HAS_GEOMETRIC_PREDICATES"]["WIDGET"].isChecked()
+        if self._controller_integration:
+            self._controller_integration.delegate_filtering_geometric_predicates_state_changed(is_checked)
+        self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].setEnabled(is_checked)
 
 
     def filtering_buffer_type_state_changed(self):
-        """Handle changes to the has_buffer_type checkable button.
-        
-        v3.1 STORY-2.4: Delegates state tracking to FilteringController.
-        
-        When checked (True): Enable buffer type combobox and buffer segments spinbox
-        When unchecked (False): Disable these widgets
-        """
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
-            is_checked = self.widgets["FILTERING"]["HAS_BUFFER_TYPE"]["WIDGET"].isChecked()
-            
-            # v3.1 STORY-2.4: Delegate state change to controller
-            if self._controller_integration is not None:
-                self._controller_integration.delegate_filtering_buffer_type_state_changed(is_checked)
-            
-            # UI widget enable/disable stays in dockwidget
-            self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].setEnabled(is_checked)
-            self.widgets["FILTERING"]["BUFFER_SEGMENTS"]["WIDGET"].setEnabled(is_checked)
-            
-            logger.debug(f"filtering_buffer_type_state_changed: is_checked={is_checked}")
+        """v3.1 Sprint 11: Simplified - handle buffer type button changes."""
+        if not self.widgets_initialized or not self.has_loaded_layers:
+            return
+        is_checked = self.widgets["FILTERING"]["HAS_BUFFER_TYPE"]["WIDGET"].isChecked()
+        if self._controller_integration:
+            self._controller_integration.delegate_filtering_buffer_type_state_changed(is_checked)
+        self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].setEnabled(is_checked)
+        self.widgets["FILTERING"]["BUFFER_SEGMENTS"]["WIDGET"].setEnabled(is_checked)
 
     def _update_centroids_source_checkbox_state(self):
         """Update enabled state of checkBox_filtering_use_centroids_source_layer.
