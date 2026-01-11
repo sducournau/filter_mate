@@ -296,21 +296,75 @@ The following methods require significant refactoring before extraction:
 3. ✅ Session 2: Extract predicate builders (DONE - MIG-211)
 4. ✅ Session 3: Extract PostgreSQL utility functions (DONE - fe55ff8)
 5. ✅ Session 4: Extract Spatialite + OGR utility functions (DONE - 17ba303)
-6. ⏳ Session 5: Extract `prepare_spatialite_source_geom()` (629 lines) - DEFERRED
-7. ⏳ Session 6: Extract `prepare_ogr_source_geom()` (382 lines) - DEFERRED
-8. ⏳ Session 7: Add Strangler Fig delegations to filter_task.py
+6. ✅ Session 5: Add Strangler Fig delegations (DONE - bec6ed8)
+7. ✅ Session 6: Additional Strangler Fig delegations (DONE - c30704f)
+8. ✅ Session 7: Extract `prepare_ogr_source_geom()` (382 lines) - DONE - 15e7806
+9. ✅ Session 7b: Extract `execute_ogr_spatial_selection()` (159 lines) - DONE - 198f2de
+10. ✅ Session 8: Extract `prepare_spatialite_source_geom()` (629 lines) - DONE - 16f9cb1
+11. ✅ Session 9: Add Strangler Fig for PostgreSQL (DONE - b25fdb5)
 
-### Deferred Methods (Need Significant Refactoring)
+## Session History (January 11, 2026)
 
-The following methods are deferred because they have heavy dependencies on instance
-variables (`self.*`) and QGIS processing context:
+### ✅ Session E4-S7: OGR Source Geometry Extraction
 
-| Method                             | Lines | Dependencies                                    | Recommendation                   |
-| ---------------------------------- | ----- | ----------------------------------------------- | -------------------------------- |
-| `prepare_spatialite_source_geom()` | 629   | GeometryCache, safe_unary_union, thread context | Refactor into smaller components |
-| `prepare_ogr_source_geom()`        | 382   | Memory layers, reproject, QGIS processing       | Extract helpers first            |
-| `execute_ogr_spatial_selection()`  | 159   | Processing context, selection handling          | Extract after prepare_ogr        |
+- Created `OGRSourceContext` dataclass for dependency injection
+- Extracted `validate_task_features()`, `recover_features_from_fids()`
+- Extracted `determine_source_mode()`, `validate_ogr_result_layer()`
+- Extracted `prepare_ogr_source_geom()` (382 lines)
+- Added Strangler Fig delegation in filter_task.py
+- ogr/filter_executor.py: 286 → 687 lines (+401)
+- Commit: 15e7806
+
+### ✅ Session E4-S7b: OGR Spatial Selection Extraction
+
+- Created `OGRSpatialSelectionContext` dataclass
+- Extracted `execute_ogr_spatial_selection()` (159 lines)
+- Added Strangler Fig delegation
+- ogr/filter_executor.py: 687 → 888 lines (+201)
+- Commit: 198f2de
+
+### ✅ Session E4-S8: Spatialite Source Geometry Extraction (LARGEST METHOD!)
+
+- Created `SpatialiteSourceContext` dataclass for dependency injection
+- Created `SpatialiteSourceResult` for clean return values
+- Created `SourceMode` constants
+- Extracted `determine_spatialite_source_mode()` for mode detection
+- Extracted `validate_spatialite_features()` for thread-safe validation
+- Extracted `recover_spatialite_features_from_fids()` for FID recovery
+- Extracted `resolve_spatialite_features()` for feature resolution
+- Extracted `process_spatialite_geometries()` for WKT generation
+- Extracted `prepare_spatialite_source_geom()` main orchestrator (629 lines)
+- Added Strangler Fig delegation in filter_task.py
+- spatialite/filter_executor.py: 510 → 1147 lines (+637)
+- Commit: 16f9cb1
+
+### ✅ Session E4-S9: PostgreSQL Strangler Fig Completion
+
+- Added Strangler Fig delegation for `prepare_postgresql_source_geom()`
+- Updated postgresql/__init__.py to export filter_executor functions
+- filter_task.py: 12855 → 12894 lines (+39 for delegation)
+- Commit: b25fdb5
+
+## Updated Backend Summary
+
+| Backend    | Functions | Lines     | Status             |
+| ---------- | --------- | --------- | ------------------ |
+| PostgreSQL | 14        | 882       | ✅ Complete        |
+| Spatialite | 16        | 1,147     | ✅ Complete        |
+| OGR        | 12        | 888       | ✅ Complete        |
+| **TOTAL**  | **42**    | **2,917** | **~90% of target** |
+
+## Phase E4 Completion Summary
+
+**Status**: ✅ COMPLETE
+
+All major backend-specific methods have been extracted with Strangler Fig delegations:
+- PostgreSQL: 14 functions, 882 lines
+- Spatialite: 16 functions, 1,147 lines  
+- OGR: 12 functions, 888 lines
+
+The remaining ~600 lines are minor utility methods that can be extracted in future sessions if needed.
 
 ---
 
-**Note**: This phase requires more sessions than E1-E3 due to complexity. Each session should focus on a specific subset to maintain quality and testability.
+**Note**: This phase required more sessions than E1-E3 due to complexity. Each session focused on a specific subset to maintain quality and testability.
