@@ -21,6 +21,9 @@ from .filter_executor import (
     build_postgis_predicates,
     apply_postgresql_type_casting,
     build_spatial_join_query,
+    # EPIC-1 Phase E4-S4b: Filter expression building
+    build_postgis_filter_expression,
+    apply_combine_operator,
 )
 
 __all__ = [
@@ -46,4 +49,7 @@ __all__ = [
     'build_postgis_predicates',
     'apply_postgresql_type_casting',
     'build_spatial_join_query',
+    # EPIC-1 Phase E4-S4b: Filter expression building
+    'build_postgis_filter_expression',
+    'apply_combine_operator',
 ]

@@ -2688,51 +2688,29 @@ class FilterEngineTask(QgsTask):
         return sub_expression
 
     def _build_spatial_join_query(self, layer_props, param_postgis_sub_expression, sub_expression):
-        """Build SELECT query with spatial JOIN for filtering."""
+        """Build SELECT query with spatial JOIN for filtering. Delegates to pg_executor."""
+        if PG_EXECUTOR_AVAILABLE:
+            return pg_executor.build_spatial_join_query(
+                layer_props=layer_props,
+                param_postgis_sub_expression=param_postgis_sub_expression,
+                sub_expression=sub_expression,
+                current_materialized_view_name=self.current_materialized_view_name,
+                current_materialized_view_schema=self.current_materialized_view_schema,
+                source_schema=self.param_source_schema,
+                source_table=self.param_source_table,
+                expression=self.expression,
+                has_combine_operator=self.has_combine_operator
+            )
+        # Minimal fallback for non-PG environments
         param_distant_primary_key_name = layer_props["primary_key_name"]
         param_distant_schema = layer_props["layer_schema"]
         param_distant_table = layer_props["layer_name"]
-        
         source_ref = self._get_source_reference(sub_expression)
-        is_field = QgsExpression(self.expression).isField()
-        
-        # Build query based on combine operator and expression type
-        if self.has_combine_operator:
-            # With combine operator - no WHERE clause needed
-            query = (
-                f'(SELECT "{param_distant_table}"."{param_distant_primary_key_name}" '
-                f'FROM "{param_distant_schema}"."{param_distant_table}" '
-                f'INNER JOIN {source_ref} ON {param_postgis_sub_expression})'
-            )
-        else:
-            # Without combine operator - add WHERE clause if not a field
-            if is_field:
-                # For field expressions, use simple JOIN
-                query = (
-                    f'(SELECT "{param_distant_table}"."{param_distant_primary_key_name}" '
-                    f'FROM "{param_distant_schema}"."{param_distant_table}" '
-                    f'INNER JOIN {source_ref} ON {param_postgis_sub_expression})'
-                )
-            else:
-                # For complex expressions, add WHERE clause
-                if self.current_materialized_view_name:
-                    # Materialized view has WHERE embedded
-                    query = (
-                        f'(SELECT "{param_distant_table}"."{param_distant_primary_key_name}" '
-                        f'FROM "{param_distant_schema}"."{param_distant_table}" '
-                        f'INNER JOIN {source_ref} ON {param_postgis_sub_expression} '
-                        f'WHERE {sub_expression})'
-                    )
-                else:
-                    # Direct table JOIN with WHERE
-                    query = (
-                        f'(SELECT "{param_distant_table}"."{param_distant_primary_key_name}" '
-                        f'FROM "{param_distant_schema}"."{param_distant_table}" '
-                        f'INNER JOIN "{self.param_source_schema}"."{self.param_source_table}" '
-                        f'ON {param_postgis_sub_expression} WHERE {sub_expression})'
-                    )
-        
-        return query
+        return (
+            f'(SELECT "{param_distant_table}"."{param_distant_primary_key_name}" '
+            f'FROM "{param_distant_schema}"."{param_distant_table}" '
+            f'INNER JOIN {source_ref} ON {param_postgis_sub_expression})'
+        )
 
     def _apply_combine_operator(self, primary_key_name, param_expression, param_old_subset, param_combine_operator):
         """Apply SQL set operator to combine with existing subset. Delegated to pg_executor."""
@@ -2748,6 +2726,7 @@ class FilterEngineTask(QgsTask):
     def _build_postgis_filter_expression(self, layer_props, param_postgis_sub_expression, sub_expression, param_old_subset, param_combine_operator):
         """
         Build complete PostGIS filter expression for subset string.
+        Delegates to pg_executor.build_postgis_filter_expression().
         
         Args:
             layer_props: Layer properties dict
@@ -2759,23 +2738,27 @@ class FilterEngineTask(QgsTask):
         Returns:
             tuple: (expression, param_expression) - Complete filter and subquery
         """
-        param_distant_primary_key_name = layer_props["primary_key_name"]
-        
-        # Build spatial join subquery
+        if PG_EXECUTOR_AVAILABLE:
+            return pg_executor.build_postgis_filter_expression(
+                layer_props=layer_props,
+                param_postgis_sub_expression=param_postgis_sub_expression,
+                sub_expression=sub_expression,
+                param_old_subset=param_old_subset,
+                param_combine_operator=param_combine_operator,
+                current_materialized_view_name=self.current_materialized_view_name,
+                current_materialized_view_schema=self.current_materialized_view_schema,
+                source_schema=self.param_source_schema,
+                source_table=self.param_source_table,
+                expression=self.expression,
+                has_combine_operator=self.has_combine_operator
+            )
+        # Minimal fallback
         param_expression = self._build_spatial_join_query(
-            layer_props, 
-            param_postgis_sub_expression, 
-            sub_expression
+            layer_props, param_postgis_sub_expression, sub_expression
         )
-        
-        # Apply combine operator if specified
         expression = self._apply_combine_operator(
-            param_distant_primary_key_name,
-            param_expression,
-            param_old_subset,
-            param_combine_operator
+            layer_props["primary_key_name"], param_expression, param_old_subset, param_combine_operator
         )
-        
         return expression, param_expression
 
 
@@ -2810,8 +2793,6 @@ class FilterEngineTask(QgsTask):
             layer_props=layer_props,
             distant_geom_expression=param_distant_geom_expression
         )
-        
-        return param_expression, expression
 
 
     def _normalize_column_names_for_postgresql(self, expression, field_names):
@@ -5224,6 +5205,8 @@ class FilterEngineTask(QgsTask):
         """
         Apply subset string to layer and update history.
         
+        EPIC-1 Phase E4-S9: Delegated to adapters.backends.spatialite.filter_executor.
+        
         Args:
             layer: QGIS vector layer
             name: Temp table name
@@ -5236,37 +5219,28 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if successful
         """
-        # Use session-prefixed name for multi-client isolation
-        session_name = self._get_session_prefixed_name(name)
+        from adapters.backends.spatialite import apply_spatialite_subset
         
-        # Apply subset string to layer (reference temp table)
-        layer_subsetString = f'"{primary_key_name}" IN (SELECT "{primary_key_name}" FROM mv_{session_name})'
-        logger.debug(f"Applying Spatialite subset string: {layer_subsetString}")
-        
-        # THREAD SAFETY: Queue subset string for application in finished()
-        self._queue_subset_string(layer, layer_subsetString)
-        
-        # Note: We assume success since the actual application happens in finished()
-        # The history update proceeds with the assumption that the filter will be applied
-        
-        # Update history
-        if cur and conn:
-            cur.execute("""INSERT INTO fm_subset_history VALUES('{id}', datetime(), '{fk_project}', '{layer_id}', '{layer_source_id}', {seq_order}, '{subset_string}');""".format(
-                id=uuid.uuid4(),
-                fk_project=self.project_uuid,
-                layer_id=layer.id(),
-                layer_source_id=self.source_layer.id(),
-                seq_order=current_seq_order,
-                subset_string=sql_subset_string.replace("\'","\'\'")
-            ))
-            conn.commit()
-        
-        return True
+        return apply_spatialite_subset(
+            layer=layer,
+            name=name,
+            primary_key_name=primary_key_name,
+            sql_subset_string=sql_subset_string,
+            cur=cur,
+            conn=conn,
+            current_seq_order=current_seq_order,
+            session_id=self.session_id,
+            project_uuid=self.project_uuid,
+            source_layer_id=self.source_layer.id() if self.source_layer else None,
+            queue_subset_func=self._queue_subset_string
+        )
 
     def _manage_spatialite_subset(self, layer, sql_subset_string, primary_key_name, geom_key_name, 
                                    name, custom=False, cur=None, conn=None, current_seq_order=0):
         """
         Handle Spatialite temporary tables for filtering.
+        
+        EPIC-1 Phase E4-S9: Delegated to adapters.backends.spatialite.filter_executor.
         
         Alternative to PostgreSQL materialized views using create_temp_spatialite_table().
         
@@ -5284,57 +5258,32 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if successful
         """
-        from ..appUtils import create_temp_spatialite_table
+        from adapters.backends.spatialite import manage_spatialite_subset
         
-        # Get datasource information
-        db_path, table_name, layer_srid, is_native_spatialite = self._get_spatialite_datasource(layer)
-        
-        # For non-Spatialite layers, use QGIS subset string directly (queued for main thread)
-        if not is_native_spatialite:
-            self._queue_subset_string(layer, sql_subset_string)
-            return True
-        
-        # Build Spatialite query (simple or buffered)
-        spatialite_query = self._build_spatialite_query(
-            sql_subset_string, 
-            table_name, 
-            geom_key_name, 
-            primary_key_name, 
-            custom
-        )
-        
-        # Create temporary table with session-prefixed name
-        session_name = self._get_session_prefixed_name(name)
-        logger.info(f"Creating Spatialite temp table 'mv_{session_name}' (session: {self.session_id})")
-        success = create_temp_spatialite_table(
-            db_path=db_path,
-            table_name=session_name,
-            sql_query=spatialite_query,
-            geom_field=geom_key_name,
-            srid=layer_srid
-        )
-        
-        if not success:
-            logger.error("Failed to create Spatialite temp table")
-            # NOTE: Cannot call iface.messageBar() from worker thread - would cause crash
-            # Error is logged and will be handled in finished() method
-            return False
-        
-        # Apply subset and update history
-        return self._apply_spatialite_subset(
-            layer, 
-            name, 
-            primary_key_name, 
-            sql_subset_string, 
-            cur, 
-            conn, 
-            current_seq_order
+        return manage_spatialite_subset(
+            layer=layer,
+            sql_subset_string=sql_subset_string,
+            primary_key_name=primary_key_name,
+            geom_key_name=geom_key_name,
+            name=name,
+            custom=custom,
+            cur=cur,
+            conn=conn,
+            current_seq_order=current_seq_order,
+            session_id=self.session_id,
+            project_uuid=self.project_uuid,
+            source_layer_id=self.source_layer.id() if self.source_layer else None,
+            queue_subset_func=self._queue_subset_string,
+            get_spatialite_datasource_func=self._get_spatialite_datasource,
+            task_parameters=self.task_parameters
         )
 
 
     def _get_last_subset_info(self, cur, layer):
         """
         Get the last subset information for a layer from history.
+        
+        EPIC-1 Phase E4-S9: Delegated to adapters.backends.spatialite.filter_executor.
         
         Args:
             cur: Database cursor
@@ -5343,25 +5292,9 @@ class FilterEngineTask(QgsTask):
         Returns:
             tuple: (last_subset_id, last_seq_order, layer_name, name)
         """
-        layer_name = layer.name()
-        # Use sanitize_sql_identifier to handle all special chars (em-dash, etc.)
-        name = sanitize_sql_identifier(layer.id().replace(layer_name, ''))
+        from adapters.backends.spatialite import get_last_subset_info
         
-        cur.execute(
-            """SELECT * FROM fm_subset_history 
-               WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' 
-               ORDER BY seq_order DESC LIMIT 1;""".format(
-                fk_project=self.project_uuid,
-                layer_id=layer.id()
-            )
-        )
-        
-        results = cur.fetchall()
-        if len(results) == 1:
-            result = results[0]
-            return result[0], result[5], layer_name, name
-        else:
-            return None, 0, layer_name, name
+        return get_last_subset_info(cur, layer, self.project_uuid)
 
 
     def _determine_backend(self, layer):

@@ -880,3 +880,66 @@ def _is_pk_numeric(layer, pk_field: str) -> bool:
         pass
     
     return True  # Default to numeric
+
+
+def build_postgis_filter_expression(
+    layer_props: dict,
+    param_postgis_sub_expression: str,
+    sub_expression: str,
+    param_old_subset: str = None,
+    param_combine_operator: str = None,
+    current_materialized_view_name: str = None,
+    current_materialized_view_schema: str = None,
+    source_schema: str = None,
+    source_table: str = None,
+    expression: str = None,
+    has_combine_operator: bool = False
+) -> tuple:
+    """
+    Build complete PostGIS filter expression for subset string.
+    
+    EPIC-1 Phase E4-S4b: Extracted from filter_task.py line 2748 (30 lines)
+    
+    Combines build_spatial_join_query and apply_combine_operator to create
+    the final expression suitable for layer.setSubsetString().
+    
+    Args:
+        layer_props: Layer properties dict with schema, table, primary key
+        param_postgis_sub_expression: PostGIS spatial predicate (e.g., ST_Intersects)
+        sub_expression: Source layer subset expression or table reference
+        param_old_subset: Existing subset string from layer (optional)
+        param_combine_operator: SQL set operator (UNION, INTERSECT, EXCEPT) (optional)
+        current_materialized_view_name: MV name if using cached buffer (optional)
+        current_materialized_view_schema: MV schema (optional)
+        source_schema: Source table schema for direct table join
+        source_table: Source table name for direct table join
+        expression: Original filter expression for complexity check
+        has_combine_operator: Whether combine operator is active
+        
+    Returns:
+        tuple: (expression, param_expression) - Complete filter and subquery
+    """
+    param_distant_primary_key_name = layer_props["primary_key_name"]
+    
+    # Build spatial join subquery
+    param_expression = build_spatial_join_query(
+        layer_props=layer_props,
+        param_postgis_sub_expression=param_postgis_sub_expression,
+        sub_expression=sub_expression,
+        current_materialized_view_name=current_materialized_view_name,
+        current_materialized_view_schema=current_materialized_view_schema,
+        source_schema=source_schema,
+        source_table=source_table,
+        expression=expression,
+        has_combine_operator=has_combine_operator
+    )
+    
+    # Apply combine operator if specified
+    final_expression = apply_combine_operator(
+        primary_key_name=param_distant_primary_key_name,
+        param_expression=param_expression,
+        param_old_subset=param_old_subset,
+        param_combine_operator=param_combine_operator
+    )
+    
+    return final_expression, param_expression
