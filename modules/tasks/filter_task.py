@@ -3510,156 +3510,33 @@ class FilterEngineTask(QgsTask):
         """
         Prepare PostgreSQL source geometry with buffer/centroid transformations.
         
-        EPIC-1 Phase E4-S9: Strangler Fig pattern - delegates to extracted module.
+        EPIC-1 Phase E5-S1: Legacy code removed - fully delegates to extracted module.
+        
+        Handles:
+        - Geometry buffer (static value or expression)
+        - Centroid optimization (simplify complex polygons to points)
+        - Materialized view creation (for buffer expressions)
+        - Negative buffer handling (erosion with ST_MakeValid)
         """
-        # =============================================================================
-        # EPIC-1 Phase E4-S9: Strangler Fig Delegation
-        # Delegate to extracted prepare_postgresql_source_geom() in postgresql/filter_executor.py
-        # =============================================================================
-        try:
-            from adapters.backends.postgresql import prepare_postgresql_source_geom as pg_prepare_source_geom
-            
-            # Call extracted function
-            result_geom, mv_name = pg_prepare_source_geom(
-                source_table=self.param_source_table,
-                source_schema=self.param_source_schema,
-                source_geom=self.param_source_geom,
-                buffer_value=getattr(self, 'param_buffer_value', None),
-                buffer_expression=getattr(self, 'param_buffer_expression', None),
-                use_centroids=getattr(self, 'param_use_centroids_source_layer', False),
-                buffer_segments=getattr(self, 'param_buffer_segments', 5),
-                buffer_type=self.task_parameters.get("filtering", {}).get("buffer_type", "Round"),
-                primary_key_name=getattr(self, 'primary_key_name', None)
-            )
-            
-            self.postgresql_source_geom = result_geom
-            if mv_name:
-                self.current_materialized_view_name = mv_name
-            
-            logger.info(f"✓ EPIC-1: Delegated to pg_prepare_source_geom (extracted)")
-            logger.debug(f"prepare_postgresql_source_geom: {self.postgresql_source_geom}")
-            return
-            
-        except ImportError as e:
-            logger.debug(f"EPIC-1: postgresql module not available ({e}), using legacy")
-        except Exception as e:
-            logger.warning(f"EPIC-1: Delegation failed ({e}), using legacy fallback")
+        from adapters.backends.postgresql import prepare_postgresql_source_geom as pg_prepare_source_geom
         
-        # =============================================================================
-        # Legacy Implementation (fallback)
-        # =============================================================================
-        source_table = self.param_source_table
-        source_schema = self.param_source_schema
+        # Call extracted function
+        result_geom, mv_name = pg_prepare_source_geom(
+            source_table=self.param_source_table,
+            source_schema=self.param_source_schema,
+            source_geom=self.param_source_geom,
+            buffer_value=getattr(self, 'param_buffer_value', None),
+            buffer_expression=getattr(self, 'param_buffer_expression', None),
+            use_centroids=getattr(self, 'param_use_centroids_source_layer', False),
+            buffer_segments=getattr(self, 'param_buffer_segments', 5),
+            buffer_type=self.task_parameters.get("filtering", {}).get("buffer_type", "Round"),
+            primary_key_name=getattr(self, 'primary_key_name', None)
+        )
         
-        # CRITICAL FIX: Include schema in geometry reference for PostgreSQL
-        # Format: "schema"."table"."geom" to avoid "missing FROM-clause entry" errors
-        base_geom = '"{source_schema}"."{source_table}"."{source_geom}"'.format(
-                                                                                source_schema=source_schema,
-                                                                                source_table=source_table,
-                                                                                source_geom=self.param_source_geom
-                                                                                )
+        self.postgresql_source_geom = result_geom
+        if mv_name:
+            self.current_materialized_view_name = mv_name
         
-        # CENTROID OPTIMIZATION: Wrap geometry in ST_Centroid if enabled for source layer
-        # This significantly speeds up queries for complex polygons (e.g., buildings)
-        # CENTROID + BUFFER OPTIMIZATION v2.5.13: Combine centroid and buffer when both are enabled
-        # Order: ST_Buffer(ST_Centroid(geom)) - buffer is applied to the centroid point
-        # This allows filtering distant layers using a buffered zone around source layer centroids
-        
-        if self.param_buffer_expression is not None and self.param_buffer_expression != '':
-            # Buffer expression mode (dynamic buffer from field/expression)
-
-            if self.param_buffer_expression.find('"') == 0 and self.param_buffer_expression.find(source_table) != 1:
-                self.param_buffer_expression = '"{source_table}".'.format(source_table=source_table) + self.param_buffer_expression
-
-            self.param_buffer_expression = re.sub(' "', ' "mv_{source_table}"."'.format(source_table=source_table), self.param_buffer_expression)
-
-            self.param_buffer_expression = self.qgis_expression_to_postgis(self.param_buffer_expression)    
-
-            
-            self.param_buffer = self.param_buffer_expression
-
-            result = self.manage_layer_subset_strings(self.source_layer, None, self.primary_key_name, self.param_source_geom, True)
-
-
-            layer_name = self.source_layer.name()
-            # Use sanitize_sql_identifier to handle all special chars (em-dash, etc.)
-            self.current_materialized_view_name = sanitize_sql_identifier(
-                self.source_layer.id().replace(layer_name, '')
-            )
-                
-            self.postgresql_source_geom = '"mv_{current_materialized_view_name}_dump"."{source_geom}"'.format(
-                                                                                                        source_geom=self.param_source_geom,
-                                                                                                        current_materialized_view_name=self.current_materialized_view_name
-                                                                                                        )
-            # NOTE: Centroids are not supported with buffer expressions (materialized views)
-            # because the view already contains buffered geometries
-            if self.param_use_centroids_source_layer:
-                logger.warning("⚠️ PostgreSQL: Centroid option ignored when using buffer expression (materialized view)")
-            
-        elif self.param_buffer_value is not None and self.param_buffer_value != 0:
-            # Static buffer value mode
-
-            self.param_buffer = self.param_buffer_value
-            
-            # CRITICAL FIX: For simple numeric buffer values, apply buffer directly in SQL
-            # Don't create materialized views - just wrap geometry in ST_Buffer()
-            # This is simpler and more efficient than creating a _dump view
-            source_table = self.param_source_table
-            source_schema = self.param_source_schema
-            
-            # Build ST_Buffer style parameters (quad_segs for segments, endcap for buffer type)
-            buffer_type_mapping = {"Round": "round", "Flat": "flat", "Square": "square"}
-            buffer_type_str = self.task_parameters["filtering"].get("buffer_type", "Round")
-            endcap_style = buffer_type_mapping.get(buffer_type_str, "round")
-            quad_segs = self.param_buffer_segments
-            
-            # Build style string for PostGIS ST_Buffer
-            style_params = f"quad_segs={quad_segs}"
-            if endcap_style != 'round':
-                style_params += f" endcap={endcap_style}"
-            
-            # CENTROID + BUFFER: Determine the geometry to buffer
-            # If centroid is enabled, buffer the centroid point instead of the full geometry
-            if self.param_use_centroids_source_layer:
-                geom_to_buffer = f'ST_Centroid("{source_schema}"."{source_table}"."{self.param_source_geom}")'
-                logger.info(f"✓ PostgreSQL: Using ST_Centroid + ST_Buffer for source layer")
-            else:
-                geom_to_buffer = '"{source_schema}"."{source_table}"."{source_geom}"'.format(
-                    source_schema=source_schema,
-                    source_table=source_table,
-                    source_geom=self.param_source_geom
-                )
-            
-            # Build base ST_Buffer expression with style parameters
-            base_buffer_expr = f"ST_Buffer({geom_to_buffer}, {self.param_buffer_value}, '{style_params}')"
-            
-            # CRITICAL FIX v2.5.6: Handle negative buffers (erosion) properly
-            # Negative buffers can produce empty geometries which must be handled
-            # with ST_MakeValid() and ST_IsEmpty() to prevent matching issues
-            if self.param_buffer_value < 0:
-                logger.info(f"📐 Applying NEGATIVE buffer (erosion): {self.param_buffer_value}m")
-                logger.info(f"  🛡️ Wrapping in ST_MakeValid() + ST_IsEmpty check for empty geometry handling")
-                validated_expr = f"ST_MakeValid({base_buffer_expr})"
-                self.postgresql_source_geom = f"CASE WHEN ST_IsEmpty({validated_expr}) THEN NULL ELSE {validated_expr} END"
-                logger.info(f"  📝 Generated expression: {self.postgresql_source_geom[:150]}...")
-            else:
-                self.postgresql_source_geom = base_buffer_expr
-            
-            buffer_type_desc = "expansion" if self.param_buffer_value > 0 else "erosion"
-            centroid_desc = " (on centroids)" if self.param_use_centroids_source_layer else ""
-            logger.info(f"✓ PostgreSQL source geom prepared with {self.param_buffer_value}m buffer ({buffer_type_desc}, endcap={endcap_style}, segments={quad_segs}){centroid_desc}")
-            logger.debug(f"Using simple buffer: ST_Buffer with {self.param_buffer_value}m ({buffer_type_desc}){centroid_desc}")
-        
-        else:
-            # No buffer - just apply centroid if enabled
-            if self.param_use_centroids_source_layer:
-                self.postgresql_source_geom = f"ST_Centroid({base_geom})"
-                logger.info(f"✓ PostgreSQL: Using ST_Centroid for source layer geometry simplification")
-            else:
-                self.postgresql_source_geom = base_geom     
-
-        
-
         logger.debug(f"prepare_postgresql_source_geom: {self.postgresql_source_geom}")     
 
 
@@ -4144,690 +4021,59 @@ class FilterEngineTask(QgsTask):
         """
         Prepare source geometry for Spatialite filtering.
         
+        EPIC-1 Phase E5-S1: Legacy code removed - fully delegates to extracted module.
+        
         Converts selected features to WKT format for use in Spatialite spatial queries.
         Handles reprojection and buffering if needed.
         
         Supports all geometry types including non-linear geometries:
-        - CIRCULARSTRING
-        - COMPOUNDCURVE
-        - CURVEPOLYGON
-        - MULTICURVE
-        - MULTISURFACE
+        - CIRCULARSTRING, COMPOUNDCURVE, CURVEPOLYGON, MULTICURVE, MULTISURFACE
         
         Note: Uses QGIS asWkt() which handles extended WKT format.
-        GeoPackage and Spatialite both support these geometry types via standard WKB encoding.
-        
         Performance: Uses cache to avoid recalculating for multiple layers.
-        
-        EPIC-1 Phase E4-S8: Strangler Fig pattern - delegates to extracted module.
         """
-        # =============================================================================
-        # EPIC-1 Phase E4-S8: Strangler Fig Delegation
-        # Delegate to extracted prepare_spatialite_source_geom() in spatialite/filter_executor.py
-        # =============================================================================
-        try:
-            from adapters.backends.spatialite import (
-                SpatialiteSourceContext,
-                prepare_spatialite_source_geom as spatialite_prepare_source_geom
-            )
-            
-            # Build context from self.* references
-            context = SpatialiteSourceContext(
-                source_layer=self.source_layer,
-                task_parameters=self.task_parameters,
-                is_field_expression=getattr(self, 'is_field_expression', None),
-                expression=getattr(self, 'expression', None),
-                param_source_new_subset=getattr(self, 'param_source_new_subset', None),
-                param_buffer_value=getattr(self, 'param_buffer_value', None),
-                has_to_reproject_source_layer=getattr(self, 'has_to_reproject_source_layer', False),
-                source_layer_crs_authid=getattr(self, 'source_layer_crs_authid', None),
-                source_crs=getattr(self, 'source_crs', None),
-                param_use_centroids_source_layer=getattr(self, 'param_use_centroids_source_layer', False),
-                PROJECT=getattr(self, 'PROJECT', None),
-                geom_cache=getattr(self, 'geom_cache', None),
-                # Inject helper method callbacks
-                geometry_to_wkt=self._geometry_to_wkt,
-                simplify_geometry_adaptive=self._simplify_geometry_adaptive,
-                get_optimization_thresholds=self._get_optimization_thresholds,
-            )
-            
-            # Call extracted function
-            result = spatialite_prepare_source_geom(context)
-            
-            if result.success:
-                self.spatialite_source_geom = result.wkt
-                
-                # Store WKT in task_parameters for backend optimization
-                if hasattr(self, 'task_parameters') and self.task_parameters:
-                    if 'infos' not in self.task_parameters:
-                        self.task_parameters['infos'] = {}
-                    self.task_parameters['infos']['source_geom_wkt'] = result.wkt
-                    self.task_parameters['infos']['buffer_state'] = result.buffer_state
-                    
-                logger.info(f"✓ EPIC-1: Delegated to spatialite_prepare_source_geom (extracted)")
-                return
-            else:
-                logger.warning(f"Extracted function failed: {result.error_message}")
-                logger.warning("Falling back to legacy implementation...")
-                # Fall through to legacy implementation
-                
-        except ImportError as e:
-            logger.debug(f"EPIC-1: spatialite module not available ({e}), using legacy")
-        except Exception as e:
-            logger.warning(f"EPIC-1: Delegation failed ({e}), using legacy fallback")
-        
-        # =============================================================================
-        # Legacy Implementation (fallback)
-        # =============================================================================
-        # CRITICAL FIX v2.4.10: Respect active subset filter on source layer
-        # When source layer has a subsetString (e.g., "homecount > 5"), we must use ONLY filtered features
-        # for geometric operations, not all features in the layer.
-        
-        # THREAD-SAFETY FIX v2.4.10: In background threads, subsetString() may return empty
-        # even when the layer is filtered. Check task_parameters FIRST for reliable feature access.
-        has_subset = bool(self.source_layer.subsetString())
-        has_selection = self.source_layer.selectedFeatureCount() > 0
-        
-        # Check if we're in field-based mode (Custom Selection with a simple field name)
-        is_field_based_mode = (
-            hasattr(self, 'is_field_expression') and 
-            self.is_field_expression is not None and
-            isinstance(self.is_field_expression, tuple) and
-            len(self.is_field_expression) >= 2 and
-            self.is_field_expression[0] is True
+        from adapters.backends.spatialite import (
+            SpatialiteSourceContext,
+            prepare_spatialite_source_geom as spatialite_prepare_source_geom
         )
         
-        # Check task_features FIRST (passed from main thread, reliable across threads)
-        task_features = self.task_parameters.get("task", {}).get("features", [])
-        has_task_features = task_features and len(task_features) > 0
+        # Build context from self.* references
+        context = SpatialiteSourceContext(
+            source_layer=self.source_layer,
+            task_parameters=self.task_parameters,
+            is_field_expression=getattr(self, 'is_field_expression', None),
+            expression=getattr(self, 'expression', None),
+            param_source_new_subset=getattr(self, 'param_source_new_subset', None),
+            param_buffer_value=getattr(self, 'param_buffer_value', None),
+            has_to_reproject_source_layer=getattr(self, 'has_to_reproject_source_layer', False),
+            source_layer_crs_authid=getattr(self, 'source_layer_crs_authid', None),
+            source_crs=getattr(self, 'source_crs', None),
+            param_use_centroids_source_layer=getattr(self, 'param_use_centroids_source_layer', False),
+            PROJECT=getattr(self, 'PROJECT', None),
+            geom_cache=getattr(self, 'geom_cache', None),
+            # Inject helper method callbacks
+            geometry_to_wkt=self._geometry_to_wkt,
+            simplify_geometry_adaptive=self._simplify_geometry_adaptive,
+            get_optimization_thresholds=self._get_optimization_thresholds,
+        )
         
-        logger.info(f"=== prepare_spatialite_source_geom DEBUG ===")
-        logger.info(f"  has_task_features: {has_task_features} ({len(task_features) if task_features else 0} features)")
-        logger.info(f"  has_subset: {has_subset}")
-        logger.info(f"  has_selection: {has_selection}")
-        logger.info(f"  is_field_based_mode: {is_field_based_mode}")
-        if has_subset:
-            logger.info(f"  Current subset: '{self.source_layer.subsetString()[:100]}'")
+        # Call extracted function
+        result = spatialite_prepare_source_geom(context)
         
-        # PRIORITY ORDER (v2.4.10):
-        # 1. task_features from task_parameters (most reliable, thread-safe)
-        # 2. getFeatures() with subset (if has_subset is True)
-        # 3. selectedFeatures() (if has_selection)
-        # 4. is_field_based_mode
-        # 5. FALLBACK: getFeatures() (all features)
-        
-        if has_task_features and not is_field_based_mode:
-            # PRIORITY MODE v2.4.10: Use task_features passed from main thread (thread-safe)
-            logger.info(f"=== prepare_spatialite_source_geom (TASK PARAMS PRIORITY MODE) ===")
-            logger.info(f"  Using {len(task_features)} features from task_parameters (thread-safe)")
+        if result.success:
+            self.spatialite_source_geom = result.wkt
             
-            # Validate features (filter out invalid/empty ones)
-            # v2.7.4: Improved thread-safety - copy geometry to local QgsGeometry object
-            # to prevent access violations when original feature becomes invalid
-            valid_features = []
-            validation_errors = 0
-            skipped_no_geometry = 0  # v2.7.16: Track features skipped due to no/empty geometry
-            for i, f in enumerate(task_features):
-                try:
-                    if f is None or f == "":
-                        continue
-                    if hasattr(f, 'hasGeometry') and hasattr(f, 'geometry'):
-                        if f.hasGeometry() and not f.geometry().isEmpty():
-                            valid_features.append(f)
-                            # Log first few features for diagnostic (DEBUG level)
-                            if i < 3 and logger.isEnabledFor(logging.DEBUG):
-                                geom = f.geometry()
-                                bbox = geom.boundingBox()
-                                logger.debug(f"  Feature[{i}]: type={geom.wkbType()}, bbox=({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})")
-                        else:
-                            # v2.7.16: Count as validation failure - feature has no valid geometry
-                            skipped_no_geometry += 1
-                            logger.debug(f"  Skipping feature[{i}] without valid geometry")
-                    elif f:
-                        valid_features.append(f)
-                except Exception as e:
-                    validation_errors += 1
-                    logger.warning(f"  Feature[{i}] validation error (thread-safety): {e}")
-                    continue
-            
-            # v2.7.16: Consider both types of failures for recovery logic
-            total_failures = validation_errors + skipped_no_geometry
-            
-            features = valid_features
-            logger.info(f"  Valid features after filtering: {len(features)}")
-            if skipped_no_geometry > 0:
-                logger.warning(f"  Skipped {skipped_no_geometry} features with no/empty geometry (thread-safety issue?)")
-            
-            # v2.7.4: CRITICAL FIX - If ALL task_features failed validation but we had features,
-            # this is likely a thread-safety issue. DO NOT fall back to all features!
-            # Instead, use feature_fids to refetch, or source selection as fallback.
-            # v2.7.16: Use total_failures which includes both exceptions AND empty geometries
-            recovery_attempted = False  # v2.7.16: Flag to prevent fallback to all features
-            if len(features) == 0 and len(task_features) > 0 and total_failures > 0:
-                recovery_attempted = True  # Mark that we tried recovery - don't use all features as fallback!
-                logger.error(f"  ❌ ALL {len(task_features)} task_features failed validation ({validation_errors} errors, {skipped_no_geometry} no geometry)")
-                logger.error(f"  This is likely a thread-safety issue - features became invalid")
+            # Store WKT in task_parameters for backend optimization
+            if hasattr(self, 'task_parameters') and self.task_parameters:
+                if 'infos' not in self.task_parameters:
+                    self.task_parameters['infos'] = {}
+                self.task_parameters['infos']['source_geom_wkt'] = result.wkt
+                self.task_parameters['infos']['buffer_state'] = result.buffer_state
                 
-                # v2.7.16: PRIORITY 1 - Use feature_fids to refetch features from source layer
-                # This is more reliable than selection which may have changed
-                feature_fids = self.task_parameters.get("task", {}).get("feature_fids", [])
-                logger.info(f"  → Looking for feature_fids in task_parameters['task']: found {len(feature_fids) if feature_fids else 0}")
-                if not feature_fids:
-                    # Also check root level of task_parameters
-                    feature_fids = self.task_parameters.get("feature_fids", [])
-                    logger.info(f"  → Looking for feature_fids at root level: found {len(feature_fids) if feature_fids else 0}")
-                
-                if feature_fids and len(feature_fids) > 0 and self.source_layer:
-                    logger.info(f"  → Attempting recovery using {len(feature_fids)} feature_fids")
-                    try:
-                        from qgis.core import QgsFeatureRequest
-                        request = QgsFeatureRequest().setFilterFids(feature_fids)
-                        features = list(self.source_layer.getFeatures(request))
-                        if len(features) > 0:
-                            logger.debug(f"  ✓ v2.7.15: Recovered {len(features)} features using FIDs (thread-safety fix)")
-                        else:
-                            logger.warning(f"  ⚠️ FID recovery returned 0 features")
-                    except Exception as e:
-                        logger.error(f"  ❌ FID recovery failed: {e}")
-                
-                # v2.7.15: PRIORITY 2 - Try source layer selection as fallback
-                if len(features) == 0 and self.source_layer and self.source_layer.selectedFeatureCount() > 0:
-                    logger.info(f"  → Attempting recovery from source layer selection")
-                    try:
-                        # FIX v3.1.3: Use thread-safe selectedFeatureIds() + getFeatures()
-                        selected_fids = list(self.source_layer.selectedFeatureIds())
-                        if selected_fids:
-                            request = QgsFeatureRequest().setFilterFids(selected_fids)
-                            features = list(self.source_layer.getFeatures(request))
-                            logger.info(f"  ✓ Recovered {len(features)} features from source layer selection")
-                    except Exception as e:
-                        logger.error(f"  ❌ Could not recover selection: {e}")
-                
-                # v2.7.16: If still no features, DON'T fall back to all features!
-                if len(features) == 0:
-                    logger.error(f"  ❌ Could not recover any features - filter will fail")
-                    logger.error(f"  This prevents incorrect filtering with all {self.source_layer.featureCount()} features")
-                    from qgis.core import QgsMessageLog, Qgis
-                    QgsMessageLog.logMessage(
-                        f"v2.7.16: BLOCKING fallback to all {self.source_layer.featureCount()} features - would cause incorrect filter!",
-                        "FilterMate", Qgis.Warning
-                    )
-            elif len(features) == 0 and len(task_features) > 0:
-                # Features were provided but ALL failed validation without errors
-                # This shouldn't happen, but if it does, mark as recovery attempted
-                recovery_attempted = True
-                logger.warning(f"  ⚠️ All {len(task_features)} task_features failed validation without errors")
-        elif has_subset and not has_task_features:
-            # Fallback: use getFeatures() which respects subsetString
-            logger.info(f"=== prepare_spatialite_source_geom (FILTERED MODE) ===")
-            logger.info(f"  Source layer has active filter: {self.source_layer.subsetString()[:100]}")
-            logger.info(f"  Using {self.source_layer.featureCount()} filtered features from source layer")
-            features = list(self.source_layer.getFeatures())
-            logger.debug(f"  Retrieved {len(features)} features from getFeatures()")
-        elif has_selection:
-            # Multi-selection mode - use selected features
-            # FIX v3.1.3: Use thread-safe selectedFeatureIds() + getFeatures()
-            logger.info(f"=== prepare_spatialite_source_geom (MULTI-SELECTION MODE) ===")
-            logger.info(f"  Using {self.source_layer.selectedFeatureCount()} selected features from source layer")
-            try:
-                selected_fids = list(self.source_layer.selectedFeatureIds())
-                if selected_fids:
-                    request = QgsFeatureRequest().setFilterFids(selected_fids)
-                    features = list(self.source_layer.getFeatures(request))
-                else:
-                    features = []
-            except Exception as e:
-                logger.error(f"Failed to get selected features: {e}")
-                features = []
-        elif is_field_based_mode:
-            # FIELD-BASED MODE: Use ALL features from filtered source layer
-            # The source layer keeps its current filter (subset string)
-            # We use ALL filtered features for geometric intersection with distant layers
-            logger.info(f"=== prepare_spatialite_source_geom (FIELD-BASED MODE) ===")
-            logger.info(f"  Field name: '{self.is_field_expression[1]}'")
-            logger.info(f"  Source subset: '{self.source_layer.subsetString()[:80] if self.source_layer.subsetString() else '(none)'}...'")
-            logger.info(f"  Using ALL {self.source_layer.featureCount()} filtered features for geometric intersection")
-            features = list(self.source_layer.getFeatures())
+            logger.debug(f"prepare_spatialite_source_geom: WKT length = {len(result.wkt) if result.wkt else 0}")
         else:
-            # FINAL FALLBACK: No task_features, no subset, no selection, no field mode
-            # Use all features from source layer (this should be rare)
-            # v2.9.20: This is often a BUG - should not happen in single_selection mode!
-            logger.info(f"=== prepare_spatialite_source_geom (FALLBACK MODE) ===")
-            logger.info(f"  No specific mode matched - using all source features")
-            from qgis.core import QgsMessageLog, Qgis
-            QgsMessageLog.logMessage(
-                f"⚠️ FALLBACK MODE: Using ALL {self.source_layer.featureCount()} features from source layer",
-                "FilterMate", Qgis.Warning
-            )
-            QgsMessageLog.logMessage(
-                f"   This may cause incorrect filtering! Expected: single feature selected.",
-                "FilterMate", Qgis.Warning
-            )
-            QgsMessageLog.logMessage(
-                f"   Debug: has_task_features={has_task_features}, has_subset={has_subset}, has_selection={has_selection}, is_field_based_mode={is_field_based_mode}",
-                "FilterMate", Qgis.Warning
-            )
-            features = list(self.source_layer.getFeatures())
-            logger.info(f"  Retrieved {len(features)} features from source layer")
-            # v2.9.20: CRITICAL WARNING - If this is single_selection mode, using all features is WRONG!
-            # The user selected ONE feature but the system is using ALL features
-            if len(features) > 10:
-                logger.warning(f"  ⚠️ POTENTIAL BUG: FALLBACK MODE with {len(features)} features!")
-                logger.warning(f"  If you selected a single feature, this is a bug - source geometry will be too large!")
-        
-        # FALLBACK: If features list is empty, use all visible features from source layer
-        # FIX v2.4.22: Also check for expression/subset that should be applied
-        # v2.7.16: BUT NOT if we already tried recovery from FIDs - that means task_features were provided
-        # but became invalid, and using all features would give WRONG results!
-        if not features or len(features) == 0:
-            # v2.7.16: Check if recovery was already attempted - don't fallback to all features!
-            if 'recovery_attempted' in dir() and recovery_attempted:
-                logger.error(f"  ❌ BLOCKING fallback to all features - recovery was attempted")
-                logger.error(f"  task_features were provided but became invalid")
-                logger.error(f"  Using all {self.source_layer.featureCount()} features would give WRONG results!")
-                from qgis.core import QgsMessageLog, Qgis
-                QgsMessageLog.logMessage(
-                    f"v2.7.16: Filter aborted - cannot recover source features. Verify selection before filtering.",
-                    "FilterMate", Qgis.Critical
-                )
-                self.spatialite_source_geom = None
-                return
-            logger.warning(f"  ⚠️ No features provided! Checking for expression fallback...")
-            
-            # Check if we have an expression that should filter the source layer
-            filter_expression = getattr(self, 'expression', None)
-            new_subset = getattr(self, 'param_source_new_subset', None)
-            
-            filter_to_use = None
-            if filter_expression and filter_expression.strip():
-                filter_to_use = filter_expression
-                logger.info(f"  → Found expression: '{filter_expression[:80]}...'")
-            elif new_subset and new_subset.strip():
-                filter_to_use = new_subset
-                logger.info(f"  → Found new_subset: '{new_subset[:80]}...'")
-            
-            if filter_to_use:
-                # Use a feature request with expression to filter features
-                from qgis.core import QgsFeatureRequest, QgsExpression
-                
-                try:
-                    expr = QgsExpression(filter_to_use)
-                    if not expr.hasParserError():
-                        request = QgsFeatureRequest(expr)
-                        features = list(self.source_layer.getFeatures(request))
-                        logger.info(f"  → Expression fallback: {len(features)} features")
-                    else:
-                        logger.warning(f"  → Expression parse error: {expr.parserErrorString()}")
-                        features = list(self.source_layer.getFeatures())
-                except Exception as e:
-                    logger.warning(f"  → Expression fallback failed: {e}")
-                    features = list(self.source_layer.getFeatures())
-            else:
-                logger.info(f"  → Source layer: {self.source_layer.name()}")
-                logger.info(f"  → Source layer feature count: {self.source_layer.featureCount()}")
-                logger.info(f"  → Source layer subset: '{self.source_layer.subsetString()[:100] if self.source_layer.subsetString() else ''}'")
-                features = list(self.source_layer.getFeatures())
-            
-            logger.info(f"  → Fallback: Using {len(features)} features from source layer")
-        
-        logger.debug(f"  Buffer value: {self.param_buffer_value}")
-        logger.debug(f"  Target CRS: {self.source_layer_crs_authid}")
-        logger.debug(f"prepare_spatialite_source_geom: Processing {len(features)} features")
-        
-        # Get current subset string for cache key (critical for field-based mode)
-        current_subset = self.source_layer.subsetString() or ''
-        layer_id = self.source_layer.id()
-        
-        # Check cache first (includes layer_id and subset_string to avoid stale cache)
-        cached_geom = self.geom_cache.get(
-            features, 
-            self.param_buffer_value,
-            self.source_layer_crs_authid,
-            layer_id=layer_id,
-            subset_string=current_subset
-        )
-        
-        if cached_geom is not None:
-            # CRITICAL: Verify cache BEFORE using it
-            cached_wkt = cached_geom.get('wkt')
-            wkt_type = cached_wkt.split('(')[0].strip() if cached_wkt else 'Unknown'
-            
-            # Check if buffer expected but cached geometry is LineString
-            cache_is_valid = True
-            if self.param_buffer_value and self.param_buffer_value != 0:
-                if 'LineString' in wkt_type or 'Line' in wkt_type:
-                    logger.error("❌ CACHE BUG DETECTED!")
-                    buffer_type_str = "expansion" if self.param_buffer_value > 0 else "erosion"
-                    logger.error(f"  Expected: Polygon/MultiPolygon (with {self.param_buffer_value}m {buffer_type_str} buffer)")
-                    logger.error(f"  Got: {wkt_type} (no buffer applied!)")
-                    logger.error("  → Cache has stale geometry without buffer")
-                    logger.error("  → Clearing cache and recomputing...")
-                    
-                    # Clear cache and mark as invalid
-                    self.geom_cache.clear()
-                    cached_geom = None
-                    cache_is_valid = False
-                    logger.info("✓ Cache cleared, will recompute geometry with buffer")
-            
-            # Only use cache if valid
-            if cache_is_valid and cached_geom is not None:
-                self.spatialite_source_geom = cached_wkt
-                logger.info("✓ Using CACHED source geometry for Spatialite")
-                logger.debug(f"  Cache was computed with buffer: {self.param_buffer_value}")
-                logger.debug(f"  Cached geometry type: {wkt_type}")
-                return
-        
-        # Cache miss - compute geometry
-        logger.debug("Cache miss - computing source geometry")
-        
-        raw_geometries = [feature.geometry() for feature in features if feature.hasGeometry()]
-        logger.debug(f"prepare_spatialite_source_geom: {len(raw_geometries)} geometries with geometry")
-        
-        if len(raw_geometries) == 0:
-            logger.error("prepare_spatialite_source_geom: No geometries found in source features")
+            logger.error(f"prepare_spatialite_source_geom failed: {result.error_message}")
             self.spatialite_source_geom = None
-            return
-        
-        geometries = []
-
-        # Determine target CRS
-        target_crs = QgsCoordinateReferenceSystem(self.source_layer_crs_authid)
-        
-        # Setup reprojection transforms (only if explicitly requested)
-        # SPATIALITE OPTIMIZATION: Buffer is now applied via ST_Buffer() in SQL expression
-        # No need to reproject to metric CRS here - ST_Buffer handles it with ST_Transform
-        if self.has_to_reproject_source_layer is True:
-            source_crs_obj = QgsCoordinateReferenceSystem(self.source_crs.authid())
-            transform = QgsCoordinateTransform(source_crs_obj, target_crs, self.PROJECT)
-            logger.debug(f"Will reproject from {self.source_crs.authid()} to {self.source_layer_crs_authid}")
-
-        # Log buffer settings for debugging
-        logger.debug(f"Buffer settings: param_buffer_value={self.param_buffer_value}")
-        
-        for geometry in raw_geometries:
-            if geometry.isEmpty() is False:
-                # Make a copy to avoid modifying original
-                geom_copy = QgsGeometry(geometry)
-                
-                logger.debug(f"Processing geometry: type={geom_copy.wkbType()}, multipart={geom_copy.isMultipart()}")
-                
-                # CENTROID OPTIMIZATION: Convert source layer geometry to centroid if enabled
-                # This significantly speeds up queries for complex polygons (e.g., buildings)
-                if self.param_use_centroids_source_layer:
-                    centroid = geom_copy.centroid()
-                    if centroid and not centroid.isEmpty():
-                        geom_copy = centroid
-                        logger.debug(f"Converted source layer geometry to centroid")
-                
-                if geom_copy.isMultipart():
-                    geom_copy.convertToSingleType()
-                    
-                if self.has_to_reproject_source_layer is True:
-                    geom_copy.transform(transform)
-                    
-                # SPATIALITE OPTIMIZATION: Buffer is now applied via ST_Buffer() in SQL expression
-                # This avoids GeometryCollection issues from QGIS buffer and uses native Spatialite functions
-                # The buffer value is passed to build_expression() which adds ST_Buffer() to the SQL
-                # Supports both positive (expand) and negative (shrink/erode) buffers
-                if self.param_buffer_value is not None and self.param_buffer_value != 0:
-                    buffer_type_str = "expansion" if self.param_buffer_value > 0 else "erosion (shrink)"
-                    logger.info(f"Buffer of {self.param_buffer_value}m ({buffer_type_str}) will be applied via ST_Buffer() in SQL")
-                    # NOTE: Do NOT apply buffer here - it's done in Spatialite SQL expression
-                    
-                geometries.append(geom_copy)
-
-        if len(geometries) == 0:
-            logger.error("prepare_spatialite_source_geom: No valid geometries after processing")
-            self.spatialite_source_geom = None
-            return
-
-        # v2.9.8: DISSOLVE OPTIMIZATION - Use unaryUnion to merge overlapping geometries
-        # This significantly reduces WKT size by eliminating redundant vertices and merging
-        # adjacent/overlapping polygons into a single geometry.
-        # Benefits:
-        # - Reduces WKT string length (less vertices = smaller string)
-        # - Eliminates overlapping regions (single boundary instead of duplicated)
-        # - Produces simpler geometry that's faster to process in Spatialite
-        # - Prevents RTTOPO/MakeValid errors caused by complex GeometryCollections
-        #
-        # Note: For very large datasets (>100 features), unaryUnion may take a few seconds
-        # but this is offset by the much faster SQL execution due to smaller WKT
-        logger.info(f"v2.9.8: Applying dissolve (unaryUnion) on {len(geometries)} geometries for WKT optimization")
-        collected_geometry = safe_unary_union(geometries)
-        
-        # Fallback to collect if unaryUnion fails (e.g., mixed geometry types)
-        if collected_geometry is None:
-            logger.warning("v2.9.8: unaryUnion failed, falling back to safe_collect_geometry")
-            collected_geometry = safe_collect_geometry(geometries)
-        
-        if collected_geometry is None:
-            logger.error("prepare_spatialite_source_geom: Both unaryUnion and collect failed")
-            self.spatialite_source_geom = None
-            return
-        
-        # Log the result of dissolve optimization
-        collected_type = get_geometry_type_name(collected_geometry)
-        logger.info(f"v2.9.8: Dissolved geometry type: {collected_type}")
-        
-        # CRITICAL FIX: Prevent GeometryCollection from causing issues with typed layers
-        # GeoPackage and other backends require homogeneous geometry types
-        
-        if 'GeometryCollection' in collected_type:
-            logger.warning(f"v2.9.8: Dissolve produced {collected_type} - converting to homogeneous type")
-            
-            # Determine the dominant geometry type from input geometries using safe wrapper
-            has_polygons = any('Polygon' in get_geometry_type_name(g) for g in geometries if validate_geometry(g))
-            has_lines = any('Line' in get_geometry_type_name(g) for g in geometries if validate_geometry(g))
-            has_points = any('Point' in get_geometry_type_name(g) for g in geometries if validate_geometry(g))
-            
-            logger.debug(f"Geometry analysis - Polygons: {has_polygons}, Lines: {has_lines}, Points: {has_points}")
-            
-            # Priority: Polygon > Line > Point (spatial filtering typically uses areas/zones)
-            if has_polygons:
-                # STABILITY FIX: Use safe wrapper for extraction
-                polygon_parts = extract_polygons_from_collection(collected_geometry)
-                
-                if polygon_parts:
-                    collected_geometry = safe_collect_geometry(polygon_parts)
-                    if collected_geometry is None:
-                        logger.error("Failed to collect polygon parts")
-                    # Force conversion to MultiPolygon if still GeometryCollection
-                    elif 'GeometryCollection' in get_geometry_type_name(collected_geometry):
-                        converted = collected_geometry.convertToType(QgsWkbTypes.PolygonGeometry, True)
-                        if converted and not converted.isEmpty():
-                            collected_geometry = converted
-                            logger.info(f"Converted to {get_geometry_type_name(collected_geometry)}")
-                        else:
-                            logger.error("Polygon conversion failed - keeping original")
-                    else:
-                        logger.info(f"Successfully converted to {get_geometry_type_name(collected_geometry)}")
-                else:
-                    logger.warning("No polygon parts found in GeometryCollection")
-                    
-            elif has_lines:
-                # Extract and collect only line parts using safe wrapper
-                line_parts = []
-                for part in safe_as_geometry_collection(collected_geometry):
-                    part_type = get_geometry_type_name(part)
-                    if 'Line' in part_type:
-                        if 'Multi' in part_type:
-                            for sub_part in safe_as_geometry_collection(part):
-                                line_parts.append(sub_part)
-                        else:
-                            line_parts.append(part)
-                
-                if line_parts:
-                    collected_geometry = safe_collect_geometry(line_parts)
-                    if collected_geometry and 'GeometryCollection' in get_geometry_type_name(collected_geometry):
-                        converted = collected_geometry.convertToType(QgsWkbTypes.LineGeometry, True)
-                        if converted and not converted.isEmpty():
-                            collected_geometry = converted
-                            logger.info(f"Converted to {get_geometry_type_name(collected_geometry)}")
-                        else:
-                            logger.error("Line conversion failed - keeping original")
-                    else:
-                        logger.info(f"Successfully converted to {get_geometry_type_name(collected_geometry)}")
-                else:
-                    logger.warning("No line parts found in GeometryCollection")
-                    
-            elif has_points:
-                # Extract and collect only point parts using safe wrapper
-                point_parts = []
-                for part in safe_as_geometry_collection(collected_geometry):
-                    part_type = get_geometry_type_name(part)
-                    if 'Point' in part_type:
-                        if 'Multi' in part_type:
-                            for sub_part in safe_as_geometry_collection(part):
-                                point_parts.append(sub_part)
-                        else:
-                            point_parts.append(part)
-                
-                if point_parts:
-                    collected_geometry = safe_collect_geometry(point_parts)
-                    if collected_geometry and 'GeometryCollection' in get_geometry_type_name(collected_geometry):
-                        converted = collected_geometry.convertToType(QgsWkbTypes.PointGeometry, True)
-                        if converted and not converted.isEmpty():
-                            collected_geometry = converted
-                            logger.info(f"Converted to {get_geometry_type_name(collected_geometry)}")
-                        else:
-                            logger.error("Point conversion failed - keeping original")
-                    else:
-                        logger.info(f"Successfully converted to {get_geometry_type_name(collected_geometry)}")
-                else:
-                    logger.warning("No point parts found in GeometryCollection")
-        
-        # v2.6.3: Force 2D geometry by dropping Z/M values for Spatialite compatibility
-        # Spatialite's GeomFromText() may have issues with very large WKT containing Z coordinates
-        # (e.g., "MultiLineString Z (...)" format from QGIS asWkt())
-        # This ensures consistent behavior and avoids "parse error" from GeomFromText
-        from qgis.core import QgsWkbTypes
-        if QgsWkbTypes.hasZ(collected_geometry.wkbType()) or QgsWkbTypes.hasM(collected_geometry.wkbType()):
-            original_type = get_geometry_type_name(collected_geometry)
-            # Create a new 2D geometry from WKB
-            # First, get the 2D variant of the WKB type
-            wkb_2d = QgsWkbTypes.flatType(collected_geometry.wkbType())
-            
-            # Use constGet() to access the underlying abstract geometry
-            abstract_geom = collected_geometry.constGet()
-            if abstract_geom:
-                # Clone and drop Z/M values
-                cloned = abstract_geom.clone()
-                cloned.dropZValue()
-                cloned.dropMValue()
-                collected_geometry = QgsGeometry(cloned)
-                logger.info(f"  ✓ Dropped Z/M values: {original_type} → {get_geometry_type_name(collected_geometry)}")
-            else:
-                logger.warning(f"  Could not access geometry internals to drop Z/M, keeping {original_type}")
-        
-        # v2.7.14: Use optimized WKT precision based on CRS units
-        # This reduces WKT size by 60-70% for metric CRS (e.g., EPSG:2154)
-        crs_authid = self.source_layer_crs_authid if hasattr(self, 'source_layer_crs_authid') else None
-        wkt = self._geometry_to_wkt(collected_geometry, crs_authid)
-        
-        # Log the final geometry type
-        geom_type = wkt.split('(')[0].strip() if '(' in wkt else 'Unknown'
-        logger.info(f"  Final collected geometry type: {geom_type}")
-        logger.info(f"  Number of geometries collected: {len(geometries)}")
-        logger.info(f"  📏 WKT with optimized precision: {len(wkt):,} chars")
-        
-        # v2.7.6: Use adaptive simplification for very large geometries
-        # This preserves topology while achieving the target WKT size
-        # Get threshold from configuration
-        thresholds = self._get_optimization_thresholds()
-        MAX_WKT_LENGTH = thresholds['exists_subquery_threshold']
-        
-        if len(wkt) > MAX_WKT_LENGTH:
-            logger.warning(f"  ⚠️ WKT too long ({len(wkt)} chars > {MAX_WKT_LENGTH} max)")
-            logger.debug(f"  v2.7.13 WKT: Simplifying {len(wkt):,} chars → target {MAX_WKT_LENGTH:,}")
-            
-            # Use new adaptive simplification that estimates optimal tolerance
-            simplified = self._simplify_geometry_adaptive(
-                collected_geometry,
-                max_wkt_length=MAX_WKT_LENGTH,
-                crs_authid=self.source_layer_crs_authid if hasattr(self, 'source_layer_crs_authid') else None
-            )
-            
-            if simplified and not simplified.isEmpty():
-                # v2.7.14: Use optimized WKT precision for simplified geometry too
-                simplified_wkt = self._geometry_to_wkt(simplified, crs_authid)
-                reduction_pct = (1 - len(simplified_wkt) / len(wkt)) * 100
-                
-                logger.debug(f"v2.7.14 WKT: Simplified to {len(simplified_wkt):,} chars ({reduction_pct:.1f}% reduction)")
-                
-                if len(simplified_wkt) <= MAX_WKT_LENGTH:
-                    logger.info(f"  ✓ Adaptive simplification succeeded: {len(wkt)} → {len(simplified_wkt)} chars ({reduction_pct:.1f}% reduction)")
-                    wkt = simplified_wkt
-                    collected_geometry = simplified
-                else:
-                    logger.warning(f"  ⚠️ Adaptive simplification reduced but not enough: {len(wkt)} → {len(simplified_wkt)} chars")
-                    # v2.7.13: Still use the simplified geometry - better than nothing
-                    wkt = simplified_wkt
-                    collected_geometry = simplified
-                    QgsMessageLog.logMessage(
-                        f"v2.7.14 WKT: Still large ({len(simplified_wkt):,} chars) - may impact performance",
-                        "FilterMate", Qgis.Warning
-                    )
-            else:
-                logger.warning(f"  ⚠️ Simplification failed, using original ({len(wkt)} chars)")
-                logger.warning(f"  Consider using PostgreSQL backend for better handling of complex geometries")
-                QgsMessageLog.logMessage(
-                    f"v2.7.13 WKT: Simplification failed - using original ({len(wkt):,} chars)",
-                    "FilterMate", Qgis.Warning
-                )
-        
-        # Escape single quotes for SQL
-        wkt_escaped = wkt.replace("'", "''")
-        self.spatialite_source_geom = wkt_escaped
-
-        logger.info(f"  WKT length: {len(self.spatialite_source_geom)} chars")
-        logger.debug(f"prepare_spatialite_source_geom WKT preview: {self.spatialite_source_geom[:200]}...")
-        logger.info(f"=== prepare_spatialite_source_geom END ===") 
-        
-        # v2.6.5: Store WKT in task_parameters for backend R-tree optimization
-        # This allows the Spatialite backend to use permanent source tables with R-tree indexes
-        # for large WKT geometries (>50KB), dramatically improving performance
-        if hasattr(self, 'task_parameters') and self.task_parameters:
-            if 'infos' not in self.task_parameters:
-                self.task_parameters['infos'] = {}
-            self.task_parameters['infos']['source_geom_wkt'] = wkt_escaped
-            logger.info(f"  ✓ WKT stored in task_parameters for backend optimization ({len(wkt_escaped)} chars)")
-
-            # FIX v3.0.10: Add buffer state tracking for multi-step filter preservation
-            # This allows backends to detect and reuse pre-buffered geometries from previous steps
-            # instead of recomputing or losing buffer state
-            buffer_value = getattr(self, 'param_buffer_value', 0)
-            existing_buffer_state = self.task_parameters['infos'].get('buffer_state', {})
-
-            # Detect if we're in a multi-step operation and buffer state already exists
-            is_multi_step = existing_buffer_state.get('is_pre_buffered', False)
-            previous_buffer_value = existing_buffer_state.get('buffer_value', 0)
-
-            self.task_parameters['infos']['buffer_state'] = {
-                'has_buffer': buffer_value != 0,
-                'buffer_value': buffer_value,
-                'is_pre_buffered': is_multi_step and previous_buffer_value == buffer_value,
-                'buffer_column': 'geom_buffered' if (is_multi_step and previous_buffer_value == buffer_value) else 'geom',
-                'previous_buffer_value': previous_buffer_value if is_multi_step else None
-            }
-
-            if is_multi_step:
-                if previous_buffer_value == buffer_value and buffer_value != 0:
-                    logger.info(f"  ✓ Multi-step filter: Reusing existing {buffer_value}m buffer from previous step")
-                elif buffer_value != previous_buffer_value:
-                    logger.warning(f"  ⚠️  Multi-step filter: Buffer changed from {previous_buffer_value}m to {buffer_value}m - will recompute")
-            elif buffer_value != 0:
-                logger.info(f"  ✓ First-step filter with {buffer_value}m buffer - will be applied")
-        
-        # Store in cache for future use (includes layer_id and subset_string)
-        self.geom_cache.put(
-            features,
-            self.param_buffer_value,
-            self.source_layer_crs_authid,
-            {'wkt': wkt_escaped},
-            layer_id=layer_id,
-            subset_string=current_subset
-        )
-        logger.info("✓ Source geometry computed and CACHED") 
 
     def _copy_filtered_layer_to_memory(self, layer, layer_name="filtered_copy"):
         """
@@ -6270,413 +5516,42 @@ class FilterEngineTask(QgsTask):
         """
         Prepare OGR source geometry with optional reprojection and buffering.
         
-        EPIC-1 Phase E4-S7: Strangler Fig delegation to ogr_executor.
-        Delegates to adapters.backends.ogr.filter_executor.prepare_ogr_source_geom()
-        using OGRSourceContext to pass parameters.
+        EPIC-1 Phase E5-S1: Legacy code removed - fully delegates to extracted module.
         
         Process:
         1. Copy filtered layer to memory (if subset string active OR features selected OR field-based mode)
         2. Fix invalid geometries in source layer
         3. Reproject if needed
-        4. Apply buffer if specified
+        4. Apply centroid optimization if enabled
         5. Store result in self.ogr_source_geom
         """
-        # EPIC-1 Phase E4-S7: Try delegating to new extracted function
-        if OGR_EXECUTOR_AVAILABLE and hasattr(ogr_executor, 'OGRSourceContext'):
-            try:
-                context = ogr_executor.OGRSourceContext(
-                    source_layer=self.source_layer,
-                    task_parameters=self.task_parameters,
-                    is_field_expression=getattr(self, 'is_field_expression', None),
-                    expression=getattr(self, 'expression', None),
-                    param_source_new_subset=getattr(self, 'param_source_new_subset', None),
-                    has_to_reproject_source_layer=self.has_to_reproject_source_layer,
-                    source_layer_crs_authid=self.source_layer_crs_authid,
-                    param_use_centroids_source_layer=self.param_use_centroids_source_layer,
-                    spatialite_fallback_mode=getattr(self, '_spatialite_fallback_mode', False),
-                    buffer_distance=None,  # Will be fetched via callback
-                    # Inject helper methods
-                    copy_filtered_layer_to_memory=self._copy_filtered_layer_to_memory,
-                    copy_selected_features_to_memory=self._copy_selected_features_to_memory,
-                    create_memory_layer_from_features=self._create_memory_layer_from_features,
-                    reproject_layer=self._reproject_layer,
-                    convert_layer_to_centroids=self._convert_layer_to_centroids,
-                    get_buffer_distance_parameter=self._get_buffer_distance_parameter,
-                )
-                result = ogr_executor.prepare_ogr_source_geom(context)
-                self.ogr_source_geom = result
-                logger.debug(f"prepare_ogr_source_geom: delegated to ogr_executor, result={result}")
-                return
-            except Exception as e:
-                logger.warning(f"ogr_executor delegation failed, using legacy: {e}")
+        if not OGR_EXECUTOR_AVAILABLE or not hasattr(ogr_executor, 'OGRSourceContext'):
+            logger.error("OGR executor not available - cannot prepare OGR source geometry")
+            self.ogr_source_geom = None
+            return
         
-        # LEGACY FALLBACK: Original implementation
-        layer = self.source_layer
-        
-        # Step 0: CRITICAL - Copy to memory if layer has subset string OR selected features
-        # This prevents issues with QGIS algorithms not handling subset strings/selections correctly
-        has_subset = bool(layer.subsetString())
-        has_selection = layer.selectedFeatureCount() > 0
-        
-        # Check if we're in field-based mode (Custom Selection with a simple field name)
-        is_field_based_mode = (
-            hasattr(self, 'is_field_expression') and 
-            self.is_field_expression is not None and
-            isinstance(self.is_field_expression, tuple) and
-            len(self.is_field_expression) >= 2 and
-            self.is_field_expression[0] is True
+        context = ogr_executor.OGRSourceContext(
+            source_layer=self.source_layer,
+            task_parameters=self.task_parameters,
+            is_field_expression=getattr(self, 'is_field_expression', None),
+            expression=getattr(self, 'expression', None),
+            param_source_new_subset=getattr(self, 'param_source_new_subset', None),
+            has_to_reproject_source_layer=self.has_to_reproject_source_layer,
+            source_layer_crs_authid=self.source_layer_crs_authid,
+            param_use_centroids_source_layer=self.param_use_centroids_source_layer,
+            spatialite_fallback_mode=getattr(self, '_spatialite_fallback_mode', False),
+            buffer_distance=None,  # Will be fetched via callback
+            # Inject helper methods
+            copy_filtered_layer_to_memory=self._copy_filtered_layer_to_memory,
+            copy_selected_features_to_memory=self._copy_selected_features_to_memory,
+            create_memory_layer_from_features=self._create_memory_layer_from_features,
+            reproject_layer=self._reproject_layer,
+            convert_layer_to_centroids=self._convert_layer_to_centroids,
+            get_buffer_distance_parameter=self._get_buffer_distance_parameter,
         )
         
-        # Also check task_features early for diagnostic
-        task_features_early = self.task_parameters.get("task", {}).get("features", [])
-        # CRITICAL FIX v2.4.16: Properly validate QgsFeature objects
-        # Old filter: [f for f in task_features_early if f and f != ""]
-        # This missed invalid features that are truthy but don't have geometry
-        #
-        # FIX v2.4.22: More robust validation with detailed logging
-        # Thread safety issue: QgsFeature objects may become invalid when passed
-        # between threads. We need to catch exceptions during validation.
-        valid_task_features_early = []
-        invalid_count = 0
-        for f in task_features_early:
-            if f is None or f == "":
-                continue
-            # Check if it's a QgsFeature with geometry
-            try:
-                if hasattr(f, 'hasGeometry') and hasattr(f, 'geometry'):
-                    if f.hasGeometry():
-                        geom = f.geometry()
-                        if geom is not None and not geom.isEmpty():
-                            valid_task_features_early.append(f)
-                        else:
-                            invalid_count += 1
-                            logger.debug(f"  Skipping feature with empty geometry: id={f.id() if hasattr(f, 'id') else 'unknown'}")
-                    else:
-                        invalid_count += 1
-                        logger.debug(f"  Skipping feature without geometry: id={f.id() if hasattr(f, 'id') else 'unknown'}")
-                elif f:
-                    # Non-QgsFeature truthy value (e.g., feature ID)
-                    valid_task_features_early.append(f)
-            except (RuntimeError, AttributeError) as e:
-                invalid_count += 1
-                logger.warning(f"  ⚠️ Feature access error (thread-safety issue?): {e}")
-        
-        if invalid_count > 0:
-            logger.warning(f"  ⚠️ {invalid_count} task features were invalid or had no geometry")
-        
-        # v2.7.15: If ALL task_features failed validation, try to recover using feature_fids
-        if len(valid_task_features_early) == 0 and len(task_features_early) > 0 and invalid_count > 0:
-            logger.warning(f"  ⚠️ ALL {len(task_features_early)} task_features failed validation (thread-safety issue)")
-            
-            # Try to recover using feature_fids
-            feature_fids = self.task_parameters.get("task", {}).get("feature_fids", [])
-            if not feature_fids:
-                feature_fids = self.task_parameters.get("feature_fids", [])
-            
-            if feature_fids and len(feature_fids) > 0 and layer:
-                logger.info(f"  → v2.7.15: Attempting FID recovery with {len(feature_fids)} FIDs")
-                try:
-                    from qgis.core import QgsFeatureRequest, QgsMessageLog, Qgis
-                    request = QgsFeatureRequest().setFilterFids(feature_fids)
-                    recovered_features = list(layer.getFeatures(request))
-                    if len(recovered_features) > 0:
-                        valid_task_features_early = recovered_features
-                        logger.debug(f"  ✓ v2.7.15 OGR: Recovered {len(recovered_features)} features using FIDs")
-                except Exception as e:
-                    logger.error(f"  ❌ FID recovery failed: {e}")
-        
-        logger.info(f"=== prepare_ogr_source_geom DEBUG ===")
-        logger.info(f"  Source layer name: {layer.name() if layer else 'None'}")
-        logger.info(f"  Source layer valid: {layer.isValid() if layer else False}")
-        logger.info(f"  Source layer feature count: {layer.featureCount() if layer else 0}")
-        logger.info(f"  has_subset: {has_subset}")
-        logger.info(f"  has_selection: {has_selection}")
-        logger.info(f"  is_field_based_mode: {is_field_based_mode}")
-        logger.info(f"  valid_task_features count: {len(valid_task_features_early)}")
-        if has_subset:
-            logger.info(f"  Current subset: '{layer.subsetString()[:100]}'")
-        
-        # DIAGNOSTIC: Log for debugging
-        logger.debug(
-            f"prepare_ogr_source_geom: layer={layer.name() if layer else 'None'}, "
-            f"features={layer.featureCount() if layer else 0}, "
-            f"has_subset={has_subset}, has_selection={has_selection}, "
-            f"task_features={len(valid_task_features_early)}"
-        )
-        
-        # CRITICAL: If task_features are provided, they should take precedence!
-        # This handles single selection by FID mode
-        if valid_task_features_early and len(valid_task_features_early) > 0:
-            logger.info(f"=== prepare_ogr_source_geom (TASK PARAMS MODE - PRIORITY) ===")
-            logger.info(f"  PRIORITY: Using {len(valid_task_features_early)} features from task_parameters")
-            
-            # DIAGNOSTIC: Log for debugging
-            logger.debug(
-                f"OGR TASK PARAMS MODE (PRIORITY): {len(valid_task_features_early)} features from task_parameters"
-            )
-            
-            # DIAGNOSTIC v2.4.17: Log geometry details of task features before creating memory layer
-            logger.debug(f"OGR TASK PARAMS: {len(valid_task_features_early)} features to use")
-            # Only log first 3 features at DEBUG level to reduce verbosity
-            if logger.isEnabledFor(logging.DEBUG):
-                for idx, feat in enumerate(valid_task_features_early[:3]):
-                    if hasattr(feat, 'geometry') and feat.hasGeometry():
-                        geom = feat.geometry()
-                        geom_type = geom.type()
-                        bbox = geom.boundingBox()
-                        logger.debug(
-                            f"  Feature[{idx}]: type={geom_type}, bbox=({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})"
-                        )
-                    else:
-                        logger.debug(f"  Feature[{idx}]: NO GEOMETRY or type={type(feat).__name__}")
-                if len(valid_task_features_early) > 3:
-                    logger.debug(f"  ... and {len(valid_task_features_early) - 3} more features")
-            
-            # Create memory layer from task features
-            layer = self._create_memory_layer_from_features(valid_task_features_early, layer.crs(), "source_from_task")
-            if layer:
-                logger.info(f"  ✓ Memory layer created with {layer.featureCount()} features")
-                # Log extent at DEBUG level
-                extent = layer.extent()
-                logger.debug(
-                    f"  Memory layer extent: ({extent.xMinimum():.1f},{extent.yMinimum():.1f})-({extent.xMaximum():.1f},{extent.yMaximum():.1f})"
-                )
-            else:
-                logger.error(f"  ✗ Failed to create memory layer from task features, using original layer")
-                layer = self.source_layer
-        elif has_subset or has_selection:
-            if has_subset:
-                logger.debug(f"Source layer has subset string, copying to memory first...")
-            if has_selection:
-                logger.debug(f"Source layer has {layer.selectedFeatureCount()} selected features, copying selection to memory...")
-            
-            # For multi-selection, copy only selected features
-            if has_selection and not has_subset:
-                layer = self._copy_selected_features_to_memory(layer, "source_selection")
-            else:
-                layer = self._copy_filtered_layer_to_memory(layer, "source_filtered")
-        elif is_field_based_mode:
-            # FIELD-BASED MODE: Use all visible features from filtered source layer
-            # The source layer keeps its current filter (subset string)
-            # We copy ALL filtered features to use for geometric intersection with distant layers
-            logger.info(f"=== prepare_ogr_source_geom (FIELD-BASED MODE) ===")
-            logger.info(f"  Field name: '{self.is_field_expression[1]}'")
-            logger.info(f"  Source subset: '{layer.subsetString()[:80] if layer.subsetString() else '(none)'}...'")
-            logger.info(f"  Using ALL {layer.featureCount()} filtered features for geometric intersection")
-            # Copy all visible features to memory for consistent processing
-            layer = self._copy_filtered_layer_to_memory(layer, "source_field_based")
-        else:
-            # DIRECT MODE: No task_features, no subset, no selection, no field-based mode
-            #
-            # FIX v2.4.22: Check if we have an expression that should filter the source layer
-            # This handles the case where setSubsetString() from a background thread didn't
-            # take effect immediately (thread-safety issue).
-            #
-            # Try multiple fallback strategies:
-            # 1. Check if self.expression was set during execute_source_layer_filtering()
-            # 2. Check if param_source_new_subset was set
-            # 3. Use all features as last resort
-            
-            filter_expression = getattr(self, 'expression', None)
-            new_subset = getattr(self, 'param_source_new_subset', None)
-            
-            # Determine if we should filter
-            should_filter = False
-            filter_to_use = None
-            
-            if filter_expression and filter_expression.strip():
-                should_filter = True
-                filter_to_use = filter_expression
-                logger.info(f"=== prepare_ogr_source_geom (EXPRESSION FALLBACK MODE) ===")
-                logger.info(f"  ⚠️ No subset detected but self.expression exists")
-                logger.info(f"  Expression: '{filter_expression[:80]}...'")
-            elif new_subset and new_subset.strip():
-                should_filter = True
-                filter_to_use = new_subset
-                logger.info(f"=== prepare_ogr_source_geom (SUBSET FALLBACK MODE) ===")
-                logger.info(f"  ⚠️ No subset detected but param_source_new_subset exists")
-                logger.info(f"  New subset: '{new_subset[:80]}...'")
-            
-            if should_filter and filter_to_use:
-                # Use a feature request with expression to filter features
-                from qgis.core import QgsFeatureRequest, QgsExpression
-                
-                try:
-                    expr = QgsExpression(filter_to_use)
-                    if expr.hasParserError():
-                        logger.warning(f"  Expression parse error: {expr.parserErrorString()}")
-                        logger.warning(f"  Falling back to all features")
-                    else:
-                        request = QgsFeatureRequest(expr)
-                        filtered_features = list(layer.getFeatures(request))
-                        
-                        if len(filtered_features) > 0:
-                            logger.info(f"  ✓ Filtered to {len(filtered_features)} features using expression")
-                            
-                            # Create memory layer from filtered features
-                            layer = self._create_memory_layer_from_features(
-                                filtered_features, layer.crs(), "source_expr_filtered"
-                            )
-                            if layer:
-                                logger.info(f"  ✓ Memory layer created with {layer.featureCount()} features")
-                                logger.debug(f"OGR EXPRESSION FALLBACK: Using {layer.featureCount()} features (filtered from expression)")
-                            else:
-                                logger.error(f"  ✗ Failed to create memory layer, using original layer")
-                                layer = self.source_layer
-                        else:
-                            logger.warning(f"  ⚠️ Expression returned 0 features, using original layer")
-                            layer = self.source_layer
-                except Exception as e:
-                    logger.error(f"  Expression filtering failed: {e}")
-                    layer = self.source_layer
-            else:
-                logger.info(f"=== prepare_ogr_source_geom (DIRECT MODE) ===")
-                logger.info(f"  No task features, subset, selection, or field-based mode detected")
-                logger.info(f"  Source layer: {layer.name()}")
-                logger.info(f"  Source layer feature count: {layer.featureCount()}")
-                
-                # DIAGNOSTIC: Log to QGIS Message Panel
-                QgsMessageLog.logMessage(
-                    f"OGR DIRECT MODE: Using {layer.featureCount()} features from source layer",
-                    "FilterMate", Qgis.Warning
-                )
-        
-        # Step 1: DISABLED - Skip geometry validation/repair, let invalid geometries pass
-        logger.info("Geometry validation DISABLED - allowing invalid geometries to pass through")
-        # layer = self._repair_invalid_geometries(layer)
-        # layer = self._fix_invalid_geometries(layer, 'alg_source_layer_params_fixgeometries_source')
-        
-        # Step 2: Check if buffer is requested and validate CRS BEFORE reprojection
-        buffer_distance = self._get_buffer_distance_parameter()
-        if buffer_distance is not None:
-            # Check CRS compatibility with buffer
-            crs = layer.crs()
-            is_geographic = crs.isGeographic()
-            
-            # Evaluate buffer distance
-            eval_distance = buffer_distance
-            if isinstance(buffer_distance, QgsProperty):
-                features = list(layer.getFeatures())
-                if features:
-                    context = QgsExpressionContext()
-                    context.setFeature(features[0])
-                    eval_distance = buffer_distance.value(context, 0)
-            
-            if is_geographic and eval_distance and float(eval_distance) > 1:
-                logger.warning(
-                    f"⚠️ Geographic CRS detected ({crs.authid()}) with buffer value {eval_distance}.\n"
-                    f"   Buffer units would be DEGREES. Auto-reprojecting to EPSG:3857 (Web Mercator)."
-                )
-                # Force reprojection to Web Mercator for buffering
-                self.has_to_reproject_source_layer = True
-                self.source_layer_crs_authid = 'EPSG:3857'
-        
-        # Step 3: Reproject if needed (either requested by user or forced for buffer)
-        if self.has_to_reproject_source_layer:
-            layer = self._reproject_layer(layer, self.source_layer_crs_authid)
-        
-        # Step 4: Apply buffer if specified
-        # CRITICAL FIX v2.5.2: Only skip buffer when using Spatialite backend for SQL-based buffer
-        # Do NOT skip if using OGR backend directly (even if spatialite_source_geom exists for other layers)
-        #
-        # IMPORTANT: Buffer must be applied in ONE place only to avoid double-buffering:
-        # - Spatialite backend: Buffer via ST_Buffer() in SQL (backend.build_expression applies it)
-        # - OGR backend: Buffer via QGIS Processing (here OR in apply_filter)
-        # - PostgreSQL backend: Buffer via ST_Buffer() in SQL
-        #
-        # The ogr_source_geom layer is used by OGR backend's apply_filter method
-        # Buffer is applied there via _apply_buffer() using the buffer_value param from build_expression
-        # So we should NOT apply buffer here for OGR layers - let apply_filter handle it
-        #
-        # Skip buffer in prepare_ogr only if it will be applied via SQL (Spatialite fallback mode)
-        is_spatialite_fallback = hasattr(self, '_spatialite_fallback_mode') and self._spatialite_fallback_mode
-        
-        if buffer_distance is not None and not is_spatialite_fallback:
-            # Buffer will be applied in OGR backend's apply_filter via _apply_buffer()
-            # This is the correct place because OGR uses QGIS Processing algorithms
-            logger.info(f"Buffer of {buffer_distance}m will be applied in OGR backend's apply_filter")
-        elif buffer_distance is not None and is_spatialite_fallback:
-            logger.info(f"Buffer of {buffer_distance}m will be applied via ST_Buffer() in Spatialite SQL")
-        
-        # REMOVED: Don't apply buffer here, let OGR apply_filter handle it via _apply_buffer()
-        # This ensures buffer is applied with correct parameters and error handling
-        
-        # STABILITY FIX v2.3.9: Validate the final layer before storing
-        if layer is None:
-            logger.error("prepare_ogr_source_geom: Final layer is None")
-            self.ogr_source_geom = None
-            return
-        
-        if not layer.isValid():
-            logger.error(f"prepare_ogr_source_geom: Final layer is not valid")
-            self.ogr_source_geom = None
-            return
-        
-        if layer.featureCount() == 0:
-            logger.warning("prepare_ogr_source_geom: Final layer has no features")
-            self.ogr_source_geom = None
-            return
-        
-        # Validate at least one geometry is valid
-        has_valid_geom = False
-        invalid_reason = "unknown"
-        for feature in layer.getFeatures():
-            geom = feature.geometry()
-            if validate_geometry(geom):
-                has_valid_geom = True
-                break
-            else:
-                # FIX v2.9.9: Enhanced diagnostic - log WHY geometry is invalid
-                if geom is None:
-                    invalid_reason = "geometry is None"
-                elif geom.isNull():
-                    invalid_reason = "geometry is Null"
-                elif geom.isEmpty():
-                    invalid_reason = "geometry is Empty"
-                else:
-                    wkb_type = geom.wkbType()
-                    invalid_reason = f"wkbType={wkb_type} (Unknown or NoGeometry)"
-        
-        if not has_valid_geom:
-            logger.error(f"prepare_ogr_source_geom: Final layer has no valid geometries")
-            logger.error(f"  → Layer name: {layer.name()}")
-            logger.error(f"  → Layer features: {layer.featureCount()}")
-            logger.error(f"  → Last invalid reason: {invalid_reason}")
-            logger.error(f"  → Source layer name: {self.source_layer.name() if self.source_layer else 'None'}")
-            logger.error(f"  → Source layer features: {self.source_layer.featureCount() if self.source_layer else 0}")
-            # Log to QGIS MessageLog for visibility
-            QgsMessageLog.logMessage(
-                f"OGR source geometry preparation FAILED: {layer.name()} has no valid geometries "
-                f"({layer.featureCount()} features, reason: {invalid_reason})",
-                "FilterMate", Qgis.Critical
-            )
-            self.ogr_source_geom = None
-            return
-        
-        # CENTROID OPTIMIZATION: Convert source layer geometries to centroids if enabled
-        # This significantly speeds up queries for complex polygons (e.g., buildings)
-        if self.param_use_centroids_source_layer:
-            logger.info("OGR: Applying centroid transformation for source layer geometry simplification")
-            centroid_layer = self._convert_layer_to_centroids(layer)
-            if centroid_layer and centroid_layer.isValid() and centroid_layer.featureCount() > 0:
-                layer = centroid_layer
-                logger.info(f"  ✓ Converted source layer to centroids: {layer.featureCount()} point features")
-            else:
-                logger.warning("  ⚠️ Source layer centroid conversion failed, using original geometries")
-        
-        # Store result
-        self.ogr_source_geom = layer
-        
-        # FIX v2.8.14: Prevent garbage collection of memory layers
-        # If the layer is a memory layer created by _copy_filtered_layer_to_memory(),
-        # add it to the QGIS project with addToLegend=False to prevent C++ object deletion
-        # This is critical for OGR backend which may reuse the layer across multiple target layers
-        if layer and layer.isValid() and layer.providerType() == 'memory':
-            logger.debug(f"prepare_ogr_source_geom: Adding memory layer to project to prevent GC")
-            QgsProject.instance().addMapLayer(layer, addToLegend=False)
-        
+        self.ogr_source_geom = ogr_executor.prepare_ogr_source_geom(context)
         logger.debug(f"prepare_ogr_source_geom: {self.ogr_source_geom}")
-
 
 
     def _verify_and_create_spatial_index(self, layer, layer_name=None):

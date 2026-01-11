@@ -1,6 +1,6 @@
 # Analyse Réduction Dockwidget - FilterMate v4.0
 
-**Date**: 10 janvier 2026  
+**Date**: 11 janvier 2026  
 **Version analysée**: v4.0  
 **Fichier cible**: `filter_mate_dockwidget.py`
 
@@ -8,12 +8,79 @@
 
 ## 📈 État Actuel
 
-| Métrique          | Valeur       | Objectif      |
-| ----------------- | ------------ | ------------- |
-| Lignes dockwidget | **5,204**    | <2,000        |
-| Sprint actuel     | **Sprint 8** | Sprint 8      |
-| Réduction totale  | **-1,417**   | -9,116        |
-| Progrès           | **13.5%**    | 71.4% restant |
+| Métrique          | Valeur        | Objectif    |
+| ----------------- | ------------- | ----------- |
+| Lignes dockwidget | **4,305**     | <2,000      |
+| Sprint actuel     | **Sprint 13** | Sprint 13   |
+| Réduction totale  | **-8,744**    | -11,049     |
+| Progrès           | **67%**       | 33% restant |
+
+### Progression Sprint 13 (session 11 janvier 2026)
+
+| Action                                               | Lignes avant | Lignes après | Réduction |
+| ---------------------------------------------------- | ------------ | ------------ | --------- |
+| **Début Sprint 13**                                  | **4,521**    | -            | -         |
+| Migrer `_get_pg_session_context` → BackendController | 4,521        | 4,502        | -19       |
+| Migrer `_toggle_pg_auto_cleanup` → BackendController | 4,502        | 4,493        | -9        |
+| Migrer `_cleanup_postgresql_session_views` → BC      | 4,493        | 4,460        | -33       |
+| Migrer `_cleanup_postgresql_schema_if_empty` → BC    | 4,460        | 4,413        | -47       |
+| Migrer `_show_postgresql_session_info` → BC          | 4,413        | 4,305        | -108      |
+| **Total Sprint 13**                                  | **4,521**    | **4,305**    | **-216**  |
+
+**Note**: 239 lignes ajoutées à `BackendController` (734 → 973 lignes) pour les méthodes PostgreSQL.
+
+### Progression Sprint 12 (session 11 janvier 2026)
+
+| Action                                         | Lignes avant | Lignes après | Réduction |
+| ---------------------------------------------- | ------------ | ------------ | --------- |
+| **Début Sprint 12**                            | **4,680**    | -            | -         |
+| Simplifier `_toggle_optimization_enabled`      | 4,680        | 4,679        | -1        |
+| Simplifier `_toggle_centroid_auto`             | 4,679        | 4,678        | -1        |
+| Simplifier `_get_available_backends_for_layer` | 4,678        | 4,652        | -26       |
+| Simplifier `_detect_current_backend`           | 4,652        | 4,635        | -17       |
+| Simplifier `_set_forced_backend`               | 4,635        | 4,623        | -12       |
+| Simplifier `get_forced_backend_for_layer`      | 4,623        | 4,615        | -8        |
+| Simplifier `_get_optimal_backend_for_layer`    | 4,615        | 4,591        | -24       |
+| Simplifier `_export_favorites`                 | 4,591        | 4,577        | -14       |
+| Simplifier `_import_favorites`                 | 4,577        | 4,551        | -26       |
+| Simplifier `auto_select_optimal_backends`      | 4,551        | 4,532        | -19       |
+| Simplifier `_force_backend_for_all_layers`     | 4,532        | 4,521        | -11       |
+| **Total Sprint 12**                            | **4,680**    | **4,521**    | **-159**  |
+
+### Progression Sprint 11 (session 11 janvier 2026)
+
+| Action                                          | Lignes avant | Lignes après | Réduction |
+| ----------------------------------------------- | ------------ | ------------ | --------- |
+| **Début Sprint 11**                             | **4,833**    | -            | -         |
+| Simplifier `data_changed_configuration_model`   | 4,833        | 4,808        | -25       |
+| Simplifier `apply_pending_config_changes`       | 4,808        | 4,778        | -30       |
+| Supprimer 5 helpers `_apply_*_change` orphelins | 4,778        | 4,680        | -98       |
+| **Total Sprint 11**                             | **4,833**    | **4,680**    | **-153**  |
+
+### Progression Sprint 10 (session 11 janvier 2026)
+
+| Action                                          | Lignes avant | Lignes après | Réduction |
+| ----------------------------------------------- | ------------ | ------------ | --------- |
+| **Début Sprint 10**                             | **5,009**    | -            | -         |
+| Simplifier `_setup_action_bar_layout`           | 5,009        | 4,983        | -26       |
+| Simplifier `_get_action_bar_position`           | 4,983        | 4,971        | -12       |
+| Simplifier `_apply_action_bar_position`         | 4,971        | 4,961        | -10       |
+| Migrer 9 méthodes action bar → ActionBarManager | 4,961        | 4,833        | -128      |
+| **Total Sprint 10**                             | **5,009**    | **4,833**    | **-176**  |
+
+### Progression Sprint 9 (session 11 janvier 2026)
+
+| Action                                       | Lignes avant | Lignes après | Réduction |
+| -------------------------------------------- | ------------ | ------------ | --------- |
+| **Début Sprint 9**                           | **5,160**    | -            | -         |
+| Migrer `layer_property_changed` → delegate   | 5,160        | 5,141        | -19       |
+| Migrer `layer_property_changed_with_buffer`  | 5,141        | 5,131        | -10       |
+| Supprimer `_parse_property_data` (doublon)   | 5,131        | 5,106        | -25       |
+| Supprimer `_find_property_path` (doublon)    | 5,106        | 5,089        | -17       |
+| Supprimer `_update_is_property` (doublon)    | 5,089        | 5,047        | -42       |
+| Supprimer `_update_selection_expression_*`   | 5,047        | 5,040        | -7        |
+| Supprimer `_update_other_property` (doublon) | 5,040        | 5,009        | -31       |
+| **Total Sprint 9**                           | **5,160**    | **5,009**    | **-151**  |
 
 ### Progression Sprint 8 (session 10 janvier 2026)
 

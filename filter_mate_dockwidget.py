@@ -863,38 +863,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return label
     
     def _on_backend_indicator_clicked(self, event):
-        """
-        Handle click on backend indicator to show backend selection menu.
-        Allows user to force a specific backend for the current layer.
-        
-        NEW: If indicator shows "..." (no layers loaded), clicking triggers
-        a force reload of layers instead of showing the backend menu.
-        
-        v4.0: Delegates to BackendController when available.
-        """
-        # v4.0 MIG-071: Try delegation first
-        if (self._controller_integration 
-            and self._controller_integration.backend_controller):
+        """v4.0 Sprint 13: Simplified - delegates to BackendController."""
+        if self._controller_integration and self._controller_integration.backend_controller:
             if self._controller_integration.delegate_handle_backend_click():
                 return
-        
-        # Fallback: Legacy implementation
         self._on_backend_indicator_clicked_legacy(event)
     
     def _on_backend_indicator_clicked_legacy(self, event):
-        """
-        Legacy implementation of backend indicator click.
-        
-        v4.0: Reduced - main logic moved to BackendController.
-        This fallback only logs a warning if called.
-        """
-        # v4.0: This should not be called if controller works properly
-        from .infrastructure.feedback import show_warning
-        import logging
-        logger = logging.getLogger('FilterMate')
+        """v4.0 Sprint 13: Simplified legacy fallback - just logs warning."""
         logger.warning("_on_backend_indicator_clicked_legacy called - controller may not be working")
         show_warning("FilterMate", "Backend controller not available - please report this issue")
-    
 
     def _on_favorite_indicator_clicked(self, event):
         """v4.0 Sprint 7: One-liner wrapper."""
@@ -912,64 +890,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._controller_integration._favorites_controller.apply_favorite(favorite_id)
 
     def _show_favorites_manager_dialog(self):
-        """Show the favorites management dialog. v4.0: Delegates to FavoritesController."""
-        if self._controller_integration and self._controller_integration.delegate_favorites_show_manager_dialog():
-            return
-        # Minimal fallback
-        from .infrastructure.feedback import show_warning
-        show_warning("FilterMate", "Favorites manager not available")
+        """v4.0 Sprint 13: Delegate to FavoritesController."""
+        if not (self._controller_integration and self._controller_integration.delegate_favorites_show_manager_dialog()):
+            show_warning("FilterMate", "Favorites manager not available")
     
     def _export_favorites(self):
-        """Export favorites to a JSON file."""
-        from qgis.PyQt.QtWidgets import QFileDialog
-        
-        filepath, _ = QFileDialog.getSaveFileName(
-            self,
-            "Export Favorites",
-            "filtermate_favorites.json",
-            "JSON Files (*.json)"
-        )
-        
-        if filepath:
-            if self._favorites_manager.export_to_file(filepath):
-                show_success("FilterMate", f"Exported {self._favorites_manager.count} favorites")
-            else:
-                show_warning("FilterMate", "Failed to export favorites")
+        """v4.0 Sprint 12: Delegate to FavoritesController."""
+        if self._controller_integration and self._controller_integration._favorites_controller:
+            self._controller_integration._favorites_controller.export_favorites()
     
     def _import_favorites(self):
-        """Import favorites from a JSON file."""
-        from qgis.PyQt.QtWidgets import QFileDialog, QMessageBox
-        
-        filepath, _ = QFileDialog.getOpenFileName(
-            self,
-            "Import Favorites",
-            "",
-            "JSON Files (*.json)"
-        )
-        
-        if filepath:
-            # Ask merge or replace
-            result = QMessageBox.question(
-                self,
-                "Import Favorites",
-                "Merge with existing favorites?\n\n"
-                "Yes = Add to existing\n"
-                "No = Replace all existing",
-                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel
-            )
-            
-            if result == QMessageBox.Cancel:
-                return
-            
-            merge = (result == QMessageBox.Yes)
-            count = self._favorites_manager.import_from_file(filepath, merge=merge)
-            
-            if count > 0:
-                self._favorites_manager.save_to_project()
+        """v4.0 Sprint 12: Delegate to FavoritesController."""
+        if self._controller_integration and self._controller_integration._favorites_controller:
+            result = self._controller_integration._favorites_controller.import_favorites()
+            if result:
                 self._update_favorite_indicator()
-                show_success("FilterMate", f"Imported {count} favorites")
-            else:
-                show_warning("FilterMate", "No favorites imported")
     
     def _update_favorite_indicator(self):
         """v3.1 Sprint 17: Update the favorites indicator badge with current count."""
@@ -988,273 +923,139 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.favorites_indicator_label.adjustSize()
 
     def _get_available_backends_for_layer(self, layer):
-        """
-        Get list of available backends for the given layer.
-        
-        Returns:
-            List of tuples: (backend_type, backend_name, backend_icon)
-        """
-        from .adapters.backends import POSTGRESQL_AVAILABLE
-        
-        available = []
-        provider_type = layer.providerType()
-        
-        # PostgreSQL backend (only for postgres layers with psycopg2 available)
-        if provider_type == 'postgres' and POSTGRESQL_AVAILABLE:
-            available.append(('postgresql', 'PostgreSQL', '🐘'))
-        
-        # Spatialite backend (for spatialite layers and some OGR layers)
-        if provider_type in ['spatialite', 'ogr']:
-            # Check if it's a SQLite-based layer
-            source = layer.source()
-            if 'gpkg' in source.lower() or 'sqlite' in source.lower() or provider_type == 'spatialite':
-                available.append(('spatialite', 'Spatialite', '💾'))
-        
-        # OGR backend (always available as fallback)
-        available.append(('ogr', 'OGR', '📁'))
-        
-        # Remove current backend to show only alternatives
-        # (but keep at least one option)
-        if len(available) > 1:
-            current_backend = self._detect_current_backend(layer)
-            available = [b for b in available if b[0] != current_backend]
-        
-        return available
+        """v4.0 Sprint 12: Delegate to BackendController."""
+        if self._controller_integration and self._controller_integration._backend_controller:
+            return self._controller_integration._backend_controller.get_available_backends_for_layer(layer)
+        return [('ogr', 'OGR', '📁')]  # Fallback
     
     def _detect_current_backend(self, layer):
-        """
-        Detect which backend is currently being used for a layer.
-        
-        Returns:
-            str: Backend type ('postgresql', 'spatialite', 'ogr')
-        """
-        from .adapters.backends import POSTGRESQL_AVAILABLE
-        
-        provider_type = layer.providerType()
-        
-        # Check for forced backend first
-        if hasattr(self, 'forced_backends') and layer.id() in self.forced_backends:
-            return self.forced_backends[layer.id()]
-        
-        # Auto-detection based on provider
-        if provider_type == 'postgres' and POSTGRESQL_AVAILABLE:
-            return 'postgresql'
-        elif provider_type == 'spatialite':
-            return 'spatialite'
-        else:
-            return 'ogr'
+        """v4.0 Sprint 12: Delegate to BackendController."""
+        if self._controller_integration and self._controller_integration._backend_controller:
+            return self._controller_integration._backend_controller.get_current_backend(layer)
+        return 'ogr'  # Fallback
 
     def _set_forced_backend(self, layer_id, backend_type):
-        """
-        Force a specific backend for a layer.
-        
-        Args:
-            layer_id: Layer ID
-            backend_type: Backend type to force, or None for auto
-        """
-        if not hasattr(self, 'forced_backends'):
-            self.forced_backends = {}
-        
-        if backend_type is None:
-            # Remove forced backend (use auto)
-            if layer_id in self.forced_backends:
-                del self.forced_backends[layer_id]
-        else:
-            self.forced_backends[layer_id] = backend_type
+        """v4.0 Sprint 12: Delegate to BackendController."""
+        if self._controller_integration and self._controller_integration._backend_controller:
+            self._controller_integration._backend_controller.set_forced_backend(layer_id, backend_type)
 
     def _force_backend_for_all_layers(self, backend_type):
-        """
-        Force a specific backend for all layers in the project.
-        
-        v4.0: Delegates to BackendController.
-        """
-        # v4.0: Delegate to controller
-        if (self._controller_integration 
-            and hasattr(self._controller_integration, '_backend_controller')
-            and self._controller_integration._backend_controller):
+        """v4.0 Sprint 12: Delegate to BackendController."""
+        if self._controller_integration and self._controller_integration._backend_controller:
             count = self._controller_integration._backend_controller.force_backend_for_all_layers(backend_type)
-            from .infrastructure.feedback import show_success
             show_success("FilterMate", f"Forced {backend_type.upper()} for {count} layers")
-            return
-        
-        # Fallback warning
-        from .infrastructure.feedback import show_warning
-        show_warning("FilterMate", "Backend controller not available")
+        else:
+            show_warning("FilterMate", "Backend controller not available")
 
     def get_forced_backend_for_layer(self, layer_id):
-        """
-        Get forced backend for a layer, if any.
-        
-        Args:
-            layer_id: Layer ID
-        
-        Returns:
-            str or None: Forced backend type, or None if auto
-        """
-        if not hasattr(self, 'forced_backends'):
-            self.forced_backends = {}
-        return self.forced_backends.get(layer_id)
-    
-    def _get_optimal_backend_for_layer(self, layer):
-        """v3.1 Sprint 16: Determine optimal backend for layer."""
-        from qgis.core import QgsVectorLayer
-        from .modules.appUtils import detect_layer_provider_type, POSTGRESQL_AVAILABLE
-        from .adapters.backends.factory import should_use_memory_optimization
-        
-        if not layer or not isinstance(layer, QgsVectorLayer) or not layer.isValid():
-            return None
-        
-        provider = detect_layer_provider_type(layer)
-        count = layer.featureCount()
-        source = layer.source().lower()
-        
-        # PostgreSQL layers
-        if provider == 'postgresql':
-            if not POSTGRESQL_AVAILABLE or should_use_memory_optimization(layer, provider):
-                return 'ogr'
-            return 'postgresql'
-        
-        # Spatialite layers
-        if provider == 'spatialite':
-            return 'spatialite' if count > 5000 else 'ogr'
-        
-        # OGR layers - check for GeoPackage
-        if provider == 'ogr':
-            if ('gpkg' in source or 'sqlite' in source) and count > 5000:
-                return 'spatialite'
-            return 'ogr'
-        
+        """v4.0 Sprint 12: Delegate to BackendController."""
+        if self._controller_integration and self._controller_integration._backend_controller:
+            return self._controller_integration._backend_controller.forced_backends.get(layer_id)
         return None
     
+    def _get_optimal_backend_for_layer(self, layer):
+        """v4.0 Sprint 12: Delegate to BackendController."""
+        if self._controller_integration and self._controller_integration._backend_controller:
+            return self._controller_integration._backend_controller._get_optimal_backend_for_layer(layer)
+        return 'ogr'  # Fallback
+
     # ========================================
     # POSTGRESQL MAINTENANCE METHODS
     # ========================================
     
     def _get_pg_session_context(self):
-        """v3.1 Sprint 15: Get PostgreSQL session context (app, session_id, schema, connection)."""
-        from .adapters.backends import POSTGRESQL_AVAILABLE, get_datasource_connexion_from_layer
-        if not POSTGRESQL_AVAILABLE:
-            return None, None, None, None
-        app = getattr(self, '_app_ref', None)
-        if not app:
-            parent = self.parent()
-            while parent:
-                if hasattr(parent, 'session_id'): app = parent; break
-                parent = parent.parent() if hasattr(parent, 'parent') else None
-        session_id = getattr(app, 'session_id', None) if app else None
-        schema = getattr(app, 'app_postgresql_temp_schema', 'filter_mate_temp') if app else 'filter_mate_temp'
-        connexion = None
-        for layer_info in (getattr(app, 'PROJECT_LAYERS', {}) if app else {}).values():
-            layer = layer_info.get('layer')
-            if layer and layer.isValid() and layer.providerType() == 'postgres':
-                connexion, _ = get_datasource_connexion_from_layer(layer)
-                if connexion: break
-        return app, session_id, schema, connexion
+        """v4.0 Sprint 13: WRAPPER - delegate to BackendController."""
+        if self._controller_integration and self._controller_integration._backend_controller:
+            return self._controller_integration._backend_controller.get_pg_session_context()
+        return None, None, None, None
     
     def _toggle_pg_auto_cleanup(self):
-        """v3.1 Sprint 15: Toggle PostgreSQL auto-cleanup."""
-        self._pg_auto_cleanup_enabled = not getattr(self, '_pg_auto_cleanup_enabled', True)
-        msg = "PostgreSQL auto-cleanup enabled" if self._pg_auto_cleanup_enabled else "PostgreSQL auto-cleanup disabled"
-        (show_success if self._pg_auto_cleanup_enabled else show_info)("FilterMate", msg)
+        """v4.0 Sprint 13: WRAPPER - delegate to BackendController."""
+        if self._controller_integration and self._controller_integration._backend_controller:
+            enabled = self._controller_integration._backend_controller.toggle_pg_auto_cleanup()
+            msg = "PostgreSQL auto-cleanup enabled" if enabled else "PostgreSQL auto-cleanup disabled"
+            (show_success if enabled else show_info)("FilterMate", msg)
     
     def _cleanup_postgresql_session_views(self):
-        """v3.1 Sprint 15: Cleanup PostgreSQL materialized views for current session."""
-        app, session_id, schema, connexion = self._get_pg_session_context()
-        if not connexion:
-            show_warning("FilterMate", "No PostgreSQL connection available")
-            return
-        if not session_id:
-            show_warning("FilterMate", "Session ID not available")
-            return
-        try:
-            with connexion.cursor() as cursor:
-                cursor.execute("SELECT matviewname FROM pg_matviews WHERE schemaname = %s AND matviewname LIKE %s", (schema, f"mv_{session_id}_%"))
-                views = [v[0] for v in cursor.fetchall()]
-                if not views:
-                    show_info("FilterMate", f"No views found for session {session_id[:8]}")
-                    return
-                for view in views:
-                    try: cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."{view}" CASCADE;')
-                    except: pass
-                connexion.commit()
-                show_success("FilterMate", f"Cleaned up {len(views)} view(s) for session {session_id[:8]}")
-        except Exception as e:
-            show_warning("FilterMate", f"Error: {str(e)[:50]}")
-        finally:
-            try: connexion.close()
-            except: pass
+        """v4.0 Sprint 13: WRAPPER - delegate to BackendController."""
+        if self._controller_integration and self._controller_integration._backend_controller:
+            success = self._controller_integration._backend_controller.cleanup_postgresql_session_views()
+            if success:
+                show_success("FilterMate", "PostgreSQL session views cleaned up")
+            else:
+                show_warning("FilterMate", "No views to clean or cleanup failed")
+        else:
+            show_warning("FilterMate", "Backend controller not available")
     
     def _cleanup_postgresql_schema_if_empty(self):
-        """v3.1 Sprint 15: Drop schema if no other sessions are using it."""
+        """v4.0 Sprint 13: WRAPPER - delegate to BackendController."""
         from qgis.PyQt.QtWidgets import QMessageBox
-        app, session_id, schema, connexion = self._get_pg_session_context()
-        if not connexion:
-            show_warning("FilterMate", "No PostgreSQL connection available")
-            return
-        try:
-            with connexion.cursor() as cursor:
-                cursor.execute("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = %s", (schema,))
-                if cursor.fetchone()[0] == 0:
-                    show_info("FilterMate", f"Schema '{schema}' does not exist"); return
-                
-                cursor.execute("SELECT matviewname FROM pg_matviews WHERE schemaname = %s", (schema,))
-                views = [v[0] for v in cursor.fetchall()]
-                other_views = [v for v in views if not (session_id and v.startswith(f"mv_{session_id}_"))]
-                
-                if other_views:
-                    msg = f"Schema '{schema}' has {len(other_views)} view(s) from other sessions.\nDrop anyway?"
-                    if QMessageBox.question(self, "Other Sessions Active", msg, QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
-                        show_info("FilterMate", "Schema cleanup cancelled"); return
-                
-                cursor.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE;')
-                connexion.commit()
-                show_success("FilterMate", f"Schema '{schema}' dropped successfully")
-        except Exception as e:
-            show_warning("FilterMate", f"Error: {str(e)[:50]}")
-        finally:
-            try: connexion.close()
-            except Exception: pass
+        if self._controller_integration and self._controller_integration._backend_controller:
+            ctrl = self._controller_integration._backend_controller
+            info = ctrl.get_postgresql_session_info()
+            
+            if not info.get('connection_available'):
+                show_warning("FilterMate", "No PostgreSQL connection available")
+                return
+            
+            # Check for other sessions' views
+            other_count = info.get('total_views_count', 0) - info.get('our_views_count', 0)
+            if other_count > 0:
+                msg = f"Schema has {other_count} view(s) from other sessions.\nDrop anyway?"
+                if QMessageBox.question(self, "Other Sessions Active", msg,
+                                        QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
+                    show_info("FilterMate", "Schema cleanup cancelled")
+                    return
+            
+            success = ctrl.cleanup_postgresql_schema_if_empty(force=True)
+            if success:
+                show_success("FilterMate", f"Schema '{info.get('schema')}' dropped successfully")
+            else:
+                show_warning("FilterMate", "Schema cleanup failed")
+        else:
+            show_warning("FilterMate", "Backend controller not available")
     
     def _show_postgresql_session_info(self):
-        """v3.1 Sprint 15: Show PostgreSQL session information."""
+        """v4.0 Sprint 13: WRAPPER - delegate to BackendController."""
         from qgis.PyQt.QtWidgets import QMessageBox
-        app, session_id, schema, connexion = self._get_pg_session_context()
-        auto_cleanup = getattr(self, '_pg_auto_cleanup_enabled', True)
-        
-        info = f"<b>Session ID:</b> {session_id or 'Not set'}<br><b>Schema:</b> {schema}<br><b>Auto-cleanup:</b> {'Yes' if auto_cleanup else 'No'}<br>"
-        
-        if connexion:
-            try:
-                with connexion.cursor() as cursor:
-                    cursor.execute("SELECT COUNT(*) FROM pg_matviews WHERE schemaname = %s AND matviewname LIKE %s", (schema, f"mv_{session_id}_%")) if session_id else None
-                    our_count = cursor.fetchone()[0] if session_id else 0
-                    cursor.execute("SELECT COUNT(*) FROM pg_matviews WHERE schemaname = %s", (schema,))
-                    total = cursor.fetchone()[0]
-                    cursor.execute("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = %s", (schema,))
-                    exists = cursor.fetchone()[0] > 0
-                    info += f"<b>Schema exists:</b> {'Yes' if exists else 'No'}<br><b>Your views:</b> {our_count}<br><b>Total views:</b> {total}<br>"
-            except Exception as e:
-                info += f"<b>Error:</b> {str(e)[:40]}<br>"
-            finally:
-                try: connexion.close()
-                except: pass
+        if self._controller_integration and self._controller_integration._backend_controller:
+            info = self._controller_integration._backend_controller.get_postgresql_session_info()
+            
+            session_id = info.get('session_id') or 'Not set'
+            html = (
+                f"<b>Session ID:</b> {session_id}<br>"
+                f"<b>Schema:</b> {info.get('schema')}<br>"
+                f"<b>Auto-cleanup:</b> {'Yes' if info.get('auto_cleanup') else 'No'}<br>"
+                f"<b>Connection:</b> {'Available' if info.get('connection_available') else 'Not available'}<br>"
+            )
+            if info.get('connection_available'):
+                html += (
+                    f"<b>Schema exists:</b> {'Yes' if info.get('schema_exists') else 'No'}<br>"
+                    f"<b>Your views:</b> {info.get('our_views_count', 0)}<br>"
+                    f"<b>Total views:</b> {info.get('total_views_count', 0)}<br>"
+                )
+            if 'error' in info:
+                html += f"<b>Error:</b> {info['error']}<br>"
+            
+            QMessageBox.information(self, "PostgreSQL Session Info", html)
         else:
-            info += "<b>Connection:</b> Not available<br>"
-        QMessageBox.information(self, "PostgreSQL Session Info", info)
+            show_warning("FilterMate", "Backend controller not available")
 
     # ========================================
     # OPTIMIZATION SETTINGS METHODS
     # ========================================
     
     def _toggle_optimization_enabled(self):
-        """v3.1 Sprint 15: Toggle optimization recommendations."""
-        self._optimization_enabled = not getattr(self, '_optimization_enabled', True)
-        (show_success if self._optimization_enabled else show_info)("FilterMate", "Auto-optimization " + ("enabled" if self._optimization_enabled else "disabled"))
+        """v4.0 Sprint 12: Delegate to BackendController."""
+        if self._controller_integration and self._controller_integration._backend_controller:
+            enabled = self._controller_integration._backend_controller.toggle_optimization_enabled()
+            (show_success if enabled else show_info)("FilterMate", f"Auto-optimization {'enabled' if enabled else 'disabled'}")
     
     def _toggle_centroid_auto(self):
-        """v3.1 Sprint 15: Toggle auto-centroid for distant layers."""
-        self._centroid_auto_enabled = not getattr(self, '_centroid_auto_enabled', True)
-        (show_success if self._centroid_auto_enabled else show_info)("FilterMate", "Auto-centroid " + ("enabled" if self._centroid_auto_enabled else "disabled"))
+        """v4.0 Sprint 12: Delegate to BackendController."""
+        if self._controller_integration and self._controller_integration._backend_controller:
+            enabled = self._controller_integration._backend_controller.toggle_centroid_auto()
+            (show_success if enabled else show_info)("FilterMate", f"Auto-centroid {'enabled' if enabled else 'disabled'}")
     
     def _toggle_optimization_ask_before(self):
         """v3.1 Sprint 15: Toggle confirmation dialog."""
@@ -1391,37 +1192,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return current
     
     def _is_centroid_already_enabled(self, layer) -> bool:
-        """
-        Check if centroid optimization is already enabled by the user.
-        
-        This is used to avoid proposing centroid optimization when the user
-        has already explicitly enabled it via:
-        1. The 'Use centroids for distant layers' checkbox in UI
-        2. The 'Use centroids for source layer' checkbox in UI
-        3. A layer-specific override stored in _layer_centroid_overrides
-        
-        Args:
-            layer: QgsVectorLayer to check
-            
-        Returns:
-            bool: True if centroid is already enabled (don't recommend again)
-        """
-        # Check layer-specific override first
-        if hasattr(self, '_layer_centroid_overrides'):
-            layer_id = layer.id() if layer else None
-            if layer_id and self._layer_centroid_overrides.get(layer_id, False):
+        """v4.0 Sprint 14: Check if centroid optimization is already enabled."""
+        layer_id = layer.id() if layer else None
+        if hasattr(self, '_layer_centroid_overrides') and layer_id:
+            if self._layer_centroid_overrides.get(layer_id, False):
                 return True
-        
-        # Check if distant layers checkbox is checked
-        if hasattr(self, 'checkBox_filtering_use_centroids_distant_layers'):
-            if self.checkBox_filtering_use_centroids_distant_layers.isChecked():
-                return True
-        
-        # Check if source layer checkbox is checked
-        if hasattr(self, 'checkBox_filtering_use_centroids_source_layer'):
-            if self.checkBox_filtering_use_centroids_source_layer.isChecked():
-                return True
-        
+        if hasattr(self, 'checkBox_filtering_use_centroids_distant_layers') and self.checkBox_filtering_use_centroids_distant_layers.isChecked():
+            return True
+        if hasattr(self, 'checkBox_filtering_use_centroids_source_layer') and self.checkBox_filtering_use_centroids_source_layer.isChecked():
+            return True
         return False
     
     def should_use_centroid_for_layer(self, layer) -> bool:
@@ -1441,12 +1220,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except: return False
     
     def get_optimization_state(self) -> dict:
-        """
-        Get the current optimization state for storage/restore.
-        
-        Returns:
-            dict: Current optimization settings
-        """
+        """v4.0 Sprint 14: Get current optimization state for storage/restore."""
         return {
             'enabled': getattr(self, '_optimization_enabled', True),
             'centroid_auto': getattr(self, '_centroid_auto_enabled', True),
@@ -1471,298 +1245,103 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         logger.info(f"Restored optimization state: enabled={self._optimization_enabled}")
 
     def auto_select_optimal_backends(self):
-        """
-        Automatically select optimal backend for all layers in the project.
-        
-        v4.0 Sprint 1: Delegated to BackendController.
-        
-        Analyzes each layer's characteristics and sets the most appropriate backend.
-        Shows summary message with results.
-        """
-        # v4.0: Delegate to BackendController (Sprint 5: fallback removed)
+        """v4.0 Sprint 12: Delegate to BackendController."""
         if self._controller_integration and self._controller_integration.backend_controller:
             try:
-                optimized_count = self._controller_integration.backend_controller.auto_select_optimal_backends()
-                
-                # Show summary message
-                if optimized_count > 0:
-                    show_success("FilterMate", f"Optimized {optimized_count} layer(s)")
-                else:
-                    show_info("FilterMate", "All layers using auto-selection")
-                
-                # Update indicator for current layer
+                count = self._controller_integration.backend_controller.auto_select_optimal_backends()
+                (show_success if count > 0 else show_info)("FilterMate", f"Optimized {count} layer(s)" if count > 0 else "All layers using auto-selection")
                 if self.current_layer:
                     _, _, layer_props = self._validate_and_prepare_layer(self.current_layer)
                     self._synchronize_layer_widgets(self.current_layer, layer_props)
-                return
             except Exception as e:
-                logger.warning(f"auto_select_optimal_backends delegation failed: {e}")
-        
-        # No fallback - controller handles all logic
-        logger.warning("auto_select_optimal_backends: Controller delegation failed")
-        show_warning("FilterMate", "Backend optimization unavailable")
+                logger.warning(f"auto_select_optimal_backends failed: {e}")
+                show_warning("FilterMate", "Backend optimization unavailable")
 
     def _setup_action_bar_layout(self):
         """
+        WRAPPER: Delegates to ActionBarManager.
+        
         Setup the action bar layout based on configuration.
-        
-        Reads ACTION_BAR_POSITION from config and applies the appropriate layout:
-        - 'top': Action bar at top (default horizontal layout)
-        - 'bottom': Action bar at bottom (horizontal layout)
-        - 'left': Action bar on left side (vertical layout)
-        - 'right': Action bar on right side (vertical layout)
-        
-        v3.1 Phase 6 (MIG-064): Delegates to ActionBarManager if available.
+        v4.0 Sprint 10: Simplified - ActionBarManager handles all logic.
         """
         if not hasattr(self, 'frame_actions'):
             return
         
-        # v3.1: Delegate to ActionBarManager (Phase 6 - MIG-064)
         if self._action_bar_manager is not None:
-            try:
-                self._action_bar_manager.setup()
-                logger.debug("Action bar setup delegated to ActionBarManager (v3.1)")
-                return
-            except Exception as e:
-                logger.warning(f"ActionBarManager.setup() failed, falling back to legacy: {e}")
+            self._action_bar_manager.setup()
+            return
         
-        # Legacy fallback - original implementation
-        # Get configured position
-        position = self._get_action_bar_position()
-        logger.info(f"Setting up action bar with position: {position}")
-        
-        # Initialize tracking attributes
-        self._side_action_bar_active = False
-        self._side_action_bar_position = None
-        self._side_action_bar_alignment = None
-        self._vertical_action_spacer = None
-        self._side_action_wrapper = None
-        
-        # Apply the position
-        if position in ('left', 'right'):
-            # For side positions, we need to set up the wrapper layout
-            self._apply_action_bar_position(position)
-        else:
-            # For top/bottom, use the default horizontal layout
-            self.frame_actions.show()
-            self._current_action_bar_position = position
-            logger.info(f"Action bar: Using '{position}' position")
+        # Minimal fallback: just show frame_actions
+        self.frame_actions.show()
 
     def _get_action_bar_position(self):
-        """
-        Get action bar position from configuration.
-        
-        Returns:
-            str: Position value ('top', 'bottom', 'left', 'right')
-        """
-        try:
-            position_config = self.CONFIG_DATA.get('APP', {}).get('DOCKWIDGET', {}).get('ACTION_BAR_POSITION', {})
-            if isinstance(position_config, dict):
-                return position_config.get('value', 'top')
-            return position_config if position_config else 'top'
-        except (KeyError, TypeError, AttributeError):
-            return 'top'
+        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
+        if self._action_bar_manager:
+            return self._action_bar_manager.get_position()
+        return 'top'
 
     def _get_action_bar_vertical_alignment(self):
-        """
-        Get action bar vertical alignment from configuration.
-        
-        Only applies when action bar is in vertical mode (left/right position).
-        
-        Returns:
-            str: Alignment value ('top', 'bottom')
-        """
-        try:
-            alignment_config = self.CONFIG_DATA.get('APP', {}).get('DOCKWIDGET', {}).get('ACTION_BAR_VERTICAL_ALIGNMENT', {})
-            if isinstance(alignment_config, dict):
-                return alignment_config.get('value', 'top')
-            return alignment_config if alignment_config else 'top'
-        except (KeyError, TypeError, AttributeError):
-            return 'top'
+        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
+        if self._action_bar_manager:
+            return self._action_bar_manager._read_alignment_from_config()
+        return 'top'
 
     def _apply_action_bar_position(self, position):
-        """v3.1 Sprint 17: Apply action bar position dynamically."""
-        if not hasattr(self, 'frame_actions'): return
-        
-        if hasattr(self, '_side_action_bar_active') and self._side_action_bar_active:
-            self._restore_side_action_bar_layout()
-        
-        action_buttons = [self.pushButton_action_filter, self.pushButton_action_undo_filter, self.pushButton_action_redo_filter, 
-                          self.pushButton_action_unfilter, self.pushButton_action_export, self.pushButton_action_about]
-        
-        self._clear_action_bar_layout()
-        if position in ('top', 'bottom'): self._create_horizontal_action_layout(action_buttons)
-        else: self._create_vertical_action_layout(action_buttons)
-        
-        self._apply_action_bar_size_constraints(position)
-        self._reposition_action_bar_in_main_layout(position)
-        self._adjust_header_for_side_position(position)
-        self._current_action_bar_position = position
+        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
+        if self._action_bar_manager:
+            self._action_bar_manager.set_position(position)
+            self._action_bar_manager.apply_position()
 
     def _adjust_header_for_side_position(self, position):
-        """v3.1 Sprint 13: Adjust header for side action bar position."""
-        if not hasattr(self, 'frame_header') or not self.frame_header:
-            return
-        
-        spacer_width = int(UIConfig.get_button_height("action_button") * 1.3) if UI_CONFIG_AVAILABLE else 54
-        
-        if position in ('left', 'right'):
-            if hasattr(self, '_header_wrapper') and self._header_wrapper:
-                return
-            parent_layout = getattr(self, 'verticalLayout_8', None)
-            if not parent_layout:
-                return
-            header_idx = parent_layout.indexOf(self.frame_header)
-            if header_idx < 0:
-                return
-            
-            parent_layout.removeWidget(self.frame_header)
-            self._header_wrapper = QtWidgets.QWidget(self.dockWidgetContents)
-            self._header_wrapper.setObjectName("header_wrapper")
-            wrapper_layout = QtWidgets.QHBoxLayout(self._header_wrapper)
-            wrapper_layout.setContentsMargins(0, 0, 0, 0)
-            wrapper_layout.setSpacing(0)
-            
-            self._header_spacer = QtWidgets.QWidget(self._header_wrapper)
-            self._header_spacer.setFixedWidth(spacer_width)
-            self._header_spacer.setObjectName("header_spacer")
-            
-            widgets = (self._header_spacer, self.frame_header) if position == 'left' else (self.frame_header, self._header_spacer)
-            wrapper_layout.addWidget(widgets[0], 0 if widgets[0] == self._header_spacer else 1)
-            wrapper_layout.addWidget(widgets[1], 1 if widgets[1] == self.frame_header else 0)
-            parent_layout.insertWidget(header_idx, self._header_wrapper)
-        else:
-            self._restore_header_from_wrapper()
+        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
+        if self._action_bar_manager:
+            self._action_bar_manager.adjust_header_for_side_position()
 
     def _restore_header_from_wrapper(self):
-        """v3.1 Sprint 13: Restore header when switching from side position."""
-        if not hasattr(self, '_header_wrapper') or not self._header_wrapper:
-            return
-        if not hasattr(self, 'frame_header') or not self.frame_header:
-            return
-        parent_layout = getattr(self, 'verticalLayout_8', None)
-        if not parent_layout:
-            return
-        wrapper_idx = parent_layout.indexOf(self._header_wrapper)
-        if wrapper_idx < 0:
-            return
-        wrapper_layout = self._header_wrapper.layout()
-        if wrapper_layout:
-            wrapper_layout.removeWidget(self.frame_header)
-        parent_layout.removeWidget(self._header_wrapper)
-        self.frame_header.setParent(self.dockWidgetContents)
-        parent_layout.insertWidget(wrapper_idx, self.frame_header)
-        if hasattr(self, '_header_spacer') and self._header_spacer:
-            self._header_spacer.deleteLater()
-            self._header_spacer = None
-        self._header_wrapper.deleteLater()
-        self._header_wrapper = None
+        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
+        if self._action_bar_manager:
+            self._action_bar_manager.restore_header_from_wrapper()
 
 
     def _clear_action_bar_layout(self):
-        """v3.1 Sprint 13: Clear action bar layout completely."""
-        old_layout = self.frame_actions.layout()
-        if old_layout:
-            while old_layout.count():
-                item = old_layout.takeAt(0)
-                if item.widget():
-                    item.widget().setParent(None)
-            temp = QtWidgets.QWidget()
-            temp.setLayout(old_layout)
-            temp.deleteLater()
+        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
+        if self._action_bar_manager:
+            self._action_bar_manager.clear_layout()
 
     def _create_horizontal_action_layout(self, action_buttons):
-        """v3.1 Sprint 13: Create horizontal layout for action bar."""
-        layout = QtWidgets.QHBoxLayout(self.frame_actions)
-        layout.setContentsMargins(8, 8, 8, 16)
-        layout.setSpacing(6)
-        for i, btn in enumerate(action_buttons):
-            btn.setParent(self.frame_actions)
-            layout.addWidget(btn)
-            if i < len(action_buttons) - 1:
-                layout.addItem(QtWidgets.QSpacerItem(4, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))
+        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
+        if self._action_bar_manager:
+            self._action_bar_manager.create_horizontal_layout(action_buttons)
 
     def _create_vertical_action_layout(self, action_buttons):
-        """v3.1 Sprint 13: Create vertical layout for action bar."""
-        layout = QtWidgets.QVBoxLayout(self.frame_actions)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(12)
-        for btn in action_buttons:
-            btn.setParent(self.frame_actions)
-            layout.addWidget(btn, 0, Qt.AlignHCenter)
-        layout.addStretch(1)
+        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
+        if self._action_bar_manager:
+            self._action_bar_manager.create_vertical_layout(action_buttons)
 
     def _apply_action_bar_size_constraints(self, position):
-        """v3.1 Sprint 13: Apply size constraints to frame_actions based on position."""
-        if position in ('top', 'bottom'):
-            frame_height = max(int(UIConfig.get_button_height("action_button") * 1.8), 56) if UI_CONFIG_AVAILABLE else 60
-            self.frame_actions.setMinimumHeight(frame_height)
-            self.frame_actions.setMaximumHeight(frame_height + 15)
-            self.frame_actions.setMinimumWidth(0)
-            self.frame_actions.setMaximumWidth(16777215)
-            self.frame_actions.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
-        else:
-            frame_width = int(UIConfig.get_button_height("action_button") * 1.3) if UI_CONFIG_AVAILABLE else 54
-            self.frame_actions.setMinimumWidth(frame_width)
-            self.frame_actions.setMaximumWidth(frame_width)
-            self.frame_actions.setMinimumHeight(0)
-            self.frame_actions.setMaximumHeight(16777215)
-            self.frame_actions.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Expanding)
+        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
+        if self._action_bar_manager:
+            self._action_bar_manager.apply_size_constraints()
 
     def _reposition_action_bar_in_main_layout(self, position):
-        """v3.1 Sprint 13: Reposition action bar frame in main layout."""
-        if self.horizontalLayout_actions_container.indexOf(self.frame_actions) >= 0:
-            self.horizontalLayout_actions_container.removeWidget(self.frame_actions)
-        self.frame_actions.setParent(self.dockWidgetContents)
-        if position == 'top':
-            self.verticalLayout_main.insertWidget(0, self.frame_actions)
-        elif position == 'bottom':
-            self.horizontalLayout_actions_container.addWidget(self.frame_actions)
-        elif position in ('left', 'right'):
-            self._create_horizontal_wrapper_for_side_action_bar(position)
+        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
+        if self._action_bar_manager:
+            self._action_bar_manager.reposition_in_main_layout()
 
     def _create_horizontal_wrapper_for_side_action_bar(self, position):
-        """v3.1 Sprint 13: Delegate to UILayoutController."""
-        if (hasattr(self, '_controller_integration') and self._controller_integration and
-            self._controller_integration.delegate_create_horizontal_wrapper_for_side_action_bar()):
-            return
+        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
+        if self._action_bar_manager:
+            self._action_bar_manager._create_side_wrapper()
 
     def _restore_side_action_bar_layout(self):
-        """v3.1 Sprint 13: Restore layout from side action bar position."""
-        if hasattr(self, '_side_action_wrapper') and self._side_action_wrapper:
-            if self.main_splitter is not None:
-                wrapper_layout = self._side_action_wrapper.layout()
-                if wrapper_layout:
-                    wrapper_layout.removeWidget(self.main_splitter)
-                    self.main_splitter.setParent(self.dockWidgetContents)
-                wrapper_idx = self.verticalLayout_main.indexOf(self._side_action_wrapper)
-                if wrapper_idx >= 0:
-                    self.verticalLayout_main.removeWidget(self._side_action_wrapper)
-                    self.verticalLayout_main.insertWidget(wrapper_idx, self.main_splitter)
-            self._side_action_wrapper.deleteLater()
-            self._side_action_wrapper = None
-        self._restore_header_from_wrapper()
-        if hasattr(self, '_vertical_action_spacer') and self._vertical_action_spacer:
-            idx = self.horizontalLayout_actions_container.indexOf(self._vertical_action_spacer)
-            if idx >= 0:
-                self.horizontalLayout_actions_container.takeAt(idx)
-            self._vertical_action_spacer = None
-        self._side_action_bar_active = False
-        self._side_action_bar_position = None
-        self._side_action_bar_alignment = None
+        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
+        if self._action_bar_manager:
+            self._action_bar_manager.restore_side_action_bar_layout()
 
     def _restore_original_layout(self):
-        """v3.1 Sprint 13: Restore layout when switching from side to top/bottom."""
-        self._restore_side_action_bar_layout()
-        if self.frame_actions.parent():
-            parent_layout = self.frame_actions.parent().layout()
-            if parent_layout:
-                idx = parent_layout.indexOf(self.frame_actions)
-                if idx >= 0:
-                    parent_layout.removeWidget(self.frame_actions)
-        if self.horizontalLayout_actions_container.indexOf(self.frame_actions) < 0:
-            self.frame_actions.setParent(self.dockWidgetContents)
-            self.horizontalLayout_actions_container.addWidget(self.frame_actions)
+        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
+        if self._action_bar_manager:
+            self._action_bar_manager.restore_original_layout()
 
     def _setup_exploring_tab_widgets(self):
         """v3.1 Sprint 13: Configure Exploring tab widgets."""
@@ -2067,192 +1646,39 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             QTimer.singleShot(100, safe_layers_update)
 
     def data_changed_configuration_model(self, input_data=None):
-        """Track configuration changes without applying them immediately"""
-
-        if self.widgets_initialized is True:
-
-            index = input_data.index()
-            item = input_data
-
-            item_key = self.config_view.model.itemFromIndex(index.siblingAtColumn(0))
-
-            items_keys_values_path = []
-
-            while item_key is not None:
-                items_keys_values_path.append(item_key.data(QtCore.Qt.DisplayRole))
-                item_key = item_key.parent()
-
-            items_keys_values_path.reverse()
-            
-            # Store change for later application
-            self.pending_config_changes.append({
-                'path': items_keys_values_path,
-                'index': index,
-                'item': item
-            })
-            self.config_changes_pending = True
-            
-            # Enable OK/Cancel buttons when changes are pending
-            if hasattr(self, 'buttonBox'):
-                self.buttonBox.setEnabled(True)
-                logger.info("Configuration buttons enabled (changes pending)")
-            
-            # Mark that changes are pending (visual feedback could be added)
-            logger.info(f"Configuration change pending: {' → '.join(items_keys_values_path)}")
-            
-            # Note: Changes are NOT applied immediately
-            # They will be applied when user clicks OK button
-    
-    def _apply_theme_change(self, change, changes_summary):
-        """v3.1 Sprint 13: Apply ACTIVE_THEME config change."""
-        if 'ACTIVE_THEME' not in change['path']:
-            return
-        try:
-            value_item = self.config_view.model.itemFromIndex(change['index'].siblingAtColumn(1))
-            value_data = value_item.data(QtCore.Qt.UserRole)
-            new_theme = value_data.get('value') if isinstance(value_data, dict) else value_item.data(QtCore.Qt.DisplayRole)
-            if not new_theme:
-                return
-            from .ui.styles import StyleLoader
-            if new_theme == 'auto':
-                detected = StyleLoader.detect_qgis_theme()
-                StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA, detected)
-            else:
-                StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA, new_theme)
-            changes_summary.append(f"Theme: {new_theme}")
-        except Exception:
-            pass
-    
-    def _apply_ui_profile_change(self, change, changes_summary):
-        """v3.1 Sprint 13: Apply UI_PROFILE config change."""
-        if 'UI_PROFILE' not in change['path']:
-            return
-        try:
-            value_item = self.config_view.model.itemFromIndex(change['index'].siblingAtColumn(1))
-            value_data = value_item.data(QtCore.Qt.UserRole)
-            new_profile = value_data.get('value') if isinstance(value_data, dict) else value_item.data(QtCore.Qt.DisplayRole)
-            if not new_profile or not UI_CONFIG_AVAILABLE:
-                return
-            from .ui.config import UIConfig, DisplayProfile
-            profiles = {'compact': DisplayProfile.COMPACT, 'normal': DisplayProfile.NORMAL}
-            if new_profile in profiles:
-                UIConfig.set_profile(profiles[new_profile])
-            elif new_profile == 'auto':
-                UIConfig.set_profile(UIConfig.detect_optimal_profile())
-            self.apply_dynamic_dimensions()
-            changes_summary.append(f"Profile: {new_profile}")
-        except Exception:
-            pass
-    
-    def _apply_action_bar_position_change(self, change, changes_summary):
-        """v3.1 Sprint 13: Apply action bar position/alignment config change."""
-        path, index = change['path'], change['index']
-        is_position = 'ACTION_BAR_POSITION' in path and 'VERTICAL' not in path
-        is_alignment = 'ACTION_BAR_VERTICAL_ALIGNMENT' in path
-        if not is_position and not is_alignment:
-            return
+        """
+        WRAPPER: Delegates to ConfigController.
         
-        try:
-            value_item = self.config_view.model.itemFromIndex(index.siblingAtColumn(1))
-            value_data = value_item.data(QtCore.Qt.UserRole)
-            new_value = value_data.get('value') if isinstance(value_data, dict) else value_item.data(QtCore.Qt.DisplayRole)
-            if not new_value:
-                return
-            
-            config_key = "ACTION_BAR_POSITION" if is_position else "ACTION_BAR_VERTICAL_ALIGNMENT"
-            set_config_value(self.CONFIG_DATA, new_value, "APP", "DOCKWIDGET", config_key)
-            
-            if is_position:
-                self._apply_action_bar_position(new_value)
-                changes_summary.append(f"Action bar position: {new_value}")
-                show_info("FilterMate", QCoreApplication.translate("FilterMateDockWidget", 
-                    "Action bar position changed. Use 'Reload Plugin' button for best results."))
-            else:
-                current_pos = self._get_action_bar_position()
-                if current_pos in ('left', 'right'):
-                    self._apply_action_bar_position(current_pos)
-                changes_summary.append(f"Action bar alignment: {new_value}")
-        except Exception:
-            pass
+        Track configuration changes without applying immediately.
+        v4.0 Sprint 11: Migrated to ConfigController.
+        """
+        if self._controller_integration:
+            self._controller_integration.delegate_config_data_changed(input_data)
+            # Enable OK/Cancel buttons when changes are pending
+            if hasattr(self, 'buttonBox') and self._controller_integration.delegate_config_has_pending_changes():
+                self.buttonBox.setEnabled(True)
     
-    def _apply_export_style_change(self, change, changes_summary):
-        """v3.1 Sprint 13: Apply STYLES_TO_EXPORT config change."""
-        if 'STYLES_TO_EXPORT' not in change['path']:
-            return
-        try:
-            value_item = self.config_view.model.itemFromIndex(change['index'].siblingAtColumn(1))
-            value_data = value_item.data(QtCore.Qt.UserRole)
-            new_style = value_data.get('value') if isinstance(value_data, dict) else value_item.data(QtCore.Qt.DisplayRole)
-            if new_style and 'STYLES_TO_EXPORT' in self.widgets.get('EXPORTING', {}):
-                combo = self.widgets["EXPORTING"]["STYLES_TO_EXPORT"]["WIDGET"]
-                idx = combo.findText(new_style)
-                if idx >= 0:
-                    combo.setCurrentIndex(idx)
-                    changes_summary.append(f"Style: {new_style}")
-        except Exception:
-            pass
-    
-    def _apply_export_format_change(self, change, changes_summary):
-        """v3.1 Sprint 13: Apply DATATYPE_TO_EXPORT config change."""
-        if 'DATATYPE_TO_EXPORT' not in change['path']:
-            return
-        try:
-            value_item = self.config_view.model.itemFromIndex(change['index'].siblingAtColumn(1))
-            value_data = value_item.data(QtCore.Qt.UserRole)
-            new_format = value_data.get('value') if isinstance(value_data, dict) else value_item.data(QtCore.Qt.DisplayRole)
-            if new_format and 'DATATYPE_TO_EXPORT' in self.widgets.get('EXPORTING', {}):
-                combo = self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"]
-                idx = combo.findText(new_format)
-                if idx >= 0:
-                    combo.setCurrentIndex(idx)
-                    changes_summary.append(f"Format: {new_format}")
-        except Exception:
-            pass
-
+    # v4.0 Sprint 11: Config change helper methods removed - logic migrated to ConfigController
+    # Removed: _apply_theme_change, _apply_ui_profile_change, _apply_action_bar_position_change,
+    # _apply_export_style_change, _apply_export_format_change (~110 lines)
 
     def apply_pending_config_changes(self):
         """
+        WRAPPER: Delegates to ConfigController.
+        
         Apply all pending configuration changes when OK button is clicked.
-        
-        Orchestrates the application of different config change types by delegating
-        to specialized methods.
+        v4.0 Sprint 11: Migrated to ConfigController.
         """
-        if not self.config_changes_pending or not self.pending_config_changes:
-            logger.info("No pending configuration changes to apply")
-            return
+        if self._controller_integration:
+            if self._controller_integration.delegate_config_apply_pending_changes():
+                # Disable OK/Cancel buttons after changes applied
+                if hasattr(self, 'buttonBox'):
+                    self.buttonBox.setEnabled(False)
+                return
         
-        logger.info(f"Applying {len(self.pending_config_changes)} pending configuration change(s)")
-        
-        changes_summary = []
-        
-        for change in self.pending_config_changes:
-            items_keys_values_path = change['path']
-            
-            # Handle ICONS changes
-            if 'ICONS' in items_keys_values_path:
-                self.set_widget_icon(items_keys_values_path)
-                changes_summary.append(f"Icon: {' → '.join(items_keys_values_path[-2:])}")
-            
-            # Apply specialized change handlers
-            self._apply_theme_change(change, changes_summary)
-            self._apply_ui_profile_change(change, changes_summary)
-            self._apply_action_bar_position_change(change, changes_summary)
-            self._apply_export_style_change(change, changes_summary)
-            self._apply_export_format_change(change, changes_summary)
-            
-            # Save configuration after each change
-            self.save_configuration_model()
-        
-        # Clear pending changes after applying them
+        # Clear local state as fallback
         self.pending_config_changes = []
         self.config_changes_pending = False
-        
-        # Disable OK/Cancel buttons after changes have been applied
-        if hasattr(self, 'buttonBox'):
-            self.buttonBox.setEnabled(False)
-            logger.info("Configuration buttons disabled (changes applied)")
-        
-        logger.info("All pending configuration changes have been applied and saved")
 
 
     def cancel_pending_config_changes(self):
@@ -2724,76 +2150,30 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._configure_key_widgets_sizes(icons_sizes)
     
     def _setup_theme_watcher(self):
-        """
-        Setup QGIS theme watcher for automatic dark/light mode switching.
-        
-        Connects to QGIS paletteChanged signal to detect theme changes.
-        When QGIS theme changes (e.g., user switches to Night Mapping),
-        the plugin automatically updates its stylesheet and icons.
-        """
+        """v4.0 Sprint 14: Setup QGIS theme watcher for dark/light mode switching."""
         try:
-            # Get or create theme watcher singleton
             self._theme_watcher = QGISThemeWatcher.get_instance()
-            
-            # Detect current theme and initialize IconThemeManager
             current_theme = StyleLoader.detect_qgis_theme()
             if ICON_THEME_AVAILABLE:
                 IconThemeManager.set_theme(current_theme)
-                logger.info(f"IconThemeManager initialized with theme: {current_theme}")
-            
-            # Add our callback for theme changes
             self._theme_watcher.add_callback(self._on_qgis_theme_changed)
-            
-            # Start watching if not already
             if not self._theme_watcher.is_watching:
                 self._theme_watcher.start_watching()
-            
-            # Refresh icons for initial theme (important for dark mode at startup)
             if current_theme == 'dark':
                 self._refresh_icons_for_theme()
-            
-            logger.info(f"Theme watcher initialized - current theme: {current_theme}")
-            
         except Exception as e:
             logger.warning(f"Could not setup theme watcher: {e}")
     
     def _on_qgis_theme_changed(self, new_theme: str):
-        """
-        Handle QGIS theme change event.
-        
-        Called automatically when QGIS theme changes (e.g., user switches
-        between default and Night Mapping themes).
-        
-        Args:
-            new_theme: New theme name ('dark' or 'default')
-        """
-        logger.info(f"QGIS theme changed to: {new_theme}")
-        
+        """v4.0 Sprint 14: Handle QGIS theme change event."""
         try:
-            # Update IconThemeManager
             if ICON_THEME_AVAILABLE:
                 IconThemeManager.set_theme(new_theme)
-            
-            # Reapply stylesheet with new theme
-            StyleLoader.set_theme_from_config(
-                self.dockWidgetContents,
-                self.CONFIG_DATA,
-                new_theme
-            )
-            
-            # Refresh all button icons for new theme
+            StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA, new_theme)
             self._refresh_icons_for_theme()
-            
-            # Update JsonView (config editor) theme
-            if hasattr(self, 'config_view') and self.config_view is not None:
-                is_dark = (new_theme == 'dark')
-                self.config_view.refresh_theme_stylesheet(force_dark=is_dark)
-                logger.debug("JsonView theme updated")
-            
-            # Show brief notification
-            theme_name = "Mode sombre" if new_theme == 'dark' else "Mode clair"
-            show_info("FilterMate", f"Thème adapté: {theme_name}")
-            
+            if hasattr(self, 'config_view') and self.config_view:
+                self.config_view.refresh_theme_stylesheet(force_dark=(new_theme == 'dark'))
+            show_info("FilterMate", f"Thème adapté: {'Mode sombre' if new_theme == 'dark' else 'Mode clair'}")
         except Exception as e:
             logger.error(f"Error applying theme change: {e}")
     
@@ -3966,184 +3346,33 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         logger.warning("project_property_changed: Controller delegation failed")
 
 
-    def _parse_property_data(self, input_data):
-        """
-        Parse and validate input data for property updates.
-        
-        Args:
-            input_data: Property value (dict, list, str, int, float, bool, or None)
-            
-        Returns:
-            tuple: (parsed_data, state) where state indicates if data is valid/enabled
-        """
-        state = None
-        
-        if isinstance(input_data, dict) or isinstance(input_data, list) or isinstance(input_data, str):
-            state = len(input_data) >= 0
-        elif isinstance(input_data, int) or isinstance(input_data, float):
-            state = int(input_data) >= 0
-            if isinstance(input_data, float):
-                input_data = truncate(input_data, 2)
-        elif isinstance(input_data, bool):
-            state = input_data
-        elif input_data is None:
-            state = False
-            
-        return input_data, state
-
-    def _find_property_path(self, input_property):
-        """
-        Find property path and group key from input property name.
-        
-        Args:
-            input_property: Property identifier string
-            
-        Returns:
-            tuple: (properties_group_key, property_path, properties_tuples, index)
-        """
-        for properties_tuples_key in self.layer_properties_tuples_dict:
-            properties_tuples = self.layer_properties_tuples_dict[properties_tuples_key]
-            for i, property_tuple in enumerate(properties_tuples):
-                if property_tuple[1] == input_property:
-                    return properties_tuples_key, property_tuple, properties_tuples, i
-        return None, None, None, None
-
-    def _update_is_property(self, property_path, layer_props, input_data, custom_functions):
-        """
-        Update 'is' type properties (boolean toggles).
-        
-        Args:
-            property_path: Property path tuple
-            layer_props: Layer properties dict
-            input_data: New value
-            custom_functions: Callbacks dict
-            
-        Returns:
-            bool: True if value changed
-        """
-        flag_value_changed = False
-        
-        if property_path[1] == "is_changing_all_layer_properties":
-            if layer_props[property_path[0]][property_path[1]] is True:
-                self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = False
-                flag_value_changed = True
-                if "ON_TRUE" in custom_functions:
-                    custom_functions["ON_TRUE"](0)
-                self.switch_widget_icon(property_path, False)
-            elif layer_props[property_path[0]][property_path[1]] is False:
-                self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = True
-                flag_value_changed = True
-                if "ON_FALSE" in custom_functions:
-                    custom_functions["ON_FALSE"](0)
-                self.switch_widget_icon(property_path, True)
-        else:
-            if layer_props[property_path[0]][property_path[1]] is not input_data and input_data is True:
-                self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
-                flag_value_changed = True
-                if "ON_TRUE" in custom_functions:
-                    custom_functions["ON_TRUE"](0)
-            elif layer_props[property_path[0]][property_path[1]] is not input_data and input_data is False:
-                self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
-                flag_value_changed = True
-                if "ON_FALSE" in custom_functions:
-                    custom_functions["ON_FALSE"](0)
-                    
-        return flag_value_changed
-
-    def _update_selection_expression_property(self, property_path, layer_props, input_data, custom_functions):
-        """v3.1 Sprint 16: Update selection expression properties."""
-        if str(layer_props[property_path[0]][property_path[1]]) != input_data:
-            self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
-            if "ON_TRUE" in custom_functions: custom_functions["ON_TRUE"](0)
-        return True  # Always trigger ON_CHANGE for expression updates
-
-    def _update_other_property(self, property_path, properties_tuples, properties_group_key, layer_props, input_data, custom_functions):
-        """v3.1 Sprint 16: Update other property types."""
-        if not properties_tuples:
-            return False
-        
-        # Check group state
-        if properties_group_key == 'source_layer':
-            group_state = True
-        else:
-            group_state = self.widgets[properties_tuples[0][0].upper()][properties_tuples[0][1].upper()]["WIDGET"].isChecked()
-
-        if not group_state:
-            self.properties_group_state_reset_to_default(properties_tuples, properties_group_key, group_state)
-            return True
-        
-        self.properties_group_state_enabler(properties_tuples)
-        widget_type = self.widgets[property_path[0].upper()][property_path[1].upper()]["TYPE"]
-        current_value = layer_props.get(property_path[0], {}).get(property_path[1])
-        layer_id = self.current_layer.id()
-        
-        if property_path[0] not in self.PROJECT_LAYERS[layer_id]:
-            self.PROJECT_LAYERS[layer_id][property_path[0]] = {}
-        
-        if widget_type == 'PushButton':
-            if current_value != input_data:
-                self.PROJECT_LAYERS[layer_id][property_path[0]][property_path[1]] = input_data
-                callback = "ON_TRUE" if input_data else "ON_FALSE"
-                if callback in custom_functions: custom_functions[callback](0)
-                if property_path[1] == 'has_layers_to_filter' and input_data:
-                    self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'disconnect')
-                    self.filtering_populate_layers_chekableCombobox()
-                    self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
-                return True
-        else:
-            new_value = custom_functions["CUSTOM_DATA"](0) if "CUSTOM_DATA" in custom_functions else input_data
-            if current_value != new_value:
-                self.PROJECT_LAYERS[layer_id][property_path[0]][property_path[1]] = new_value
-                callback = "ON_TRUE" if new_value else "ON_FALSE"
-                if callback in custom_functions: custom_functions[callback](0)
-                return True
-        return False
+    # v4.0 Sprint 9: Property helper methods removed - logic migrated to PropertyController
+    # Removed: _parse_property_data, _find_property_path, _update_is_property,
+    # _update_selection_expression_property, _update_other_property (~130 lines)
 
     def layer_property_changed(self, input_property, input_data=None, custom_functions={}):
-        """v3.1 Sprint 17: Handle property changes for the current layer."""
-        if not self.widgets_initialized or not self.current_layer: return
-        if self.current_layer.id() not in self.PROJECT_LAYERS: return
+        """
+        WRAPPER: Delegates to PropertyController.
         
-        widgets = [["EXPLORING", w] for w in ["SINGLE_SELECTION_FEATURES", "SINGLE_SELECTION_EXPRESSION", "MULTIPLE_SELECTION_FEATURES", "MULTIPLE_SELECTION_EXPRESSION", "CUSTOM_SELECTION_EXPRESSION"]]
-        for wp in widgets: self.manageSignal(wp, 'disconnect')
-
-        input_data, state = self._parse_property_data(input_data)
-        layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-        properties_group_key, property_path, properties_tuples, index = self._find_property_path(input_property)
-
-        flag_value_changed = False
-        if properties_group_key and property_path:
-            if properties_group_key == 'is': flag_value_changed = self._update_is_property(property_path, layer_props, input_data, custom_functions)
-            elif properties_group_key == 'selection_expression': flag_value_changed = self._update_selection_expression_property(property_path, layer_props, input_data, custom_functions)
-            else: flag_value_changed = self._update_other_property(property_path, properties_tuples, properties_group_key, layer_props, input_data, custom_functions)
-
-        if flag_value_changed:
-            if "ON_CHANGE" in custom_functions: custom_functions["ON_CHANGE"](0)
-            self.setLayerVariableEvent(self.current_layer, [property_path])
-
-        picker = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
-        try: picker.featureChanged.disconnect(self.exploring_features_changed)
-        except: pass
-        picker.featureChanged.connect(self.exploring_features_changed)
-        for wp in widgets[1:]: self.manageSignal(wp, 'connect')
+        Handle property changes for the current layer.
+        v4.0 Sprint 9: Migrated to PropertyController.
+        """
+        if self._controller_integration and self._controller_integration.property_controller:
+            self._controller_integration.delegate_change_layer_property(
+                input_property, input_data, custom_functions
+            )
 
     def layer_property_changed_with_buffer_style(self, input_property, input_data=None):
         """
+        WRAPPER: Delegates to PropertyController.
+        
         Handle buffer value changes with visual style feedback.
-        
-        Applies visual styling to indicate negative buffer (erosion) vs positive buffer (expansion):
-        - Negative buffer: Orange/yellow background to indicate erosion mode
-        - Zero/positive buffer: Default style
-        
-        Args:
-            input_property: The property name being changed
-            input_data: The new value
+        v4.0 Sprint 9: Migrated to PropertyController.
         """
-        # First, call the normal property change handler
-        self.layer_property_changed(input_property, input_data)
-        
-        # Then update the visual style based on the buffer value
-        self._update_buffer_spinbox_style(input_data)
+        if self._controller_integration and self._controller_integration.property_controller:
+            self._controller_integration.property_controller.change_property_with_buffer_style(
+                input_property, input_data
+            )
     
     def _update_buffer_spinbox_style(self, buffer_value):
         """
@@ -4617,66 +3846,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def setLayerVariableEvent(self, layer=None, properties=None):
-        """
-        Emit signal to set layer variables.
-        
-        CRASH FIX (v2.3.15): Added is_valid_layer() check before emitting signal
-        to prevent Windows access violations when layer's C++ object is deleted
-        during signal processing (e.g., backend change, layer switch, project unload).
-        
-        Args:
-            layer: QgsVectorLayer to set, or None to use current_layer
-            properties: List of properties (default: empty list)
-        """
-        if properties is None:
-            properties = []
-
-        if self.widgets_initialized is True:
-            if layer is None:
-                layer = self.current_layer
-            
-            # CRASH FIX (v2.3.15): Validate layer before emitting signal
-            # This prevents access violations when layer becomes invalid during signal cascade
-            if not is_valid_layer(layer):
-                logger.debug(f"setLayerVariableEvent: layer is invalid or deleted, skipping emit")
-                return
-            
-            # Ensure properties is a list type for PyQt signal
-            if not isinstance(properties, list):
-                logger.debug(f"Properties is {type(properties)}, converting to list")
-                properties = []
-
+        """v4.0 Sprint 13: Emit signal to set layer variables with validity check."""
+        if not self.widgets_initialized:
+            return
+        properties = properties if isinstance(properties, list) else []
+        layer = layer or self.current_layer
+        if is_valid_layer(layer):
             self.settingLayerVariable.emit(layer, properties)
 
 
     def resetLayerVariableOnErrorEvent(self, layer, properties=None):
-        """
-        Emit signal to reset layer variables after an error.
-        
-        Args:
-            layer: QgsVectorLayer to reset, or None to use current_layer
-            properties: List of properties (default: empty list)
-        """
-        if properties is None:
-            properties = []
-
-        if self.widgets_initialized is True:
-            if layer is None:
-                layer = self.current_layer
-            
-            # v3.0.14: CRITICAL - Double-check layer is valid before emitting signal using centralized method
-            if not self._is_layer_truly_deleted(layer):
-                try:
-                    # Ensure properties is a list type for PyQt signal
-                    if not isinstance(properties, list):
-                        logger.debug(f"Properties is {type(properties)}, converting to list")
-                        properties = []
-                    self.resettingLayerVariableOnError.emit(layer, properties)
-                except TypeError as e:
-                    # Signal emission failed due to type mismatch
-                    logger.warning(f"Signal emission failed - type error: {e}")
-            else:
-                logger.debug("Cannot emit resettingLayerVariableOnError - layer is None or deleted")
+        """v4.0 Sprint 13: Emit signal to reset layer variables after error."""
+        if not self.widgets_initialized:
+            return
+        properties = properties if isinstance(properties, list) else []
+        layer = layer or self.current_layer
+        if not self._is_layer_truly_deleted(layer):
+            try:
+                self.resettingLayerVariableOnError.emit(layer, properties)
+            except TypeError as e:
+                logger.warning(f"Signal emission failed: {e}")
 
 
     def resetLayerVariableEvent(self, layer=None, properties=None):
@@ -4762,61 +3951,23 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.settingProjectVariables.emit()
 
     def _update_backend_indicator(self, provider_type, postgresql_connection_available=None, actual_backend=None):
-        """
-        Update the backend indicator badge based on the layer provider type and actual backend used.
-        
-        Uses modern badge styling with colored backgrounds for visual distinction.
-        Shows the REAL backend being used (not just provider type).
-        
-        v4.0: Delegates to BackendController when available.
-        
-        Args:
-            provider_type: The provider type string ('postgresql', 'spatialite', 'ogr', etc.)
-            postgresql_connection_available: For PostgreSQL layers, whether connection is available
-            actual_backend: The actual backend name being used (from BackendFactory)
-        """
-        # v4.0 MIG-071: Delegate to BackendController if available
-        if (self._controller_integration 
-            and self._controller_integration.backend_controller
-            and self.current_layer):
+        """v4.0 Sprint 13: Simplified - delegates to BackendController."""
+        if self._controller_integration and self._controller_integration.backend_controller and self.current_layer:
             if self._controller_integration.delegate_update_backend_indicator(
-                self.current_layer,
-                postgresql_connection_available,
-                actual_backend
-            ):
-                # Store provider info for compatibility
+                self.current_layer, postgresql_connection_available, actual_backend):
                 self._current_provider_type = provider_type
                 self._current_postgresql_available = postgresql_connection_available
                 return
-        
-        # Fallback: Legacy implementation
         self._update_backend_indicator_legacy(provider_type, postgresql_connection_available, actual_backend)
     
     def _update_backend_indicator_legacy(self, provider_type, postgresql_connection_available=None, actual_backend=None):
-        """
-        Legacy implementation of backend indicator update.
-        
-        v4.0: Reduced - main logic moved to BackendController.
-        This fallback attempts basic update via controller.
-        """
-        # v4.0: Try to use controller instead
-        if (self._controller_integration 
-            and hasattr(self._controller_integration, '_backend_controller')
-            and self._controller_integration._backend_controller):
-            # Get current layer
-            layer = getattr(self, 'current_layer', None)
-            if layer:
-                self._controller_integration._backend_controller.update_for_layer(
-                    layer, 
-                    postgresql_available=postgresql_connection_available,
-                    actual_backend=actual_backend
-                )
-                return
-        
-        # Fallback: Just update label text if available
+        """v4.0 Sprint 13: Simplified legacy fallback."""
+        if self._controller_integration and self._controller_integration._backend_controller and self.current_layer:
+            self._controller_integration._backend_controller.update_for_layer(
+                self.current_layer, postgresql_available=postgresql_connection_available, actual_backend=actual_backend)
+            return
         if hasattr(self, 'backend_indicator_label') and self.backend_indicator_label:
-            text = actual_backend.upper() if actual_backend else provider_type.upper()[:3]
-            self.backend_indicator_label.setText(text)
+            self.backend_indicator_label.setText(actual_backend.upper() if actual_backend else provider_type.upper()[:3])
     
     def getProjectLayersEvent(self, event):
 
@@ -4845,65 +3996,25 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         event.accept()
 
     def get_exploring_cache_stats(self):
-        """
-        Get statistics about the exploring features cache.
-        
-        v3.1 Phase 6 (STORY-2.3): Delegates to ExploringController if available.
-        
-        Returns:
-            dict: Cache statistics including hits, misses, hit ratio, and entry counts.
-                  Returns empty dict if cache is not initialized.
-        
-        Example:
-            >>> stats = self.get_exploring_cache_stats()
-            >>> print(f"Cache hit ratio: {stats['hit_ratio']}")
-        """
-        # v3.1: Delegate to ExploringController (STORY-2.3)
-        if self._controller_integration is not None:
+        """v4.0 Sprint 13: Get cache statistics - delegates to controller or uses local cache."""
+        if self._controller_integration:
             stats = self._controller_integration.delegate_exploring_get_cache_stats()
             if stats:
                 return stats
-        
-        # Legacy fallback
-        if hasattr(self, '_exploring_cache'):
-            return self._exploring_cache.get_stats()
-        return {}
+        return self._exploring_cache.get_stats() if hasattr(self, '_exploring_cache') else {}
     
     def invalidate_exploring_cache(self, layer_id=None, groupbox_type=None):
-        """
-        Invalidate the exploring features cache.
-        
-        v3.1 Phase 6 (STORY-2.3): Delegates to ExploringController if available.
-        
-        Args:
-            layer_id: Optional layer ID to invalidate. If None, invalidates all layers.
-            groupbox_type: Optional groupbox type ('single_selection', 'multiple_selection', 
-                          'custom_selection'). If None with layer_id, invalidates all 
-                          groupboxes for that layer.
-        
-        Example:
-            >>> self.invalidate_exploring_cache()  # Clear all
-            >>> self.invalidate_exploring_cache(layer.id())  # Clear specific layer
-            >>> self.invalidate_exploring_cache(layer.id(), 'single_selection')  # Clear specific
-        """
-        # v3.1: Delegate to ExploringController (STORY-2.3)
-        if layer_id is None and groupbox_type is None:
-            if self._controller_integration is not None:
-                if self._controller_integration.delegate_exploring_clear_cache():
-                    logger.debug("Exploring cache: delegated clear_cache to controller")
-                    return
-        
-        # Legacy fallback (or specific layer/groupbox invalidation)
+        """v4.0 Sprint 13: Invalidate exploring cache - delegates to controller or uses local cache."""
+        if layer_id is None and groupbox_type is None and self._controller_integration:
+            if self._controller_integration.delegate_exploring_clear_cache():
+                return
         if hasattr(self, '_exploring_cache'):
             if layer_id is None:
                 self._exploring_cache.invalidate_all()
-                logger.debug("Exploring cache: invalidated all entries")
             elif groupbox_type is None:
                 self._exploring_cache.invalidate_layer(layer_id)
-                logger.debug(f"Exploring cache: invalidated layer {layer_id[:8]}...")
             else:
                 self._exploring_cache.invalidate(layer_id, groupbox_type)
-                logger.debug(f"Exploring cache: invalidated {layer_id[:8]}.../{groupbox_type}")
 
     def launchTaskEvent(self, state, task_name):
         """v3.1 Sprint 17: Emit signal to launch a task."""
@@ -5096,65 +4207,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         logger.debug("Keyboard shortcuts initialized: F5 = Reload layers, Ctrl+Z = Undo, Ctrl+Y = Redo")
     
+    
     def _on_reload_layers_shortcut(self):
-        """
-        Handle F5 shortcut to reload layers.
-        
-        Emits the launchingTask signal with 'reload_layers' to trigger
-        a complete reload of all layers from the current project.
-        """
-        logger.info("F5 pressed - Force reloading layers")
+        """v4.0 Sprint 13: Handle F5 shortcut to reload layers."""
         self._trigger_reload_layers()
     
     def _trigger_reload_layers(self):
-        """
-        Trigger layer reload from shortcut (F5) or backend indicator click.
-        
-        Shows visual feedback on the indicator and emits the reload signal.
-        """
-        # Visual feedback - show loading state on backend indicator
+        """v4.0 Sprint 13: Trigger layer reload with visual feedback."""
         if hasattr(self, 'backend_indicator_label') and self.backend_indicator_label:
             self.backend_indicator_label.setText("⟳")
-            self.backend_indicator_label.setStyleSheet("""
-                QLabel#label_backend_indicator {
-                    color: #3498db;
-                    font-size: 9pt;
-                    font-weight: 600;
-                    padding: 3px 10px;
-                    border-radius: 12px;
-                    border: none;
-                    background-color: #e8f4fc;
-                }
-            """)
-        
-        # Emit reload signal
+            self.backend_indicator_label.setStyleSheet("QLabel#label_backend_indicator { color: #3498db; font-size: 9pt; font-weight: 600; padding: 3px 10px; border-radius: 12px; border: none; background-color: #e8f4fc; }")
         self.launchingTask.emit('reload_layers')
 
     def _on_undo_shortcut(self):
-        """
-        Handle Ctrl+Z shortcut to undo last filter operation.
-        
-        Triggers the undo action if the undo button is enabled.
-        """
-        logger.info("Ctrl+Z pressed - Undo filter operation")
+        """v4.0 Sprint 13: Handle Ctrl+Z to undo last filter."""
         undo_widget = self.widgets.get("ACTION", {}).get("UNDO_FILTER", {}).get("WIDGET")
         if undo_widget and undo_widget.isEnabled():
             self.launchTaskEvent(False, 'undo')
-        else:
-            logger.debug("Undo shortcut ignored - no undo available")
 
     def _on_redo_shortcut(self):
-        """
-        Handle Ctrl+Y shortcut to redo last undone filter operation.
-        
-        Triggers the redo action if the redo button is enabled.
-        """
-        logger.info("Ctrl+Y pressed - Redo filter operation")
+        """v4.0 Sprint 13: Handle Ctrl+Y to redo last filter."""
         redo_widget = self.widgets.get("ACTION", {}).get("REDO_FILTER", {}).get("WIDGET")
         if redo_widget and redo_widget.isEnabled():
             self.launchTaskEvent(False, 'redo')
-        else:
-            logger.debug("Redo shortcut ignored - no redo available")
-
-
-

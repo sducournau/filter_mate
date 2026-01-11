@@ -732,3 +732,242 @@ class BackendController(BaseController):
         """Toggle centroid auto-detection."""
         self.centroid_auto_enabled = not self.centroid_auto_enabled
         return self.centroid_auto_enabled
+
+    # ========================================
+    # POSTGRESQL MAINTENANCE METHODS (Sprint 13)
+    # ========================================
+
+    def get_pg_session_context(self):
+        """
+        Get PostgreSQL session context for maintenance operations.
+        
+        v4.0 Sprint 13: Migrated from dockwidget._get_pg_session_context()
+        
+        Returns:
+            tuple: (app, session_id, schema, connexion)
+        """
+        from ..adapters.backends import POSTGRESQL_AVAILABLE
+        if not POSTGRESQL_AVAILABLE:
+            return None, None, None, None
+        
+        try:
+            from ..adapters.backends import get_datasource_connexion_from_layer
+        except ImportError:
+            from ...modules.appUtils import get_datasource_connexion_from_layer
+        
+        # Get app reference
+        app = getattr(self.dockwidget, '_app_ref', None)
+        if not app:
+            parent = self.dockwidget.parent()
+            while parent:
+                if hasattr(parent, 'session_id'):
+                    app = parent
+                    break
+                parent = parent.parent() if hasattr(parent, 'parent') else None
+        
+        session_id = getattr(app, 'session_id', None) if app else None
+        schema = getattr(app, 'app_postgresql_temp_schema', 'filter_mate_temp') if app else 'filter_mate_temp'
+        
+        # Find a PostgreSQL connection
+        connexion = None
+        project_layers = getattr(app, 'PROJECT_LAYERS', {}) if app else {}
+        for layer_info in project_layers.values():
+            layer = layer_info.get('layer')
+            if layer and layer.isValid() and layer.providerType() == 'postgres':
+                connexion, _ = get_datasource_connexion_from_layer(layer)
+                if connexion:
+                    break
+        
+        return app, session_id, schema, connexion
+
+    @property
+    def pg_auto_cleanup_enabled(self) -> bool:
+        """Whether PostgreSQL auto-cleanup is enabled."""
+        return getattr(self, '_pg_auto_cleanup_enabled', True)
+
+    @pg_auto_cleanup_enabled.setter
+    def pg_auto_cleanup_enabled(self, value: bool) -> None:
+        """Set PostgreSQL auto-cleanup enabled state."""
+        self._pg_auto_cleanup_enabled = value
+        if hasattr(self.dockwidget, '_pg_auto_cleanup_enabled'):
+            self.dockwidget._pg_auto_cleanup_enabled = value
+
+    def toggle_pg_auto_cleanup(self) -> bool:
+        """
+        Toggle PostgreSQL auto-cleanup.
+        
+        v4.0 Sprint 13: Migrated from dockwidget._toggle_pg_auto_cleanup()
+        
+        Returns:
+            bool: New state of pg_auto_cleanup
+        """
+        self.pg_auto_cleanup_enabled = not self.pg_auto_cleanup_enabled
+        return self.pg_auto_cleanup_enabled
+
+    def cleanup_postgresql_session_views(self) -> bool:
+        """
+        Cleanup PostgreSQL materialized views for current session.
+        
+        v4.0 Sprint 13: Migrated from dockwidget._cleanup_postgresql_session_views()
+        
+        Returns:
+            bool: True if cleanup successful
+        """
+        app, session_id, schema, connexion = self.get_pg_session_context()
+        
+        if not connexion:
+            logger.warning("cleanup_postgresql_session_views: No PostgreSQL connection available")
+            return False
+        
+        if not session_id:
+            logger.warning("cleanup_postgresql_session_views: Session ID not available")
+            return False
+        
+        try:
+            with connexion.cursor() as cursor:
+                # Find views for this session
+                cursor.execute(
+                    "SELECT matviewname FROM pg_matviews WHERE schemaname = %s AND matviewname LIKE %s",
+                    (schema, f"mv_{session_id}_%")
+                )
+                views = [v[0] for v in cursor.fetchall()]
+                
+                if not views:
+                    logger.info(f"No views found for session {session_id[:8]}")
+                    return True
+                
+                # Drop each view
+                for view in views:
+                    try:
+                        cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."{view}" CASCADE;')
+                    except Exception as e:
+                        logger.warning(f"Failed to drop view {view}: {e}")
+                
+                connexion.commit()
+                logger.info(f"Cleaned up {len(views)} view(s) for session {session_id[:8]}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error cleaning PostgreSQL session views: {e}")
+            return False
+        finally:
+            try:
+                connexion.close()
+            except Exception:
+                pass
+
+    def cleanup_postgresql_schema_if_empty(self, force: bool = False) -> bool:
+        """
+        Drop PostgreSQL schema if no other sessions are using it.
+        
+        v4.0 Sprint 13: Migrated from dockwidget._cleanup_postgresql_schema_if_empty()
+        
+        Args:
+            force: If True, skip confirmation for views from other sessions
+            
+        Returns:
+            bool: True if cleanup successful or schema doesn't exist
+        """
+        app, session_id, schema, connexion = self.get_pg_session_context()
+        
+        if not connexion:
+            logger.warning("cleanup_postgresql_schema_if_empty: No PostgreSQL connection available")
+            return False
+        
+        try:
+            with connexion.cursor() as cursor:
+                # Check if schema exists
+                cursor.execute(
+                    "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = %s",
+                    (schema,)
+                )
+                if cursor.fetchone()[0] == 0:
+                    logger.info(f"Schema '{schema}' does not exist")
+                    return True
+                
+                # Get all views in schema
+                cursor.execute(
+                    "SELECT matviewname FROM pg_matviews WHERE schemaname = %s",
+                    (schema,)
+                )
+                views = [v[0] for v in cursor.fetchall()]
+                
+                # Check for views from other sessions
+                other_views = [v for v in views if not (session_id and v.startswith(f"mv_{session_id}_"))]
+                
+                if other_views and not force:
+                    logger.warning(f"Schema '{schema}' has {len(other_views)} view(s) from other sessions")
+                    return False
+                
+                # Drop schema
+                cursor.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE;')
+                connexion.commit()
+                logger.info(f"Schema '{schema}' dropped successfully")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error cleaning PostgreSQL schema: {e}")
+            return False
+        finally:
+            try:
+                connexion.close()
+            except Exception:
+                pass
+
+    def get_postgresql_session_info(self) -> dict:
+        """
+        Get PostgreSQL session information.
+        
+        v4.0 Sprint 13: Migrated from dockwidget._show_postgresql_session_info()
+        
+        Returns:
+            dict: Session information with keys: session_id, schema, auto_cleanup,
+                  schema_exists, our_views_count, total_views_count, connection_available
+        """
+        app, session_id, schema, connexion = self.get_pg_session_context()
+        
+        info = {
+            'session_id': session_id,
+            'schema': schema,
+            'auto_cleanup': self.pg_auto_cleanup_enabled,
+            'connection_available': connexion is not None,
+            'schema_exists': False,
+            'our_views_count': 0,
+            'total_views_count': 0
+        }
+        
+        if connexion:
+            try:
+                with connexion.cursor() as cursor:
+                    # Count our views
+                    if session_id:
+                        cursor.execute(
+                            "SELECT COUNT(*) FROM pg_matviews WHERE schemaname = %s AND matviewname LIKE %s",
+                            (schema, f"mv_{session_id}_%")
+                        )
+                        info['our_views_count'] = cursor.fetchone()[0]
+                    
+                    # Count total views
+                    cursor.execute(
+                        "SELECT COUNT(*) FROM pg_matviews WHERE schemaname = %s",
+                        (schema,)
+                    )
+                    info['total_views_count'] = cursor.fetchone()[0]
+                    
+                    # Check schema exists
+                    cursor.execute(
+                        "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = %s",
+                        (schema,)
+                    )
+                    info['schema_exists'] = cursor.fetchone()[0] > 0
+                    
+            except Exception as e:
+                info['error'] = str(e)[:50]
+                logger.warning(f"Error getting PostgreSQL session info: {e}")
+            finally:
+                try:
+                    connexion.close()
+                except Exception:
+                    pass
+        
+        return info

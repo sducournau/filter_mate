@@ -1,22 +1,44 @@
 # FilterMate Backlog - Issues & Fixes
 
 **Date de création:** 2026-01-08  
-**Dernière mise à jour:** 2026-01-10  
-**Version analysée:** 3.1.0  
+**Dernière mise à jour:** 2026-01-11  
+**Version analysée:** 4.0  
 **Généré par:** BMAD Master + Claude Opus 4.5
 
 ---
 
-## 📊 Résumé Exécutif - Migration v3.0
+## 📊 Résumé Exécutif - Refactoring v4.0
 
-### État de la Migration Architecture Hexagonale
+### 🎯 État Global du Refactoring (11 janvier 2026)
 
-| Composant                 | Statut         | Détails                      |
-| ------------------------- | -------------- | ---------------------------- |
-| **Nouvelle Architecture** | ✅ Créée       | 108 fichiers (38,561 lignes) |
-| **Ancienne Architecture** | ⚠️ À supprimer | 74 fichiers (68,649 lignes)  |
-| **Imports Legacy**        | ✅ Migrés      | 143 imports migrés (Phase A) |
-| **God Classes**           | ⚠️ 2 fichiers  | 19,155 lignes (hybride)      |
+| Composant                | Statut      | Détails                               |
+| ------------------------ | ----------- | ------------------------------------- |
+| **God Class App**        | ✅ **-41%** | 6,063 → 3,578 lignes                  |
+| **God Class Dockwidget** | ✅ **-65%** | 13,049 → 4,521 lignes (-8,528 lignes) |
+| **Total God Classes**    | ✅ **-58%** | 19,112 → 8,099 lignes                 |
+| **Services Core**        | ✅ Créés    | 17 services (9,767 lignes)            |
+| **Controllers UI**       | ✅ Créés    | 13 controllers (12,500+ lignes)       |
+| **Adapters**             | ✅ Créés    | 10 adapters (5,000+ lignes)           |
+
+### 📈 Progression Sprints Récents
+
+| Sprint            | Date       | Cible                         | Réduction       |
+| ----------------- | ---------- | ----------------------------- | --------------- |
+| S9                | 11/01/2026 | PropertyController            | -151 lignes     |
+| S10               | 11/01/2026 | ActionBarManager              | -176 lignes     |
+| S11               | 11/01/2026 | ConfigController helpers      | -153 lignes     |
+| S12               | 11/01/2026 | BackendController + Favorites | -159 lignes     |
+| **Total Session** | **11/01**  | **Multiple**                  | **-639 lignes** |
+
+### 🏗️ Nouvelle Architecture Hexagonale (v4.0)
+
+| Dossier           | Fichiers | Lignes      | Rôle                              |
+| ----------------- | -------- | ----------- | --------------------------------- |
+| `core/services/`  | 17       | 9,767       | Domain Services                   |
+| `ui/controllers/` | 13       | 12,500+     | UI Controllers (MVC)              |
+| `adapters/`       | 10       | 5,000+      | Bridges & Handlers                |
+| `ui/managers/`    | 4        | 1,100+      | Layout & Config Managers          |
+| **Total Extrait** | **44+**  | **28,000+** | **Code migré depuis God Classes** |
 
 ### Phase A - Migration Imports ✅ COMPLÈTE (2026-01-09)
 
@@ -25,32 +47,35 @@
 - **Shims de compatibilité**: 6 modules créés
 - **Imports legacy restants**: 0 (hors shims et tests)
 
-### Phase C - Slim God Classes ⏸️ PARTIEL (2026-01-10)
+### Phase C - Slim God Classes 🔄 EN COURS (Sprint 12+)
 
-| Vague | Status      | Travail Effectué                                |
-| ----- | ----------- | ----------------------------------------------- |
-| 1     | ✅ Complète | BackendController, LayerSyncController intégrés |
-| 2     | ✅ Complète | flash_features, zoom_to_features délégués       |
-| 3+    | ⏸️ Bloqué   | Méthodes trop couplées à l'état interne         |
+| Fichier                     | Début  | Actuel | Cible   | Progrès |
+| --------------------------- | ------ | ------ | ------- | ------- |
+| `filter_mate_dockwidget.py` | 13,049 | 4,521  | < 2,000 | **65%** |
+| `filter_mate_app.py`        | 6,063  | 3,578  | < 1,500 | **41%** |
+| **Total**                   | 19,112 | 8,099  | < 3,500 | **58%** |
 
-**Conclusion:** Les God Classes restent car les méthodes sont fortement couplées via `PROJECT_LAYERS`, `widgets`, etc. Voir `SLIM_STRATEGY.md` pour l'analyse détaillée.
+### Services Extraits (v4.0 - v4.6)
 
-### Nouvelle Architecture (prête)
+| Service                       | Version | Lignes | Fonction                |
+| ----------------------------- | ------- | ------ | ----------------------- |
+| `LayerFilterBuilder`          | v4.6    | 348    | Build layers to filter  |
+| `DatasourceManager`           | v4.5    | 502    | Datasource operations   |
+| `AppInitializer`              | v4.4    | 684    | App initialization      |
+| `FilterResultHandler`         | v4.3    | 587    | Filter result handling  |
+| `OptimizationManager`         | v4.2    | 545    | Optimization management |
+| `TaskOrchestrator`            | v4.1    | 535    | Task orchestration      |
+| `UndoRedoHandler`             | v4.0    | 587    | Undo/Redo operations    |
+| `DatabaseManager`             | v4.0    | 404    | Database operations     |
+| `VariablesPersistenceManager` | v4.0    | 474    | Variables persistence   |
 
-| Dossier           | Fichiers | Lignes | Rôle                        |
-| ----------------- | -------- | ------ | --------------------------- |
-| `core/`           | ~20      | 8,567  | Domain + Services           |
-| `adapters/`       | ~40      | 14,436 | Backends + QGIS integration |
-| `ui/`             | ~35      | 13,967 | Controllers + Widgets       |
-| `infrastructure/` | ~13      | 1,591  | DI + Utils                  |
+### Ancienne Architecture (deprecated)
 
-### Ancienne Architecture (à supprimer)
-
-| Dossier             | Fichiers | Lignes  | Action                   |
+| Dossier             | Fichiers | Lignes  | Statut                   |
 | ------------------- | -------- | ------- | ------------------------ |
-| `modules/backends/` | 15       | ~11,000 | → `adapters/backends/`   |
-| `modules/tasks/`    | 12       | ~18,000 | → `adapters/qgis/tasks/` |
-| `modules/` (autres) | 47       | ~40,000 | Migrer ou supprimer      |
+| `modules/backends/` | 15       | ~11,000 | ⚠️ Deprecated → adapters |
+| `modules/tasks/`    | 12       | ~18,000 | ⚠️ En cours de migration |
+| `modules/` (autres) | 47       | ~40,000 | ⚠️ Fallbacks actifs      |
 
 ---
 
@@ -72,27 +97,42 @@
 | MIGRER (équivalent existe) | 28       | ~43,000 | Migration progressive   |
 | UNIQUE/GARDER              | 27       | ~23,000 | Pas d'équivalent encore |
 
-**Décision**: Garder `modules/` comme package deprecated jusqu'à v4.0
+**Décision**: Garder `modules/` comme package deprecated jusqu'à v5.0
 
 - Warnings de dépréciation actifs via `modules/__init__.py`
 - Tests utilisent encore `modules.*` (104 imports)
 - Fallbacks créés dans `adapters/backends/` et `ui/widgets/`
 - `adapters/backends/postgresql_availability.py` créé comme équivalent
 
-**Fichiers corrigés**:
+### Phase C: Slim God Classes 🔄 EN COURS - Sprint 12+ (2026-01-11)
 
-- `adapters/backends/__init__.py` - fallback POSTGRESQL_AVAILABLE
-- `ui/widgets/tree_view.py` - fallback JsonModel
-- `adapters/backends/postgresql_availability.py` - nouveau équivalent
+**Documentation**: `docs/dockwidget-reduction-analysis.md`
 
-### Phase C: Slim God Classes ✅ PARTIELLE (2026-01-10)
+| Sprint   | Fichier    | Méthodes Migrées                        | Réduction |
+| -------- | ---------- | --------------------------------------- | --------- |
+| S1-S5    | dockwidget | Exploring, Filtering, Config            | -1,064    |
+| S6       | dockwidget | ConfigurationManager créé               | -106      |
+| S7       | dockwidget | connect_widgets_signals simplifié       | -13       |
+| S8       | dockwidget | force*reconnect*\*, manage_interactions | -36       |
+| S9       | dockwidget | PropertyController (layer*property*\*)  | -151      |
+| S10      | dockwidget | ActionBarManager (9 méthodes)           | -176      |
+| S11      | dockwidget | Config helpers supprimés                | -153      |
+| S12      | dockwidget | Backend + Favorites delegation          | -159      |
+| **v4.6** | app        | `LayerFilterBuilder` créé               | -184      |
 
-**Documentation**: `_bmad-output/planning-artifacts/SLIM_STRATEGY.md`
+**Totaux actuels (11 janvier 2026):**
 
-| Fichier                     | Actuel | Cible   | Stratégie                       |
-| --------------------------- | ------ | ------- | ------------------------------- |
-| `filter_mate_dockwidget.py` | 13,049 | < 2,000 | Déléguer vers `ui/controllers/` |
-| `filter_mate_app.py`        | 6,063  | < 1,500 | Déléguer vers `core/services/`  |
+| Fichier                     | Lignes Initiales | Lignes Actuelles | Réduction   | Progrès |
+| --------------------------- | ---------------- | ---------------- | ----------- | ------- |
+| `filter_mate_dockwidget.py` | 13,049           | 4,521            | -8,528      | **65%** |
+| `filter_mate_app.py`        | 6,063            | 3,578            | -2,485      | **41%** |
+| **Total**                   | **19,112**       | **8,099**        | **-11,013** | **58%** |
+
+**Prochaines étapes (Sprint 13+):**
+
+- Migrer `manage_task()` → TaskOrchestrator (estimation: -200 lignes)
+- Migrer callbacks `*_completed` → FilterResultHandler (estimation: -150 lignes)
+- Extraire UI initialization → AppInitializer (estimation: -300 lignes)
 
 ---
 

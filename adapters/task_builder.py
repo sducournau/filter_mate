@@ -492,6 +492,131 @@ class TaskParameterBuilder:
         
         return params
     
+    def sync_ui_to_project_layers(self, current_layer: 'QgsVectorLayer') -> Dict[str, Any]:
+        """
+        Synchronize UI widget values to PROJECT_LAYERS for the current layer.
+        
+        CRITICAL: UI widgets may have values that haven't propagated to PROJECT_LAYERS
+        via signals. This method reads current widget values and updates PROJECT_LAYERS
+        to ensure task parameters are consistent with what the user sees.
+        
+        Extracted from FilterMateApp.get_task_parameters() (SYNC blocks).
+        
+        Args:
+            current_layer: The source layer being filtered
+            
+        Returns:
+            Updated task_parameters for the layer, or None if layer invalid
+        """
+        if current_layer is None or not current_layer.isValid():
+            logger.warning("sync_ui_to_project_layers: Invalid current layer")
+            return None
+        
+        layer_id = current_layer.id()
+        if layer_id not in self._project_layers:
+            logger.warning(f"sync_ui_to_project_layers: Layer {layer_id} not in PROJECT_LAYERS")
+            return None
+        
+        task_parameters = self._project_layers[layer_id]
+        dw = self._dockwidget
+        
+        if dw is None:
+            return task_parameters
+        
+        # Ensure filtering section exists
+        if "filtering" not in task_parameters:
+            task_parameters["filtering"] = {}
+        
+        # SYNC buffer_value
+        if hasattr(dw, 'mQgsDoubleSpinBox_filtering_buffer_value'):
+            current_val = self._clean_buffer_value(dw.mQgsDoubleSpinBox_filtering_buffer_value.value())
+            stored_val = task_parameters["filtering"].get("buffer_value", 0.0)
+            if current_val != stored_val:
+                logger.info(f"SYNC buffer_value: {stored_val} → {current_val}")
+                task_parameters["filtering"]["buffer_value"] = current_val
+                self._project_layers[layer_id]["filtering"]["buffer_value"] = current_val
+        
+        # SYNC buffer_segments
+        if hasattr(dw, 'mQgsSpinBox_filtering_buffer_segments'):
+            current_val = dw.mQgsSpinBox_filtering_buffer_segments.value()
+            stored_val = task_parameters["filtering"].get("buffer_segments", 5)
+            if current_val != stored_val:
+                logger.info(f"SYNC buffer_segments: {stored_val} → {current_val}")
+                task_parameters["filtering"]["buffer_segments"] = current_val
+                self._project_layers[layer_id]["filtering"]["buffer_segments"] = current_val
+        
+        # SYNC buffer_type
+        if hasattr(dw, 'comboBox_filtering_buffer_type'):
+            current_val = dw.comboBox_filtering_buffer_type.currentText()
+            stored_val = task_parameters["filtering"].get("buffer_type", "Round")
+            if current_val != stored_val:
+                logger.info(f"SYNC buffer_type: {stored_val} → {current_val}")
+                task_parameters["filtering"]["buffer_type"] = current_val
+                self._project_layers[layer_id]["filtering"]["buffer_type"] = current_val
+        
+        # SYNC use_centroids_source_layer
+        if hasattr(dw, 'checkBox_filtering_use_centroids_source_layer'):
+            current_val = dw.checkBox_filtering_use_centroids_source_layer.isChecked()
+            stored_val = task_parameters["filtering"].get("use_centroids_source_layer", False)
+            if current_val != stored_val:
+                logger.info(f"SYNC use_centroids_source_layer: {stored_val} → {current_val}")
+                task_parameters["filtering"]["use_centroids_source_layer"] = current_val
+                self._project_layers[layer_id]["filtering"]["use_centroids_source_layer"] = current_val
+        
+        # SYNC use_centroids_distant_layers
+        if hasattr(dw, 'checkBox_filtering_use_centroids_distant_layers'):
+            current_val = dw.checkBox_filtering_use_centroids_distant_layers.isChecked()
+            stored_val = task_parameters["filtering"].get("use_centroids_distant_layers", False)
+            if current_val != stored_val:
+                logger.info(f"SYNC use_centroids_distant_layers: {stored_val} → {current_val}")
+                task_parameters["filtering"]["use_centroids_distant_layers"] = current_val
+                self._project_layers[layer_id]["filtering"]["use_centroids_distant_layers"] = current_val
+        
+        # SYNC has_geometric_predicates
+        if hasattr(dw, 'pushButton_checkable_filtering_geometric_predicates'):
+            current_val = dw.pushButton_checkable_filtering_geometric_predicates.isChecked()
+            stored_val = task_parameters["filtering"].get("has_geometric_predicates", False)
+            if current_val != stored_val:
+                logger.info(f"SYNC has_geometric_predicates: {stored_val} → {current_val}")
+                task_parameters["filtering"]["has_geometric_predicates"] = current_val
+                self._project_layers[layer_id]["filtering"]["has_geometric_predicates"] = current_val
+        
+        # SYNC geometric_predicates list
+        if hasattr(dw, 'listWidget_filtering_geometric_predicate'):
+            selected_items = dw.listWidget_filtering_geometric_predicate.selectedItems()
+            current_val = [item.text() for item in selected_items]
+            stored_val = task_parameters["filtering"].get("geometric_predicates", [])
+            if set(current_val) != set(stored_val):
+                logger.info(f"SYNC geometric_predicates: {len(stored_val)} → {len(current_val)} items")
+                task_parameters["filtering"]["geometric_predicates"] = current_val
+                self._project_layers[layer_id]["filtering"]["geometric_predicates"] = current_val
+        
+        # SYNC has_layers_to_filter
+        if hasattr(dw, 'pushButton_checkable_filtering_layers_to_filter'):
+            current_val = dw.pushButton_checkable_filtering_layers_to_filter.isChecked()
+            stored_val = task_parameters["filtering"].get("has_layers_to_filter", False)
+            if current_val != stored_val:
+                logger.info(f"SYNC has_layers_to_filter: {stored_val} → {current_val}")
+                task_parameters["filtering"]["has_layers_to_filter"] = current_val
+                self._project_layers[layer_id]["filtering"]["has_layers_to_filter"] = current_val
+        
+        # SYNC layers_to_filter list
+        if hasattr(dw, 'get_layers_to_filter'):
+            current_val = dw.get_layers_to_filter()
+            stored_val = task_parameters["filtering"].get("layers_to_filter", [])
+            if set(current_val) != set(stored_val):
+                logger.info(f"SYNC layers_to_filter: {len(stored_val)} → {len(current_val)} layers")
+                task_parameters["filtering"]["layers_to_filter"] = current_val
+                self._project_layers[layer_id]["filtering"]["layers_to_filter"] = current_val
+        
+        # Update is_already_subset flag
+        if current_layer.subsetString() != '':
+            self._project_layers[layer_id]["infos"]["is_already_subset"] = True
+        else:
+            self._project_layers[layer_id]["infos"]["is_already_subset"] = False
+        
+        return task_parameters
+    
     def build_layer_management_params(
         self,
         layers: List,

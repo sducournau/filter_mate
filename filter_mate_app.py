@@ -98,10 +98,13 @@ try:
     from .adapters.filter_result_handler import FilterResultHandler  # v4.3: Filter result handling extraction
     from .core.services.app_initializer import AppInitializer  # v4.4: App initialization extraction
     from .core.services.datasource_manager import DatasourceManager  # v4.5: Datasource management extraction
+    from .core.services.layer_filter_builder import LayerFilterBuilder  # v4.6: Layer filter building extraction
+    from .adapters.layer_refresh_manager import LayerRefreshManager  # v4.7: Layer refresh extraction
     HEXAGONAL_AVAILABLE = True
 except ImportError:
     HEXAGONAL_AVAILABLE = False
     TaskParameterBuilder = None  # v4.0: Fallback
+    LayerRefreshManager = None  # v4.7: Fallback
     LayerLifecycleService = None  # v4.0: Fallback
     LayerLifecycleConfig = None  # v4.0: Fallback
     TaskManagementService = None  # v4.0: Fallback
@@ -114,6 +117,8 @@ except ImportError:
     FilterResultHandler = None  # v4.3: Fallback
     AppInitializer = None  # v4.4: Fallback
     DatasourceManager = None  # v4.5: Fallback
+    LayerFilterBuilder = None  # v4.6: Fallback
+    LayerRefreshManager = None  # v4.7: Fallback
 
     def _init_hexagonal_services(config=None):
         """Fallback when hexagonal services unavailable."""
@@ -701,6 +706,17 @@ class FilterMateApp:
             logger.info("FilterMate: DatasourceManager initialized (v4.5 migration)")
         else:
             self._datasource_manager = None
+        
+        # v4.7: Initialize LayerRefreshManager (extracted from _refresh_layers_and_canvas)
+        if HEXAGONAL_AVAILABLE and LayerRefreshManager:
+            self._layer_refresh_manager = LayerRefreshManager(
+                get_iface=lambda: self.iface,
+                stabilization_ms=STABILITY_CONSTANTS.get('SPATIALITE_STABILIZATION_MS', 200),
+                update_extents_threshold=get_optimization_thresholds(ENV_VARS).get('update_extents_threshold', 50000)
+            )
+            logger.info("FilterMate: LayerRefreshManager initialized (v4.7 migration)")
+        else:
+            self._layer_refresh_manager = None
         
         # Note: Do NOT call self.run() here - it will be called from filter_mate.py
         # when the user actually activates the plugin to avoid QGIS initialization race conditions
@@ -1743,256 +1759,19 @@ class FilterMateApp:
                 - approved_optimizations: {layer_id: {optimization_type: bool}}
                 - auto_apply_optimizations: True if auto-apply is enabled
         """
-        # v4.2: Delegate to OptimizationManager when available
+        # v4.2: Delegate to OptimizationManager
         if self._optimization_manager is not None:
             try:
                 return self._optimization_manager.check_and_confirm_optimizations(
                     current_layer, task_parameters
                 )
             except Exception as e:
-                logger.warning(f"v4.2: OptimizationManager failed, falling back to legacy: {e}")
-                # Fall through to legacy code
+                logger.warning(f"v4.2: OptimizationManager failed: {e}")
         
-        # Legacy code path (fallback)
-        approved_optimizations = {}
-        auto_apply = False
-        
-        # Check if optimization system is enabled
-        optimization_enabled = getattr(self.dockwidget, '_optimization_enabled', True) if self.dockwidget else True
-        if not optimization_enabled:
-            logger.debug("Auto-optimization disabled by user setting")
-            return approved_optimizations, auto_apply
-        
-        # Check if we should ask before applying
-        ask_before = getattr(self.dockwidget, '_optimization_ask_before', True) if self.dockwidget else True
-        centroid_auto = getattr(self.dockwidget, '_centroid_auto_enabled', True) if self.dockwidget else True
-        
-        if not centroid_auto:
-            logger.debug("Auto-centroid disabled by user setting")
-            return approved_optimizations, auto_apply
-        
-        # If not asking, return auto_apply = True (will be handled in task)
-        if not ask_before:
-            auto_apply = True
-            logger.info("Auto-apply optimizations enabled (no confirmation dialog)")
-            return approved_optimizations, auto_apply
-        
-        # Analyze layers for optimization opportunities
-        try:
-            from .core.services.auto_optimizer import (
-                LayerAnalyzer, AutoOptimizer, AUTO_OPTIMIZER_AVAILABLE, OptimizationType
-            )
-            
-            if not AUTO_OPTIMIZER_AVAILABLE:
-                return approved_optimizations, auto_apply
-            
-            analyzer = LayerAnalyzer()
-            optimizer = AutoOptimizer()
-            
-            # Collect all layers that need optimization
-            layers_needing_optimization = []
-            
-            # Get layers to filter from task parameters
-            task_layers = task_parameters.get("task", {}).get("layers", [])
-            
-            # v2.8.6: Get buffer parameters for optimization recommendations
-            filtering_params = task_parameters.get("filtering", {})
-            has_buffer = filtering_params.get("has_buffer_value", False)
-            has_buffer_type = filtering_params.get("has_buffer_type", False)
-            
-            # v2.8.7: Get distant layers (layers_to_filter) for centroid optimization
-            has_layers_to_filter = filtering_params.get("has_layers_to_filter", False)
-            layers_to_filter_ids = filtering_params.get("layers_to_filter", [])
-            
-            # v2.8.7: Check if distant layers centroid is already enabled
-            # v2.9.31 FIX: checkBox_filtering_use_centroids_distant_layers doesn't exist!
-            # Use checkBox_filtering_use_centroids_source_layer instead (controls both)
-            distant_centroid_enabled = False
-            if self.dockwidget and hasattr(self.dockwidget, 'checkBox_filtering_use_centroids_distant_layers'):
-                distant_centroid_enabled = self.dockwidget.checkBox_filtering_use_centroids_distant_layers.isChecked()
-            elif self.dockwidget and hasattr(self.dockwidget, 'checkBox_filtering_use_centroids_source_layer'):
-                # v2.9.31 FIX: Fallback to source checkbox (controls both source and distant layers)
-                distant_centroid_enabled = self.dockwidget.checkBox_filtering_use_centroids_source_layer.isChecked()
-            
-            # v2.8.7: Collect and analyze distant layers for centroid optimization
-            distant_layers_recommendations = []
-            distant_layers_analyses = []  # Initialize outside the if block
-            if has_layers_to_filter and layers_to_filter_ids and not distant_centroid_enabled:
-                for distant_layer_id in layers_to_filter_ids:
-                    distant_layer = self.PROJECT.mapLayer(distant_layer_id)
-                    if distant_layer and distant_layer.isValid():
-                        distant_analysis = analyzer.analyze_layer(distant_layer)
-                        if distant_analysis:
-                            distant_layers_analyses.append(distant_analysis)
-                
-                # Evaluate centroid optimization for distant layers
-                if distant_layers_analyses:
-                    distant_centroid_rec = optimizer.evaluate_distant_layers_centroid(
-                        distant_layers_analyses,
-                        user_already_enabled=distant_centroid_enabled
-                    )
-                    if distant_centroid_rec:
-                        distant_layers_recommendations.append(distant_centroid_rec)
-                        logger.debug(f"Distant layers centroid optimization recommended: {distant_centroid_rec.reason}")
-            
-            for layer_props in task_layers:
-                layer_id = layer_props.get("layer_id")
-                if not layer_id:
-                    continue
-                
-                # Get actual layer object
-                layer = self.PROJECT.mapLayer(layer_id)
-                if not layer or not layer.isValid():
-                    continue
-                
-                # Analyze the layer
-                analysis = analyzer.analyze_layer(layer)
-                if not analysis:
-                    continue
-                
-                # v2.7.15: Check if centroid is already enabled for this layer
-                # Don't recommend if user already has centroids enabled via checkbox or override
-                user_centroid_enabled = False
-                if self.dockwidget:
-                    user_centroid_enabled = self.dockwidget._is_centroid_already_enabled(layer) if hasattr(self.dockwidget, '_is_centroid_already_enabled') else False
-                
-                # Get recommendations - skip centroid if already enabled
-                # v2.8.6: Pass buffer parameters for buffer type optimization
-                # v2.8.9: is_source_layer=False because these are target layers being filtered
-                recommendations = optimizer.get_recommendations(
-                    analysis, 
-                    user_centroid_enabled=user_centroid_enabled,
-                    has_buffer=has_buffer,
-                    has_buffer_type=has_buffer_type,
-                    is_source_layer=False
-                )
-                
-                # Check if any significant optimization is recommended
-                # v2.8.6: Include ENABLE_BUFFER_TYPE in addition to USE_CENTROID_DISTANT
-                has_significant_recommendation = False
-                for rec in recommendations:
-                    if rec.auto_applicable and rec.optimization_type in (
-                        OptimizationType.USE_CENTROID_DISTANT,
-                        OptimizationType.ENABLE_BUFFER_TYPE
-                    ):
-                        has_significant_recommendation = True
-                        break
-                
-                if has_significant_recommendation:
-                    layers_needing_optimization.append({
-                        'layer': layer,
-                        'layer_id': layer_id,
-                        'analysis': analysis,
-                        'recommendations': recommendations
-                    })
-            
-            # v2.8.7: Check if we have distant layer recommendations OR target layer recommendations
-            has_any_recommendations = bool(layers_needing_optimization) or bool(distant_layers_recommendations)
-            
-            if not has_any_recommendations:
-                logger.debug("No optimization recommendations for current filtering operation")
-                return approved_optimizations, auto_apply
-            
-            # Show confirmation dialog
-            total_recommendations = len(layers_needing_optimization)
-            if distant_layers_recommendations:
-                total_recommendations += 1
-            logger.info(f"Found {total_recommendations} optimization recommendation(s) (including distant layers)")
-            
-            from .modules.optimization_dialogs import OptimizationRecommendationDialog
-            
-            # v2.8.7: Combine recommendations from target layer and distant layers
-            # Determine what to display in the dialog based on recommendation types
-            recommendations = []
-            dialog_layer_name = ""
-            dialog_feature_count = 0
-            dialog_location_type = "local_file"
-            
-            if layers_needing_optimization:
-                # Use first target layer info for recommendations
-                first_layer_info = layers_needing_optimization[0]
-                layer = first_layer_info['layer']
-                analysis = first_layer_info['analysis']
-                recommendations = list(first_layer_info['recommendations'])
-                # v2.8.8: Always use source layer name in dialog title for context
-                dialog_layer_name = current_layer.name()
-                dialog_feature_count = analysis.feature_count
-                dialog_location_type = analysis.location_type.value
-            
-            # v2.8.7: If we have distant layer recommendations, adjust dialog info
-            if distant_layers_recommendations:
-                recommendations.extend(distant_layers_recommendations)
-                
-                # If ONLY distant layer recommendations (no target layer recs),
-                # display info about the distant layers instead
-                if not layers_needing_optimization:
-                    # Calculate total features from all distant layers
-                    total_distant_features = 0
-                    distant_layer_names = []
-                    for distant_layer_id in layers_to_filter_ids:
-                        distant_layer = self.PROJECT.mapLayer(distant_layer_id)
-                        if distant_layer and distant_layer.isValid():
-                            total_distant_features += distant_layer.featureCount()
-                            distant_layer_names.append(distant_layer.name())
-                    
-                    # Use source layer name but indicate it's about distant layers
-                    dialog_layer_name = current_layer.name()
-                    dialog_feature_count = total_distant_features
-                    # Get location type from first distant layer analysis
-                    if distant_layers_analyses:
-                        dialog_location_type = distant_layers_analyses[0].location_type.value
-            
-            # v2.8.10: Deduplicate recommendations by optimization_type
-            # Keep the recommendation with the highest speedup for each type
-            deduped_recommendations = {}
-            for rec in recommendations:
-                opt_type = rec.optimization_type.value if hasattr(rec.optimization_type, 'value') else str(rec.optimization_type)
-                if opt_type not in deduped_recommendations:
-                    deduped_recommendations[opt_type] = rec
-                elif rec.estimated_speedup > deduped_recommendations[opt_type].estimated_speedup:
-                    deduped_recommendations[opt_type] = rec
-            recommendations = list(deduped_recommendations.values())
-            
-            dialog = OptimizationRecommendationDialog(
-                layer_name=dialog_layer_name,
-                recommendations=[r.to_dict() for r in recommendations],
-                feature_count=dialog_feature_count,
-                location_type=dialog_location_type,
-                parent=self.dockwidget
-            )
-            
-            result = dialog.exec_()
-            
-            if result:
-                selected = dialog.get_selected_optimizations()
-                
-                # Apply to all similar layers
-                for layer_info in layers_needing_optimization:
-                    approved_optimizations[layer_info['layer_id']] = selected
-                
-                # v2.7.1: Update UI widgets when user accepts optimizations
-                # This ensures checkboxes reflect the user's optimization choices
-                self._apply_optimization_to_ui_widgets(selected)
-                
-                # Check if user wants to remember
-                if dialog.should_remember():
-                    # Store in dockwidget for session persistence
-                    if not hasattr(self.dockwidget, '_session_optimization_choices'):
-                        self.dockwidget._session_optimization_choices = {}
-                    
-                    for layer_info in layers_needing_optimization:
-                        self.dockwidget._session_optimization_choices[layer_info['layer_id']] = selected
-                
-                logger.info(f"User approved optimizations: {approved_optimizations}")
-            else:
-                logger.info("User skipped optimizations")
-            
-        except ImportError as e:
-            logger.debug(f"Auto-optimizer not available: {e}")
-        except Exception as e:
-            logger.warning(f"Error in optimization check: {e}")
-        
-        return approved_optimizations, auto_apply
+        # v4.7: Minimal fallback - return safe defaults (no optimizations)
+        # Full logic is now in OptimizationManager
+        logger.debug("Optimization check skipped (manager unavailable)")
+        return {}, False
     
     def _apply_optimization_to_ui_widgets(self, selected_optimizations: dict):
         """
@@ -2014,103 +1793,21 @@ class FilterMateApp:
         v2.8.7: Added support for use_centroid_distant optimization type
         v4.2.0: Delegates to OptimizationManager
         """
-        # v4.2: Delegate to OptimizationManager when available
+        # v4.2: Delegate to OptimizationManager
         if self._optimization_manager is not None:
             try:
                 self._optimization_manager.apply_optimization_to_ui_widgets(selected_optimizations)
                 return
             except Exception as e:
-                logger.warning(f"v4.2: OptimizationManager UI update failed, falling back: {e}")
+                logger.warning(f"v4.2: OptimizationManager UI update failed: {e}")
         
-        # Legacy code path (fallback)
-        if not self.dockwidget or not selected_optimizations:
-            return
-        
-        try:
-            # Handle centroid optimization for distant layers only
-            # IMPORTANT v2.7.2: Do NOT enable centroids for source layer when it's a polygon
-            # used for spatial intersection - this would give geometrically incorrect results.
-            # Centroid optimization should only apply to distant layers being filtered.
-            use_distant_centroids = selected_optimizations.get('use_centroid_distant', False)
-            
-            if use_distant_centroids:
-                # Update distant layers centroid checkbox (primary target for remote layers)
-                if hasattr(self.dockwidget, 'checkBox_filtering_use_centroids_distant_layers'):
-                    if not self.dockwidget.checkBox_filtering_use_centroids_distant_layers.isChecked():
-                        self.dockwidget.checkBox_filtering_use_centroids_distant_layers.setChecked(True)
-                        logger.info("AUTO-OPTIMIZATION: Enabled 'use_centroids_distant_layers' checkbox")
-                
-                # v2.7.2: Do NOT automatically enable centroids for source layer
-                # The source layer geometry must be preserved for accurate spatial intersection.
-                # Users can still manually enable this if they understand the implications.
-                # if hasattr(self.dockwidget, 'checkBox_filtering_use_centroids_source_layer'):
-                #     if not self.dockwidget.checkBox_filtering_use_centroids_source_layer.isChecked():
-                #         self.dockwidget.checkBox_filtering_use_centroids_source_layer.setChecked(True)
-                #         logger.info("AUTO-OPTIMIZATION: Enabled 'use_centroids_source_layer' checkbox")
-                
-                # Also update the current layer's stored parameters (distant layers only)
-                if hasattr(self.dockwidget, 'current_layer') and self.dockwidget.current_layer:
-                    layer_id = self.dockwidget.current_layer.id()
-                    if layer_id in self.PROJECT_LAYERS:
-                        if "filtering" not in self.PROJECT_LAYERS[layer_id]:
-                            self.PROJECT_LAYERS[layer_id]["filtering"] = {}
-                        # v2.7.2: Only set distant layers centroids, NOT source layer
-                        self.PROJECT_LAYERS[layer_id]["filtering"]["use_centroids_distant_layers"] = True
-                        logger.debug(f"AUTO-OPTIMIZATION: Updated PROJECT_LAYERS for {layer_id} (distant layers only)")
-            
-            # Handle other optimization types (future expansion)
-            # if selected_optimizations.get('simplify_geometry', False):
-            #     # Update simplification UI if it exists
-            #     pass
-            
-            # if selected_optimizations.get('bbox_prefilter', False):
-            #     # Update bbox prefilter UI if it exists
-            #     pass
-            
-            # v2.8.6: Handle enable_buffer_type optimization
-            # When user accepts, enable buffer type with Flat type and 1 segment
-            if selected_optimizations.get('enable_buffer_type', False):
-                # Enable the buffer type toggle button
-                if hasattr(self.dockwidget, 'pushButton_checkable_filtering_buffer_type'):
-                    if not self.dockwidget.pushButton_checkable_filtering_buffer_type.isChecked():
-                        self.dockwidget.pushButton_checkable_filtering_buffer_type.setChecked(True)
-                        logger.info("AUTO-OPTIMIZATION: Enabled 'buffer_type' toggle button")
-                
-                # Set buffer type to "Flat" (index 1) for performance
-                if hasattr(self.dockwidget, 'comboBox_filtering_buffer_type'):
-                    # Find "Flat" option in combobox
-                    flat_index = self.dockwidget.comboBox_filtering_buffer_type.findText("Flat")
-                    if flat_index >= 0:
-                        self.dockwidget.comboBox_filtering_buffer_type.setCurrentIndex(flat_index)
-                        logger.info("AUTO-OPTIMIZATION: Set buffer type to 'Flat'")
-                
-                # Set buffer segments to 1 for maximum performance
-                if hasattr(self.dockwidget, 'mQgsSpinBox_filtering_buffer_segments'):
-                    self.dockwidget.mQgsSpinBox_filtering_buffer_segments.setValue(1)
-                    logger.info("AUTO-OPTIMIZATION: Set buffer segments to 1")
-                
-                # Update the current layer's stored parameters
-                if hasattr(self.dockwidget, 'current_layer') and self.dockwidget.current_layer:
-                    layer_id = self.dockwidget.current_layer.id()
-                    if layer_id in self.PROJECT_LAYERS:
-                        if "filtering" not in self.PROJECT_LAYERS[layer_id]:
-                            self.PROJECT_LAYERS[layer_id]["filtering"] = {}
-                        self.PROJECT_LAYERS[layer_id]["filtering"]["has_buffer_type"] = True
-                        self.PROJECT_LAYERS[layer_id]["filtering"]["buffer_type"] = "Flat"
-                        self.PROJECT_LAYERS[layer_id]["filtering"]["buffer_segments"] = 1
-                        logger.debug(f"AUTO-OPTIMIZATION: Updated PROJECT_LAYERS buffer params for {layer_id}")
-            
-            logger.debug(f"Applied optimization choices to UI: {selected_optimizations}")
-            
-        except Exception as e:
-            logger.warning(f"Error applying optimizations to UI widgets: {e}")
+        # v4.7: Minimal fallback - full logic is in OptimizationManager
+        logger.debug("UI widget optimization skipped (manager unavailable)")
     
     def _build_layers_to_filter(self, current_layer):
         """Build list of layers to filter with validation.
         
-        AUTO-DETECTION: If source layer is from a GeoPackage, automatically includes
-        all other layers from the same GeoPackage file for geometric filtering.
-        This ensures consistent filtering across all layers in the same data source.
+        v4.6: Delegates to LayerFilterBuilder for God Class reduction.
         
         Args:
             current_layer: Source layer for filtering
@@ -2118,210 +1815,26 @@ class FilterMateApp:
         Returns:
             list: List of validated layer info dictionaries
         """
-        layers_to_filter = []
+        # v4.6: Delegate to LayerFilterBuilder
+        if LayerFilterBuilder is not None:
+            try:
+                builder = LayerFilterBuilder(self.PROJECT_LAYERS, self.PROJECT)
+                return builder.build_layers_to_filter(current_layer)
+            except Exception as e:
+                logger.error(f"LayerFilterBuilder failed: {e}. Falling back to minimal logic.")
         
-        # STABILITY FIX: Verify layer exists in PROJECT_LAYERS before access
+        # Minimal fallback (should not happen in normal operation)
+        layers_to_filter = []
         if current_layer.id() not in self.PROJECT_LAYERS:
             logger.warning(f"_build_layers_to_filter: layer {current_layer.name()} not in PROJECT_LAYERS")
             return layers_to_filter
         
-        # DIAGNOSTIC: Log the raw layers_to_filter list from PROJECT_LAYERS
         raw_layers_list = self.PROJECT_LAYERS[current_layer.id()]["filtering"].get("layers_to_filter", [])
-        logger.info(f"=== _build_layers_to_filter DIAGNOSTIC ===")
-        logger.info(f"  Source layer: {current_layer.name()} (id={current_layer.id()[:8]}...)")
-        logger.info(f"  Raw layers_to_filter list (user-selected): {raw_layers_list}")
-        logger.info(f"  Number of user-selected layers: {len(raw_layers_list)}")
-        
-        # DIAGNOSTIC v2.7.4: List ALL available layers vs selected ones to identify missing layers
-        all_available_layers = []
-        for key in list(self.PROJECT_LAYERS.keys()):
-            if key != current_layer.id():  # Exclude source layer
-                layer_obj = self.PROJECT.mapLayer(key)
-                if layer_obj:
-                    all_available_layers.append((layer_obj.name(), key[:8], key))
-        
-        logger.info(f"  All available layers in PROJECT_LAYERS for filtering ({len(all_available_layers)}):")
-        for name, key_prefix, full_key in all_available_layers:
-            is_selected = full_key in raw_layers_list
-            status = "✓ SELECTED" if is_selected else "✗ NOT SELECTED"
-            logger.info(f"    - {name} ({key_prefix}...) → {status}")
-        
-        # FIX v2.7.5: Detect layers in QGIS project but NOT in PROJECT_LAYERS (registration issue)
-        qgis_layers = [l for l in self.PROJECT.mapLayers().values() if isinstance(l, QgsVectorLayer)]
-        missing_from_project_layers = []
-        for qgis_layer in qgis_layers:
-            if qgis_layer.id() not in self.PROJECT_LAYERS and qgis_layer.id() != current_layer.id():
-                missing_from_project_layers.append(qgis_layer.name())
-        
-        if missing_from_project_layers:
-            logger.warning(f"  ⚠️ QGIS layers NOT in PROJECT_LAYERS (may need re-add): {missing_from_project_layers}")
-        
-        # FIX v2.5.15: Disabled auto-inclusion of GeoPackage layers
-        # User selection is now strictly respected - only explicitly checked layers are filtered
-        # Previously, all layers from the same GeoPackage were auto-included, ignoring user selection
-        logger.info(f"  Final layers to process: {len(raw_layers_list)} (user selection only)")
-        
         for key in raw_layers_list:
-            # FIX v2.7.5: Log when layer is not in PROJECT_LAYERS (was silently ignored)
-            if key not in self.PROJECT_LAYERS:
-                # Try to find layer name for better error message
-                layer_obj = self.PROJECT.mapLayer(key)
-                layer_name = layer_obj.name() if layer_obj else "unknown"
-                logger.warning(
-                    f"  ⚠️ Layer '{layer_name}' (id={key[:16]}...) in user selection but NOT in PROJECT_LAYERS - SKIPPED!"
-                )
-                logger.warning(f"     Available PROJECT_LAYERS keys count: {len(self.PROJECT_LAYERS)}")
-                continue
-            
-            layer_info = self.PROJECT_LAYERS[key]["infos"].copy()
-            
-            # CRITICAL FIX v2.7.8: Remove stale runtime keys from previous filter executions
-            # These keys should NOT be part of the persistent layer configuration
-            for stale_key in ['_effective_provider_type', '_postgresql_fallback', '_forced_backend']:
-                layer_info.pop(stale_key, None)
-
-            # Resolve actual QgsVectorLayer by id
-            layer_obj = [l for l in self.PROJECT.mapLayers().values() if l.id() == key]
-            if not layer_obj:
-                logger.error(f"Cannot filter layer {key}: layer not found in project")
-                continue
-            layer = layer_obj[0]
-
-            # Skip invalid or unavailable layers (broken source)
-            if not is_layer_source_available(layer):
-                logger.warning(
-                    f"Skipping layer '{layer.name()}' (id={key}) - invalid or source missing"
-                )
-                continue
-            
-            # Validate required keys exist for geometric filtering
-            required_keys = [
-                'layer_name', 'layer_id', 'layer_provider_type',
-                'primary_key_name', 'layer_geometry_field', 'layer_schema'
-            ]
-            
-            missing_keys = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
-            if missing_keys:
-                logger.warning(f"Layer {key} missing required keys: {missing_keys}")
-                # Try to fill in missing keys from QGIS layer object
-                if layer_obj:
-                    layer = layer_obj[0]
-                    # Fill basic info
-                    if 'layer_name' not in layer_info or layer_info['layer_name'] is None:
-                        layer_info['layer_name'] = layer.name()
-                    if 'layer_id' not in layer_info or layer_info['layer_id'] is None:
-                        layer_info['layer_id'] = layer.id()
-                    
-                    # Fill layer_geometry_field from data provider
-                    if 'layer_geometry_field' not in layer_info or layer_info['layer_geometry_field'] is None:
-                        try:
-                            geom_col = layer.dataProvider().geometryColumn()
-                            if geom_col:
-                                layer_info['layer_geometry_field'] = geom_col
-                                logger.info(f"Auto-filled layer_geometry_field='{geom_col}' for layer {layer.name()}")
-                            else:
-                                # Default geometry field names by provider
-                                provider = layer.providerType()
-                                if provider == 'postgres':
-                                    layer_info['layer_geometry_field'] = 'geom'
-                                elif provider == 'spatialite':
-                                    layer_info['layer_geometry_field'] = 'geometry'
-                                else:
-                                    layer_info['layer_geometry_field'] = 'geom'
-                                logger.info(f"Using default layer_geometry_field='{layer_info['layer_geometry_field']}' for layer {layer.name()}")
-                        except Exception as e:
-                            layer_info['layer_geometry_field'] = 'geom'
-                            logger.warning(f"Could not detect geometry column for {layer.name()}, using 'geom': {e}")
-                    
-                    # Fill layer_provider_type
-                    # Use detect_layer_provider_type to get correct provider for backend selection
-                    if 'layer_provider_type' not in layer_info or layer_info['layer_provider_type'] is None:
-                        detected_type = detect_layer_provider_type(layer)
-                        layer_info['layer_provider_type'] = detected_type
-                        logger.info(f"Auto-filled layer_provider_type='{detected_type}' for layer {layer.name()}")
-                    
-                    # Fill/validate layer_schema (NULL for non-PostgreSQL layers)
-                    # CRITICAL FIX v2.3.15: Always re-validate schema from layer source for PostgreSQL
-                    # The stored layer_schema can be corrupted or incorrect (e.g., literal "schema" string)
-                    if layer_info.get('layer_provider_type') == 'postgresql':
-                        try:
-                            from qgis.core import QgsDataSourceUri
-                            source_uri = QgsDataSourceUri(layer.source())
-                            detected_schema = source_uri.schema()
-                            stored_schema = layer_info.get('layer_schema')
-                            
-                            if detected_schema:
-                                if stored_schema and stored_schema != detected_schema and stored_schema != 'NULL':
-                                    logger.warning(f"Schema mismatch for {layer.name()}: stored='{stored_schema}', actual='{detected_schema}'")
-                                layer_info['layer_schema'] = detected_schema
-                                logger.debug(f"Validated layer_schema='{detected_schema}' for layer {layer.name()}")
-                            elif not stored_schema or stored_schema == 'NULL':
-                                layer_info['layer_schema'] = 'public'
-                                logger.info(f"Auto-filled layer_schema='public' (default) for layer {layer.name()}")
-                        except Exception as e:
-                            logger.warning(f"Could not detect schema for {layer.name()}: {e}")
-                            if 'layer_schema' not in layer_info or layer_info['layer_schema'] is None:
-                                # Fallback to regex if QgsDataSourceUri fails
-                                import re
-                                source = layer.source()
-                                match = re.search(r'table="([^"]+)"\.', source)
-                                if match:
-                                    layer_info['layer_schema'] = match.group(1)
-                                else:
-                                    layer_info['layer_schema'] = 'public'
-                                logger.info(f"Auto-filled layer_schema='{layer_info['layer_schema']}' (regex fallback) for layer {layer.name()}")
-                    elif 'layer_schema' not in layer_info or layer_info['layer_schema'] is None:
-                        layer_info['layer_schema'] = 'NULL'
-                    
-                    # Fill primary_key_name by searching for a unique field
-                    if 'primary_key_name' not in layer_info or layer_info['primary_key_name'] is None:
-                        pk_found = False
-                        # Check declared primary key
-                        pk_attrs = layer.primaryKeyAttributes()
-                        if pk_attrs:
-                            field = layer.fields()[pk_attrs[0]]
-                            layer_info['primary_key_name'] = field.name()
-                            pk_found = True
-                            logger.info(f"Auto-filled primary_key_name='{field.name()}' from primary key for layer {layer.name()}")
-                        
-                        # Fallback: look for 'id' field
-                        if not pk_found:
-                            for field in layer.fields():
-                                if 'id' in field.name().lower():
-                                    layer_info['primary_key_name'] = field.name()
-                                    pk_found = True
-                                    logger.info(f"Auto-filled primary_key_name='{field.name()}' (contains 'id') for layer {layer.name()}")
-                                    break
-                        
-                        # Last resort: use first numeric field
-                        if not pk_found:
-                            for field in layer.fields():
-                                if field.isNumeric():
-                                    layer_info['primary_key_name'] = field.name()
-                                    logger.info(f"Auto-filled primary_key_name='{field.name()}' (first numeric) for layer {layer.name()}")
-                                    break
-                    
-                    # Log what still couldn't be filled
-                    still_missing = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
-                    if still_missing:
-                        logger.error(f"Cannot filter layer {layer.name()} (id={key}): still missing {still_missing}")
-                        continue
-                    else:
-                        logger.info(f"Successfully auto-filled missing properties for layer {layer.name()}")
-                        # Update PROJECT_LAYERS with auto-filled values
-                        # CRITICAL FIX v2.7.8: Remove runtime keys before updating persistent storage
-                        # These keys should only exist during filter execution, not in saved config
-                        update_info = {k: v for k, v in layer_info.items() 
-                                       if k not in ['_effective_provider_type', '_postgresql_fallback', '_forced_backend']}
-                        self.PROJECT_LAYERS[key]["infos"].update(update_info)
-                else:
-                    logger.error(f"Cannot filter layer {key}: layer not found in project")
-                    continue
-            
-            layers_to_filter.append(layer_info)
-            logger.info(f"  ✓ Added layer to filter list: {layer_info.get('layer_name', key)}")
+            if key in self.PROJECT_LAYERS:
+                layers_to_filter.append(self.PROJECT_LAYERS[key]["infos"].copy())
         
-        logger.info(f"=== Built layers_to_filter list with {len(layers_to_filter)} layers ===")
+        logger.info(f"Built layers_to_filter (fallback) with {len(layers_to_filter)} layers")
         return layers_to_filter
     
     def _initialize_filter_history(self, current_layer, layers_to_filter, task_parameters):
@@ -2469,8 +1982,6 @@ class FilterMateApp:
             - Automatically detects PostgreSQL availability
         """
 
-        
-
         if task_name in [name for name in self.tasks_descriptions.keys() if "layer" not in name]:
 
             if self.dockwidget is None or self.dockwidget.current_layer is None:
@@ -2500,120 +2011,20 @@ class FilterMateApp:
                 )
                 return None
             
-            task_parameters = self.PROJECT_LAYERS[current_layer.id()]
-            
-            # CRITICAL FIX v2.5.x: Synchronize buffer spinbox value to PROJECT_LAYERS
-            # The spinbox valueChanged signal may not have updated PROJECT_LAYERS yet
-            # Read the current spinbox value directly and sync it before creating task params
-            # FIX v3.0.12: Clean buffer value from float precision errors (0.9999999 → 1.0)
-            if self.dockwidget and hasattr(self.dockwidget, 'mQgsDoubleSpinBox_filtering_buffer_value'):
-                current_spinbox_buffer = clean_buffer_value(self.dockwidget.mQgsDoubleSpinBox_filtering_buffer_value.value())
-                stored_buffer = task_parameters.get("filtering", {}).get("buffer_value", 0.0)
-                if current_spinbox_buffer != stored_buffer:
-                    logger.info(f"SYNC buffer_value: spinbox={current_spinbox_buffer}, stored={stored_buffer} → updating")
-                    if "filtering" not in task_parameters:
-                        task_parameters["filtering"] = {}
-                    task_parameters["filtering"]["buffer_value"] = current_spinbox_buffer
-                    self.PROJECT_LAYERS[current_layer.id()]["filtering"]["buffer_value"] = current_spinbox_buffer
-
-            # CRITICAL FIX v2.5.11: Synchronize buffer_segments spinbox value to PROJECT_LAYERS
-            # Same issue as buffer_value - the spinbox valueChanged signal may not have updated PROJECT_LAYERS yet
-            if self.dockwidget and hasattr(self.dockwidget, 'mQgsSpinBox_filtering_buffer_segments'):
-                current_spinbox_segments = self.dockwidget.mQgsSpinBox_filtering_buffer_segments.value()
-                stored_segments = task_parameters.get("filtering", {}).get("buffer_segments", 5)
-                if current_spinbox_segments != stored_segments:
-                    logger.info(f"SYNC buffer_segments: spinbox={current_spinbox_segments}, stored={stored_segments} → updating")
-                    if "filtering" not in task_parameters:
-                        task_parameters["filtering"] = {}
-                    task_parameters["filtering"]["buffer_segments"] = current_spinbox_segments
-                    self.PROJECT_LAYERS[current_layer.id()]["filtering"]["buffer_segments"] = current_spinbox_segments
-
-            # CRITICAL FIX v2.5.11: Synchronize buffer_type combobox value to PROJECT_LAYERS
-            # Same issue - the combobox currentTextChanged signal may not have updated PROJECT_LAYERS yet
-            if self.dockwidget and hasattr(self.dockwidget, 'comboBox_filtering_buffer_type'):
-                current_buffer_type = self.dockwidget.comboBox_filtering_buffer_type.currentText()
-                stored_buffer_type = task_parameters.get("filtering", {}).get("buffer_type", "Round")
-                if current_buffer_type != stored_buffer_type:
-                    logger.info(f"SYNC buffer_type: combobox={current_buffer_type}, stored={stored_buffer_type} → updating")
-                    if "filtering" not in task_parameters:
-                        task_parameters["filtering"] = {}
-                    task_parameters["filtering"]["buffer_type"] = current_buffer_type
-                    self.PROJECT_LAYERS[current_layer.id()]["filtering"]["buffer_type"] = current_buffer_type
-
-            # CENTROID OPTIMIZATION v2.5.12: Synchronize use_centroids checkboxes (source and distant layers)
-            if self.dockwidget and hasattr(self.dockwidget, 'checkBox_filtering_use_centroids_source_layer'):
-                current_use_centroids_source = self.dockwidget.checkBox_filtering_use_centroids_source_layer.isChecked()
-                stored_use_centroids_source = task_parameters.get("filtering", {}).get("use_centroids_source_layer", False)
-                if current_use_centroids_source != stored_use_centroids_source:
-                    logger.info(f"SYNC use_centroids_source_layer: checkbox={current_use_centroids_source}, stored={stored_use_centroids_source} → updating")
-                    if "filtering" not in task_parameters:
-                        task_parameters["filtering"] = {}
-                    task_parameters["filtering"]["use_centroids_source_layer"] = current_use_centroids_source
-                    self.PROJECT_LAYERS[current_layer.id()]["filtering"]["use_centroids_source_layer"] = current_use_centroids_source
-            
-            if self.dockwidget and hasattr(self.dockwidget, 'checkBox_filtering_use_centroids_distant_layers'):
-                current_use_centroids_distant = self.dockwidget.checkBox_filtering_use_centroids_distant_layers.isChecked()
-                stored_use_centroids_distant = task_parameters.get("filtering", {}).get("use_centroids_distant_layers", False)
-                if current_use_centroids_distant != stored_use_centroids_distant:
-                    logger.info(f"SYNC use_centroids_distant_layers: checkbox={current_use_centroids_distant}, stored={stored_use_centroids_distant} → updating")
-                    if "filtering" not in task_parameters:
-                        task_parameters["filtering"] = {}
-                    task_parameters["filtering"]["use_centroids_distant_layers"] = current_use_centroids_distant
-                    self.PROJECT_LAYERS[current_layer.id()]["filtering"]["use_centroids_distant_layers"] = current_use_centroids_distant
-
-            if current_layer.subsetString() != '':
-                self.PROJECT_LAYERS[current_layer.id()]["infos"]["is_already_subset"] = True
+            # v4.4: Delegate UI→PROJECT_LAYERS synchronization to TaskParameterBuilder
+            # This replaces ~100 lines of SYNC blocks with a single delegation call
+            if TaskParameterBuilder and self.dockwidget:
+                builder = TaskParameterBuilder(
+                    dockwidget=self.dockwidget,
+                    project_layers=self.PROJECT_LAYERS,
+                    config_data=self.CONFIG_DATA
+                )
+                task_parameters = builder.sync_ui_to_project_layers(current_layer)
+                if task_parameters is None:
+                    logger.error("sync_ui_to_project_layers returned None")
+                    return None
             else:
-                self.PROJECT_LAYERS[current_layer.id()]["infos"]["is_already_subset"] = False
-
-            # CRITICAL FIX v2.5.x: Synchronize has_geometric_predicates button state
-            # The button clicked signal may not have updated PROJECT_LAYERS yet
-            if self.dockwidget and hasattr(self.dockwidget, 'pushButton_checkable_filtering_geometric_predicates'):
-                current_has_geom_predicates = self.dockwidget.pushButton_checkable_filtering_geometric_predicates.isChecked()
-                stored_has_geom_predicates = task_parameters.get("filtering", {}).get("has_geometric_predicates", False)
-                if current_has_geom_predicates != stored_has_geom_predicates:
-                    logger.info(f"SYNC has_geometric_predicates: button={current_has_geom_predicates}, stored={stored_has_geom_predicates} → updating")
-                    if "filtering" not in task_parameters:
-                        task_parameters["filtering"] = {}
-                    task_parameters["filtering"]["has_geometric_predicates"] = current_has_geom_predicates
-                    self.PROJECT_LAYERS[current_layer.id()]["filtering"]["has_geometric_predicates"] = current_has_geom_predicates
-
-            # CRITICAL FIX v2.5.x: Synchronize geometric_predicates list from UI
-            # The listWidget selection may not have updated PROJECT_LAYERS yet
-            if self.dockwidget and hasattr(self.dockwidget, 'listWidget_filtering_geometric_predicate'):
-                # Get selected predicates from list widget
-                selected_items = self.dockwidget.listWidget_filtering_geometric_predicate.selectedItems()
-                current_predicates = [item.text() for item in selected_items]
-                stored_predicates = task_parameters.get("filtering", {}).get("geometric_predicates", [])
-                if set(current_predicates) != set(stored_predicates):
-                    logger.info(f"SYNC geometric_predicates: listWidget={current_predicates}, stored={stored_predicates} → updating")
-                    if "filtering" not in task_parameters:
-                        task_parameters["filtering"] = {}
-                    task_parameters["filtering"]["geometric_predicates"] = current_predicates
-                    self.PROJECT_LAYERS[current_layer.id()]["filtering"]["geometric_predicates"] = current_predicates
-
-            # CRITICAL FIX v2.5.x: Synchronize has_layers_to_filter button state
-            if self.dockwidget and hasattr(self.dockwidget, 'pushButton_checkable_filtering_layers_to_filter'):
-                current_has_layers = self.dockwidget.pushButton_checkable_filtering_layers_to_filter.isChecked()
-                stored_has_layers = task_parameters.get("filtering", {}).get("has_layers_to_filter", False)
-                if current_has_layers != stored_has_layers:
-                    logger.info(f"SYNC has_layers_to_filter: button={current_has_layers}, stored={stored_has_layers} → updating")
-                    if "filtering" not in task_parameters:
-                        task_parameters["filtering"] = {}
-                    task_parameters["filtering"]["has_layers_to_filter"] = current_has_layers
-                    self.PROJECT_LAYERS[current_layer.id()]["filtering"]["has_layers_to_filter"] = current_has_layers
-
-            # CRITICAL FIX v2.5.x: Synchronize layers_to_filter list from UI
-            # The combobox checked items may not have updated PROJECT_LAYERS yet
-            if self.dockwidget and hasattr(self.dockwidget, 'get_layers_to_filter'):
-                current_layers_to_filter = self.dockwidget.get_layers_to_filter()
-                stored_layers_to_filter = task_parameters.get("filtering", {}).get("layers_to_filter", [])
-                if set(current_layers_to_filter) != set(stored_layers_to_filter):
-                    logger.info(f"SYNC layers_to_filter: combobox={len(current_layers_to_filter)} layers, stored={len(stored_layers_to_filter)} layers → updating")
-                    if "filtering" not in task_parameters:
-                        task_parameters["filtering"] = {}
-                    task_parameters["filtering"]["layers_to_filter"] = current_layers_to_filter
-                    self.PROJECT_LAYERS[current_layer.id()]["filtering"]["layers_to_filter"] = current_layers_to_filter
+                task_parameters = self.PROJECT_LAYERS[current_layer.id()]
 
             # v2.7.17: Enhanced logging before getting features
             # v2.9.28: FIX - reset and unfilter do NOT require features to be selected
@@ -2773,47 +2184,37 @@ class FilterMateApp:
         """
         Refresh source layer and map canvas with stabilization for Spatialite.
         
-        For Spatialite/OGR layers, adds a brief stabilization delay before refresh
-        to allow SQLite connections to fully close. This prevents transient 
-        "unable to open database file" errors during concurrent access.
-        
-        Uses GdalErrorHandler to suppress transient GDAL warnings during refresh.
-        
-        v2.6.5: PERFORMANCE FIX - Skip updateExtents() for large layers to prevent freeze.
-        v2.6.7: FREEZE FIX - Replace blocking time.sleep() with non-blocking QTimer.
+        v4.7: Delegates to LayerRefreshManager.refresh_layer_and_canvas().
+        Legacy fallback for backward compatibility.
         
         Args:
             source_layer (QgsVectorLayer): Layer to refresh
         """
+        # v4.7: Delegate to LayerRefreshManager when available
+        if self._layer_refresh_manager is not None:
+            self._layer_refresh_manager.refresh_layer_and_canvas(source_layer)
+            return
+        
+        # Legacy fallback (for when hexagonal services unavailable)
         from qgis.PyQt.QtCore import QTimer
         
-        # Check if layer is Spatialite or OGR (local file-based SQLite)
         provider_type = source_layer.providerType() if source_layer else None
         needs_stabilization = provider_type in ('spatialite', 'ogr')
         
         def do_refresh():
-            """Perform the actual layer refresh (called immediately or after delay)."""
             try:
-                # Use GDAL error handler to suppress transient SQLite warnings during refresh
                 with GdalErrorHandler():
-                    # v2.6.5: Skip updateExtents for large layers to prevent freeze
-                    # v2.7.6: Use configurable threshold
                     thresholds = get_optimization_thresholds(ENV_VARS)
-                    MAX_FEATURES_FOR_UPDATE_EXTENTS = thresholds['update_extents_threshold']
+                    MAX_FEATURES = thresholds['update_extents_threshold']
                     feature_count = source_layer.featureCount() if source_layer else 0
-                    if feature_count >= 0 and feature_count < MAX_FEATURES_FOR_UPDATE_EXTENTS:
+                    if feature_count >= 0 and feature_count < MAX_FEATURES:
                         source_layer.updateExtents()
-                    # else: skip expensive updateExtents for very large layers
                     source_layer.triggerRepaint()
-                    # v2.6.7: Skip refreshAllLayers() - individual layer repaint is sufficient
-                    # This avoids redundant refresh when finished() already handles canvas refresh
                     self.iface.mapCanvas().refresh()
             except Exception as e:
                 logger.warning(f"_refresh_layers_and_canvas: refresh failed: {e}")
         
         if needs_stabilization:
-            # v2.6.7: NON-BLOCKING stabilization delay using QTimer
-            # This prevents UI freeze while allowing SQLite connections to settle
             stabilization_ms = STABILITY_CONSTANTS.get('SPATIALITE_STABILIZATION_MS', 200)
             QTimer.singleShot(stabilization_ms, do_refresh)
         else:
