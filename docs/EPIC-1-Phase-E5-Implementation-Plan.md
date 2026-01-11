@@ -14,7 +14,7 @@ Phase E5 continues the refactoring of `filter_task.py` by:
 
 ## Progress Summary
 
-### E5-S1: Legacy Code Removal from prepare_*_source_geom (COMPLETED ✅)
+### E5-S1: Legacy Code Removal from prepare\_\*\_source_geom (COMPLETED ✅)
 
 Removed legacy fallback implementations from methods with working Strangler Fig delegations:
 
@@ -31,20 +31,32 @@ Removed legacy fallback implementations from methods with working Strangler Fig 
 
 Removed legacy fallback code from memory layer methods with v4.0 delegations:
 
-| Method                                 | Before     | After    | Saved           |
-| -------------------------------------- | ---------- | -------- | --------------- |
-| `_copy_filtered_layer_to_memory()`     | ~109 lines | ~27 lines | **~82 lines**   |
-| `_copy_selected_features_to_memory()`  | ~115 lines | ~26 lines | **~89 lines**   |
-| `_create_memory_layer_from_features()` | ~109 lines | ~27 lines | **~82 lines**   |
-| `_create_buffered_memory_layer()`      | ~86 lines  | ~26 lines | **~60 lines**   |
-| **Total E5-S2**                        |            |           | **~313 lines**  |
+| Method                                 | Before     | After     | Saved          |
+| -------------------------------------- | ---------- | --------- | -------------- |
+| `_copy_filtered_layer_to_memory()`     | ~109 lines | ~27 lines | **~82 lines**  |
+| `_copy_selected_features_to_memory()`  | ~115 lines | ~26 lines | **~89 lines**  |
+| `_create_memory_layer_from_features()` | ~109 lines | ~27 lines | **~82 lines**  |
+| `_create_buffered_memory_layer()`      | ~86 lines  | ~26 lines | **~60 lines**  |
+| **Total E5-S2**                        |            |           | **~313 lines** |
 
 **File size**: 11,769 → 11,456 lines (**-313 lines**, ~2.7% reduction)
 
-### Combined Progress (E5-S1 + E5-S2)
+### E5-S3: Geometry Repair Utilities (COMPLETED ✅)
 
-**Total removed**: 1,438 lines  
-**File size**: 12,894 → 11,456 lines (**-11.1% reduction**)
+Removed legacy fallback code from geometry repair methods with v4.0 delegations:
+
+| Method                           | Before    | After     | Saved          |
+| -------------------------------- | --------- | --------- | -------------- |
+| `_aggressive_geometry_repair()`  | ~84 lines | ~15 lines | **~69 lines**  |
+| `_repair_invalid_geometries()`   | ~98 lines | ~19 lines | **~79 lines**  |
+| **Total E5-S3**                  |           |           | **~148 lines** |
+
+**File size**: 11,456 → 11,314 lines (**-142 lines**, ~1.2% reduction)
+
+### Combined Progress (E5-S1 + E5-S2 + E5-S3)
+
+**Total removed**: 1,580 lines  
+**File size**: 12,894 → 11,314 lines (**-12.3% reduction**)
 
 ---
 

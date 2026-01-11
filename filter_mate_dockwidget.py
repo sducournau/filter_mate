@@ -1463,28 +1463,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return {'AND': 0, 'AND NOT': 1, 'OR': 2, 'ET': 0, 'ET NON': 1, 'OU': 2}.get(op, 0)
 
     def dockwidget_widgets_configuration(self):
-        """
-        Configure widgets using ConfigurationManager.
-        
-        v4.0 Sprint 6: Simplified to wrapper - delegates to ConfigurationManager.
-        Reduced from 164 lines to ~30 lines.
-        """
-        # Create ConfigurationManager if not exists
+        """v4.0 Sprint 15: Configure widgets via ConfigurationManager and setup controllers."""
         if self._configuration_manager is None:
             self._configuration_manager = ConfigurationManager(self)
-        
-        # Get property mappings
         self.layer_properties_tuples_dict = self._configuration_manager.get_layer_properties_tuples_dict()
         self.export_properties_tuples_dict = self._configuration_manager.get_export_properties_tuples_dict()
-        
-        # Configure all widgets
         self.widgets = self._configuration_manager.configure_widgets()
-        
         self.widgets_initialized = True
         logger.info(f"✓ Widgets fully initialized with {len(self.PROJECT_LAYERS)} layers")
         
-        # v3.0: Setup MVC controllers now that widgets are ready
-        if self._controller_integration is not None:
+        # Setup controllers
+        if self._controller_integration:
             try:
                 if self._controller_integration.setup():
                     self._controller_integration.sync_from_dockwidget()
@@ -1494,9 +1483,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             except Exception as e:
                 logger.warning(f"Controller integration setup failed: {e}")
         
-        # CRITICAL FIX: Connect selectionChanged signal for initial current_layer
-        # This ensures tracking/selecting works even without changing layers first
-        if self.current_layer is not None and self.current_layer_selection_connection is None:
+        # Connect selectionChanged for initial layer
+        if self.current_layer and not self.current_layer_selection_connection:
             try:
                 self.current_layer.selectionChanged.connect(self.on_layer_selection_changed)
                 self.current_layer_selection_connection = True
@@ -1504,16 +1492,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             except (TypeError, RuntimeError) as e:
                 logger.warning(f"Could not connect selectionChanged for initial layer: {e}")
         
-        # NEW: Emit signal to notify that widgets are ready
-        # This allows FilterMateApp to safely proceed with layer operations
         logger.debug("Emitting widgetsInitialized signal")
         self.widgetsInitialized.emit()
-        
-        # STABILITY IMPROVEMENT: Add F5 shortcut to force reload layers
-        # This helps users recover when project change doesn't properly reload layers
         self._setup_keyboard_shortcuts()
         
-        # CRITICAL: If layers were updated before widgets_initialized, refresh UI now
+        # Process pending layers update
         if self._pending_layers_update:
             logger.debug(f"Pending layers update detected - refreshing UI with {len(self.PROJECT_LAYERS)} layers")
             self._pending_layers_update = False
@@ -1647,40 +1630,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def manage_configuration_model(self):
-        """Manage the qtreeview model configuration"""
-
+        """v4.0 Sprint 15: Setup config model, view, and signals."""
         try:
-            # Create model with data
             self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=False, editable_values=True, plugin_dir=self.plugin_dir)
-
-            # Create view with model - setModel() is called in JsonView.__init__()
             self.config_view = JsonView(self.config_model, self.plugin_dir)
-            
-            # Insert into layout
             self.CONFIGURATION.layout().insertWidget(0, self.config_view)
-
-            # Note: setModel() is already called in JsonView constructor - do NOT call again
-            # Calling setModel() after insertion can cause Qt crashes
-
             self.config_view.setAnimated(True)
             self.config_view.setEnabled(True)
             self.config_view.show()
-            
-            # CRITICAL: Connect itemChanged signal immediately after model creation
-            # This ensures changes are detected and OK button is enabled
             self.config_model.itemChanged.connect(self.data_changed_configuration_model)
             logger.info("Configuration model itemChanged signal connected")
-            
-            # Add Reload Plugin button
             self._setup_reload_button()
-            
-            # Disable OK/Cancel buttons by default (no changes pending)
             if hasattr(self, 'buttonBox'):
                 self.buttonBox.setEnabled(False)
                 logger.info("Configuration buttons disabled (no pending changes)")
-            
-            # Connect OK/Cancel button signals
-            if hasattr(self, 'buttonBox'):
                 self.buttonBox.accepted.connect(self.on_config_buttonbox_accepted)
                 self.buttonBox.rejected.connect(self.on_config_buttonbox_rejected)
                 logger.info("Configuration button signals connected")
@@ -1690,25 +1653,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.error(traceback.format_exc())
 
     def _setup_reload_button(self):
-        """
-        Setup the Reload Plugin button in the configuration panel.
-        
-        This button allows users to reload the plugin to apply layout changes.
-        """
+        """v4.0 Sprint 15: Setup Reload Plugin button in config panel."""
         try:
-            # Create reload button
             self.pushButton_reload_plugin = QtWidgets.QPushButton("🔄 Reload Plugin")
             self.pushButton_reload_plugin.setObjectName("pushButton_reload_plugin")
             self.pushButton_reload_plugin.setToolTip(QCoreApplication.translate("FilterMate", "Reload the plugin to apply layout changes (action bar position)"))
             self.pushButton_reload_plugin.setCursor(QtGui.QCursor(Qt.PointingHandCursor))
-            
-            # Style the button
             self.pushButton_reload_plugin.setMinimumHeight(30)
-            
-            # Connect signal
             self.pushButton_reload_plugin.clicked.connect(self._on_reload_button_clicked)
-            
-            # Add to configuration layout (before buttonBox)
             config_layout = self.CONFIGURATION.layout()
             if config_layout:
                 # Insert before the last widget (buttonBox)
@@ -1965,22 +1917,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.frame_actions.setMaximumHeight(max(icon_size * 2, 56) + 15)
 
     def manage_ui_style(self):
-        """v3.1 Sprint 15: Load and apply plugin stylesheet."""
-        # Theme management
+        """v4.0 Sprint 15: Apply stylesheet, icons, and button styling via managers."""
         if self._theme_manager:
             try: self._theme_manager.setup()
             except: self._apply_auto_configuration(); self._apply_stylesheet(); self._setup_theme_watcher()
         else:
             self._apply_auto_configuration(); self._apply_stylesheet(); self._setup_theme_watcher()
-        
-        # Icon management  
         if self._icon_manager:
             try: self._icon_manager.setup()
             except: self._init_icon_theme()
         else:
             self._init_icon_theme()
-        
-        # Button styling
         if self._button_styler:
             try: self._button_styler.setup()
             except: self._legacy_configure_widgets()
@@ -1993,26 +1940,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             IconThemeManager.set_theme(StyleLoader.detect_qgis_theme())
     
     def _legacy_configure_widgets(self):
-        """Legacy widget configuration - used as fallback for ButtonStyler."""
-        # Safety check: widgets must be initialized
-        if self.widgets is None or not self.widgets:
+        """v4.0 Sprint 15: Legacy widget config fallback for ButtonStyler."""
+        if not self.widgets:
             logger.warning("_legacy_configure_widgets called but widgets not initialized yet")
             return
-        
-        # Get configuration
-        pushButton_config_path = ['APP', 'DOCKWIDGET', 'PushButton']
-        pushButton_config = self.CONFIG_DATA[pushButton_config_path[0]][pushButton_config_path[1]][pushButton_config_path[2]]
-        
-        icons_sizes = {
-            "ACTION": pushButton_config.get("ICONS_SIZES", {}).get("ACTION", {}).get("value", 20),
-            "OTHERS": pushButton_config.get("ICONS_SIZES", {}).get("OTHERS", {}).get("value", 20),
-        }
-        
+        pb_cfg = self.CONFIG_DATA['APP']['DOCKWIDGET']['PushButton']
+        icons_sizes = {"ACTION": pb_cfg.get("ICONS_SIZES", {}).get("ACTION", {}).get("value", 20),
+                       "OTHERS": pb_cfg.get("ICONS_SIZES", {}).get("OTHERS", {}).get("value", 20)}
         font = QFont("Segoe UI Semibold", 8)
         font.setBold(True)
-        
-        # Configure widgets (icons will now use correct theme)
-        self._configure_pushbuttons(pushButton_config, icons_sizes, font)
+        self._configure_pushbuttons(pb_cfg, icons_sizes, font)
         self._configure_other_widgets(font)
         self._configure_key_widgets_sizes(icons_sizes)
     

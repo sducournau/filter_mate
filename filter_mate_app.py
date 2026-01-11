@@ -720,6 +720,37 @@ class FilterMateApp:
         else:
             self._layer_refresh_manager = None
         
+        # v4.7: Initialize LayerTaskCompletionHandler (extracted from layer_management_engine_task_completed)
+        if HEXAGONAL_AVAILABLE and LayerTaskCompletionHandler:
+            self._layer_task_completion_handler = LayerTaskCompletionHandler(
+                get_spatialite_connection=self.get_spatialite_connection,
+                get_project_uuid=lambda: self.project_uuid,
+                get_project=lambda: self.PROJECT,
+                get_dockwidget=lambda: self.dockwidget,
+                get_project_layers=lambda: self.PROJECT_LAYERS,
+                set_project_layers=lambda pl: setattr(self, 'PROJECT_LAYERS', pl),
+                get_history_manager=lambda: self.history_manager,
+                save_project_variables_callback=self.save_project_variables,
+                update_datasource_callback=self.update_datasource,
+                get_env_vars=lambda: ENV_VARS,
+                warm_query_cache_callback=self._warm_query_cache_for_layers if hasattr(self, '_warm_query_cache_for_layers') else None,
+                process_add_layers_queue_callback=self._process_add_layers_queue if hasattr(self, '_process_add_layers_queue') else None,
+                refresh_ui_after_project_load_callback=self._refresh_ui_after_project_load if hasattr(self, '_refresh_ui_after_project_load') else None,
+                set_loading_flag_callback=self._set_loading_flag if hasattr(self, '_set_loading_flag') else None,
+                validate_layer_info_callback=self._validate_layer_info if hasattr(self, '_validate_layer_info') else None,
+                update_datasource_for_layer_callback=self._update_datasource_for_layer if hasattr(self, '_update_datasource_for_layer') else None,
+                remove_datasource_for_layer_callback=self._remove_datasource_for_layer if hasattr(self, '_remove_datasource_for_layer') else None,
+                pending_tasks_counter_callbacks={
+                    'get': lambda: self._pending_add_layers_tasks,
+                    'decrement': lambda: setattr(self, '_pending_add_layers_tasks', self._pending_add_layers_tasks - 1),
+                    'get_queue': lambda: self._add_layers_queue
+                },
+                stability_constants=STABILITY_CONSTANTS
+            )
+            logger.info("FilterMate: LayerTaskCompletionHandler initialized (v4.7 migration)")
+        else:
+            self._layer_task_completion_handler = None
+        
         # Note: Do NOT call self.run() here - it will be called from filter_mate.py
         # when the user actually activates the plugin to avoid QGIS initialization race conditions
 
@@ -2064,25 +2095,18 @@ class FilterMateApp:
                     features, expression, layers_to_filter, include_history
                 )
                 
-                # NOUVEAU: Détecter si le filtre source doit être ignoré
-                # Cas: custom_selection active ET expression n'est pas un filtre valide
-                # (pas d'opérateurs de comparaison - ex: juste un nom de champ ou expression display)
-                # 
-                # NOTE v2.9.23: single_selection et multiple_selection filtrent TOUJOURS la couche source
-                # Le filtre est appliqué selon la logique du groupbox actif
-                skip_source_filter = False
-                current_groupbox = self.dockwidget.current_exploring_groupbox
-                
-                if task_name == 'filter':
-                    if current_groupbox == "custom_selection":
-                        # L'expression validée est vide si l'expression originale n'était pas un filtre
-                        # (car _build_common_task_params la vide si pas d'opérateurs de comparaison)
-                        validated_expr = task_parameters["task"].get("expression", "")
-                        if not validated_expr or not validated_expr.strip():
-                            skip_source_filter = True
-                            logger.info(f"FilterMate: Custom selection with non-filter expression '{expression}' - will use ALL features from source layer")
-                    # single_selection et multiple_selection: la couche source EST filtrée
-                    # en utilisant l'expression construite à partir des features sélectionnées
+                # v4.7: Delegate skip_source_filter logic to TaskParameterBuilder
+                if TaskParameterBuilder and self.dockwidget:
+                    builder = TaskParameterBuilder(
+                        dockwidget=self.dockwidget,
+                        project_layers=self.PROJECT_LAYERS,
+                        config_data=self.CONFIG_DATA
+                    )
+                    skip_source_filter = builder.determine_skip_source_filter(
+                        task_name, task_parameters, expression
+                    )
+                else:
+                    skip_source_filter = False
                 
                 task_parameters["task"]["skip_source_filter"] = skip_source_filter
                 
@@ -2659,145 +2683,35 @@ class FilterMateApp:
         """
         Handle completion of layer management tasks.
         
+        v4.7: Delegates to LayerTaskCompletionHandler for God Class reduction.
+        
         Called when LayersManagementEngineTask completes. Updates internal layer registry,
         refreshes UI, and handles layer addition/removal cleanup.
         
         Args:
             result_project_layers (dict): Updated PROJECT_LAYERS dictionary with all layer metadata
             task_name (str): Type of task completed (add_layers, remove_layers, etc.)
-            
-        Notes:
-            - Updates dockwidget PROJECT_LAYERS reference
-            - Calls get_project_layers_from_app() to refresh UI
-            - Handles special cases for layer removal and project reset
-            - Updates layer comboboxes and enables/disables controls
-            - Reconnects widget signals after changes
         """
-        logger.info(f"layer_management_engine_task_completed called: task_name={task_name}, result_project_layers count={len(result_project_layers) if result_project_layers else 0}")
-        
-        init_env_vars()
-
-        global ENV_VARS
-
-        # CRITICAL: Validate and update PROJECT_LAYERS before UI refresh
-        # This ensures layer IDs are synchronized before dockwidget accesses them
-        if result_project_layers is None:
-            logger.error("layer_management_engine_task_completed received None for result_project_layers")
-            return
-        
-        self.PROJECT_LAYERS = result_project_layers
-        self.PROJECT = ENV_VARS["PROJECT"]
-        
-        logger.debug(f"Updated PROJECT_LAYERS with {len(self.PROJECT_LAYERS)} layers after {task_name}")
-        
-        ENV_VARS["PATH_ABSOLUTE_PROJECT"] = os.path.normpath(self.PROJECT.readPath("./"))
-        if ENV_VARS["PATH_ABSOLUTE_PROJECT"] =='./':
-            if ENV_VARS["PLATFORM"].startswith('win'):
-                ENV_VARS["PATH_ABSOLUTE_PROJECT"] =  os.path.normpath(os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop'))
-            else:
-                ENV_VARS["PATH_ABSOLUTE_PROJECT"] =  os.path.normpath(os.environ['HOME'])
-
-        if self.dockwidget is not None:
-
-            conn = self.get_spatialite_connection()
-            if conn is None:
-                # Even if DB connection fails, we must update the UI
-                self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
-                return
-            cur = conn.cursor()
-
+        # v4.7: Delegate to LayerTaskCompletionHandler
+        if self._layer_task_completion_handler is not None:
             try:
-                if task_name in ("add_layers","remove_layers","remove_all_layers"):
-                    if task_name == 'add_layers':
-                        for layer_key in self.PROJECT_LAYERS.keys():
-                            if layer_key not in self.dockwidget.PROJECT_LAYERS.keys():
-                                try:
-                                    self.dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].remove_list_widget(layer_key)
-                                except (KeyError, AttributeError, RuntimeError):
-                                    pass
-
-                            # Validate and update datasource
-                            layer_info = self._validate_layer_info(layer_key)
-                            if layer_info:
-                                self._update_datasource_for_layer(layer_info)
-                                
-
-                    else:
-                        # Handle layer removal
-                        for layer_key in self.dockwidget.PROJECT_LAYERS.keys():
-                            if layer_key not in self.PROJECT_LAYERS.keys():
-                                # Layer removed - clean up database
-                                cur.execute("""DELETE FROM fm_project_layers_properties 
-                                                WHERE fk_project = '{project_id}' and layer_id = '{layer_id}';""".format(
-                                                    project_id=self.project_uuid,
-                                                    layer_id=layer_key
-                                                ))
-                                conn.commit()
-                                
-                                # Clean up history for removed layer
-                                self.history_manager.remove_history(layer_key)
-                                logger.info(f"FilterMate: Removed history for deleted layer {layer_key}")
-                                
-                                try:
-                                    self.dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].remove_list_widget(layer_key)
-                                except (KeyError, AttributeError, RuntimeError):
-                                    pass
-                            else:
-                                # Update datasource for remaining layers
-                                layer_info = self._validate_layer_info(layer_key)
-                                if layer_info:
-                                    self._remove_datasource_for_layer(layer_info)
-                    
-                    
-                    self.save_project_variables()                    
-                    self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
-
-                self.MapLayerStore = self.PROJECT.layerStore()
-                self.update_datasource()
-                logger.debug(f"Project datasources: {self.project_datasources}")
-            finally:
-                # STABILITY FIX: Ensure DB connection is always closed
-                try:
-                    cur.close()
-                except Exception:
-                    pass
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-            
-            # STABILITY FIX: Decrement add_layers task counter and process queue
-            if task_name == 'add_layers':
-                if self._pending_add_layers_tasks > 0:
-                    self._pending_add_layers_tasks -= 1
-                    logger.debug(f"Completed add_layers task (remaining: {self._pending_add_layers_tasks})")
+                # Initialize ENV_VARS before delegation
+                init_env_vars()
+                global ENV_VARS
+                self.PROJECT = ENV_VARS["PROJECT"]
                 
-                # PERFORMANCE v2.6.0: Warm query cache for loaded layers
-                self._warm_query_cache_for_layers()
-                
-                # Process next queued operation if any
-                if self._add_layers_queue and self._pending_add_layers_tasks == 0:
-                    logger.info(f"Processing {len(self._add_layers_queue)} queued add_layers operations")
-                    # STABILITY FIX: Use weakref to prevent access violations
-                    weak_self = weakref.ref(self)
-                    def safe_process_queue_on_complete():
-                        strong_self = weak_self()
-                        if strong_self is not None:
-                            strong_self._process_add_layers_queue()
-                    QTimer.singleShot(STABILITY_CONSTANTS['SIGNAL_DEBOUNCE_MS'], safe_process_queue_on_complete)
-            
-            # If we're loading a new project, force UI refresh after add_layers completes
-            if task_name == 'add_layers' and self._loading_new_project:
-                logger.info("New project loaded - forcing UI refresh")
-                self._set_loading_flag(False)  # Use timestamp-tracked flag
-                if self.dockwidget is not None and self.dockwidget.widgets_initialized:
-                    # STABILITY FIX: Use weakref to prevent access violations
-                    weak_self = weakref.ref(self)
-                    def safe_ui_refresh():
-                        strong_self = weak_self()
-                        if strong_self is not None:
-                            strong_self._refresh_ui_after_project_load()
-                    QTimer.singleShot(STABILITY_CONSTANTS['UI_REFRESH_DELAY_MS'], safe_ui_refresh)
+                # Delegate to handler
+                self._layer_task_completion_handler.handle_task_completion(
+                    result_project_layers=result_project_layers,
+                    task_name=task_name,
+                    loading_new_project=self._loading_new_project
+                )
+                return
+            except Exception as e:
+                logger.warning(f"v4.7: LayerTaskCompletionHandler failed: {e}")
+        
+        # v4.7: Minimal fallback
+        logger.debug("Layer task completion skipped (handler unavailable)")
     
     def _validate_layer_info(self, layer_key):
         """Validate layer structure and return layer info if valid.

@@ -820,3 +820,45 @@ class TaskParameterBuilder:
                 )
         
         return features, expression
+    
+    def determine_skip_source_filter(
+        self,
+        task_name: str,
+        task_parameters: Dict,
+        expression: str
+    ) -> bool:
+        """
+        Determine if source layer filter should be skipped.
+        
+        v4.7: Extracted from FilterMateApp.get_task_parameters() for God Class reduction.
+        
+        Args:
+            task_name: Type of task ('filter', 'unfilter', 'reset')
+            task_parameters: Task parameters dict with task section
+            expression: Original expression from get_current_features()
+            
+        Returns:
+            bool: True if source filter should be skipped
+        """
+        # Only applies to filter operation
+        if task_name != 'filter':
+            return False
+        
+        dw = self._dockwidget
+        current_groupbox = dw.current_exploring_groupbox
+        
+        # v2.9.23: single_selection and multiple_selection ALWAYS filter source layer
+        # Only custom_selection might skip source filter
+        if current_groupbox != "custom_selection":
+            return False
+        
+        # Check if validated expression is empty (non-filter expression)
+        validated_expr = task_parameters.get("task", {}).get("expression", "")
+        if not validated_expr or not validated_expr.strip():
+            logger.info(
+                f"FilterMate: Custom selection with non-filter expression '{expression}' - "
+                "will use ALL features from source layer"
+            )
+            return True
+        
+        return False
