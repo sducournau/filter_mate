@@ -507,3 +507,162 @@ def apply_qgis_buffer(
     processing.run('qgis:createspatialindex', {"INPUT": buffered_layer})
     
     return buffered_layer
+
+
+def simplify_buffer_result(
+    layer: QgsVectorLayer,
+    buffer_distance: float,
+    auto_simplify: bool = True,
+    tolerance: float = 0.5,
+    verify_spatial_index_fn: Optional[callable] = None
+) -> QgsVectorLayer:
+    """
+    Simplify the polygon(s) resulting from buffer operations.
+    
+    EPIC-1 Phase E7.5: Extracted from filter_task.py _simplify_buffer_result.
+    
+    v2.8.6: Reduces vertex count after buffer operations,
+    particularly useful for complex polygons from negative/positive buffer sequences.
+    
+    Uses topology-preserving simplification (Douglas-Peucker) to maintain polygon 
+    validity while reducing complexity.
+    
+    Args:
+        layer: QgsVectorLayer with buffered polygon(s)
+        buffer_distance: Original buffer distance (used to calculate tolerance).
+                        Can be QgsProperty or float.
+        auto_simplify: Whether to simplify (False returns layer unchanged)
+        tolerance: Base simplification tolerance in map units
+        verify_spatial_index_fn: Optional callback to create spatial index
+            Signature: verify_spatial_index_fn(layer, layer_name)
+            
+    Returns:
+        QgsVectorLayer: Layer with simplified geometries, or original if 
+                        simplification fails/disabled
+    """
+    from qgis.core import (
+        QgsMemoryProviderUtils,
+        QgsExpressionContext,
+        QgsProperty,
+        QgsFeature,
+        QgsWkbTypes
+    )
+    
+    if not auto_simplify:
+        logger.debug("Post-buffer simplification disabled")
+        return layer
+    
+    # Validate input
+    if layer is None or not layer.isValid() or layer.featureCount() == 0:
+        return layer
+    
+    # Evaluate buffer distance if it's a QgsProperty
+    buffer_dist = buffer_distance
+    if isinstance(buffer_distance, QgsProperty):
+        features = list(layer.getFeatures())
+        if features:
+            context = QgsExpressionContext()
+            context.setFeature(features[0])
+            buffer_dist = buffer_distance.value(context, 0)
+    
+    try:
+        buffer_dist = abs(float(buffer_dist)) if buffer_dist else 0
+    except (ValueError, TypeError):
+        buffer_dist = 0
+    
+    # Adjust tolerance based on buffer distance (larger buffers can use larger tolerance)
+    # Use 1% of buffer distance as base, but at least the configured minimum
+    if buffer_dist > 0:
+        adaptive_tolerance = max(tolerance, buffer_dist * 0.01)
+        # Cap at 5% of buffer distance to avoid excessive simplification
+        adaptive_tolerance = min(adaptive_tolerance, buffer_dist * 0.05)
+    else:
+        adaptive_tolerance = tolerance
+    
+    # Check if CRS is geographic (degrees) - need to convert tolerance
+    crs = layer.crs()
+    if crs.isGeographic():
+        # Convert meters to degrees (approximate: 1 degree ≈ 111km at equator)
+        adaptive_tolerance = adaptive_tolerance / 111000.0
+        logger.debug(f"Geographic CRS detected, converted tolerance to degrees: {adaptive_tolerance}")
+    
+    logger.info(f"🔧 Simplifying buffer result: tolerance={adaptive_tolerance:.6f} ({'degrees' if crs.isGeographic() else 'meters'})")
+    
+    try:
+        # Count vertices before simplification
+        vertices_before = 0
+        for feature in layer.getFeatures():
+            geom = feature.geometry()
+            if geom and not geom.isEmpty():
+                # Count vertices in geometry
+                for part in geom.parts():
+                    vertices_before += len(list(part.vertices()))
+        
+        # Create new memory layer for simplified geometries
+        fields = layer.fields()
+        simplified_layer = QgsMemoryProviderUtils.createMemoryLayer(
+            f"{layer.name()}_simplified",
+            fields,
+            QgsWkbTypes.MultiPolygon,
+            crs
+        )
+        
+        if not simplified_layer.isValid():
+            logger.warning("Failed to create simplified layer, returning original")
+            return layer
+        
+        # Process each feature
+        simplified_features = []
+        vertices_after = 0
+        
+        for feature in layer.getFeatures():
+            geom = feature.geometry()
+            if geom is None or geom.isEmpty():
+                continue
+            
+            # Simplify geometry using Douglas-Peucker algorithm
+            simplified_geom = geom.simplify(adaptive_tolerance)
+            
+            # Validate simplified geometry
+            if simplified_geom is None or simplified_geom.isEmpty():
+                logger.debug("Simplification produced empty geometry, keeping original")
+                simplified_geom = geom
+            elif not simplified_geom.isGeosValid():
+                # Try to repair the simplified geometry
+                repaired = simplified_geom.makeValid()
+                if repaired and repaired.isGeosValid():
+                    simplified_geom = repaired
+                else:
+                    logger.debug("Simplified geometry invalid and could not be repaired, keeping original")
+                    simplified_geom = geom
+            
+            # Count vertices in simplified geometry
+            for part in simplified_geom.parts():
+                vertices_after += len(list(part.vertices()))
+            
+            # Create feature with simplified geometry
+            new_feature = QgsFeature(feature)
+            new_feature.setGeometry(simplified_geom)
+            simplified_features.append(new_feature)
+        
+        # Add features to layer
+        if simplified_features:
+            simplified_layer.dataProvider().addFeatures(simplified_features)
+            simplified_layer.updateExtents()
+            
+            # Create spatial index if callback provided
+            if verify_spatial_index_fn:
+                verify_spatial_index_fn(simplified_layer, "simplified_buffer")
+            
+            # Log simplification statistics
+            reduction_pct = ((vertices_before - vertices_after) / vertices_before * 100) if vertices_before > 0 else 0
+            logger.info(f"✓ Buffer simplified: {vertices_before:,} → {vertices_after:,} vertices ({reduction_pct:.1f}% reduction)")
+            
+            return simplified_layer
+        else:
+            logger.warning("No features after simplification, returning original")
+            return layer
+            
+    except Exception as e:
+        logger.warning(f"Post-buffer simplification failed: {e}, returning original layer")
+        return layer

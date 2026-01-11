@@ -314,3 +314,98 @@ def optimize_duplicate_in_clauses(expression: str) -> str:
         )
     
     return result.strip()
+
+
+def extract_spatial_clauses_for_exists(filter_expr: str, source_table: Optional[str] = None) -> Optional[str]:
+    """
+    Extract only spatial clauses (ST_Intersects, etc.) from a filter expression.
+    
+    EPIC-1 Phase E7.5: Extracted from filter_task.py _extract_spatial_clauses_for_exists.
+    
+    CRITICAL FIX v2.5.11: For EXISTS subqueries in PostgreSQL, we must include
+    the source layer's spatial filter to ensure we only consider filtered features.
+    However, we must EXCLUDE:
+    - Style-based rules (SELECT CASE ... THEN true/false)
+    - Attribute-only filters (without spatial predicates)
+    - coalesce display expressions
+    
+    This ensures the EXISTS query sees the same filtered source as QGIS.
+    
+    Args:
+        filter_expr: The source layer's current subsetString
+        source_table: Source table name for reference replacement (unused, kept for API)
+        
+    Returns:
+        str: Extracted spatial clauses only, or None if no spatial predicates found
+    """
+    if not filter_expr:
+        return None
+    
+    # List of spatial predicates to extract
+    SPATIAL_PREDICATES = [
+        'ST_Intersects', 'ST_Contains', 'ST_Within', 'ST_Touches',
+        'ST_Overlaps', 'ST_Crosses', 'ST_Disjoint', 'ST_Equals',
+        'ST_DWithin', 'ST_Covers', 'ST_CoveredBy'
+    ]
+    
+    # Check if filter contains any spatial predicates
+    filter_upper = filter_expr.upper()
+    has_spatial = any(pred.upper() in filter_upper for pred in SPATIAL_PREDICATES)
+    
+    if not has_spatial:
+        logger.debug(f"extract_spatial_clauses: No spatial predicates in filter")
+        return None
+    
+    # First, remove style-based expressions (SELECT CASE ... THEN true/false)
+    cleaned = filter_expr
+    
+    # Pattern for SELECT CASE style rules (multi-line support)
+    select_case_pattern = r'\s*AND\s+\(\s*SELECT\s+CASE\s+(?:WHEN\s+.+?THEN\s+(?:true|false)\s*)+\s*(?:ELSE\s+.+?)?\s*end\s*\)'
+    cleaned = re.sub(select_case_pattern, '', cleaned, flags=re.IGNORECASE | re.DOTALL)
+    
+    # Pattern for simple CASE style rules
+    case_pattern = r'\s*AND\s+\(\s*CASE\s+(?:WHEN\s+.+?THEN\s+(?:true|false)\s*)+(?:ELSE\s+.+?)?\s*END\s*\)+'
+    cleaned = re.sub(case_pattern, '', cleaned, flags=re.IGNORECASE | re.DOTALL)
+    
+    # Remove coalesce display expressions
+    coalesce_pattern = r'\s*(?:AND|OR)\s+\(coalesce\([^)]*(?:\([^)]*\)[^)]*)*\)\)'
+    cleaned = re.sub(coalesce_pattern, '', cleaned, flags=re.IGNORECASE)
+    
+    # Clean up whitespace and operators
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    cleaned = re.sub(r'\s+(AND|OR)\s*$', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'^\s*(AND|OR)\s+', '', cleaned, flags=re.IGNORECASE)
+    
+    # Remove outer parentheses if present
+    while cleaned.startswith('(') and cleaned.endswith(')'):
+        # Check if these are matching outer parens
+        depth = 0
+        is_outer = True
+        for i, char in enumerate(cleaned):
+            if char == '(':
+                depth += 1
+            elif char == ')':
+                depth -= 1
+                if depth == 0 and i < len(cleaned) - 1:
+                    is_outer = False
+                    break
+        if is_outer and depth == 0:
+            cleaned = cleaned[1:-1].strip()
+        else:
+            break
+    
+    # Verify cleaned expression still contains spatial predicates
+    cleaned_upper = cleaned.upper()
+    has_spatial_after_clean = any(pred.upper() in cleaned_upper for pred in SPATIAL_PREDICATES)
+    
+    if not has_spatial_after_clean:
+        logger.debug(f"extract_spatial_clauses: Spatial predicates removed during cleaning")
+        return None
+    
+    # Validate parentheses are balanced
+    if cleaned.count('(') != cleaned.count(')'):
+        logger.warning(f"extract_spatial_clauses: Unbalanced parentheses after extraction")
+        return None
+    
+    logger.info(f"extract_spatial_clauses: Extracted spatial filter: '{cleaned[:100]}...'")
+    return cleaned

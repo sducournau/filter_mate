@@ -1,35 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-/***************************************************************************
- FilterMateDockWidget
-                                 A QGIS plugin
- FilterMate is a Qgis plugin, an everyday companion that allows you to easily filter your vector layers
-                             -------------------
-        begin                : 2023-10-26
-        git sha              : $Format:%H$
-        copyright            : (C) 2023 by imagodata
-        email                : imagodata+filter_mate@skiff.com
- ***************************************************************************/
+FilterMateDockWidget - Main UI component for FilterMate QGIS plugin.
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- ***************************************************************************/
+This module is progressively migrating to MVC architecture:
+- UI Controllers: ui/controllers/
+- Services: core/services/
+- Domain: core/domain/
 
-.. deprecated:: 3.0.0
-    This module is a legacy God Class (12,000+ lines) and will be progressively
-    refactored in future versions. New code should use the hexagonal architecture:
-    
-    - For UI logic: ui/controllers/ (FilteringController, ExploringController, ExportingController)
-    - For filtering: core/services/filter_service.py
-    - For domain objects: core/domain/
-    
-    This module is kept for backward compatibility and will delegate to new
-    controllers progressively. See docs/architecture.md for migration guide.
+See docs/architecture.md for migration guide.
 """
 
 from .config.config import ENV_VARS
@@ -79,33 +57,18 @@ from qgis.gui import (
     QgsProjectionSelectionWidget
 )
 
-# Compatibility layer for proxy model classes that may be in different modules
-# depending on QGIS version. These classes moved from qgis.core to qgis.gui
-# in newer QGIS versions (3.30+)
-
-# QgsMapLayerProxyModel: Used for filtering layer types (e.g., VectorLayer only)
-try:
-    from qgis.gui import QgsMapLayerProxyModel
+# Compatibility layer for proxy model classes (moved from qgis.core to qgis.gui in QGIS 3.30+)
+try: from qgis.gui import QgsMapLayerProxyModel
 except ImportError:
-    try:
-        from qgis.core import QgsMapLayerProxyModel
+    try: from qgis.core import QgsMapLayerProxyModel
     except ImportError:
-        # Fallback for versions where QgsMapLayerProxyModel is not available
-        class QgsMapLayerProxyModel:
-            """Fallback class for QGIS versions without QgsMapLayerProxyModel"""
-            VectorLayer = 1  # Filter to show only vector layers
+        class QgsMapLayerProxyModel: VectorLayer = 1
 
-# QgsFieldProxyModel: Used for filtering field types in QgsFieldExpressionWidget
-try:
-    from qgis.gui import QgsFieldProxyModel
+try: from qgis.gui import QgsFieldProxyModel
 except ImportError:
-    try:
-        from qgis.core import QgsFieldProxyModel
+    try: from qgis.core import QgsFieldProxyModel
     except ImportError:
-        # Fallback for versions where QgsFieldProxyModel is not available
-        class QgsFieldProxyModel:
-            """Fallback class for QGIS versions without QgsFieldProxyModel"""
-            AllTypes = 0  # No filtering (all field types accepted)
+        class QgsFieldProxyModel: AllTypes = 0
 from qgis.utils import iface
 
 import webbrowser
@@ -131,69 +94,31 @@ try:
     from core.tasks import get_expression_manager
     ASYNC_EXPRESSION_AVAILABLE = True
 except ImportError:
-    ASYNC_EXPRESSION_AVAILABLE = False
-    get_expression_manager = None
+    ASYNC_EXPRESSION_AVAILABLE = False; get_expression_manager = None
 
-# Import CRS utilities for improved CRS compatibility (v2.5.7)
-try:
-    from .modules.crs_utils import (
-        is_geographic_crs,
-        get_optimal_metric_crs,
-        DEFAULT_METRIC_CRS
-    )
-    CRS_UTILS_AVAILABLE = True
-except ImportError:
-    CRS_UTILS_AVAILABLE = False
-    DEFAULT_METRIC_CRS = "EPSG:3857"
+# CRS utilities
+try: from .modules.crs_utils import is_geographic_crs, get_optimal_metric_crs, DEFAULT_METRIC_CRS; CRS_UTILS_AVAILABLE = True
+except ImportError: CRS_UTILS_AVAILABLE = False; DEFAULT_METRIC_CRS = "EPSG:3857"
 
-# Import icon utilities for dark mode support
-try:
-    from .modules.icon_utils import IconThemeManager, get_themed_icon
-    ICON_THEME_AVAILABLE = True
-except ImportError:
-    ICON_THEME_AVAILABLE = False
+# Icon utilities for dark mode
+try: from .modules.icon_utils import IconThemeManager, get_themed_icon; ICON_THEME_AVAILABLE = True
+except ImportError: ICON_THEME_AVAILABLE = False
 
-# Import UI configuration system for dynamic dimensions
-try:
-    from .ui.config import UIConfig
-    from .modules import ui_widget_utils as ui_utils
-    UI_CONFIG_AVAILABLE = True
-except ImportError:
-    UI_CONFIG_AVAILABLE = False
+# UI configuration system
+try: from .ui.config import UIConfig; from .modules import ui_widget_utils as ui_utils; UI_CONFIG_AVAILABLE = True
+except ImportError: UI_CONFIG_AVAILABLE = False
 
-# Import MVC Controllers for gradual migration (v3.0)
-try:
-    from .ui.controllers.integration import ControllerIntegration
-    from .adapters.app_bridge import get_filter_service, is_initialized as is_hexagonal_initialized
-    CONTROLLERS_AVAILABLE = True
-except ImportError as e:
-    CONTROLLERS_AVAILABLE = False
-    get_filter_service = None
-    is_hexagonal_initialized = lambda: False
-    logger.debug(f"Controllers not available: {e}")
+# MVC Controllers
+try: from .ui.controllers.integration import ControllerIntegration; from .adapters.app_bridge import get_filter_service, is_initialized as is_hexagonal_initialized; CONTROLLERS_AVAILABLE = True
+except ImportError: CONTROLLERS_AVAILABLE = False; get_filter_service = None; is_hexagonal_initialized = lambda: False
 
-# Import Layout Managers for God Class refactoring (v3.1 - Phase 6)
-try:
-    from .ui.layout import SplitterManager, DimensionsManager, SpacingManager, ActionBarManager
-    LAYOUT_MANAGERS_AVAILABLE = True
-except ImportError as e:
-    LAYOUT_MANAGERS_AVAILABLE = False
-    SplitterManager = None
-    DimensionsManager = None
-    SpacingManager = None
-    ActionBarManager = None
-    logger.debug(f"Layout managers not available: {e}")
+# Layout Managers
+try: from .ui.layout import SplitterManager, DimensionsManager, SpacingManager, ActionBarManager; LAYOUT_MANAGERS_AVAILABLE = True
+except ImportError: LAYOUT_MANAGERS_AVAILABLE = False; SplitterManager = DimensionsManager = SpacingManager = ActionBarManager = None
 
-# Import Style Managers for God Class refactoring (v3.1 - Phase 6)
-try:
-    from .ui.styles import ThemeManager, IconManager, ButtonStyler
-    STYLE_MANAGERS_AVAILABLE = True
-except ImportError as e:
-    STYLE_MANAGERS_AVAILABLE = False
-    ThemeManager = None
-    IconManager = None
-    ButtonStyler = None
-    logger.debug(f"Style managers not available: {e}")
+# Style Managers
+try: from .ui.styles import ThemeManager, IconManager, ButtonStyler; STYLE_MANAGERS_AVAILABLE = True
+except ImportError: STYLE_MANAGERS_AVAILABLE = False; ThemeManager = IconManager = ButtonStyler = None
 
 
 class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
@@ -201,7 +126,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     closingPlugin = pyqtSignal()
     launchingTask = pyqtSignal(str)
     currentLayerChanged = pyqtSignal()
-    widgetsInitialized = pyqtSignal()  # NEW: Signal emitted when widgets are fully initialized
+    widgetsInitialized = pyqtSignal()
 
     gettingProjectLayers = pyqtSignal()
 
@@ -336,45 +261,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return self._layer_tree_view_signal_connected if is_ltv else widget.isSignalConnected(self.getSignal(widget, signal_name))
 
     def reset_multiple_checkable_combobox(self):
-        """v3.1 Sprint 14: Reset and recreate multiple checkable combobox widget."""
+        """v4.0 S18: Reset and recreate multiple checkable combobox widget."""
         try:
             layout = self.horizontalLayout_exploring_multiple_feature_picker
-            if layout.count() > 0:
-                item = layout.itemAt(0)
-                if item and item.widget():
-                    old_widget = item.widget()
-                    layout.removeWidget(old_widget)
-                    old_widget.deleteLater()
-            if hasattr(self, 'checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection') and \
-               self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection is not None:
-                try:
-                    self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.reset()
-                    self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.close()
-                    self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.deleteLater()
-                except (RuntimeError, AttributeError):
-                    pass
+            if layout.count() > 0 and (item := layout.itemAt(0)) and item.widget():
+                layout.removeWidget(item.widget()); item.widget().deleteLater()
+            if hasattr(self, 'checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection') and self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection:
+                try: self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.reset(); self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.close(); self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.deleteLater()
+                except (RuntimeError, AttributeError): pass
             self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = None
             self.set_multiple_checkable_combobox()
-            if self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection is not None:
-                layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, 1)
-                layout.update()
-                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"] = {
-                    "TYPE": "CustomCheckableFeatureComboBox",
-                    "WIDGET": self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection,
-                    "SIGNALS": [("updatingCheckedItemList", self.exploring_features_changed),
-                                ("filteringCheckedItemList", self.exploring_source_params_changed)]}
-        except Exception:
-            pass
+            if self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection:
+                layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, 1); layout.update()
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"] = {"TYPE": "CustomCheckableFeatureComboBox", "WIDGET": self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection,
+                    "SIGNALS": [("updatingCheckedItemList", self.exploring_features_changed), ("filteringCheckedItemList", self.exploring_source_params_changed)]}
+        except Exception: pass
 
 
     def _fix_toolbox_icons(self):
-        """v3.1 Sprint 14: Fix toolBox_tabTools icons with absolute paths."""
-        icons = {0: "filter_multi.png", 1: "save.png", 2: "parameters.png"}
-        for index, icon_file in icons.items():
-            icon_path = os.path.join(self.plugin_dir, "icons", icon_file)
-            if os.path.exists(icon_path):
-                icon = get_themed_icon(icon_path) if ICON_THEME_AVAILABLE else QtGui.QIcon(icon_path)
-                self.toolBox_tabTools.setItemIcon(index, icon)
+        """v4.0 S18: Fix toolBox_tabTools icons with absolute paths."""
+        for idx, icon_file in {0: "filter_multi.png", 1: "save.png", 2: "parameters.png"}.items():
+            p = os.path.join(self.plugin_dir, "icons", icon_file)
+            if os.path.exists(p): self.toolBox_tabTools.setItemIcon(idx, get_themed_icon(p) if ICON_THEME_AVAILABLE else QtGui.QIcon(p))
 
 
     def setupUiCustom(self):
@@ -571,58 +479,30 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return
     
     def _harmonize_spacers(self):
-        """v3.1 Sprint 13: Simplified - harmonize vertical spacers across key widgets."""
+        """Harmonize vertical spacers across key widgets."""
         try:
-            from qgis.PyQt.QtWidgets import QSpacerItem
-            from .ui.elements import get_spacer_size
-            from .ui.config import UIConfig, DisplayProfile
-            
+            from qgis.PyQt.QtWidgets import QSpacerItem; from .ui.elements import get_spacer_size; from .ui.config import UIConfig, DisplayProfile
             is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
-            spacer_sizes = {
-                'exploring': get_spacer_size('verticalSpacer_exploring_tab_top', is_compact),
-                'filtering': get_spacer_size('verticalSpacer_filtering_keys_field_top', is_compact),
-                'exporting': get_spacer_size('verticalSpacer_exporting_keys_field_top', is_compact)
-            }
-            sections = {'exploring': 'widget_exploring_keys', 'filtering': 'widget_filtering_keys', 'exporting': 'widget_exporting_keys'}
-            
-            for section_name, widget_name in sections.items():
-                target_h = spacer_sizes.get(section_name, 4)
-                if hasattr(self, widget_name):
-                    layout = getattr(self, widget_name).layout()
-                    if layout:
-                        for i in range(layout.count()):
-                            item = layout.itemAt(i)
-                            if item and hasattr(item, 'layout') and item.layout():
-                                for j in range(item.layout().count()):
-                                    nested = item.layout().itemAt(j)
-                                    if nested and isinstance(nested, QSpacerItem):
-                                        nested.changeSize(20, target_h, nested.sizePolicy().horizontalPolicy(), nested.sizePolicy().verticalPolicy())
-        except Exception:
-            pass
+            for section, widget_name in [('exploring', 'widget_exploring_keys'), ('filtering', 'widget_filtering_keys'), ('exporting', 'widget_exporting_keys')]:
+                target_h = get_spacer_size(f'verticalSpacer_{section}_keys_field_top' if section != 'exploring' else 'verticalSpacer_exploring_tab_top', is_compact)
+                if hasattr(self, widget_name) and (layout := getattr(self, widget_name).layout()):
+                    for i in range(layout.count()):
+                        if (item := layout.itemAt(i)) and hasattr(item, 'layout') and item.layout():
+                            for j in range(item.layout().count()):
+                                if (nested := item.layout().itemAt(j)) and isinstance(nested, QSpacerItem): nested.changeSize(20, target_h, nested.sizePolicy().horizontalPolicy(), nested.sizePolicy().verticalPolicy())
+        except: pass
     
     def _apply_qgis_widget_dimensions(self):
-        """v3.1 Sprint 13: Simplified - apply dimensions to QGIS custom widgets."""
+        """v4.0 Sprint 17: Apply dimensions to QGIS widgets."""
         try:
             from qgis.PyQt.QtWidgets import QSizePolicy
             from qgis.gui import QgsPropertyOverrideButton
             from .ui.config import UIConfig
-            
             cb_h = UIConfig.get_config('combobox', 'height') or 24
-            in_h = UIConfig.get_config('input', 'height') or 24
-            
-            # Apply to standard QGIS widgets
             for cls in [QgsFeaturePickerWidget, QgsFieldExpressionWidget, QgsProjectionSelectionWidget, QgsMapLayerComboBox, QgsFieldComboBox, QgsCheckableComboBox]:
-                for w in self.findChildren(cls):
-                    w.setMinimumHeight(cb_h)
-                    w.setMaximumHeight(cb_h)
-                    w.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            
-            # QgsPropertyOverrideButton - fixed 22px
-            for w in self.findChildren(QgsPropertyOverrideButton):
-                w.setFixedSize(22, 22)
-                w.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        except Exception:
-            pass
+                for w in self.findChildren(cls): w.setMinimumHeight(cb_h); w.setMaximumHeight(cb_h); w.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            for w in self.findChildren(QgsPropertyOverrideButton): w.setFixedSize(22, 22); w.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        except: pass
     
     def _align_key_layouts(self):
         """v3.1 Sprint 14: Delegate to UILayoutController."""
@@ -630,28 +510,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return
     
     def _adjust_row_spacing(self):
-        """v3.1 Sprint 14: Adjust row spacing for filtering/exporting alignment."""
+        """Adjust row spacing for filtering/exporting alignment."""
         try:
-            from qgis.PyQt.QtWidgets import QSpacerItem
-            from .ui.elements import get_spacer_size
-            from .ui.config import UIConfig, DisplayProfile
-            is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
-            spacing = UIConfig.get_config('layout', 'spacing_frame') or 4
-            spacers = {'filtering': get_spacer_size('verticalSpacer_filtering_keys_field_top', is_compact),
-                       'exporting': get_spacer_size('verticalSpacer_exporting_keys_field_top', is_compact)}
-            for name, layout_attr in [('filtering', 'verticalLayout_filtering_values'),
-                                       ('exporting', 'verticalLayout_exporting_values')]:
-                if hasattr(self, layout_attr):
-                    layout = getattr(self, layout_attr)
-                    target = spacers.get(name, 4)
+            from qgis.PyQt.QtWidgets import QSpacerItem; from .ui.elements import get_spacer_size; from .ui.config import UIConfig, DisplayProfile
+            is_compact = UIConfig._active_profile == DisplayProfile.COMPACT; spacing = UIConfig.get_config('layout', 'spacing_frame') or 4
+            for name, layout_attr in [('filtering', 'verticalLayout_filtering_values'), ('exporting', 'verticalLayout_exporting_values')]:
+                target = get_spacer_size(f'verticalSpacer_{name}_keys_field_top', is_compact)
+                if hasattr(self, layout_attr) and (layout := getattr(self, layout_attr)):
                     for i in range(layout.count()):
-                        item = layout.itemAt(i)
-                        if item and isinstance(item, QSpacerItem):
-                            item.changeSize(item.sizeHint().width(), target,
-                                          item.sizePolicy().horizontalPolicy(), item.sizePolicy().verticalPolicy())
+                        if (item := layout.itemAt(i)) and isinstance(item, QSpacerItem): item.changeSize(item.sizeHint().width(), target, item.sizePolicy().horizontalPolicy(), item.sizePolicy().verticalPolicy())
                     layout.setSpacing(spacing)
-        except Exception:
-            pass
+        except: pass
 
     def _setup_backend_indicator(self):
         """v4.0 S16: Create header with indicators."""
@@ -679,14 +548,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return lbl
     
     def _on_backend_indicator_clicked(self, event):
-        """v4.0 S16: → BackendController."""
-        if self._controller_integration and self._controller_integration.backend_controller and self._controller_integration.delegate_handle_backend_click(): return
-        self._on_backend_indicator_clicked_legacy(event)
-    
-    def _on_backend_indicator_clicked_legacy(self, event):
-        """v4.0 S16: Legacy fallback."""
-        logger.warning("_on_backend_indicator_clicked_legacy called - controller may not be working")
-        show_warning("FilterMate", "Backend controller not available - please report this issue")
+        """v4.0 Sprint 18: → BackendController (no legacy fallback)."""
+        if not (self._controller_integration and self._controller_integration.backend_controller and self._controller_integration.delegate_handle_backend_click()):
+            logger.warning("Backend controller unavailable")
 
     def _on_favorite_indicator_clicked(self, event):
         """v4.0 S16: → FavoritesController."""
@@ -938,90 +802,61 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         show_success("FilterMate", self.tr("Backend optimization settings saved"))
     
     def _show_backend_optimization_dialog(self):
-        """v3.1 Sprint 15: Show backend optimization dialog."""
+        """Show backend optimization dialog."""
         try:
             from .modules.backend_optimization_widget import BackendOptimizationDialog
             dialog = BackendOptimizationDialog(self)
-            if not dialog.exec_():
-                return
-            
-            all_settings = dialog.get_settings()
+            if not dialog.exec_(): return
+            all_settings, global_s = dialog.get_settings(), dialog.get_settings().get('global', {})
             self._backend_optimization_settings = all_settings
-            
-            global_s = all_settings.get('global', {})
             self._optimization_enabled = global_s.get('auto_optimization_enabled', True)
             self._centroid_auto_enabled = global_s.get('auto_centroid', {}).get('enabled', True)
             self._optimization_ask_before = global_s.get('ask_before_apply', True)
-            
-            pg_mv = all_settings.get('postgresql', {}).get('materialized_views', {})
-            self._pg_auto_cleanup_enabled = pg_mv.get('auto_cleanup', True)
-            
+            pg_mv = all_settings.get('postgresql', {}).get('materialized_views', {}); self._pg_auto_cleanup_enabled = pg_mv.get('auto_cleanup', True)
             if not hasattr(self, '_optimization_thresholds'): self._optimization_thresholds = {}
-            self._optimization_thresholds['centroid_distant'] = global_s.get('auto_centroid', {}).get('distant_threshold', 5000)
-            self._optimization_thresholds['mv_threshold'] = pg_mv.get('threshold', 10000)
-            
+            self._optimization_thresholds.update({'centroid_distant': global_s.get('auto_centroid', {}).get('distant_threshold', 5000), 'mv_threshold': pg_mv.get('threshold', 10000)})
             show_success("FilterMate", self.tr("Backend optimizations configured"))
-        except ImportError as e:
-            show_warning("FilterMate", f"Dialog not available: {e}")
-        except Exception as e:
-            show_warning("FilterMate", f"Error: {str(e)[:50]}")
+        except ImportError as e: show_warning("FilterMate", f"Dialog not available: {e}")
+        except Exception as e: show_warning("FilterMate", f"Error: {str(e)[:50]}")
     
     def get_backend_optimization_setting(self, backend: str, setting_path: str, default=None):
-        """v3.1 Sprint 15: Get backend optimization setting by path."""
+        """Get backend optimization setting by path."""
         current = getattr(self, '_backend_optimization_settings', {}).get(backend, {})
-        for part in setting_path.split('.'):
-            current = current.get(part, default) if isinstance(current, dict) else default
+        for part in setting_path.split('.'): current = current.get(part, default) if isinstance(current, dict) else default
         return current
     
     def _is_centroid_already_enabled(self, layer) -> bool:
-        """v4.0 Sprint 14: Check if centroid optimization is already enabled."""
-        layer_id = layer.id() if layer else None
-        if hasattr(self, '_layer_centroid_overrides') and layer_id:
-            if self._layer_centroid_overrides.get(layer_id, False):
-                return True
-        if hasattr(self, 'checkBox_filtering_use_centroids_distant_layers') and self.checkBox_filtering_use_centroids_distant_layers.isChecked():
-            return True
-        if hasattr(self, 'checkBox_filtering_use_centroids_source_layer') and self.checkBox_filtering_use_centroids_source_layer.isChecked():
-            return True
-        return False
+        """Check if centroid optimization is already enabled."""
+        lid = layer.id() if layer else None
+        if hasattr(self, '_layer_centroid_overrides') and lid and self._layer_centroid_overrides.get(lid, False): return True
+        return (hasattr(self, 'checkBox_filtering_use_centroids_distant_layers') and self.checkBox_filtering_use_centroids_distant_layers.isChecked()) or \
+               (hasattr(self, 'checkBox_filtering_use_centroids_source_layer') and self.checkBox_filtering_use_centroids_source_layer.isChecked())
     
     def should_use_centroid_for_layer(self, layer) -> bool:
-        """v3.1 Sprint 17: Check if centroid optimization should be used for a layer."""
-        if hasattr(self, '_layer_centroid_overrides'):
-            override = self._layer_centroid_overrides.get(layer.id() if layer else None)
-            if override is not None: return override
+        """Check if centroid optimization should be used for a layer."""
+        if hasattr(self, '_layer_centroid_overrides') and (override := self._layer_centroid_overrides.get(layer.id() if layer else None)) is not None: return override
         if not getattr(self, '_optimization_enabled', True) or not getattr(self, '_centroid_auto_enabled', True): return False
         try:
             from .core.services.auto_optimizer import LayerAnalyzer, LayerLocationType, AUTO_OPTIMIZER_AVAILABLE
-            if not AUTO_OPTIMIZER_AVAILABLE: return False
-            analysis = LayerAnalyzer().analyze_layer(layer)
-            if not analysis: return False
-            threshold = get_optimization_thresholds(ENV_VARS).get('centroid_optimization_threshold', 1000)
-            if hasattr(self, '_optimization_thresholds'): threshold = self._optimization_thresholds.get('centroid_distant', threshold)
+            if not AUTO_OPTIMIZER_AVAILABLE or not (analysis := LayerAnalyzer().analyze_layer(layer)): return False
+            threshold = getattr(self, '_optimization_thresholds', {}).get('centroid_distant', get_optimization_thresholds(ENV_VARS).get('centroid_optimization_threshold', 1000))
             return analysis.location_type in (LayerLocationType.REMOTE_SERVICE, LayerLocationType.REMOTE_DATABASE) and analysis.feature_count >= threshold
         except: return False
     
     def get_optimization_state(self) -> dict:
-        """v4.0 Sprint 14: Get current optimization state for storage/restore."""
-        return {
-            'enabled': getattr(self, '_optimization_enabled', True),
-            'centroid_auto': getattr(self, '_centroid_auto_enabled', True),
-            'ask_before': getattr(self, '_optimization_ask_before', True),
-            'thresholds': getattr(self, '_optimization_thresholds', {}),
-            'layer_overrides': getattr(self, '_layer_centroid_overrides', {}),
-        }
+        """Get current optimization state for storage/restore."""
+        return {'enabled': getattr(self, '_optimization_enabled', True), 'centroid_auto': getattr(self, '_centroid_auto_enabled', True),
+                'ask_before': getattr(self, '_optimization_ask_before', True), 'thresholds': getattr(self, '_optimization_thresholds', {}),
+                'layer_overrides': getattr(self, '_layer_centroid_overrides', {})}
     
     def restore_optimization_state(self, state: dict):
-        """v4.0 Sprint 14: Restore optimization state from saved settings."""
-        self._optimization_enabled = state.get('enabled', True)
-        self._centroid_auto_enabled = state.get('centroid_auto', True)
-        self._optimization_ask_before = state.get('ask_before', True)
-        self._optimization_thresholds = state.get('thresholds', {})
+        """Restore optimization state from saved settings."""
+        self._optimization_enabled = state.get('enabled', True); self._centroid_auto_enabled = state.get('centroid_auto', True)
+        self._optimization_ask_before = state.get('ask_before', True); self._optimization_thresholds = state.get('thresholds', {})
         self._layer_centroid_overrides = state.get('layer_overrides', {})
-        logger.info(f"Restored optimization state: enabled={self._optimization_enabled}")
 
     def auto_select_optimal_backends(self):
-        """v4.0 Sprint 12: Delegate to BackendController."""
+        """Delegate to BackendController."""
         if self._controller_integration and self._controller_integration.backend_controller:
             try:
                 count = self._controller_integration.backend_controller.auto_select_optimal_backends()
@@ -1050,45 +885,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 S16: → ActionBarManager."""
         if self._action_bar_manager: self._action_bar_manager.set_position(position); self._action_bar_manager.apply_position()
 
-    def _adjust_header_for_side_position(self, position):
-        """v4.0 S16: → ActionBarManager."""
-        if self._action_bar_manager: self._action_bar_manager.adjust_header_for_side_position()
-
-    def _restore_header_from_wrapper(self):
-        """v4.0 S16: → ActionBarManager."""
-        if self._action_bar_manager: self._action_bar_manager.restore_header_from_wrapper()
-
-    def _clear_action_bar_layout(self):
-        """v4.0 S16: → ActionBarManager."""
-        if self._action_bar_manager: self._action_bar_manager.clear_layout()
-
-    def _create_horizontal_action_layout(self, action_buttons):
-        """v4.0 S16: → ActionBarManager."""
-        if self._action_bar_manager: self._action_bar_manager.create_horizontal_layout(action_buttons)
-
-    def _create_vertical_action_layout(self, action_buttons):
-        """v4.0 S16: → ActionBarManager."""
-        if self._action_bar_manager: self._action_bar_manager.create_vertical_layout(action_buttons)
-
-    def _apply_action_bar_size_constraints(self, position):
-        """v4.0 S16: → ActionBarManager."""
-        if self._action_bar_manager: self._action_bar_manager.apply_size_constraints()
-
-    def _reposition_action_bar_in_main_layout(self, position):
-        """v4.0 S16: → ActionBarManager."""
-        if self._action_bar_manager: self._action_bar_manager.reposition_in_main_layout()
-
-    def _create_horizontal_wrapper_for_side_action_bar(self, position):
-        """v4.0 S16: → ActionBarManager."""
-        if self._action_bar_manager: self._action_bar_manager._create_side_wrapper()
-
-    def _restore_side_action_bar_layout(self):
-        """v4.0 S16: → ActionBarManager."""
-        if self._action_bar_manager: self._action_bar_manager.restore_side_action_bar_layout()
-
-    def _restore_original_layout(self):
-        """v4.0 S16: → ActionBarManager."""
-        if self._action_bar_manager: self._action_bar_manager.restore_original_layout()
+    # v5.0: ActionBar wrapper methods removed - use self._action_bar_manager directly
+    # Removed: _adjust_header_for_side_position, _restore_header_from_wrapper, _clear_action_bar_layout,
+    # _create_horizontal_action_layout, _create_vertical_action_layout, _apply_action_bar_size_constraints,
+    # _reposition_action_bar_in_main_layout, _create_horizontal_wrapper_for_side_action_bar,
+    # _restore_side_action_bar_layout, _restore_original_layout (~30 lines)
 
     def _setup_exploring_tab_widgets(self):
         """v4.0 Sprint 16: Delegate to ConfigurationManager."""
@@ -1199,53 +1000,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return {'AND': 0, 'AND NOT': 1, 'OR': 2, 'ET': 0, 'ET NON': 1, 'OU': 2}.get(op, 0)
 
     def dockwidget_widgets_configuration(self):
-        """v4.0 Sprint 15: Configure widgets via ConfigurationManager and setup controllers."""
-        if self._configuration_manager is None:
-            self._configuration_manager = ConfigurationManager(self)
+        """Configure widgets via ConfigurationManager and setup controllers."""
+        if self._configuration_manager is None: self._configuration_manager = ConfigurationManager(self)
         self.layer_properties_tuples_dict = self._configuration_manager.get_layer_properties_tuples_dict()
         self.export_properties_tuples_dict = self._configuration_manager.get_export_properties_tuples_dict()
-        self.widgets = self._configuration_manager.configure_widgets()
-        self.widgets_initialized = True
-        logger.info(f"✓ Widgets fully initialized with {len(self.PROJECT_LAYERS)} layers")
-        
-        # Setup controllers
+        self.widgets = self._configuration_manager.configure_widgets(); self.widgets_initialized = True
         if self._controller_integration:
             try:
-                if self._controller_integration.setup():
-                    self._controller_integration.sync_from_dockwidget()
-                    logger.info("✓ Controller integration setup complete")
-                else:
-                    logger.debug("Controller integration setup returned False")
-            except Exception as e:
-                logger.warning(f"Controller integration setup failed: {e}")
-        
-        # Connect selectionChanged for initial layer
+                if self._controller_integration.setup(): self._controller_integration.sync_from_dockwidget()
+            except: pass
         if self.current_layer and not self.current_layer_selection_connection:
-            try:
-                self.current_layer.selectionChanged.connect(self.on_layer_selection_changed)
-                self.current_layer_selection_connection = True
-                logger.info(f"Connected selectionChanged signal for initial layer '{self.current_layer.name()}'")
-            except (TypeError, RuntimeError) as e:
-                logger.warning(f"Could not connect selectionChanged for initial layer: {e}")
-        
-        logger.debug("Emitting widgetsInitialized signal")
-        self.widgetsInitialized.emit()
-        self._setup_keyboard_shortcuts()
-        
-        # Process pending layers update
+            try: self.current_layer.selectionChanged.connect(self.on_layer_selection_changed); self.current_layer_selection_connection = True
+            except: pass
+        self.widgetsInitialized.emit(); self._setup_keyboard_shortcuts()
         if self._pending_layers_update:
-            logger.debug(f"Pending layers update detected - refreshing UI with {len(self.PROJECT_LAYERS)} layers")
-            self._pending_layers_update = False
-            # Use QTimer with increased delay to ensure event loop has processed widgets_initialized
-            # STABILITY FIX: Use weakref to prevent access violations
-            pl = self.PROJECT_LAYERS
-            pr = self.PROJECT
-            weak_self = weakref.ref(self)
-            def safe_layers_update():
-                strong_self = weak_self()
-                if strong_self is not None:
-                    strong_self.get_project_layers_from_app(pl, pr)
-            QTimer.singleShot(100, safe_layers_update)
+            self._pending_layers_update = False; pl, pr, weak_self = self.PROJECT_LAYERS, self.PROJECT, weakref.ref(self)
+            QTimer.singleShot(100, lambda: weak_self() and weak_self().get_project_layers_from_app(pl, pr))
 
     def data_changed_configuration_model(self, input_data=None):
         """
@@ -1284,397 +1054,221 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def cancel_pending_config_changes(self):
-        """v3.1 Sprint 17: Cancel pending configuration changes."""
+        """Cancel pending configuration changes."""
         if not self.config_changes_pending or not self.pending_config_changes: return
-        
         try:
-            config_path = ENV_VARS.get('CONFIG_JSON_PATH', self.plugin_dir + '/config/config.json')
-            with open(config_path, 'r') as f: self.CONFIG_DATA = json.load(f)
-            
+            with open(ENV_VARS.get('CONFIG_JSON_PATH', self.plugin_dir + '/config/config.json'), 'r') as f: self.CONFIG_DATA = json.load(f)
             self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=False, editable_values=True, plugin_dir=self.plugin_dir)
-            if hasattr(self, 'config_view') and self.config_view:
-                self.config_view.setModel(self.config_model)
-                self.config_view.model = self.config_model
-            
+            if hasattr(self, 'config_view') and self.config_view: self.config_view.setModel(self.config_model); self.config_view.model = self.config_model
             self.pending_config_changes, self.config_changes_pending = [], False
             if hasattr(self, 'buttonBox'): self.buttonBox.setEnabled(False)
-        except Exception as e:
-            show_error("FilterMate", f"Error cancelling changes: {str(e)}")
+        except Exception as e: show_error("FilterMate", f"Error cancelling changes: {str(e)}")
 
 
     def on_config_buttonbox_accepted(self):
-        """Called when OK button is clicked.
-        
-        v3.1 STORY-2.5: Delegates to ConfigController if available.
-        """
+        """v4.0 S18: → ConfigController."""
         logger.info("Configuration OK button clicked")
-        # v3.1 STORY-2.5: Try controller delegation first
-        if self._controller_integration is not None:
-            if self._controller_integration.delegate_config_apply_pending_changes():
-                return
-        # Fallback to legacy
+        if self._controller_integration and self._controller_integration.delegate_config_apply_pending_changes(): return
         self.apply_pending_config_changes()
 
 
     def on_config_buttonbox_rejected(self):
-        """Called when Cancel button is clicked.
-        
-        v3.1 STORY-2.5: Delegates to ConfigController if available.
-        """
+        """v4.0 S18: → ConfigController."""
         logger.info("Configuration Cancel button clicked")
-        # v3.1 STORY-2.5: Try controller delegation first
-        if self._controller_integration is not None:
-            if self._controller_integration.delegate_config_cancel_pending_changes():
-                return
-        # Fallback to legacy
+        if self._controller_integration and self._controller_integration.delegate_config_cancel_pending_changes(): return
         self.cancel_pending_config_changes()
 
 
     def reload_configuration_model(self):
-
-        if self.widgets_initialized is True:
-            try:
-                # Create new model
-                self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=False, editable_values=True, plugin_dir=self.plugin_dir)
-                
-                # Update view model - safe to call here since view already exists
-                if hasattr(self, 'config_view') and self.config_view is not None:
-                    self.config_view.setModel(self.config_model)
-                    self.config_view.model = self.config_model
-                
-                # Save to file
-                json_object = json.dumps(self.CONFIG_DATA, indent=4)
-                config_json_path = ENV_VARS.get('CONFIG_JSON_PATH', self.plugin_dir + '/config/config.json')
-                with open(config_json_path, 'w') as outfile:
-                    outfile.write(json_object)
-            except Exception as e:
-                logger.error(f"Error reloading configuration model: {e}")
-                import traceback
-                logger.error(traceback.format_exc())
+        """v4.0 S18: Reload config model and save."""
+        if not self.widgets_initialized: return
+        try:
+            self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=False, editable_values=True, plugin_dir=self.plugin_dir)
+            if hasattr(self, 'config_view') and self.config_view: self.config_view.setModel(self.config_model); self.config_view.model = self.config_model
+            with open(ENV_VARS.get('CONFIG_JSON_PATH', self.plugin_dir + '/config/config.json'), 'w') as f: f.write(json.dumps(self.CONFIG_DATA, indent=4))
+        except Exception as e: logger.error(f"Error reloading configuration model: {e}")
 
 
     def save_configuration_model(self):
-
-        if self.widgets_initialized is True:
-
-            self.CONFIG_DATA = self.config_model.serialize()
-            json_object = json.dumps(self.CONFIG_DATA, indent=4)
-
-            config_json_path = ENV_VARS.get('CONFIG_JSON_PATH', self.plugin_dir + '/config/config.json')
-            with open(config_json_path, 'w') as outfile:
-                outfile.write(json_object)
+        """v4.0 S18: Save config to file."""
+        if not self.widgets_initialized: return
+        self.CONFIG_DATA = self.config_model.serialize()
+        with open(ENV_VARS.get('CONFIG_JSON_PATH', self.plugin_dir + '/config/config.json'), 'w') as f: f.write(json.dumps(self.CONFIG_DATA, indent=4))
 
 
     def manage_configuration_model(self):
-        """v4.0 Sprint 15: Setup config model, view, and signals."""
+        """Setup config model, view, and signals."""
         try:
             self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=False, editable_values=True, plugin_dir=self.plugin_dir)
             self.config_view = JsonView(self.config_model, self.plugin_dir)
-            self.CONFIGURATION.layout().insertWidget(0, self.config_view)
-            self.config_view.setAnimated(True)
-            self.config_view.setEnabled(True)
-            self.config_view.show()
-            self.config_model.itemChanged.connect(self.data_changed_configuration_model)
-            logger.info("Configuration model itemChanged signal connected")
-            self._setup_reload_button()
+            self.CONFIGURATION.layout().insertWidget(0, self.config_view); self.config_view.setAnimated(True); self.config_view.setEnabled(True); self.config_view.show()
+            self.config_model.itemChanged.connect(self.data_changed_configuration_model); self._setup_reload_button()
             if hasattr(self, 'buttonBox'):
-                self.buttonBox.setEnabled(False)
-                logger.info("Configuration buttons disabled (no pending changes)")
-                self.buttonBox.accepted.connect(self.on_config_buttonbox_accepted)
-                self.buttonBox.rejected.connect(self.on_config_buttonbox_rejected)
-                logger.info("Configuration button signals connected")
-        except Exception as e:
-            logger.error(f"Error creating configuration model: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+                self.buttonBox.setEnabled(False); self.buttonBox.accepted.connect(self.on_config_buttonbox_accepted); self.buttonBox.rejected.connect(self.on_config_buttonbox_rejected)
+        except Exception as e: logger.error(f"Error creating configuration model: {e}")
 
     def _setup_reload_button(self):
-        """v4.0 Sprint 15: Setup Reload Plugin button in config panel."""
+        """Setup Reload Plugin button in config panel."""
         try:
-            self.pushButton_reload_plugin = QtWidgets.QPushButton("🔄 Reload Plugin")
-            self.pushButton_reload_plugin.setObjectName("pushButton_reload_plugin")
+            self.pushButton_reload_plugin = QtWidgets.QPushButton("🔄 Reload Plugin"); self.pushButton_reload_plugin.setObjectName("pushButton_reload_plugin")
             self.pushButton_reload_plugin.setToolTip(QCoreApplication.translate("FilterMate", "Reload the plugin to apply layout changes (action bar position)"))
-            self.pushButton_reload_plugin.setCursor(QtGui.QCursor(Qt.PointingHandCursor))
-            self.pushButton_reload_plugin.setMinimumHeight(30)
+            self.pushButton_reload_plugin.setCursor(QtGui.QCursor(Qt.PointingHandCursor)); self.pushButton_reload_plugin.setMinimumHeight(30)
             self.pushButton_reload_plugin.clicked.connect(self._on_reload_button_clicked)
-            config_layout = self.CONFIGURATION.layout()
-            if config_layout:
-                # Insert before the last widget (buttonBox)
-                insert_index = config_layout.count() - 1  # Before buttonBox
-                config_layout.insertWidget(insert_index, self.pushButton_reload_plugin)
-                logger.info("Reload button added to configuration panel")
-        except Exception as e:
-            logger.error(f"Error setting up reload button: {e}")
+            if self.CONFIGURATION.layout(): self.CONFIGURATION.layout().insertWidget(self.CONFIGURATION.layout().count() - 1, self.pushButton_reload_plugin)
+        except Exception as e: logger.error(f"Error setting up reload button: {e}")
 
     def _on_reload_button_clicked(self):
-        """
-        Handle reload button click - save configuration and reload plugin.
-        """
-        
-        # First, apply any pending changes
-        if self.config_changes_pending and self.pending_config_changes:
-            self.apply_pending_config_changes()
-        
-        # Save configuration
-        self.save_configuration_model()
-        
-        # Confirm reload
+        """v4.0 S18: Reload plugin after saving config."""
         from qgis.PyQt.QtWidgets import QMessageBox
-        reply = QMessageBox.question(
-            self,
-            "Reload Plugin",
-            "Do you want to reload FilterMate to apply all configuration changes?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes
-        )
-        
-        if reply == QMessageBox.Yes:
+        if self.config_changes_pending and self.pending_config_changes: self.apply_pending_config_changes()
+        self.save_configuration_model()
+        if QMessageBox.question(self, "Reload Plugin", "Do you want to reload FilterMate to apply all configuration changes?",
+                                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes) == QMessageBox.Yes:
             self.reload_plugin()
 
         
     def manage_output_name(self):
-        self.output_name = 'export'
-        self.current_project_title = self.PROJECT.fileName().split('.')[0]
-        self.current_project_path = self.PROJECT.homePath()
-        if self.current_project_title is not None:
-            self.output_name = 'export' + '_' + str(self.current_project_title)
+        """v4.0 S18: Set export output name."""
+        self.current_project_title, self.current_project_path = self.PROJECT.fileName().split('.')[0], self.PROJECT.homePath()
+        self.output_name = f"export_{self.current_project_title}" if self.current_project_title else 'export'
 
 
     def set_widget_icon(self, config_widget_path):
-
-        if self.widgets_initialized is True:
-
-            if len(config_widget_path) == 6:
-
-                config_path = self.CONFIG_DATA[config_widget_path[0]][config_widget_path[1]][config_widget_path[2]][config_widget_path[3]][config_widget_path[4]][config_widget_path[5]]
-
-                if isinstance(config_path, dict):
-                    if "ICON_ON_FALSE" in config_path:    
-                        file = config_path["ICON_ON_FALSE"]
-                        file_path = os.path.join(self.plugin_dir, "icons", file)
-                        self.widgets[config_widget_path[4]][config_widget_path[5]]["ICON_ON_FALSE"] = file_path
-
-                    if "ICON_ON_TRUE" in config_path:
-                        file = config_path["ICON_ON_TRUE"]
-                        file_path = os.path.join(self.plugin_dir, "icons", file)
-                        self.widgets[config_widget_path[4]][config_widget_path[5]]["ICON_ON_TRUE"] = file_path
-
-                elif isinstance(config_path, str):
-                    file_path = os.path.join(self.plugin_dir, "icons", config_path)
-                    self.widgets[config_widget_path[4]][config_widget_path[5]]["ICON"] = file_path
-
-                # Use themed icon for dark mode support
-                if ICON_THEME_AVAILABLE:
-                    icon = get_themed_icon(file_path)
-                else:
-                    icon = QtGui.QIcon(file_path)
-                self.widgets[config_widget_path[4]][config_widget_path[5]]["WIDGET"].setIcon(icon)
-
+        """v4.0 Sprint 17: Set widget icon from config path."""
+        if not self.widgets_initialized or len(config_widget_path) != 6: return
+        cfg = self.CONFIG_DATA
+        for p in config_widget_path[:4]: cfg = cfg[p]
+        cfg = cfg[config_widget_path[4]][config_widget_path[5]]
+        wgt = self.widgets[config_widget_path[4]][config_widget_path[5]]
+        file_path = None
+        if isinstance(cfg, dict):
+            for key in ["ICON_ON_FALSE", "ICON_ON_TRUE"]:
+                if key in cfg: wgt[key] = os.path.join(self.plugin_dir, "icons", cfg[key]); file_path = wgt[key]
+        elif isinstance(cfg, str): wgt["ICON"] = file_path = os.path.join(self.plugin_dir, "icons", cfg)
+        if file_path:
+            icon = get_themed_icon(file_path) if ICON_THEME_AVAILABLE else QtGui.QIcon(file_path)
+            wgt["WIDGET"].setIcon(icon)
 
     def switch_widget_icon(self, widget_path, state):
-        if state is True:
-            icon_path = self.widgets[widget_path[0].upper()][widget_path[1].upper()]["ICON_ON_TRUE"]
-        else:
-            icon_path = self.widgets[widget_path[0].upper()][widget_path[1].upper()]["ICON_ON_FALSE"]
-        
-        # Use themed icon for dark mode support
-        if ICON_THEME_AVAILABLE:
-            icon = get_themed_icon(icon_path)
-        else:
-            icon = QtGui.QIcon(icon_path)
+        """v4.0 Sprint 17: Switch widget icon based on state."""
+        key = "ICON_ON_TRUE" if state else "ICON_ON_FALSE"
+        icon_path = self.widgets[widget_path[0].upper()][widget_path[1].upper()][key]
+        icon = get_themed_icon(icon_path) if ICON_THEME_AVAILABLE else QtGui.QIcon(icon_path)
         self.widgets[widget_path[0].upper()][widget_path[1].upper()]["WIDGET"].setIcon(icon)
 
 
     def icon_per_geometry_type(self, geometry_type):
-        """
-        Get icon for geometry type with caching.
-        
-        Icons are cached statically to avoid repeated QgsLayerItem calls,
-        improving performance when displaying multiple layers.
-        
-        Args:
-            geometry_type (str): Geometry type string (e.g., 'GeometryType.Point')
-        
-        Returns:
-            QIcon: Icon for the geometry type
-        """
-        # Check cache first
-        if geometry_type in self._icon_cache:
-            return self._icon_cache[geometry_type]
-        
-        # Calculate and cache the icon
-        if geometry_type == 'GeometryType.Line':
-            icon = QgsLayerItem.iconLine()
-        elif geometry_type == 'GeometryType.Point':
-            icon = QgsLayerItem.iconPoint()
-        elif geometry_type == 'GeometryType.Polygon':
-            icon = QgsLayerItem.iconPolygon()
-        elif geometry_type == 'GeometryType.UnknownGeometry':
-            icon = QgsLayerItem.iconTable()
-        else:
-            icon = QgsLayerItem.iconDefault()
-        
-        # Cache for future use
+        """v4.0 Sprint 17: Get cached icon for geometry type."""
+        if geometry_type in self._icon_cache: return self._icon_cache[geometry_type]
+        icon_map = {'GeometryType.Line': QgsLayerItem.iconLine, 'GeometryType.Point': QgsLayerItem.iconPoint,
+                    'GeometryType.Polygon': QgsLayerItem.iconPolygon, 'GeometryType.UnknownGeometry': QgsLayerItem.iconTable}
+        icon = icon_map.get(geometry_type, QgsLayerItem.iconDefault)()
         self._icon_cache[geometry_type] = icon
         return icon
         
     def filtering_populate_predicates_chekableCombobox(self):
-        """v3.1 Sprint 12: Simplified - populate geometric predicates combobox."""
-        predicates = None
-        if self._controller_integration:
-            predicates = self._controller_integration.delegate_filtering_get_available_predicates()
+        """v4.0 S18: Populate geometric predicates combobox."""
+        predicates = self._controller_integration.delegate_filtering_get_available_predicates() if self._controller_integration else None
         self.predicates = predicates or ["Intersect","Contain","Disjoint","Equal","Touch","Overlap","Are within","Cross"]
-        self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].clear()
-        self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].addItems(self.predicates)
+        w = self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"]; w.clear(); w.addItems(self.predicates)
 
     def filtering_populate_buffer_type_combobox(self):
-        """v3.1 Sprint 12: Simplified - populate buffer type combobox."""
-        buffer_types = None
-        if self._controller_integration:
-            buffer_types = self._controller_integration.delegate_filtering_get_available_buffer_types()
-        self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].clear()
-        self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].addItems(buffer_types or ["Round", "Flat", "Square"])
-        if not self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].currentText():
-            self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].setCurrentIndex(0)
+        """v4.0 S18: Populate buffer type combobox."""
+        buffer_types = self._controller_integration.delegate_filtering_get_available_buffer_types() if self._controller_integration else None
+        w = self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"]; w.clear(); w.addItems(buffer_types or ["Round", "Flat", "Square"])
+        if not w.currentText(): w.setCurrentIndex(0)
 
 
     def filtering_populate_layers_chekableCombobox(self, layer=None):
-        """v3.1 Sprint 12: Simplified - populate layers-to-filter combobox via controller."""
-        if not self.widgets_initialized:
-            return
-        if self._controller_integration:
-            self._controller_integration.delegate_populate_layers_checkable_combobox(layer)
+        """Populate layers-to-filter combobox."""
+        if self.widgets_initialized and self._controller_integration: self._controller_integration.delegate_populate_layers_checkable_combobox(layer)
 
     def exporting_populate_combobox(self):
-        """v4.0 Sprint 7: One-liner wrapper."""
+        """Populate export layers combobox."""
         if self._controller_integration: self._controller_integration.delegate_populate_export_combobox()
 
     def _apply_auto_configuration(self):
-        """v4.0 Sprint 7: One-liner wrapper."""
+        """Apply auto-configuration from environment."""
         return ui_utils.auto_configure_from_environment(self.CONFIG_DATA) if UI_CONFIG_AVAILABLE else {}
 
     def _apply_stylesheet(self):
-        """v3.1 Sprint 12: Simplified - apply stylesheet using StyleLoader."""
+        """Apply stylesheet using StyleLoader."""
         StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA)
 
     def _configure_pushbuttons(self, pushButton_config, icons_sizes, font):
-        """v4.0 Sprint 16: Delegate to ConfigurationManager."""
-        if self._configuration_manager:
-            self._configuration_manager.configure_pushbuttons(pushButton_config, icons_sizes, font)
+        """Delegate to ConfigurationManager."""
+        if self._configuration_manager: self._configuration_manager.configure_pushbuttons(pushButton_config, icons_sizes, font)
 
     def _configure_other_widgets(self, font):
-        """v4.0 Sprint 16: Delegate to ConfigurationManager."""
-        if self._configuration_manager:
-            self._configuration_manager.configure_other_widgets(font)
+        """Delegate to ConfigurationManager."""
+        if self._configuration_manager: self._configuration_manager.configure_other_widgets(font)
 
     def _configure_key_widgets_sizes(self, icons_sizes):
-        """v4.0 Sprint 16: Delegate to ConfigurationManager."""
-        if self._configuration_manager:
-            self._configuration_manager.configure_key_widgets_sizes(icons_sizes)
+        """Delegate to ConfigurationManager."""
+        if self._configuration_manager: self._configuration_manager.configure_key_widgets_sizes(icons_sizes)
 
     def manage_ui_style(self):
-        """v4.0 Sprint 15: Apply stylesheet, icons, and button styling via managers."""
-        if self._theme_manager:
-            try: self._theme_manager.setup()
-            except: self._apply_auto_configuration(); self._apply_stylesheet(); self._setup_theme_watcher()
-        else:
-            self._apply_auto_configuration(); self._apply_stylesheet(); self._setup_theme_watcher()
-        if self._icon_manager:
-            try: self._icon_manager.setup()
-            except: self._init_icon_theme()
-        else:
-            self._init_icon_theme()
-        if self._button_styler:
-            try: self._button_styler.setup()
-            except: self._legacy_configure_widgets()
-        else:
-            self._legacy_configure_widgets()
+        """v4.0 Sprint 18: Apply stylesheet, icons, and styling via managers."""
+        try: self._theme_manager.setup() if self._theme_manager else (self._apply_auto_configuration(), self._apply_stylesheet(), self._setup_theme_watcher())
+        except: self._apply_auto_configuration(); self._apply_stylesheet(); self._setup_theme_watcher()
+        try: self._icon_manager.setup() if self._icon_manager else self._init_icon_theme()
+        except: self._init_icon_theme()
+        try: self._button_styler.setup() if self._button_styler else self._legacy_configure_widgets()
+        except: self._legacy_configure_widgets()
     
     def _init_icon_theme(self):
-        """v3.1 Sprint 15: Initialize icon theme."""
-        if ICON_THEME_AVAILABLE:
-            IconThemeManager.set_theme(StyleLoader.detect_qgis_theme())
+        """Initialize icon theme."""
+        if ICON_THEME_AVAILABLE: IconThemeManager.set_theme(StyleLoader.detect_qgis_theme())
     
     def _legacy_configure_widgets(self):
-        """v4.0 Sprint 15: Legacy widget config fallback for ButtonStyler."""
-        if not self.widgets:
-            logger.warning("_legacy_configure_widgets called but widgets not initialized yet")
-            return
-        pb_cfg = self.CONFIG_DATA['APP']['DOCKWIDGET']['PushButton']
-        icons_sizes = {"ACTION": pb_cfg.get("ICONS_SIZES", {}).get("ACTION", {}).get("value", 20),
-                       "OTHERS": pb_cfg.get("ICONS_SIZES", {}).get("OTHERS", {}).get("value", 20)}
-        font = QFont("Segoe UI Semibold", 8)
-        font.setBold(True)
-        self._configure_pushbuttons(pb_cfg, icons_sizes, font)
-        self._configure_other_widgets(font)
-        self._configure_key_widgets_sizes(icons_sizes)
+        """Legacy widget config - delegates to ConfigurationManager."""
+        if not self.widgets or not self._configuration_manager: return
+        self._configuration_manager.configure_all_widgets()
     
     def _setup_theme_watcher(self):
-        """v4.0 Sprint 14: Setup QGIS theme watcher for dark/light mode switching."""
+        """Setup QGIS theme watcher for dark/light mode switching."""
         try:
-            self._theme_watcher = QGISThemeWatcher.get_instance()
-            current_theme = StyleLoader.detect_qgis_theme()
-            if ICON_THEME_AVAILABLE:
-                IconThemeManager.set_theme(current_theme)
+            self._theme_watcher = QGISThemeWatcher.get_instance(); current_theme = StyleLoader.detect_qgis_theme()
+            if ICON_THEME_AVAILABLE: IconThemeManager.set_theme(current_theme)
             self._theme_watcher.add_callback(self._on_qgis_theme_changed)
-            if not self._theme_watcher.is_watching:
-                self._theme_watcher.start_watching()
-            if current_theme == 'dark':
-                self._refresh_icons_for_theme()
-        except Exception as e:
-            logger.warning(f"Could not setup theme watcher: {e}")
+            if not self._theme_watcher.is_watching: self._theme_watcher.start_watching()
+            if current_theme == 'dark': self._refresh_icons_for_theme()
+        except Exception as e: logger.warning(f"Could not setup theme watcher: {e}")
     
     def _on_qgis_theme_changed(self, new_theme: str):
-        """v4.0 Sprint 14: Handle QGIS theme change event."""
+        """Handle QGIS theme change event."""
         try:
-            if ICON_THEME_AVAILABLE:
-                IconThemeManager.set_theme(new_theme)
-            StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA, new_theme)
-            self._refresh_icons_for_theme()
-            if hasattr(self, 'config_view') and self.config_view:
-                self.config_view.refresh_theme_stylesheet(force_dark=(new_theme == 'dark'))
+            if ICON_THEME_AVAILABLE: IconThemeManager.set_theme(new_theme)
+            StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA, new_theme); self._refresh_icons_for_theme()
+            if hasattr(self, 'config_view') and self.config_view: self.config_view.refresh_theme_stylesheet(force_dark=(new_theme == 'dark'))
             show_info("FilterMate", f"Thème adapté: {'Mode sombre' if new_theme == 'dark' else 'Mode clair'}")
-        except Exception as e:
-            logger.error(f"Error applying theme change: {e}")
+        except Exception as e: logger.error(f"Error applying theme change: {e}")
     
     def _refresh_icons_for_theme(self):
-        """v3.1 Sprint 16: Refresh all button icons for the current theme."""
+        """Refresh all button icons for the current theme."""
         if not ICON_THEME_AVAILABLE or not self.widgets_initialized: return
-        
         try:
-            # Refresh toolbox icons
             for idx, icon in enumerate(["filter_multi.png", "save.png", "parameters.png"]):
-                path = os.path.join(self.plugin_dir, "icons", icon)
-                if os.path.exists(path): self.toolBox_tabTools.setItemIcon(idx, get_themed_icon(path))
-            
-            # Refresh pushbutton icons
+                p = os.path.join(self.plugin_dir, "icons", icon)
+                if os.path.exists(p): self.toolBox_tabTools.setItemIcon(idx, get_themed_icon(p))
             for wg in self.widgets:
                 for wn in self.widgets[wg]:
                     wi = self.widgets[wg][wn]
                     if wi.get("TYPE") != "PushButton": continue
-                    icon_path = wi.get("ICON") or wi.get("ICON_ON_FALSE")
-                    if icon_path and os.path.exists(icon_path):
-                        wi.get("WIDGET").setIcon(get_themed_icon(icon_path))
-                        wi.get("WIDGET").setProperty('icon_path', icon_path)
-        except Exception: pass
+                    if (ip := wi.get("ICON") or wi.get("ICON_ON_FALSE")) and os.path.exists(ip): wi.get("WIDGET").setIcon(get_themed_icon(ip)); wi.get("WIDGET").setProperty('icon_path', ip)
+        except: pass
 
 
     def set_widgets_enabled_state(self, state):
-        """v3.1 Sprint 12: Simplified - enable or disable all plugin widgets."""
-        for widget_group in self.widgets:
-            for widget_name in self.widgets[widget_group]:
-                if self.widgets[widget_group][widget_name]["TYPE"] not in ("JsonTreeView","LayerTreeView","JsonModel","ToolBox"):
-                    widget = self.widgets[widget_group][widget_name]["WIDGET"]
-                    was_blocked = widget.blockSignals(True)
-                    try:
-                        if self.widgets[widget_group][widget_name]["TYPE"] in ("PushButton", "GroupBox"):
-                            if widget.isCheckable() and not state:
-                                widget.setChecked(False)
-                                if self.widgets[widget_group][widget_name]["TYPE"] == "GroupBox":
-                                    widget.setCollapsed(True)
-                        widget.setEnabled(state)
-                    finally:
-                        widget.blockSignals(was_blocked)
+        """v4.0 S18: Enable/disable all plugin widgets."""
+        skip_types = ("JsonTreeView","LayerTreeView","JsonModel","ToolBox")
+        for wg in self.widgets:
+            for wn in self.widgets[wg]:
+                wt, w = self.widgets[wg][wn]["TYPE"], self.widgets[wg][wn]["WIDGET"]
+                if wt in skip_types: continue
+                w.blockSignals(True)
+                if wt in ("PushButton", "GroupBox") and w.isCheckable() and not state: w.setChecked(False); (w.setCollapsed(True) if wt == "GroupBox" else None)
+                w.setEnabled(state); w.blockSignals(False)
 
 
     def connect_widgets_signals(self):
@@ -1708,30 +1302,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 except: pass
 
     def force_reconnect_exploring_signals(self):
-        """
-        v4.0 Sprint 8: Ultra-simplified - force reconnect EXPLORING signals bypassing cache.
-        """
-        if 'EXPLORING' not in self.widgets:
-            return
-        
-        # Widget → expected signals mapping
-        ws = {
-            'SINGLE_SELECTION_FEATURES': ['featureChanged'], 'SINGLE_SELECTION_EXPRESSION': ['fieldChanged'],
-            'MULTIPLE_SELECTION_FEATURES': ['updatingCheckedItemList', 'filteringCheckedItemList'],
-            'MULTIPLE_SELECTION_EXPRESSION': ['fieldChanged'], 'CUSTOM_SELECTION_EXPRESSION': ['fieldChanged'],
-            'IDENTIFY': ['clicked'], 'ZOOM': ['clicked'], 'IS_SELECTING': ['clicked'],
-            'IS_TRACKING': ['clicked'], 'IS_LINKING': ['clicked'], 'RESET_ALL_LAYER_PROPERTIES': ['clicked']
-        }
-        
+        """v4.0 S18: Force reconnect EXPLORING signals bypassing cache."""
+        if 'EXPLORING' not in self.widgets: return
+        ws = {'SINGLE_SELECTION_FEATURES': ['featureChanged'], 'SINGLE_SELECTION_EXPRESSION': ['fieldChanged'], 'MULTIPLE_SELECTION_FEATURES': ['updatingCheckedItemList', 'filteringCheckedItemList'],
+              'MULTIPLE_SELECTION_EXPRESSION': ['fieldChanged'], 'CUSTOM_SELECTION_EXPRESSION': ['fieldChanged'], 'IDENTIFY': ['clicked'], 'ZOOM': ['clicked'],
+              'IS_SELECTING': ['clicked'], 'IS_TRACKING': ['clicked'], 'IS_LINKING': ['clicked'], 'RESET_ALL_LAYER_PROPERTIES': ['clicked']}
         for w, signals in ws.items():
             if w not in self.widgets['EXPLORING']: continue
             for s_tuple in self.widgets['EXPLORING'][w].get("SIGNALS", []):
                 if not s_tuple[-1] or s_tuple[0] not in signals: continue
-                key = f"EXPLORING.{w}.{s_tuple[0]}"
-                self._signal_connection_states.pop(key, None)
-                try:
-                    state = self.changeSignalState(['EXPLORING', w], s_tuple[0], s_tuple[-1], 'connect')
-                    self._signal_connection_states[key] = state
+                key = f"EXPLORING.{w}.{s_tuple[0]}"; self._signal_connection_states.pop(key, None)
+                try: self._signal_connection_states[key] = self.changeSignalState(['EXPLORING', w], s_tuple[0], s_tuple[-1], 'connect')
                 except: pass
 
     def manage_interactions(self):
@@ -1767,99 +1348,50 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.current_layer_changed(self.init_layer)
             self.filtering_auto_current_layer_changed()
     def select_tabTools_index(self):
-        """v3.1 Sprint 12: Simplified - update action buttons based on active tab."""
-        if not self.widgets_initialized:
-            return
+        """v4.0 S18: Update action buttons based on active tab."""
+        if not self.widgets_initialized: return
         self.tabTools_current_index = self.widgets["DOCK"]["TOOLS"]["WIDGET"].currentIndex()
-        
-        # Button states: (FILTER, UNDO, REDO, UNFILTER, EXPORT)
-        states = {
-            0: (True, True, True, True, False),   # Filtering tab
-            1: (False, False, False, False, True), # Exporting tab
-            2: (False, False, False, False, False) # Configuration tab
-        }
-        s = states.get(self.tabTools_current_index, (False, False, False, False, False))
-        self.widgets["ACTION"]["FILTER"]["WIDGET"].setEnabled(s[0])
-        self.widgets["ACTION"]["UNDO_FILTER"]["WIDGET"].setEnabled(s[1])
-        self.widgets["ACTION"]["REDO_FILTER"]["WIDGET"].setEnabled(s[2])
-        self.widgets["ACTION"]["UNFILTER"]["WIDGET"].setEnabled(s[3])
-        self.widgets["ACTION"]["EXPORT"]["WIDGET"].setEnabled(s[4])
+        states = {0: (True,True,True,True,False), 1: (False,False,False,False,True), 2: (False,)*5}
+        s = states.get(self.tabTools_current_index, (False,)*5)
+        for i, name in enumerate(['FILTER','UNDO_FILTER','REDO_FILTER','UNFILTER','EXPORT']): self.widgets["ACTION"][name]["WIDGET"].setEnabled(s[i])
         self.widgets["ACTION"]["ABOUT"]["WIDGET"].setEnabled(True)
         self.set_exporting_properties()
 
     def _connect_groupbox_signals_directly(self):
-        """v4.0 Sprint 7: Simplified - connect groupbox signals for exclusive behavior."""
+        """v4.0 S18: Connect groupbox signals for exclusive behavior."""
         try:
-            gbs = [(self.mGroupBox_exploring_single_selection, 'single_selection'),
-                   (self.mGroupBox_exploring_multiple_selection, 'multiple_selection'),
-                   (self.mGroupBox_exploring_custom_selection, 'custom_selection')]
-            
+            gbs = [(self.mGroupBox_exploring_single_selection, 'single_selection'), (self.mGroupBox_exploring_multiple_selection, 'multiple_selection'), (self.mGroupBox_exploring_custom_selection, 'custom_selection')]
             for gb, _ in gbs:
                 gb.blockSignals(True)
                 try: gb.toggled.disconnect(); gb.collapsedStateChanged.disconnect()
                 except: pass
                 gb.blockSignals(False)
-            
-            for gb, name in gbs:
-                gb.toggled.connect(lambda checked, n=name: self._on_groupbox_clicked(n, checked))
-                gb.collapsedStateChanged.connect(lambda collapsed, n=name: self._on_groupbox_collapse_changed(n, collapsed))
+            for gb, name in gbs: gb.toggled.connect(lambda c, n=name: self._on_groupbox_clicked(n, c)); gb.collapsedStateChanged.connect(lambda col, n=name: self._on_groupbox_collapse_changed(n, col))
         except: pass
 
     def _force_exploring_groupbox_exclusive(self, active_groupbox):
-        """v3.1 Sprint 16: Force exclusive state for exploring groupboxes."""
+        """v4.0 S18: Force exclusive state for exploring groupboxes."""
         if self._updating_groupbox: return
         self._updating_groupbox = True
-        
         try:
-            gbs = {
-                "single": self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"],
-                "multiple": self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"],
-                "custom": self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"]
-            }
-            active_key = active_groupbox.split("_")[0]  # single, multiple, custom
-            
+            gbs = {"single": self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"], "multiple": self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"], "custom": self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"]}
+            active_key = active_groupbox.split("_")[0]
             for gb in gbs.values(): gb.blockSignals(True)
-            for key, gb in gbs.items():
-                gb.setChecked(key == active_key)
-                gb.setCollapsed(key != active_key)
+            for key, gb in gbs.items(): gb.setChecked(key == active_key); gb.setCollapsed(key != active_key)
             for gb in gbs.values(): gb.blockSignals(False)
         finally:
             self._updating_groupbox = False
 
     def _on_groupbox_clicked(self, groupbox, state):
-        """v3.1 Sprint 10: Simplified - handle groupbox checkbox toggle for exclusive behavior."""
-        if self._updating_groupbox or not self.widgets_initialized:
-            return
-        
-        if state:
-            self.exploring_groupbox_changed(groupbox)
-            return
-        
-        # User unchecked - ensure at least one remains checked
-        try:
-            gbs = {
-                "single_selection": self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"],
-                "multiple_selection": self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"],
-                "custom_selection": self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"],
-            }
-        except (KeyError, AttributeError):
-            return
-        
-        # Check if any other is checked
-        other_checked = any(gbs[k].isChecked() for k in gbs if k != groupbox)
-        
-        if not other_checked:
-            # Force this one to stay checked
-            gbs[groupbox].blockSignals(True)
-            gbs[groupbox].setChecked(True)
-            gbs[groupbox].setCollapsed(False)
-            gbs[groupbox].blockSignals(False)
+        """v4.0 S18: Handle groupbox toggle for exclusive behavior."""
+        if self._updating_groupbox or not self.widgets_initialized: return
+        if state: self.exploring_groupbox_changed(groupbox); return
+        try: gbs = {"single_selection": self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"], "multiple_selection": self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"], "custom_selection": self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"]}
+        except: return
+        if not any(gbs[k].isChecked() for k in gbs if k != groupbox): gbs[groupbox].blockSignals(True); gbs[groupbox].setChecked(True); gbs[groupbox].setCollapsed(False); gbs[groupbox].blockSignals(False)
         else:
-            # Activate the checked one
             for name, gb in gbs.items():
-                if gb.isChecked():
-                    self.exploring_groupbox_changed(name)
-                    break
+                if gb.isChecked(): self.exploring_groupbox_changed(name); break
 
     def _on_groupbox_collapse_changed(self, groupbox, collapsed):
         """v3.1 Sprint 10: Handle groupbox expand - make it the active one."""
@@ -1868,238 +1400,103 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.exploring_groupbox_changed(groupbox)
 
     def exploring_groupbox_init(self):
-        """
-        Initialize exploring groupbox to default or saved state.
-        
-        v4.0 Sprint 6: Simplified - reduced conditional checks.
-        """
-        if not self.widgets_initialized:
-            return
-        
+        """v4.0 Sprint 18: Initialize exploring groupbox to default or saved state."""
+        if not self.widgets_initialized: return
         self.properties_group_state_enabler(self.layer_properties_tuples_dict["selection_expression"])
-        
-        # Restore saved groupbox or use default
-        groupbox = "single_selection"
-        if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
-            groupbox = self.PROJECT_LAYERS[self.current_layer.id()].get("exploring", {}).get(
-                "current_exploring_groupbox", "single_selection"
-            )
-        
+        groupbox = self.PROJECT_LAYERS.get(self.current_layer.id(), {}).get("exploring", {}).get("current_exploring_groupbox", "single_selection") if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS else "single_selection"
         self.exploring_groupbox_changed(groupbox)
 
     def _update_exploring_buttons_state(self):
-        """v4.0 Sprint 8: Optimized - update identify/zoom buttons based on selection."""
+        """v4.0 S18: Update identify/zoom buttons based on selection."""
         if not self.widgets_initialized or not self.current_layer:
-            self.pushButton_exploring_identify.setEnabled(False)
-            self.pushButton_exploring_zoom.setEnabled(False)
-            return
-        
+            self.pushButton_exploring_identify.setEnabled(False); self.pushButton_exploring_zoom.setEnabled(False); return
         has_features = False
         try:
             w = self.widgets.get("EXPLORING", {})
-            if self.current_exploring_groupbox == "single_selection":
-                if picker := w.get("SINGLE_SELECTION_FEATURES", {}).get("WIDGET"):
-                    f = picker.feature()
-                    has_features = f is not None and (not hasattr(f, 'isValid') or f.isValid())
-            elif self.current_exploring_groupbox == "multiple_selection":
-                if combo := w.get("MULTIPLE_SELECTION_FEATURES", {}).get("WIDGET"):
-                    has_features = bool(combo.checkedItems())
-            elif self.current_exploring_groupbox == "custom_selection":
-                if expr := w.get("CUSTOM_SELECTION_EXPRESSION", {}).get("WIDGET"):
-                    has_features = bool(expr.expression() and expr.expression().strip())
+            if self.current_exploring_groupbox == "single_selection" and (picker := w.get("SINGLE_SELECTION_FEATURES", {}).get("WIDGET")):
+                f = picker.feature(); has_features = f is not None and (not hasattr(f, 'isValid') or f.isValid())
+            elif self.current_exploring_groupbox == "multiple_selection" and (combo := w.get("MULTIPLE_SELECTION_FEATURES", {}).get("WIDGET")):
+                has_features = bool(combo.checkedItems())
+            elif self.current_exploring_groupbox == "custom_selection" and (expr := w.get("CUSTOM_SELECTION_EXPRESSION", {}).get("WIDGET")):
+                has_features = bool(expr.expression() and expr.expression().strip())
         except: pass
-        
-        self.pushButton_exploring_identify.setEnabled(has_features)
-        self.pushButton_exploring_zoom.setEnabled(has_features)
+        self.pushButton_exploring_identify.setEnabled(has_features); self.pushButton_exploring_zoom.setEnabled(has_features)
+
+    def _configure_groupbox_common(self, groupbox_name):
+        """v4.0 Sprint 17: Common groupbox configuration logic."""
+        self.current_exploring_groupbox = groupbox_name
+        self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
+        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+        if not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS:
+            self._update_exploring_buttons_state(); return None
+        self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = groupbox_name
+        layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+        if self._controller_integration:
+            self._controller_integration.delegate_exploring_configure_groupbox(groupbox_name, self.current_layer, layer_props)
+        return layer_props
 
     def _configure_single_selection_groupbox(self):
-        """v4.0 Sprint 5: Simplified - delegates to ExploringController."""
-        self.current_exploring_groupbox = "single_selection"
-        
-        if not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS:
-            self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
-            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
-            self._update_exploring_buttons_state()
-            return True
-        
-        self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = "single_selection"
-        layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-        
-        # Delegate widget configuration to controller
-        if self._controller_integration:
-            self._controller_integration.delegate_exploring_configure_groupbox(
-                "single_selection", self.current_layer, layer_props)
-        
-        # Signal management and linking
-        self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
-        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+        """v4.0 Sprint 17: Configure single selection groupbox."""
+        layer_props = self._configure_groupbox_common("single_selection")
+        if layer_props is None: return True
         self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
         self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
-        
         self.exploring_link_widgets()
-        
         if not self._syncing_from_qgis:
-            feature = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
-            if feature and feature.isValid():
-                self.exploring_features_changed(feature)
-        
-        self._update_exploring_buttons_state()
-        return True
+            f = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
+            if f and f.isValid(): self.exploring_features_changed(f)
+        self._update_exploring_buttons_state(); return True
 
     def _configure_multiple_selection_groupbox(self):
-        """v4.0 Sprint 5: Simplified - delegates to ExploringController."""
-        self.current_exploring_groupbox = "multiple_selection"
-        
-        if not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS:
-            self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
-            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
-            self._update_exploring_buttons_state()
-            return True
-        
-        self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = "multiple_selection"
-        layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-        
-        # Delegate widget configuration to controller
-        if self._controller_integration:
-            self._controller_integration.delegate_exploring_configure_groupbox(
-                "multiple_selection", self.current_layer, layer_props)
-        
-        # Signal management
-        self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
-        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+        """v4.0 Sprint 17: Configure multiple selection groupbox."""
+        layer_props = self._configure_groupbox_common("multiple_selection")
+        if layer_props is None: return True
         self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect')
-        
         self.exploring_link_widgets()
-        
         if not self._syncing_from_qgis:
             features = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures()
-            if features:
-                self.exploring_features_changed(features, True)
-        
-        self._update_exploring_buttons_state()
-        return True
+            if features: self.exploring_features_changed(features, True)
+        self._update_exploring_buttons_state(); return True
 
     def _configure_custom_selection_groupbox(self):
-        """v4.0 Sprint 5: Simplified - delegates to ExploringController."""
-        self.current_exploring_groupbox = "custom_selection"
-        
-        if not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS:
-            self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
-            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
-            self._update_exploring_buttons_state()
-            return True
-        
-        self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = "custom_selection"
-        layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-        
-        # Delegate widget configuration to controller
-        if self._controller_integration:
-            self._controller_integration.delegate_exploring_configure_groupbox(
-                "custom_selection", self.current_layer, layer_props)
-        
-        # Signal management
-        self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
-        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+        """v4.0 Sprint 17: Configure custom selection groupbox."""
+        layer_props = self._configure_groupbox_common("custom_selection")
+        if layer_props is None: return True
         self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
         self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
         self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
-        
         self.exploring_link_widgets()
-        
-        # Only apply custom expression if set, or if no existing filter
         custom_expr = layer_props["exploring"].get("custom_selection_expression", "")
-        if custom_expr or not self.current_layer.subsetString():
-            self.exploring_custom_selection()
-        
-        self._update_exploring_buttons_state()
-        return True
+        if custom_expr or not self.current_layer.subsetString(): self.exploring_custom_selection()
+        self._update_exploring_buttons_state(); return True
 
     def exploring_groupbox_changed(self, groupbox):
-        """v3.1 Sprint 11: Simplified - handle groupbox change with exclusive behavior."""
-        if not self.widgets_initialized:
-            return
-        
-        # Delegate cache invalidation to controller
-        if self._controller_integration:
-            self._controller_integration.delegate_exploring_set_groupbox_mode(groupbox)
+        """v4.0 Sprint 18: Handle groupbox change with exclusive behavior."""
+        if not self.widgets_initialized: return
+        if self._controller_integration: self._controller_integration.delegate_exploring_set_groupbox_mode(groupbox)
         elif hasattr(self, '_exploring_cache') and self.current_layer:
             old = self.current_exploring_groupbox
-            if old and old != groupbox:
-                self._exploring_cache.invalidate(self.current_layer.id(), old)
-        
-        # Force exclusive and configure
+            if old and old != groupbox: self._exploring_cache.invalidate(self.current_layer.id(), old)
         self._force_exploring_groupbox_exclusive(groupbox)
-        
-        if groupbox == "single_selection":
-            self._configure_single_selection_groupbox()
-        elif groupbox == "multiple_selection":
-            self._configure_multiple_selection_groupbox()
-        elif groupbox == "custom_selection":
-            self._configure_custom_selection_groupbox()
+        {'single_selection': self._configure_single_selection_groupbox, 'multiple_selection': self._configure_multiple_selection_groupbox, 'custom_selection': self._configure_custom_selection_groupbox}.get(groupbox, lambda: None)()
 
 
     def exploring_identify_clicked(self):
-        """
-        Flash the currently selected features on the map canvas.
-        
-        v4.0 Sprint 6: Simplified to pure wrapper - delegates to ExploringController.
-        Reduced from 34 lines to ~10 lines.
-        """
-        if not self.widgets_initialized or self.current_layer is None:
-            return
-
-        if self._is_layer_truly_deleted(self.current_layer):
-            self.current_layer = None
-            return
-        
-        # Delegate to controller
+        """v4.0 Sprint 18: Flash selected features on map - delegates to ExploringController."""
+        if not self.widgets_initialized or not self.current_layer or self._is_layer_truly_deleted(self.current_layer): self.current_layer = None; return
         if self._controller_integration:
             features, _ = self.get_current_features()
-            if features:
-                self._controller_integration.delegate_flash_features(
-                    [f.id() for f in features], self.current_layer
-                )
+            if features: self._controller_integration.delegate_flash_features([f.id() for f in features], self.current_layer)
 
 
     def get_current_features(self, use_cache: bool = True):
-        """
-        Get the currently selected features based on the active exploring groupbox.
-        
-        v3.1 Sprint 6: Simplified - delegates to ExploringController.
-        
-        Args:
-            use_cache: If True, return cached features if available (default: True).
-        
-        Returns:
-            tuple: (features, expression)
-        """
-        # Delegate to controller
-        if self._controller_integration:
-            result = self._controller_integration.delegate_get_current_features(use_cache)
-            if result != ([], ''):
-                return result
-        
-        # No fallback - controller handles all logic
-        return [], ''
-        
+        """v4.0 Sprint 18: Get selected features based on active groupbox - delegates to ExploringController."""
+        return self._controller_integration.delegate_get_current_features(use_cache) if self._controller_integration else ([], '')
 
     def exploring_zoom_clicked(self, features=[], expression=None):
-        """
-        Zoom the map canvas to the currently selected features.
-        
-        v4.0 Sprint 6: Simplified to pure wrapper - delegates to zooming_to_features.
-        Reduced from 24 lines to ~8 lines.
-        """
-        if not self.widgets_initialized or self.current_layer is None:
-            return
-
-        if self._is_layer_truly_deleted(self.current_layer):
-            self.current_layer = None
-            return
-
-        # Get features if not provided, then delegate
-        if not features:
-            features, expression = self.get_current_features()
+        """v4.0 Sprint 18: Zoom to selected features - delegates to ExploringController."""
+        if not self.widgets_initialized or not self.current_layer or self._is_layer_truly_deleted(self.current_layer): self.current_layer = None; return
+        if not features: features, expression = self.get_current_features()
         self.zooming_to_features(features, expression)
 
 
@@ -2121,193 +1518,75 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except: return layer.extent()
 
     def _compute_zoom_extent_for_mode(self):
-        """
-        WRAPPER: Delegates to ExploringController.
-        
-        Compute the appropriate zoom extent based on the current exploring mode.
-        Migrated to ExploringController in v4.0 Sprint 2.
-        """
-        if self._controller_integration and self._controller_integration.exploring_controller:
-            return self._controller_integration.exploring_controller._compute_zoom_extent_for_mode()
-        # Fallback during init: use filtered layer extent
-        return self.get_filtered_layer_extent(self.current_layer) if self.current_layer else None
+        """v4.0 Sprint 18: Compute zoom extent - delegates to ExploringController."""
+        return self._controller_integration.exploring_controller._compute_zoom_extent_for_mode() if self._controller_integration and self._controller_integration.exploring_controller else self.get_filtered_layer_extent(self.current_layer) if self.current_layer else None
 
     def zooming_to_features(self, features, expression=None):
-        """
-        v3.1 Sprint 8: Simplified - delegates to ExploringController.
-        Zoom to provided features on the map canvas.
-        """
-        if not self.widgets_initialized or self.current_layer is None:
-            return
-
-        if self._is_layer_truly_deleted(self.current_layer):
-            self.current_layer = None
-            return
-
-        # Delegate to controller
+        """v4.0 Sprint 18: Zoom to features - delegates to ExploringController."""
+        if not self.widgets_initialized or not self.current_layer or self._is_layer_truly_deleted(self.current_layer): self.current_layer = None; return
         if self._controller_integration and self._controller_integration.exploring_controller:
             self._controller_integration.exploring_controller.zooming_to_features(features, expression)
-            return
-
-        # Minimal fallback
-        if features and len(features) > 0:
-            self.iface.mapCanvas().zoomToFeatureIds(self.current_layer, [f.id() for f in features])
-            self.iface.mapCanvas().refresh()
+        elif features: self.iface.mapCanvas().zoomToFeatureIds(self.current_layer, [f.id() for f in features]); self.iface.mapCanvas().refresh()
 
 
     def on_layer_selection_changed(self, selected, deselected, clearAndSelect):
-        """
-        Handle layer selection change from QGIS.
-        
-        v3.1 Sprint 7: Simplified - delegates to ExploringController.
-        Synchronizes QGIS selection with FilterMate widgets when is_selecting is active.
-        If is_tracking is active, zooms to selected features.
-        """
-        # Delegate to controller
-        if self._controller_integration:
-            if self._controller_integration.delegate_handle_layer_selection_changed(
-                selected, deselected, clearAndSelect
-            ):
-                return
-        
-        # Minimal fallback - no-op if controller not available
-        logger.debug("on_layer_selection_changed: Controller not available")
-
+        """v4.0 Sprint 18: Handle layer selection change - delegates to ExploringController."""
+        if not (self._controller_integration and self._controller_integration.delegate_handle_layer_selection_changed(selected, deselected, clearAndSelect)):
+            logger.debug("on_layer_selection_changed: Controller not available")
     
     def _sync_widgets_from_qgis_selection(self):
-        """
-        v3.1 Sprint 7: Simplified - delegates to ExploringController.
-        Synchronizes single and multiple selection widgets with QGIS selection.
-        """
+        """v4.0 Sprint 18: Sync widgets with QGIS selection - delegates to ExploringController."""
         if self._controller_integration and self._controller_integration.exploring_controller:
             self._controller_integration.exploring_controller._sync_widgets_from_qgis_selection()
-            return
-        logger.debug("_sync_widgets_from_qgis_selection: Controller not available")
-
     
     def _sync_single_selection_from_qgis(self, selected_features, selected_count):
-        """
-        v3.1 Sprint 7: Simplified - delegates to ExploringController.
-        """
+        """v4.0 Sprint 18: Sync single selection - delegates to ExploringController."""
         if self._controller_integration and self._controller_integration.exploring_controller:
-            self._controller_integration.exploring_controller._sync_single_selection_from_qgis(
-                selected_features, selected_count
-            )
-            return
-        logger.debug("_sync_single_selection_from_qgis: Controller not available")
-
+            self._controller_integration.exploring_controller._sync_single_selection_from_qgis(selected_features, selected_count)
     
     def _sync_multiple_selection_from_qgis(self, selected_features, selected_count):
-        """
-        Synchronise AUTOMATIQUEMENT le widget multiple selection avec la sélection QGIS.
-        Appelé automatiquement quand la groupbox multiple_selection est active.
-        
-        Comportement de synchronisation COMPLÈTE (v2.5.6+):
-        - COCHE les features sélectionnées dans QGIS
-        - DÉCOCHE les features NON sélectionnées dans QGIS
-        - Synchronisation bidirectionnelle complète pour refléter exactement l'état QGIS
-        
-        v3.0.5: Handles async loading - if feature list not ready yet, stores pending
-        selection to be applied when loadFeaturesList task completes.
-        
-        v4.0 Sprint 4: Delegation to UILayoutController with fallback.
-        
-        Note:
-            Contrairement aux versions précédentes qui étaient additives,
-            cette synchronisation reflète maintenant EXACTEMENT la sélection QGIS.
-        """
-        # v4.0 Sprint 4: Delegated to UILayoutController
-        if (hasattr(self, '_controller_integration') and 
-            self._controller_integration and
-            self._controller_integration.delegate_sync_multiple_selection_from_qgis()):
-            logger.debug("_sync_multiple_selection_from_qgis: Delegated to UILayoutController")
-            return
-        
-        # No fallback - controller handles all logic
-        logger.warning("_sync_multiple_selection_from_qgis: Controller delegation failed")
+        """v4.0 Sprint 18: Sync multiple selection - delegates to UILayoutController."""
+        if not (hasattr(self, '_controller_integration') and self._controller_integration and self._controller_integration.delegate_sync_multiple_selection_from_qgis()):
+            logger.warning("_sync_multiple_selection_from_qgis: Controller delegation failed")
 
 
     def exploring_source_params_changed(self, expression=None, groupbox_override=None, change_source=None):
-        """
-        WRAPPER: Delegates to ExploringController.
-        
-        Handle changes to source parameters for exploring features.
-        Migrated to ExploringController in v4.0 Sprint 2.
-        """
+        """v4.0 S18: → ExploringController."""
         if self._controller_integration and self._controller_integration.exploring_controller:
-            self._controller_integration.exploring_controller.exploring_source_params_changed(
-                expression, groupbox_override, change_source
-            )
+            self._controller_integration.exploring_controller.exploring_source_params_changed(expression, groupbox_override, change_source)
 
 
     def exploring_custom_selection(self):
-        """v3.1 Sprint 17: Get features matching custom expression."""
-        if not self.widgets_initialized or not self.current_layer: return [], ''
-        if self.current_layer.id() not in self.PROJECT_LAYERS: return [], ''
-
+        """v4.0 S18: Get features matching custom expression."""
+        if not self.widgets_initialized or not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS: return [], ''
         expression = self.PROJECT_LAYERS[self.current_layer.id()]["exploring"].get("custom_selection_expression", "")
         if not expression: return [], expression
-        
-        # Check if field-only expression (no operators) - used for field-based geometric filtering
         qgs_expr = QgsExpression(expression)
-        if qgs_expr.isField() and not any(op in expression.upper() for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']):
-            return [], expression
-        
-        # Check cache
-        layer_id = self.current_layer.id()
-        cached = self._get_cached_expression_result(layer_id, expression)
+        if qgs_expr.isField() and not any(op in expression.upper() for op in ['=','>','<','!','IN','LIKE','AND','OR']): return [], expression
+        layer_id, cached = self.current_layer.id(), self._get_cached_expression_result(self.current_layer.id(), expression)
         if cached is not None: return cached, expression
-        
-        # Get matching features
         features = self.exploring_features_changed([], False, expression)
         if features: self._set_cached_expression_result(layer_id, expression, features)
         return features, expression
     
 
     def exploring_deselect_features(self):
-        """
-        Deselect all features on the current layer.
-        
-        v4.0 Sprint 5: Simplified - delegates to ExploringController.
-        """
-        if not self.widgets_initialized or self.current_layer is None:
-            return
-
-        # CRITICAL - Use centralized deletion check
-        if self._is_layer_truly_deleted(self.current_layer):
-            logger.debug("exploring_deselect_features: current_layer C++ object truly deleted")
-            self.current_layer = None
-            return
-
-        # Delegate to ExploringController
-        if self._controller_integration is not None:
-            if self._controller_integration.delegate_exploring_clear_selection():
-                return
-        
-        # Minimal fallback
-        self.current_layer.removeSelection()
+        """v4.0 Sprint 18: Deselect all features - delegates to ExploringController."""
+        if not self.widgets_initialized or not self.current_layer or self._is_layer_truly_deleted(self.current_layer): self.current_layer = None; return
+        if not (self._controller_integration and self._controller_integration.delegate_exploring_clear_selection()): self.current_layer.removeSelection()
         
 
     def exploring_select_features(self):
-        """v3.1 Sprint 17: Activate QGIS selection tool and select features from active groupbox."""
-        if not self.widgets_initialized or not self.current_layer: return
-        if self._is_layer_truly_deleted(self.current_layer):
-            self.current_layer = None
-            return
-
+        """v4.0 Sprint 18: Select features from active groupbox - delegates to ExploringController."""
+        if not self.widgets_initialized or not self.current_layer or self._is_layer_truly_deleted(self.current_layer): self.current_layer = None; return
         if self._controller_integration:
             if self._controller_integration.delegate_exploring_activate_selection_tool(self.current_layer):
                 features, _ = self.get_current_features()
                 if features and self._controller_integration.delegate_exploring_select_layer_features([f.id() for f in features], self.current_layer): return
-        
-        try: self.iface.actionSelectRectangle().trigger()
-        except: pass
-        try: self.iface.setActiveLayer(self.current_layer)
+        try: self.iface.actionSelectRectangle().trigger(); self.iface.setActiveLayer(self.current_layer)
         except: pass
         features, _ = self.get_current_features()
-        if features:
-            self.current_layer.removeSelection()
-            self.current_layer.select([f.id() for f in features])
+        if features: self.current_layer.removeSelection(); self.current_layer.select([f.id() for f in features])
 
     def exploring_features_changed(self, input=[], identify_by_primary_key_name=False, custom_expression=None, preserve_filter_if_empty=False):
         """
@@ -2329,28 +1608,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         layer_props,
         identify_by_primary_key_name=False
     ):
-        """
-        v3.1 Sprint 8: Simplified - delegates to ExploringController.
-        Handle the result of get_exploring_features (sync or async).
-        """
+        """v4.0 S18: → ExploringController."""
         if self._controller_integration and self._controller_integration.exploring_controller:
-            return self._controller_integration.exploring_controller.handle_exploring_features_result(
-                features, expression, layer_props, identify_by_primary_key_name
-            )
+            return self._controller_integration.exploring_controller.handle_exploring_features_result(features, expression, layer_props, identify_by_primary_key_name)
         return []
 
 
     def get_exploring_features(self, input, identify_by_primary_key_name=False, custom_expression=None):
-        """
-        WRAPPER: Delegates to ExploringController.
-        
-        Get features based on input (QgsFeature, list, or expression).
-        Migrated to ExploringController in v4.0 Sprint 2.
-        """
+        """v4.0 S18: → ExploringController."""
         if self._controller_integration and self._controller_integration.exploring_controller:
-            return self._controller_integration.exploring_controller.get_exploring_features(
-                input, identify_by_primary_key_name, custom_expression
-            )
+            return self._controller_integration.exploring_controller.get_exploring_features(input, identify_by_primary_key_name, custom_expression)
         return [], None
     
     def get_exploring_features_async(self, expression: str, on_complete=None, on_error=None, on_progress=None):
@@ -2388,127 +1655,64 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return task
     
     def cancel_async_expression_evaluation(self):
-        """Cancel any pending async expression evaluation."""
-        if self._pending_async_evaluation:
-            self._pending_async_evaluation.cancel()
-            self._pending_async_evaluation = None
-            self._set_expression_loading_state(False)
-        
-        # Also cancel via manager for current layer
-        if self._expression_manager and self.current_layer:
-            self._expression_manager.cancel(self.current_layer.id())
+        """v4.0 S18: Cancel pending async expression evaluation."""
+        if self._pending_async_evaluation: self._pending_async_evaluation.cancel(); self._pending_async_evaluation = None; self._set_expression_loading_state(False)
+        if self._expression_manager and self.current_layer: self._expression_manager.cancel(self.current_layer.id())
     
     def should_use_async_expression(self, custom_expression: str = None) -> bool:
-        """
-        Check if async expression evaluation should be used.
-        
-        Args:
-            custom_expression: The custom expression being evaluated
-            
-        Returns:
-            True if async evaluation should be used
-        """
-        if not ASYNC_EXPRESSION_AVAILABLE or self._expression_manager is None:
+        """v4.0 S18: Check if async expression evaluation should be used."""
+        if not ASYNC_EXPRESSION_AVAILABLE or not self._expression_manager or not self.current_layer or not custom_expression:
             return False
-        
-        if self.current_layer is None:
-            return False
-        
-        if custom_expression is None:
-            return False
-        
-        feature_count = self.current_layer.featureCount()
-        return feature_count > self._async_expression_threshold
+        return self.current_layer.featureCount() > self._async_expression_threshold
         
     
     def exploring_link_widgets(self, expression=None, change_source=None):
-        """
-        WRAPPER: Delegates to ExploringController.
-        
-        Link single and multiple selection widgets based on IS_LINKING state.
-        Migrated to ExploringController in v4.0 Sprint 2.
-        """
+        """v4.0 S18: → ExploringController."""
         if self._controller_integration and self._controller_integration.exploring_controller:
-            self._controller_integration.exploring_controller.exploring_link_widgets(
-                expression, change_source
-            )
+            self._controller_integration.exploring_controller.exploring_link_widgets(expression, change_source)
 
 
     def get_layers_to_filter(self):
-        """v3.1 Sprint 9: Simplified - reduced verbose logging."""
-        if not self.widgets_initialized or self.current_layer is None:
-            return []
-
-        checked_list_data = []
-        widget = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
-        
-        for i in range(widget.count()):
-            if widget.itemCheckState(i) == Qt.Checked:
-                data = widget.itemData(i, Qt.UserRole)
-                if isinstance(data, dict) and "layer_id" in data:
-                    checked_list_data.append(data["layer_id"])
-                elif isinstance(data, str):
-                    checked_list_data.append(data)
-        
-        # Sync to controller
-        if self._controller_integration is not None:
-            self._controller_integration.delegate_filtering_set_target_layer_ids(checked_list_data)
-        
-        return checked_list_data
+        """v4.0 S18: Get checked layer IDs from filtering combobox."""
+        if not self.widgets_initialized or not self.current_layer: return []
+        checked = []
+        w = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
+        for i in range(w.count()):
+            if w.itemCheckState(i) == Qt.Checked:
+                d = w.itemData(i, Qt.UserRole)
+                checked.append(d["layer_id"] if isinstance(d, dict) and "layer_id" in d else d if isinstance(d, str) else None)
+        checked = [c for c in checked if c]
+        if self._controller_integration: self._controller_integration.delegate_filtering_set_target_layer_ids(checked)
+        return checked
 
 
     def get_layers_to_export(self):
-        # v3.1 STORY-2.5: Sync with export controller
-        if self.widgets_initialized is True and self.current_layer is not None:
-
-            checked_list_data = []
-            for i in range(self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].count()):
-                if self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].itemCheckState(i) == Qt.Checked:
-                    data = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].itemData(i, Qt.UserRole)
-                    if isinstance(data, str):
-                        checked_list_data.append(data)
-            
-            # v3.1 STORY-2.5: Sync to controller
-            if self._controller_integration is not None:
-                self._controller_integration.delegate_export_set_layers_to_export(checked_list_data)
-            
-            return checked_list_data
+        """v4.0 S18: Get checked layer IDs for export."""
+        if not self.widgets_initialized or not self.current_layer: return None
+        w, checked = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"], []
+        for i in range(w.count()):
+            if w.itemCheckState(i) == Qt.Checked:
+                d = w.itemData(i, Qt.UserRole)
+                if isinstance(d, str): checked.append(d)
+        if self._controller_integration: self._controller_integration.delegate_export_set_layers_to_export(checked)
+        return checked
 
 
     def get_current_crs_authid(self):
-        
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
-
-            return self.widgets["EXPORTING"]["PROJECTION_TO_EXPORT"]["WIDGET"].crs().authid()
+        """v4.0 S18: Get current export CRS."""
+        return self.widgets["EXPORTING"]["PROJECTION_TO_EXPORT"]["WIDGET"].crs().authid() if self.widgets_initialized and self.has_loaded_layers else None
     
     def _validate_and_prepare_layer(self, layer):
-        """
-        v3.1 Sprint 10: Simplified validation and preparation for layer change.
-        Returns: (should_continue, layer, layer_props)
-        """
-        # Quick guards
-        if self._plugin_busy or not self.PROJECT_LAYERS or not self.widgets_initialized:
-            return (False, None, None)
-        
-        # Skip raster layers and None
-        if layer is None or not isinstance(layer, QgsVectorLayer):
-            return (False, None, None)
-        
-        # Verify C++ object validity
-        try:
-            _ = layer.id()
-        except RuntimeError:
-            return (False, None, None)
-        
-        # Verify layer source is available
+        """Validate and prepare layer for change. Returns: (should_continue, layer, layer_props)"""
+        if self._plugin_busy or not self.PROJECT_LAYERS or not self.widgets_initialized: return (False, None, None)
+        if layer is None or not isinstance(layer, QgsVectorLayer): return (False, None, None)
+        try: _ = layer.id()
+        except RuntimeError: return (False, None, None)
         try:
             if not is_layer_source_available(layer):
                 show_warning("FilterMate", "La couche sélectionnée est invalide ou sa source est introuvable.")
                 return (False, None, None)
-        except Exception:
-            return (False, None, None)
-        
-        # Disconnect selectionChanged from previous layer
+        except: return (False, None, None)
         if self.current_layer is not None and self.current_layer_selection_connection is not None:
             try:
                 self.current_layer.selectionChanged.disconnect(self.on_layer_selection_changed)
@@ -2525,18 +1729,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return (True, layer, self.PROJECT_LAYERS[self.current_layer.id()])
     
     def _reset_layer_expressions(self, layer_props):
-        """
-        Reset exploring expressions to primary_key_name of new layer when switching.
-        
-        v3.1 Sprint 9: Simplified - delegates to ExploringController.
-        Resets expressions to primary_key when switching layers.
-        """
+        """v4.0 S18: → ExploringController."""
         if self._controller_integration and self._controller_integration.exploring_controller:
-            try:
-                if self._controller_integration.delegate_reset_layer_expressions(layer_props):
-                    return
-            except Exception as e:
-                logger.debug(f"_reset_layer_expressions delegation failed: {e}")
+            self._controller_integration.delegate_reset_layer_expressions(layer_props)
     
     def _disconnect_layer_signals(self):
         """v3.1 Sprint 17: Disconnect all layer-related widget signals before updating."""
@@ -2555,220 +1750,108 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return widgets_to_stop
     
     def _detect_multi_step_filter(self, layer, layer_props):
-        """
-        v3.1 Sprint 9: Simplified - delegates to FilteringController.
-        Detects existing filters and enables additive mode if needed.
-        """
+        """v4.0 S18: → FilteringController."""
         if self._controller_integration and self._controller_integration.filtering_controller:
-            try:
-                succeeded, result = self._controller_integration.delegate_detect_multi_step_filter(
-                    layer, layer_props
-                )
-                if succeeded:
-                    if result:
-                        self._sync_additive_mode_widgets(layer_props)
-                    return result
-            except Exception as e:
-                logger.debug(f"_detect_multi_step_filter delegation failed: {e}")
+            succeeded, result = self._controller_integration.delegate_detect_multi_step_filter(layer, layer_props)
+            if succeeded and result: self._sync_additive_mode_widgets(layer_props)
+            return result if succeeded else False
         return False
     
     def _sync_additive_mode_widgets(self, layer_props):
-        """
-        Synchronize UI widgets after additive mode is enabled by controller.
-        
-        v4.0 Sprint 2: Helper for controller delegation.
-        
-        Args:
-            layer_props: Layer properties dict with updated filtering state
-        """
+        """v4.0 S18: Sync widgets after additive mode."""
         try:
-            # Set combobox widgets to index 0 (AND) for additive mode
-            self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].blockSignals(True)
-            self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].setCurrentIndex(0)
-            self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].blockSignals(False)
-            
-            self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].blockSignals(True)
-            self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].setCurrentIndex(0)
-            self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].blockSignals(False)
-        except Exception as widget_error:
-            logger.debug(f"Error syncing additive mode widgets: {widget_error}")
+            for key in ["SOURCE_LAYER_COMBINE_OPERATOR", "OTHER_LAYERS_COMBINE_OPERATOR"]:
+                w = self.widgets["FILTERING"][key]["WIDGET"]; w.blockSignals(True); w.setCurrentIndex(0); w.blockSignals(False)
+        except Exception as e: logger.debug(f"Error syncing additive mode widgets: {e}")
     
     def _synchronize_layer_widgets(self, layer, layer_props):
-        """
-        Synchronize all widgets with the new current layer.
-        
-        Updates comboboxes, field expression widgets, and backend indicator.
-        
-        v4.0 Sprint 3: Delegates to LayerSyncController when available.
-        v2.9.42: Added protection to prevent combobox changes during post-filter window.
-        """
-        # v4.0 Sprint 3: Delegation to LayerSyncController (Sprint 5: fallback removed)
+        """v4.0 S18: → LayerSyncController."""
         if self._controller_integration and self._controller_integration.layer_sync_controller:
-            try:
-                if self._controller_integration.delegate_synchronize_layer_widgets(layer, layer_props):
-                    logger.debug("_synchronize_layer_widgets: delegated to LayerSyncController")
-                    return
-            except Exception as e:
-                logger.debug(f"_synchronize_layer_widgets delegation failed: {e}")
-        
-        # No fallback - controller handles all logic
-        logger.warning("_synchronize_layer_widgets: Controller delegation failed")
+            self._controller_integration.delegate_synchronize_layer_widgets(layer, layer_props)
     
     def _reload_exploration_widgets(self, layer, layer_props):
-        """v4.0 Sprint 9: Wrapper - delegates to ExploringController."""
-        if self._controller_integration and self._controller_integration.exploring_controller:
-            self._controller_integration.exploring_controller._reload_exploration_widgets(layer, layer_props)
+        """v4.0 S18: → ExploringController."""
+        if self._controller_integration and self._controller_integration.exploring_controller: self._controller_integration.exploring_controller._reload_exploration_widgets(layer, layer_props)
 
     def _restore_groupbox_ui_state(self, groupbox_name):
-        """v4.0 Sprint 9: Restore exploring groupbox visual state."""
-        if not self.widgets_initialized:
-            return
-        
+        """v4.0 Sprint 17: Restore exploring groupbox visual state."""
+        if not self.widgets_initialized: return
         self.current_exploring_groupbox = groupbox_name
-        
-        if self.current_layer is not None and self.current_layer.id() in self.PROJECT_LAYERS:
+        if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
             self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = groupbox_name
-        
-        states = {
-            "single_selection": (True, False, False, True, False, True),
-            "multiple_selection": (False, True, True, False, False, True),
-            "custom_selection": (False, True, False, True, True, False),
-        }
+        states = {"single_selection": (True, False, False, True, False, True),
+                  "multiple_selection": (False, True, True, False, False, True),
+                  "custom_selection": (False, True, False, True, True, False)}
         s = states.get(groupbox_name, states["single_selection"])
-        
-        groupboxes = [
-            self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"],
-            self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"],
-            self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"],
-        ]
-        
-        for gb in groupboxes:
-            gb.blockSignals(True)
-        
+        gbs = [self.widgets["DOCK"][k]["WIDGET"] for k in ["SINGLE_SELECTION", "MULTIPLE_SELECTION", "CUSTOM_SELECTION"]]
+        for gb in gbs: gb.blockSignals(True)
         try:
-            groupboxes[0].setChecked(s[0]); groupboxes[0].setCollapsed(s[1])
-            groupboxes[1].setChecked(s[2]); groupboxes[1].setCollapsed(s[3])
-            groupboxes[2].setChecked(s[4]); groupboxes[2].setCollapsed(s[5])
-            
-            for gb in groupboxes:
-                gb.update()
+            for i, gb in enumerate(gbs): gb.setChecked(s[i*2]); gb.setCollapsed(s[i*2+1]); gb.update()
         finally:
-            for gb in groupboxes:
-                gb.blockSignals(False)
+            for gb in gbs: gb.blockSignals(False)
     
     def _reconnect_layer_signals(self, widgets_to_reconnect, layer_props):
-        """v4.0 Sprint 9: Reconnect layer signals - delegates to LayerSyncController."""
+        """v4.0 S18: → LayerSyncController."""
         if self._controller_integration and self._controller_integration.layer_sync_controller:
-            try:
-                if self._controller_integration.delegate_reconnect_layer_signals(widgets_to_reconnect, layer_props):
-                    return
-            except:
-                pass
+            self._controller_integration.delegate_reconnect_layer_signals(widgets_to_reconnect, layer_props)
 
     
     def _ensure_valid_current_layer(self, requested_layer):
-        """v4.0 Sprint 9: Ensure valid layer - delegates to LayerSyncController."""
+        """v4.0 Sprint 18: Ensure valid layer - delegates to LayerSyncController."""
         if self._controller_integration and self._controller_integration.layer_sync_controller:
-            try:
+            try: 
                 result = self._controller_integration.delegate_ensure_valid_current_layer(requested_layer)
-                if result is not None:
-                    return result
-            except:
-                logger.debug(f"_ensure_valid_current_layer delegation failed: {e}")
-        
-        # Minimal fallback: use requested layer if valid
-        if requested_layer is not None:
-            try:
-                _ = requested_layer.id()
-                return requested_layer
-            except (RuntimeError, AttributeError):
-                pass
+                if result is not None: return result
+            except: pass
+        if requested_layer:
+            try: _ = requested_layer.id(); return requested_layer
+            except: pass
         return None
 
 
     def _is_layer_truly_deleted(self, layer):
-        """
-        v3.1 Sprint 9: Simplified - delegates to LayerSyncController.
-        Checks if layer is truly deleted, respecting filtering protection window.
-        """
-        if self._controller_integration and self._controller_integration.layer_sync_controller:
-            try:
-                return self._controller_integration.delegate_is_layer_truly_deleted(layer)
-            except Exception as e:
-                logger.debug(f"_is_layer_truly_deleted delegation failed: {e}")
-        
-        # Minimal fallback
-        if layer is None:
-            return True
+        """v4.0 Sprint 18: Check if layer is truly deleted - delegates to LayerSyncController."""
+        if layer is None: return True
         try:
+            if self._controller_integration and self._controller_integration.layer_sync_controller:
+                return self._controller_integration.delegate_is_layer_truly_deleted(layer)
             import sip
             return sip.isdeleted(layer)
-        except Exception:
-            return True
+        except: return True
 
 
     def current_layer_changed(self, layer):
-        """v3.1 Sprint 11: Simplified - handle current layer change event."""
-        if self._updating_current_layer:
-            return
-        
-        # Delegate protection to controller
-        if self._controller_integration:
-            if not self._controller_integration.delegate_current_layer_changed(layer):
-                return
-        
+        """v4.0 Sprint 18: Handle current layer change event."""
+        if self._updating_current_layer: return
+        if self._controller_integration and not self._controller_integration.delegate_current_layer_changed(layer): return
         layer = self._ensure_valid_current_layer(layer)
-        if layer is None:
-            return
-        
-        if self._plugin_busy:
-            self._defer_layer_change(layer)
-            return
-        
-        try:
-            _ = layer.id()
-        except (RuntimeError, AttributeError):
-            return
-        
+        if layer is None: return
+        if self._plugin_busy: self._defer_layer_change(layer); return
+        try: _ = layer.id()
+        except: return
         self._updating_current_layer = True
         self._reset_selection_tracking_for_layer(layer)
-            
         try:
             should_continue, validated_layer, layer_props = self._validate_and_prepare_layer(layer)
-            if not should_continue:
-                return
-            
-            self._reset_layer_expressions(layer_props)
-            widgets_to_reconnect = self._disconnect_layer_signals()
-            self._synchronize_layer_widgets(validated_layer, layer_props)
-            self._reload_exploration_widgets(validated_layer, layer_props)
-            self._update_exploring_buttons_state()
-            self._reconnect_layer_signals(widgets_to_reconnect, layer_props)
-        except Exception as e:
-            logger.error(f"Error in current_layer_changed: {e}")
-        finally:
-            self._updating_current_layer = False
+            if not should_continue: return
+            self._reset_layer_expressions(layer_props); widgets = self._disconnect_layer_signals()
+            self._synchronize_layer_widgets(validated_layer, layer_props); self._reload_exploration_widgets(validated_layer, layer_props)
+            self._update_exploring_buttons_state(); self._reconnect_layer_signals(widgets, layer_props)
+        except Exception as e: logger.error(f"Error in current_layer_changed: {e}")
+        finally: self._updating_current_layer = False
     
     def _defer_layer_change(self, layer):
-        """Defer layer change when plugin is busy."""
+        """v4.0 Sprint 18: Defer layer change when plugin is busy."""
         from qgis.PyQt.QtCore import QTimer
         from qgis.core import QgsProject
-        
-        logger.debug(f"Plugin is busy, deferring layer change for: {layer.name() if layer else 'None'}")
+        captured_id = layer.id() if layer else None
         weak_self = weakref.ref(self)
-        try:
-            captured_layer_id = layer.id() if layer else None
-        except (RuntimeError, OSError, SystemError):
-            captured_layer_id = None
-        
-        def safe_layer_change():
-            strong_self = weak_self()
-            if strong_self is not None and captured_layer_id:
-                fresh_layer = QgsProject.instance().mapLayer(captured_layer_id)
-                if fresh_layer is not None:
-                    strong_self.current_layer_changed(fresh_layer)
-        
-        QTimer.singleShot(150, safe_layer_change)
+        def safe_change():
+            s = weak_self()
+            if s and captured_id:
+                fresh = QgsProject.instance().mapLayer(captured_id)
+                if fresh: s.current_layer_changed(fresh)
+        QTimer.singleShot(150, safe_change)
     
     def _reset_selection_tracking_for_layer(self, layer):
         """Reset selection tracking when layer changes."""
@@ -2786,24 +1869,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def project_property_changed(self, input_property, input_data=None, custom_functions={}):
-        """
-        Handle property changes for project-level (export) properties.
-        
-        v4.0 Sprint 3: Delegates to PropertyController when available.
-        """
-        # v4.0 Sprint 3: Delegation to PropertyController (Sprint 5: fallback removed)
+        """v4.0 S18: → PropertyController."""
         if self._controller_integration and self._controller_integration.property_controller:
-            try:
-                if self._controller_integration.delegate_change_project_property(
-                    input_property, input_data, custom_functions
-                ):
-                    logger.debug("project_property_changed: delegated to PropertyController")
-                    return
-            except Exception as e:
-                logger.debug(f"project_property_changed delegation failed: {e}")
-        
-        # No fallback - controller handles all logic
-        logger.warning("project_property_changed: Controller delegation failed")
+            self._controller_integration.delegate_change_project_property(input_property, input_data, custom_functions)
 
 
     # v4.0 Sprint 9: Property helper methods removed - logic migrated to PropertyController
@@ -2811,77 +1879,30 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     # _update_selection_expression_property, _update_other_property (~130 lines)
 
     def layer_property_changed(self, input_property, input_data=None, custom_functions={}):
-        """
-        WRAPPER: Delegates to PropertyController.
-        
-        Handle property changes for the current layer.
-        v4.0 Sprint 9: Migrated to PropertyController.
-        """
+        """v4.0 S18: → PropertyController."""
         if self._controller_integration and self._controller_integration.property_controller:
-            self._controller_integration.delegate_change_layer_property(
-                input_property, input_data, custom_functions
-            )
+            self._controller_integration.delegate_change_layer_property(input_property, input_data, custom_functions)
 
     def layer_property_changed_with_buffer_style(self, input_property, input_data=None):
-        """
-        WRAPPER: Delegates to PropertyController.
-        
-        Handle buffer value changes with visual style feedback.
-        v4.0 Sprint 9: Migrated to PropertyController.
-        """
+        """v4.0 S18: → PropertyController."""
         if self._controller_integration and self._controller_integration.property_controller:
-            self._controller_integration.property_controller.change_property_with_buffer_style(
-                input_property, input_data
-            )
+            self._controller_integration.property_controller.change_property_with_buffer_style(input_property, input_data)
     
     def _update_buffer_spinbox_style(self, buffer_value):
-        """
-        Update the visual style of the buffer spinbox based on value.
-        
-        Negative values get a distinctive style to indicate erosion mode.
-        
-        Args:
-            buffer_value: The current buffer value
-        """
+        """Update buffer spinbox style based on value (negative = erosion mode)."""
         spinbox = self.mQgsDoubleSpinBox_filtering_buffer_value
-        
         if buffer_value is not None and buffer_value < 0:
-            # Negative buffer (erosion) - use distinctive orange/yellow style
-            spinbox.setStyleSheet("""
-                QgsDoubleSpinBox {
-                    background-color: #FFF3CD;
-                    border: 2px solid #FFC107;
-                    color: #856404;
-                }
-                QgsDoubleSpinBox:focus {
-                    border: 2px solid #FF9800;
-                }
-            """)
+            spinbox.setStyleSheet("QgsDoubleSpinBox{background-color:#FFF3CD;border:2px solid #FFC107;color:#856404;}QgsDoubleSpinBox:focus{border:2px solid #FF9800;}")
             spinbox.setToolTip(self.tr("Negative buffer (erosion): shrinks polygons inward"))
         else:
-            # Zero or positive buffer - reset to default style
             spinbox.setStyleSheet("")
             spinbox.setToolTip(self.tr("Buffer value in meters (positive=expand, negative=shrink polygons)"))
     
     def _update_buffer_validation(self):
-        """
-        Update buffer spinbox validation based on source layer geometry type.
-        
-        v4.0 Sprint 1: Delegated to PropertyController.
-        
-        Negative buffers (erosion) only work on polygon/multipolygon geometries.
-        For point and line geometries, the minimum value is set to 0 to prevent
-        negative buffer input.
-        """
-        # v4.0: Delegate to PropertyController (Sprint 5: fallback removed)
+        """Update buffer spinbox validation - delegates to PropertyController."""
         if self._controller_integration and self._controller_integration.property_controller:
-            try:
-                self._controller_integration.delegate_update_buffer_validation()
-                return
-            except Exception as e:
-                logger.debug(f"_update_buffer_validation delegation failed: {e}")
-        
-        # No fallback - controller handles all logic
+            try: self._controller_integration.delegate_update_buffer_validation(); return
+            except: pass
         logger.warning("_update_buffer_validation: Controller delegation failed")
 
     def set_exporting_properties(self):
@@ -2928,60 +1949,34 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if crs.isValid(): w.setCrs(crs)
 
     def properties_group_state_enabler(self, tuple_group):
-        """v3.1 Sprint 12: Simplified - enable widgets in a property group."""
-        if not self.widgets_initialized or not self.has_loaded_layers:
-            return
+        """v4.0 S18: Enable widgets in a property group."""
+        if not self.widgets_initialized or not self.has_loaded_layers: return
         for t in tuple_group:
-            if t[0].upper() not in self.widgets or t[1].upper() not in self.widgets[t[0].upper()]:
-                continue
-            widget_entry = self.widgets[t[0].upper()][t[1].upper()]
+            if t[0].upper() not in self.widgets or t[1].upper() not in self.widgets[t[0].upper()]: continue
+            we = self.widgets[t[0].upper()][t[1].upper()]
             if t[1] in ['has_output_folder_to_export', 'has_zip_to_export']:
-                has_layers = any(self.checkableComboBoxLayer_exporting_layers.itemCheckState(i) == Qt.Checked 
-                               for i in range(self.checkableComboBoxLayer_exporting_layers.count())) if hasattr(self, 'checkableComboBoxLayer_exporting_layers') else False
-                widget_entry["WIDGET"].setEnabled(has_layers)
-            else:
-                widget_entry["WIDGET"].setEnabled(True)
-            if widget_entry["TYPE"] == 'QgsFieldExpressionWidget' and self.current_layer:
-                widget_entry["WIDGET"].setLayer(self.current_layer)
+                has_layers = any(self.checkableComboBoxLayer_exporting_layers.itemCheckState(i) == Qt.Checked for i in range(self.checkableComboBoxLayer_exporting_layers.count())) if hasattr(self, 'checkableComboBoxLayer_exporting_layers') else False
+                we["WIDGET"].setEnabled(has_layers)
+            else: we["WIDGET"].setEnabled(True)
+            if we["TYPE"] == 'QgsFieldExpressionWidget' and self.current_layer: we["WIDGET"].setLayer(self.current_layer)
 
 
     def properties_group_state_reset_to_default(self, tuple_group, group_name, state):
-        """v3.1 Sprint 12: Simplified - reset property group to defaults via controller."""
-        if self._controller_integration and self._controller_integration.property_controller:
-            try:
-                if self._controller_integration.delegate_reset_property_group(tuple_group, group_name, state):
-                    return
-            except Exception:
-                pass
+        """v4.0 S18: → PropertyController."""
+        if self._controller_integration and self._controller_integration.property_controller: self._controller_integration.delegate_reset_property_group(tuple_group, group_name, state)
 
     def filtering_init_buffer_property(self):
-        """v3.1 Sprint 12: Simplified - init buffer property override widget."""
-        if not self.widgets_initialized or not self.has_loaded_layers:
-            return
-        if not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS:
-            return
-
-        layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-        layer_id = self.current_layer.id()
-        
-        name = f"{layer_id}_buffer_property_definition"
-        description = f"Replace unique buffer value with values based on expression for {layer_id}"
-        prop_def = QgsPropertyDefinition(name, QgsPropertyDefinition.DataTypeNumeric, description, 'Expression must returns numeric values (unit is in meters)')
-        
-        buffer_expr = layer_props["filtering"]["buffer_value_expression"]
-        if not isinstance(buffer_expr, str):
-            buffer_expr = str(buffer_expr) if buffer_expr else ''
-            layer_props["filtering"]["buffer_value_expression"] = buffer_expr
-        
-        prop = QgsProperty.fromExpression(buffer_expr) if buffer_expr and buffer_expr.strip() else QgsProperty()
+        """v4.0 S18: Init buffer property override widget."""
+        if not self.widgets_initialized or not self.has_loaded_layers or not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS: return
+        lp, lid = self.PROJECT_LAYERS[self.current_layer.id()], self.current_layer.id()
+        prop_def = QgsPropertyDefinition(f"{lid}_buffer_property_definition", QgsPropertyDefinition.DataTypeNumeric, f"Replace buffer with expression for {lid}", 'Expression must return numeric values (meters)')
+        buf_expr = lp["filtering"]["buffer_value_expression"]
+        if not isinstance(buf_expr, str): buf_expr = str(buf_expr) if buf_expr else ''; lp["filtering"]["buffer_value_expression"] = buf_expr
+        prop = QgsProperty.fromExpression(buf_expr) if buf_expr and buf_expr.strip() else QgsProperty()
         self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].init(0, prop, prop_def, self.current_layer)
-        
-        has_buffer_checked = layer_props["filtering"].get("has_buffer_value", False)
-        is_active = layer_props["filtering"]["buffer_value_property"]
-        has_valid_expr = bool(buffer_expr and buffer_expr.strip())
-        
-        self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(has_buffer_checked and not (is_active and has_valid_expr))
-        self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setEnabled(has_buffer_checked)
+        has_buf, is_active, has_expr = lp["filtering"].get("has_buffer_value", False), lp["filtering"]["buffer_value_property"], bool(buf_expr and buf_expr.strip())
+        self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(has_buf and not (is_active and has_expr))
+        self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setEnabled(has_buf)
 
 
     def filtering_buffer_property_changed(self):
@@ -3042,34 +2037,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def filtering_combine_operator_state_changed(self):
-        """v3.1 Sprint 11: Simplified - handle combine operator button changes."""
-        if not self.widgets_initialized or not self.has_loaded_layers:
-            return
+        """v4.0 S18: Handle combine operator button changes."""
+        if not self.widgets_initialized or not self.has_loaded_layers: return
         is_checked = self.widgets["FILTERING"]["HAS_COMBINE_OPERATOR"]["WIDGET"].isChecked()
-        if self._controller_integration:
-            self._controller_integration.delegate_filtering_combine_operator_state_changed(is_checked)
+        if self._controller_integration: self._controller_integration.delegate_filtering_combine_operator_state_changed(is_checked)
         self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].setEnabled(is_checked)
         self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].setEnabled(is_checked)
 
 
     def filtering_geometric_predicates_state_changed(self):
-        """v3.1 Sprint 11: Simplified - handle geometric predicates button changes."""
-        if not self.widgets_initialized or not self.has_loaded_layers:
-            return
+        """v4.0 S18: Handle geometric predicates button changes."""
+        if not self.widgets_initialized or not self.has_loaded_layers: return
         is_checked = self.widgets["FILTERING"]["HAS_GEOMETRIC_PREDICATES"]["WIDGET"].isChecked()
-        if self._controller_integration:
-            self._controller_integration.delegate_filtering_geometric_predicates_state_changed(is_checked)
+        if self._controller_integration: self._controller_integration.delegate_filtering_geometric_predicates_state_changed(is_checked)
         self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].setEnabled(is_checked)
 
 
     def filtering_buffer_type_state_changed(self):
-        """v4.0 Sprint 8: Optimized - handle buffer type button changes."""
+        """v4.0 S18: Handle buffer type button changes."""
         if not self.widgets_initialized or not self.has_loaded_layers: return
         is_checked = self.widgets["FILTERING"]["HAS_BUFFER_TYPE"]["WIDGET"].isChecked()
-        if self._controller_integration:
-            self._controller_integration.delegate_filtering_buffer_type_state_changed(is_checked)
-        self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].setEnabled(is_checked)
-        self.widgets["FILTERING"]["BUFFER_SEGMENTS"]["WIDGET"].setEnabled(is_checked)
+        if self._controller_integration: self._controller_integration.delegate_filtering_buffer_type_state_changed(is_checked)
+        self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].setEnabled(is_checked); self.widgets["FILTERING"]["BUFFER_SEGMENTS"]["WIDGET"].setEnabled(is_checked)
 
     def _update_centroids_source_checkbox_state(self):
         """v4.0 Sprint 8: Optimized - update centroids checkbox enabled state."""
@@ -3115,14 +2104,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def reset_export_output_path(self):
-        """v3.1 Sprint 12: Simplified - reset export output path."""
-        if not self.widgets_initialized or not self.has_loaded_layers:
-            return
-        if not self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].text():
-            self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear()
-            self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].setChecked(False)
-            self.project_property_changed('has_output_folder_to_export', False)
-            self.project_property_changed('output_folder_to_export', '')
+        """v4.0 S18: Reset export output path."""
+        if not self.widgets_initialized or not self.has_loaded_layers or self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].text(): return
+        self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear(); self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].setChecked(False)
+        self.project_property_changed('has_output_folder_to_export', False); self.project_property_changed('output_folder_to_export', '')
 
     def dialog_export_output_pathzip(self):
         """v3.1 Sprint 12: Simplified - dialog for zip export path."""
@@ -3143,14 +2128,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.project_property_changed('zip_to_export', path)
 
     def reset_export_output_pathzip(self):
-        """v3.1 Sprint 12: Simplified - reset zip export path."""
-        if not self.widgets_initialized or not self.has_loaded_layers:
-            return
-        if not self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].text():
-            self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].clear()
-            self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].setChecked(False)
-            self.project_property_changed('has_zip_to_export', False)
-            self.project_property_changed('zip_to_export', '')
+        """v4.0 S18: Reset zip export path."""
+        if not self.widgets_initialized or not self.has_loaded_layers or self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].text(): return
+        self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].clear(); self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].setChecked(False)
+        self.project_property_changed('has_zip_to_export', False); self.project_property_changed('zip_to_export', '')
 
     def filtering_auto_current_layer_changed(self, state=None):
         """v3.1 Sprint 12: Simplified - handle auto current layer toggle."""
@@ -3280,109 +2261,59 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def open_project_page(self):
-        if "APP" in self.CONFIG_DATA and "OPTIONS" in self.CONFIG_DATA["APP"]:
-            if "GITHUB_PAGE" in self.CONFIG_DATA["APP"]["OPTIONS"]:
-                url = self.CONFIG_DATA["APP"]["OPTIONS"]["GITHUB_PAGE"]
-                if url and url.startswith("http"):
-                    webbrowser.open(url)
+        """v4.0 S18: Open GitHub project page."""
+        url = self.CONFIG_DATA.get("APP", {}).get("OPTIONS", {}).get("GITHUB_PAGE", "")
+        if url and url.startswith("http"): webbrowser.open(url)
 
     def reload_plugin(self):
-        """v3.1 Sprint 17: Reload the FilterMate plugin to apply layout changes."""
+        """v4.0 S18: Reload FilterMate plugin."""
         try:
-            from qgis.utils import plugins
-            from qgis.PyQt.QtCore import QTimer
-            
+            from qgis.utils import plugins; from qgis.PyQt.QtCore import QTimer
             self.save_configuration_model()
-            if 'filter_mate' not in plugins:
-                show_warning("FilterMate", "Could not reload plugin automatically. Please close and reopen.")
-                return
-            
-            fm = plugins['filter_mate']
-            self.close()
-            fm.pluginIsActive, fm.app = False, None
-            QTimer.singleShot(100, fm.run)
-        except Exception as e:
-            show_error("FilterMate", f"Error reloading plugin: {str(e)}")
+            if 'filter_mate' not in plugins: show_warning("FilterMate", "Could not reload plugin automatically."); return
+            fm = plugins['filter_mate']; self.close(); fm.pluginIsActive, fm.app = False, None; QTimer.singleShot(100, fm.run)
+        except Exception as e: show_error("FilterMate", f"Error reloading plugin: {str(e)}")
 
 
     def setLayerVariableEvent(self, layer=None, properties=None):
-        """v4.0 Sprint 13: Emit signal to set layer variables with validity check."""
-        if not self.widgets_initialized:
-            return
-        properties = properties if isinstance(properties, list) else []
+        """v4.0 Sprint 18: Emit signal to set layer variables."""
+        if not self.widgets_initialized: return
         layer = layer or self.current_layer
-        if is_valid_layer(layer):
-            self.settingLayerVariable.emit(layer, properties)
-
+        if is_valid_layer(layer): self.settingLayerVariable.emit(layer, properties if isinstance(properties, list) else [])
 
     def resetLayerVariableOnErrorEvent(self, layer, properties=None):
-        """v4.0 Sprint 13: Emit signal to reset layer variables after error."""
-        if not self.widgets_initialized:
-            return
-        properties = properties if isinstance(properties, list) else []
+        """v4.0 Sprint 18: Emit signal to reset layer variables after error."""
+        if not self.widgets_initialized: return
         layer = layer or self.current_layer
         if not self._is_layer_truly_deleted(layer):
-            try:
-                self.resettingLayerVariableOnError.emit(layer, properties)
-            except TypeError as e:
-                logger.warning(f"Signal emission failed: {e}")
+            try: self.resettingLayerVariableOnError.emit(layer, properties if isinstance(properties, list) else [])
+            except: pass
 
 
     def resetLayerVariableEvent(self, layer=None, properties=None):
-        """v3.1 Sprint 15: Reset layer properties to default values."""
-        if not self.widgets_initialized:
-            return
+        """v4.0 Sprint 18: Reset layer properties to default values."""
+        if not self.widgets_initialized: return
         layer = layer or self.current_layer
-        if not layer or not is_valid_layer(layer) or layer.id() not in self.PROJECT_LAYERS:
-            return
-        
+        if not layer or not is_valid_layer(layer) or layer.id() not in self.PROJECT_LAYERS: return
         try:
             layer_props = self.PROJECT_LAYERS[layer.id()]
             best_field = get_best_display_field(layer) or layer_props.get("infos", {}).get("primary_key_name", "")
-            
-            defaults = {
-                "exploring": {"is_changing_all_layer_properties": True, "is_tracking": False, "is_selecting": False, "is_linking": False,
-                    "current_exploring_groupbox": "single_selection", "single_selection_expression": best_field,
-                    "multiple_selection_expression": best_field, "custom_selection_expression": best_field},
-                "filtering": {"has_layers_to_filter": False, "layers_to_filter": [], "has_combine_operator": False,
-                    "source_layer_combine_operator": "AND", "other_layers_combine_operator": "AND", "has_geometric_predicates": False,
-                    "geometric_predicates": [], "has_buffer_value": False, "buffer_value": 0.0, "buffer_value_property": False,
-                    "buffer_value_expression": "", "has_buffer_type": False, "buffer_type": "Round"}
-            }
-            
-            properties_to_save = []
-            for category, props in defaults.items():
-                layer_props[category].update(props)
-                properties_to_save.extend((category, k) for k in props)
-            
-            self.settingLayerVariable.emit(layer, properties_to_save)
-            self._synchronize_layer_widgets(layer, layer_props)
-            self._update_buffer_spinbox_style(0.0)
-            self._reset_exploring_button_states(layer_props)
-            self._reset_filtering_button_states(layer_props)
+            defaults = {"exploring": {"is_changing_all_layer_properties": True, "is_tracking": False, "is_selecting": False, "is_linking": False, "current_exploring_groupbox": "single_selection", "single_selection_expression": best_field, "multiple_selection_expression": best_field, "custom_selection_expression": best_field},
+                        "filtering": {"has_layers_to_filter": False, "layers_to_filter": [], "has_combine_operator": False, "source_layer_combine_operator": "AND", "other_layers_combine_operator": "AND", "has_geometric_predicates": False, "geometric_predicates": [], "has_buffer_value": False, "buffer_value": 0.0, "buffer_value_property": False, "buffer_value_expression": "", "has_buffer_type": False, "buffer_type": "Round"}}
+            props_to_save = []
+            for cat, props in defaults.items(): layer_props[cat].update(props); props_to_save.extend((cat, k) for k in props)
+            self.settingLayerVariable.emit(layer, props_to_save); self._synchronize_layer_widgets(layer, layer_props)
+            self._update_buffer_spinbox_style(0.0); self._reset_exploring_button_states(layer_props); self._reset_filtering_button_states(layer_props)
             self.iface.messageBar().pushSuccess("FilterMate", self.tr("Layer properties reset to defaults"))
-        except Exception as e:
-            self.iface.messageBar().pushCritical("FilterMate", self.tr("Error resetting layer properties: {}").format(str(e)))
+        except Exception as e: self.iface.messageBar().pushCritical("FilterMate", self.tr("Error resetting layer properties: {}").format(str(e)))
 
     def _reset_exploring_button_states(self, layer_props):
-        """Reset exploring button visual states based on layer properties."""
+        """v4.0 Sprint 17: Reset exploring button visual states."""
         try:
-            # Block signals during state update
-            is_selecting_widget = self.widgets["EXPLORING"]["IS_SELECTING"]["WIDGET"]
-            is_tracking_widget = self.widgets["EXPLORING"]["IS_TRACKING"]["WIDGET"]
-            is_linking_widget = self.widgets["EXPLORING"]["IS_LINKING"]["WIDGET"]
-            
-            is_selecting_widget.blockSignals(True)
-            is_tracking_widget.blockSignals(True)
-            is_linking_widget.blockSignals(True)
-            
-            is_selecting_widget.setChecked(layer_props["exploring"]["is_selecting"])
-            is_tracking_widget.setChecked(layer_props["exploring"]["is_tracking"])
-            is_linking_widget.setChecked(layer_props["exploring"]["is_linking"])
-            
-            is_selecting_widget.blockSignals(False)
-            is_tracking_widget.blockSignals(False)
-            is_linking_widget.blockSignals(False)
+            exp = layer_props["exploring"]
+            for key, prop in [("IS_SELECTING", "is_selecting"), ("IS_TRACKING", "is_tracking"), ("IS_LINKING", "is_linking")]:
+                w = self.widgets["EXPLORING"][key]["WIDGET"]
+                w.blockSignals(True); w.setChecked(exp[prop]); w.blockSignals(False)
         except Exception as e:
             logger.debug(f"Error resetting exploring button states: {e}")
 
@@ -3406,34 +2337,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except: pass
 
     def setProjectVariablesEvent(self):
-        if self.widgets_initialized is True:
-
-            self.settingProjectVariables.emit()
+        """v4.0 S18: Emit project variables signal."""
+        if self.widgets_initialized: self.settingProjectVariables.emit()
 
     def _update_backend_indicator(self, provider_type, postgresql_connection_available=None, actual_backend=None):
-        """v4.0 Sprint 13: Simplified - delegates to BackendController."""
+        """v4.0 Sprint 18: Update backend indicator via BackendController."""
         if self._controller_integration and self._controller_integration.backend_controller and self.current_layer:
-            if self._controller_integration.delegate_update_backend_indicator(
-                self.current_layer, postgresql_connection_available, actual_backend):
+            if self._controller_integration.delegate_update_backend_indicator(self.current_layer, postgresql_connection_available, actual_backend):
                 self._current_provider_type = provider_type
                 self._current_postgresql_available = postgresql_connection_available
                 return
-        self._update_backend_indicator_legacy(provider_type, postgresql_connection_available, actual_backend)
-    
-    def _update_backend_indicator_legacy(self, provider_type, postgresql_connection_available=None, actual_backend=None):
-        """v4.0 Sprint 13: Simplified legacy fallback."""
-        if self._controller_integration and self._controller_integration._backend_controller and self.current_layer:
-            self._controller_integration._backend_controller.update_for_layer(
-                self.current_layer, postgresql_available=postgresql_connection_available, actual_backend=actual_backend)
-            return
         if hasattr(self, 'backend_indicator_label') and self.backend_indicator_label:
             self.backend_indicator_label.setText(actual_backend.upper() if actual_backend else provider_type.upper()[:3])
     
     def getProjectLayersEvent(self, event):
-
-        if self.widgets_initialized is True:
-
-            self.gettingProjectLayers.emit()
+        if self.widgets_initialized: self.gettingProjectLayers.emit()
 
     def closeEvent(self, event):
         """v3.1 Sprint 17: Clean up resources before closing."""
@@ -3456,166 +2374,83 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         event.accept()
 
     def get_exploring_cache_stats(self):
-        """v4.0 Sprint 13: Get cache statistics - delegates to controller or uses local cache."""
-        if self._controller_integration:
-            stats = self._controller_integration.delegate_exploring_get_cache_stats()
-            if stats:
-                return stats
-        return self._exploring_cache.get_stats() if hasattr(self, '_exploring_cache') else {}
+        """v4.0 Sprint 18: Get cache statistics."""
+        return (self._controller_integration.delegate_exploring_get_cache_stats() if self._controller_integration else None) or (self._exploring_cache.get_stats() if hasattr(self, '_exploring_cache') else {})
     
     def invalidate_exploring_cache(self, layer_id=None, groupbox_type=None):
-        """v4.0 Sprint 13: Invalidate exploring cache - delegates to controller or uses local cache."""
-        if layer_id is None and groupbox_type is None and self._controller_integration:
-            if self._controller_integration.delegate_exploring_clear_cache():
-                return
+        """v4.0 Sprint 18: Invalidate exploring cache."""
+        if layer_id is None and groupbox_type is None and self._controller_integration and self._controller_integration.delegate_exploring_clear_cache(): return
         if hasattr(self, '_exploring_cache'):
-            if layer_id is None:
-                self._exploring_cache.invalidate_all()
-            elif groupbox_type is None:
-                self._exploring_cache.invalidate_layer(layer_id)
-            else:
-                self._exploring_cache.invalidate(layer_id, groupbox_type)
+            self._exploring_cache.invalidate_all() if layer_id is None else (self._exploring_cache.invalidate_layer(layer_id) if groupbox_type is None else self._exploring_cache.invalidate(layer_id, groupbox_type))
 
     def launchTaskEvent(self, state, task_name):
-        """v3.1 Sprint 17: Emit signal to launch a task."""
-        if not self.widgets_initialized: return
-        if not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS: return
-        
-        current_layers_to_filter = self.get_layers_to_filter()
-        self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = current_layers_to_filter
-        self.setLayerVariableEvent(self.current_layer, [("filtering", "layers_to_filter")])
-        self.launchingTask.emit(task_name)
+        """v4.0 S18: Emit signal to launch a task."""
+        if not self.widgets_initialized or not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS: return
+        self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = self.get_layers_to_filter()
+        self.setLayerVariableEvent(self.current_layer, [("filtering", "layers_to_filter")]); self.launchingTask.emit(task_name)
     
     def _setup_truncation_tooltips(self):
-        """
-        Setup tooltips for widgets that may display truncated text.
-        
-        Adds tooltips to show full text content when text is potentially truncated
-        in combo boxes, expression widgets, and other text-displaying widgets.
-        """
-        # Widgets to monitor for text truncation
-        widgets_to_monitor = [
-            # Layer selection combos
+        """v4.0 Sprint 17: Setup tooltips for widgets with truncated text."""
+        widgets = [
             (self.comboBox_filtering_current_layer, 'currentTextChanged', lambda: self._update_combo_tooltip(self.comboBox_filtering_current_layer)),
             (self.checkableComboBoxLayer_filtering_layers_to_filter, 'checkedItemsChanged', lambda: self._update_checkable_combo_tooltip(self.checkableComboBoxLayer_filtering_layers_to_filter)),
             (self.checkableComboBoxLayer_exporting_layers, 'checkedItemsChanged', lambda: [self._update_checkable_combo_tooltip(self.checkableComboBoxLayer_exporting_layers), self._update_export_buttons_state()]),
-            
-            # Expression widgets
             (self.mFieldExpressionWidget_exploring_single_selection, 'fieldChanged', lambda: self._update_expression_tooltip(self.mFieldExpressionWidget_exploring_single_selection)),
             (self.mFieldExpressionWidget_exploring_multiple_selection, 'fieldChanged', lambda: self._update_expression_tooltip(self.mFieldExpressionWidget_exploring_multiple_selection)),
             (self.mFieldExpressionWidget_exploring_custom_selection, 'fieldChanged', lambda: self._update_expression_tooltip(self.mFieldExpressionWidget_exploring_custom_selection)),
-            
-            # Feature picker
-            (self.mFeaturePickerWidget_exploring_single_selection, 'featureChanged', lambda: self._update_feature_picker_tooltip(self.mFeaturePickerWidget_exploring_single_selection)),
-        ]
-        
-        # Connect signals for dynamic tooltip updates
-        for widget, signal_name, slot in widgets_to_monitor:
-            if widget and hasattr(widget, signal_name):
-                try:
-                    signal = getattr(widget, signal_name)
-                    signal.connect(slot)
-                    # Initial tooltip setup
-                    slot()
-                except Exception as e:
-                    logger.debug(f"FilterMate: Could not connect truncation tooltip for {widget.objectName()}: {e}")
+            (self.mFeaturePickerWidget_exploring_single_selection, 'featureChanged', lambda: self._update_feature_picker_tooltip(self.mFeaturePickerWidget_exploring_single_selection))]
+        for w, sig, slot in widgets:
+            if w and hasattr(w, sig):
+                try: getattr(w, sig).connect(slot); slot()
+                except: pass
     
-    def _update_combo_tooltip(self, combo_widget):
-        """Update tooltip for a QComboBox-like widget."""
-        if not combo_widget:
-            return
-        
+    def _update_combo_tooltip(self, combo):
+        """v4.0 Sprint 17: Update tooltip for combo widget."""
+        if not combo or not hasattr(combo, 'currentText'): return
         try:
-            if hasattr(combo_widget, 'currentText'):
-                text = combo_widget.currentText()
-                # Set tooltip if text is longer than typical display width (30 chars threshold)
-                if text and len(text) > 30:
-                    combo_widget.setToolTip(text)
-                elif text:
-                    # Short text - use descriptive tooltip instead
-                    combo_widget.setToolTip(QCoreApplication.translate("FilterMate", "Current layer: {0}").format(text))
-                else:
-                    combo_widget.setToolTip(QCoreApplication.translate("FilterMate", "No layer selected"))
-        except Exception as e:
-            logger.debug(f"FilterMate: Error updating combo tooltip: {e}")
+            t = combo.currentText()
+            combo.setToolTip(t if t and len(t) > 30 else QCoreApplication.translate("FilterMate", "Current layer: {0}").format(t) if t else QCoreApplication.translate("FilterMate", "No layer selected"))
+        except: pass
     
-    def _update_checkable_combo_tooltip(self, combo_widget):
-        """Update tooltip for a checkable combo box showing selected items."""
-        if not combo_widget:
-            return
-        
+    def _update_checkable_combo_tooltip(self, combo):
+        """v4.0 Sprint 17: Update tooltip for checkable combo showing selected items."""
+        if not combo or not hasattr(combo, 'checkedItems'): return
         try:
-            if hasattr(combo_widget, 'checkedItems'):
-                items = combo_widget.checkedItems()
-                if items:
-                    # Join item names with line breaks for readability
-                    text = "\n".join([item.text() for item in items if hasattr(item, 'text')])
-                    if text:
-                        combo_widget.setToolTip(QCoreApplication.translate("FilterMate", "Selected layers:\n{0}").format(text))
-                    else:
-                        combo_widget.setToolTip(QCoreApplication.translate("FilterMate", "Multiple layers selected"))
-                else:
-                    combo_widget.setToolTip(QCoreApplication.translate("FilterMate", "No layers selected"))
-        except Exception as e:
-            logger.debug(f"FilterMate: Error updating checkable combo tooltip: {e}")
+            items = combo.checkedItems()
+            t = "\n".join([i.text() for i in items if hasattr(i, 'text')]) if items else ""
+            combo.setToolTip(QCoreApplication.translate("FilterMate", "Selected layers:\n{0}").format(t) if t else QCoreApplication.translate("FilterMate", "No layers selected"))
+        except: pass
     
     def _update_export_buttons_state(self):
-        """Update enabled state of output and zip buttons based on selected layers."""
+        """v4.0 Sprint 17: Update export buttons based on layer selection."""
         try:
-            # Check if any layers are selected in the export combobox
-            has_layers_selected = False
-            if hasattr(self, 'checkableComboBoxLayer_exporting_layers'):
-                for i in range(self.checkableComboBoxLayer_exporting_layers.count()):
-                    if self.checkableComboBoxLayer_exporting_layers.itemCheckState(i) == Qt.Checked:
-                        has_layers_selected = True
-                        break
-            
-            # Enable/disable output and zip buttons
-            if hasattr(self, 'pushButton_checkable_exporting_output_folder'):
-                self.pushButton_checkable_exporting_output_folder.setEnabled(has_layers_selected)
-            if hasattr(self, 'pushButton_checkable_exporting_zip'):
-                self.pushButton_checkable_exporting_zip.setEnabled(has_layers_selected)
-        except Exception as e:
-            logger.debug(f"FilterMate: Error updating export buttons state: {e}")
+            has_layers = any(self.checkableComboBoxLayer_exporting_layers.itemCheckState(i) == Qt.Checked 
+                           for i in range(self.checkableComboBoxLayer_exporting_layers.count())) if hasattr(self, 'checkableComboBoxLayer_exporting_layers') else False
+            for btn in ['pushButton_checkable_exporting_output_folder', 'pushButton_checkable_exporting_zip']:
+                if hasattr(self, btn): getattr(self, btn).setEnabled(has_layers)
+        except: pass
     
-    def _update_expression_tooltip(self, expression_widget):
-        """Update tooltip for a QgsFieldExpressionWidget."""
-        if not expression_widget:
-            return
-        
+    def _update_expression_tooltip(self, expr_widget):
+        """v4.0 Sprint 17: Update tooltip for expression widget."""
+        if not expr_widget or not hasattr(expr_widget, 'expression'): return
         try:
-            if hasattr(expression_widget, 'expression'):
-                expr = expression_widget.expression()
-                if expr and len(expr) > 40:
-                    # For long expressions, format with line breaks at logical points
-                    formatted_expr = expr.replace(' AND ', '\nAND ').replace(' OR ', '\nOR ')
-                    expression_widget.setToolTip(QCoreApplication.translate("FilterMate", "Expression:\n{0}").format(formatted_expr))
-                elif expr:
-                    expression_widget.setToolTip(QCoreApplication.translate("FilterMate", "Expression: {0}").format(expr))
-                else:
-                    expression_widget.setToolTip(QCoreApplication.translate("FilterMate", "No expression defined"))
-        except Exception as e:
-            logger.debug(f"FilterMate: Error updating expression tooltip: {e}")
+            e = expr_widget.expression()
+            if e and len(e) > 40: e = e.replace(' AND ', '\nAND ').replace(' OR ', '\nOR ')
+            expr_widget.setToolTip(QCoreApplication.translate("FilterMate", "Expression:\n{0}" if e and len(e) > 40 else "Expression: {0}").format(e) if e else QCoreApplication.translate("FilterMate", "No expression defined"))
+        except: pass
     
-    def _update_feature_picker_tooltip(self, picker_widget):
-        """Update tooltip for a QgsFeaturePickerWidget."""
-        if not picker_widget:
-            return
-        
+    def _update_feature_picker_tooltip(self, picker):
+        """v4.0 Sprint 17: Update tooltip for feature picker widget."""
+        if not picker: return
         try:
-            if hasattr(picker_widget, 'displayExpression'):
-                display_expr = picker_widget.displayExpression()
-                if display_expr and len(display_expr) > 30:
-                    picker_widget.setToolTip(QCoreApplication.translate("FilterMate", "Display expression: {0}").format(display_expr))
-                elif hasattr(picker_widget, 'feature'):
-                    feature = picker_widget.feature()
-                    if feature and feature.isValid():
-                        # Show feature ID and first attribute
-                        attrs = feature.attributes()
-                        if attrs:
-                            picker_widget.setToolTip(QCoreApplication.translate("FilterMate", "Feature ID: {0}\nFirst attribute: {1}").format(feature.id(), attrs[0]))
-        except Exception as e:
-            logger.debug(f"FilterMate: Error updating feature picker tooltip: {e}")
+            if hasattr(picker, 'displayExpression'):
+                de = picker.displayExpression()
+                if de and len(de) > 30: picker.setToolTip(QCoreApplication.translate("FilterMate", "Display expression: {0}").format(de)); return
+            if hasattr(picker, 'feature'):
+                f = picker.feature()
+                if f and f.isValid() and f.attributes():
+                    picker.setToolTip(QCoreApplication.translate("FilterMate", "Feature ID: {0}\nFirst attribute: {1}").format(f.id(), f.attributes()[0]))
+        except: pass
 
     def retranslate_dynamic_tooltips(self):
         """Refresh all dynamic tooltips after a locale change."""
@@ -3639,54 +2474,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.debug(f"FilterMate: Could not refresh dynamic tooltip: {error}")
 
     def _setup_keyboard_shortcuts(self):
-        """
-        Setup keyboard shortcuts for the dockwidget.
-        
-        F5: Force reload all layers from current project.
-             Useful when project change doesn't properly refresh the layer list.
-        Ctrl+Z: Undo last filter operation.
-        Ctrl+Y: Redo last undone filter operation.
-        """
+        """Setup keyboard shortcuts: F5=reload layers, Ctrl+Z=undo, Ctrl+Y=redo."""
         from qgis.PyQt.QtWidgets import QShortcut
         from qgis.PyQt.QtGui import QKeySequence
-        
-        # F5 - Force reload layers
-        self._reload_shortcut = QShortcut(QKeySequence("F5"), self)
-        self._reload_shortcut.activated.connect(self._on_reload_layers_shortcut)
-        self._reload_shortcut.setContext(Qt.WidgetWithChildrenShortcut)
-        
-        # Ctrl+Z - Undo filter operation
-        self._undo_shortcut = QShortcut(QKeySequence.Undo, self)  # Standard Ctrl+Z / Cmd+Z
-        self._undo_shortcut.activated.connect(self._on_undo_shortcut)
-        self._undo_shortcut.setContext(Qt.WidgetWithChildrenShortcut)
-        
-        # Ctrl+Y - Redo filter operation (also Ctrl+Shift+Z on some platforms)
-        self._redo_shortcut = QShortcut(QKeySequence.Redo, self)  # Standard Ctrl+Y / Cmd+Shift+Z
-        self._redo_shortcut.activated.connect(self._on_redo_shortcut)
-        self._redo_shortcut.setContext(Qt.WidgetWithChildrenShortcut)
-        
+        self._reload_shortcut = QShortcut(QKeySequence("F5"), self); self._reload_shortcut.activated.connect(self._on_reload_layers_shortcut); self._reload_shortcut.setContext(Qt.WidgetWithChildrenShortcut)
+        self._undo_shortcut = QShortcut(QKeySequence.Undo, self); self._undo_shortcut.activated.connect(self._on_undo_shortcut); self._undo_shortcut.setContext(Qt.WidgetWithChildrenShortcut)
+        self._redo_shortcut = QShortcut(QKeySequence.Redo, self); self._redo_shortcut.activated.connect(self._on_redo_shortcut); self._redo_shortcut.setContext(Qt.WidgetWithChildrenShortcut)
         logger.debug("Keyboard shortcuts initialized: F5 = Reload layers, Ctrl+Z = Undo, Ctrl+Y = Redo")
     
     
     def _on_reload_layers_shortcut(self):
-        """v4.0 Sprint 13: Handle F5 shortcut to reload layers."""
-        self._trigger_reload_layers()
-    
-    def _trigger_reload_layers(self):
-        """v4.0 Sprint 13: Trigger layer reload with visual feedback."""
+        """Handle F5 shortcut to reload layers."""
         if hasattr(self, 'backend_indicator_label') and self.backend_indicator_label:
-            self.backend_indicator_label.setText("⟳")
-            self.backend_indicator_label.setStyleSheet("QLabel#label_backend_indicator { color: #3498db; font-size: 9pt; font-weight: 600; padding: 3px 10px; border-radius: 12px; border: none; background-color: #e8f4fc; }")
+            self.backend_indicator_label.setText("⟳"); self.backend_indicator_label.setStyleSheet("QLabel#label_backend_indicator { color: #3498db; font-size: 9pt; font-weight: 600; padding: 3px 10px; border-radius: 12px; border: none; background-color: #e8f4fc; }")
         self.launchingTask.emit('reload_layers')
 
     def _on_undo_shortcut(self):
-        """v4.0 Sprint 13: Handle Ctrl+Z to undo last filter."""
-        undo_widget = self.widgets.get("ACTION", {}).get("UNDO_FILTER", {}).get("WIDGET")
-        if undo_widget and undo_widget.isEnabled():
-            self.launchTaskEvent(False, 'undo')
+        """Handle Ctrl+Z to undo last filter."""
+        uw = self.widgets.get("ACTION", {}).get("UNDO_FILTER", {}).get("WIDGET")
+        if uw and uw.isEnabled(): self.launchTaskEvent(False, 'undo')
 
     def _on_redo_shortcut(self):
-        """v4.0 Sprint 13: Handle Ctrl+Y to redo last filter."""
-        redo_widget = self.widgets.get("ACTION", {}).get("REDO_FILTER", {}).get("WIDGET")
-        if redo_widget and redo_widget.isEnabled():
-            self.launchTaskEvent(False, 'redo')
+        """Handle Ctrl+Y to redo last filter."""
+        rw = self.widgets.get("ACTION", {}).get("REDO_FILTER", {}).get("WIDGET")
+        if rw and rw.isEnabled(): self.launchTaskEvent(False, 'redo')

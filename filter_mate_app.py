@@ -97,112 +97,46 @@ try:
     from .core.services.optimization_manager import OptimizationManager  # v4.2: Optimization management extraction
     from .adapters.filter_result_handler import FilterResultHandler  # v4.3: Filter result handling extraction
     from .core.services.app_initializer import AppInitializer  # v4.4: App initialization extraction
-    from .core.services.datasource_manager import DatasourceManager  # v4.5: Datasource management extraction
-    from .core.services.layer_filter_builder import LayerFilterBuilder  # v4.6: Layer filter building extraction
-    from .adapters.layer_refresh_manager import LayerRefreshManager  # v4.7: Layer refresh extraction
-    from .adapters.layer_task_completion_handler import LayerTaskCompletionHandler  # v4.7: Layer task completion extraction
+    from .core.services.datasource_manager import DatasourceManager
+    from .core.services.layer_filter_builder import LayerFilterBuilder
+    from .adapters.layer_refresh_manager import LayerRefreshManager
+    from .adapters.layer_task_completion_handler import LayerTaskCompletionHandler
     HEXAGONAL_AVAILABLE = True
 except ImportError:
     HEXAGONAL_AVAILABLE = False
-    TaskParameterBuilder = None  # v4.0: Fallback
-    LayerRefreshManager = None  # v4.7: Fallback
-    LayerTaskCompletionHandler = None  # v4.7: Fallback
-    LayerLifecycleService = None  # v4.0: Fallback
-    LayerLifecycleConfig = None  # v4.0: Fallback
-    TaskManagementService = None  # v4.0: Fallback
-    TaskManagementConfig = None  # v4.0: Fallback
-    UndoRedoHandler = None  # v4.0: Fallback
-    DatabaseManager = None  # v4.0: Fallback
-    VariablesPersistenceManager = None  # v4.0: Fallback
-    TaskOrchestrator = None  # v4.1: Fallback
-    OptimizationManager = None  # v4.2: Fallback
-    FilterResultHandler = None  # v4.3: Fallback
-    AppInitializer = None  # v4.4: Fallback
-    DatasourceManager = None  # v4.5: Fallback
-    LayerFilterBuilder = None  # v4.6: Fallback
-    LayerRefreshManager = None  # v4.7: Fallback
-
-    def _init_hexagonal_services(config=None):
-        """Fallback when hexagonal services unavailable."""
-
-    def _cleanup_hexagonal_services():
-        """Fallback cleanup."""
-
-    def _hexagonal_initialized():
-        """Fallback initialization check."""
-        return False
-
-    # Fallback stubs for optional services
-    get_filter_service = None
-    get_history_service = None
-    get_expression_service = None
-    validate_expression = None
-    parse_expression = None
+    TaskParameterBuilder = LayerRefreshManager = LayerTaskCompletionHandler = None
+    LayerLifecycleService = LayerLifecycleConfig = TaskManagementService = TaskManagementConfig = None
+    UndoRedoHandler = DatabaseManager = VariablesPersistenceManager = TaskOrchestrator = None
+    OptimizationManager = FilterResultHandler = AppInitializer = DatasourceManager = LayerFilterBuilder = None
+    def _init_hexagonal_services(config=None): pass
+    def _cleanup_hexagonal_services(): pass
+    def _hexagonal_initialized(): return False
+    get_filter_service = get_history_service = get_expression_service = validate_expression = parse_expression = None
 
 # Get FilterMate logger with SafeStreamHandler to prevent "--- Logging error ---" on shutdown
 logger = get_app_logger()
 
 
 def safe_show_message(level, title, message):
-    """
-    Safely show a message in QGIS interface, catching RuntimeError if interface is destroyed.
-    
-    This prevents access violations when showing messages after plugin unload or QGIS shutdown.
-    
-    Args:
-        level (str): Message level - 'success', 'info', 'warning', or 'critical'
-        title (str): Message title
-        message (str): Message content
-    
-    Returns:
-        bool: True if message was shown, False if interface unavailable
-    """
+    """Safely show a message in QGIS interface, catching RuntimeError if interface is destroyed."""
     try:
-        message_bar = iface.messageBar()
-        if level == 'success':
-            message_bar.pushSuccess(title, message)
-        elif level == 'info':
-            message_bar.pushInfo(title, message)
-        elif level == 'warning':
-            message_bar.pushWarning(title, message)
-        elif level == 'critical':
-            message_bar.pushCritical(title, message)
+        mb = iface.messageBar()
+        {'success': mb.pushSuccess, 'info': mb.pushInfo, 'warning': mb.pushWarning, 'critical': mb.pushCritical}.get(level, mb.pushInfo)(title, message)
         return True
-    except (RuntimeError, AttributeError) as e:
-        logger.warning(f"Cannot show {level} message '{title}': interface may be destroyed ({e})")
-        return False
+    except (RuntimeError, AttributeError): return False
 
 
-# Import the code for the DockWidget
 from .filter_mate_dockwidget import FilterMateDockWidget
 
-MESSAGE_TASKS_CATEGORIES = {
-                            'filter':'FilterLayers',
-                            'unfilter':'FilterLayers',
-                            'reset':'FilterLayers',
-                            'export':'ExportLayers',
-                            'add_layers':'ManageLayers',
-                            'remove_layers':'ManageLayers',
-                            'remove_all_layers':'ManageLayers',
-                            'new_project':'ManageLayers',
-                            'project_read':'ManageLayers',
-                            'reload_layers':'ManageLayers'
-                            }
+MESSAGE_TASKS_CATEGORIES = {'filter':'FilterLayers', 'unfilter':'FilterLayers', 'reset':'FilterLayers', 'export':'ExportLayers',
+    'add_layers':'ManageLayers', 'remove_layers':'ManageLayers', 'remove_all_layers':'ManageLayers',
+    'new_project':'ManageLayers', 'project_read':'ManageLayers', 'reload_layers':'ManageLayers'}
 
-# STABILITY CONSTANTS - Centralized timing configuration
 STABILITY_CONSTANTS = {
-    'MAX_ADD_LAYERS_QUEUE': 50,           # Maximum queued add_layers operations
-    'FLAG_TIMEOUT_MS': 30000,              # Timeout for flags (30 seconds)
-    'LAYER_RETRY_DELAY_MS': 500,           # Delay between layer operation retries
-    'UI_REFRESH_DELAY_MS': 300,            # Delay for UI refresh after operations (increased from 200)
-    'PROJECT_LOAD_DELAY_MS': 2500,         # Delay after project load for layer processing (increased from 1500)
-    'PROJECT_CHANGE_CLEANUP_DELAY_MS': 300, # Delay before cleanup on project change
-    'PROJECT_CHANGE_REINIT_DELAY_MS': 500,  # Delay before reinitializing after project change
-    'MAX_RETRIES': 10,                     # Maximum retry count for deferred operations
-    'SIGNAL_DEBOUNCE_MS': 150,             # Debounce delay for rapid signal calls (increased from 100)
-    'POSTGRESQL_EXTRA_DELAY_MS': 1000,     # Extra delay for PostgreSQL layers
-    'SPATIALITE_STABILIZATION_MS': 200,    # Delay before refreshing Spatialite layers (v2.3.12)
-}
+    'MAX_ADD_LAYERS_QUEUE': 50, 'FLAG_TIMEOUT_MS': 30000, 'LAYER_RETRY_DELAY_MS': 500,
+    'UI_REFRESH_DELAY_MS': 300, 'PROJECT_LOAD_DELAY_MS': 2500, 'PROJECT_CHANGE_CLEANUP_DELAY_MS': 300,
+    'PROJECT_CHANGE_REINIT_DELAY_MS': 500, 'MAX_RETRIES': 10, 'SIGNAL_DEBOUNCE_MS': 150,
+    'POSTGRESQL_EXTRA_DELAY_MS': 1000, 'SPATIALITE_STABILIZATION_MS': 200}
 
 class FilterMateApp:
 
@@ -232,35 +166,11 @@ class FilterMateApp:
         return self._task_mgmt_service
 
     def _filter_usable_layers(self, layers):
-        """
-        Return only layers that are valid vector layers with available sources.
-        
-        Delegates to LayerLifecycleService.filter_usable_layers().
-        
-        v4.7 E7-S1: Functional fallback when service unavailable.
-        """
+        """Return only valid vector layers with available sources."""
         service = self._get_layer_lifecycle_service()
-        if service:
-            return service.filter_usable_layers(layers, POSTGRESQL_AVAILABLE)
-        
-        # E7-S1 FALLBACK: Minimal working implementation
-        logger.warning("LayerLifecycleService unavailable, using minimal fallback validation")
-        
-        usable = []
-        for layer in layers:
-            try:
-                # Validate layer is a valid QgsVectorLayer with available source
-                if (isinstance(layer, QgsVectorLayer) and 
-                    layer.isValid() and 
-                    is_layer_source_available(layer)):
-                    usable.append(layer)
-            except Exception as e:
-                # E7-S1: Catch all exceptions to prevent fallback from crashing
-                logger.debug(f"Skipping invalid layer in fallback: {e}")
-                continue
-        
-        logger.info(f"Fallback validation: {len(usable)}/{len(layers)} layers usable")
-        return usable
+        if service: return service.filter_usable_layers(layers, POSTGRESQL_AVAILABLE)
+        # Fallback: minimal validation
+        return [l for l in layers if isinstance(l, QgsVectorLayer) and l.isValid() and is_layer_source_available(l)]
 
     def _on_layers_added(self, layers):
         """Signal handler for layersAdded: ignore broken/invalid layers.
@@ -372,85 +282,22 @@ class FilterMateApp:
             QTimer.singleShot(STABILITY_CONSTANTS['POSTGRESQL_EXTRA_DELAY_MS'], retry_postgres)
 
     def cleanup(self):
-        """
-        Clean up plugin resources on unload or reload.
-        
-        .. deprecated:: 4.0.2
-            Delegates to LayerLifecycleService.cleanup()
-        
-        Safely removes widgets, clears data structures, and prevents memory leaks.
-        Called when plugin is disabled or QGIS is closing.
-        
-        Cleanup steps:
-        1. Clean up PostgreSQL materialized views for this session
-        2. Clear list_widgets from multiple selection widget
-        3. Reset async tasks
-        4. Clear PROJECT_LAYERS dictionary
-        5. Clear datasource connections
-        
-        Notes:
-            - Uses try/except to handle already-deleted widgets
-            - Safe to call multiple times
-            - Prevents KeyError on plugin reload
-        """
-        # v4.0.2: Delegate to LayerLifecycleService
+        """Clean up plugin resources on unload or reload. Delegates to LayerLifecycleService."""
         service = self._get_layer_lifecycle_service()
         if service:
-            # Get auto-cleanup setting
-            auto_cleanup_enabled = True  # Default to enabled
-            if self.dockwidget and hasattr(self.dockwidget, '_pg_auto_cleanup_enabled'):
-                auto_cleanup_enabled = self.dockwidget._pg_auto_cleanup_enabled
-            
-            service.cleanup(
-                session_id=self.session_id,
-                temp_schema=self.app_postgresql_temp_schema,
-                project_layers=self.PROJECT_LAYERS,
-                dockwidget=self.dockwidget,
-                auto_cleanup_enabled=auto_cleanup_enabled,
-                postgresql_available=POSTGRESQL_AVAILABLE
-            )
-            
-            # Clear app-level structures
-            self.PROJECT_LAYERS.clear()
-            self.project_datasources.clear()
-            
-            # v3.0: Cleanup hexagonal architecture services
-            if HEXAGONAL_AVAILABLE:
-                try:
-                    _cleanup_hexagonal_services()
-                    logger.debug("FilterMate: Hexagonal services cleaned up")
-                except Exception as e:
-                    logger.debug(f"FilterMate: Hexagonal services cleanup error: {e}")
-            return
-        
-        # Service not available - minimal cleanup
-        logger.warning("LayerLifecycleService not available - performing minimal cleanup")
-        self.PROJECT_LAYERS.clear()
-        self.project_datasources.clear()
-        
+            auto_cleanup_enabled = getattr(self.dockwidget, '_pg_auto_cleanup_enabled', True) if self.dockwidget else True
+            service.cleanup(session_id=self.session_id, temp_schema=self.app_postgresql_temp_schema, 
+                          project_layers=self.PROJECT_LAYERS, dockwidget=self.dockwidget,
+                          auto_cleanup_enabled=auto_cleanup_enabled, postgresql_available=POSTGRESQL_AVAILABLE)
+        self.PROJECT_LAYERS.clear(); self.project_datasources.clear()
         if HEXAGONAL_AVAILABLE:
-            try:
-                _cleanup_hexagonal_services()
-            except Exception as e:
-                logger.debug(f"FilterMate: Hexagonal services cleanup error: {e}")
-
+            try: _cleanup_hexagonal_services()
+            except: pass
 
     def _cleanup_postgresql_session_views(self):
-        """
-        Clean up all PostgreSQL materialized views created by this session.
-        
-        Delegates to LayerLifecycleService.cleanup_postgresql_session_views().
-        """
+        """Clean up all PostgreSQL materialized views created by this session."""
         service = self._get_layer_lifecycle_service()
-        if service:
-            service.cleanup_postgresql_session_views(
-                session_id=self.session_id,
-                temp_schema=self.app_postgresql_temp_schema,
-                project_layers=self.PROJECT_LAYERS,
-                postgresql_available=POSTGRESQL_AVAILABLE
-            )
-        else:
-            logger.debug("LayerLifecycleService not available - skipping PostgreSQL cleanup")
+        if service: service.cleanup_postgresql_session_views(session_id=self.session_id, temp_schema=self.app_postgresql_temp_schema, project_layers=self.PROJECT_LAYERS, postgresql_available=POSTGRESQL_AVAILABLE)
 
 
     def __init__(self, plugin_dir):
@@ -618,15 +465,7 @@ class FilterMateApp:
         # when the user actually activates the plugin to avoid QGIS initialization race conditions
 
     def _get_history_max_size_from_config(self):
-        """
-        Get the maximum history size from configuration.
-        
-        Reads the HISTORY.max_history_size setting from config.json
-        to control how many filter operations are kept in the undo/redo stack.
-        
-        Returns:
-            int: Maximum history size (default: 100)
-        """
+        """Get history.max_history_size from config (default: 100)."""
         try:
             from .config.config import ENV_VARS
             config_data = ENV_VARS.get("CONFIG_DATA", {})
@@ -638,12 +477,7 @@ class FilterMateApp:
             return 100
 
     def _init_feedback_level(self):
-        """
-        Initialize user feedback verbosity level from configuration.
-        
-        Loads the FEEDBACK_LEVEL setting from config.json and applies it
-        to the feedback_config module to control message display.
-        """
+        """Initialize feedback verbosity level from config.json."""
         try:
             from .config.feedback_config import set_feedback_level_from_string
             
@@ -656,18 +490,7 @@ class FilterMateApp:
             logger.warning(f"FilterMate: Could not set feedback level: {e}. Using default 'normal'.")
 
     def _get_dock_position(self):
-        """
-        Get the dock widget position from configuration.
-        
-        Returns the Qt.DockWidgetArea corresponding to the configured
-        DOCK_POSITION value in config.json.
-        
-        Returns:
-            Qt.DockWidgetArea: The dock position (Left, Right, Top, or Bottom)
-        
-        Default:
-            Qt.RightDockWidgetArea if configuration is missing or invalid
-        """
+        """Get Qt.DockWidgetArea from config.DOCK_POSITION (default: right)."""
         try:
             dock_position_str = self.CONFIG_DATA.get("APP", {}).get("DOCKWIDGET", {}).get("DOCK_POSITION", {}).get("value", "right")
             
@@ -687,69 +510,24 @@ class FilterMateApp:
             return Qt.RightDockWidgetArea
 
     def _check_and_reset_stale_flags(self):
-        """
-        Check for stale flags that might block operations and reset them.
-        
-        This is a STABILITY method to prevent deadlocks when flags get stuck due to
-        errors or exceptions that bypass the normal finally blocks.
-        
-        Checks:
-        - _loading_new_project: Should not be set for more than FLAG_TIMEOUT_MS
-        - _initializing_project: Should not be set for more than FLAG_TIMEOUT_MS
-        - _pending_add_layers_tasks: Should not exceed MAX_ADD_LAYERS_QUEUE
-        
-        Returns:
-            bool: True if any flags were reset, False otherwise
-        """
-        import time
-        current_time = time.time() * 1000  # Convert to milliseconds
-        timeout = STABILITY_CONSTANTS['FLAG_TIMEOUT_MS']
-        flags_reset = False
-        
+        """Check for stale flags that might block operations and reset them. Returns True if any flags were reset."""
+        import time; current_time = time.time() * 1000; timeout = STABILITY_CONSTANTS['FLAG_TIMEOUT_MS']; flags_reset = False
         # Check _loading_new_project flag timeout
         if self._loading_new_project:
-            if self._loading_new_project_timestamp > 0:
-                elapsed = current_time - self._loading_new_project_timestamp
-                if elapsed > timeout:
-                    logger.warning(f"🔧 STABILITY: Resetting stale _loading_new_project flag (elapsed: {elapsed:.0f}ms > {timeout}ms)")
-                    self._loading_new_project = False
-                    self._loading_new_project_timestamp = 0
-                    flags_reset = True
-            else:
-                # Timestamp not set but flag is True - set timestamp now
-                self._loading_new_project_timestamp = current_time
-        
+            if self._loading_new_project_timestamp > 0 and (elapsed := current_time - self._loading_new_project_timestamp) > timeout:
+                logger.warning(f"🔧 STABILITY: Resetting stale _loading_new_project flag (elapsed: {elapsed:.0f}ms > {timeout}ms)")
+                self._loading_new_project = False; self._loading_new_project_timestamp = 0; flags_reset = True
+            elif self._loading_new_project_timestamp <= 0: self._loading_new_project_timestamp = current_time
         # Check _initializing_project flag timeout
         if self._initializing_project:
-            if self._initializing_project_timestamp > 0:
-                elapsed = current_time - self._initializing_project_timestamp
-                if elapsed > timeout:
-                    logger.warning(f"🔧 STABILITY: Resetting stale _initializing_project flag (elapsed: {elapsed:.0f}ms > {timeout}ms)")
-                    self._initializing_project = False
-                    self._initializing_project_timestamp = 0
-                    flags_reset = True
-            else:
-                # Timestamp not set but flag is True - set timestamp now
-                self._initializing_project_timestamp = current_time
-        
-        # Check add_layers queue size
+            if self._initializing_project_timestamp > 0 and (elapsed := current_time - self._initializing_project_timestamp) > timeout:
+                logger.warning(f"🔧 STABILITY: Resetting stale _initializing_project flag (elapsed: {elapsed:.0f}ms > {timeout}ms)")
+                self._initializing_project = False; self._initializing_project_timestamp = 0; flags_reset = True
+            elif self._initializing_project_timestamp <= 0: self._initializing_project_timestamp = current_time
+        # Check queue sizes
         max_queue = STABILITY_CONSTANTS['MAX_ADD_LAYERS_QUEUE']
-        if len(self._add_layers_queue) > max_queue:
-            logger.warning(f"🔧 STABILITY: Trimming add_layers queue from {len(self._add_layers_queue)} to {max_queue}")
-            # Keep only the most recent items
-            self._add_layers_queue = self._add_layers_queue[-max_queue:]
-            flags_reset = True
-        
-        # Check pending tasks counter sanity
-        if self._pending_add_layers_tasks < 0:
-            logger.warning(f"🔧 STABILITY: Resetting negative _pending_add_layers_tasks counter: {self._pending_add_layers_tasks}")
-            self._pending_add_layers_tasks = 0
-            flags_reset = True
-        elif self._pending_add_layers_tasks > 10:
-            logger.warning(f"🔧 STABILITY: Resetting unreasonably high _pending_add_layers_tasks counter: {self._pending_add_layers_tasks}")
-            self._pending_add_layers_tasks = 0
-            flags_reset = True
-        
+        if len(self._add_layers_queue) > max_queue: self._add_layers_queue = self._add_layers_queue[-max_queue:]; flags_reset = True
+        if self._pending_add_layers_tasks < 0 or self._pending_add_layers_tasks > 10: self._pending_add_layers_tasks = 0; flags_reset = True
         return flags_reset
 
     def _set_loading_flag(self, loading: bool):
@@ -818,27 +596,8 @@ class FilterMateApp:
         )
 
     def run(self):
-        """
-        Initialize and display the FilterMate dockwidget.
-        
-        v4.4: Feature flag for AppInitializer delegation.
-        Set USE_APP_INITIALIZER = True to enable new architecture.
-        Keep False during testing period for safe rollback.
-        
-        Creates the dockwidget if it doesn't exist, initializes the database,
-        connects signals for layer management, and displays the UI.
-        Also processes any existing layers in the project on first run.
-        
-        DIAGNOSTIC LOGGING ENABLED: Logging startup phases to identify freeze point.
-        
-        This method can be called multiple times:
-        - First call: creates dockwidget and initializes everything
-        - Subsequent calls: shows existing dockwidget and refreshes layers if needed
-        """
-        
-        # v4.4: Feature flag for AppInitializer delegation
-        USE_APP_INITIALIZER = True  # Phase 4.6: ENABLED
-        
+        """Initialize and display the FilterMate dockwidget. Delegates to AppInitializer."""
+        USE_APP_INITIALIZER = True
         if USE_APP_INITIALIZER and self._app_initializer is not None:
             logger.info(f"v4.4: Delegating application initialization to AppInitializer")
             try:
@@ -857,41 +616,13 @@ class FilterMateApp:
 
 
     def _safe_layer_operation(self, layer, properties, operation):
-        """
-        Safely execute a layer operation by deferring to Qt event loop and re-fetching layer.
-        
-        CRASH FIX (v2.3.18): Signal handlers receive layer objects that may become
-        invalid (C++ deleted) between signal emission and handling. This wrapper:
-        1. Extracts the layer ID immediately (before it becomes invalid)
-        2. Defers execution with QTimer.singleShot(0, ...) to let Qt stabilize
-        3. Re-fetches fresh layer reference from QgsProject in the deferred callback
-        
-        This approach prevents Windows access violations that cannot be caught by try/except.
-        
-        Args:
-            layer: Layer object from signal (may be stale)
-            properties: Properties to pass to operation
-            operation: Function to call with (fresh_layer, properties)
-        """
+        """Safely execute a layer operation by deferring to Qt event loop and re-fetching layer."""
         from qgis.PyQt.QtCore import QTimer
-        
-        # Extract layer ID before it potentially becomes invalid
         try:
-            if layer is None:
-                logger.debug("_safe_layer_operation: layer is None, skipping")
-                return
-            if sip.isdeleted(layer):
-                logger.debug("_safe_layer_operation: layer already sip deleted, skipping")
-                return
+            if layer is None or sip.isdeleted(layer): return
             layer_id = layer.id()
-            if not layer_id:
-                logger.debug("_safe_layer_operation: layer has no ID, skipping")
-                return
-        except (RuntimeError, OSError, SystemError) as e:
-            logger.debug(f"_safe_layer_operation: failed to get layer ID: {e}")
-            return
-        
-        # CRASH FIX (v2.3.18): Defer the operation to next Qt event loop iteration
+            if not layer_id: return
+        except (RuntimeError, OSError, SystemError): return
         # This ensures Qt internal state is stable and layer deletion is complete
         # (if it was going to be deleted). Using singleShot(0, ...) queues the
         # callback to run as soon as control returns to the event loop.
@@ -972,12 +703,7 @@ class FilterMateApp:
             return None
     
     def _handle_remove_all_layers(self):
-        """Handle remove all layers task.
-        
-        v4.0.2: Delegates to LayerLifecycleService.handle_remove_all_layers()
-        
-        Safely cleans up all layer state when all layers are removed from project.
-        """
+        """Delegates to LayerLifecycleService.handle_remove_all_layers()."""
         service = self._get_layer_lifecycle_service()
         if not service:
             logger.error("LayerLifecycleService not available, cannot handle remove all layers")
@@ -1062,16 +788,7 @@ class FilterMateApp:
     # ========================================
     
     def _execute_filter_task(self, task_name: str, task_parameters: dict):
-        """
-        Execute a filter/unfilter/reset task.
-        
-        v4.1: Extracted as callback for TaskOrchestrator.
-        Contains the actual task creation and execution logic for filtering operations.
-        
-        Args:
-            task_name: Name of the task ('filter', 'unfilter', 'reset')
-            task_parameters: Parameters for task execution
-        """
+        """Execute filter/unfilter/reset task (callback for TaskOrchestrator)."""
         from .modules.tasks import FilterEngineTask
         
         if self.dockwidget is None or self.dockwidget.current_layer is None:
@@ -1116,16 +833,7 @@ class FilterMateApp:
         QgsApplication.taskManager().addTask(self.appTasks[task_name])
     
     def _execute_layer_task(self, task_name: str, task_parameters: dict):
-        """
-        Execute a layer management task.
-        
-        v4.1: Extracted as callback for TaskOrchestrator.
-        Contains the actual task creation and execution logic for layer operations.
-        
-        Args:
-            task_name: Name of the task ('add_layers', 'remove_layers')
-            task_parameters: Parameters for task execution
-        """
+        """Execute layer management task (callback for TaskOrchestrator)."""
         from .modules.tasks import LayersManagementEngineTask
         
         self.appTasks[task_name] = LayersManagementEngineTask(
@@ -1213,12 +921,7 @@ class FilterMateApp:
             iface.messageBar().pushCritical("FilterMate", f"Erreur lors de l'exécution de {task_name}: {str(e)}")
     
     def _show_degraded_mode_warning(self):
-        """
-        Show one-time warning that plugin is running in degraded mode.
-        
-        E7-S1: Uses QSettings to track if warning already shown this session.
-        """
-        # Check if we've already shown the warning this session
+        """Show one-time warning that plugin is running in degraded mode."""
         if hasattr(self, '_degraded_mode_warning_shown'):
             return  # Already shown
         
@@ -1250,24 +953,14 @@ class FilterMateApp:
     
     def _set_filter_protection_flags(self, current_layer):
         """Set protection flags and disconnect signals during filtering."""
-        if not self.dockwidget:
-            return
-        
-        # Set saved layer ID for protection
-        if self._current_layer_id_before_filter:
-            self.dockwidget._saved_layer_id_before_filter = self._current_layer_id_before_filter
-        
-        # Set filtering in progress flag
+        if not self.dockwidget: return
+        if self._current_layer_id_before_filter: self.dockwidget._saved_layer_id_before_filter = self._current_layer_id_before_filter
         self.dockwidget._filtering_in_progress = True
-        logger.info("v4.1: 🔒 Filtering protection enabled")
-        
-        # Disconnect signals and block Qt signals on combobox
         try:
             self.dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'disconnect')
             self.dockwidget.comboBox_filtering_current_layer.blockSignals(True)
             self.dockwidget.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'disconnect')
-        except Exception as e:
-            logger.debug(f"Could not disconnect signals: {e}")
+        except: pass
     
     def _show_filter_start_message(self, task_name, task_parameters, layers_props, layers, current_layer):
         """Show informational message about filtering operation starting."""
@@ -1315,39 +1008,7 @@ class FilterMateApp:
             pass
 
     def manage_task(self, task_name, data=None):
-        """
-        Orchestrate execution of FilterMate tasks.
-        
-        Central dispatcher for all plugin operations including filtering, layer management,
-        and project operations. Creates appropriate task objects and manages their execution
-        through QGIS task manager.
-        
-        .. deprecated:: 4.1.0
-            This method delegates to TaskOrchestrator when available.
-            Direct task execution logic is being migrated to _execute_filter_task() 
-            and _execute_layer_task() methods.
-        
-        Args:
-            task_name (str): Name of task to execute. Must be one of:
-                - 'filter': Apply filters to layers
-                - 'unfilter': Remove filters from layers
-                - 'reset': Reset layer state
-                - 'add_layers': Process newly added layers
-                - 'remove_layers': Clean up removed layers
-                - 'remove_all_layers': Clear all layer data
-                - 'project_read': Handle project load
-                - 'new_project': Initialize new project
-            data: Task-specific data (layers list, parameters, etc.)
-                
-        Raises:
-            AssertionError: If task_name is not recognized
-            
-        Notes:
-            - Cancels conflicting active tasks before starting new ones
-            - Shows progress messages in QGIS message bar
-            - Automatically connects task completion signals
-        """
-
+        """Orchestrate FilterMate tasks. Delegates to TaskOrchestrator when available."""
         assert task_name in list(self.tasks_descriptions.keys())
         
         # v4.1: Feature flag for TaskOrchestrator delegation
@@ -1372,48 +1033,15 @@ class FilterMateApp:
 
 
     def _safe_cancel_all_tasks(self):
-        """
-        Safely cancel all tasks in the task manager to avoid access violations.
-        
-        .. deprecated:: 4.0.0
-            Delegates to TaskManagementService.safe_cancel_all_tasks()
-        
-        Note: We cancel tasks individually instead of using cancelAll() to avoid
-        Windows access violations that occur when cancelAll() is called from Qt signals
-        during project transitions.
-        """
-        # v4.0: Delegate to TaskManagementService
+        """Safely cancel all tasks via TaskManagementService."""
         service = self._get_task_management_service()
         if service:
             service.safe_cancel_all_tasks()
-            return
-        
-        # Fallback to legacy implementation
-        try:
-            task_manager = QgsApplication.taskManager()
-            if not task_manager:
-                return
-            
-            # Get all active tasks and cancel them
-            # Note: QgsTask doesn't have taskId() method, we iterate by index
-            count = task_manager.count()
-            for i in range(count - 1, -1, -1):  # Iterate backwards to avoid index issues
-                task = task_manager.task(i)
-                if task and task.canCancel():
-                    task.cancel()
-                    
-        except Exception as e:
-            logger.warning(f"Could not cancel tasks: {e}")
+        else:
+            logger.warning("TaskManagementService unavailable - cannot cancel tasks safely")
 
     def _cancel_layer_tasks(self, layer_id):
-        """
-        Cancel all running tasks for a specific layer to prevent access violations.
-        
-        Delegates to TaskManagementService.cancel_layer_tasks().
-        
-        Args:
-            layer_id: The ID of the layer whose tasks should be cancelled
-        """
+        """Cancel all tasks for layer_id via TaskManagementService."""
         service = self._get_task_management_service()
         if service:
             service.cancel_layer_tasks(layer_id, self.dockwidget)
@@ -1471,23 +1099,11 @@ class FilterMateApp:
                         strong_self.manage_task('add_layers', captured_layers)
                 QTimer.singleShot(STABILITY_CONSTANTS['LAYER_RETRY_DELAY_MS'], safe_layer_retry)
             else:
-                # No layers - update UI to show waiting state
                 logger.info("No layers available after task termination")
                 if hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
                     self.dockwidget.backend_indicator_label.setText("...")
-                    self.dockwidget.backend_indicator_label.setStyleSheet("""
-                        QLabel#label_backend_indicator {
-                            color: #7f8c8d;
-                            font-size: 9pt;
-                            font-weight: 600;
-                            padding: 3px 10px;
-                            border-radius: 12px;
-                            border: none;
-                            background-color: #ecf0f1;
-                        }
-                    """)
+                    self.dockwidget.backend_indicator_label.setStyleSheet("QLabel#label_backend_indicator{color:#7f8c8d;font-size:9pt;font-weight:600;padding:3px 10px;border-radius:12px;border:none;background-color:#ecf0f1;}")
         else:
-            # PROJECT_LAYERS has data - just refresh UI
             logger.info("Task terminated but PROJECT_LAYERS has data, refreshing UI")
             self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
 
@@ -1548,18 +1164,7 @@ class FilterMateApp:
             logger.debug(f"Cache warming skipped: {e}")
 
     def _is_dockwidget_ready_for_filtering(self):
-        """Check if dockwidget is fully ready for filtering operations.
-        
-        Verifies that:
-        - Dockwidget exists
-        - Widgets are initialized (via widgetsInitialized signal)
-        - Layer combobox has items
-        - Current layer is set
-        - Widgets are ready flag is set
-        
-        Returns:
-            bool: True if ready for filtering, False otherwise
-        """
+        """Check if dockwidget is fully ready for filtering (widgets initialized, current layer set)."""
         if self.dockwidget is None:
             logger.debug("Dockwidget not ready: dockwidget is None")
             return False
@@ -1596,12 +1201,7 @@ class FilterMateApp:
         return True
 
     def _on_widgets_initialized(self):
-        """Callback when dockwidget widgets are fully initialized.
-        
-        This is called via widgetsInitialized signal when the dockwidget
-        has finished creating and connecting all its widgets. It's a safe
-        point to perform operations that require fully functional UI.
-        """
+        """Callback when dockwidget widgets are initialized (via widgetsInitialized signal)."""
         logger.info("✓ Received widgetsInitialized signal - dockwidget ready for operations")
         self._widgets_ready = True
         logger.debug(f"_widgets_ready set to: {self._widgets_ready}")
@@ -1721,27 +1321,7 @@ class FilterMateApp:
     # ========================================
     
     def _check_and_confirm_optimizations(self, current_layer, task_parameters):
-        """
-        Check for optimization opportunities and ask user for confirmation.
-        
-        .. deprecated:: 4.2.0
-            Delegates to OptimizationManager.check_and_confirm_optimizations().
-        
-        This method analyzes the layers being filtered and determines if any
-        optimizations (like centroid usage) would benefit the operation.
-        If optimizations are available and the "ask before apply" setting is
-        enabled, it shows a confirmation dialog to the user.
-        
-        Args:
-            current_layer: The source layer for filtering
-            task_parameters: The task parameters dictionary
-            
-        Returns:
-            tuple: (approved_optimizations dict, auto_apply_optimizations bool)
-                - approved_optimizations: {layer_id: {optimization_type: bool}}
-                - auto_apply_optimizations: True if auto-apply is enabled
-        """
-        # v4.2: Delegate to OptimizationManager
+        """Check for optimization opportunities and ask user for confirmation. Delegates to OptimizationManager."""
         if self._optimization_manager is not None:
             try:
                 return self._optimization_manager.check_and_confirm_optimizations(
@@ -1756,26 +1336,7 @@ class FilterMateApp:
         return {}, False
     
     def _apply_optimization_to_ui_widgets(self, selected_optimizations: dict):
-        """
-        Apply accepted optimization choices to UI widgets.
-        
-        .. deprecated:: 4.2.0
-            Delegates to OptimizationManager.apply_optimization_to_ui_widgets().
-        
-        When user accepts optimizations in the confirmation dialog, this method
-        updates the corresponding checkboxes and other UI controls to reflect
-        their choices. This ensures visual consistency between the dialog
-        selections and the main UI state.
-        
-        Args:
-            selected_optimizations: Dict of {optimization_type: bool} choices
-                e.g., {'use_centroid_distant': True, 'simplify_geometry': False}
-        
-        v2.7.1: New method for UI synchronization after optimization acceptance
-        v2.8.7: Added support for use_centroid_distant optimization type
-        v4.2.0: Delegates to OptimizationManager
-        """
-        # v4.2: Delegate to OptimizationManager
+        """Apply accepted optimization choices to UI widgets. Delegates to OptimizationManager."""
         if self._optimization_manager is not None:
             try:
                 self._optimization_manager.apply_optimization_to_ui_widgets(selected_optimizations)
@@ -1787,17 +1348,7 @@ class FilterMateApp:
         logger.debug("UI widget optimization skipped (manager unavailable)")
     
     def _build_layers_to_filter(self, current_layer):
-        """Build list of layers to filter with validation.
-        
-        v4.6: Delegates to LayerFilterBuilder for God Class reduction.
-        
-        Args:
-            current_layer: Source layer for filtering
-            
-        Returns:
-            list: List of validated layer info dictionaries
-        """
-        # v4.6: Delegate to LayerFilterBuilder
+        """Build list of layers to filter with validation. Delegates to LayerFilterBuilder."""
         if LayerFilterBuilder is not None:
             try:
                 builder = LayerFilterBuilder(self.PROJECT_LAYERS, self.PROJECT)
@@ -2069,59 +1620,14 @@ class FilterMateApp:
 
 
     def _refresh_layers_and_canvas(self, source_layer):
-        """
-        Refresh source layer and map canvas with stabilization for Spatialite.
-        
-        v4.7: Delegates to LayerRefreshManager.refresh_layer_and_canvas().
-        Legacy fallback for backward compatibility.
-        
-        Args:
-            source_layer (QgsVectorLayer): Layer to refresh
-        """
-        # v4.7: Delegate to LayerRefreshManager when available
+        """Refresh source layer and canvas via LayerRefreshManager."""
         if self._layer_refresh_manager is not None:
             self._layer_refresh_manager.refresh_layer_and_canvas(source_layer)
-            return
-        
-        # Legacy fallback (for when hexagonal services unavailable)
-        from qgis.PyQt.QtCore import QTimer
-        
-        provider_type = source_layer.providerType() if source_layer else None
-        needs_stabilization = provider_type in ('spatialite', 'ogr')
-        
-        def do_refresh():
-            try:
-                with GdalErrorHandler():
-                    thresholds = get_optimization_thresholds(ENV_VARS)
-                    MAX_FEATURES = thresholds['update_extents_threshold']
-                    feature_count = source_layer.featureCount() if source_layer else 0
-                    if feature_count >= 0 and feature_count < MAX_FEATURES:
-                        source_layer.updateExtents()
-                    source_layer.triggerRepaint()
-                    self.iface.mapCanvas().refresh()
-            except Exception as e:
-                logger.warning(f"_refresh_layers_and_canvas: refresh failed: {e}")
-        
-        if needs_stabilization:
-            stabilization_ms = STABILITY_CONSTANTS.get('SPATIALITE_STABILIZATION_MS', 200)
-            QTimer.singleShot(stabilization_ms, do_refresh)
         else:
-            # No delay needed for PostgreSQL and other providers
-            do_refresh()
+            logger.warning("LayerRefreshManager unavailable - canvas refresh skipped")
     
     def _push_filter_to_history(self, source_layer, task_parameters, feature_count, provider_type, layer_count):
-        """
-        Push filter state to history for source and associated layers.
-        
-        v4.0: Delegated to UndoRedoHandler.
-        
-        Args:
-            source_layer (QgsVectorLayer): Source layer being filtered
-            task_parameters (dict): Task parameters containing layers info
-            feature_count (int): Number of features in filtered result
-            provider_type (str): Backend provider type
-            layer_count (int): Number of layers affected
-        """
+        """Push filter state to history via UndoRedoHandler."""
         if self._undo_redo_handler:
             self._undo_redo_handler.push_filter_to_history(
                 source_layer=source_layer,
@@ -2134,11 +1640,7 @@ class FilterMateApp:
             logger.warning("UndoRedoHandler not available, history not updated")
     
     def update_undo_redo_buttons(self):
-        """
-        Update undo/redo button states based on history availability.
-        
-        v4.0: Delegates to UndoRedoHandler.
-        """
+        """Update undo/redo button states via UndoRedoHandler."""
         if not self.dockwidget:
             return
         
@@ -2166,16 +1668,7 @@ class FilterMateApp:
             redo_btn.setEnabled(False)
     
     def handle_undo(self):
-        """
-        Handle undo operation with intelligent layer selection logic.
-        
-        v4.0: Delegated to UndoRedoHandler for God Class reduction.
-        v4.7 E7-S1: Functional fallback when handler unavailable.
-        
-        Logic:
-        - If pushButton_checkable_filtering_layers_to_filter is checked AND has remote layers: undo all layers globally
-        - If pushButton_checkable_filtering_layers_to_filter is unchecked: undo only source layer
-        """
+        """Handle undo (delegates to UndoRedoHandler, global mode if checkbox checked)."""
         if not self.dockwidget or not self.dockwidget.current_layer:
             logger.warning("FilterMate: No current layer for undo")
             return
@@ -2334,15 +1827,7 @@ class FilterMateApp:
                 show_warning("Aucune opération à refaire")
     
     def _clear_filter_history(self, source_layer, task_parameters):
-        """
-        Clear filter history for source and associated layers.
-        
-        v4.0: Delegated to UndoRedoHandler for God Class reduction.
-        
-        Args:
-            source_layer (QgsVectorLayer): Source layer whose history to clear
-            task_parameters (dict): Task parameters containing layers info
-        """
+        """Clear filter history via UndoRedoHandler."""
         if self._undo_redo_handler:
             remote_layer_ids = [
                 lp.get("layer_id") 
@@ -2351,11 +1836,7 @@ class FilterMateApp:
             ]
             self._undo_redo_handler.clear_filter_history(source_layer, remote_layer_ids)
         else:
-            # Legacy fallback
-            history = self.history_manager.get_history(source_layer.id())
-            if history:
-                history.clear()
-            self.history_manager.clear_global_history()
+            logger.warning("UndoRedoHandler unavailable - history not cleared")
     
     def _show_task_completion_message(self, task_name, source_layer, provider_type, layer_count, is_fallback=False):
         """
@@ -2725,19 +2206,7 @@ class FilterMateApp:
 
 
     def layer_management_engine_task_completed(self, result_project_layers, task_name):
-        """
-        Handle completion of layer management tasks.
-        
-        v4.7: Delegates to LayerTaskCompletionHandler for God Class reduction.
-        
-        Called when LayersManagementEngineTask completes. Updates internal layer registry,
-        refreshes UI, and handles layer addition/removal cleanup.
-        
-        Args:
-            result_project_layers (dict): Updated PROJECT_LAYERS dictionary with all layer metadata
-            task_name (str): Type of task completed (add_layers, remove_layers, etc.)
-        """
-        # v4.7: Delegate to LayerTaskCompletionHandler
+        """Handle layer management task completion. Delegates to LayerTaskCompletionHandler."""
         if self._layer_task_completion_handler is not None:
             try:
                 # Initialize ENV_VARS before delegation
@@ -2759,15 +2228,7 @@ class FilterMateApp:
         logger.debug("Layer task completion skipped (handler unavailable)")
     
     def _validate_layer_info(self, layer_key):
-        """Validate layer structure and return layer info if valid.
-        
-        Args:
-            layer_key: Layer ID to validate
-            
-        Returns:
-            dict: Layer info or None if invalid
-        """
-        # STABILITY FIX: Guard against KeyError if layer_key not in PROJECT_LAYERS
+        """Validate layer structure and return layer info if valid, else None."""
         if layer_key not in self.PROJECT_LAYERS:
             logger.warning(f"Layer {layer_key} not found in PROJECT_LAYERS")
             return None
@@ -2787,16 +2248,8 @@ class FilterMateApp:
         return layer_info
     
     def _update_datasource_for_layer(self, layer_info):
-        """
-        Update project datasources for a given layer.
-        
-        v4.5 DELEGATION: Uses DatasourceManager.update_datasource_for_layer()
-        
-        Args:
-            layer_info: Layer info dictionary
-        """
-        # v4.5: Feature flag for DatasourceManager delegation
-        USE_DATASOURCE_MANAGER = True  # Phase 4.6: ENABLED
+        """Update datasources via DatasourceManager."""
+        USE_DATASOURCE_MANAGER = True
         
         if USE_DATASOURCE_MANAGER and self._datasource_manager:
             try:
@@ -2863,44 +2316,19 @@ class FilterMateApp:
             else:
                 logger.error("PROJECT_LAYERS still empty after 3 retries - layer loading may have failed")
                 self._reload_retry_count = 0
-                # Update indicator to show error state
                 if hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
                     self.dockwidget.backend_indicator_label.setText("!")
-                    self.dockwidget.backend_indicator_label.setStyleSheet("""
-                        QLabel#label_backend_indicator {
-                            color: #e74c3c;
-                            font-size: 9pt;
-                            font-weight: 600;
-                            padding: 3px 10px;
-                            border-radius: 12px;
-                            border: none;
-                            background-color: #fadbd8;
-                        }
-                    """)
+                    self.dockwidget.backend_indicator_label.setStyleSheet("QLabel#label_backend_indicator{color:#e74c3c;font-size:9pt;font-weight:600;padding:3px 10px;border-radius:12px;border:none;background-color:#fadbd8;}")
                     self.dockwidget.backend_indicator_label.setToolTip("Layer loading failed - click to retry")
                 return
         
-        # Reset retry counter on success
         self._reload_retry_count = 0
-        
-        # CRITICAL: Sync PROJECT_LAYERS to dockwidget
-        self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
-        self.dockwidget.has_loaded_layers = True
-        
-        # Enable UI widgets
-        if hasattr(self.dockwidget, 'set_widgets_enabled_state'):
-            self.dockwidget.set_widgets_enabled_state(True)
-        
-        # FIX v2.8.10: Force QgsMapLayerComboBox to re-sync with project layers
-        # The combobox uses QgsMapLayerProxyModel which should auto-sync, but sometimes
-        # needs a nudge after major state changes. We re-apply the filter to trigger refresh.
+        self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT); self.dockwidget.has_loaded_layers = True
+        if hasattr(self.dockwidget, 'set_widgets_enabled_state'): self.dockwidget.set_widgets_enabled_state(True)
         try:
             if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
-                # Re-apply filter to force model refresh
                 self.dockwidget.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
-                logger.debug("Force refreshed QgsMapLayerComboBox filters after reload")
-        except Exception as e:
-            logger.debug(f"Error refreshing layer combobox after reload: {e}")
+        except: pass
         
         # If there's an active layer, trigger current_layer_changed
         if self.iface.activeLayer() is not None:
@@ -2927,13 +2355,7 @@ class FilterMateApp:
         )
     
     def _refresh_ui_after_project_load(self):
-        """
-        Force complete UI refresh after project load.
-        
-        Called when a new project is loaded while the plugin was already active.
-        Ensures all widgets, comboboxes, and signals are properly updated with new project layers.
-        Also validates PostgreSQL layers for orphaned materialized view references.
-        """
+        """Force UI refresh after project load (validates PostgreSQL layers, reconnects signals)."""
         if self.dockwidget is None or not self.dockwidget.widgets_initialized:
             logger.debug("Cannot refresh UI: dockwidget not initialized")
             return

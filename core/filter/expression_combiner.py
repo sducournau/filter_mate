@@ -222,3 +222,112 @@ def combine_with_old_subset(
             return optimized
     
     return combined
+
+
+def should_replace_old_subset(old_subset: str) -> tuple:
+    """
+    Check if old subset contains patterns that should trigger replacement instead of combination.
+    
+    Patterns that require replacement:
+    - __source alias (only valid inside EXISTS subqueries)
+    - EXISTS subquery (avoid nested EXISTS)
+    - Spatial predicates (likely from previous geometric filter)
+    - FilterMate materialized view references
+    - QGIS style/symbology expressions
+    
+    Args:
+        old_subset: Existing subset string to check
+        
+    Returns:
+        tuple: (should_replace: bool, reasons: list of str)
+    """
+    import re
+    
+    if not old_subset:
+        return False, []
+    
+    reasons = []
+    old_subset_upper = old_subset.upper()
+    
+    # Pattern 1: __source alias (only valid inside EXISTS subqueries)
+    if '__source' in old_subset.lower():
+        reasons.append("__source alias")
+    
+    # Pattern 2: EXISTS subquery (avoid nested EXISTS)
+    if 'EXISTS (' in old_subset_upper or 'EXISTS(' in old_subset_upper:
+        reasons.append("EXISTS subquery")
+    
+    # Pattern 3: Spatial predicates (likely from previous geometric filter)
+    spatial_predicates = [
+        'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
+        'ST_OVERLAPS', 'ST_CROSSES', 'ST_DISJOINT', 'ST_EQUALS',
+        'ST_DWITHIN', 'ST_COVERS', 'ST_COVEREDBY'
+    ]
+    if any(pred in old_subset_upper for pred in spatial_predicates):
+        reasons.append("spatial predicate")
+    
+    # Pattern 4: FilterMate materialized view reference
+    if re.search(
+        r'IN\s*\(\s*SELECT.*FROM\s+["\']?filter_mate_temp["\']?\s*\.\s*["\']?mv_',
+        old_subset,
+        re.IGNORECASE | re.DOTALL
+    ):
+        reasons.append("FilterMate materialized view (mv_)")
+    
+    # Pattern 5: QGIS style/symbology expressions
+    style_patterns = [
+        r'AND\s+TRUE\s*\)',
+        r'THEN\s+true',
+        r'THEN\s+false',
+        r'SELECT\s+CASE',
+        r'\)\s*AND\s+TRUE\s*\)',
+    ]
+    if any(re.search(pattern, old_subset, re.IGNORECASE) for pattern in style_patterns):
+        reasons.append("QGIS style pattern")
+    
+    return bool(reasons), reasons
+
+
+def combine_with_old_filter(
+    new_expression: str,
+    old_subset: Optional[str],
+    combine_operator: Optional[str] = 'AND',
+    sanitize_fn: Optional[callable] = None
+) -> str:
+    """
+    Combine new expression with existing layer filter.
+    
+    Similar to combine_with_old_subset but for distant layer filtering.
+    Handles special patterns that should trigger replacement instead of combination.
+    
+    Args:
+        new_expression: New filter expression
+        old_subset: Existing subset string from layer
+        combine_operator: Logical operator ('AND', 'OR', 'AND NOT')
+        sanitize_fn: Optional callback to sanitize old_subset
+        
+    Returns:
+        str: Combined or replaced expression
+    """
+    # No existing filter
+    if not old_subset:
+        return new_expression
+    
+    # Sanitize if callback provided
+    if sanitize_fn:
+        old_subset = sanitize_fn(old_subset)
+        if not old_subset:
+            return new_expression
+    
+    # Check if we should replace instead of combine
+    should_replace, reasons = should_replace_old_subset(old_subset)
+    if should_replace:
+        logger.info(f"Old subset contains {', '.join(reasons)} - replacing instead of combining")
+        return new_expression
+    
+    # Default to AND if no operator specified
+    if not combine_operator:
+        combine_operator = 'AND'
+        logger.info("No combine operator specified, using AND by default to preserve existing filter")
+    
+    return f"({old_subset}) {combine_operator} ({new_expression})"

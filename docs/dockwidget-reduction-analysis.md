@@ -10,10 +10,10 @@
 
 | Métrique          | Valeur        | Objectif      |
 | ----------------- | ------------- | ------------- |
-| Lignes dockwidget | **4,036**     | <2,000        |
-| Sprint actuel     | **Sprint 15** | Sprint 15     |
-| Réduction totale  | **-9,013**    | -11,049       |
-| Progrès           | **69.2%**     | 30.8% restant |
+| Lignes dockwidget | **3,463**     | <2,000        |
+| Sprint actuel     | **Sprint 17** | Sprint 17     |
+| Réduction totale  | **-9,586**    | -11,049       |
+| Progrès           | **73.6%**     | 26.4% restant |
 
 ## 📈 État Actuel - App Orchestrator
 
@@ -45,7 +45,25 @@
 
 ## 🎯 Progression filter_mate_dockwidget.py
 
-### Progression Sprint 15 (session 11 janvier 2026)
+### Progression Sprint 17 (session 12 janvier 2026)
+
+| Action                                        | Lignes avant | Lignes après | Réduction |
+| --------------------------------------------- | ------------ | ------------ | --------- |
+| **Début Sprint 17**                           | **3,693**    | -            | -         |
+| Compresser `_restore_groupbox_ui_state`       | 3,693        | 3,672        | -21       |
+| Compresser `_reset_exploring_button_states`   | 3,672        | 3,661        | -11       |
+| Factoriser `_configure_*_groupbox` (×3)       | 3,661        | 3,606        | -55       |
+| Compresser `icon_per_geometry_type`           | 3,606        | 3,582        | -24       |
+| Compresser `_apply_qgis_widget_dimensions`    | 3,582        | 3,570        | -12       |
+| Compresser `_on_groupbox_clicked`             | 3,570        | 3,552        | -18       |
+| Compresser `set_widget_icon` + `switch_*`     | 3,552        | 3,531        | -21       |
+| Compresser `_setup_truncation_tooltips`       | 3,531        | 3,501        | -30       |
+| Compresser `_update_*_tooltip` (×4)           | 3,501        | 3,463        | -38       |
+| **Total Sprint 17**                           | **3,693**    | **3,463**    | **-230**  |
+
+**Note**: Sprint 17 axé sur factorisation code dupliqué (groupboxes) et compression tooltip helpers.
+
+### Progression Sprint 15-16 (session 11 janvier 2026)
 
 | Action                                        | Lignes avant | Lignes après | Réduction |
 | --------------------------------------------- | ------------ | ------------ | --------- |
@@ -59,6 +77,7 @@
 | Compresser `manage_configuration_model`       | 4,067        | 4,046        | -21       |
 | Compresser `_setup_reload_button`             | 4,046        | 4,036        | -10       |
 | **Total Sprint 15**                           | **4,172**    | **4,036**    | **-136**  |
+| **Sprint 16**: → 3,693                        | **4,036**    | **3,693**    | **-343**  |
 
 **Note**: Sprint 15 axé sur compression `__init__`, setup, et config (commentaires verbose → docstrings concis).
 

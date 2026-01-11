@@ -2,6 +2,7 @@
 Geometry Operations Module
 
 EPIC-1 Phase E2: Extracted from filter_task.py god class.
+EPIC-1 Phase E7.5: Added simplify_buffer_result.
 
 This module provides geometry processing functionality:
 - Buffer operations (positive/negative)
@@ -16,6 +17,7 @@ Used by FilterEngineTask for spatial operations.
 from core.geometry.buffer_processor import (
     apply_qgis_buffer,
     create_buffered_memory_layer,
+    simplify_buffer_result,
     BufferConfig
 )
 
@@ -34,6 +36,7 @@ __all__ = [
     # Buffer
     'apply_qgis_buffer',
     'create_buffered_memory_layer',
+    'simplify_buffer_result',
     'BufferConfig',
     
     # Repair
