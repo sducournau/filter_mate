@@ -183,6 +183,29 @@ except ImportError:
     TASK_BRIDGE_AVAILABLE = False
     logger.debug("TaskBridge not available - using legacy backends only")
 
+# EPIC-1 Phase E4-S5: Import extracted backend filter_executor modules
+# These provide Strangler Fig delegation for PostgreSQL/Spatialite/OGR utilities
+try:
+    from adapters.backends.postgresql import filter_executor as pg_executor
+    PG_EXECUTOR_AVAILABLE = True
+except ImportError:
+    pg_executor = None
+    PG_EXECUTOR_AVAILABLE = False
+
+try:
+    from adapters.backends.spatialite import filter_executor as sl_executor
+    SL_EXECUTOR_AVAILABLE = True
+except ImportError:
+    sl_executor = None
+    SL_EXECUTOR_AVAILABLE = False
+
+try:
+    from adapters.backends.ogr import filter_executor as ogr_executor
+    OGR_EXECUTOR_AVAILABLE = True
+except ImportError:
+    ogr_executor = None
+    OGR_EXECUTOR_AVAILABLE = False
+
 class FilterEngineTask(QgsTask):
     """Main QgsTask class which filter and unfilter data"""
     
@@ -1813,25 +1836,17 @@ class FilterEngineTask(QgsTask):
         """
         Apply PostgreSQL type casting to fix common type mismatch errors.
         
-        Handles cases like "importance" < 4 where importance is varchar.
-        
-        Args:
-            expression: SQL expression
-            layer: Optional layer to get field type information
-            
-        Returns:
-            str: Expression with type casting applied
+        EPIC-1 Phase E4-S5: Strangler Fig delegation to pg_executor.
         """
+        # Strangler Fig: Delegate to extracted module
+        if PG_EXECUTOR_AVAILABLE:
+            return pg_executor.apply_postgresql_type_casting(expression, layer)
+        
+        # Legacy fallback (kept for safety)
         if not expression:
             return expression
         
         import re
-        
-        # Add ::numeric type casting for numeric comparisons if not already present
-        # This handles cases like "importance" < 4 → "importance"::numeric < 4
-        # Pattern: "field" followed by comparison operator and number
-        # Only apply if not already cast (no :: before the operator)
-        
         numeric_comparison_pattern = r'"([^"]+)"(\s*)(<|>|<=|>=)(\s*)(\d+(?:\.\d+)?)'
         
         def add_numeric_cast(match):
@@ -1840,10 +1855,8 @@ class FilterEngineTask(QgsTask):
             operator = match.group(3)
             space2 = match.group(4)
             number = match.group(5)
-            # Check if already has type casting
             return f'"{field}"::numeric{space1}{operator}{space2}{number}'
         
-        # Only apply if not already cast (check for :: before operator)
         if '::numeric' not in expression:
             expression = re.sub(numeric_comparison_pattern, add_numeric_cast, expression)
         
@@ -2266,20 +2279,17 @@ class FilterEngineTask(QgsTask):
         """
         Check if the primary key field is numeric.
         
-        CRITICAL FIX v2.8.5: UUID fields and other text-based PKs must be quoted in SQL.
-        
-        Args:
-            layer: QgsVectorLayer to check (optional, uses source_layer if None)
-            pk_field: Primary key field name (optional, uses self.primary_key_name if None)
-            
-        Returns:
-            bool: True if PK is numeric (int, bigint, etc.), False if text (UUID, varchar, etc.)
+        EPIC-1 Phase E4-S5: Strangler Fig delegation to pg_executor.
         """
         check_layer = layer or self.source_layer
         check_pk = pk_field or getattr(self, 'primary_key_name', None)
         
+        # Strangler Fig: Delegate to extracted module
+        if PG_EXECUTOR_AVAILABLE:
+            return pg_executor._is_pk_numeric(check_layer, check_pk)
+        
+        # Legacy fallback
         if not check_layer or not check_pk:
-            # Default to numeric for safety (most common case)
             return True
         
         try:
@@ -2296,35 +2306,26 @@ class FilterEngineTask(QgsTask):
         """
         Format primary key values for SQL IN clause.
         
-        CRITICAL FIX v2.8.5: UUID fields must be quoted with single quotes in SQL.
-        Example: 
-            - Numeric: IN (1, 2, 3)
-            - UUID/Text: IN ('7b2e1a3e-b812-4d51-bf33-7f0cd0271ef3', ...)
-        
-        Args:
-            values: List of primary key values
-            is_numeric: Whether PK is numeric (optional, auto-detected if None)
-            layer: QgsVectorLayer to check PK type (optional)
-            pk_field: Primary key field name (optional)
-            
-        Returns:
-            str: Comma-separated values formatted for SQL IN clause
+        EPIC-1 Phase E4-S5: Strangler Fig delegation to pg_executor.
         """
+        # Strangler Fig: Delegate to extracted module
+        if PG_EXECUTOR_AVAILABLE:
+            return pg_executor.format_pk_values_for_sql(
+                values, is_numeric, layer, pk_field
+            )
+        
+        # Legacy fallback
         if not values:
             return ''
         
-        # Auto-detect if not specified
         if is_numeric is None:
             is_numeric = self._is_pk_numeric(layer, pk_field)
         
         if is_numeric:
-            # Numeric: simple conversion to string
             return ', '.join(str(v) for v in values)
         else:
-            # Text/UUID: quote with single quotes, escape existing quotes
             formatted = []
             for v in values:
-                # Convert to string and escape single quotes
                 str_val = str(v).replace("'", "''")
                 formatted.append(f"'{str_val}'")
             return ', '.join(formatted)
@@ -6950,24 +6951,22 @@ class FilterEngineTask(QgsTask):
         """
         Build filter expression from selected features for OGR layers.
         
-        Args:
-            current_layer: Layer with selected features
-            layer_props: Layer properties dict
-            param_distant_geom_expression: Geometry field expression
-            
-        Returns:
-            tuple: (success_bool, filter_expression or None)
+        EPIC-1 Phase E4-S5: Strangler Fig delegation to ogr_executor.
         """
+        # Strangler Fig: Delegate to extracted module
+        if OGR_EXECUTOR_AVAILABLE:
+            return ogr_executor.build_ogr_filter_from_selection(
+                layer=current_layer,
+                layer_props=layer_props,
+                distant_geom_expression=param_distant_geom_expression
+            )
+        
+        # Legacy fallback
         param_distant_primary_key_name = layer_props["primary_key_name"]
         param_distant_primary_key_is_numeric = layer_props["primary_key_is_numeric"]
         param_distant_schema = layer_props["layer_schema"]
         param_distant_table = layer_props["layer_name"]
-        param_distant_geometry_field = layer_props["layer_geometry_field"]
         
-        # Extract feature IDs from selection
-        # CRITICAL FIX: Handle ctid (PostgreSQL internal identifier)
-        # ctid is not accessible via feature[field_name], use feature.id() instead
-        # FIX v3.1.3: Use thread-safe selectedFeatureIds() + getFeatures()
         features_ids = []
         selected_fids = list(current_layer.selectedFeatureIds())
         if selected_fids:
@@ -6981,24 +6980,12 @@ class FilterEngineTask(QgsTask):
         if len(features_ids) == 0:
             return False, None
         
-        # Build IN clause based on key type
         if param_distant_primary_key_is_numeric:
-            param_expression = '"{distant_primary_key_name}" IN '.format(
-                distant_primary_key_name=param_distant_primary_key_name
-            ) + "(" + ", ".join(features_ids) + ")"
+            param_expression = f'"{param_distant_primary_key_name}" IN ({", ".join(features_ids)})'
         else:
-            param_expression = '"{distant_primary_key_name}" IN '.format(
-                distant_primary_key_name=param_distant_primary_key_name
-            ) + "('" + "', '".join(features_ids) + "')"
+            param_expression = f'"{param_distant_primary_key_name}" IN (\'{"\', \'".join(features_ids)}\')'
         
-        # Build full SELECT expression for manage_layer_subset_strings
-        expression = 'SELECT "{param_distant_table}"."{param_distant_primary_key_name}", {param_distant_geom_expression} FROM "{param_distant_schema}"."{param_distant_table}" WHERE {expression}'.format(
-            param_distant_primary_key_name=param_distant_primary_key_name,
-            param_distant_geom_expression=param_distant_geom_expression,
-            param_distant_schema=param_distant_schema,
-            param_distant_table=param_distant_table,
-            expression=param_expression
-        )
+        expression = f'SELECT "{param_distant_table}"."{param_distant_primary_key_name}", {param_distant_geom_expression} FROM "{param_distant_schema}"."{param_distant_table}" WHERE {param_expression}'
         
         return param_expression, expression
 
@@ -7007,49 +6994,29 @@ class FilterEngineTask(QgsTask):
         """
         Normalize column names in expression to match actual PostgreSQL column names.
         
-        PostgreSQL is case-sensitive for quoted identifiers. If columns were created
-        without quotes, they are stored in lowercase. This function corrects column
-        names in filter expressions to match the actual column names.
-        
-        For example: "SUB_TYPE" → "sub_type" if the column exists as "sub_type"
-        
-        Args:
-            expression: SQL expression string
-            field_names: List of actual field names from the layer
-            
-        Returns:
-            str: Expression with corrected column names
+        EPIC-1 Phase E4-S5: Strangler Fig delegation to pg_executor.
         """
+        # Strangler Fig: Delegate to extracted module
+        if PG_EXECUTOR_AVAILABLE:
+            return pg_executor.normalize_column_names_for_postgresql(expression, field_names)
+        
+        # Legacy fallback
         if not expression or not field_names:
             return expression
         
         result_expression = expression
-        
-        # Build case-insensitive lookup map: lowercase → actual name
         field_lookup = {name.lower(): name for name in field_names}
-        
-        # Find all quoted column names in expression (e.g., "SUB_TYPE")
         quoted_cols = re.findall(r'"([^"]+)"', result_expression)
         
-        corrections_made = []
         for col_name in quoted_cols:
-            # Skip if column exists with exact case (no correction needed)
             if col_name in field_names:
                 continue
-            
-            # Check for case-insensitive match
             col_lower = col_name.lower()
             if col_lower in field_lookup:
                 correct_name = field_lookup[col_lower]
-                # Replace the incorrectly cased column name with correct one
                 result_expression = result_expression.replace(
-                    f'"{col_name}"',
-                    f'"{correct_name}"'
+                    f'"{col_name}"', f'"{correct_name}"'
                 )
-                corrections_made.append(f'"{col_name}" → "{correct_name}"')
-        
-        if corrections_made:
-            logger.info(f"PostgreSQL column case normalization: {', '.join(corrections_made)}")
         
         return result_expression
 
