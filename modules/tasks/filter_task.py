@@ -1582,9 +1582,7 @@ class FilterEngineTask(QgsTask):
         """
         Remove non-boolean display expressions and fix type casting issues in subset string.
         
-        Display expressions like 'coalesce("field",'<NULL>')' or CASE expressions that
-        return true/false are valid QGIS expressions but cause issues in SQL WHERE clauses.
-        This function removes such expressions and fixes common type casting issues.
+        v4.7 E6-S2: Pure delegation to core.services.expression_service.sanitize_subset_string
         
         Args:
             subset_string (str): The original subset string
@@ -1592,151 +1590,8 @@ class FilterEngineTask(QgsTask):
         Returns:
             str: Sanitized subset string with non-boolean expressions removed
         """
-        if not subset_string:
-            return subset_string
-        
-        import re
-        
-        sanitized = subset_string
-        
-        # ========================================================================
-        # PHASE 0: Normalize French SQL operators to English
-        # ========================================================================
-        # QGIS expressions support French operators (ET, OU, NON) but PostgreSQL
-        # only understands English operators (AND, OR, NOT). This normalization
-        # ensures compatibility with all SQL backends.
-        # 
-        # FIX v2.5.12: Handle French operators that cause SQL syntax errors like:
-        # "syntax error at or near 'ET'" 
-        
-        french_operators = [
-            (r'\)\s+ET\s+\(', ') AND ('),      # ) ET ( -> ) AND (
-            (r'\)\s+OU\s+\(', ') OR ('),       # ) OU ( -> ) OR (
-            (r'\s+ET\s+', ' AND '),            # ... ET ... -> ... AND ...
-            (r'\s+OU\s+', ' OR '),             # ... OU ... -> ... OR ...
-            (r'\s+ET\s+NON\s+', ' AND NOT '),  # ET NON -> AND NOT
-            (r'\s+NON\s+', ' NOT '),           # NON ... -> NOT ...
-        ]
-        
-        for pattern, replacement in french_operators:
-            if re.search(pattern, sanitized, re.IGNORECASE):
-                logger.info(f"FilterMate: Normalizing French operator '{pattern}' to '{replacement}'")
-                sanitized = re.sub(pattern, replacement, sanitized, flags=re.IGNORECASE)
-        
-        # ========================================================================
-        # PHASE 1: Remove non-boolean display expressions
-        # ========================================================================
-        
-        # Pattern to match AND/OR followed by coalesce display expressions
-        # CRITICAL: These patterns must match display expressions that return values, not booleans
-        # Example: AND (coalesce("cleabs",'<NULL>')) - returns text, not boolean
-        # Note: The outer ( ) wraps coalesce(...) so we have )) at the end
-        coalesce_patterns = [
-            # Match coalesce with quoted string containing special chars like '<NULL>'
-            # Pattern: AND (coalesce("field",'<NULL>'))  - note TWO closing parens
-            r'(?:^|\s+)AND\s+\(coalesce\("[^"]+"\s*,\s*\'[^\']*\'\s*\)\)',
-            r'(?:^|\s+)OR\s+\(coalesce\("[^"]+"\s*,\s*\'[^\']*\'\s*\)\)',
-            # Match AND/OR followed by coalesce expression with nested content
-            r'(?:^|\s+)AND\s+\(coalesce\([^)]*(?:\([^)]*\)[^)]*)*\)\)',
-            r'(?:^|\s+)OR\s+\(coalesce\([^)]*(?:\([^)]*\)[^)]*)*\)\)',
-            # Simpler patterns for common cases (TWO closing parens)
-            r'(?:^|\s+)AND\s+\(coalesce\([^)]+\)\)',
-            r'(?:^|\s+)OR\s+\(coalesce\([^)]+\)\)',
-            # Match table.field syntax
-            r'(?:^|\s+)AND\s+\(coalesce\("[^"]+"\s*\.\s*"[^"]+"\s*,\s*\'[^\']*\'\s*\)\)',
-            r'(?:^|\s+)OR\s+\(coalesce\("[^"]+"\s*\.\s*"[^"]+"\s*,\s*\'[^\']*\'\s*\)\)',
-        ]
-        
-        for pattern in coalesce_patterns:
-            match = re.search(pattern, sanitized, re.IGNORECASE)
-            if match:
-                logger.info(f"FilterMate: Removing invalid coalesce expression: '{match.group()[:60]}...'")
-                sanitized = re.sub(pattern, '', sanitized, flags=re.IGNORECASE)
-        
-        # Pattern to match AND/OR followed by CASE expressions that just return true/false
-        # These are style/display expressions, not filter conditions
-        # Match: AND ( case when ... end ) OR AND ( SELECT CASE when ... end )
-        # with multiple closing parentheses (malformed)
-        #
-        # CRITICAL FIX v2.5.10: Improved patterns to handle multi-line CASE expressions
-        # like those from rule-based symbology:
-        #   AND ( SELECT CASE 
-        #     WHEN 'AV' = left("table"."field", 2) THEN true
-        #     WHEN 'PL' = left("table"."field", 2) THEN true
-        #     ...
-        #   end )
-        
-        # IMPROVED PATTERN: Match AND ( SELECT CASE ... WHEN ... THEN true/false ... end )
-        # This pattern is more robust for multi-line expressions from QGIS rule-based symbology
-        select_case_pattern = r'\s*AND\s+\(\s*SELECT\s+CASE\s+(?:WHEN\s+.+?THEN\s+(?:true|false)\s*)+\s*(?:ELSE\s+.+?)?\s*end\s*\)'
-        
-        match = re.search(select_case_pattern, sanitized, re.IGNORECASE | re.DOTALL)
-        if match:
-            logger.info(f"FilterMate: Removing SELECT CASE style expression: '{match.group()[:80]}...'")
-            sanitized = re.sub(select_case_pattern, '', sanitized, flags=re.IGNORECASE | re.DOTALL)
-        
-        # Also check for simpler CASE patterns without SELECT
-        case_patterns = [
-            # Standard CASE expression with true/false returns  
-            r'\s*AND\s+\(\s*CASE\s+(?:WHEN\s+.+?THEN\s+(?:true|false)\s*)+(?:ELSE\s+.+?)?\s*END\s*\)+',
-            r'\s*OR\s+\(\s*CASE\s+(?:WHEN\s+.+?THEN\s+(?:true|false)\s*)+(?:ELSE\s+.+?)?\s*END\s*\)+',
-            # SELECT CASE expression (from rule-based styles) - backup pattern
-            r'\s*AND\s+\(\s*SELECT\s+CASE\s+.+?\s+END\s*\)+',
-            r'\s*OR\s+\(\s*SELECT\s+CASE\s+.+?\s+END\s*\)+',
-        ]
-        
-        for pattern in case_patterns:
-            match = re.search(pattern, sanitized, re.IGNORECASE | re.DOTALL)
-            if match:
-                # Verify this is a display/style expression (returns true/false, not a comparison)
-                matched_text = match.group()
-                # Check if it's just "then true/false" without external comparison
-                if re.search(r'\bTHEN\s+(true|false)\b', matched_text, re.IGNORECASE):
-                    logger.info(f"FilterMate: Removing invalid CASE/style expression: '{matched_text[:60]}...'")
-                    sanitized = re.sub(pattern, '', sanitized, flags=re.IGNORECASE | re.DOTALL)
-        
-        # Remove standalone coalesce expressions at start
-        standalone_coalesce = r'^\s*\(coalesce\([^)]*(?:\([^)]*\)[^)]*)*\)\)\s*(?:AND|OR)?'
-        if re.match(standalone_coalesce, sanitized, re.IGNORECASE):
-            match = re.match(standalone_coalesce, sanitized, re.IGNORECASE)
-            logger.info(f"FilterMate: Removing standalone coalesce: '{match.group()[:60]}...'")
-            sanitized = re.sub(standalone_coalesce, '', sanitized, flags=re.IGNORECASE)
-        
-        # ========================================================================
-        # PHASE 2: Fix unbalanced parentheses
-        # ========================================================================
-        
-        # Count parentheses and fix if unbalanced
-        open_count = sanitized.count('(')
-        close_count = sanitized.count(')')
-        
-        if close_count > open_count:
-            # Remove excess closing parentheses from the end
-            excess = close_count - open_count
-            # Remove trailing )))) patterns
-            trailing_parens = re.search(r'\)+\s*$', sanitized)
-            if trailing_parens:
-                parens_at_end = len(trailing_parens.group().strip())
-                if parens_at_end >= excess:
-                    sanitized = re.sub(r'\){' + str(excess) + r'}\s*$', '', sanitized)
-                    logger.info(f"FilterMate: Removed {excess} excess closing parentheses")
-        
-        # ========================================================================
-        # PHASE 3: Clean up whitespace and orphaned operators
-        # ========================================================================
-        
-        sanitized = re.sub(r'\s+', ' ', sanitized).strip()
-        sanitized = re.sub(r'\s+(AND|OR)\s*$', '', sanitized, flags=re.IGNORECASE)
-        sanitized = re.sub(r'^\s*(AND|OR)\s+', '', sanitized, flags=re.IGNORECASE)
-        
-        # Remove duplicate AND/OR operators
-        sanitized = re.sub(r'\s+AND\s+AND\s+', ' AND ', sanitized, flags=re.IGNORECASE)
-        sanitized = re.sub(r'\s+OR\s+OR\s+', ' OR ', sanitized, flags=re.IGNORECASE)
-        
-        if sanitized != subset_string:
-            logger.info(f"FilterMate: Subset sanitized from '{subset_string[:80]}...' to '{sanitized[:80]}...'")
-        
-        return sanitized
+        from core.services.expression_service import sanitize_subset_string
+        return sanitize_subset_string(subset_string, logger=logger)
     
     def _extract_spatial_clauses_for_exists(self, filter_expr, source_table=None):
         """
@@ -2826,287 +2681,42 @@ class FilterEngineTask(QgsTask):
         """
         Prepare source geometries for each provider type.
         
+        Delegates to core.services.geometry_preparer.prepare_geometries_by_provider()
+        for actual geometry preparation logic.
+        
         Args:
             provider_list: List of unique provider types to prepare
             
         Returns:
             bool: True if all required geometries prepared successfully
         """
-        # CRITICAL FIX v2.7.3: Use SELECTED/FILTERED feature count, not total table count!
-        # When user selects 1 commune out of 930, we should use WKT mode (1 feature ≤ 50)
-        # NOT EXISTS subquery (which would require filtering 930 communes).
-        #
-        # Priority for source feature count:
-        # 1. task_features from task_parameters (selected features passed from main thread)
-        # 2. source_layer.featureCount() (respects subsetString but NOT manual selection)
-        task_features = self.task_parameters.get("task", {}).get("features", [])
-        if task_features and len(task_features) > 0:
-            source_feature_count = len(task_features)
-            logger.info(f"Using task_features count for WKT decision: {source_feature_count} selected features")
-            # DIAGNOSTIC: Also log to QGIS Message Panel
-            logger.debug(
-                f"v2.7.3 FIX: Using {source_feature_count} SELECTED features for WKT decision (not {self.source_layer.featureCount()} total)"
-            )
-        else:
-            source_feature_count = self.source_layer.featureCount()
-            logger.info(f"Using source_layer featureCount for WKT decision: {source_feature_count} total features")
+        from core.services.geometry_preparer import prepare_geometries_by_provider
         
-        # CRITICAL FIX v2.7.15: Check if source is PostgreSQL with connection
-        # If source IS PostgreSQL, we should prefer EXISTS subquery over WKT mode
-        # because WKT simplification can produce Bounding Box fallback which returns too many features
-        source_is_postgresql = (
-            self.param_source_provider_type == PROVIDER_POSTGRES and
-            self.task_parameters.get("infos", {}).get("postgresql_connection_available", True)
+        result = prepare_geometries_by_provider(
+            provider_list=provider_list,
+            task_parameters=self.task_parameters,
+            source_layer=self.source_layer,
+            param_source_provider_type=self.param_source_provider_type,
+            param_buffer_expression=self.param_buffer_expression,
+            layers_dict=self.layers if hasattr(self, 'layers') else None,
+            prepare_postgresql_geom_callback=lambda: self.prepare_postgresql_source_geom(),
+            prepare_spatialite_geom_callback=lambda: self.prepare_spatialite_source_geom(),
+            prepare_ogr_geom_callback=lambda: self.prepare_ogr_source_geom(),
+            logger=logger,
+            postgresql_available=POSTGRESQL_AVAILABLE
         )
         
-        postgresql_needs_wkt = (
-            'postgresql' in provider_list and 
-            POSTGRESQL_AVAILABLE and
-            source_feature_count <= 50 and  # SIMPLE_WKT_THRESHOLD from PostgreSQL backend
-            not source_is_postgresql  # v2.7.15: Don't use WKT mode if source is PostgreSQL (use EXISTS instead)
-        )
+        # Apply results to instance attributes
+        if result['postgresql_source_geom'] is not None:
+            self.postgresql_source_geom = result['postgresql_source_geom']
+        if result['spatialite_source_geom'] is not None:
+            self.spatialite_source_geom = result['spatialite_source_geom']
+        if result['ogr_source_geom'] is not None:
+            self.ogr_source_geom = result['ogr_source_geom']
+        if result.get('spatialite_fallback_mode', False):
+            self._spatialite_fallback_mode = result['spatialite_fallback_mode']
         
-        # DIAGNOSTIC: Log WKT decision
-        logger.debug(
-            f"v2.7.15: postgresql_needs_wkt={postgresql_needs_wkt} (count={source_feature_count}, source_is_pg={source_is_postgresql})"
-        )
-        if postgresql_needs_wkt:
-            logger.info(f"PostgreSQL simplified mode: {source_feature_count} features ≤ 50, source is NOT PostgreSQL")
-            logger.info("  → Will prepare WKT geometry for direct ST_GeomFromText()")
-        elif source_is_postgresql and 'postgresql' in provider_list:
-            logger.info(f"PostgreSQL EXISTS mode: source IS PostgreSQL with {source_feature_count} features")
-            logger.info("  → Will use EXISTS subquery with table reference (no WKT simplification)")
-        
-        # Check if any OGR layer needs Spatialite geometry
-        ogr_needs_spatialite_geom = False
-        if 'ogr' in provider_list and hasattr(self, 'layers') and 'ogr' in self.layers:
-            spatialite_backend = SpatialiteGeometricFilter(self.task_parameters)
-            for layer, layer_props in self.layers['ogr']:
-                if spatialite_backend.supports_layer(layer):
-                    ogr_needs_spatialite_geom = True
-                    logger.info(f"  OGR layer '{layer.name()}' will use Spatialite backend - need WKT geometry")
-                    break
-        
-        # Prepare PostgreSQL source geometry
-        # CRITICAL FIX v2.7.2: Only prepare postgresql_source_geom if SOURCE layer is PostgreSQL
-        # Previously, this was also called when source layer is OGR but distant layers are PostgreSQL.
-        # This created invalid table references like "public"."commune"."geometrie" where
-        # "commune" is an OGR layer (GeoPackage/Shapefile) that doesn't exist in PostgreSQL!
-        # The result was that EXISTS subqueries referenced non-existent tables, causing
-        # filters to silently fail and return all features instead of filtered results.
-        #
-        # NEW BEHAVIOR:
-        # - Source is PostgreSQL + distant is PostgreSQL: Use postgresql_source_geom (EXISTS subquery)
-        # - Source is OGR + distant is PostgreSQL: Use WKT (spatialite_source_geom) with ST_GeomFromText
-        has_postgresql_fallback_layers = False  # Track if any PostgreSQL layer uses OGR fallback
-        
-        if 'postgresql' in provider_list and POSTGRESQL_AVAILABLE:
-            # Check if SOURCE layer is PostgreSQL with connection
-            # CRITICAL FIX v2.5.14: Default to True for PostgreSQL layers
-            source_is_postgresql_with_connection = (
-                self.param_source_provider_type == PROVIDER_POSTGRES and
-                self.task_parameters.get("infos", {}).get("postgresql_connection_available", True)
-            )
-            
-            # Check if any DISTANT PostgreSQL layer has connection available
-            has_distant_postgresql_with_connection = False
-            if hasattr(self, 'layers') and 'postgresql' in self.layers:
-                for layer, layer_props in self.layers['postgresql']:
-                    # CRITICAL FIX v2.5.14: Default to True for PostgreSQL layers
-                    if layer_props.get('postgresql_connection_available', True):
-                        has_distant_postgresql_with_connection = True
-                    # CRITICAL FIX: Check if this layer uses OGR fallback
-                    if layer_props.get('_postgresql_fallback', False):
-                        has_postgresql_fallback_layers = True
-                        logger.info(f"  → Layer '{layer.name()}' is PostgreSQL with OGR fallback")
-            
-            # CRITICAL FIX v2.7.2: ONLY prepare postgresql_source_geom if SOURCE is PostgreSQL
-            # For OGR source + PostgreSQL distant, we will use WKT mode (spatialite_source_geom)
-            if source_is_postgresql_with_connection:
-                logger.info("Preparing PostgreSQL source geometry...")
-                logger.info("  → Source layer is PostgreSQL with connection")
-                self.prepare_postgresql_source_geom()
-            elif has_distant_postgresql_with_connection:
-                # Source is NOT PostgreSQL but distant layers ARE PostgreSQL
-                # Use WKT mode (ST_GeomFromText) instead of EXISTS subquery
-                logger.info("PostgreSQL distant layers detected but source is NOT PostgreSQL")
-                logger.info("  → Source layer provider: %s", self.param_source_provider_type)
-                logger.info("  → Will use WKT mode (ST_GeomFromText) for PostgreSQL filtering")
-                logger.info("  → Skipping prepare_postgresql_source_geom() to avoid invalid table references")
-            else:
-                logger.warning("PostgreSQL in provider list but no layers have connection - will use OGR fallback")
-                # Ensure OGR geometry is prepared for PostgreSQL fallback
-                if 'ogr' not in provider_list:
-                    logger.info("Adding OGR to provider list for PostgreSQL fallback...")
-                    provider_list.append('ogr')
-        
-        # CRITICAL FIX: If any PostgreSQL layer uses OGR fallback, we MUST prepare ogr_source_geom
-        # This happens when source layer has PostgreSQL connection but distant layers don't
-        if has_postgresql_fallback_layers and 'ogr' not in provider_list:
-            logger.info("PostgreSQL fallback layers detected - adding OGR to provider list")
-            provider_list.append('ogr')
-        
-        # Prepare Spatialite source geometry (WKT string) with fallback to OGR
-        # Also needed for PostgreSQL simplified mode (few source features)
-        # CRITICAL FIX: Also prepare for OGR layers that will use Spatialite backend (GeoPackage/SQLite)
-        if 'spatialite' in provider_list or postgresql_needs_wkt or ogr_needs_spatialite_geom:
-            logger.debug(f"v2.7.3: Preparing Spatialite/WKT geometry (postgresql_wkt={postgresql_needs_wkt})")
-            logger.info("Preparing Spatialite source geometry...")
-            logger.info(f"  → Reason: spatialite={'spatialite' in provider_list}, "
-                       f"postgresql_wkt={postgresql_needs_wkt}, ogr_spatialite={ogr_needs_spatialite_geom}")
-            logger.info(f"  → Features in task: {len(self.task_parameters['task'].get('features', []))}")
-            
-            spatialite_success = False
-            try:
-                self.prepare_spatialite_source_geom()
-                if hasattr(self, 'spatialite_source_geom') and self.spatialite_source_geom is not None:
-                    spatialite_success = True
-                    wkt_preview = self.spatialite_source_geom[:150] if len(self.spatialite_source_geom) > 150 else self.spatialite_source_geom
-                    logger.info(f"✓ Spatialite source geometry prepared: {len(self.spatialite_source_geom)} chars")
-                    logger.debug(f"v2.7.3: WKT prepared OK ({len(self.spatialite_source_geom)} chars)")
-                    logger.info(f"  → WKT preview: {wkt_preview}...")
-                else:
-                    logger.warning("Spatialite geometry preparation returned None")
-                    QgsMessageLog.logMessage(
-                        "v2.7.3: WARNING - Spatialite geometry preparation returned None!",
-                        "FilterMate", Qgis.Warning
-                    )
-            except Exception as e:
-                logger.warning(f"Spatialite geometry preparation failed: {e}")
-                QgsMessageLog.logMessage(
-                    f"v2.7.3: ERROR - Spatialite geometry preparation failed: {e}",
-                    "FilterMate", Qgis.Critical
-                )
-                import traceback
-                logger.debug(f"Traceback: {traceback.format_exc()}")
-            
-            # Fallback to OGR if Spatialite failed
-            if not spatialite_success:
-                logger.info("Falling back to OGR geometry preparation...")
-                # Set flag to prevent buffer application in OGR fallback
-                # Buffer will be applied via ST_Buffer() in SQL when we convert to WKT
-                self._spatialite_fallback_mode = True
-                try:
-                    self.prepare_ogr_source_geom()
-                    if hasattr(self, 'ogr_source_geom') and self.ogr_source_geom is not None:
-                        # CRITICAL FIX: Convert OGR layer geometry to WKT for Spatialite
-                        # ogr_source_geom is a QgsVectorLayer, spatialite_source_geom expects WKT string
-                        if isinstance(self.ogr_source_geom, QgsVectorLayer):
-                            # Extract geometries from the layer and convert to WKT
-                            all_geoms = []
-                            for feature in self.ogr_source_geom.getFeatures():
-                                geom = feature.geometry()
-                                if geom and not geom.isEmpty():
-                                    all_geoms.append(geom)
-                            
-                            if all_geoms:
-                                # Combine all geometries and convert to WKT
-                                combined = QgsGeometry.collectGeometry(all_geoms)
-                                
-                                # CRITICAL FIX: Prevent GeometryCollection from causing issues
-                                # Same protection as in prepare_spatialite_source_geom
-                                combined_type = QgsWkbTypes.displayString(combined.wkbType())
-                                if 'GeometryCollection' in combined_type:
-                                    logger.warning(f"OGR fallback: collectGeometry produced {combined_type} - converting")
-                                    
-                                    # Determine dominant geometry type
-                                    has_polygons = any('Polygon' in QgsWkbTypes.displayString(g.wkbType()) for g in all_geoms)
-                                    has_lines = any('Line' in QgsWkbTypes.displayString(g.wkbType()) for g in all_geoms)
-                                    has_points = any('Point' in QgsWkbTypes.displayString(g.wkbType()) for g in all_geoms)
-                                    
-                                    if has_polygons:
-                                        converted = combined.convertToType(QgsWkbTypes.PolygonGeometry, True)
-                                    elif has_lines:
-                                        converted = combined.convertToType(QgsWkbTypes.LineGeometry, True)
-                                    elif has_points:
-                                        converted = combined.convertToType(QgsWkbTypes.PointGeometry, True)
-                                    else:
-                                        converted = None
-                                    
-                                    if converted and not converted.isEmpty():
-                                        combined = converted
-                                        logger.info(f"OGR fallback: Converted to {QgsWkbTypes.displayString(combined.wkbType())}")
-                                    else:
-                                        logger.warning("OGR fallback: Conversion failed, keeping GeometryCollection")
-                                
-                                wkt = combined.asWkt()
-                                # Escape single quotes for SQL
-                                self.spatialite_source_geom = wkt.replace("'", "''")
-                                logger.info(f"✓ Converted OGR layer to WKT ({len(self.spatialite_source_geom)} chars)")
-                            else:
-                                logger.warning("OGR layer has no valid geometries for Spatialite fallback")
-                                self.spatialite_source_geom = None
-                        else:
-                            # If it's already a string (WKT), use it directly
-                            self.spatialite_source_geom = self.ogr_source_geom
-                            logger.info("✓ Successfully used OGR geometry as fallback")
-                    else:
-                        logger.error("OGR fallback also failed - no geometry available")
-                        self.message = "Failed to prepare source geometry: OGR fallback also failed - no geometry available"
-                        return False
-                except Exception as e2:
-                    logger.error(f"OGR fallback failed: {e2}")
-                    self.message = f"Failed to prepare source geometry: OGR fallback failed - {e2}"
-                    return False
-                finally:
-                    # Reset fallback flag
-                    self._spatialite_fallback_mode = False
-
-        # Prepare OGR geometry if needed for OGR layers, buffer expressions, OR PostgreSQL layers
-        # CRITICAL: Always prepare OGR geometry for PostgreSQL because BackendFactory may
-        # fall back to OGR at runtime if PostgreSQL connection fails or for small datasets
-        # ALSO: Prepare for Spatialite layers because Spatialite backend may fall back to OGR
-        # if Spatialite functions are not available (e.g., GDAL without Spatialite support)
-        needs_ogr_geom = (
-            'ogr' in provider_list or 
-            'spatialite' in provider_list or  # Spatialite may fall back to OGR
-            self.param_buffer_expression != '' or
-            'postgresql' in provider_list  # PostgreSQL may use OGR fallback at runtime
-        )
-        if needs_ogr_geom:
-            logger.info("Preparing OGR/Spatialite source geometry...")
-            self.prepare_ogr_source_geom()
-            
-            # DIAGNOSTIC v2.4.11: Log status of all source geometries after preparation
-            logger.info("=" * 60)
-            logger.info("📊 SOURCE GEOMETRY STATUS AFTER PREPARATION")
-            logger.info("=" * 60)
-            
-            spatialite_status = "✓ READY" if (hasattr(self, 'spatialite_source_geom') and self.spatialite_source_geom) else "✗ NOT AVAILABLE"
-            spatialite_len = len(self.spatialite_source_geom) if (hasattr(self, 'spatialite_source_geom') and self.spatialite_source_geom) else 0
-            logger.info(f"  Spatialite (WKT): {spatialite_status} ({spatialite_len} chars)")
-            
-            ogr_status = "✓ READY" if (hasattr(self, 'ogr_source_geom') and self.ogr_source_geom) else "✗ NOT AVAILABLE"
-            ogr_features = self.ogr_source_geom.featureCount() if (hasattr(self, 'ogr_source_geom') and self.ogr_source_geom and isinstance(self.ogr_source_geom, QgsVectorLayer)) else 0
-            logger.info(f"  OGR (Layer):      {ogr_status} ({ogr_features} features)")
-            
-            postgresql_status = "✓ READY" if (hasattr(self, 'postgresql_source_geom') and self.postgresql_source_geom) else "✗ NOT AVAILABLE"
-            logger.info(f"  PostgreSQL (SQL): {postgresql_status}")
-            
-            # CRITICAL: If both Spatialite and OGR are not available, filtering will fail
-            if not (hasattr(self, 'spatialite_source_geom') and self.spatialite_source_geom) and \
-               not (hasattr(self, 'ogr_source_geom') and self.ogr_source_geom):
-                logger.error("=" * 60)
-                logger.error("❌ CRITICAL: NO SOURCE GEOMETRY AVAILABLE!")
-                logger.error("=" * 60)
-                logger.error("  → Both Spatialite (WKT) and OGR (Layer) geometries are None")
-                logger.error("  → This will cause ALL layer filtering to FAIL")
-                logger.error("  → Possible causes:")
-                logger.error("    1. Source layer has no features")
-                logger.error("    2. Source layer has no valid geometries")
-                logger.error("    3. No features selected/filtered in source layer")
-                logger.error("    4. Geometry preparation failed")
-                logger.error("=" * 60)
-                
-                # v2.8.6: Try to use source_layer directly as emergency fallback
-                if self.source_layer and self.source_layer.isValid() and self.source_layer.featureCount() > 0:
-                    logger.warning("  → EMERGENCY FALLBACK: Using source_layer directly as ogr_source_geom")
-                    self.ogr_source_geom = self.source_layer
-                    logger.info(f"  → ogr_source_geom set to source_layer ({self.source_layer.featureCount()} features)")
-            
-            logger.info("=" * 60)
-
-        return True
+        return result['success']
 
     def _filter_all_layers_with_progress(self):
         """
@@ -3708,10 +3318,7 @@ class FilterEngineTask(QgsTask):
 
     def _simplify_geometry_adaptive(self, geometry, max_wkt_length=None, crs_authid=None):
         """
-        Simplify geometry adaptively to fit within WKT size limit while preserving topology.
-        
-        v4.0 DELEGATION: Delegates to GeometryPreparationAdapter.simplify_geometry_adaptive().
-        Legacy implementation preserved as fallback.
+        v4.0 E6-S1: Simplify geometry adaptively - pure delegation to GeometryPreparationAdapter.
         
         Args:
             geometry: QgsGeometry to simplify
@@ -3721,12 +3328,11 @@ class FilterEngineTask(QgsTask):
         Returns:
             QgsGeometry: Simplified geometry, or original if simplification fails/disabled
         """
-        from qgis.core import QgsGeometry, QgsWkbTypes
+        from qgis.core import QgsGeometry
         
         if not geometry or geometry.isEmpty():
             return geometry
         
-        # v4.0: Delegate to GeometryPreparationAdapter
         try:
             from adapters.qgis.geometry_preparation import GeometryPreparationAdapter
             adapter = GeometryPreparationAdapter()
@@ -3747,238 +3353,13 @@ class FilterEngineTask(QgsTask):
             
             if result.success and result.geometry:
                 return result.geometry
-        except ImportError:
-            logger.debug("GeometryPreparationAdapter not available, using legacy")
+            logger.warning(f"GeometryPreparationAdapter simplify failed: {result.message}")
+            return geometry
+        except ImportError as e:
+            logger.error(f"GeometryPreparationAdapter not available: {e}")
+            return geometry
         except Exception as e:
-            logger.debug(f"GeometryPreparationAdapter simplify failed: {e}, using legacy")
-        
-        # LEGACY FALLBACK (to be removed in v5.0)
-        # Get configuration
-        config = self._get_simplification_config()
-        
-        # Check if simplification is enabled
-        if not config['enabled']:
-            logger.debug(f"  Geometry simplification disabled in config")
-            return geometry
-        
-        # Use configured max_wkt_length if not specified
-        if max_wkt_length is None:
-            max_wkt_length = config['max_wkt_length']
-        
-        # v2.7.14: Use optimized WKT precision for size calculation
-        wkt_precision = self._get_wkt_precision(crs_authid)
-        original_wkt = geometry.asWkt(wkt_precision)
-        original_length = len(original_wkt)
-        
-        if original_length <= max_wkt_length:
-            logger.debug(f"  Geometry already within limit ({original_length} chars)")
-            return geometry
-        
-        if config['show_warnings']:
-            logger.info(f"  🔧 Simplifying geometry: {original_length} chars → target {max_wkt_length} chars")
-        
-        # Calculate reduction ratio needed
-        reduction_ratio = max_wkt_length / original_length
-        logger.debug(f"  Reduction ratio needed: {reduction_ratio:.4f} ({(1-reduction_ratio)*100:.1f}% reduction)")
-        
-        # Get geometry extent to estimate appropriate tolerance
-        extent = geometry.boundingBox()
-        extent_size = max(extent.width(), extent.height())
-        
-        # Determine if CRS is geographic (degrees) or metric
-        is_geographic = False
-        if crs_authid:
-            try:
-                srid = int(crs_authid.split(':')[1]) if ':' in crs_authid else int(crs_authid)
-                # EPSG:4326 and similar geographic CRS have small SRID numbers
-                is_geographic = srid == 4326 or (srid < 5000 and srid > 4000)
-            except (ValueError, IndexError):
-                pass
-        
-        # Get tolerance limits from config
-        min_tolerance = config['min_tolerance_meters']
-        max_tolerance = config['max_tolerance_meters']
-        
-        # v2.7.13: For extremely large WKT, increase max_tolerance dynamically
-        # If we need >99% reduction, we need to be more aggressive
-        if reduction_ratio < 0.01:  # Need >99% reduction (e.g., 4.6M → 100K chars)
-            # Scale max_tolerance based on how extreme the reduction is
-            # For 4.6M → 100K, ratio = 0.022, so multiplier ≈ 45
-            extreme_multiplier = 1.0 / reduction_ratio if reduction_ratio > 0 else 100
-            max_tolerance = max_tolerance * min(extreme_multiplier, 100)  # Cap at 100x
-            logger.info(f"  🔧 Extreme WKT size - increasing max_tolerance to {max_tolerance:.1f}m")
-        
-        # v2.7.11: Use buffer-aware tolerance if buffer parameters are available
-        buffer_value = getattr(self, 'param_buffer_value', None)
-        buffer_segments = getattr(self, 'param_buffer_segments', 5)
-        buffer_type = getattr(self, 'param_buffer_type', 0)
-        
-        if buffer_value is not None and buffer_value != 0:
-            # Calculate tolerance based on buffer precision
-            buffer_tolerance = self._get_buffer_aware_tolerance(
-                buffer_value=buffer_value,
-                buffer_segments=buffer_segments,
-                buffer_type=buffer_type,
-                extent_size=extent_size,
-                is_geographic=is_geographic
-            )
-            
-            # Use buffer-aware tolerance as base, but scale based on reduction needed
-            if reduction_ratio < 0.01:  # Need >99% reduction
-                initial_tolerance = buffer_tolerance * 10
-            elif reduction_ratio < 0.05:  # Need >95% reduction
-                initial_tolerance = buffer_tolerance * 5
-            elif reduction_ratio < 0.1:  # Need >90% reduction
-                initial_tolerance = buffer_tolerance * 3
-            elif reduction_ratio < 0.5:  # Need >50% reduction
-                initial_tolerance = buffer_tolerance * 2
-            else:
-                initial_tolerance = buffer_tolerance
-            
-            logger.info(f"  🎯 Using buffer-aware tolerance: {buffer_tolerance:.6f} → scaled to {initial_tolerance:.6f}")
-        else:
-            # Fallback: Calculate initial tolerance based on extent and reduction needed
-            if is_geographic:
-                # Geographic CRS: convert meters to degrees (approximate)
-                # 1 degree ≈ 111km at equator
-                min_tolerance = min_tolerance / 111000.0
-                max_tolerance = max_tolerance / 111000.0
-                base_tolerance = extent_size * 0.0001  # Start with 0.01% of extent
-            else:
-                # Projected CRS: tolerance in map units (usually meters)
-                base_tolerance = extent_size * 0.001  # Start with 0.1% of extent
-            
-            # Scale initial tolerance based on how much reduction is needed
-            if reduction_ratio < 0.01:  # Need >99% reduction
-                initial_tolerance = base_tolerance * 50
-            elif reduction_ratio < 0.05:  # Need >95% reduction
-                initial_tolerance = base_tolerance * 20
-            elif reduction_ratio < 0.1:  # Need >90% reduction
-                initial_tolerance = base_tolerance * 10
-            elif reduction_ratio < 0.5:  # Need >50% reduction
-                initial_tolerance = base_tolerance * 5
-            else:
-                initial_tolerance = base_tolerance
-        
-        # Convert tolerance limits if geographic
-        if is_geographic:
-            min_tolerance = config['min_tolerance_meters'] / 111000.0
-            max_tolerance = config['max_tolerance_meters'] / 111000.0
-        
-        # Clamp to configured limits
-        initial_tolerance = max(min_tolerance, min(initial_tolerance, max_tolerance))
-        
-        logger.info(f"  Initial tolerance: {initial_tolerance:.6f} ({'degrees' if is_geographic else 'map units'})")
-        logger.info(f"  Tolerance limits: [{min_tolerance:.6f}, {max_tolerance:.6f}]")
-        logger.info(f"  Extent size: {extent_size:.2f}")
-        
-        # Progressive simplification with topology preservation
-        tolerance = initial_tolerance
-        best_simplified = geometry
-        best_wkt_length = original_length
-        max_attempts = 15
-        tolerance_multiplier = 2.0
-        
-        for attempt in range(max_attempts):
-            # Check if we've exceeded max tolerance
-            if tolerance > max_tolerance:
-                logger.warning(f"  Reached max tolerance ({max_tolerance:.6f}) - stopping")
-                break
-            
-            # Use QGIS simplify which is topology-aware for polygons
-            simplified = geometry.simplify(tolerance)
-            
-            if simplified is None or simplified.isEmpty():
-                logger.warning(f"  Attempt {attempt+1}: Simplification produced empty geometry at tolerance {tolerance:.6f}")
-                # Try a smaller tolerance step
-                tolerance *= 1.5
-                continue
-            
-            # Validate geometry type is preserved
-            if QgsWkbTypes.geometryType(simplified.wkbType()) != QgsWkbTypes.geometryType(geometry.wkbType()):
-                logger.warning(f"  Attempt {attempt+1}: Geometry type changed, skipping")
-                tolerance *= tolerance_multiplier
-                continue
-            
-            # v2.7.14: Use optimized WKT precision
-            simplified_wkt = simplified.asWkt(wkt_precision)
-            wkt_length = len(simplified_wkt)
-            reduction_pct = (1 - wkt_length / original_length) * 100
-            
-            logger.debug(f"  Attempt {attempt+1}: tolerance={tolerance:.6f}, {wkt_length} chars ({reduction_pct:.1f}% reduction)")
-            
-            # Track best result
-            if wkt_length < best_wkt_length:
-                best_simplified = simplified
-                best_wkt_length = wkt_length
-            
-            if wkt_length <= max_wkt_length:
-                if config['show_warnings']:
-                    logger.info(f"  ✓ Simplified: {original_length} → {wkt_length} chars ({reduction_pct:.1f}% reduction)")
-                    logger.info(f"  ✓ Final tolerance: {tolerance:.6f}")
-                return simplified
-            
-            # Increase tolerance for next attempt
-            tolerance *= tolerance_multiplier
-        
-        # Use best result even if not under limit
-        final_reduction = (1 - best_wkt_length / original_length) * 100
-        if best_wkt_length < original_length:
-            if config['show_warnings']:
-                logger.warning(f"  ⚠️ Could not reach target, using best result: {original_length} → {best_wkt_length} chars ({final_reduction:.1f}% reduction)")
-            
-            # v2.7.13: If still too large, try more aggressive fallbacks
-            if best_wkt_length > max_wkt_length:
-                logger.warning(f"  🔄 Trying aggressive fallbacks...")
-                
-                # FALLBACK 1: Convex Hull - fast and compact but loses concave details
-                try:
-                    convex_hull = geometry.convexHull()
-                    if convex_hull and not convex_hull.isEmpty():
-                        # v2.7.14: Use optimized WKT precision
-                        hull_wkt = convex_hull.asWkt(wkt_precision)
-                        if len(hull_wkt) <= max_wkt_length:
-                            hull_reduction = (1 - len(hull_wkt) / original_length) * 100
-                            logger.info(f"  ✓ Convex Hull fallback: {original_length} → {len(hull_wkt)} chars ({hull_reduction:.1f}% reduction)")
-                            logger.warning(f"  ⚠️ Using Convex Hull - some precision lost for concave boundaries")
-                            return convex_hull
-                except Exception as e:
-                    logger.debug(f"  Convex Hull fallback failed: {e}")
-                
-                # FALLBACK 2: Oriented Minimum Bounding Rectangle - even more compact
-                try:
-                    oriented_bbox = geometry.orientedMinimumBoundingBox()[0]
-                    if oriented_bbox and not oriented_bbox.isEmpty():
-                        # v2.7.14: Use optimized WKT precision
-                        bbox_wkt = oriented_bbox.asWkt(wkt_precision)
-                        if len(bbox_wkt) <= max_wkt_length:
-                            bbox_reduction = (1 - len(bbox_wkt) / original_length) * 100
-                            logger.info(f"  ✓ Oriented BBox fallback: {original_length} → {len(bbox_wkt)} chars ({bbox_reduction:.1f}% reduction)")
-                            logger.warning(f"  ⚠️ Using Oriented Bounding Box - significant precision lost")
-                            return oriented_bbox
-                except Exception as e:
-                    logger.debug(f"  Oriented BBox fallback failed: {e}")
-                
-                # FALLBACK 3: Simple Bounding Box as polygon - minimal but always works
-                try:
-                    bbox = geometry.boundingBox()
-                    if not bbox.isEmpty():
-                        from qgis.core import QgsGeometry, QgsRectangle
-                        bbox_geom = QgsGeometry.fromRect(bbox)
-                        if bbox_geom and not bbox_geom.isEmpty():
-                            # v2.7.14: Use optimized WKT precision
-                            bbox_wkt = bbox_geom.asWkt(wkt_precision)
-                            bbox_reduction = (1 - len(bbox_wkt) / original_length) * 100
-                            logger.info(f"  ✓ Bounding Box fallback: {original_length} → {len(bbox_wkt)} chars ({bbox_reduction:.1f}% reduction)")
-                            logger.warning(f"  ⚠️ Using Bounding Box - maximum precision lost")
-                            return bbox_geom
-                except Exception as e:
-                    logger.debug(f"  Bounding Box fallback failed: {e}")
-            
-            return best_simplified
-        else:
-            if config['show_warnings']:
-                logger.warning(f"  ⚠️ Simplification failed, using original geometry")
+            logger.error(f"GeometryPreparationAdapter simplify error: {e}")
             return geometry
 
     def prepare_spatialite_source_geom(self):
@@ -4235,9 +3616,7 @@ class FilterEngineTask(QgsTask):
 
     def _apply_qgis_buffer(self, layer, buffer_distance):
         """
-        Apply buffer using QGIS processing algorithm.
-        
-        v4.0 DELEGATION (EPIC-1 Phase E2): Delegates to core.geometry.apply_qgis_buffer
+        v4.0 E6-S1: Apply buffer - pure delegation to core.geometry.apply_qgis_buffer.
         
         Args:
             layer: Input layer
@@ -4249,123 +3628,25 @@ class FilterEngineTask(QgsTask):
         Raises:
             Exception: If buffer operation fails
         """
-        # v4.0 DELEGATION (EPIC-1 Phase E2): Use core.geometry module (Strangler Fig pattern)
         try:
             from core.geometry import apply_qgis_buffer, BufferConfig
             
-            # Create buffer configuration
-            config = BufferConfig(
-                buffer_type=self.param_buffer_type,
-                buffer_segments=self.param_buffer_segments,
-                dissolve=True
-            )
-            
-            # Delegate to extracted module
-            buffered_layer = apply_qgis_buffer(
-                layer=layer,
-                buffer_distance=buffer_distance,
-                config=config,
-                convert_geometry_collection_fn=self._convert_geometry_collection_to_multipolygon
-            )
-            
-            # Store output for backward compatibility
+            config = BufferConfig(buffer_type=self.param_buffer_type, buffer_segments=self.param_buffer_segments, dissolve=True)
+            buffered_layer = apply_qgis_buffer(layer, buffer_distance, config, self._convert_geometry_collection_to_multipolygon)
             self.outputs['alg_source_layer_params_buffer'] = {'OUTPUT': buffered_layer}
-            
             return buffered_layer
-            
-        except ImportError:
-            # LEGACY FALLBACK: Keep original implementation for backward compatibility
-            # DISABLED: Geometry repair - let invalid geometries pass through
-            # layer = self._repair_invalid_geometries(layer)
-            # layer = self._fix_invalid_geometries(layer, 'alg_source_layer_params_fixgeometries_buffer')
-            
-            # CRITICAL DIAGNOSTIC: Check CRS type
-            crs = layer.crs()
-            is_geographic = crs.isGeographic()
-            crs_units = crs.mapUnits()
-            
-            # Log layer info with enhanced CRS diagnostics
-            logger.info(f"QGIS buffer: {layer.featureCount()} features, "
-                       f"CRS: {crs.authid()}, "
-                       f"Geometry type: {layer.geometryType()}, "
-                       f"wkbType: {layer.wkbType()}, "
-                       f"buffer_distance: {buffer_distance}")
-            logger.info(f"CRS diagnostics: isGeographic={is_geographic}, mapUnits={crs_units}")
-            
-            # CRITICAL: Check if CRS is geographic with large buffer value
-            if is_geographic:
-                # Evaluate buffer distance to get actual value
-                eval_distance = buffer_distance
-                if isinstance(buffer_distance, QgsProperty):
-                    features = list(layer.getFeatures())
-                    if features:
-                        context = QgsExpressionContext()
-                        context.setFeature(features[0])
-                        eval_distance = buffer_distance.value(context, 0)
-                
-                if eval_distance and float(eval_distance) > 1:
-                    logger.warning(
-                        f"⚠️ GEOGRAPHIC CRS DETECTED with large buffer value!\n"
-                        f"  CRS: {crs.authid()} (units: degrees)\n"
-                        f"  Buffer: {eval_distance} DEGREES (this is likely wrong!)\n"
-                        f"  → A buffer of {eval_distance}° = ~{float(eval_distance) * 111}km at equator\n"
-                        f"  → This will likely fail or create invalid geometries\n"
-                        f"  SOLUTION: Reproject layer to a projected CRS (e.g., EPSG:3857, EPSG:2154) first"
-                    )
-                    raise Exception(
-                        f"Cannot apply buffer: Geographic CRS detected ({crs.authid()}) with buffer value {eval_distance}. "
-                        f"Buffer units would be DEGREES, not meters. "
-                        f"Please reproject your layer to a projected coordinate system (e.g., EPSG:3857 Web Mercator, "
-                        f"or EPSG:2154 Lambert 93 for France) before applying buffer."
-                    )
-            
-            # Apply buffer with dissolve
-            # CRITICAL: Configure to skip invalid geometries instead of failing
-            alg_params = {
-                'DISSOLVE': True,
-                'DISTANCE': buffer_distance,
-                'END_CAP_STYLE': int(self.param_buffer_type),  # Use configured buffer type (0=Round, 1=Flat, 2=Square)
-                'INPUT': layer,
-                'JOIN_STYLE': int(0),
-                'MITER_LIMIT': float(2),
-                'SEGMENTS': int(self.param_buffer_segments),  # Use configured buffer segments (default: 5)
-                'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
-            }
-            
-            logger.debug(f"Calling processing.run('qgis:buffer') with params: {alg_params}")
-            
-            # CRITICAL: Configure processing context to skip invalid geometries
-            context = QgsProcessingContext()
-            context.setInvalidGeometryCheck(QgsFeatureRequest.GeometryNoCheck)
-            feedback = QgsProcessingFeedback()
-            
-            self.outputs['alg_source_layer_params_buffer'] = processing.run(
-                'qgis:buffer', 
-                alg_params, 
-                context=context, 
-                feedback=feedback
-            )
-            layer = self.outputs['alg_source_layer_params_buffer']['OUTPUT']
-            
-            # CRITICAL FIX: Convert GeometryCollection to MultiPolygon
-            # This prevents "Impossible d'ajouter l'objet avec une géométrie de type 
-            # GeometryCollection à une couche de type MultiPolygon" errors when using
-            # the buffer result for spatial operations on typed GPKG layers
-            layer = self._convert_geometry_collection_to_multipolygon(layer)
-            
-            # Create spatial index
-            processing.run('qgis:createspatialindex', {"INPUT": layer})
-            
-            return layer
+        except ImportError as e:
+            logger.error(f"core.geometry module not available: {e}")
+            raise Exception(f"Buffer operation requires core.geometry module: {e}")
+        except Exception as e:
+            logger.error(f"Buffer operation failed: {e}")
+            raise
 
     def _convert_geometry_collection_to_multipolygon(self, layer):
         """
         Convert GeometryCollection geometries in a layer to MultiPolygon.
         
-        v4.0 DELEGATION (EPIC-1 Phase E2): Delegates to core.geometry.convert_geometry_collection_to_multipolygon
-        
-        STABILITY FIX v2.3.9: Uses geometry_safety module to prevent
-        access violations when handling GeometryCollections.
+        v4.7 E6-S1: Pure delegation to core.geometry module (legacy fallback removed).
         
         CRITICAL FIX for GeoPackage/OGR layers:
         When qgis:buffer processes features with DISSOLVE=True, the result
@@ -4373,124 +3654,15 @@ class FilterEngineTask(QgsTask):
         This causes errors when the buffer layer is used for spatial operations
         on typed layers (e.g., GeoPackage MultiPolygon layers).
         
-        Error fixed: "Impossible d'ajouter l'objet avec une géométrie de type 
-        GeometryCollection à une couche de type MultiPolygon"
-        
         Args:
             layer: QgsVectorLayer from buffer operation
             
         Returns:
             QgsVectorLayer: Layer with geometries converted to MultiPolygon
         """
-        # v4.0 DELEGATION (EPIC-1 Phase E2): Use core.geometry module (Strangler Fig pattern)
-        try:
-            from core.geometry import convert_geometry_collection_to_multipolygon
-            
-            return convert_geometry_collection_to_multipolygon(layer)
-            
-        except ImportError:
-            # LEGACY FALLBACK: Keep original implementation
-            # Check if any features have GeometryCollection type
-            has_geometry_collection = False
-            for feature in layer.getFeatures():
-                geom = feature.geometry()
-                if validate_geometry(geom):
-                    geom_type = get_geometry_type_name(geom)
-                    if 'GeometryCollection' in geom_type:
-                        has_geometry_collection = True
-                        break
-            
-            if not has_geometry_collection:
-                logger.debug("No GeometryCollection found in buffer result - no conversion needed")
-                return layer
-            
-            logger.info("🔄 GeometryCollection detected in buffer result - converting to MultiPolygon")
-            
-            # Create new memory layer with MultiPolygon type
-            crs = layer.crs()
-            fields = layer.fields()
-            
-            # Create MultiPolygon memory layer
-            converted_layer = QgsMemoryProviderUtils.createMemoryLayer(
-                f"{layer.name()}_converted",
-                fields,
-                QgsWkbTypes.MultiPolygon,
-                crs
-            )
-            
-            if not converted_layer or not converted_layer.isValid():
-                logger.error("Failed to create converted memory layer")
-                return layer
-            
-            converted_dp = converted_layer.dataProvider()
-            converted_features = []
-            conversion_count = 0
-            
-            for feature in layer.getFeatures():
-                geom = feature.geometry()
-                if not validate_geometry(geom):
-                    continue
-                
-                geom_type = get_geometry_type_name(geom)
-                new_geom = geom
-                
-                if 'GeometryCollection' in geom_type:
-                    # STABILITY FIX: Use safe wrapper for conversion
-                    converted = safe_convert_to_multi_polygon(geom)
-                    if converted:
-                        new_geom = converted
-                        conversion_count += 1
-                        logger.debug(f"Converted GeometryCollection to {get_geometry_type_name(new_geom)}")
-                    else:
-                        # Fallback: try extracting polygons using safe wrapper
-                        polygon_parts = extract_polygons_from_collection(geom)
-                        if polygon_parts:
-                            # Create MultiPolygon from extracted parts
-                            if len(polygon_parts) == 1:
-                                poly_data = safe_as_polygon(polygon_parts[0])
-                                if poly_data:
-                                    new_geom = QgsGeometry.fromMultiPolygonXY([poly_data])
-                            else:
-                                multi_poly_parts = [safe_as_polygon(p) for p in polygon_parts]
-                                multi_poly_parts = [p for p in multi_poly_parts if p]
-                                if multi_poly_parts:
-                                    new_geom = QgsGeometry.fromMultiPolygonXY(multi_poly_parts)
-                            conversion_count += 1
-                        else:
-                            logger.warning("GeometryCollection contained no polygon parts - skipping feature")
-                            continue
-                
-                elif 'Polygon' in geom_type and 'Multi' not in geom_type:
-                    # Convert single Polygon to MultiPolygon for consistency
-                    poly_data = safe_as_polygon(geom)
-                    if poly_data:
-                        new_geom = QgsGeometry.fromMultiPolygonXY([poly_data])
-                
-                # Create new feature with converted geometry
-                new_feature = QgsFeature(fields)
-                new_feature.setGeometry(new_geom)
-                new_feature.setAttributes(feature.attributes())
-                converted_features.append(new_feature)
-            
-            # Add converted features
-            if converted_features:
-                success, _ = converted_dp.addFeatures(converted_features)
-                if success:
-                    converted_layer.updateExtents()
-                    logger.info(f"✓ Converted {conversion_count} GeometryCollection(s) to MultiPolygon")
-                    return converted_layer
-                else:
-                    logger.error("Failed to add converted features to layer")
-                    return layer
-            else:
-                logger.warning("No features to convert")
-                return layer
-                
-        except Exception as e:
-            logger.error(f"Error converting GeometryCollection: {str(e)}")
-            import traceback
-            logger.debug(f"Conversion traceback: {traceback.format_exc()}")
-            return layer
+        from core.geometry import convert_geometry_collection_to_multipolygon
+        
+        return convert_geometry_collection_to_multipolygon(layer)
 
 
     def _evaluate_buffer_distance(self, layer, buffer_param):
@@ -5248,7 +4420,7 @@ class FilterEngineTask(QgsTask):
         """
         Execute spatial selection using QGIS processing for OGR/non-PostgreSQL layers.
         
-        EPIC-1 Phase E4-S7b: Strangler Fig delegation to ogr_executor.
+        v4.7 E6-S1: Pure delegation to ogr_executor.execute_ogr_spatial_selection (legacy fallback removed).
         
         Args:
             layer: Original layer
@@ -5258,208 +4430,39 @@ class FilterEngineTask(QgsTask):
         Returns:
             None (modifies current_layer selection)
         """
-        # EPIC-1 Phase E4-S7b: Try delegating to new extracted function
-        if OGR_EXECUTOR_AVAILABLE and hasattr(ogr_executor, 'OGRSpatialSelectionContext'):
-            try:
-                context = ogr_executor.OGRSpatialSelectionContext(
-                    ogr_source_geom=self.ogr_source_geom,
-                    current_predicates=self.current_predicates,
-                    has_combine_operator=self.has_combine_operator,
-                    param_other_layers_combine_operator=self.param_other_layers_combine_operator,
-                    verify_and_create_spatial_index=self._verify_and_create_spatial_index,
-                )
-                ogr_executor.execute_ogr_spatial_selection(
-                    layer, current_layer, param_old_subset, context
-                )
-                logger.debug("_execute_ogr_spatial_selection: delegated to ogr_executor")
-                return
-            except Exception as e:
-                logger.warning(f"ogr_executor delegation failed, using legacy: {e}")
+        if not OGR_EXECUTOR_AVAILABLE:
+            raise ImportError("ogr_executor module not available - cannot execute OGR spatial selection")
         
-        # LEGACY FALLBACK: Original implementation
-        # CRITICAL FIX: Validate ogr_source_geom before using it
-        if not self.ogr_source_geom:
-            logger.error("ogr_source_geom is None - cannot execute spatial selection")
-            raise Exception("Source geometry layer is not available for spatial selection")
+        if not hasattr(ogr_executor, 'OGRSpatialSelectionContext'):
+            raise ImportError("ogr_executor.OGRSpatialSelectionContext not available")
         
-        if not isinstance(self.ogr_source_geom, QgsVectorLayer):
-            logger.error(f"ogr_source_geom is not a QgsVectorLayer: {type(self.ogr_source_geom)}")
-            raise Exception(f"Source geometry must be a QgsVectorLayer, got {type(self.ogr_source_geom)}")
-        
-        if not self.ogr_source_geom.isValid():
-            logger.error(f"ogr_source_geom is not valid: {self.ogr_source_geom.name()}")
-            raise Exception("Source geometry layer is not valid")
-        
-        if self.ogr_source_geom.featureCount() == 0:
-            logger.warning("ogr_source_geom has no features - spatial selection will return no results")
-            return
-        
-        # STABILITY FIX v2.3.9: Validate that at least one geometry is valid before calling selectbylocation
-        # This prevents access violations from corrupted or invalid geometries
-        has_valid_geom = False
-        for feature in self.ogr_source_geom.getFeatures():
-            geom = feature.geometry()
-            if validate_geometry(geom):
-                has_valid_geom = True
-                break
-        
-        if not has_valid_geom:
-            logger.error("ogr_source_geom has no valid geometries - spatial selection would fail")
-            raise Exception("Source geometry layer has no valid geometries")
-        
-        logger.info(f"Using ogr_source_geom: {self.ogr_source_geom.name()}, "
-                   f"features={self.ogr_source_geom.featureCount()}, "
-                   f"geomType={QgsWkbTypes.displayString(self.ogr_source_geom.wkbType())}")
-        
-        # STABILITY FIX v2.3.9: Configure processing context to skip invalid geometries
-        # This prevents access violations when selectbylocation encounters corrupted geometries
-        context = QgsProcessingContext()
-        context.setInvalidGeometryCheck(QgsFeatureRequest.GeometrySkipInvalid)
-        feedback = QgsProcessingFeedback()
-        
-        # CRITICAL FIX v2.3.9.2: Use create_geos_safe_layer for geometry validation
-        # The function now handles fallbacks gracefully and returns original layer as last resort
-        logger.info("🛡️ Creating GEOS-safe source layer (geometry validation)...")
-        safe_source_geom = create_geos_safe_layer(self.ogr_source_geom, "_safe_source")
-        
-        # create_geos_safe_layer now returns the original layer as fallback, never None for valid input
-        if safe_source_geom is None:
-            logger.warning("create_geos_safe_layer returned None, using original")
-            safe_source_geom = self.ogr_source_geom
-        
-        if not safe_source_geom.isValid() or safe_source_geom.featureCount() == 0:
-            logger.error("No valid source geometries available")
-            raise Exception("Source geometry layer has no valid geometries")
-        
-        logger.info(f"✓ Safe source layer: {safe_source_geom.featureCount()} features")
-        
-        # Also process current_layer if not too large (to avoid performance issues)
-        safe_current_layer = current_layer
-        use_safe_current = False
-        if current_layer.featureCount() <= 50000:  # Only process smaller layers for performance
-            logger.debug("🛡️ Creating GEOS-safe target layer...")
-            temp_safe_layer = create_geos_safe_layer(current_layer, "_safe_target")
-            if temp_safe_layer and temp_safe_layer.isValid() and temp_safe_layer.featureCount() > 0:
-                safe_current_layer = temp_safe_layer
-                use_safe_current = True
-                logger.info(f"✓ Safe target layer: {safe_current_layer.featureCount()} features")
-        
-        predicate_list = [int(predicate) for predicate in self.current_predicates.keys()]
-        
-        # Helper function to map selection back to original layer if we used safe layer
-        def map_selection_to_original():
-            if use_safe_current and safe_current_layer is not current_layer:
-                # FIX v3.1.3: Use thread-safe selectedFeatureIds()
-                selected_fids = list(safe_current_layer.selectedFeatureIds())
-                if selected_fids:
-                    current_layer.selectByIds(selected_fids)
-                    logger.debug(f"Mapped {len(selected_fids)} features back to original layer")
-        
-        # Use safe layers for spatial operations
-        work_layer = safe_current_layer if use_safe_current else current_layer
-        
-        if self.has_combine_operator is True:
-            work_layer.selectAll()
-            
-            if self.param_other_layers_combine_operator == 'OR':
-                self._verify_and_create_spatial_index(work_layer)
-                # CRITICAL FIX: Thread-safe subset string application
-                safe_set_subset_string(work_layer, param_old_subset)
-                work_layer.selectAll()
-                safe_set_subset_string(work_layer, '')
-                
-                alg_params_select = {
-                    'INPUT': work_layer,
-                    'INTERSECT': safe_source_geom,
-                    'METHOD': 1,
-                    'PREDICATE': predicate_list
-                }
-                processing.run("qgis:selectbylocation", alg_params_select, context=context, feedback=feedback)
-                map_selection_to_original()
-                
-            elif self.param_other_layers_combine_operator == 'AND':
-                self._verify_and_create_spatial_index(work_layer)
-                alg_params_select = {
-                    'INPUT': work_layer,
-                    'INTERSECT': safe_source_geom,
-                    'METHOD': 2,
-                    'PREDICATE': predicate_list
-                }
-                processing.run("qgis:selectbylocation", alg_params_select, context=context, feedback=feedback)
-                map_selection_to_original()
-                
-            elif self.param_other_layers_combine_operator == 'NOT AND':
-                self._verify_and_create_spatial_index(work_layer)
-                alg_params_select = {
-                    'INPUT': work_layer,
-                    'INTERSECT': safe_source_geom,
-                    'METHOD': 3,
-                    'PREDICATE': predicate_list
-                }
-                processing.run("qgis:selectbylocation", alg_params_select, context=context, feedback=feedback)
-                map_selection_to_original()
-                
-            else:
-                self._verify_and_create_spatial_index(work_layer)
-                alg_params_select = {
-                    'INPUT': work_layer,
-                    'INTERSECT': safe_source_geom,
-                    'METHOD': 0,
-                    'PREDICATE': predicate_list
-                }
-                processing.run("qgis:selectbylocation", alg_params_select, context=context, feedback=feedback)
-                map_selection_to_original()
-        else:
-            self._verify_and_create_spatial_index(work_layer)
-            alg_params_select = {
-                'INPUT': work_layer,
-                'INTERSECT': safe_source_geom,
-                'METHOD': 0,
-                'PREDICATE': predicate_list
-            }
-            processing.run("qgis:selectbylocation", alg_params_select, context=context, feedback=feedback)
-            map_selection_to_original()
+        context = ogr_executor.OGRSpatialSelectionContext(
+            ogr_source_geom=self.ogr_source_geom,
+            current_predicates=self.current_predicates,
+            has_combine_operator=self.has_combine_operator,
+            param_other_layers_combine_operator=self.param_other_layers_combine_operator,
+            verify_and_create_spatial_index=self._verify_and_create_spatial_index,
+        )
+        ogr_executor.execute_ogr_spatial_selection(
+            layer, current_layer, param_old_subset, context
+        )
+        logger.debug("_execute_ogr_spatial_selection: delegated to ogr_executor")
 
 
     def _build_ogr_filter_from_selection(self, current_layer, layer_props, param_distant_geom_expression):
         """
         Build filter expression from selected features for OGR layers.
         
-        EPIC-1 Phase E4-S5: Strangler Fig delegation to ogr_executor.
+        v4.7 E6-S1: Pure delegation to ogr_executor.build_ogr_filter_from_selection (legacy fallback removed).
         """
-        # Strangler Fig: Delegate to extracted module
-        if OGR_EXECUTOR_AVAILABLE:
-            return ogr_executor.build_ogr_filter_from_selection(
-                layer=current_layer,
-                layer_props=layer_props,
-                distant_geom_expression=param_distant_geom_expression
-            )
+        if not OGR_EXECUTOR_AVAILABLE:
+            raise ImportError("ogr_executor module not available - cannot build OGR filter from selection")
         
-        # Legacy fallback
-        param_distant_primary_key_name = layer_props["primary_key_name"]
-        param_distant_primary_key_is_numeric = layer_props["primary_key_is_numeric"]
-        param_distant_schema = layer_props["layer_schema"]
-        param_distant_table = layer_props["layer_name"]
-        
-        features_ids = []
-        selected_fids = list(current_layer.selectedFeatureIds())
-        if selected_fids:
-            request = QgsFeatureRequest().setFilterFids(selected_fids)
-            for feature in current_layer.getFeatures(request):
-                if param_distant_primary_key_name == 'ctid':
-                    features_ids.append(str(feature.id()))
-                else:
-                    features_ids.append(str(feature[param_distant_primary_key_name]))
-        
-        if len(features_ids) == 0:
-            return False, None
-        
-        if param_distant_primary_key_is_numeric:
-            param_expression = f'"{param_distant_primary_key_name}" IN ({", ".join(features_ids)})'
-        else:
-            param_expression = f'"{param_distant_primary_key_name}" IN (\'{"\', \'".join(features_ids)}\')'
-        
-        expression = f'SELECT "{param_distant_table}"."{param_distant_primary_key_name}", {param_distant_geom_expression} FROM "{param_distant_schema}"."{param_distant_table}" WHERE {param_expression}'
+        return ogr_executor.build_ogr_filter_from_selection(
+            layer=current_layer,
+            layer_props=layer_props,
+            distant_geom_expression=param_distant_geom_expression
+        )
         
         return param_expression, expression
 
@@ -5468,31 +4471,12 @@ class FilterEngineTask(QgsTask):
         """
         Normalize column names in expression to match actual PostgreSQL column names.
         
-        EPIC-1 Phase E4-S5: Strangler Fig delegation to pg_executor.
+        v4.7 E6-S1: Pure delegation to pg_executor.normalize_column_names_for_postgresql (legacy fallback removed).
         """
-        # Strangler Fig: Delegate to extracted module
-        if PG_EXECUTOR_AVAILABLE:
-            return pg_executor.normalize_column_names_for_postgresql(expression, field_names)
+        if not PG_EXECUTOR_AVAILABLE:
+            raise ImportError("pg_executor module not available - cannot normalize column names for PostgreSQL")
         
-        # Legacy fallback
-        if not expression or not field_names:
-            return expression
-        
-        result_expression = expression
-        field_lookup = {name.lower(): name for name in field_names}
-        quoted_cols = re.findall(r'"([^"]+)"', result_expression)
-        
-        for col_name in quoted_cols:
-            if col_name in field_names:
-                continue
-            col_lower = col_name.lower()
-            if col_lower in field_lookup:
-                correct_name = field_lookup[col_lower]
-                result_expression = result_expression.replace(
-                    f'"{col_name}"', f'"{correct_name}"'
-                )
-        
-        return result_expression
+        return pg_executor.normalize_column_names_for_postgresql(expression, field_names)
 
     def _qualify_field_names_in_expression(self, expression, field_names, primary_key_name, table_name, is_postgresql):
         """
@@ -7185,13 +6169,9 @@ class FilterEngineTask(QgsTask):
     
     def _simplify_source_for_ogr_fallback(self, source_layer):
         """
-        v2.9.7: Simplify complex source geometries for OGR fallback.
+        v4.7 E6-S2: Simplify complex source geometries for OGR fallback.
         
-        When Spatialite/PostgreSQL fails with complex geometries (like large
-        GeometryCollections), OGR fallback may also struggle. This method:
-        1. Converts GeometryCollections to MultiPolygon (extract polygons only)
-        2. Simplifies complex geometries to reduce vertex count
-        3. Applies makeValid() to ensure geometry validity
+        Pure delegation to adapters.backends.ogr.geometry_optimizer.simplify_source_for_ogr_fallback
         
         Args:
             source_layer: QgsVectorLayer containing source geometry
@@ -7199,119 +6179,8 @@ class FilterEngineTask(QgsTask):
         Returns:
             QgsVectorLayer: Simplified source layer (may be new memory layer)
         """
-        if not source_layer or not source_layer.isValid():
-            return source_layer
-        
-        try:
-            from qgis.core import QgsVectorLayer, QgsFeature, QgsGeometry, QgsWkbTypes
-            
-            # Check if simplification is needed
-            needs_simplification = False
-            total_vertices = 0
-            has_geometry_collection = False
-            
-            for feat in source_layer.getFeatures():
-                geom = feat.geometry()
-                if geom and not geom.isEmpty():
-                    # Count vertices
-                    for part in geom.parts():
-                        total_vertices += part.vertexCount()
-                    
-                    # Check for GeometryCollection
-                    wkt = geom.asWkt()
-                    if wkt and wkt.strip().upper().startswith('GEOMETRYCOLLECTION'):
-                        has_geometry_collection = True
-            
-            # Thresholds for simplification
-            MAX_VERTICES = 5000
-            
-            if total_vertices > MAX_VERTICES or has_geometry_collection:
-                needs_simplification = True
-                logger.info(f"  🔧 OGR fallback: simplifying source ({total_vertices:,} vertices, GeomCollection={has_geometry_collection})")
-            
-            if not needs_simplification:
-                return source_layer
-            
-            # Create new memory layer with simplified geometries
-            crs_authid = source_layer.crs().authid()
-            simplified_layer = QgsVectorLayer(
-                f"MultiPolygon?crs={crs_authid}",
-                "ogr_fallback_simplified",
-                "memory"
-            )
-            
-            if not simplified_layer.isValid():
-                logger.warning("  Failed to create simplified layer, using original")
-                return source_layer
-            
-            simplified_features = []
-            
-            for feat in source_layer.getFeatures():
-                geom = feat.geometry()
-                if not geom or geom.isEmpty():
-                    continue
-                
-                # Step 1: Extract polygons from GeometryCollection
-                wkt = geom.asWkt()
-                if wkt and wkt.strip().upper().startswith('GEOMETRYCOLLECTION'):
-                    # Extract polygon parts
-                    polygons = []
-                    for part in geom.parts():
-                        part_geom = QgsGeometry(part.clone())
-                        geom_type = QgsWkbTypes.geometryType(part_geom.wkbType())
-                        if geom_type == QgsWkbTypes.PolygonGeometry:
-                            if part_geom.isMultipart():
-                                for sub in part_geom.parts():
-                                    polygons.append(QgsGeometry(sub.clone()))
-                            else:
-                                polygons.append(part_geom)
-                    
-                    if polygons:
-                        geom = QgsGeometry.collectGeometry(polygons)
-                        logger.debug(f"    Extracted {len(polygons)} polygons from GeometryCollection")
-                    else:
-                        logger.warning(f"    No polygons found in GeometryCollection, skipping")
-                        continue
-                
-                # Step 2: Apply makeValid
-                if not geom.isGeosValid():
-                    geom = geom.makeValid()
-                    if geom.isNull() or geom.isEmpty():
-                        continue
-                
-                # Step 3: Simplify if still too complex
-                vertex_count = sum(p.vertexCount() for p in geom.parts())
-                if vertex_count > 1000:
-                    # Calculate tolerance based on extent
-                    bbox = geom.boundingBox()
-                    extent = max(bbox.width(), bbox.height())
-                    tolerance = extent / 1000  # 0.1% of extent
-                    
-                    simplified = geom.simplify(tolerance)
-                    if simplified and not simplified.isEmpty():
-                        new_vertex_count = sum(p.vertexCount() for p in simplified.parts())
-                        logger.debug(f"    Simplified: {vertex_count:,} → {new_vertex_count:,} vertices")
-                        geom = simplified
-                
-                # Create new feature
-                new_feat = QgsFeature()
-                new_feat.setGeometry(geom)
-                simplified_features.append(new_feat)
-            
-            if simplified_features:
-                simplified_layer.dataProvider().addFeatures(simplified_features)
-                simplified_layer.updateExtents()
-                logger.info(f"  ✓ Simplified source: {len(simplified_features)} features, ready for OGR")
-                return simplified_layer
-            else:
-                logger.warning("  No features after simplification, using original")
-                return source_layer
-                
-        except Exception as e:
-            logger.warning(f"  OGR simplification error: {e}, using original")
-            import traceback
-            logger.debug(f"  Traceback: {traceback.format_exc()}")
-            return source_layer
+        from adapters.backends.ogr.geometry_optimizer import simplify_source_for_ogr_fallback
+        return simplify_source_for_ogr_fallback(source_layer, logger=logger)
     
     def _prepare_source_geometry(self, layer_provider_type):
         """
@@ -7709,7 +6578,7 @@ class FilterEngineTask(QgsTask):
         """
         Validate and extract export parameters from task configuration.
         
-        v4.0 DELEGATION: Delegates to core.export.validate_export_parameters()
+        v4.7 E6-S1: Pure delegation to core.export.validate_export_parameters (legacy fallback removed).
         
         Returns:
             dict: Export configuration or None if validation fails
@@ -7722,96 +6591,23 @@ class FilterEngineTask(QgsTask):
                     'zip_path': zip file path or None
                 }
         """
-        # v4.0: Delegate to export validator
-        try:
-            from core.export import validate_export_parameters
-            result = validate_export_parameters(self.task_parameters, ENV_VARS)
-            if result.valid:
-                return {
-                    'layers': result.layers,
-                    'projection': result.projection,
-                    'styles': result.styles,
-                    'datatype': result.datatype,
-                    'output_folder': result.output_folder,
-                    'zip_path': result.zip_path,
-                    'batch_output_folder': result.batch_output_folder,
-                    'batch_zip': result.batch_zip
-                }
-            else:
-                logger.error(result.error_message)
-                return None
-        except ImportError:
-            logger.debug("Export validator not available, using legacy validation")
-        except Exception as e:
-            logger.debug(f"Export validator failed: {e}, using legacy validation")
+        from core.export import validate_export_parameters
         
-        # LEGACY FALLBACK
-        config = self.task_parameters["task"]['EXPORTING']
-        
-        # Validate layers
-        if not config.get("HAS_LAYERS_TO_EXPORT", False):
-            logger.error("No layers selected for export")
+        result = validate_export_parameters(self.task_parameters, ENV_VARS)
+        if result.valid:
+            return {
+                'layers': result.layers,
+                'projection': result.projection,
+                'styles': result.styles,
+                'datatype': result.datatype,
+                'output_folder': result.output_folder,
+                'zip_path': result.zip_path,
+                'batch_output_folder': result.batch_output_folder,
+                'batch_zip': result.batch_zip
+            }
+        else:
+            logger.error(result.error_message)
             return None
-        
-        layers = self.task_parameters["task"].get("layers")
-        if not layers or len(layers) == 0:
-            logger.error("Empty layers list for export")
-            return None
-        
-        # Validate datatype
-        if not config.get("HAS_DATATYPE_TO_EXPORT", False):
-            logger.error("No export datatype specified")
-            return None
-        
-        datatype = config.get("DATATYPE_TO_EXPORT")
-        if not datatype:
-            logger.error("Export datatype is empty")
-            return None
-        
-        # Extract optional parameters
-        projection = None
-        if config.get("HAS_PROJECTION_TO_EXPORT", False):
-            proj_wkt = config.get("PROJECTION_TO_EXPORT")
-            if proj_wkt:
-                crs = QgsCoordinateReferenceSystem()
-                crs.createFromWkt(proj_wkt)
-                projection = crs
-        
-        styles = None
-        if config.get("HAS_STYLES_TO_EXPORT", False):
-            styles_raw = config.get("STYLES_TO_EXPORT")
-            if styles_raw:
-                styles = styles_raw.lower()
-        
-        output_folder = ENV_VARS["PATH_ABSOLUTE_PROJECT"]
-        if config.get("HAS_OUTPUT_FOLDER_TO_EXPORT", False):
-            folder = config.get("OUTPUT_FOLDER_TO_EXPORT")
-            if folder:
-                output_folder = folder
-        
-        zip_path = None
-        if config.get("HAS_ZIP_TO_EXPORT", False):
-            zip_path = config.get("ZIP_TO_EXPORT")
-        
-        # Batch export flags
-        batch_output_folder = config.get("BATCH_OUTPUT_FOLDER", False)
-        batch_zip = config.get("BATCH_ZIP", False)
-        
-        # Debug logging
-        logger.debug(f"Export config keys: {list(config.keys())}")
-        logger.debug(f"BATCH_OUTPUT_FOLDER value: {batch_output_folder} (type: {type(batch_output_folder)})")
-        logger.debug(f"BATCH_ZIP value: {batch_zip} (type: {type(batch_zip)})")
-        
-        return {
-            'layers': layers,
-            'projection': projection,
-            'styles': styles,
-            'datatype': datatype,
-            'output_folder': output_folder,
-            'zip_path': zip_path,
-            'batch_output_folder': batch_output_folder,
-            'batch_zip': batch_zip
-        }
 
 
     def _get_layer_by_name(self, layer_name):

@@ -236,14 +236,31 @@ class FilterMateApp:
         Return only layers that are valid vector layers with available sources.
         
         Delegates to LayerLifecycleService.filter_usable_layers().
+        
+        v4.7 E7-S1: Functional fallback when service unavailable.
         """
         service = self._get_layer_lifecycle_service()
         if service:
             return service.filter_usable_layers(layers, POSTGRESQL_AVAILABLE)
         
-        # Service not available - return empty (should not happen in normal operation)
-        logger.error("LayerLifecycleService not available - returning empty layer list")
-        return []
+        # E7-S1 FALLBACK: Minimal working implementation
+        logger.warning("LayerLifecycleService unavailable, using minimal fallback validation")
+        self._show_degraded_mode_warning()
+        
+        usable = []
+        for layer in layers:
+            try:
+                # Validate layer is a valid QgsVectorLayer with available source
+                if (isinstance(layer, QgsVectorLayer) and 
+                    layer.isValid() and 
+                    is_layer_source_available(layer)):
+                    usable.append(layer)
+            except (RuntimeError, AttributeError) as e:
+                logger.debug(f"Skipping invalid layer in fallback: {e}")
+                continue
+        
+        logger.info(f"Fallback validation: {len(usable)}/{len(layers)} layers usable")
+        return usable
 
     def _on_layers_added(self, layers):
         """Signal handler for layersAdded: ignore broken/invalid layers.
@@ -923,6 +940,7 @@ class FilterMateApp:
         Get a Spatialite connection with proper error handling.
         
         v4.5 DELEGATION: Uses DatasourceManager.get_spatialite_connection()
+        v4.7 E7-S1: Functional fallback when manager unavailable.
         
         Returns:
             Connection object or None if connection fails
@@ -934,10 +952,25 @@ class FilterMateApp:
             try:
                 return self._datasource_manager.get_spatialite_connection()
             except Exception as e:
-                logger.error(f"DatasourceManager.get_spatialite_connection failed: {e}")
+                logger.error(f"DatasourceManager.get_spatialite_connection failed: {e}, using fallback")
+                # E7-S1 FALLBACK: Continue to legacy implementation below
         else:
-            logger.error("DatasourceManager not available")
-        return None
+            logger.warning("DatasourceManager not available, using fallback")
+            self._show_degraded_mode_warning()
+        
+        # E7-S1 FALLBACK: Direct spatialite_connect() call
+        try:
+            from .modules.tasks import spatialite_connect
+            conn = spatialite_connect(self.db_file_path)
+            if conn:
+                logger.debug("Spatialite connection created via fallback")
+                return conn
+            else:
+                logger.error("Spatialite connection fallback returned None")
+                return None
+        except Exception as e:
+            logger.error(f"Spatialite connection fallback failed: {e}")
+            return None
     
     def _handle_remove_all_layers(self):
         """Handle remove all layers task.
@@ -1138,6 +1171,67 @@ class FilterMateApp:
         # Add to task manager
         QgsApplication.taskManager().addTask(self.appTasks[task_name])
     
+    def _legacy_dispatch_task(self, task_name: str, data=None):
+        """
+        Legacy task dispatcher used as fallback when TaskOrchestrator unavailable.
+        
+        E7-S1: Minimal implementation for core operations only.
+        Does NOT implement all features - just enough to keep plugin functional.
+        
+        Args:
+            task_name: Task to execute ('filter', 'unfilter', 'reset', 'add_layers', etc.)
+            data: Task-specific data
+        """
+        logger.debug(f"_legacy_dispatch_task: {task_name}")
+        
+        # Get task parameters
+        task_parameters = self.get_task_parameters(task_name, data)
+        if task_parameters is None:
+            logger.warning(f"Cannot execute task {task_name}: parameters are None")
+            return
+        
+        # Dispatch based on task type
+        if task_name in ('filter', 'unfilter', 'reset'):
+            # Filter operations
+            self._execute_filter_task(task_name, task_parameters)
+        elif task_name in ('add_layers', 'remove_layers'):
+            # Layer management operations
+            self._execute_layer_task(task_name, task_parameters)
+        elif task_name == 'remove_all_layers':
+            self._handle_remove_all_layers()
+        elif task_name in ('new_project', 'project_read'):
+            self._handle_project_initialization(task_name)
+        elif task_name == 'undo':
+            self.handle_undo()
+        elif task_name == 'redo':
+            self.handle_redo()
+        else:
+            logger.warning(f"_legacy_dispatch_task: Unknown task {task_name}")
+    
+    def _show_degraded_mode_warning(self):
+        """
+        Show one-time warning that plugin is running in degraded mode.
+        
+        E7-S1: Uses QSettings to track if warning already shown this session.
+        """
+        # Check if we've already shown the warning this session
+        if hasattr(self, '_degraded_mode_warning_shown'):
+            return  # Already shown
+        
+        # Mark as shown
+        self._degraded_mode_warning_shown = True
+        
+        # Show non-blocking warning message
+        try:
+            iface.messageBar().pushWarning(
+                "FilterMate",
+                "Plugin fonctionne en mode dégradé (services hexagonaux indisponibles). "
+                "Performance réduite possible."
+            )
+            logger.warning("FilterMate running in DEGRADED MODE - hexagonal services unavailable")
+        except Exception as e:
+            logger.debug(f"Could not show degraded mode warning: {e}")
+    
     def _save_current_layer_before_filter(self):
         """Save current layer reference before filtering to restore after."""
         self._current_layer_before_filter = self.dockwidget.current_layer if self.dockwidget else None
@@ -1263,9 +1357,16 @@ class FilterMateApp:
                 self._task_orchestrator.dispatch_task(task_name, data)
                 return
             except Exception as e:
-                logger.error(f"TaskOrchestrator failed: {e}")
+                logger.error(f"TaskOrchestrator failed: {e}, using fallback")
+                iface.messageBar().pushWarning("FilterMate", "Opération en mode dégradé")
+                # E7-S1 FALLBACK: Continue to legacy implementation below
         else:
-            logger.error("TaskOrchestrator not available")
+            logger.warning("TaskOrchestrator not available, using fallback")
+            self._show_degraded_mode_warning()
+        
+        # E7-S1 FALLBACK: Legacy task dispatch
+        logger.info(f"Executing task fallback for: {task_name}")
+        self._legacy_dispatch_task(task_name, data)
 
 
     def _safe_cancel_all_tasks(self):
@@ -2067,6 +2168,7 @@ class FilterMateApp:
         Handle undo operation with intelligent layer selection logic.
         
         v4.0: Delegated to UndoRedoHandler for God Class reduction.
+        v4.7 E7-S1: Functional fallback when handler unavailable.
         
         Logic:
         - If pushButton_checkable_filtering_layers_to_filter is checked AND has remote layers: undo all layers globally
@@ -2102,14 +2204,38 @@ class FilterMateApp:
                 self.dockwidget._filtering_in_progress = False
                 logger.info("v4.0: 🔓 handle_undo - Filtering protection disabled")
         else:
-            # Legacy fallback - should not happen in normal operation
-            logger.warning("FilterMate: UndoRedoHandler not available, undo skipped")
+            # E7-S1 FALLBACK: Use HistoryManager directly
+            logger.warning("UndoRedoHandler not available, using fallback")
+            self._show_degraded_mode_warning()
+            
+            source_layer = self.dockwidget.current_layer
+            history = self.history_manager.get_history(source_layer.id())
+            
+            if history and history.can_undo():
+                # Set filtering protection
+                self.dockwidget._filtering_in_progress = True
+                
+                try:
+                    previous_state = history.undo()
+                    if previous_state:
+                        safe_set_subset_string(source_layer, previous_state.expression)
+                        self._refresh_layers_and_canvas(source_layer)
+                        logger.info(f"Undo fallback: restored filter '{previous_state.description}'")
+                        show_info(f"Filtre annulé: {previous_state.description}")
+                finally:
+                    self.dockwidget._filtering_in_progress = False
+                
+                # Update button states
+                self.update_undo_redo_buttons()
+            else:
+                show_warning("Aucune opération à annuler")
     
     def handle_redo(self):
         """
         Handle redo operation with intelligent layer selection logic.
         
         v4.0: Delegated to UndoRedoHandler for God Class reduction.
+        v4.7 E7-S1: Functional fallback when handler unavailable.
         
         Logic:
         - If pushButton_checkable_filtering_layers_to_filter is checked AND has remote layers: redo all layers globally
@@ -2145,8 +2271,31 @@ class FilterMateApp:
                 self.dockwidget._filtering_in_progress = False
                 logger.info("v4.0: 🔓 handle_redo - Filtering protection disabled")
         else:
-            # Legacy fallback - should not happen in normal operation
-            logger.warning("FilterMate: UndoRedoHandler not available, redo skipped")
+            # E7-S1 FALLBACK: Use HistoryManager directly
+            logger.warning("UndoRedoHandler not available, using fallback")
+            self._show_degraded_mode_warning()
+            
+            source_layer = self.dockwidget.current_layer
+            history = self.history_manager.get_history(source_layer.id())
+            
+            if history and history.can_redo():
+                # Set filtering protection
+                self.dockwidget._filtering_in_progress = True
+                
+                try:
+                    next_state = history.redo()
+                    if next_state:
+                        safe_set_subset_string(source_layer, next_state.expression)
+                        self._refresh_layers_and_canvas(source_layer)
+                        logger.info(f"Redo fallback: reapplied filter '{next_state.description}'")
+                        show_info(f"Filtre réappliqué: {next_state.description}")
+                finally:
+                    self.dockwidget._filtering_in_progress = False
+                
+                # Update button states
+                self.update_undo_redo_buttons()
+            else:
+                show_warning("Aucune opération à refaire")
     
     def _clear_filter_history(self, source_layer, task_parameters):
         """
@@ -2241,12 +2390,58 @@ class FilterMateApp:
                     task_parameters=task_parameters,
                     current_layer_id_before_filter=current_layer_id
                 )
-
                 return
             except Exception as e:
-                logger.error(f"FilterResultHandler failed: {e}")
+                logger.error(f"FilterResultHandler failed: {e}, using fallback")
+                iface.messageBar().pushWarning("FilterMate", "Opération en mode dégradé")
+                # E7-S1 FALLBACK: Continue to legacy implementation below
         else:
-            logger.error("FilterResultHandler not available")
+            logger.warning("FilterResultHandler not available, using fallback")
+            self._show_degraded_mode_warning()
+        
+        # E7-S1 FALLBACK: Legacy filter result handling
+        logger.info(f"Executing filter completion fallback for task: {task_name}")
+        
+        try:
+            # Apply subset filter to source layer
+            self.apply_subset_filter(task_name, source_layer)
+            
+            # Apply filters to remote layers
+            if "task" in task_parameters and "layers" in task_parameters["task"]:
+                for layer_info in task_parameters["task"]["layers"]:
+                    layer_id = layer_info.get("layer_id")
+                    if layer_id:
+                        remote_layers = [l for l in self.PROJECT.mapLayers().values() if l.id() == layer_id]
+                        if len(remote_layers) == 1:
+                            self.apply_subset_filter(task_name, remote_layers[0])
+            
+            # Refresh layers and canvas
+            self._refresh_layers_and_canvas(source_layer)
+            
+            # Show success message
+            feature_count = source_layer.featureCount()
+            provider_type = task_parameters.get("infos", {}).get("layer_provider_type", "unknown")
+            layer_count = len(task_parameters.get("task", {}).get("layers", [])) + 1
+            
+            show_success_with_backend(provider_type, task_name, layer_count)
+            if task_name == 'filter':
+                show_info(f"{feature_count:,} features visible in main layer")
+            
+            # Update UI if dockwidget available
+            if self.dockwidget:
+                try:
+                    self.dockwidget._filtering_in_progress = False
+                    self.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
+                    self.dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect')
+                    self.dockwidget.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect')
+                except Exception as e:
+                    logger.debug(f"Could not reconnect signals: {e}")
+            
+            logger.info("Filter completion fallback executed successfully")
+            
+        except Exception as e:
+            logger.error(f"Filter completion fallback failed: {e}")
+            iface.messageBar().pushCritical("FilterMate", f"Erreur lors du filtrage: {str(e)}")
 
 
     def apply_subset_filter(self, task_name, layer):

@@ -654,3 +654,227 @@ class ConfigurationManager(QObject):
         
         logger.info(f"✓ ConfigurationManager configured {sum(len(v) for v in widgets.values())} widgets")
         return widgets
+    
+    def configure_pushbuttons(self, pushButton_config, icons_sizes, font):
+        """v4.0 Sprint 16: Configure push buttons with icons, sizes, and cursors (migrated from dockwidget)."""
+        from qgis.PyQt.QtCore import Qt, QSize
+        from qgis.PyQt import QtGui, QtCore
+        from qgis.PyQt.QtWidgets import QSizePolicy
+        import os
+        
+        # Check if UI managers available
+        try:
+            from ui.config.ui_config import UIConfig
+            from ui.styling.icon_theme import get_themed_icon
+            UI_CONFIG_AVAILABLE = True
+            ICON_THEME_AVAILABLE = True
+        except ImportError:
+            UI_CONFIG_AVAILABLE = False
+            ICON_THEME_AVAILABLE = False
+        
+        icons_config = pushButton_config.get("ICONS", {})
+        exploring_tooltips = {
+            "IDENTIFY": self.dockwidget.tr("Identify selected feature"),
+            "ZOOM": self.dockwidget.tr("Zoom to selected feature"),
+            "IS_SELECTING": self.dockwidget.tr("Toggle feature selection on map"),
+            "IS_TRACKING": self.dockwidget.tr("Auto-zoom when feature changes"),
+            "IS_LINKING": self.dockwidget.tr("Link exploring widgets together"),
+            "RESET_ALL_LAYER_PROPERTIES": self.dockwidget.tr("Reset all layer exploring properties")
+        }
+        
+        for widget_group in self.dockwidget.widgets:
+            for widget_name, widget_data in self.dockwidget.widgets[widget_group].items():
+                if widget_data["TYPE"] != "PushButton":
+                    continue
+                widget_obj = widget_data["WIDGET"]
+                
+                # Load icon
+                icon_file = icons_config.get(widget_group, {}).get(widget_name)
+                if icon_file:
+                    icon_path = os.path.join(self.dockwidget.plugin_dir, "icons", icon_file)
+                    if os.path.exists(icon_path):
+                        widget_obj.setIcon(get_themed_icon(icon_path) if ICON_THEME_AVAILABLE else QtGui.QIcon(icon_path))
+                        widget_data["ICON"] = icon_path
+                
+                widget_obj.setCursor(Qt.PointingHandCursor)
+                if widget_group == "EXPLORING" and widget_name in exploring_tooltips:
+                    widget_obj.setToolTip(exploring_tooltips[widget_name])
+                
+                # Apply dimensions
+                icon_size = icons_sizes.get(widget_group, icons_sizes["OTHERS"])
+                if UI_CONFIG_AVAILABLE:
+                    btn_type = "action_button" if widget_group == "ACTION" else ("tool_button" if widget_group in ["EXPLORING", "FILTERING", "EXPORTING"] else "button")
+                    h = UIConfig.get_button_height(btn_type)
+                    s = UIConfig.get_icon_size(btn_type)
+                else:
+                    h = 36 if widget_group in ["EXPLORING", "FILTERING", "EXPORTING"] else icon_size * 2
+                    s = icon_size
+                
+                widget_obj.setMinimumSize(h, h)
+                widget_obj.setMaximumSize(h, h)
+                widget_obj.setIconSize(QSize(s, s))
+                widget_obj.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+                widget_obj.setFont(font)
+    
+    def configure_other_widgets(self, font):
+        """v4.0 Sprint 16: Configure non-button widgets (migrated from dockwidget)."""
+        from qgis.PyQt.QtCore import Qt
+        
+        for widget_group in self.dockwidget.widgets:
+            for widget_name in self.dockwidget.widgets[widget_group]:
+                widget_type = self.dockwidget.widgets[widget_group][widget_name]["TYPE"]
+                widget_obj = self.dockwidget.widgets[widget_group][widget_name]["WIDGET"]
+                
+                # Skip certain widget types
+                if widget_type in ("JsonTreeView", "LayerTreeView", "JsonModel", "ToolBox", "PushButton"):
+                    continue
+                
+                # Configure comboboxes and field widgets
+                if any(keyword in widget_type for keyword in ["ComboBox", "QgsFieldExpressionWidget", "QgsProjectionSelectionWidget"]):
+                    widget_obj.setCursor(Qt.PointingHandCursor)
+                    widget_obj.setFont(font)
+                
+                # Configure text inputs
+                elif "LineEdit" in widget_type or "QgsDoubleSpinBox" in widget_type:
+                    widget_obj.setCursor(Qt.IBeamCursor)
+                    widget_obj.setFont(font)
+                
+                # Configure property override buttons
+                elif "PropertyOverrideButton" in widget_type:
+                    widget_obj.setCursor(Qt.PointingHandCursor)
+                    widget_obj.setFont(font)
+    
+    def configure_key_widgets_sizes(self, icons_sizes):
+        """v4.0 Sprint 16: Configure sizes for widget_keys and frame_actions (migrated from dockwidget)."""
+        from qgis.PyQt.QtWidgets import QSizePolicy
+        
+        # Check if UI config available
+        try:
+            from ui.config.ui_config import UIConfig
+            UI_CONFIG_AVAILABLE = True
+        except ImportError:
+            UI_CONFIG_AVAILABLE = False
+        
+        d = self.dockwidget
+        
+        if UI_CONFIG_AVAILABLE:
+            # Get widget_keys width directly from config
+            widget_keys_width = UIConfig.get_config('widget_keys', 'max_width') or 56
+            
+            for widget in [d.widget_exploring_keys, d.widget_filtering_keys, d.widget_exporting_keys]:
+                widget.setMinimumWidth(widget_keys_width)
+                widget.setMaximumWidth(widget_keys_width)
+                widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+            
+            # Set frame actions size (convert to int to avoid float)
+            action_button_height = UIConfig.get_button_height("action_button")
+            frame_height = max(int(action_button_height * 1.8), 56)  # Minimum 56px to prevent clipping
+            d.frame_actions.setMinimumHeight(frame_height)
+            d.frame_actions.setMaximumHeight(frame_height + 15)  # Allow flexibility
+        else:
+            # Fallback to hardcoded values
+            icon_size = icons_sizes["OTHERS"]
+            for widget in [d.widget_exploring_keys, d.widget_filtering_keys, d.widget_exporting_keys]:
+                widget.setMinimumWidth(80)
+                widget.setMaximumWidth(80)
+                widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+            
+            # Set frame actions size
+            icon_size = icons_sizes["ACTION"]
+            d.frame_actions.setMinimumHeight(max(icon_size * 2, 56))
+            d.frame_actions.setMaximumHeight(max(icon_size * 2, 56) + 15)
+    
+    def setup_exploring_tab_widgets(self):
+        """v4.0 Sprint 16: Configure Exploring tab widgets (migrated from dockwidget)."""
+        from qgis.gui import QgsFieldProxyModel
+        
+        d = self.dockwidget
+        d.horizontalLayout_exploring_multiple_feature_picker.insertWidget(
+            0, d.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, 1)
+        field_filters = QgsFieldProxyModel.AllTypes
+        for widget in [d.mFieldExpressionWidget_exploring_single_selection,
+                       d.mFieldExpressionWidget_exploring_multiple_selection,
+                       d.mFieldExpressionWidget_exploring_custom_selection]:
+            widget.setFilters(field_filters)
+        self.setup_expression_widget_direct_connections()
+    
+    def setup_expression_widget_direct_connections(self):
+        """v4.0 Sprint 16: Connect fieldChanged signals for expression widgets (migrated from dockwidget)."""
+        d = self.dockwidget
+        connections = [
+            (d.mFieldExpressionWidget_exploring_single_selection, "single_selection"),
+            (d.mFieldExpressionWidget_exploring_multiple_selection, "multiple_selection"),
+            (d.mFieldExpressionWidget_exploring_custom_selection, "custom_selection")
+        ]
+        for widget, groupbox in connections:
+            widget.fieldChanged.connect(lambda f, g=groupbox: d._schedule_expression_change(g, f))
+    
+    def setup_filtering_tab_widgets(self):
+        """v4.0 Sprint 16: Configure widgets for Filtering tab (migrated from dockwidget)."""
+        import os
+        from qgis.PyQt import QtGui, QtCore, QtWidgets
+        from qgis.gui import QgsMapLayerProxyModel
+        from modules.custom_widgets import QgsCheckableComboBoxLayer
+        
+        d = self.dockwidget
+        d.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
+        
+        icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "icons", "centroid.png")
+        if os.path.exists(icon_path) and hasattr(d, 'checkBox_filtering_use_centroids_source_layer'):
+            d.checkBox_filtering_use_centroids_source_layer.setIcon(QtGui.QIcon(icon_path))
+            d.checkBox_filtering_use_centroids_source_layer.setText("")
+            d.checkBox_filtering_use_centroids_source_layer.setLayoutDirection(QtCore.Qt.RightToLeft)
+
+        d.checkableComboBoxLayer_filtering_layers_to_filter = QgsCheckableComboBoxLayer(d.dockWidgetContents)
+        
+        d.checkBox_filtering_use_centroids_distant_layers = QtWidgets.QCheckBox(d.dockWidgetContents)
+        d.checkBox_filtering_use_centroids_distant_layers.setText("")
+        d.checkBox_filtering_use_centroids_distant_layers.setToolTip(d.tr("Use centroids instead of full geometries for distant layers"))
+        d.checkBox_filtering_use_centroids_distant_layers.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        if os.path.exists(icon_path):
+            d.checkBox_filtering_use_centroids_distant_layers.setIcon(QtGui.QIcon(icon_path))
+        d.checkBox_filtering_use_centroids_distant_layers.setLayoutDirection(QtCore.Qt.RightToLeft)
+        d.checkBox_filtering_use_centroids_distant_layers.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        
+        d.horizontalLayout_filtering_distant_layers = QtWidgets.QHBoxLayout()
+        d.horizontalLayout_filtering_distant_layers.setSpacing(4)
+        d.horizontalLayout_filtering_distant_layers.addWidget(d.checkableComboBoxLayer_filtering_layers_to_filter)
+        d.horizontalLayout_filtering_distant_layers.addWidget(d.checkBox_filtering_use_centroids_distant_layers)
+        d.verticalLayout_filtering_values.insertLayout(2, d.horizontalLayout_filtering_distant_layers)
+        
+        try:
+            from ui.config import UIConfig
+            h = UIConfig.get_config('combobox', 'height')
+            d.checkableComboBoxLayer_filtering_layers_to_filter.setMinimumHeight(h)
+            d.checkableComboBoxLayer_filtering_layers_to_filter.setMaximumHeight(h)
+        except Exception:
+            pass
+    
+    def setup_exporting_tab_widgets(self):
+        """v4.0 Sprint 16: Configure widgets for Exporting tab (migrated from dockwidget)."""
+        from qgis.PyQt import QtWidgets
+        from qgis.PyQt.QtGui import QColor
+        from modules.custom_widgets import QgsCheckableComboBoxLayer
+        
+        d = self.dockwidget
+        d.checkableComboBoxLayer_exporting_layers = QgsCheckableComboBoxLayer(d.EXPORTING)
+        
+        if hasattr(d, 'verticalLayout_exporting_values'):
+            d.verticalLayout_exporting_values.insertWidget(0, d.checkableComboBoxLayer_exporting_layers)
+            d.verticalLayout_exporting_values.insertItem(1, QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
+        
+        try:
+            from ui.config import UIConfig
+            h = UIConfig.get_config('combobox', 'height')
+            d.checkableComboBoxLayer_exporting_layers.setMinimumHeight(h)
+            d.checkableComboBoxLayer_exporting_layers.setMaximumHeight(h)
+        except Exception:
+            pass
+        
+        for btn in ['pushButton_checkable_exporting_layers', 'pushButton_checkable_exporting_projection',
+                    'pushButton_checkable_exporting_styles', 'pushButton_checkable_exporting_datatype',
+                    'pushButton_checkable_exporting_output_folder', 'pushButton_checkable_exporting_zip']:
+            if hasattr(d, btn):
+                getattr(d, btn).setEnabled(False)
+        
+        d.iface.mapCanvas().setSelectionColor(QColor(237, 97, 62, 75))

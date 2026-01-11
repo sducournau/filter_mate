@@ -218,60 +218,32 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     _signal_cache = {}
 
     def __init__(self, project_layers, plugin_dir, config_data, project, parent=None):
-        """v4.0 Sprint 15: Initialize dockwidget with state, managers, and performance optimizations."""
+        """v4.0 Sprint 16: Initialize dockwidget with state, managers, controllers, optimizations."""
         super(FilterMateDockWidget, self).__init__(parent)
         self.exception, self.iface = None, iface
         self.plugin_dir, self.CONFIG_DATA, self.PROJECT_LAYERS, self.PROJECT = plugin_dir, config_data, project_layers, project
         self.current_layer, self.current_layer_selection_connection = None, None
-        
-        # Protection flags
         self._updating_layers = self._updating_current_layer = self._updating_groupbox = self._signals_connected = False
         self._pending_layers_update = self._plugin_busy = self._syncing_from_qgis = False
         self._filtering_in_progress, self._filter_completed_time, self._saved_layer_id_before_filter = False, 0, None
-        self._layer_tree_view_signal_connected = False
-        self._signal_connection_states = {}
-        self._theme_watcher = None
-        
-        # Expression debounce (450ms)
+        self._layer_tree_view_signal_connected, self._signal_connection_states, self._theme_watcher = False, {}, None
         self._expression_debounce_timer = QTimer()
-        self._expression_debounce_timer.setSingleShot(True)
-        self._expression_debounce_timer.setInterval(450)
+        self._expression_debounce_timer.setSingleShot(True); self._expression_debounce_timer.setInterval(450)
         self._expression_debounce_timer.timeout.connect(self._execute_debounced_expression_change)
         self._pending_expression_change = self._last_expression_change_source = None
-        
-        # Expression cache (60s TTL, 100 max entries)
-        self._expression_cache = {}
-        self._expression_cache_max_age, self._expression_cache_max_size = 60.0, 100
-        
-        # Async expression eval
+        self._expression_cache, self._expression_cache_max_age, self._expression_cache_max_size = {}, 60.0, 100
         thresholds = get_optimization_thresholds(ENV_VARS)
         self._async_expression_threshold = thresholds['async_expression_threshold']
         self._expression_manager = get_expression_manager() if ASYNC_EXPRESSION_AVAILABLE else None
-        self._pending_async_evaluation, self._expression_loading = None, False
-        self._configuration_manager = None
+        self._pending_async_evaluation, self._expression_loading, self._configuration_manager = None, False, None
         self._initialize_layer_state()
     
     def _safe_get_layer_props(self, layer):
-        """
-        Safely get layer properties from PROJECT_LAYERS with validation.
-        
-        Args:
-            layer (QgsVectorLayer): The layer to get properties for
-            
-        Returns:
-            dict or None: Layer properties if found, None otherwise
-        """
-        if layer is None:
-            return None
-        
-        if not isinstance(layer, QgsVectorLayer):
-            return None
-            
+        """v4.0 Sprint 16: Get layer properties from PROJECT_LAYERS with validation."""
+        if layer is None or not isinstance(layer, QgsVectorLayer): return None
         layer_id = layer.id()
         if layer_id not in self.PROJECT_LAYERS:
-            logger.warning(f"Layer {layer.name()} (ID: {layer_id}) not found in PROJECT_LAYERS")
-            return None
-            
+            logger.warning(f"Layer {layer.name()} (ID: {layer_id}) not found in PROJECT_LAYERS"); return None
         return self.PROJECT_LAYERS[layer_id]
     
     def _initialize_layer_state(self):
@@ -321,66 +293,45 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except Exception as e: logger.error(f"Error in manage_interactions: {e}")
 
     def getSignal(self, oObject: QObject, strSignalName: str):
-        """v3.1 Sprint 14: Get signal from QObject by name with caching."""
-        class_name = oObject.metaObject().className()
-        cache_key = f"{class_name}.{strSignalName}"
-        if cache_key in FilterMateDockWidget._signal_cache:
-            return FilterMateDockWidget._signal_cache[cache_key]
+        """v4.0 S16: Get signal from QObject by name with caching."""
+        class_name, cache_key = oObject.metaObject().className(), f"{oObject.metaObject().className()}.{strSignalName}"
+        if cache_key in FilterMateDockWidget._signal_cache: return FilterMateDockWidget._signal_cache[cache_key]
         oMetaObj = oObject.metaObject()
         for i in range(oMetaObj.methodCount()):
             oMetaMethod = oMetaObj.method(i)
-            if oMetaMethod.isValid() and oMetaMethod.methodType() == QMetaMethod.Signal and \
-               oMetaMethod.name() == strSignalName:
-                FilterMateDockWidget._signal_cache[cache_key] = oMetaMethod
-                return oMetaMethod
-        FilterMateDockWidget._signal_cache[cache_key] = None
-        return None
+            if oMetaMethod.isValid() and oMetaMethod.methodType() == QMetaMethod.Signal and oMetaMethod.name() == strSignalName:
+                FilterMateDockWidget._signal_cache[cache_key] = oMetaMethod; return oMetaMethod
+        FilterMateDockWidget._signal_cache[cache_key] = None; return None
 
     def manageSignal(self, widget_path, custom_action=None, custom_signal_name=None):
-        """v3.1 Sprint 15: Manage signal connection/disconnection."""
+        """v4.0 S16: Manage signal connection/disconnection."""
         if not isinstance(widget_path, list) or len(widget_path) != 2:
             raise SignalStateChangeError(None, widget_path, 'Incorrect input parameters')
-        
-        widget_object = self.widgets[widget_path[0]][widget_path[1]]
-        state = None
-        
+        widget_object, state = self.widgets[widget_path[0]][widget_path[1]], None
         signals_to_process = [(s[0], s[-1]) for s in widget_object["SIGNALS"] 
                               if s[-1] is not None and (custom_signal_name is None or s[0] == custom_signal_name)]
-        
         for signal_name, func in signals_to_process:
-            state_key = f"{widget_path[0]}.{widget_path[1]}.{signal_name}"
-            cached = self._signal_connection_states.get(state_key)
+            state_key, cached = f"{widget_path[0]}.{widget_path[1]}.{signal_name}", self._signal_connection_states.get(f"{widget_path[0]}.{widget_path[1]}.{signal_name}")
             if (custom_action == 'connect' and cached is True) or (custom_action == 'disconnect' and cached is False):
-                state = cached
-                continue
+                state = cached; continue
             state = self.changeSignalState(widget_path, signal_name, func, custom_action)
             self._signal_connection_states[state_key] = state
-        
         return True if state is None and widget_object["SIGNALS"] else state
-        if state is None:
-            raise SignalStateChangeError(state, widget_path)
+        if state is None: raise SignalStateChangeError(state, widget_path)
 
     def changeSignalState(self, widget_path, signal_name, func, custom_action=None):
-        """v3.1 Sprint 15: Change signal connection state."""
-        if not isinstance(widget_path, list) or len(widget_path) != 2:
-            raise SignalStateChangeError(None, widget_path)
-        
+        """v4.0 S16: Change signal connection state."""
+        if not isinstance(widget_path, list) or len(widget_path) != 2: raise SignalStateChangeError(None, widget_path)
         widget = self.widgets[widget_path[0]][widget_path[1]]["WIDGET"]
-        if not hasattr(widget, signal_name):
-            raise SignalStateChangeError(None, widget_path)
-        
+        if not hasattr(widget, signal_name): raise SignalStateChangeError(None, widget_path)
         is_ltv = widget_path == ["QGIS", "LAYER_TREE_VIEW"]
-        state = self._layer_tree_view_signal_connected if is_ltv else widget.isSignalConnected(self.getSignal(widget, signal_name))
-        signal = getattr(widget, signal_name)
-        
+        state, signal = (self._layer_tree_view_signal_connected if is_ltv else widget.isSignalConnected(self.getSignal(widget, signal_name))), getattr(widget, signal_name)
         should_connect = (custom_action == 'connect' and not state) or (custom_action is None and not state)
         should_disconnect = (custom_action == 'disconnect' and state) or (custom_action is None and state)
-        
         try:
             if should_disconnect: signal.disconnect(func)
             elif should_connect: signal.connect(func)
         except TypeError: pass
-        
         if is_ltv: self._layer_tree_view_signal_connected = should_connect
         return self._layer_tree_view_signal_connected if is_ltv else widget.isSignalConnected(self.getSignal(widget, signal_name))
 
@@ -790,48 +741,45 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return label
     
     def _on_backend_indicator_clicked(self, event):
-        """v4.0 Sprint 13: Simplified - delegates to BackendController."""
-        if self._controller_integration and self._controller_integration.backend_controller:
-            if self._controller_integration.delegate_handle_backend_click():
-                return
+        """v4.0 S16: → BackendController."""
+        if self._controller_integration and self._controller_integration.backend_controller and self._controller_integration.delegate_handle_backend_click(): return
         self._on_backend_indicator_clicked_legacy(event)
     
     def _on_backend_indicator_clicked_legacy(self, event):
-        """v4.0 Sprint 13: Simplified legacy fallback - just logs warning."""
+        """v4.0 S16: Legacy fallback."""
         logger.warning("_on_backend_indicator_clicked_legacy called - controller may not be working")
         show_warning("FilterMate", "Backend controller not available - please report this issue")
 
     def _on_favorite_indicator_clicked(self, event):
-        """v4.0 Sprint 7: One-liner wrapper."""
+        """v4.0 S16: → FavoritesController."""
         if self._controller_integration and self._controller_integration._favorites_controller:
             self._controller_integration._favorites_controller.handle_indicator_clicked()
     
     def _add_current_to_favorites(self):
-        """v4.0 Sprint 7: One-liner wrapper."""
+        """v4.0 S16: → FavoritesController."""
         if self._controller_integration and self._controller_integration._favorites_controller:
             self._controller_integration._favorites_controller.add_current_to_favorites()
     
     def _apply_favorite(self, favorite_id: str):
-        """v4.0 Sprint 7: One-liner wrapper."""
+        """v4.0 S16: → FavoritesController."""
         if self._controller_integration and self._controller_integration._favorites_controller:
             self._controller_integration._favorites_controller.apply_favorite(favorite_id)
 
     def _show_favorites_manager_dialog(self):
-        """v4.0 Sprint 13: Delegate to FavoritesController."""
+        """v4.0 S16: → FavoritesController."""
         if not (self._controller_integration and self._controller_integration.delegate_favorites_show_manager_dialog()):
             show_warning("FilterMate", "Favorites manager not available")
     
     def _export_favorites(self):
-        """v4.0 Sprint 12: Delegate to FavoritesController."""
+        """v4.0 S16: → FavoritesController."""
         if self._controller_integration and self._controller_integration._favorites_controller:
             self._controller_integration._favorites_controller.export_favorites()
     
     def _import_favorites(self):
-        """v4.0 Sprint 12: Delegate to FavoritesController."""
+        """v4.0 S16: → FavoritesController."""
         if self._controller_integration and self._controller_integration._favorites_controller:
             result = self._controller_integration._favorites_controller.import_favorites()
-            if result:
-                self._update_favorite_indicator()
+            if result: self._update_favorite_indicator()
     
     def _update_favorite_indicator(self):
         """v3.1 Sprint 17: Update the favorites indicator badge with current count."""
@@ -850,24 +798,24 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.favorites_indicator_label.adjustSize()
 
     def _get_available_backends_for_layer(self, layer):
-        """v4.0 Sprint 12: Delegate to BackendController."""
+        """v4.0 S16: → BackendController."""
         if self._controller_integration and self._controller_integration._backend_controller:
             return self._controller_integration._backend_controller.get_available_backends_for_layer(layer)
-        return [('ogr', 'OGR', '📁')]  # Fallback
+        return [('ogr', 'OGR', '📁')]
     
     def _detect_current_backend(self, layer):
-        """v4.0 Sprint 12: Delegate to BackendController."""
+        """v4.0 S16: → BackendController."""
         if self._controller_integration and self._controller_integration._backend_controller:
             return self._controller_integration._backend_controller.get_current_backend(layer)
-        return 'ogr'  # Fallback
+        return 'ogr'
 
     def _set_forced_backend(self, layer_id, backend_type):
-        """v4.0 Sprint 12: Delegate to BackendController."""
+        """v4.0 S16: → BackendController."""
         if self._controller_integration and self._controller_integration._backend_controller:
             self._controller_integration._backend_controller.set_forced_backend(layer_id, backend_type)
 
     def _force_backend_for_all_layers(self, backend_type):
-        """v4.0 Sprint 12: Delegate to BackendController."""
+        """v4.0 S16: → BackendController."""
         if self._controller_integration and self._controller_integration._backend_controller:
             count = self._controller_integration._backend_controller.force_backend_for_all_layers(backend_type)
             show_success("FilterMate", f"Forced {backend_type.upper()} for {count} layers")
@@ -875,42 +823,39 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             show_warning("FilterMate", "Backend controller not available")
 
     def get_forced_backend_for_layer(self, layer_id):
-        """v4.0 Sprint 12: Delegate to BackendController."""
+        """v4.0 S16: → BackendController."""
         if self._controller_integration and self._controller_integration._backend_controller:
             return self._controller_integration._backend_controller.forced_backends.get(layer_id)
         return None
     
     def _get_optimal_backend_for_layer(self, layer):
-        """v4.0 Sprint 12: Delegate to BackendController."""
+        """v4.0 S16: → BackendController."""
         if self._controller_integration and self._controller_integration._backend_controller:
             return self._controller_integration._backend_controller._get_optimal_backend_for_layer(layer)
-        return 'ogr'  # Fallback
+        return 'ogr'
 
     # ========================================
     # POSTGRESQL MAINTENANCE METHODS
     # ========================================
     
     def _get_pg_session_context(self):
-        """v4.0 Sprint 13: WRAPPER - delegate to BackendController."""
+        """v4.0 S16: → BackendController."""
         if self._controller_integration and self._controller_integration._backend_controller:
             return self._controller_integration._backend_controller.get_pg_session_context()
         return None, None, None, None
     
     def _toggle_pg_auto_cleanup(self):
-        """v4.0 Sprint 13: WRAPPER - delegate to BackendController."""
+        """v4.0 S16: → BackendController."""
         if self._controller_integration and self._controller_integration._backend_controller:
             enabled = self._controller_integration._backend_controller.toggle_pg_auto_cleanup()
             msg = "PostgreSQL auto-cleanup enabled" if enabled else "PostgreSQL auto-cleanup disabled"
             (show_success if enabled else show_info)("FilterMate", msg)
     
     def _cleanup_postgresql_session_views(self):
-        """v4.0 Sprint 13: WRAPPER - delegate to BackendController."""
+        """v4.0 S16: → BackendController."""
         if self._controller_integration and self._controller_integration._backend_controller:
             success = self._controller_integration._backend_controller.cleanup_postgresql_session_views()
-            if success:
-                show_success("FilterMate", "PostgreSQL session views cleaned up")
-            else:
-                show_warning("FilterMate", "No views to clean or cleanup failed")
+            (show_success if success else show_warning)("FilterMate", "PostgreSQL session views cleaned up" if success else "No views to clean or cleanup failed")
         else:
             show_warning("FilterMate", "Backend controller not available")
     
@@ -990,38 +935,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         (show_success if self._optimization_ask_before else show_info)("FilterMate", "Confirmation " + ("enabled" if self._optimization_ask_before else "disabled"))
     
     def _analyze_layer_optimizations(self):
-        """v3.1 Sprint 15: Analyze layer and show optimization recommendations."""
+        """v4.0 Sprint 16: Analyze layer and show optimization recommendations."""
         if not self.current_layer:
-            show_warning("FilterMate", "No layer selected. Please select a layer first.")
-            return
-        
+            show_warning("FilterMate", "No layer selected. Please select a layer first."); return
         try:
             from .core.services.auto_optimizer import LayerAnalyzer, AutoOptimizer, AUTO_OPTIMIZER_AVAILABLE
             if not AUTO_OPTIMIZER_AVAILABLE:
-                show_warning("FilterMate", "Auto-optimizer module not available")
-                return
-            
+                show_warning("FilterMate", "Auto-optimizer module not available"); return
             layer_analysis = LayerAnalyzer().analyze_layer(self.current_layer)
             if not layer_analysis:
-                show_info("FilterMate", f"Could not analyze layer '{self.current_layer.name()}'")
-                return
-            
-            # Get buffer and centroid status
+                show_info("FilterMate", f"Could not analyze layer '{self.current_layer.name()}'"); return
             has_buffer = getattr(self, 'mQgsDoubleSpinBox_filtering_buffer_value', None) and self.mQgsDoubleSpinBox_filtering_buffer_value.value() != 0.0
             has_buffer_type = getattr(self, 'checkBox_filtering_buffer_type', None) and self.checkBox_filtering_buffer_type.isChecked()
-            
             recommendations = AutoOptimizer().get_recommendations(
                 layer_analysis, user_centroid_enabled=self._is_centroid_already_enabled(self.current_layer),
                 has_buffer=has_buffer, has_buffer_type=has_buffer_type, is_source_layer=True)
-            
             if not recommendations:
-                show_success("FilterMate", f"Layer '{self.current_layer.name()}' is already optimally configured.\nType: {layer_analysis.location_type.value}\nFeatures: {layer_analysis.feature_count:,}")
-                return
-            
+                show_success("FilterMate", f"Layer '{self.current_layer.name()}' is already optimally configured.\nType: {layer_analysis.location_type.value}\nFeatures: {layer_analysis.feature_count:,}"); return
             from .modules.optimization_dialogs import OptimizationRecommendationDialog
             dialog = OptimizationRecommendationDialog(layer_name=self.current_layer.name(), recommendations=[r.to_dict() for r in recommendations],
                 feature_count=layer_analysis.feature_count, location_type=layer_analysis.location_type.value, parent=self)
-            
             if dialog.exec_():
                 self._apply_optimization_selections(dialog.get_selected_optimizations(), self.current_layer)
         except ImportError as e:
@@ -1179,273 +1112,154 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 show_warning("FilterMate", "Backend optimization unavailable")
 
     def _setup_action_bar_layout(self):
-        """v4.0 Sprint 14: Delegate to ActionBarManager."""
-        if not hasattr(self, 'frame_actions'):
-            return
-        if self._action_bar_manager:
-            self._action_bar_manager.setup()
-        else:
-            self.frame_actions.show()
+        """v4.0 S16: → ActionBarManager."""
+        if not hasattr(self, 'frame_actions'): return
+        (self._action_bar_manager.setup() if self._action_bar_manager else self.frame_actions.show())
 
     def _get_action_bar_position(self):
-        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
-        if self._action_bar_manager:
-            return self._action_bar_manager.get_position()
-        return 'top'
+        """v4.0 S16: → ActionBarManager."""
+        return self._action_bar_manager.get_position() if self._action_bar_manager else 'top'
 
     def _get_action_bar_vertical_alignment(self):
-        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
-        if self._action_bar_manager:
-            return self._action_bar_manager._read_alignment_from_config()
-        return 'top'
+        """v4.0 S16: → ActionBarManager."""
+        return self._action_bar_manager._read_alignment_from_config() if self._action_bar_manager else 'top'
 
     def _apply_action_bar_position(self, position):
-        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
-        if self._action_bar_manager:
-            self._action_bar_manager.set_position(position)
-            self._action_bar_manager.apply_position()
+        """v4.0 S16: → ActionBarManager."""
+        if self._action_bar_manager: self._action_bar_manager.set_position(position); self._action_bar_manager.apply_position()
 
     def _adjust_header_for_side_position(self, position):
-        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
-        if self._action_bar_manager:
-            self._action_bar_manager.adjust_header_for_side_position()
+        """v4.0 S16: → ActionBarManager."""
+        if self._action_bar_manager: self._action_bar_manager.adjust_header_for_side_position()
 
     def _restore_header_from_wrapper(self):
-        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
-        if self._action_bar_manager:
-            self._action_bar_manager.restore_header_from_wrapper()
-
+        """v4.0 S16: → ActionBarManager."""
+        if self._action_bar_manager: self._action_bar_manager.restore_header_from_wrapper()
 
     def _clear_action_bar_layout(self):
-        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
-        if self._action_bar_manager:
-            self._action_bar_manager.clear_layout()
+        """v4.0 S16: → ActionBarManager."""
+        if self._action_bar_manager: self._action_bar_manager.clear_layout()
 
     def _create_horizontal_action_layout(self, action_buttons):
-        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
-        if self._action_bar_manager:
-            self._action_bar_manager.create_horizontal_layout(action_buttons)
+        """v4.0 S16: → ActionBarManager."""
+        if self._action_bar_manager: self._action_bar_manager.create_horizontal_layout(action_buttons)
 
     def _create_vertical_action_layout(self, action_buttons):
-        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
-        if self._action_bar_manager:
-            self._action_bar_manager.create_vertical_layout(action_buttons)
+        """v4.0 S16: → ActionBarManager."""
+        if self._action_bar_manager: self._action_bar_manager.create_vertical_layout(action_buttons)
 
     def _apply_action_bar_size_constraints(self, position):
-        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
-        if self._action_bar_manager:
-            self._action_bar_manager.apply_size_constraints()
+        """v4.0 S16: → ActionBarManager."""
+        if self._action_bar_manager: self._action_bar_manager.apply_size_constraints()
 
     def _reposition_action_bar_in_main_layout(self, position):
-        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
-        if self._action_bar_manager:
-            self._action_bar_manager.reposition_in_main_layout()
+        """v4.0 S16: → ActionBarManager."""
+        if self._action_bar_manager: self._action_bar_manager.reposition_in_main_layout()
 
     def _create_horizontal_wrapper_for_side_action_bar(self, position):
-        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
-        if self._action_bar_manager:
-            self._action_bar_manager._create_side_wrapper()
+        """v4.0 S16: → ActionBarManager."""
+        if self._action_bar_manager: self._action_bar_manager._create_side_wrapper()
 
     def _restore_side_action_bar_layout(self):
-        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
-        if self._action_bar_manager:
-            self._action_bar_manager.restore_side_action_bar_layout()
+        """v4.0 S16: → ActionBarManager."""
+        if self._action_bar_manager: self._action_bar_manager.restore_side_action_bar_layout()
 
     def _restore_original_layout(self):
-        """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
-        if self._action_bar_manager:
-            self._action_bar_manager.restore_original_layout()
+        """v4.0 S16: → ActionBarManager."""
+        if self._action_bar_manager: self._action_bar_manager.restore_original_layout()
 
     def _setup_exploring_tab_widgets(self):
-        """v3.1 Sprint 13: Configure Exploring tab widgets."""
-        self.horizontalLayout_exploring_multiple_feature_picker.insertWidget(
-            0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, 1)
-        field_filters = QgsFieldProxyModel.AllTypes
-        for widget in [self.mFieldExpressionWidget_exploring_single_selection,
-                       self.mFieldExpressionWidget_exploring_multiple_selection,
-                       self.mFieldExpressionWidget_exploring_custom_selection]:
-            widget.setFilters(field_filters)
-        self._setup_expression_widget_direct_connections()
+        """v4.0 Sprint 16: Delegate to ConfigurationManager."""
+        if self._configuration_manager:
+            self._configuration_manager.setup_exploring_tab_widgets()
 
     def _setup_expression_widget_direct_connections(self):
-        """v3.1 Sprint 13: Connect fieldChanged signals for expression widgets."""
-        connections = [
-            (self.mFieldExpressionWidget_exploring_single_selection, "single_selection"),
-            (self.mFieldExpressionWidget_exploring_multiple_selection, "multiple_selection"),
-            (self.mFieldExpressionWidget_exploring_custom_selection, "custom_selection")
-        ]
-        for widget, groupbox in connections:
-            widget.fieldChanged.connect(lambda f, g=groupbox: self._schedule_expression_change(g, f))
+        """v4.0 Sprint 16: Delegate to ConfigurationManager."""
+        if self._configuration_manager:
+            self._configuration_manager.setup_expression_widget_direct_connections()
     
     def _schedule_expression_change(self, groupbox: str, expression: str):
-        """v3.1 Sprint 14: Schedule debounced expression change."""
-        self._pending_expression_change = (groupbox, expression)
-        self._set_expression_loading_state(True, groupbox)
-        self._expression_debounce_timer.start()
+        """v4.0 Sprint 16: Schedule debounced expression change."""
+        self._pending_expression_change = (groupbox, expression); self._set_expression_loading_state(True, groupbox); self._expression_debounce_timer.start()
     
     def _execute_debounced_expression_change(self):
-        """v3.1 Sprint 14: Execute pending expression change after debounce."""
+        """v4.0 Sprint 16: Execute pending expression change after debounce."""
         if self._pending_expression_change is None:
-            self._set_expression_loading_state(False)
-            return
-        groupbox, expression = self._pending_expression_change
-        self._pending_expression_change = None
+            self._set_expression_loading_state(False); return
+        groupbox, expression = self._pending_expression_change; self._pending_expression_change = None
         try:
-            property_key = f"{groupbox}_expression"
-            custom_functions = {"ON_CHANGE": lambda x: self._execute_expression_params_change(groupbox)}
-            self.layer_property_changed(property_key, expression, custom_functions)
+            self.layer_property_changed(f"{groupbox}_expression", expression, {"ON_CHANGE": lambda x: self._execute_expression_params_change(groupbox)})
         except Exception:
             self._set_expression_loading_state(False)
     
     def _execute_expression_params_change(self, groupbox: str):
-        """v3.1 Sprint 14: Execute expression params change with caching."""
+        """v4.0 Sprint 16: Execute expression params change with caching."""
         try:
-            if groupbox in ("single_selection", "multiple_selection"):
-                self._last_expression_change_source = groupbox
+            if groupbox in ("single_selection", "multiple_selection"): self._last_expression_change_source = groupbox
             if groupbox == "single_selection":
-                try:
-                    self.mFeaturePickerWidget_exploring_single_selection.update()
-                except Exception:
-                    pass
+                try: self.mFeaturePickerWidget_exploring_single_selection.update()
+                except Exception: pass
             elif groupbox == "multiple_selection":
                 try:
-                    widget = self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection
-                    if widget and hasattr(widget, 'list_widgets') and self.current_layer:
-                        layer_id = self.current_layer.id()
-                        if layer_id in widget.list_widgets:
-                            widget.list_widgets[layer_id].viewport().update()
-                except Exception:
-                    pass
+                    w = self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection
+                    if w and hasattr(w, 'list_widgets') and self.current_layer and self.current_layer.id() in w.list_widgets:
+                        w.list_widgets[self.current_layer.id()].viewport().update()
+                except Exception: pass
             self.exploring_source_params_changed(groupbox_override=groupbox, change_source=groupbox)
         finally:
             self._set_expression_loading_state(False, groupbox)
     
     def _set_expression_loading_state(self, loading: bool, groupbox: str = None):
-        """v3.1 Sprint 14: Update loading state for expression widgets."""
+        """v4.0 Sprint 16: Update loading state for expression widgets."""
         self._expression_loading = loading
         try:
-            cursor = Qt.WaitCursor if loading else Qt.PointingHandCursor
-            widgets = []
-            if groupbox in ("single_selection", None):
-                widgets.extend([self.mFieldExpressionWidget_exploring_single_selection,
-                              self.mFeaturePickerWidget_exploring_single_selection])
-            if groupbox in ("multiple_selection", None):
-                widgets.extend([self.mFieldExpressionWidget_exploring_multiple_selection,
-                              self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection])
-            if groupbox in ("custom_selection", None):
-                widgets.append(self.mFieldExpressionWidget_exploring_custom_selection)
-            for widget in widgets:
-                if widget and hasattr(widget, 'setCursor'):
-                    widget.setCursor(cursor)
-        except Exception:
-            pass
+            cursor, widgets = (Qt.WaitCursor if loading else Qt.PointingHandCursor), []
+            if groupbox in ("single_selection", None): widgets.extend([self.mFieldExpressionWidget_exploring_single_selection, self.mFeaturePickerWidget_exploring_single_selection])
+            if groupbox in ("multiple_selection", None): widgets.extend([self.mFieldExpressionWidget_exploring_multiple_selection, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection])
+            if groupbox in ("custom_selection", None): widgets.append(self.mFieldExpressionWidget_exploring_custom_selection)
+            for w in widgets:
+                if w and hasattr(w, 'setCursor'): w.setCursor(cursor)
+        except Exception: pass
     
     def _get_cached_expression_result(self, layer_id: str, expression: str):
-        """v4.0 Sprint 14: Get cached expression result (includes subsetString in key for multi-step filtering)."""
+        """v4.0 Sprint 16: Get cached expression result (includes subsetString for multi-step filtering)."""
         import time
         layer = QgsProject.instance().mapLayer(layer_id)
-        subset_string = layer.subsetString() if layer else ""
-        cache_key = (layer_id, expression, subset_string)
-        
-        if cache_key not in self._expression_cache:
-            return None
-        
+        cache_key = (layer_id, expression, layer.subsetString() if layer else "")
+        if cache_key not in self._expression_cache: return None
         features, timestamp = self._expression_cache[cache_key]
-        current_time = time.time()
-        
-        # Check if cache entry has expired
-        if current_time - timestamp > self._expression_cache_max_age:
-            del self._expression_cache[cache_key]
-            return None
-        
+        if time.time() - timestamp > self._expression_cache_max_age:
+            del self._expression_cache[cache_key]; return None
         return features
     
     def _set_cached_expression_result(self, layer_id: str, expression: str, features):
-        """v4.0 Sprint 14: Cache expression result with LRU eviction."""
+        """v4.0 Sprint 16: Cache expression result with LRU eviction."""
         import time
-        # Enforce cache size limit (LRU eviction)
         if len(self._expression_cache) >= self._expression_cache_max_size:
-            # Remove oldest entry
-            oldest_key = min(self._expression_cache.keys(), 
-                           key=lambda k: self._expression_cache[k][1])
+            oldest_key = min(self._expression_cache.keys(), key=lambda k: self._expression_cache[k][1])
             del self._expression_cache[oldest_key]
-        
-        # v2.8.13: Include subsetString in cache key for multi-step filtering support
         layer = QgsProject.instance().mapLayer(layer_id)
-        subset_string = layer.subsetString() if layer else ""
-        cache_key = (layer_id, expression, subset_string)
+        cache_key = (layer_id, expression, layer.subsetString() if layer else "")
         self._expression_cache[cache_key] = (features, time.time())
     
     def invalidate_expression_cache(self, layer_id: str = None):
-        """v4.0 Sprint 14: Invalidate expression cache (layer_id=None clears all)."""
+        """v4.0 Sprint 16: Invalidate expression cache (layer_id=None clears all)."""
         if layer_id is None:
-            self._expression_cache.clear()
-            logger.debug("Cleared entire expression cache")
+            self._expression_cache.clear(); logger.debug("Cleared entire expression cache")
         else:
-            keys_to_remove = [k for k in self._expression_cache.keys() if k[0] == layer_id]
-            for key in keys_to_remove:
-                del self._expression_cache[key]
-            if keys_to_remove:
-                logger.debug(f"Cleared {len(keys_to_remove)} cache entries for layer {layer_id}")
+            keys = [k for k in self._expression_cache.keys() if k[0] == layer_id]
+            for k in keys: del self._expression_cache[k]
+            if keys: logger.debug(f"Cleared {len(keys)} cache entries for layer {layer_id}")
 
     def _setup_filtering_tab_widgets(self):
-        """v3.1 Sprint 13: Simplified - configure widgets for Filtering tab."""
-        self.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
-        
-        icon_path = os.path.join(os.path.dirname(__file__), "icons", "centroid.png")
-        if os.path.exists(icon_path) and hasattr(self, 'checkBox_filtering_use_centroids_source_layer'):
-            self.checkBox_filtering_use_centroids_source_layer.setIcon(QtGui.QIcon(icon_path))
-            self.checkBox_filtering_use_centroids_source_layer.setText("")
-            self.checkBox_filtering_use_centroids_source_layer.setLayoutDirection(QtCore.Qt.RightToLeft)
-
-        self.checkableComboBoxLayer_filtering_layers_to_filter = QgsCheckableComboBoxLayer(self.dockWidgetContents)
-        
-        self.checkBox_filtering_use_centroids_distant_layers = QtWidgets.QCheckBox(self.dockWidgetContents)
-        self.checkBox_filtering_use_centroids_distant_layers.setText("")
-        self.checkBox_filtering_use_centroids_distant_layers.setToolTip(self.tr("Use centroids instead of full geometries for distant layers"))
-        self.checkBox_filtering_use_centroids_distant_layers.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        if os.path.exists(icon_path):
-            self.checkBox_filtering_use_centroids_distant_layers.setIcon(QtGui.QIcon(icon_path))
-        self.checkBox_filtering_use_centroids_distant_layers.setLayoutDirection(QtCore.Qt.RightToLeft)
-        self.checkBox_filtering_use_centroids_distant_layers.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        
-        self.horizontalLayout_filtering_distant_layers = QtWidgets.QHBoxLayout()
-        self.horizontalLayout_filtering_distant_layers.setSpacing(4)
-        self.horizontalLayout_filtering_distant_layers.addWidget(self.checkableComboBoxLayer_filtering_layers_to_filter)
-        self.horizontalLayout_filtering_distant_layers.addWidget(self.checkBox_filtering_use_centroids_distant_layers)
-        self.verticalLayout_filtering_values.insertLayout(2, self.horizontalLayout_filtering_distant_layers)
-        
-        try:
-            from .ui.config import UIConfig
-            h = UIConfig.get_config('combobox', 'height')
-            self.checkableComboBoxLayer_filtering_layers_to_filter.setMinimumHeight(h)
-            self.checkableComboBoxLayer_filtering_layers_to_filter.setMaximumHeight(h)
-        except Exception:
-            pass
+        """v4.0 Sprint 16: Delegate to ConfigurationManager."""
+        if self._configuration_manager:
+            self._configuration_manager.setup_filtering_tab_widgets()
 
     def _setup_exporting_tab_widgets(self):
-        """v3.1 Sprint 13: Simplified - configure widgets for Exporting tab."""
-        self.checkableComboBoxLayer_exporting_layers = QgsCheckableComboBoxLayer(self.EXPORTING)
-        
-        if hasattr(self, 'verticalLayout_exporting_values'):
-            self.verticalLayout_exporting_values.insertWidget(0, self.checkableComboBoxLayer_exporting_layers)
-            self.verticalLayout_exporting_values.insertItem(1, QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
-        
-        try:
-            from .ui.config import UIConfig
-            h = UIConfig.get_config('combobox', 'height')
-            self.checkableComboBoxLayer_exporting_layers.setMinimumHeight(h)
-            self.checkableComboBoxLayer_exporting_layers.setMaximumHeight(h)
-        except Exception:
-            pass
-        
-        for btn in ['pushButton_checkable_exporting_layers', 'pushButton_checkable_exporting_projection',
-                    'pushButton_checkable_exporting_styles', 'pushButton_checkable_exporting_datatype',
-                    'pushButton_checkable_exporting_output_folder', 'pushButton_checkable_exporting_zip']:
-            if hasattr(self, btn):
-                getattr(self, btn).setEnabled(False)
-        
-        self.iface.mapCanvas().setSelectionColor(QColor(237, 97, 62, 75))
+        """v4.0 Sprint 16: Delegate to ConfigurationManager."""
+        if self._configuration_manager:
+            self._configuration_manager.setup_exporting_tab_widgets()
 
     def _index_to_combine_operator(self, index):
         """v4.0 Sprint 5: Delegates to FilteringController."""
@@ -1822,99 +1636,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA)
 
     def _configure_pushbuttons(self, pushButton_config, icons_sizes, font):
-        """v3.1 Sprint 15: Configure push buttons with icons, sizes, and cursors."""
-        icons_config = pushButton_config.get("ICONS", {})
-        exploring_tooltips = {"IDENTIFY": self.tr("Identify selected feature"), "ZOOM": self.tr("Zoom to selected feature"),
-            "IS_SELECTING": self.tr("Toggle feature selection on map"), "IS_TRACKING": self.tr("Auto-zoom when feature changes"),
-            "IS_LINKING": self.tr("Link exploring widgets together"), "RESET_ALL_LAYER_PROPERTIES": self.tr("Reset all layer exploring properties")}
-        
-        for widget_group in self.widgets:
-            for widget_name, widget_data in self.widgets[widget_group].items():
-                if widget_data["TYPE"] != "PushButton":
-                    continue
-                widget_obj = widget_data["WIDGET"]
-                
-                # Load icon
-                icon_file = icons_config.get(widget_group, {}).get(widget_name)
-                if icon_file:
-                    icon_path = os.path.join(self.plugin_dir, "icons", icon_file)
-                    if os.path.exists(icon_path):
-                        widget_obj.setIcon(get_themed_icon(icon_path) if ICON_THEME_AVAILABLE else QtGui.QIcon(icon_path))
-                        widget_data["ICON"] = icon_path
-                
-                widget_obj.setCursor(Qt.PointingHandCursor)
-                if widget_group == "EXPLORING" and widget_name in exploring_tooltips:
-                    widget_obj.setToolTip(exploring_tooltips[widget_name])
-                
-                # Apply dimensions
-                icon_size = icons_sizes.get(widget_group, icons_sizes["OTHERS"])
-                if UI_CONFIG_AVAILABLE:
-                    btn_type = "action_button" if widget_group == "ACTION" else ("tool_button" if widget_group in ["EXPLORING", "FILTERING", "EXPORTING"] else "button")
-                    h, s = UIConfig.get_button_height(btn_type), UIConfig.get_icon_size(btn_type)
-                else:
-                    h = 36 if widget_group in ["EXPLORING", "FILTERING", "EXPORTING"] else icon_size * 2
-                    s = icon_size
-                
-                widget_obj.setMinimumSize(h, h)
-                widget_obj.setMaximumSize(h, h)
-                widget_obj.setIconSize(QtCore.QSize(s, s))
-                widget_obj.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-                widget_obj.setFont(font)
+        """v4.0 Sprint 16: Delegate to ConfigurationManager."""
+        if self._configuration_manager:
+            self._configuration_manager.configure_pushbuttons(pushButton_config, icons_sizes, font)
 
     def _configure_other_widgets(self, font):
-        """v4.0 Sprint 14: Configure non-button widgets (cursors and fonts)."""
-        for widget_group in self.widgets:
-            for widget_name in self.widgets[widget_group]:
-                widget_type = self.widgets[widget_group][widget_name]["TYPE"]
-                widget_obj = self.widgets[widget_group][widget_name]["WIDGET"]
-                
-                # Skip certain widget types
-                if widget_type in ("JsonTreeView", "LayerTreeView", "JsonModel", "ToolBox", "PushButton"):
-                    continue
-                
-                # Configure comboboxes and field widgets
-                if any(keyword in widget_type for keyword in ["ComboBox", "QgsFieldExpressionWidget", "QgsProjectionSelectionWidget"]):
-                    widget_obj.setCursor(Qt.PointingHandCursor)
-                    widget_obj.setFont(font)
-                
-                # Configure text inputs
-                elif "LineEdit" in widget_type or "QgsDoubleSpinBox" in widget_type:
-                    widget_obj.setCursor(Qt.IBeamCursor)
-                    widget_obj.setFont(font)
-                
-                # Configure property override buttons
-                elif "PropertyOverrideButton" in widget_type:
-                    widget_obj.setCursor(Qt.PointingHandCursor)
-                    widget_obj.setFont(font)
+        """v4.0 Sprint 16: Delegate to ConfigurationManager."""
+        if self._configuration_manager:
+            self._configuration_manager.configure_other_widgets(font)
 
     def _configure_key_widgets_sizes(self, icons_sizes):
-        """v4.0 Sprint 14: Configure sizes for widget_keys and frame_actions."""
-        if UI_CONFIG_AVAILABLE:
-            # Get widget_keys width directly from config
-            widget_keys_width = UIConfig.get_config('widget_keys', 'max_width') or 56
-            
-            for widget in [self.widget_exploring_keys, self.widget_filtering_keys, self.widget_exporting_keys]:
-                widget.setMinimumWidth(widget_keys_width)
-                widget.setMaximumWidth(widget_keys_width)
-                widget.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Expanding)
-            
-            # Set frame actions size (convert to int to avoid float)
-            action_button_height = UIConfig.get_button_height("action_button")
-            frame_height = max(int(action_button_height * 1.8), 56)  # Minimum 56px to prevent clipping
-            self.frame_actions.setMinimumHeight(frame_height)
-            self.frame_actions.setMaximumHeight(frame_height + 15)  # Allow flexibility
-        else:
-            # Fallback to hardcoded values
-            icon_size = icons_sizes["OTHERS"]
-            for widget in [self.widget_exploring_keys, self.widget_filtering_keys, self.widget_exporting_keys]:
-                widget.setMinimumWidth(80)
-                widget.setMaximumWidth(80)
-                widget.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Expanding)
-            
-            # Set frame actions size
-            icon_size = icons_sizes["ACTION"]
-            self.frame_actions.setMinimumHeight(max(icon_size * 2, 56))
-            self.frame_actions.setMaximumHeight(max(icon_size * 2, 56) + 15)
+        """v4.0 Sprint 16: Delegate to ConfigurationManager."""
+        if self._configuration_manager:
+            self._configuration_manager.configure_key_widgets_sizes(icons_sizes)
 
     def manage_ui_style(self):
         """v4.0 Sprint 15: Apply stylesheet, icons, and button styling via managers."""
