@@ -4119,7 +4119,67 @@ class FilterEngineTask(QgsTask):
         GeoPackage and Spatialite both support these geometry types via standard WKB encoding.
         
         Performance: Uses cache to avoid recalculating for multiple layers.
+        
+        EPIC-1 Phase E4-S8: Strangler Fig pattern - delegates to extracted module.
         """
+        # =============================================================================
+        # EPIC-1 Phase E4-S8: Strangler Fig Delegation
+        # Delegate to extracted prepare_spatialite_source_geom() in spatialite/filter_executor.py
+        # =============================================================================
+        try:
+            from adapters.backends.spatialite import (
+                SpatialiteSourceContext,
+                prepare_spatialite_source_geom as spatialite_prepare_source_geom
+            )
+            
+            # Build context from self.* references
+            context = SpatialiteSourceContext(
+                source_layer=self.source_layer,
+                task_parameters=self.task_parameters,
+                is_field_expression=getattr(self, 'is_field_expression', None),
+                expression=getattr(self, 'expression', None),
+                param_source_new_subset=getattr(self, 'param_source_new_subset', None),
+                param_buffer_value=getattr(self, 'param_buffer_value', None),
+                has_to_reproject_source_layer=getattr(self, 'has_to_reproject_source_layer', False),
+                source_layer_crs_authid=getattr(self, 'source_layer_crs_authid', None),
+                source_crs=getattr(self, 'source_crs', None),
+                param_use_centroids_source_layer=getattr(self, 'param_use_centroids_source_layer', False),
+                PROJECT=getattr(self, 'PROJECT', None),
+                geom_cache=getattr(self, 'geom_cache', None),
+                # Inject helper method callbacks
+                geometry_to_wkt=self._geometry_to_wkt,
+                simplify_geometry_adaptive=self._simplify_geometry_adaptive,
+                get_optimization_thresholds=self._get_optimization_thresholds,
+            )
+            
+            # Call extracted function
+            result = spatialite_prepare_source_geom(context)
+            
+            if result.success:
+                self.spatialite_source_geom = result.wkt
+                
+                # Store WKT in task_parameters for backend optimization
+                if hasattr(self, 'task_parameters') and self.task_parameters:
+                    if 'infos' not in self.task_parameters:
+                        self.task_parameters['infos'] = {}
+                    self.task_parameters['infos']['source_geom_wkt'] = result.wkt
+                    self.task_parameters['infos']['buffer_state'] = result.buffer_state
+                    
+                logger.info(f"✓ EPIC-1: Delegated to spatialite_prepare_source_geom (extracted)")
+                return
+            else:
+                logger.warning(f"Extracted function failed: {result.error_message}")
+                logger.warning("Falling back to legacy implementation...")
+                # Fall through to legacy implementation
+                
+        except ImportError as e:
+            logger.debug(f"EPIC-1: spatialite module not available ({e}), using legacy")
+        except Exception as e:
+            logger.warning(f"EPIC-1: Delegation failed ({e}), using legacy fallback")
+        
+        # =============================================================================
+        # Legacy Implementation (fallback)
+        # =============================================================================
         # CRITICAL FIX v2.4.10: Respect active subset filter on source layer
         # When source layer has a subsetString (e.g., "homecount > 5"), we must use ONLY filtered features
         # for geometric operations, not all features in the layer.
