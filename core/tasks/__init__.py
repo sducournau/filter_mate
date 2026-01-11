@@ -34,10 +34,25 @@ from .expression_evaluation_task import (
 
 from .layer_management_task import LayersManagementEngineTask
 
+# E6: Task completion handler functions
+from .task_completion_handler import (
+    display_warning_messages,
+    should_skip_subset_application,
+    apply_pending_subset_requests,
+    schedule_canvas_refresh,
+    cleanup_memory_layer
+)
+
 __all__ = [
     'ExpressionEvaluationSignals',
     'ExpressionEvaluationTask',
     'ExpressionEvaluationManager',
     'get_expression_manager',
-    'LayersManagementEngineTask'
+    'LayersManagementEngineTask',
+    # E6: Task completion handler
+    'display_warning_messages',
+    'should_skip_subset_application',
+    'apply_pending_subset_requests',
+    'schedule_canvas_refresh',
+    'cleanup_memory_layer'
 ]

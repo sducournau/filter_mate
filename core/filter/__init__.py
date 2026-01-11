@@ -40,6 +40,19 @@ from core.filter.expression_combiner import (
     CombineOperator,
 )
 
+# Source filter builders (Phase E5)
+from core.filter.source_filter_builder import (
+    should_skip_source_subset,
+    get_primary_key_field,
+    get_source_table_name,
+    extract_feature_ids,
+    build_source_filter_inline,
+    build_source_filter_with_mv,
+    get_visible_feature_ids,
+    get_source_wkt_and_srid,
+    get_source_feature_count,
+)
+
 __all__ = [
     # Builders
     'build_feature_id_expression',
@@ -54,4 +67,14 @@ __all__ = [
     'apply_combine_operator',
     'combine_with_old_subset',
     'CombineOperator',
+    # Source filter builders (Phase E5)
+    'should_skip_source_subset',
+    'get_primary_key_field',
+    'get_source_table_name',
+    'extract_feature_ids',
+    'build_source_filter_inline',
+    'build_source_filter_with_mv',
+    'get_visible_feature_ids',
+    'get_source_wkt_and_srid',
+    'get_source_feature_count',
 ]
