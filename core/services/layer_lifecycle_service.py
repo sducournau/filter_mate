@@ -751,3 +751,110 @@ class LayerLifecycleService:
             if dockwidget is not None:
                 dockwidget._plugin_busy = False
 
+    def schedule_postgres_layer_retry(
+        self,
+        pending_layers: List[QgsVectorLayer],
+        project_layers: dict,
+        manage_task_callback: Callable,
+        stability_constants: dict,
+        max_retries: int = 3
+    ) -> None:
+        """
+        Schedule retry for PostgreSQL layers that may become valid after connection is established.
+        
+        Sprint 17: Extracted from FilterMateApp._on_layers_added() to reduce God Class.
+        
+        PostgreSQL layers may not be immediately valid due to connection timing.
+        This method schedules retries with increasing delays to handle this case.
+        
+        Args:
+            pending_layers: List of PostgreSQL layers that failed initial validation
+            project_layers: PROJECT_LAYERS dict to check if layer was already added
+            manage_task_callback: Callback to trigger add_layers task
+            stability_constants: Dict with POSTGRESQL_EXTRA_DELAY_MS
+            max_retries: Maximum number of retry attempts
+        """
+        from infrastructure.utils import is_sip_deleted
+        
+        if not pending_layers:
+            return
+        
+        logger.info(f"FilterMate: {len(pending_layers)} PostgreSQL layers pending - scheduling retry")
+        
+        # Use weakref to prevent access violations
+        weak_callback = weakref.ref(manage_task_callback) if hasattr(manage_task_callback, '__self__') else None
+        captured_pending = list(pending_layers)
+        captured_project_layers = project_layers
+        delay_ms = stability_constants.get('POSTGRESQL_EXTRA_DELAY_MS', 1500)
+        
+        def retry_postgres(retry_attempt: int = 1):
+            # Get strong reference to callback
+            callback = weak_callback() if weak_callback else manage_task_callback
+            if callback is None:
+                return
+            
+            now_valid = []
+            still_pending = []
+            
+            for layer in captured_pending:
+                try:
+                    if is_sip_deleted(layer):
+                        continue
+                    if layer.isValid() and layer.id() not in captured_project_layers:
+                        now_valid.append(layer)
+                        logger.info(f"PostgreSQL layer '{layer.name()}' is now valid (retry #{retry_attempt})")
+                    elif not layer.isValid():
+                        still_pending.append(layer)
+                except (RuntimeError, AttributeError):
+                    pass
+            
+            if now_valid:
+                logger.info(f"FilterMate: Adding {len(now_valid)} PostgreSQL layers after retry #{retry_attempt}")
+                callback(now_valid)
+            
+            # Schedule a second retry if layers are still pending
+            if still_pending and retry_attempt < max_retries:
+                logger.info(f"FilterMate: {len(still_pending)} PostgreSQL layers still not valid - scheduling retry #{retry_attempt + 1}")
+                QTimer.singleShot(
+                    delay_ms * retry_attempt,
+                    lambda: retry_postgres(retry_attempt + 1)
+                )
+        
+        # Retry after PostgreSQL connection establishment delay
+        QTimer.singleShot(delay_ms, retry_postgres)
+
+    def validate_and_cleanup_postgres_layers_on_add(
+        self,
+        layers: List[QgsVectorLayer]
+    ) -> List[str]:
+        """
+        Validate PostgreSQL layers for orphaned MV references BEFORE adding them.
+        
+        Sprint 17: Extracted from FilterMateApp._on_layers_added() to reduce God Class.
+        
+        This fixes "relation does not exist" errors when layers with stale filters are added.
+        
+        Args:
+            layers: List of layers being added
+            
+        Returns:
+            List of layer names that were cleaned
+        """
+        try:
+            from infrastructure.utils import validate_and_cleanup_postgres_layers
+        except ImportError:
+            logger.debug("validate_and_cleanup_postgres_layers not available")
+            return []
+        
+        postgres_to_validate = [l for l in layers if l.providerType() == 'postgres']
+        if not postgres_to_validate:
+            return []
+        
+        try:
+            cleaned = validate_and_cleanup_postgres_layers(postgres_to_validate)
+            if cleaned:
+                logger.info(f"Cleared orphaned MV references from {len(cleaned)} layer(s) during add")
+            return cleaned or []
+        except Exception as e:
+            logger.debug(f"Error validating PostgreSQL layers during add: {e}")
+            return []

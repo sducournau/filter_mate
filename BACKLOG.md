@@ -13,33 +13,58 @@
 
 | Composant                | Statut      | Détails                               |
 | ------------------------ | ----------- | ------------------------------------- |
-| **God Class App**        | ✅ **-48%** | 6,063 → 3,163 lignes (-2,900 lignes)  |
-| **God Class Dockwidget** | ✅ **-68%** | 13,049 → 4,232 lignes (-8,817 lignes) |
-| **Total God Classes**    | ✅ **-61%** | 19,112 → 7,395 lignes                 |
-| **Services Core**        | ✅ Créés    | 17 services (9,767 lignes)            |
+| **God Class App**        | ✅ **-71%** | 6,063 → 1,785 lignes (-4,278 lignes)  |
+| **God Class Dockwidget** | ✅ **-81%** | 13,049 → 2,494 lignes (-10,555 lignes)|
+| **Total God Classes**    | ✅ **-78%** | 19,112 → 4,279 lignes                 |
+| **Services Core**        | ✅ Créés    | 19 services (10,500+ lignes)          |
 | **Controllers UI**       | ✅ Créés    | 13 controllers (12,500+ lignes)       |
-| **Adapters**             | ✅ Créés    | 10 adapters (5,000+ lignes)           |
+| **Adapters**             | ✅ Créés    | 10 adapters (5,800+ lignes)           |
 
 ### 📈 Progression Sprints Récents
 
-| Sprint            | Date         | Cible                          | Réduction       |
-| ----------------- | ------------ | ------------------------------ | --------------- |
-| S9                | 11/01/2026   | PropertyController             | -151 lignes     |
-| S10               | 11/01/2026   | ActionBarManager               | -176 lignes     |
-| S11               | 11/01/2026   | ConfigController helpers       | -153 lignes     |
-| S12               | 11/01/2026   | BackendController + Favorites  | -159 lignes     |
-| S13               | 11/01/2026   | PostgreSQL → BackendController | -216 lignes     |
-| **Total Session** | **11-12/01** | **Multiple**                   | **-855 lignes** |
+| Sprint            | Date         | Cible                                   | Réduction       |
+| ----------------- | ------------ | --------------------------------------- | --------------- |
+| S13               | 11/01/2026   | PostgreSQL → BackendController          | -216 lignes     |
+| S14               | 12/01/2026   | Suppression fallbacks                   | -174 lignes     |
+| S15               | 12/01/2026   | Simplification managers                 | -110 lignes     |
+| S16               | 12/01/2026   | Extract initialize_filter_history       | -61 lignes      |
+| S17               | 12/01/2026   | Extract apply_subset, PostgreSQL retry, validate | -135 lignes |
+| S18 (dockwidget)  | 12/01/2026   | Helper properties + simplifications     | +2 lignes       |
+| **S18 (app)**     | **12/01/2026** | **Micro-optimisations app.py**          | **-159 lignes** |
+| **S18 (dockwidget)** | **12/01/2026** | **Nettoyage dockwidget.py**          | **-16 lignes**  |
+| **Total Session** | **11-12/01** | **Multiple**                            | **-1,580 lignes** |
+
+### 🔧 Sprint 18 - Détail Optimisations
+
+#### App.py (-159 lignes)
+
+| Optimisation                                | Lignes économisées |
+| ------------------------------------------- | ------------------ |
+| Suppression lignes blanches doubles         | -8                 |
+| Consolidation `_set_flag_with_timestamp()`  | -14                |
+| Simplification docstrings (10 méthodes)     | -66                |
+| Helper `_get_task_builder()` + utilisation  | -29                |
+| Consolidation `_handle_undo_redo()` (avant) | -30                |
+| Compactage méthode messages (avant)         | -22                |
+| **Total app.py**                            | **-159 lignes**    |
+
+#### Dockwidget.py (-16 lignes)
+
+| Optimisation                        | Lignes économisées |
+| ----------------------------------- | ------------------ |
+| Suppression lignes blanches doubles | -15                |
+| Suppression ligne espaces vide      | -1                 |
+| **Total dockwidget.py**             | **-16 lignes**     |
 
 ### 🏗️ Nouvelle Architecture Hexagonale (v4.0)
 
 | Dossier           | Fichiers | Lignes      | Rôle                              |
 | ----------------- | -------- | ----------- | --------------------------------- |
-| `core/services/`  | 17       | 9,767       | Domain Services                   |
+| `core/services/`  | 19       | 10,500+     | Domain Services                   |
 | `ui/controllers/` | 13       | 13,000+     | UI Controllers (MVC)              |
-| `adapters/`       | 10       | 5,500+      | Bridges & Handlers                |
+| `adapters/`       | 10       | 5,800+      | Bridges & Handlers                |
 | `ui/managers/`    | 4        | 1,100+      | Layout & Config Managers          |
-| **Total Extrait** | **44+**  | **29,000+** | **Code migré depuis God Classes** |
+| **Total Extrait** | **46+**  | **30,000+** | **Code migré depuis God Classes** |
 
 ### Phase A - Migration Imports ✅ COMPLÈTE (2026-01-09)
 
@@ -48,27 +73,42 @@
 - **Shims de compatibilité**: 6 modules créés
 - **Imports legacy restants**: 0 (hors shims et tests)
 
-### Phase C - Slim God Classes 🔄 EN COURS (Sprint 13+)
+### Phase C - Slim God Classes 🔄 EN COURS (Sprint 18+)
 
-| Fichier                     | Début  | Actuel | Cible   | Progrès |
-| --------------------------- | ------ | ------ | ------- | ------- |
-| `filter_mate_dockwidget.py` | 13,049 | 4,232  | < 2,000 | **68%** |
-| `filter_mate_app.py`        | 6,063  | 3,163  | < 1,500 | **48%** |
-| **Total**                   | 19,112 | 7,395  | < 3,500 | **61%** |
+| Fichier                     | Début  | Actuel | Cible   | Progrès | Gap |
+| --------------------------- | ------ | ------ | ------- | ------- | --- |
+| `filter_mate_app.py`        | 6,063  | 1,785  | < 1,500 | **71%** | 285 |
+| `filter_mate_dockwidget.py` | 13,049 | 2,494  | < 2,000 | **81%** | 494 |
+| **Total**                   | 19,112 | 4,279  | < 3,500 | **78%** | **779** |
 
-### Services Extraits (v4.0 - v4.6)
+**Statut:** 779 lignes restantes à économiser pour atteindre les cibles (< 22%)
 
-| Service                       | Version | Lignes | Fonction                |
-| ----------------------------- | ------- | ------ | ----------------------- |
-| `LayerFilterBuilder`          | v4.6    | 348    | Build layers to filter  |
-| `DatasourceManager`           | v4.5    | 502    | Datasource operations   |
-| `AppInitializer`              | v4.4    | 684    | App initialization      |
-| `FilterResultHandler`         | v4.3    | 587    | Filter result handling  |
-| `OptimizationManager`         | v4.2    | 545    | Optimization management |
-| `TaskOrchestrator`            | v4.1    | 535    | Task orchestration      |
-| `UndoRedoHandler`             | v4.0    | 587    | Undo/Redo operations    |
-| `DatabaseManager`             | v4.0    | 404    | Database operations     |
-| `VariablesPersistenceManager` | v4.0    | 474    | Variables persistence   |
+**Dockwidget - Helper properties:**
+- `_backend_ctrl`, `_favorites_ctrl`, `_exploring_ctrl`, `_layer_sync_ctrl`, `_property_ctrl`
+- `_is_ui_ready()`, `_is_layer_valid()`
+- **Impact:** +30 patterns simplifiés
+
+**App - Refactoring méthodes:**
+- `handle_undo` + `handle_redo` → `_handle_undo_redo(is_undo)` (-30 lignes)
+- `_show_task_completion_message` simplifié (-22 lignes)
+- `update_undo_redo_buttons` compacté (-15 lignes)
+
+### Services Extraits (v4.0 - Sprint 17)
+
+| Service                       | Version   | Lignes | Fonction                |
+| ----------------------------- | --------- | ------ | ----------------------- |
+| `FilterApplicationService`    | Sprint 17 | 201    | Apply subset filters    |
+| `LayerFilterBuilder`          | v4.6      | 348    | Build layers to filter  |
+| `DatasourceManager`           | v4.5      | 502    | Datasource operations   |
+| `AppInitializer`              | v4.4      | 684    | App initialization      |
+| `FilterResultHandler`         | v4.3      | 587    | Filter result handling  |
+| `OptimizationManager`         | v4.2      | 545    | Optimization management |
+| `TaskOrchestrator`            | v4.1      | 535    | Task orchestration      |
+| `UndoRedoHandler`             | v4.0      | 668    | Undo/Redo operations    |
+| `DatabaseManager`             | v4.0      | 404    | Database operations     |
+| `VariablesPersistenceManager` | v4.0      | 474    | Variables persistence   |
+| `LayerLifecycleService`       | Sprint 17 | 860    | Layer lifecycle + retry |
+| `LayerValidator`              | Sprint 17 | 344    | Layer validation        |
 
 ### Ancienne Architecture (deprecated)
 

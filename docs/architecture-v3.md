@@ -1,6 +1,26 @@
 # FilterMate v3.0 - Architecture Documentation
 
-> **Version**: 3.0.0 | **Status**: Released | **Date**: January 2026
+> **⚠️ DOCUMENT OBSOLÈTE**  
+> **Remplacé par**: [`architecture-unified-v4.0.md`](consolidation/architecture-unified-v4.0.md)  
+> **Date de dépréciation**: 11 janvier 2026  
+> **Raison**: Documentation consolidée v4.0 disponible avec réconciliation v3.x/v4.x
+
+---
+
+## 📚 Documentation Actuelle
+
+**Ce document a été remplacé par la documentation consolidée v4.0:**
+
+- **Architecture complète**: [architecture-unified-v4.0.md](consolidation/architecture-unified-v4.0.md)
+- **Décisions architecturales**: [ADR-001](consolidation/ADR-001-v3-v4-architecture-reconciliation.md)
+- **Progrès migration**: [migration-progress-report-v4.0.md](consolidation/migration-progress-report-v4.0.md)
+- **Index complet**: [BMAD_DOCUMENTATION_INDEX.md](consolidation/BMAD_DOCUMENTATION_INDEX.md)
+
+**Backup original**: `_backups/docs/architecture-v3.md.backup-2026-01-11`
+
+---
+
+> **Version**: 3.0.0 | **Status**: ⚠️ DEPRECATED | **Date**: January 2026
 
 ## 📋 Executive Summary
 

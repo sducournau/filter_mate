@@ -26,6 +26,13 @@ from .filter_executor import (
     prepare_spatialite_source_geom,
     # Expression conversion
     qgis_expression_to_spatialite,
+    # EPIC-1 Phase E4-S9: Subset management
+    build_spatialite_query,
+    apply_spatialite_subset,
+    manage_spatialite_subset,
+    get_last_subset_info,
+    cleanup_session_temp_tables,
+    normalize_column_names_for_spatialite,
 )
 
 __all__ = [
@@ -52,4 +59,11 @@ __all__ = [
     'process_spatialite_geometries',
     'prepare_spatialite_source_geom',
     'qgis_expression_to_spatialite',
+    # EPIC-1 Phase E4-S9: Subset management
+    'build_spatialite_query',
+    'apply_spatialite_subset',
+    'manage_spatialite_subset',
+    'get_last_subset_info',
+    'cleanup_session_temp_tables',
+    'normalize_column_names_for_spatialite',
 ]

@@ -585,3 +585,84 @@ class UndoRedoHandler:
             remote_layers_info[layer_id] = (assoc_filter, assoc_count)
         
         return remote_layers_info
+
+    def initialize_filter_history(
+        self,
+        current_layer: 'QgsVectorLayer',
+        layers_to_filter: List[Dict],
+        task_parameters: Dict
+    ) -> None:
+        """
+        Initialize filter history for source and associated layers.
+        
+        Captures the CURRENT state of all layers BEFORE filtering is applied.
+        This ensures that undo will properly restore all layers to their pre-filter state.
+        
+        Extracted from FilterMateApp._initialize_filter_history() in Sprint 16.
+        
+        Args:
+            current_layer: Source layer
+            layers_to_filter: List of layers to be filtered
+            task_parameters: Task parameters with layer info
+        """
+        project_layers = self._get_project_layers()
+        project = self._get_project()
+        
+        # Initialize per-layer history for source layer if needed
+        history = self._history_manager.get_or_create_history(current_layer.id())
+        if len(history._states) == 0:
+            current_filter = current_layer.subsetString()
+            current_count = current_layer.featureCount()
+            history.push_state(
+                expression=current_filter,
+                feature_count=current_count,
+                description="Initial state (before first filter)",
+                metadata={
+                    "operation": "initial",
+                    "backend": task_parameters["infos"].get("layer_provider_type", "unknown")
+                }
+            )
+            logger.info(f"FilterMate: Initialized history with current state for source layer {current_layer.id()}")
+        
+        # Initialize per-layer history for associated layers
+        remote_layers_info = {}
+        for layer_info in layers_to_filter:
+            layer_id = layer_info.get("layer_id")
+            if layer_id and layer_id in project_layers:
+                assoc_layers = [l for l in project.mapLayers().values() if l.id() == layer_id]
+                if len(assoc_layers) == 1:
+                    assoc_layer = assoc_layers[0]
+                    assoc_history = self._history_manager.get_or_create_history(assoc_layer.id())
+                    if len(assoc_history._states) == 0:
+                        assoc_filter = assoc_layer.subsetString()
+                        assoc_count = assoc_layer.featureCount()
+                        assoc_history.push_state(
+                            expression=assoc_filter,
+                            feature_count=assoc_count,
+                            description="Initial state (before first filter)",
+                            metadata={
+                                "operation": "initial",
+                                "backend": layer_info.get("layer_provider_type", "unknown")
+                            }
+                        )
+                        logger.info(f"FilterMate: Initialized history for associated layer {assoc_layer.name()}")
+                    
+                    # Collect CURRENT state for all remote layers (for global state)
+                    remote_layers_info[assoc_layer.id()] = (assoc_layer.subsetString(), assoc_layer.featureCount())
+        
+        # ALWAYS push global state BEFORE filtering if we have remote layers
+        if remote_layers_info:
+            current_filter = current_layer.subsetString()
+            current_count = current_layer.featureCount()
+            self._history_manager.push_global_state(
+                source_layer_id=current_layer.id(),
+                source_expression=current_filter,
+                source_feature_count=current_count,
+                remote_layers=remote_layers_info,
+                description=f"Pre-filter state ({len(remote_layers_info) + 1} layers)",
+                metadata={
+                    "operation": "pre_filter",
+                    "backend": task_parameters["infos"].get("layer_provider_type", "unknown")
+                }
+            )
+            logger.info(f"FilterMate: Captured pre-filter global state ({len(remote_layers_info) + 1} layers)")

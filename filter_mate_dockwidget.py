@@ -170,6 +170,44 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.warning(f"Layer {layer.name()} (ID: {layer_id}) not found in PROJECT_LAYERS"); return None
         return self.PROJECT_LAYERS[layer_id]
     
+    @property
+    def _backend_ctrl(self):
+        """Sprint 18: Helper property for BackendController access."""
+        return self._controller_integration._backend_controller if self._controller_integration and self._controller_integration._backend_controller else None
+    
+    @property
+    def _favorites_ctrl(self):
+        """Sprint 18: Helper property for FavoritesController access."""
+        return self._controller_integration._favorites_controller if self._controller_integration and self._controller_integration._favorites_controller else None
+    
+    @property
+    def _exploring_ctrl(self):
+        """Sprint 18: Helper property for ExploringController access."""
+        return self._controller_integration.exploring_controller if self._controller_integration and self._controller_integration.exploring_controller else None
+    
+    @property
+    def _layer_sync_ctrl(self):
+        """Sprint 18: Helper property for LayerSyncController access."""
+        return self._controller_integration.layer_sync_controller if self._controller_integration and self._controller_integration.layer_sync_controller else None
+    
+    @property
+    def _property_ctrl(self):
+        """Sprint 18: Helper property for PropertyController access."""
+        return self._controller_integration.property_controller if self._controller_integration and self._controller_integration.property_controller else None
+    
+    def _is_ui_ready(self) -> bool:
+        """Sprint 18: Check if UI is ready for operations."""
+        return self.widgets_initialized and self.has_loaded_layers
+    
+    def _is_layer_valid(self) -> bool:
+        """Sprint 18: Check if current_layer is valid and usable."""
+        if not self.widgets_initialized or not self.current_layer:
+            return False
+        if self._is_layer_truly_deleted(self.current_layer):
+            self.current_layer = None
+            return False
+        return True
+    
     def _initialize_layer_state(self):
         """v4.0 Sprint 15: Initialize layers, managers, controllers, and UI."""
         self.init_layer, self.has_loaded_layers = None, False
@@ -275,7 +313,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"] = {"TYPE": "CustomCheckableFeatureComboBox", "WIDGET": self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection,
                     "SIGNALS": [("updatingCheckedItemList", self.exploring_features_changed), ("filteringCheckedItemList", self.exploring_source_params_changed)]}
         except Exception: pass
-
 
     def _fix_toolbox_icons(self):
         """v4.0 S18: Fix toolBox_tabTools icons with absolute paths."""
@@ -384,7 +421,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         cfg = UIConfig.get_config('splitter')
         tot = self.main_splitter.height() if self.main_splitter.height() >= 100 else 600
         self.main_splitter.setSizes([int(tot * cfg.get('initial_exploring_ratio', 0.50)), int(tot * cfg.get('initial_toolset_ratio', 0.50))])
-
 
     def apply_dynamic_dimensions(self):
         """v4.0 S16: Apply dynamic dimensions."""
@@ -555,18 +591,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def _on_favorite_indicator_clicked(self, event):
         """v4.0 S16: → FavoritesController."""
-        if self._controller_integration and self._controller_integration._favorites_controller:
-            self._controller_integration._favorites_controller.handle_indicator_clicked()
+        if self._favorites_ctrl:
+            self._favorites_ctrl.handle_indicator_clicked()
     
     def _add_current_to_favorites(self):
         """v4.0 S16: → FavoritesController."""
-        if self._controller_integration and self._controller_integration._favorites_controller:
-            self._controller_integration._favorites_controller.add_current_to_favorites()
+        if self._favorites_ctrl:
+            self._favorites_ctrl.add_current_to_favorites()
     
     def _apply_favorite(self, favorite_id: str):
         """v4.0 S16: → FavoritesController."""
-        if self._controller_integration and self._controller_integration._favorites_controller:
-            self._controller_integration._favorites_controller.apply_favorite(favorite_id)
+        if self._favorites_ctrl:
+            self._favorites_ctrl.apply_favorite(favorite_id)
 
     def _show_favorites_manager_dialog(self):
         """v4.0 S16: → FavoritesController."""
@@ -575,13 +611,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _export_favorites(self):
         """v4.0 S16: → FavoritesController."""
-        if self._controller_integration and self._controller_integration._favorites_controller:
-            self._controller_integration._favorites_controller.export_favorites()
+        if self._favorites_ctrl:
+            self._favorites_ctrl.export_favorites()
     
     def _import_favorites(self):
         """v4.0 S16: → FavoritesController."""
-        if self._controller_integration and self._controller_integration._favorites_controller:
-            result = self._controller_integration._favorites_controller.import_favorites()
+        if self._favorites_ctrl:
+            result = self._favorites_ctrl.import_favorites()
             if result: self._update_favorite_indicator()
     
     def _update_favorite_indicator(self):
@@ -599,65 +635,61 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.favorites_indicator_label.adjustSize()
 
     def _get_available_backends_for_layer(self, layer):
-        """v4.0 S16: → BackendController."""
-        return self._controller_integration._backend_controller.get_available_backends_for_layer(layer) if self._controller_integration and self._controller_integration._backend_controller else [('ogr', 'OGR', '📁')]
+        """Sprint 18: → BackendController via _backend_ctrl property."""
+        return self._backend_ctrl.get_available_backends_for_layer(layer) if self._backend_ctrl else [('ogr', 'OGR', '📁')]
     
     def _detect_current_backend(self, layer):
-        """v4.0 S16: → BackendController."""
-        return self._controller_integration._backend_controller.get_current_backend(layer) if self._controller_integration and self._controller_integration._backend_controller else 'ogr'
+        """Sprint 18: → BackendController via _backend_ctrl property."""
+        return self._backend_ctrl.get_current_backend(layer) if self._backend_ctrl else 'ogr'
 
     def _set_forced_backend(self, layer_id, backend_type):
-        """v4.0 S16: → BackendController."""
-        if self._controller_integration and self._controller_integration._backend_controller:
-            self._controller_integration._backend_controller.set_forced_backend(layer_id, backend_type)
+        """Sprint 18: → BackendController via _backend_ctrl property."""
+        if self._backend_ctrl: self._backend_ctrl.set_forced_backend(layer_id, backend_type)
 
     def _force_backend_for_all_layers(self, backend_type):
-        """v4.0 S16: → BackendController."""
-        if self._controller_integration and self._controller_integration._backend_controller:
-            count = self._controller_integration._backend_controller.force_backend_for_all_layers(backend_type)
+        """Sprint 18: → BackendController via _backend_ctrl property."""
+        if self._backend_ctrl:
+            count = self._backend_ctrl.force_backend_for_all_layers(backend_type)
             show_success("FilterMate", f"Forced {backend_type.upper()} for {count} layers")
         else:
             show_warning("FilterMate", "Backend controller not available")
 
     def get_forced_backend_for_layer(self, layer_id):
-        """v4.0 S16: → BackendController."""
-        return self._controller_integration._backend_controller.forced_backends.get(layer_id) if self._controller_integration and self._controller_integration._backend_controller else None
+        """Sprint 18: → BackendController via _backend_ctrl property."""
+        return self._backend_ctrl.forced_backends.get(layer_id) if self._backend_ctrl else None
     
     def _get_optimal_backend_for_layer(self, layer):
-        """v4.0 S16: → BackendController."""
-        return self._controller_integration._backend_controller._get_optimal_backend_for_layer(layer) if self._controller_integration and self._controller_integration._backend_controller else 'ogr'
+        """Sprint 18: → BackendController via _backend_ctrl property."""
+        return self._backend_ctrl._get_optimal_backend_for_layer(layer) if self._backend_ctrl else 'ogr'
 
     # ========================================
     # POSTGRESQL MAINTENANCE METHODS
     # ========================================
     
     def _get_pg_session_context(self):
-        """v4.0 S16: → BackendController."""
-        if self._controller_integration and self._controller_integration._backend_controller:
-            return self._controller_integration._backend_controller.get_pg_session_context()
-        return None, None, None, None
+        """Sprint 18: → BackendController via _backend_ctrl property."""
+        return self._backend_ctrl.get_pg_session_context() if self._backend_ctrl else (None, None, None, None)
     
     def _toggle_pg_auto_cleanup(self):
-        """v4.0 S16: → BackendController."""
-        if self._controller_integration and self._controller_integration._backend_controller:
-            enabled = self._controller_integration._backend_controller.toggle_pg_auto_cleanup()
+        """Sprint 18: → BackendController via _backend_ctrl property."""
+        if self._backend_ctrl:
+            enabled = self._backend_ctrl.toggle_pg_auto_cleanup()
             msg = "PostgreSQL auto-cleanup enabled" if enabled else "PostgreSQL auto-cleanup disabled"
             (show_success if enabled else show_info)("FilterMate", msg)
     
     def _cleanup_postgresql_session_views(self):
-        """v4.0 S16: → BackendController."""
-        if self._controller_integration and self._controller_integration._backend_controller:
-            success = self._controller_integration._backend_controller.cleanup_postgresql_session_views()
+        """Sprint 18: → BackendController via _backend_ctrl property."""
+        if self._backend_ctrl:
+            success = self._backend_ctrl.cleanup_postgresql_session_views()
             (show_success if success else show_warning)("FilterMate", "PostgreSQL session views cleaned up" if success else "No views to clean or cleanup failed")
         else:
             show_warning("FilterMate", "Backend controller not available")
     
     def _cleanup_postgresql_schema_if_empty(self):
-        """v4.0 Sprint 13: WRAPPER - delegate to BackendController."""
+        """Sprint 18: → BackendController via _backend_ctrl property."""
         from qgis.PyQt.QtWidgets import QMessageBox
-        if self._controller_integration and self._controller_integration._backend_controller:
-            ctrl = self._controller_integration._backend_controller
-            info = ctrl.get_postgresql_session_info()
+        if self._backend_ctrl:
+            info = self._backend_ctrl.get_postgresql_session_info()
             
             if not info.get('connection_available'):
                 show_warning("FilterMate", "No PostgreSQL connection available")
@@ -672,7 +704,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     show_info("FilterMate", "Schema cleanup cancelled")
                     return
             
-            success = ctrl.cleanup_postgresql_schema_if_empty(force=True)
+            success = self._backend_ctrl.cleanup_postgresql_schema_if_empty(force=True)
             if success:
                 show_success("FilterMate", f"Schema '{info.get('schema')}' dropped successfully")
             else:
@@ -681,10 +713,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             show_warning("FilterMate", "Backend controller not available")
     
     def _show_postgresql_session_info(self):
-        """v4.0 Sprint 13: WRAPPER - delegate to BackendController."""
+        """Sprint 18: → BackendController via _backend_ctrl property."""
         from qgis.PyQt.QtWidgets import QMessageBox
-        if self._controller_integration and self._controller_integration._backend_controller:
-            info = self._controller_integration._backend_controller.get_postgresql_session_info()
+        if self._backend_ctrl:
+            info = self._backend_ctrl.get_postgresql_session_info()
             
             session_id = info.get('session_id') or 'Not set'
             html = (
@@ -712,14 +744,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _toggle_optimization_enabled(self):
         """v4.0 S16: → BackendController."""
-        if self._controller_integration and self._controller_integration._backend_controller:
-            enabled = self._controller_integration._backend_controller.toggle_optimization_enabled()
+        if self._backend_ctrl:
+            enabled = self._backend_ctrl.toggle_optimization_enabled()
             (show_success if enabled else show_info)("FilterMate", f"Auto-optimization {'enabled' if enabled else 'disabled'}")
     
     def _toggle_centroid_auto(self):
         """v4.0 S16: → BackendController."""
-        if self._controller_integration and self._controller_integration._backend_controller:
-            enabled = self._controller_integration._backend_controller.toggle_centroid_auto()
+        if self._backend_ctrl:
+            enabled = self._backend_ctrl.toggle_centroid_auto()
             (show_success if enabled else show_info)("FilterMate", f"Auto-centroid {'enabled' if enabled else 'disabled'}")
     
     def _toggle_optimization_ask_before(self):
@@ -1091,7 +1123,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.CONFIG_DATA = self.config_model.serialize()
         with open(ENV_VARS.get('CONFIG_JSON_PATH', self.plugin_dir + '/config/config.json'), 'w') as f: f.write(json.dumps(self.CONFIG_DATA, indent=4))
 
-
     def manage_configuration_model(self):
         """Setup config model, view, and signals."""
         try:
@@ -1122,7 +1153,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                 QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes) == QMessageBox.Yes:
             self.reload_plugin()
 
-        
     def manage_output_name(self):
         """v4.0 S18: Set export output name."""
         self.current_project_title, self.current_project_path = self.PROJECT.fileName().split('.')[0], self.PROJECT.homePath()
@@ -1173,7 +1203,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         buffer_types = self._controller_integration.delegate_filtering_get_available_buffer_types() if self._controller_integration else None
         w = self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"]; w.clear(); w.addItems(buffer_types or ["Round", "Flat", "Square"])
         if not w.currentText(): w.setCurrentIndex(0)
-
 
     def filtering_populate_layers_chekableCombobox(self, layer=None):
         """Populate layers-to-filter combobox."""
@@ -1255,7 +1284,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     if (ip := wi.get("ICON") or wi.get("ICON_ON_FALSE")) and os.path.exists(ip): wi.get("WIDGET").setIcon(get_themed_icon(ip)); wi.get("WIDGET").setProperty('icon_path', ip)
         except: pass
 
-
     def set_widgets_enabled_state(self, state):
         """v4.0 S18: Enable/disable all plugin widgets."""
         skip_types = ("JsonTreeView","LayerTreeView","JsonModel","ToolBox")
@@ -1266,7 +1294,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 w.blockSignals(True)
                 if wt in ("PushButton", "GroupBox") and w.isCheckable() and not state: w.setChecked(False); (w.setCollapsed(True) if wt == "GroupBox" else None)
                 w.setEnabled(state); w.blockSignals(False)
-
 
     def connect_widgets_signals(self):
         """v4.0 Sprint 7: Ultra-simplified - connect all widget signals."""
@@ -1480,7 +1507,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def exploring_identify_clicked(self):
         """v4.0 Sprint 18: Flash selected features on map - delegates to ExploringController."""
-        if not self.widgets_initialized or not self.current_layer or self._is_layer_truly_deleted(self.current_layer): self.current_layer = None; return
+        if not self._is_layer_valid(): return
         if self._controller_integration:
             features, _ = self.get_current_features()
             if features: self._controller_integration.delegate_flash_features([f.id() for f in features], self.current_layer)
@@ -1492,7 +1519,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def exploring_zoom_clicked(self, features=[], expression=None):
         """v4.0 Sprint 18: Zoom to selected features - delegates to ExploringController."""
-        if not self.widgets_initialized or not self.current_layer or self._is_layer_truly_deleted(self.current_layer): self.current_layer = None; return
+        if not self._is_layer_valid(): return
         if not features: features, expression = self.get_current_features()
         self.zooming_to_features(features, expression)
 
@@ -1516,13 +1543,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def _compute_zoom_extent_for_mode(self):
         """v4.0 Sprint 18: Compute zoom extent - delegates to ExploringController."""
-        return self._controller_integration.exploring_controller._compute_zoom_extent_for_mode() if self._controller_integration and self._controller_integration.exploring_controller else self.get_filtered_layer_extent(self.current_layer) if self.current_layer else None
+        return self._exploring_ctrl._compute_zoom_extent_for_mode() if self._exploring_ctrl else self.get_filtered_layer_extent(self.current_layer) if self.current_layer else None
 
     def zooming_to_features(self, features, expression=None):
         """v4.0 Sprint 18: Zoom to features - delegates to ExploringController."""
-        if not self.widgets_initialized or not self.current_layer or self._is_layer_truly_deleted(self.current_layer): self.current_layer = None; return
-        if self._controller_integration and self._controller_integration.exploring_controller:
-            self._controller_integration.exploring_controller.zooming_to_features(features, expression)
+        if not self._is_layer_valid(): return
+        if self._exploring_ctrl:
+            self._exploring_ctrl.zooming_to_features(features, expression)
         elif features: self.iface.mapCanvas().zoomToFeatureIds(self.current_layer, [f.id() for f in features]); self.iface.mapCanvas().refresh()
 
 
@@ -1533,24 +1560,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _sync_widgets_from_qgis_selection(self):
         """v4.0 Sprint 18: Sync widgets with QGIS selection - delegates to ExploringController."""
-        if self._controller_integration and self._controller_integration.exploring_controller:
-            self._controller_integration.exploring_controller._sync_widgets_from_qgis_selection()
+        if self._exploring_ctrl: self._exploring_ctrl._sync_widgets_from_qgis_selection()
     
     def _sync_single_selection_from_qgis(self, selected_features, selected_count):
         """v4.0 Sprint 18: Sync single selection - delegates to ExploringController."""
-        if self._controller_integration and self._controller_integration.exploring_controller:
-            self._controller_integration.exploring_controller._sync_single_selection_from_qgis(selected_features, selected_count)
+        if self._exploring_ctrl: self._exploring_ctrl._sync_single_selection_from_qgis(selected_features, selected_count)
     
     def _sync_multiple_selection_from_qgis(self, selected_features, selected_count):
         """v4.0 Sprint 18: Sync multiple selection - delegates to UILayoutController."""
         if not (hasattr(self, '_controller_integration') and self._controller_integration and self._controller_integration.delegate_sync_multiple_selection_from_qgis()):
             logger.warning("_sync_multiple_selection_from_qgis: Controller delegation failed")
 
-
     def exploring_source_params_changed(self, expression=None, groupbox_override=None, change_source=None):
         """v4.0 S18: → ExploringController."""
-        if self._controller_integration and self._controller_integration.exploring_controller:
-            self._controller_integration.exploring_controller.exploring_source_params_changed(expression, groupbox_override, change_source)
+        if self._exploring_ctrl: self._exploring_ctrl.exploring_source_params_changed(expression, groupbox_override, change_source)
 
 
     def exploring_custom_selection(self):
@@ -1565,17 +1588,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         features = self.exploring_features_changed([], False, expression)
         if features: self._set_cached_expression_result(layer_id, expression, features)
         return features, expression
-    
 
     def exploring_deselect_features(self):
         """v4.0 Sprint 18: Deselect all features - delegates to ExploringController."""
-        if not self.widgets_initialized or not self.current_layer or self._is_layer_truly_deleted(self.current_layer): self.current_layer = None; return
+        if not self._is_layer_valid(): return
         if not (self._controller_integration and self._controller_integration.delegate_exploring_clear_selection()): self.current_layer.removeSelection()
-        
 
     def exploring_select_features(self):
         """v4.0 Sprint 18: Select features from active groupbox - delegates to ExploringController."""
-        if not self.widgets_initialized or not self.current_layer or self._is_layer_truly_deleted(self.current_layer): self.current_layer = None; return
+        if not self._is_layer_valid(): return
         if self._controller_integration:
             if self._controller_integration.delegate_exploring_activate_selection_tool(self.current_layer):
                 features, _ = self.get_current_features()
@@ -1592,10 +1613,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Handle feature selection changes in exploration widgets.
         Migrated to ExploringController in v4.0 Sprint 2.
         """
-        if self._controller_integration and self._controller_integration.exploring_controller:
-            return self._controller_integration.exploring_controller.exploring_features_changed(
-                input, identify_by_primary_key_name, custom_expression, preserve_filter_if_empty
-            )
+        if self._exploring_ctrl: return self._exploring_ctrl.exploring_features_changed(input, identify_by_primary_key_name, custom_expression, preserve_filter_if_empty)
         return []
     
     def _handle_exploring_features_result(
@@ -1606,15 +1624,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         identify_by_primary_key_name=False
     ):
         """v4.0 S18: → ExploringController."""
-        if self._controller_integration and self._controller_integration.exploring_controller:
-            return self._controller_integration.exploring_controller.handle_exploring_features_result(features, expression, layer_props, identify_by_primary_key_name)
+        if self._exploring_ctrl: return self._exploring_ctrl.handle_exploring_features_result(features, expression, layer_props, identify_by_primary_key_name)
         return []
 
 
     def get_exploring_features(self, input, identify_by_primary_key_name=False, custom_expression=None):
         """v4.0 S18: → ExploringController."""
-        if self._controller_integration and self._controller_integration.exploring_controller:
-            return self._controller_integration.exploring_controller.get_exploring_features(input, identify_by_primary_key_name, custom_expression)
+        if self._exploring_ctrl: return self._exploring_ctrl.get_exploring_features(input, identify_by_primary_key_name, custom_expression)
         return [], None
     
     def get_exploring_features_async(self, expression: str, on_complete=None, on_error=None, on_progress=None):
@@ -1661,13 +1677,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if not ASYNC_EXPRESSION_AVAILABLE or not self._expression_manager or not self.current_layer or not custom_expression:
             return False
         return self.current_layer.featureCount() > self._async_expression_threshold
-        
-    
+
     def exploring_link_widgets(self, expression=None, change_source=None):
         """v4.0 S18: → ExploringController."""
-        if self._controller_integration and self._controller_integration.exploring_controller:
-            self._controller_integration.exploring_controller.exploring_link_widgets(expression, change_source)
-
+        if self._exploring_ctrl: self._exploring_ctrl.exploring_link_widgets(expression, change_source)
 
     def get_layers_to_filter(self):
         """v4.0 S18: Get checked layer IDs from filtering combobox."""
@@ -1693,7 +1706,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if isinstance(d, str): checked.append(d)
         if self._controller_integration: self._controller_integration.delegate_export_set_layers_to_export(checked)
         return checked
-
 
     def get_current_crs_authid(self):
         """v4.0 S18: Get current export CRS."""
@@ -1727,8 +1739,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _reset_layer_expressions(self, layer_props):
         """v4.0 S18: → ExploringController."""
-        if self._controller_integration and self._controller_integration.exploring_controller:
-            self._controller_integration.delegate_reset_layer_expressions(layer_props)
+        if self._exploring_ctrl: self._controller_integration.delegate_reset_layer_expressions(layer_props)
     
     def _disconnect_layer_signals(self):
         """v3.1 Sprint 17: Disconnect all layer-related widget signals before updating."""
@@ -1763,12 +1774,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _synchronize_layer_widgets(self, layer, layer_props):
         """v4.0 S18: → LayerSyncController."""
-        if self._controller_integration and self._controller_integration.layer_sync_controller:
-            self._controller_integration.delegate_synchronize_layer_widgets(layer, layer_props)
+        if self._layer_sync_ctrl: self._controller_integration.delegate_synchronize_layer_widgets(layer, layer_props)
     
     def _reload_exploration_widgets(self, layer, layer_props):
         """v4.0 S18: → ExploringController."""
-        if self._controller_integration and self._controller_integration.exploring_controller: self._controller_integration.exploring_controller._reload_exploration_widgets(layer, layer_props)
+        if self._exploring_ctrl: self._exploring_ctrl._reload_exploration_widgets(layer, layer_props)
 
     def _restore_groupbox_ui_state(self, groupbox_name):
         """v4.0 Sprint 17: Restore exploring groupbox visual state."""
@@ -1789,13 +1799,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _reconnect_layer_signals(self, widgets_to_reconnect, layer_props):
         """v4.0 S18: → LayerSyncController."""
-        if self._controller_integration and self._controller_integration.layer_sync_controller:
-            self._controller_integration.delegate_reconnect_layer_signals(widgets_to_reconnect, layer_props)
+        if self._layer_sync_ctrl: self._controller_integration.delegate_reconnect_layer_signals(widgets_to_reconnect, layer_props)
 
     
     def _ensure_valid_current_layer(self, requested_layer):
         """v4.0 Sprint 18: Ensure valid layer - delegates to LayerSyncController."""
-        if self._controller_integration and self._controller_integration.layer_sync_controller:
+        if self._layer_sync_ctrl:
             try: 
                 result = self._controller_integration.delegate_ensure_valid_current_layer(requested_layer)
                 if result is not None: return result
@@ -1805,17 +1814,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             except: pass
         return None
 
-
     def _is_layer_truly_deleted(self, layer):
         """v4.0 Sprint 18: Check if layer is truly deleted - delegates to LayerSyncController."""
         if layer is None: return True
         try:
-            if self._controller_integration and self._controller_integration.layer_sync_controller:
-                return self._controller_integration.delegate_is_layer_truly_deleted(layer)
+            if self._layer_sync_ctrl: return self._controller_integration.delegate_is_layer_truly_deleted(layer)
             import sip
             return sip.isdeleted(layer)
         except: return True
-
 
     def current_layer_changed(self, layer):
         """v4.0 Sprint 18: Handle current layer change event."""
@@ -1867,8 +1873,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def project_property_changed(self, input_property, input_data=None, custom_functions={}):
         """v4.0 S18: → PropertyController."""
-        if self._controller_integration and self._controller_integration.property_controller:
-            self._controller_integration.delegate_change_project_property(input_property, input_data, custom_functions)
+        if self._property_ctrl: self._controller_integration.delegate_change_project_property(input_property, input_data, custom_functions)
 
 
     # v4.0 Sprint 9: Property helper methods removed - logic migrated to PropertyController
@@ -1877,13 +1882,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def layer_property_changed(self, input_property, input_data=None, custom_functions={}):
         """v4.0 S18: → PropertyController."""
-        if self._controller_integration and self._controller_integration.property_controller:
-            self._controller_integration.delegate_change_layer_property(input_property, input_data, custom_functions)
+        if self._property_ctrl: self._controller_integration.delegate_change_layer_property(input_property, input_data, custom_functions)
 
     def layer_property_changed_with_buffer_style(self, input_property, input_data=None):
         """v4.0 S18: → PropertyController."""
-        if self._controller_integration and self._controller_integration.property_controller:
-            self._controller_integration.property_controller.change_property_with_buffer_style(input_property, input_data)
+        if self._property_ctrl: self._controller_integration.property_controller.change_property_with_buffer_style(input_property, input_data)
     
     def _update_buffer_spinbox_style(self, buffer_value):
         """Update buffer spinbox style based on value (negative = erosion mode)."""
@@ -1897,15 +1900,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _update_buffer_validation(self):
         """Update buffer spinbox validation - delegates to PropertyController."""
-        if self._controller_integration and self._controller_integration.property_controller:
+        if self._property_ctrl:
             try: self._controller_integration.delegate_update_buffer_validation(); return
             except: pass
         logger.warning("_update_buffer_validation: Controller delegation failed")
 
     def set_exporting_properties(self):
         """v3.1 Sprint 16: Set exporting widgets from project properties."""
-        if not self.widgets_initialized or not self.has_loaded_layers:
-            return
+        if not self._is_ui_ready(): return
 
         widgets_to_stop = [["EXPORTING", w] for w in ["HAS_LAYERS_TO_EXPORT", "HAS_PROJECTION_TO_EXPORT", "HAS_STYLES_TO_EXPORT", 
             "HAS_DATATYPE_TO_EXPORT", "LAYERS_TO_EXPORT", "PROJECTION_TO_EXPORT", "STYLES_TO_EXPORT", "DATATYPE_TO_EXPORT"]]
@@ -1947,7 +1949,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def properties_group_state_enabler(self, tuple_group):
         """v4.0 S18: Enable widgets in a property group."""
-        if not self.widgets_initialized or not self.has_loaded_layers: return
+        if not self._is_ui_ready(): return
         for t in tuple_group:
             if t[0].upper() not in self.widgets or t[1].upper() not in self.widgets[t[0].upper()]: continue
             we = self.widgets[t[0].upper()][t[1].upper()]
@@ -1960,7 +1962,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def properties_group_state_reset_to_default(self, tuple_group, group_name, state):
         """v4.0 S18: → PropertyController."""
-        if self._controller_integration and self._controller_integration.property_controller: self._controller_integration.delegate_reset_property_group(tuple_group, group_name, state)
+        if self._property_ctrl: self._controller_integration.delegate_reset_property_group(tuple_group, group_name, state)
 
     def filtering_init_buffer_property(self):
         """v4.0 S18: Init buffer property override widget."""
@@ -1978,7 +1980,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def filtering_buffer_property_changed(self):
         """v4.0 Sprint 8: Optimized - handle buffer property override button changes."""
-        if not self.widgets_initialized or not self.has_loaded_layers: return
+        if not self._is_ui_ready(): return
 
         self.manageSignal(["FILTERING","BUFFER_VALUE_PROPERTY"], 'disconnect')
 
@@ -2024,8 +2026,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def filtering_layers_to_filter_state_changed(self):
         """v3.1 Sprint 11: Simplified - handle layers_to_filter button changes."""
-        if not self.widgets_initialized or not self.has_loaded_layers:
-            return
+        if not self._is_ui_ready(): return
         is_checked = self.widgets["FILTERING"]["HAS_LAYERS_TO_FILTER"]["WIDGET"].isChecked()
         if self._controller_integration:
             self._controller_integration.delegate_filtering_layers_to_filter_state_changed(is_checked)
@@ -2035,7 +2036,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def filtering_combine_operator_state_changed(self):
         """v4.0 S18: Handle combine operator button changes."""
-        if not self.widgets_initialized or not self.has_loaded_layers: return
+        if not self._is_ui_ready(): return
         is_checked = self.widgets["FILTERING"]["HAS_COMBINE_OPERATOR"]["WIDGET"].isChecked()
         if self._controller_integration: self._controller_integration.delegate_filtering_combine_operator_state_changed(is_checked)
         self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].setEnabled(is_checked)
@@ -2044,7 +2045,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def filtering_geometric_predicates_state_changed(self):
         """v4.0 S18: Handle geometric predicates button changes."""
-        if not self.widgets_initialized or not self.has_loaded_layers: return
+        if not self._is_ui_ready(): return
         is_checked = self.widgets["FILTERING"]["HAS_GEOMETRIC_PREDICATES"]["WIDGET"].isChecked()
         if self._controller_integration: self._controller_integration.delegate_filtering_geometric_predicates_state_changed(is_checked)
         self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].setEnabled(is_checked)
@@ -2052,7 +2053,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def filtering_buffer_type_state_changed(self):
         """v4.0 S18: Handle buffer type button changes."""
-        if not self.widgets_initialized or not self.has_loaded_layers: return
+        if not self._is_ui_ready(): return
         is_checked = self.widgets["FILTERING"]["HAS_BUFFER_TYPE"]["WIDGET"].isChecked()
         if self._controller_integration: self._controller_integration.delegate_filtering_buffer_type_state_changed(is_checked)
         self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].setEnabled(is_checked); self.widgets["FILTERING"]["BUFFER_SEGMENTS"]["WIDGET"].setEnabled(is_checked)
@@ -2064,11 +2065,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
            (checkbox := self.widgets.get("FILTERING", {}).get("USE_CENTROIDS_SOURCE_LAYER", {}).get("WIDGET")):
             checkbox.setEnabled(combo.currentLayer() is not None and combo.isEnabled())
 
-              
     def dialog_export_output_path(self):
         """v3.1 Sprint 12: Simplified - dialog for export output path."""
-        if not self.widgets_initialized or not self.has_loaded_layers:
-            return
+        if not self._is_ui_ready(): return
         path = ''
         state = self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].isChecked()
         datatype = self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].currentText() if self.widgets["EXPORTING"]["HAS_DATATYPE_TO_EXPORT"]["WIDGET"].isChecked() else ''
@@ -2108,8 +2107,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def dialog_export_output_pathzip(self):
         """v3.1 Sprint 12: Simplified - dialog for zip export path."""
-        if not self.widgets_initialized or not self.has_loaded_layers:
-            return
+        if not self._is_ui_ready(): return
         path = ''
         state = self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].isChecked()
         if state:
@@ -2132,8 +2130,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def filtering_auto_current_layer_changed(self, state=None):
         """v3.1 Sprint 12: Simplified - handle auto current layer toggle."""
-        if not self.widgets_initialized or not self.has_loaded_layers:
-            return
+        if not self._is_ui_ready(): return
         if state is None:
             state = self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"]
         self.widgets["FILTERING"]["AUTO_CURRENT_LAYER"]["WIDGET"].setChecked(state)

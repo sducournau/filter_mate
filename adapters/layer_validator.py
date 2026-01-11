@@ -268,3 +268,77 @@ class LayerValidator:
             return provider
         except (RuntimeError, AttributeError):
             return 'unknown'
+
+    def validate_postgres_layers_on_project_load(
+        self,
+        project,
+        show_warning_callback=None
+    ) -> List[str]:
+        """
+        Validate PostgreSQL layers for orphaned materialized view references.
+        
+        Sprint 17: Extracted from FilterMateApp._validate_postgres_layers_on_project_load()
+        
+        v2.8.1: When QGIS/FilterMate is closed and reopened, materialized views
+        created for filtering are no longer present in the database. However, 
+        the layer's subset string may still reference them, causing 
+        "relation does not exist" errors.
+        
+        This method detects such orphaned references and clears them,
+        restoring the layer to its unfiltered state.
+        
+        Args:
+            project: QgsProject instance
+            show_warning_callback: Optional callback(title, message) to show warnings
+            
+        Returns:
+            List of layer names that were cleaned
+        """
+        try:
+            from infrastructure.utils import validate_and_cleanup_postgres_layers
+        except ImportError:
+            logger.debug("validate_and_cleanup_postgres_layers not available")
+            return []
+        
+        try:
+            # Get all PostgreSQL layers from the project
+            postgres_layers = []
+            for layer in project.mapLayers().values():
+                if self.is_postgresql_layer(layer):
+                    postgres_layers.append(layer)
+            
+            if not postgres_layers:
+                logger.debug("No PostgreSQL layers to validate for orphaned MVs")
+                return []
+            
+            logger.debug(f"Validating {len(postgres_layers)} PostgreSQL layer(s) for orphaned MV references")
+            
+            # Validate and cleanup orphaned MV references
+            cleaned_layers = validate_and_cleanup_postgres_layers(postgres_layers)
+            
+            if cleaned_layers:
+                # Show warning to user about cleared filters
+                layer_list = ", ".join(cleaned_layers[:3])
+                if len(cleaned_layers) > 3:
+                    layer_list += f" (+{len(cleaned_layers) - 3} other(s))"
+                
+                warning_msg = (
+                    f"Cleared orphaned filter(s) from {len(cleaned_layers)} layer(s): {layer_list}. "
+                    f"Previous filters referenced temporary views that no longer exist."
+                )
+                
+                if show_warning_callback:
+                    show_warning_callback("FilterMate", warning_msg)
+                
+                logger.warning(
+                    f"Cleared orphaned MV references from {len(cleaned_layers)} PostgreSQL layer(s) on project load"
+                )
+                return cleaned_layers
+            else:
+                logger.debug("No orphaned MV references found in PostgreSQL layers")
+                return []
+                
+        except Exception as e:
+            # Non-critical - don't fail project load
+            logger.debug(f"Error validating PostgreSQL layers for orphaned MVs: {e}")
+            return []
