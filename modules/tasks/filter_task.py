@@ -4079,8 +4079,7 @@ class FilterEngineTask(QgsTask):
         """
         Copy filtered layer (with subset string) to memory layer.
         
-        v4.0 DELEGATION: Delegates to GeometryPreparationAdapter.
-        Legacy implementation preserved as fallback.
+        EPIC-1 Phase E5-S2: Legacy code removed - fully delegates to GeometryPreparationAdapter.
         
         Args:
             layer: Source layer (may have subset string active)
@@ -4089,107 +4088,25 @@ class FilterEngineTask(QgsTask):
         Returns:
             QgsVectorLayer: Memory layer with only filtered features and valid geometries
         """
-        # v4.0: Delegate to GeometryPreparationAdapter
-        try:
-            from adapters.qgis.geometry_preparation import GeometryPreparationAdapter
-            adapter = GeometryPreparationAdapter()
-            result = adapter.copy_filtered_to_memory(layer, layer_name)
-            if result.success and result.layer:
-                # Create spatial index for improved performance
-                self._verify_and_create_spatial_index(result.layer, layer_name)
-                return result.layer
-            elif result.error_message:
-                logger.warning(f"GeometryPreparationAdapter: {result.error_message}")
-        except ImportError:
-            logger.debug("GeometryPreparationAdapter not available, using legacy")
-        except Exception as e:
-            logger.debug(f"GeometryPreparationAdapter failed: {e}, using legacy")
+        from adapters.qgis.geometry_preparation import GeometryPreparationAdapter
         
-        # LEGACY FALLBACK (to be removed in v5.0)
-        # Check if layer has active filter
-        subset_string = layer.subsetString()
-        feature_count = layer.featureCount()
+        adapter = GeometryPreparationAdapter()
+        result = adapter.copy_filtered_to_memory(layer, layer_name)
         
-        logger.debug(f"_copy_filtered_layer_to_memory: {layer.name()}, features={feature_count}, "
-                    f"subset='{subset_string[:50] if subset_string else 'None'}', provider={layer.providerType()}")
-        
-        # If no filter and reasonable feature count, return original
-        # EXCEPTION: Always copy virtual layers to memory - they may have unstable geometries
-        is_virtual_layer = layer.providerType() == 'virtual'
-        if not subset_string and feature_count < 10000 and not is_virtual_layer:
-            logger.debug("  → No subset string, returning original layer")
-            return layer
-        
-        if is_virtual_layer:
-            logger.debug("  → Virtual layer detected, copying to memory for stability")
-        
-        # Create memory layer with same structure
-        geom_type = QgsWkbTypes.displayString(layer.wkbType())
-        crs = layer.crs().authid()
-        memory_layer = QgsVectorLayer(f"{geom_type}?crs={crs}", layer_name, "memory")
-        
-        # Copy fields
-        memory_layer.dataProvider().addAttributes(layer.fields())
-        memory_layer.updateFields()
-        
-        # STABILITY FIX v2.3.9: Validate AND REPAIR geometries during copy
-        # Virtual layers and some OGR sources may have corrupted geometries
-        # that pass validation but crash GEOS
-        features_to_copy = []
-        skipped_invalid = 0
-        repaired_count = 0
-        
-        for feature in layer.getFeatures():
-            geom = feature.geometry()
-            
-            # CRITICAL: First check if geometry exists
-            if geom is None or geom.isNull() or geom.isEmpty():
-                skipped_invalid += 1
-                continue
-            
-            # STABILITY FIX: Try to repair ALL geometries with makeValid()
-            try:
-                repaired_geom = geom.makeValid()
-                if repaired_geom and not repaired_geom.isNull() and not repaired_geom.isEmpty():
-                    new_feature = QgsFeature(feature)
-                    new_feature.setGeometry(repaired_geom)
-                    features_to_copy.append(new_feature)
-                    if geom.wkbType() != repaired_geom.wkbType():
-                        repaired_count += 1
-                elif validate_geometry(geom):
-                    new_feature = QgsFeature(feature)
-                    features_to_copy.append(new_feature)
-                else:
-                    skipped_invalid += 1
-            except Exception as e:
-                logger.debug(f"  Exception repairing feature {feature.id()}: {e}")
-                skipped_invalid += 1
-        
-        if repaired_count > 0:
-            logger.info(f"  🔧 Repaired {repaired_count} geometries during copy")
-        if skipped_invalid > 0:
-            logger.warning(f"  ⚠️ Skipped {skipped_invalid} features with invalid geometries")
-        
-        if not features_to_copy:
-            logger.warning(f"  ⚠️ No valid features to copy from {layer.name()}")
-            return memory_layer
-        
-        memory_layer.dataProvider().addFeatures(features_to_copy)
-        memory_layer.updateExtents()
-        
-        logger.debug(f"  ✓ Copied {len(features_to_copy)} features to memory layer (skipped {skipped_invalid} invalid, repaired {repaired_count})")
-        
-        # Create spatial index for improved performance
-        self._verify_and_create_spatial_index(memory_layer, layer_name)
-        
-        return memory_layer
+        if result.success and result.layer:
+            # Create spatial index for improved performance
+            self._verify_and_create_spatial_index(result.layer, layer_name)
+            return result.layer
+        else:
+            error_msg = result.error_message if result.error_message else "Unknown error"
+            logger.error(f"_copy_filtered_layer_to_memory failed: {error_msg}")
+            raise Exception(f"Failed to copy filtered layer to memory: {error_msg}")
 
     def _copy_selected_features_to_memory(self, layer, layer_name="selected_copy"):
         """
         Copy only selected features from layer to memory layer.
         
-        v4.0 DELEGATION: Delegates to GeometryPreparationAdapter.
-        Legacy implementation preserved as fallback.
+        EPIC-1 Phase E5-S2: Legacy code removed - fully delegates to GeometryPreparationAdapter.
         
         Args:
             layer: Source layer with selected features
@@ -4198,113 +4115,24 @@ class FilterEngineTask(QgsTask):
         Returns:
             QgsVectorLayer: Memory layer containing only selected features with valid geometries
         """
-        # v4.0: Delegate to GeometryPreparationAdapter
-        try:
-            from adapters.qgis.geometry_preparation import GeometryPreparationAdapter
-            adapter = GeometryPreparationAdapter()
-            result = adapter.copy_selected_to_memory(layer, layer_name)
-            if result.success and result.layer:
-                self._verify_and_create_spatial_index(result.layer, layer_name)
-                return result.layer
-            elif result.error_message:
-                logger.debug(f"GeometryPreparationAdapter: {result.error_message}")
-        except ImportError:
-            logger.debug("GeometryPreparationAdapter not available, using legacy")
-        except Exception as e:
-            logger.debug(f"GeometryPreparationAdapter failed: {e}, using legacy")
+        from adapters.qgis.geometry_preparation import GeometryPreparationAdapter
         
-        # LEGACY FALLBACK (to be removed in v5.0)
-        selected_count = layer.selectedFeatureCount()
-        logger.debug(f"_copy_selected_features_to_memory: {layer.name()}, "
-                    f"selected={selected_count}, provider={layer.providerType()}")
+        adapter = GeometryPreparationAdapter()
+        result = adapter.copy_selected_to_memory(layer, layer_name)
         
-        if selected_count == 0:
-            logger.warning(f"  ⚠️ No features selected in {layer.name()}")
-            # Return empty memory layer with same structure
-            geom_type = QgsWkbTypes.displayString(layer.wkbType())
-            crs = layer.crs().authid()
-            empty_layer = QgsVectorLayer(f"{geom_type}?crs={crs}", layer_name, "memory")
-            empty_layer.dataProvider().addAttributes(layer.fields())
-            empty_layer.updateFields()
-            return empty_layer
-        
-        # Create memory layer with same structure
-        geom_type = QgsWkbTypes.displayString(layer.wkbType())
-        crs = layer.crs().authid()
-        memory_layer = QgsVectorLayer(f"{geom_type}?crs={crs}", layer_name, "memory")
-        
-        # Copy fields
-        memory_layer.dataProvider().addAttributes(layer.fields())
-        memory_layer.updateFields()
-        
-        # STABILITY FIX v2.3.9: Validate AND REPAIR geometries during copy
-        # Virtual layers and some OGR sources may have corrupted geometries
-        # that pass validation but crash GEOS
-        # FIX v3.1.3: Use thread-safe selectedFeatureIds() + getFeatures()
-        features_to_copy = []
-        skipped_invalid = 0
-        repaired_count = 0
-        
-        selected_fids = list(layer.selectedFeatureIds())
-        if not selected_fids:
-            logger.warning(f"No selected features to copy for {layer_name}")
-            return memory_layer
-        
-        request = QgsFeatureRequest().setFilterFids(selected_fids)
-        for feature in layer.getFeatures(request):
-            geom = feature.geometry()
-            
-            # CRITICAL: First check if geometry exists
-            if geom is None or geom.isNull() or geom.isEmpty():
-                skipped_invalid += 1
-                logger.debug(f"  Skipped feature {feature.id()} with null/empty geometry")
-                continue
-            
-            # STABILITY FIX: Try to repair ALL geometries with makeValid()
-            # This prevents crashes even on geometries that "look" valid
-            try:
-                repaired_geom = geom.makeValid()
-                if repaired_geom and not repaired_geom.isNull() and not repaired_geom.isEmpty():
-                    # Use repaired geometry
-                    new_feature = QgsFeature(feature)
-                    new_feature.setGeometry(repaired_geom)
-                    features_to_copy.append(new_feature)
-                    if geom.wkbType() != repaired_geom.wkbType():
-                        repaired_count += 1
-                elif validate_geometry(geom):
-                    # Fallback to original if makeValid failed but geometry seems OK
-                    new_feature = QgsFeature(feature)
-                    features_to_copy.append(new_feature)
-                else:
-                    skipped_invalid += 1
-                    logger.debug(f"  Skipped feature {feature.id()} - makeValid failed and geometry invalid")
-            except Exception as e:
-                logger.warning(f"  Exception repairing feature {feature.id()}: {e}")
-                skipped_invalid += 1
-        
-        if repaired_count > 0:
-            logger.info(f"  🔧 Repaired {repaired_count} geometries during copy")
-        if skipped_invalid > 0:
-            logger.warning(f"  ⚠️ Skipped {skipped_invalid} features with invalid geometries")
-        
-        if features_to_copy:
-            memory_layer.dataProvider().addFeatures(features_to_copy)
-            memory_layer.updateExtents()
-            
-            # Create spatial index for improved performance
-            self._verify_and_create_spatial_index(memory_layer, layer_name)
+        if result.success and result.layer:
+            self._verify_and_create_spatial_index(result.layer, layer_name)
+            return result.layer
         else:
-            logger.warning(f"  ⚠️ No valid features to copy from selection (all {selected_count} had invalid geometries)")
-        
-        logger.debug(f"  ✓ Copied {len(features_to_copy)} selected features to memory layer (skipped {skipped_invalid} invalid)")
-        return memory_layer
+            error_msg = result.error_message if result.error_message else "Unknown error"
+            logger.error(f"_copy_selected_features_to_memory failed: {error_msg}")
+            raise Exception(f"Failed to copy selected features to memory: {error_msg}")
 
     def _create_memory_layer_from_features(self, features, crs, layer_name="from_features"):
         """
         Create memory layer from a list of QgsFeature objects.
         
-        v4.0 DELEGATION: Delegates to GeometryPreparationAdapter.
-        Legacy implementation preserved as fallback.
+        EPIC-1 Phase E5-S2: Legacy code removed - fully delegates to GeometryPreparationAdapter.
         
         Args:
             features: List of QgsFeature objects
@@ -4314,99 +4142,18 @@ class FilterEngineTask(QgsTask):
         Returns:
             QgsVectorLayer: Memory layer containing the features, or None on failure
         """
-        # v4.0: Delegate to GeometryPreparationAdapter
-        try:
-            from adapters.qgis.geometry_preparation import GeometryPreparationAdapter
-            adapter = GeometryPreparationAdapter()
-            result = adapter.create_memory_from_features(features, crs, layer_name)
-            if result.success and result.layer:
-                self._verify_and_create_spatial_index(result.layer, layer_name)
-                return result.layer
-            elif result.error_message:
-                logger.debug(f"GeometryPreparationAdapter: {result.error_message}")
-        except ImportError:
-            logger.debug("GeometryPreparationAdapter not available, using legacy")
-        except Exception as e:
-            logger.debug(f"GeometryPreparationAdapter failed: {e}, using legacy")
+        from adapters.qgis.geometry_preparation import GeometryPreparationAdapter
         
-        # LEGACY FALLBACK (to be removed in v5.0)
-        if not features or len(features) == 0:
-            logger.warning(f"_create_memory_layer_from_features: No features provided")
+        adapter = GeometryPreparationAdapter()
+        result = adapter.create_memory_from_features(features, crs, layer_name)
+        
+        if result.success and result.layer:
+            self._verify_and_create_spatial_index(result.layer, layer_name)
+            return result.layer
+        else:
+            error_msg = result.error_message if result.error_message else "Unknown error"
+            logger.error(f"_create_memory_layer_from_features failed: {error_msg}")
             return None
-        
-        # Find first feature with valid geometry to determine type
-        geom_type = None
-        for feat in features:
-            if feat.hasGeometry() and not feat.geometry().isEmpty():
-                geom_type = QgsWkbTypes.displayString(feat.geometry().wkbType())
-                break
-        
-        if not geom_type:
-            logger.error(f"_create_memory_layer_from_features: No features with valid geometry")
-            return None
-        
-        # Get CRS auth ID
-        crs_authid = crs.authid() if hasattr(crs, 'authid') else str(crs)
-        
-        logger.info(f"_create_memory_layer_from_features: Creating {geom_type} layer with {len(features)} features")
-        
-        # Create memory layer
-        memory_layer = QgsVectorLayer(f"{geom_type}?crs={crs_authid}", layer_name, "memory")
-        
-        if not memory_layer.isValid():
-            logger.error(f"_create_memory_layer_from_features: Failed to create memory layer")
-            return None
-        
-        # Copy fields from first feature if available
-        first_valid = features[0]
-        if first_valid.fields().count() > 0:
-            memory_layer.dataProvider().addAttributes(first_valid.fields())
-            memory_layer.updateFields()
-        
-        # Add features with geometry validation
-        features_to_add = []
-        skipped = 0
-        
-        for feat in features:
-            if not feat.hasGeometry() or feat.geometry().isEmpty():
-                skipped += 1
-                continue
-            
-            geom = feat.geometry()
-            
-            # Try to repair geometry
-            try:
-                repaired = geom.makeValid()
-                if repaired and not repaired.isEmpty():
-                    new_feat = QgsFeature(feat)
-                    new_feat.setGeometry(repaired)
-                    features_to_add.append(new_feat)
-                elif validate_geometry(geom):
-                    features_to_add.append(QgsFeature(feat))
-                else:
-                    skipped += 1
-            except Exception:
-                if validate_geometry(geom):
-                    features_to_add.append(QgsFeature(feat))
-                else:
-                    skipped += 1
-        
-        if not features_to_add:
-            logger.error(f"_create_memory_layer_from_features: All {len(features)} features had invalid geometries")
-            return None
-        
-        memory_layer.dataProvider().addFeatures(features_to_add)
-        memory_layer.updateExtents()
-        
-        if skipped > 0:
-            logger.warning(f"  ⚠️ Skipped {skipped} features with invalid geometries")
-        
-        logger.info(f"  ✓ Created memory layer with {memory_layer.featureCount()} features")
-        
-        # Create spatial index
-        self._verify_and_create_spatial_index(memory_layer, layer_name)
-        
-        return memory_layer
 
     def _convert_layer_to_centroids(self, layer):
         """
@@ -5037,9 +4784,9 @@ class FilterEngineTask(QgsTask):
 
     def _create_buffered_memory_layer(self, layer, buffer_distance):
         """
-        Manually buffer layer features and create memory layer (fallback method).
+        Create memory layer with buffered geometries.
         
-        v4.0 DELEGATION (EPIC-1 Phase E2): Delegates to core.geometry.create_buffered_memory_layer
+        EPIC-1 Phase E5-S2: Legacy code removed - fully delegates to core.geometry.create_buffered_memory_layer.
         
         Args:
             layer: Input layer
@@ -5051,75 +4798,15 @@ class FilterEngineTask(QgsTask):
         Raises:
             Exception: If no valid geometries could be buffered
         """
-        # v4.0 DELEGATION (EPIC-1 Phase E2): Use core.geometry module (Strangler Fig pattern)
-        try:
-            from core.geometry import create_buffered_memory_layer
-            
-            return create_buffered_memory_layer(
-                layer=layer,
-                buffer_distance=buffer_distance,
-                buffer_segments=self.param_buffer_segments,
-                verify_spatial_index_fn=self._verify_and_create_spatial_index,
-                warning_callback=self._store_warning_message
-            )
-            
-        except ImportError:
-            # LEGACY FALLBACK: Keep original implementation
-            # DISABLED: Skip pre-validation, accept geometries as-is
-            logger.info("Manual buffer: geometry validation DISABLED")
-            # layer = self._repair_invalid_geometries(layer)
+        from core.geometry import create_buffered_memory_layer
         
-        feature_count = layer.featureCount()
-        logger.info(f"Manual buffer: Layer has {feature_count} features, geomType={layer.geometryType()}, wkbType={layer.wkbType()}")
-        
-        # CRS diagnostic
-        crs = layer.crs()
-        is_geographic = crs.isGeographic()
-        logger.info(f"Manual buffer CRS: {crs.authid()}, isGeographic={is_geographic}")
-        
-        if feature_count == 0:
-            raise Exception("Cannot buffer layer: source layer has no features")
-        
-        # Evaluate buffer distance
-        buffer_dist = self._evaluate_buffer_distance(layer, buffer_distance)
-        logger.debug(f"Manual buffer distance: {buffer_dist}")
-        
-        # Warn about geographic CRS
-        if is_geographic and buffer_dist > 1:
-            logger.warning(
-                f"⚠️ Manual buffer with geographic CRS ({crs.authid()}) and distance {buffer_dist}°\n"
-                f"   This is {buffer_dist * 111:.1f}km at equator - likely too large!"
-            )
-        
-        # Create memory layer
-        buffered_layer = self._create_memory_layer_for_buffer(layer)
-        
-        # Buffer all features
-        geometries, valid_features, invalid_features, eroded_features = self._buffer_all_features(layer, buffer_dist)
-        
-        # MODIFIED: Accept result even with 0 valid geometries (return empty layer instead of error)
-        if not geometries:
-            # Enhanced warning message for negative buffers
-            if buffer_dist < 0:
-                logger.warning(
-                    f"⚠️ Buffer négatif ({buffer_dist}m) a complètement érodé toutes les géométries. "
-                    f"Total: {feature_count}, Valides: {valid_features}, Érodées: {eroded_features}, Invalides: {invalid_features}"
-                )
-                # THREAD SAFETY FIX v2.5.6: Store warning for display in finished()
-                # Cannot call iface.messageBar() from worker thread - would cause crash
-                self.warning_messages.append(
-                    f"Le buffer négatif de {buffer_dist}m a complètement érodé toutes les géométries. Réduisez la distance du buffer."
-                )
-            else:
-                logger.warning(
-                    f"⚠️ Manual buffer produced no geometries. "
-                    f"Total: {feature_count}, Valid: {valid_features}, Invalid: {invalid_features}"
-                )
-            # Return empty layer instead of raising exception
-            return buffered_layer
-        
-        # Dissolve and add to layer if we have geometries
-        return self._dissolve_and_add_to_layer(geometries, buffered_layer)
+        return create_buffered_memory_layer(
+            layer=layer,
+            buffer_distance=buffer_distance,
+            buffer_segments=self.param_buffer_segments,
+            verify_spatial_index_fn=self._verify_and_create_spatial_index,
+            warning_callback=self._store_warning_message
+        )
 
     def _aggressive_geometry_repair(self, geom):
         """

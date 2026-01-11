@@ -655,3 +655,168 @@ class TaskParameterBuilder:
                 "session_id": session_id  # For multi-client materialized view isolation
             }
         }
+    
+    def log_filtering_diagnostic(
+        self,
+        current_layer: 'QgsVectorLayer',
+        layers_to_filter: List[Dict],
+        context: str = "get_task_parameters"
+    ) -> None:
+        """
+        Log detailed filtering diagnostic information.
+        
+        v4.7: Extracted from FilterMateApp.get_task_parameters() for God Class reduction.
+        
+        Args:
+            current_layer: Source layer for filtering
+            layers_to_filter: List of validated layer info dictionaries
+            context: Context string for log message
+        """
+        layer_id = current_layer.id()
+        if layer_id not in self._project_layers:
+            logger.warning(f"Layer {layer_id} not in PROJECT_LAYERS for diagnostic")
+            return
+        
+        filtering_props = self._project_layers[layer_id].get("filtering", {})
+        
+        logger.info("=" * 60)
+        logger.info(f"🔍 GEOMETRIC FILTERING DIAGNOSTIC - {context}")
+        logger.info("=" * 60)
+        logger.info(f"  Source layer: {current_layer.name()}")
+        logger.info(f"  has_geometric_predicates: {filtering_props.get('has_geometric_predicates', 'NOT SET')}")
+        logger.info(f"  geometric_predicates: {filtering_props.get('geometric_predicates', [])}")
+        logger.info(f"  has_layers_to_filter: {filtering_props.get('has_layers_to_filter', 'NOT SET')}")
+        logger.info(f"  layers_to_filter (from filtering): {filtering_props.get('layers_to_filter', [])}")
+        logger.info(f"  layers_to_filter (validated): {len(layers_to_filter)} layers")
+        for i, layer_info in enumerate(layers_to_filter[:5]):
+            logger.info(f"    {i + 1}. {layer_info.get('layer_name', 'unknown')}")
+        if len(layers_to_filter) > 5:
+            logger.info(f"    ... and {len(layers_to_filter) - 5} more")
+        logger.info("=" * 60)
+    
+    def build_export_params(
+        self,
+        project_layers: Dict,
+        project: 'QgsProject'
+    ) -> Dict[str, Any]:
+        """
+        Build parameters for export task.
+        
+        v4.7: Extracted from FilterMateApp.get_task_parameters() for God Class reduction.
+        
+        Args:
+            project_layers: PROJECT_LAYERS dictionary
+            project: QgsProject instance
+            
+        Returns:
+            Export task parameters dictionary with layers_to_export
+        """
+        from qgis.core import QgsVectorLayer
+        
+        layers_to_export = []
+        dw = self._dockwidget
+        
+        if not dw or not hasattr(dw, 'project_props'):
+            logger.warning("Cannot build export params: dockwidget or project_props missing")
+            return {}
+        
+        export_layer_ids = dw.project_props.get("EXPORTING", {}).get("LAYERS_TO_EXPORT", [])
+        
+        for layer_key in export_layer_ids:
+            if layer_key in project_layers:
+                layers_to_export.append(project_layers[layer_key]["infos"])
+            else:
+                # Handle layers not in PROJECT_LAYERS but still in QGIS project
+                layer = project.mapLayer(layer_key)
+                if layer and isinstance(layer, QgsVectorLayer) and layer.isValid():
+                    from ..modules.appUtils import detect_layer_provider_type
+                    
+                    geom_type_map = {
+                        0: 'GeometryType.Point', 
+                        1: 'GeometryType.Line',
+                        2: 'GeometryType.Polygon', 
+                        3: 'GeometryType.Unknown', 
+                        4: 'GeometryType.Null'
+                    }
+                    geom_type_str = geom_type_map.get(layer.geometryType(), 'GeometryType.Unknown')
+                    
+                    layer_info = {
+                        "layer_id": layer.id(),
+                        "layer_name": layer.name(),
+                        "layer_crs_authid": layer.crs().authid(),
+                        "layer_geometry_type": geom_type_str,
+                        "layer_provider_type": detect_layer_provider_type(layer),
+                        "layer_table_name": layer.name(),
+                        "layer_schema": "",
+                        "layer_geometry_field": layer.dataProvider().geometryColumn() 
+                            if hasattr(layer.dataProvider(), 'geometryColumn') else "geometry"
+                    }
+                    layers_to_export.append(layer_info)
+                    logger.info(f"Export: Added layer '{layer.name()}' not in PROJECT_LAYERS")
+        
+        task_params = dict(dw.project_props)
+        task_params["layers"] = layers_to_export
+        return {"task": task_params}
+    
+    def get_and_validate_features(
+        self,
+        task_name: str
+    ) -> tuple:
+        """
+        Get and validate source features for filtering task.
+        
+        v4.7: Extracted from FilterMateApp.get_task_parameters() for God Class reduction.
+        
+        Args:
+            task_name: Type of task ('filter', 'unfilter', 'reset')
+            
+        Returns:
+            tuple: (features, expression) or ([], "") for unfilter/reset
+            
+        Raises:
+            ValueError: If single_selection mode has no features
+        """
+        from qgis.core import QgsMessageLog, Qgis
+        from qgis.utils import iface
+        
+        dw = self._dockwidget
+        
+        # v2.9.28: reset and unfilter don't need features
+        if task_name in ('unfilter', 'reset'):
+            logger.info(f"get_and_validate_features: task_name='{task_name}' - no features needed")
+            return [], ""
+        
+        # Get features for filter operation
+        logger.info("get_and_validate_features: Calling get_current_features()...")
+        features, expression = dw.get_current_features()
+        logger.info(f"get_and_validate_features: Returned {len(features)} features, expression='{expression}'")
+        
+        # CRITICAL CHECK: Warn if no features and no expression
+        if len(features) == 0 and not expression:
+            logger.warning("⚠️ NO FEATURES and NO EXPRESSION!")
+            logger.warning(f"   current_exploring_groupbox: {dw.current_exploring_groupbox}")
+            
+            QgsMessageLog.logMessage(
+                f"⚠️ CRITICAL: No source features selected! Groupbox: {dw.current_exploring_groupbox}",
+                "FilterMate", Qgis.Warning
+            )
+            
+            # v2.9.21: ABORT in single_selection mode
+            if dw.current_exploring_groupbox == "single_selection":
+                QgsMessageLog.logMessage(
+                    "   Aborting filter - single_selection mode requires a selected feature!",
+                    "FilterMate", Qgis.Warning
+                )
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    "Aucune entité sélectionnée! Le widget de sélection a perdu la feature. Re-sélectionnez une entité."
+                )
+                logger.warning("⚠️ ABORTING filter task - single_selection mode with no selection!")
+                raise ValueError("No features in single_selection mode")
+            else:
+                QgsMessageLog.logMessage(
+                    "   The filter will use ALL features from source layer!",
+                    "FilterMate", Qgis.Warning
+                )
+        
+        return features, expression

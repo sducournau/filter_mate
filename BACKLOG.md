@@ -1,7 +1,7 @@
 # FilterMate Backlog - Issues & Fixes
 
 **Date de création:** 2026-01-08  
-**Dernière mise à jour:** 2026-01-11  
+**Dernière mise à jour:** 2026-01-12  
 **Version analysée:** 4.0  
 **Généré par:** BMAD Master + Claude Opus 4.5
 
@@ -9,36 +9,37 @@
 
 ## 📊 Résumé Exécutif - Refactoring v4.0
 
-### 🎯 État Global du Refactoring (11 janvier 2026)
+### 🎯 État Global du Refactoring (12 janvier 2026)
 
 | Composant                | Statut      | Détails                               |
 | ------------------------ | ----------- | ------------------------------------- |
-| **God Class App**        | ✅ **-41%** | 6,063 → 3,578 lignes                  |
-| **God Class Dockwidget** | ✅ **-65%** | 13,049 → 4,521 lignes (-8,528 lignes) |
-| **Total God Classes**    | ✅ **-58%** | 19,112 → 8,099 lignes                 |
+| **God Class App**        | ✅ **-48%** | 6,063 → 3,163 lignes (-2,900 lignes)  |
+| **God Class Dockwidget** | ✅ **-68%** | 13,049 → 4,232 lignes (-8,817 lignes) |
+| **Total God Classes**    | ✅ **-61%** | 19,112 → 7,395 lignes                 |
 | **Services Core**        | ✅ Créés    | 17 services (9,767 lignes)            |
 | **Controllers UI**       | ✅ Créés    | 13 controllers (12,500+ lignes)       |
 | **Adapters**             | ✅ Créés    | 10 adapters (5,000+ lignes)           |
 
 ### 📈 Progression Sprints Récents
 
-| Sprint            | Date       | Cible                         | Réduction       |
-| ----------------- | ---------- | ----------------------------- | --------------- |
-| S9                | 11/01/2026 | PropertyController            | -151 lignes     |
-| S10               | 11/01/2026 | ActionBarManager              | -176 lignes     |
-| S11               | 11/01/2026 | ConfigController helpers      | -153 lignes     |
-| S12               | 11/01/2026 | BackendController + Favorites | -159 lignes     |
-| **Total Session** | **11/01**  | **Multiple**                  | **-639 lignes** |
+| Sprint            | Date         | Cible                          | Réduction       |
+| ----------------- | ------------ | ------------------------------ | --------------- |
+| S9                | 11/01/2026   | PropertyController             | -151 lignes     |
+| S10               | 11/01/2026   | ActionBarManager               | -176 lignes     |
+| S11               | 11/01/2026   | ConfigController helpers       | -153 lignes     |
+| S12               | 11/01/2026   | BackendController + Favorites  | -159 lignes     |
+| S13               | 11/01/2026   | PostgreSQL → BackendController | -216 lignes     |
+| **Total Session** | **11-12/01** | **Multiple**                   | **-855 lignes** |
 
 ### 🏗️ Nouvelle Architecture Hexagonale (v4.0)
 
 | Dossier           | Fichiers | Lignes      | Rôle                              |
 | ----------------- | -------- | ----------- | --------------------------------- |
 | `core/services/`  | 17       | 9,767       | Domain Services                   |
-| `ui/controllers/` | 13       | 12,500+     | UI Controllers (MVC)              |
-| `adapters/`       | 10       | 5,000+      | Bridges & Handlers                |
+| `ui/controllers/` | 13       | 13,000+     | UI Controllers (MVC)              |
+| `adapters/`       | 10       | 5,500+      | Bridges & Handlers                |
 | `ui/managers/`    | 4        | 1,100+      | Layout & Config Managers          |
-| **Total Extrait** | **44+**  | **28,000+** | **Code migré depuis God Classes** |
+| **Total Extrait** | **44+**  | **29,000+** | **Code migré depuis God Classes** |
 
 ### Phase A - Migration Imports ✅ COMPLÈTE (2026-01-09)
 
@@ -47,13 +48,13 @@
 - **Shims de compatibilité**: 6 modules créés
 - **Imports legacy restants**: 0 (hors shims et tests)
 
-### Phase C - Slim God Classes 🔄 EN COURS (Sprint 12+)
+### Phase C - Slim God Classes 🔄 EN COURS (Sprint 13+)
 
 | Fichier                     | Début  | Actuel | Cible   | Progrès |
 | --------------------------- | ------ | ------ | ------- | ------- |
-| `filter_mate_dockwidget.py` | 13,049 | 4,521  | < 2,000 | **65%** |
-| `filter_mate_app.py`        | 6,063  | 3,578  | < 1,500 | **41%** |
-| **Total**                   | 19,112 | 8,099  | < 3,500 | **58%** |
+| `filter_mate_dockwidget.py` | 13,049 | 4,232  | < 2,000 | **68%** |
+| `filter_mate_app.py`        | 6,063  | 3,163  | < 1,500 | **48%** |
+| **Total**                   | 19,112 | 7,395  | < 3,500 | **61%** |
 
 ### Services Extraits (v4.0 - v4.6)
 

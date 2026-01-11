@@ -100,11 +100,13 @@ try:
     from .core.services.datasource_manager import DatasourceManager  # v4.5: Datasource management extraction
     from .core.services.layer_filter_builder import LayerFilterBuilder  # v4.6: Layer filter building extraction
     from .adapters.layer_refresh_manager import LayerRefreshManager  # v4.7: Layer refresh extraction
+    from .adapters.layer_task_completion_handler import LayerTaskCompletionHandler  # v4.7: Layer task completion extraction
     HEXAGONAL_AVAILABLE = True
 except ImportError:
     HEXAGONAL_AVAILABLE = False
     TaskParameterBuilder = None  # v4.0: Fallback
     LayerRefreshManager = None  # v4.7: Fallback
+    LayerTaskCompletionHandler = None  # v4.7: Fallback
     LayerLifecycleService = None  # v4.0: Fallback
     LayerLifecycleConfig = None  # v4.0: Fallback
     TaskManagementService = None  # v4.0: Fallback
@@ -2026,71 +2028,34 @@ class FilterMateApp:
             else:
                 task_parameters = self.PROJECT_LAYERS[current_layer.id()]
 
-            # v2.7.17: Enhanced logging before getting features
-            # v2.9.28: FIX - reset and unfilter do NOT require features to be selected
-            # Only filter operation requires features - reset/unfilter just need source layer and distant layers
-            if task_name == 'filter':
-                logger.info(f"get_task_parameters: Calling get_current_features()...")
-                features, expression = self.dockwidget.get_current_features()
-                logger.info(f"get_task_parameters: get_current_features() returned {len(features)} features, expression='{expression}'")
-                
-                # v2.7.17: CRITICAL CHECK - Warn if no features and no expression
-                # v2.9.20: Enhanced warning with QGIS MessageLog for visibility
-                # v2.9.21: FIX - Abort filter in single_selection mode to prevent FALLBACK MODE
-                if len(features) == 0 and not expression:
-                    logger.warning(f"⚠️ get_task_parameters: NO FEATURES and NO EXPRESSION!")
-                    logger.warning(f"   current_exploring_groupbox: {self.dockwidget.current_exploring_groupbox}")
-                    logger.warning(f"   This may cause the filter task to abort or filter incorrectly")
-                    from qgis.core import QgsMessageLog, Qgis
-                    QgsMessageLog.logMessage(
-                        f"⚠️ CRITICAL: No source features selected! Groupbox: {self.dockwidget.current_exploring_groupbox}",
-                        "FilterMate", Qgis.Warning
+            # v4.7: Delegate feature extraction and validation to TaskParameterBuilder
+            try:
+                if TaskParameterBuilder and self.dockwidget:
+                    builder = TaskParameterBuilder(
+                        dockwidget=self.dockwidget,
+                        project_layers=self.PROJECT_LAYERS,
+                        config_data=self.CONFIG_DATA
                     )
-                    
-                    # v2.9.21: ABORT filter in single_selection mode instead of continuing with ALL features
-                    if self.dockwidget.current_exploring_groupbox == "single_selection":
-                        QgsMessageLog.logMessage(
-                            f"   Aborting filter - single_selection mode requires a selected feature!",
-                            "FilterMate", Qgis.Warning
-                        )
-                        iface.messageBar().pushWarning(
-                            "FilterMate",
-                            "Aucune entité sélectionnée! Le widget de sélection a perdu la feature. Re-sélectionnez une entité."
-                        )
-                        logger.warning(f"⚠️ ABORTING filter task - single_selection mode with no selection!")
-                        return None  # v2.9.21: Abort filter instead of using FALLBACK MODE
-                    else:
-                        QgsMessageLog.logMessage(
-                            f"   The filter will use ALL features from source layer - this is probably NOT what you want!",
-                            "FilterMate", Qgis.Warning
-                        )
-            else:
-                # v2.9.28: For reset and unfilter, we don't need features - just initialize empty values
-                # These operations just clear filters on source and distant layers
-                logger.info(f"get_task_parameters: task_name='{task_name}' - no features needed (reset/unfilter)")
-                features = []
-                expression = ""
+                    features, expression = builder.get_and_validate_features(task_name)
+                else:
+                    # Minimal fallback
+                    features, expression = [], ""
+            except ValueError:
+                # single_selection mode with no features - abort
+                return None
 
             if task_name in ('filter', 'unfilter', 'reset'):
                 # Build validated list of layers to filter
                 layers_to_filter = self._build_layers_to_filter(current_layer)
                 
-                # Log filtering state - ENHANCED DIAGNOSTIC
-                filtering_props = self.PROJECT_LAYERS[current_layer.id()]["filtering"]
-                logger.info(f"=" * 60)
-                logger.info(f"🔍 GEOMETRIC FILTERING DIAGNOSTIC - get_task_parameters")
-                logger.info(f"=" * 60)
-                logger.info(f"  Source layer: {current_layer.name()}")
-                logger.info(f"  has_geometric_predicates: {filtering_props.get('has_geometric_predicates', 'NOT SET')}")
-                logger.info(f"  geometric_predicates: {filtering_props.get('geometric_predicates', [])}")
-                logger.info(f"  has_layers_to_filter: {filtering_props.get('has_layers_to_filter', 'NOT SET')}")
-                logger.info(f"  layers_to_filter (from filtering): {filtering_props.get('layers_to_filter', [])}")
-                logger.info(f"  layers_to_filter (validated): {len(layers_to_filter)} layers")
-                for i, l in enumerate(layers_to_filter[:5]):  # Show first 5
-                    logger.info(f"    {i+1}. {l.get('layer_name', 'unknown')}")
-                if len(layers_to_filter) > 5:
-                    logger.info(f"    ... and {len(layers_to_filter) - 5} more")
-                logger.info(f"=" * 60)
+                # v4.7: Delegate diagnostic logging to TaskParameterBuilder
+                if TaskParameterBuilder and self.dockwidget:
+                    builder = TaskParameterBuilder(
+                        dockwidget=self.dockwidget,
+                        project_layers=self.PROJECT_LAYERS,
+                        config_data=self.CONFIG_DATA
+                    )
+                    builder.log_filtering_diagnostic(current_layer, layers_to_filter)
                 
                 # Build common task parameters
                 # Note: unfilter no longer needs history_manager (just clears filters)
@@ -2133,38 +2098,21 @@ class FilterMateApp:
                 return task_parameters
 
             elif task_name == 'export':
-                layers_to_export = []
-                for key in self.dockwidget.project_props["EXPORTING"]["LAYERS_TO_EXPORT"]:
-                    if key in self.PROJECT_LAYERS:
-                        layers_to_export.append(self.PROJECT_LAYERS[key]["infos"])
-                    else:
-                        # FIX: Handle layers not in PROJECT_LAYERS but still in QGIS project
-                        # This can happen for PostgreSQL layers that weren't added to FilterMate
-                        layer = self.PROJECT.mapLayer(key)
-                        if layer and isinstance(layer, QgsVectorLayer) and layer.isValid():
-                            # Convert geometry type to string
-                            geom_type_map = {0: 'GeometryType.Point', 1: 'GeometryType.Line', 
-                                           2: 'GeometryType.Polygon', 3: 'GeometryType.Unknown', 4: 'GeometryType.Null'}
-                            geom_type_str = geom_type_map.get(layer.geometryType(), 'GeometryType.Unknown')
-                            
-                            # Build minimal layer info for export
-                            layer_info = {
-                                "layer_id": layer.id(),
-                                "layer_name": layer.name(),
-                                "layer_crs_authid": layer.crs().authid(),
-                                "layer_geometry_type": geom_type_str,
-                                "layer_provider_type": detect_layer_provider_type(layer),
-                                "layer_table_name": layer.name(),  # Fallback
-                                "layer_schema": "",
-                                "layer_geometry_field": layer.dataProvider().geometryColumn() if hasattr(layer.dataProvider(), 'geometryColumn') else "geometry"
-                            }
-                            layers_to_export.append(layer_info)
-                            logger.info(f"Export: Added layer '{layer.name()}' not in PROJECT_LAYERS")
+                # v4.7: Delegate export params building to TaskParameterBuilder
+                if TaskParameterBuilder and self.dockwidget:
+                    builder = TaskParameterBuilder(
+                        dockwidget=self.dockwidget,
+                        project_layers=self.PROJECT_LAYERS,
+                        config_data=self.CONFIG_DATA
+                    )
+                    export_params = builder.build_export_params(self.PROJECT_LAYERS, self.PROJECT)
+                    if export_params:
+                        export_params["task"]["session_id"] = self.session_id
+                        return {**task_parameters, **export_params}
                 
-                task_parameters["task"] = self.dockwidget.project_props
-                task_parameters["task"]["layers"] = layers_to_export
-                task_parameters["task"]["session_id"] = self.session_id  # For multi-client isolation
-                return task_parameters
+                # Fallback if TaskParameterBuilder unavailable
+                logger.warning("TaskParameterBuilder unavailable for export")
+                return None
             
         else:
             # Layer management tasks

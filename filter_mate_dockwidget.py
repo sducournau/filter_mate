@@ -218,75 +218,37 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     _signal_cache = {}
 
     def __init__(self, project_layers, plugin_dir, config_data, project, parent=None):
-        """Constructor."""
+        """v4.0 Sprint 15: Initialize dockwidget with state, managers, and performance optimizations."""
         super(FilterMateDockWidget, self).__init__(parent)
+        self.exception, self.iface = None, iface
+        self.plugin_dir, self.CONFIG_DATA, self.PROJECT_LAYERS, self.PROJECT = plugin_dir, config_data, project_layers, project
+        self.current_layer, self.current_layer_selection_connection = None, None
         
-        self.exception = None
-        self.iface = iface
-
-        self.plugin_dir = plugin_dir
-        self.CONFIG_DATA = config_data
-        self.PROJECT_LAYERS = project_layers
-        self.PROJECT = project
-        self.current_layer = None
-        self.current_layer_selection_connection = None
-        
-        # Protection flags against recursive calls
-        self._updating_layers = False
-        self._updating_current_layer = False
-        self._updating_groupbox = False  # Prevents infinite loop in groupbox collapse/expand signals
-        self._signals_connected = False
-        self._pending_layers_update = False  # Flag to track if layers were updated before widgets_initialized
-        self._plugin_busy = False  # Global flag to block operations during critical changes (project load, etc.)
-        self._syncing_from_qgis = False  # Flag to prevent infinite recursion in QGIS ↔ widgets synchronization
-        self._filtering_in_progress = False  # v2.9.25: CRITICAL - Protect current_layer during filtering operations
-        self._filter_completed_time = 0  # v2.9.42: Timestamp when filtering completed (for delayed protection)
-        self._saved_layer_id_before_filter = None  # v2.9.42: Layer ID to restore after filtering
-        
-        # Flag to track if LAYER_TREE_VIEW signal is connected (for bidirectional sync)
+        # Protection flags
+        self._updating_layers = self._updating_current_layer = self._updating_groupbox = self._signals_connected = False
+        self._pending_layers_update = self._plugin_busy = self._syncing_from_qgis = False
+        self._filtering_in_progress, self._filter_completed_time, self._saved_layer_id_before_filter = False, 0, None
         self._layer_tree_view_signal_connected = False
-        
-        # Signal connection state tracking to avoid redundant connect/disconnect calls
-        # Key format: "WIDGET_GROUP.WIDGET_NAME.SIGNAL_NAME" -> bool (True=connected, False=disconnected)
         self._signal_connection_states = {}
-        
-        # Theme watcher for automatic dark/light mode switching
         self._theme_watcher = None
         
-        # PERFORMANCE: Debounce timers for expression changes
-        # Prevents excessive recomputation when user types quickly or makes rapid changes
+        # Expression debounce (450ms)
         self._expression_debounce_timer = QTimer()
         self._expression_debounce_timer.setSingleShot(True)
-        self._expression_debounce_timer.setInterval(450)  # 450ms debounce delay
+        self._expression_debounce_timer.setInterval(450)
         self._expression_debounce_timer.timeout.connect(self._execute_debounced_expression_change)
-        self._pending_expression_change = None  # Stores pending (groupbox, expression) tuple
-
-        # SYNCHRONIZATION: Track which widget last changed its display expression
-        # This prevents infinite loops when IS_LINKING is enabled and we sync expressions
-        # Value: "single_selection", "multiple_selection", or None
-        self._last_expression_change_source = None
+        self._pending_expression_change = self._last_expression_change_source = None
         
-        # PERFORMANCE: Cache for expression evaluation results
-        # Avoids recomputing same expressions repeatedly
-        self._expression_cache = {}  # Key: (layer_id, expression) -> Value: (features, timestamp)
-        self._expression_cache_max_age = 60.0  # Cache entries expire after 60 seconds
-        self._expression_cache_max_size = 100  # Maximum cache entries
+        # Expression cache (60s TTL, 100 max entries)
+        self._expression_cache = {}
+        self._expression_cache_max_age, self._expression_cache_max_size = 60.0, 100
         
-        # PERFORMANCE (v2.5.10): Async expression evaluation for large layers
-        # Threshold above which expression evaluation runs in background task
-        # v2.7.6: Get threshold from configuration
+        # Async expression eval
         thresholds = get_optimization_thresholds(ENV_VARS)
         self._async_expression_threshold = thresholds['async_expression_threshold']
         self._expression_manager = get_expression_manager() if ASYNC_EXPRESSION_AVAILABLE else None
-        self._pending_async_evaluation = None  # Track pending async evaluation
-        
-        # Loading state tracking for UI feedback
-        self._expression_loading = False
-        
-        # v4.0 Sprint 6: Configuration manager for widgets
+        self._pending_async_evaluation, self._expression_loading = None, False
         self._configuration_manager = None
-        
-        # Initialize layer state
         self._initialize_layer_state()
     
     def _safe_get_layer_props(self, layer):
@@ -313,36 +275,29 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return self.PROJECT_LAYERS[layer_id]
     
     def _initialize_layer_state(self):
-        """v3.1 Sprint 15: Initialize layer state and managers."""
-        # Initialize layer from project
+        """v4.0 Sprint 15: Initialize layers, managers, controllers, and UI."""
         self.init_layer, self.has_loaded_layers = None, False
         if self.PROJECT:
             vector_layers = [l for l in self.PROJECT.mapLayers().values() if isinstance(l, QgsVectorLayer)]
             if vector_layers:
-                self.init_layer = self.iface.activeLayer() or vector_layers[0]
-                self.has_loaded_layers = True
-
-        # Core state initialization
-        self.widgets, self.widgets_initialized = None, False
-        self.current_exploring_groupbox, self.tabTools_current_index = None, 0
+                self.init_layer, self.has_loaded_layers = self.iface.activeLayer() or vector_layers[0], True
+        self.widgets, self.widgets_initialized, self.current_exploring_groupbox, self.tabTools_current_index = None, False, None, 0
         self.backend_indicator_label, self.plugin_title_label, self.frame_header = None, None, None
         self._exploring_cache = ExploringFeaturesCache(max_layers=50, max_age_seconds=300.0)
         
-        # Layout managers (v3.1 Phase 6)
+        # Layout/Style managers
         self._splitter_manager = self._dimensions_manager = self._spacing_manager = self._action_bar_manager = None
         if LAYOUT_MANAGERS_AVAILABLE:
             for name, cls in [('_splitter_manager', SplitterManager), ('_dimensions_manager', DimensionsManager),
                               ('_spacing_manager', SpacingManager), ('_action_bar_manager', ActionBarManager)]:
                 try: setattr(self, name, cls(self) if cls else None)
                 except: pass
-        
-        # Style managers (v3.1 Phase 6)
         self._theme_manager = self._icon_manager = self._button_styler = None
         if STYLE_MANAGERS_AVAILABLE:
             try: self._theme_manager, self._icon_manager, self._button_styler = ThemeManager(self), IconManager(self), ButtonStyler(self)
             except: pass
         
-        # Controller integration (v3.0 Strangler Fig)
+        # Controllers
         self._controller_integration = None
         if CONTROLLERS_AVAILABLE:
             try:
@@ -350,22 +305,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self._controller_integration = ControllerIntegration(dockwidget=self, filter_service=filter_service, enabled=True)
             except: pass
         
-        # Feature selection tracking
         self._last_single_selection_fid = self._last_single_selection_layer_id = None
         self._last_multiple_selection_fids = self._last_multiple_selection_layer_id = None
-
-        # Property state
         self.predicates = self.project_props = self.layer_properties_tuples_dict = self.export_properties_tuples_dict = None
         self.buffer_property_has_been_init = False
         self.json_template_project_exporting = '{"has_layers_to_export":false,"layers_to_export":[],"has_projection_to_export":false,"projection_to_export":"","has_styles_to_export":false,"styles_to_export":"","has_datatype_to_export":false,"datatype_to_export":"","datatype_to_export":"","has_output_folder_to_export":false,"output_folder_to_export":"","has_zip_to_export":false,"zip_to_export":"","batch_output_folder":false,"batch_zip":false }'
         self.pending_config_changes, self.config_changes_pending = [], False
-
-        # IconThemeManager early init
         if ICON_THEME_AVAILABLE:
             try: IconThemeManager.set_theme(StyleLoader.detect_qgis_theme())
             except: pass
-
-        # Setup UI
         self.setupUi(self)
         self.setupUiCustom()
         self.manage_ui_style()
@@ -479,45 +427,24 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def setupUiCustom(self):
-        # v4.0 Sprint 7: Inline set_multiple_checkable_combobox
+        """v4.0 Sprint 15: Setup custom UI - splitter, dimensions, tabs, icons, tooltips."""
         self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self.CONFIG_DATA, self)
-        
-        # Setup splitter between frame_exploring and frame_toolset
-        # v3.1: Delegate to SplitterManager if available (Phase 6 - MIG-061)
-        if self._splitter_manager is not None:
+        if self._splitter_manager:
             self._splitter_manager.setup()
         else:
-            # Fallback to legacy method
             self._setup_main_splitter()
-        
-        # Apply dynamic dimensions based on active profile
         self.apply_dynamic_dimensions()
-        
-        # Fix toolBox icons with absolute paths
         self._fix_toolbox_icons()
-
-        # Setup backend indicator (right-aligned label showing current backend)
         self._setup_backend_indicator()
-        
-        # Setup action bar layout based on configuration
         self._setup_action_bar_layout()
-        
-        # Setup tab-specific widgets (always needed regardless of splitter)
         self._setup_exploring_tab_widgets()
         self._setup_filtering_tab_widgets()
         self._setup_exporting_tab_widgets()
-
-        # Continue setupUiCustom after widget creation
         if 'CURRENT_PROJECT' in self.CONFIG_DATA:
             self.project_props = self.CONFIG_DATA["CURRENT_PROJECT"]
-
         self.manage_configuration_model()
         self.dockwidget_widgets_configuration()
-        
-        # CRITICAL: Load icons immediately after widgets are configured
         self._load_all_pushbutton_icons()
-        
-        # Setup anti-truncation tooltips for widgets with potentially long text
         self._setup_truncation_tooltips()
     
     def _load_all_pushbutton_icons(self):
@@ -1230,18 +1157,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         }
     
     def restore_optimization_state(self, state: dict):
-        """
-        Restore optimization state from saved settings.
-        
-        Args:
-            state: Dictionary with optimization settings
-        """
+        """v4.0 Sprint 14: Restore optimization state from saved settings."""
         self._optimization_enabled = state.get('enabled', True)
         self._centroid_auto_enabled = state.get('centroid_auto', True)
         self._optimization_ask_before = state.get('ask_before', True)
         self._optimization_thresholds = state.get('thresholds', {})
         self._layer_centroid_overrides = state.get('layer_overrides', {})
-        
         logger.info(f"Restored optimization state: enabled={self._optimization_enabled}")
 
     def auto_select_optimal_backends(self):
@@ -1258,21 +1179,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 show_warning("FilterMate", "Backend optimization unavailable")
 
     def _setup_action_bar_layout(self):
-        """
-        WRAPPER: Delegates to ActionBarManager.
-        
-        Setup the action bar layout based on configuration.
-        v4.0 Sprint 10: Simplified - ActionBarManager handles all logic.
-        """
+        """v4.0 Sprint 14: Delegate to ActionBarManager."""
         if not hasattr(self, 'frame_actions'):
             return
-        
-        if self._action_bar_manager is not None:
+        if self._action_bar_manager:
             self._action_bar_manager.setup()
-            return
-        
-        # Minimal fallback: just show frame_actions
-        self.frame_actions.show()
+        else:
+            self.frame_actions.show()
 
     def _get_action_bar_position(self):
         """v4.0 Sprint 10: WRAPPER - delegate to ActionBarManager."""
@@ -1428,24 +1341,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             pass
     
     def _get_cached_expression_result(self, layer_id: str, expression: str):
-        """
-        Get cached result for an expression if available and not expired.
-        
-        v2.8.13: Cache key now includes subsetString to ensure cache invalidation
-        when layer is filtered. This is critical for multi-step filtering where
-        Step 2 must re-evaluate expressions on features filtered by Step 1.
-        
-        Args:
-            layer_id: The layer ID
-            expression: The expression string
-            
-        Returns:
-            Cached result tuple (features, timestamp) or None if not cached/expired
-        """
+        """v4.0 Sprint 14: Get cached expression result (includes subsetString in key for multi-step filtering)."""
         import time
-        
-        # v2.8.13: Include subsetString in cache key for multi-step filtering support
-        # When layer is filtered, subsetString changes, automatically invalidating cache
         layer = QgsProject.instance().mapLayer(layer_id)
         subset_string = layer.subsetString() if layer else ""
         cache_key = (layer_id, expression, subset_string)
@@ -1464,16 +1361,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return features
     
     def _set_cached_expression_result(self, layer_id: str, expression: str, features):
-        """
-        Cache an expression evaluation result.
-        
-        Args:
-            layer_id: The layer ID
-            expression: The expression string
-            features: The features result to cache
-        """
+        """v4.0 Sprint 14: Cache expression result with LRU eviction."""
         import time
-        
         # Enforce cache size limit (LRU eviction)
         if len(self._expression_cache) >= self._expression_cache_max_size:
             # Remove oldest entry
@@ -1488,13 +1377,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._expression_cache[cache_key] = (features, time.time())
     
     def invalidate_expression_cache(self, layer_id: str = None):
-        """
-        Invalidate expression cache entries.
-        
-        Args:
-            layer_id: If provided, only invalidate cache for this layer.
-                     If None, invalidate entire cache.
-        """
+        """v4.0 Sprint 14: Invalidate expression cache (layer_id=None clears all)."""
         if layer_id is None:
             self._expression_cache.clear()
             logger.debug("Cleared entire expression cache")
@@ -2027,15 +1910,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 widget_obj.setFont(font)
 
     def _configure_other_widgets(self, font):
-        """
-        Configure non-button widgets (comboboxes, text inputs, etc.).
-        
-        Sets cursors and fonts for ComboBox, LineEdit, QgsFieldExpressionWidget,
-        PropertyOverrideButton, and other widget types.
-        
-        Args:
-            font (QFont): Font to apply to widgets
-        """
+        """v4.0 Sprint 14: Configure non-button widgets (cursors and fonts)."""
         for widget_group in self.widgets:
             for widget_name in self.widgets[widget_group]:
                 widget_type = self.widgets[widget_group][widget_name]["TYPE"]
@@ -2061,15 +1936,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     widget_obj.setFont(font)
 
     def _configure_key_widgets_sizes(self, icons_sizes):
-        """
-        Configure sizes for key widgets (widget_keys and frame_actions).
-        
-        Uses UIConfig for dynamic dimensions or falls back to hardcoded values.
-        Sets fixed size policies for widget_keys to prevent unwanted resizing.
-        
-        Args:
-            icons_sizes (dict): Icon size dictionary with ACTION and OTHERS keys
-        """
+        """v4.0 Sprint 14: Configure sizes for widget_keys and frame_actions."""
         if UI_CONFIG_AVAILABLE:
             # Get widget_keys width directly from config
             widget_keys_width = UIConfig.get_config('widget_keys', 'max_width') or 56

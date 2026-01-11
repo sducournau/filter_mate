@@ -14,18 +14,37 @@ Phase E5 continues the refactoring of `filter_task.py` by:
 
 ## Progress Summary
 
-### E5-S1: Legacy Code Removal (COMPLETED ✅)
+### E5-S1: Legacy Code Removal from prepare_*_source_geom (COMPLETED ✅)
 
 Removed legacy fallback implementations from methods with working Strangler Fig delegations:
 
-| Method | Before | After | Saved |
-|--------|--------|-------|-------|
-| `prepare_postgresql_source_geom()` | ~150 lines | ~30 lines | **~120 lines** |
-| `prepare_ogr_source_geom()` | ~450 lines | ~45 lines | **~405 lines** |
-| `prepare_spatialite_source_geom()` | ~690 lines | ~55 lines | **~635 lines** |
-| **Total** | | | **~1,160 lines** |
+| Method                             | Before     | After     | Saved            |
+| ---------------------------------- | ---------- | --------- | ---------------- |
+| `prepare_postgresql_source_geom()` | ~150 lines | ~30 lines | **~120 lines**   |
+| `prepare_ogr_source_geom()`        | ~450 lines | ~45 lines | **~405 lines**   |
+| `prepare_spatialite_source_geom()` | ~690 lines | ~55 lines | **~635 lines**   |
+| **Total E5-S1**                    |            |           | **~1,160 lines** |
 
 **File size**: 12,894 → 11,769 lines (**-1,125 lines**, ~8.7% reduction)
+
+### E5-S2: Memory Layer Operations (COMPLETED ✅)
+
+Removed legacy fallback code from memory layer methods with v4.0 delegations:
+
+| Method                                 | Before     | After    | Saved           |
+| -------------------------------------- | ---------- | -------- | --------------- |
+| `_copy_filtered_layer_to_memory()`     | ~109 lines | ~27 lines | **~82 lines**   |
+| `_copy_selected_features_to_memory()`  | ~115 lines | ~26 lines | **~89 lines**   |
+| `_create_memory_layer_from_features()` | ~109 lines | ~27 lines | **~82 lines**   |
+| `_create_buffered_memory_layer()`      | ~86 lines  | ~26 lines | **~60 lines**   |
+| **Total E5-S2**                        |            |           | **~313 lines**  |
+
+**File size**: 11,769 → 11,456 lines (**-313 lines**, ~2.7% reduction)
+
+### Combined Progress (E5-S1 + E5-S2)
+
+**Total removed**: 1,438 lines  
+**File size**: 12,894 → 11,456 lines (**-11.1% reduction**)
 
 ---
 

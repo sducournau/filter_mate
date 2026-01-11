@@ -1,6 +1,6 @@
 # Analyse Réduction Dockwidget - FilterMate v4.0
 
-**Date**: 11 janvier 2026  
+**Date**: 12 janvier 2026  
 **Version analysée**: v4.0  
 **Fichier cible**: `filter_mate_dockwidget.py`
 
@@ -8,12 +8,30 @@
 
 ## 📈 État Actuel
 
-| Métrique          | Valeur        | Objectif    |
-| ----------------- | ------------- | ----------- |
-| Lignes dockwidget | **4,305**     | <2,000      |
-| Sprint actuel     | **Sprint 13** | Sprint 13   |
-| Réduction totale  | **-8,744**    | -11,049     |
-| Progrès           | **67%**       | 33% restant |
+| Métrique          | Valeur        | Objectif      |
+| ----------------- | ------------- | ------------- |
+| Lignes dockwidget | **4,172**     | <2,000        |
+| Sprint actuel     | **Sprint 14** | Sprint 14     |
+| Réduction totale  | **-8,877**    | -11,049       |
+| Progrès           | **68.3%**     | 31.7% restant |
+
+### Progression Sprint 14 (session 11 janvier 2026)
+
+| Action                                    | Lignes avant | Lignes après | Réduction |
+| ----------------------------------------- | ------------ | ------------ | --------- |
+| **Début Sprint 14**                       | **4,305**    | -            | -         |
+| Simplifier `_setup_theme_watcher`         | 4,305        | 4,290        | -15       |
+| Simplifier `_on_qgis_theme_changed`       | 4,290        | 4,259        | -31       |
+| Simplifier `_is_centroid_already_enabled` | 4,259        | 4,239        | -20       |
+| Simplifier `get_optimization_state`       | 4,239        | 4,232        | -7        |
+| Simplifier cache expression methods (×3)  | 4,232        | 4,195        | -37       |
+| Simplifier `_setup_action_bar_layout`     | 4,195        | 4,188        | -7        |
+| Simplifier `restore_optimization_state`   | 4,188        | 4,184        | -4        |
+| Simplifier `_configure_other_widgets`     | 4,184        | 4,178        | -6        |
+| Simplifier `_configure_key_widgets_sizes` | 4,178        | 4,172        | -6        |
+| **Total Sprint 14**                       | **4,305**    | **4,172**    | **-133**  |
+
+**Note**: Sprint 14 axé sur compression docstrings (verbose → one-line "v4.0 Sprint 14: description")
 
 ### Progression Sprint 13 (session 11 janvier 2026)
 
