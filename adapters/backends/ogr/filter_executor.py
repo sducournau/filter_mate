@@ -685,3 +685,204 @@ def prepare_ogr_source_geom(
         QgsProject.instance().addMapLayer(layer, addToLegend=False)
     
     return layer
+
+
+# =============================================================================
+# EPIC-1 Phase E4-S7b: OGR Spatial Selection Execution
+# =============================================================================
+
+@dataclass
+class OGRSpatialSelectionContext:
+    """
+    Context object for OGR spatial selection execution.
+    
+    EPIC-1 Phase E4-S7b: Encapsulates parameters for _execute_ogr_spatial_selection()
+    """
+    # Source geometry layer (prepared by prepare_ogr_source_geom)
+    ogr_source_geom: Any = None
+    
+    # Predicates dict: {predicate_enum: True, ...}
+    current_predicates: dict = field(default_factory=dict)
+    
+    # Combine operator settings
+    has_combine_operator: bool = False
+    param_other_layers_combine_operator: str = "AND"
+    
+    # Callback for spatial index verification
+    verify_and_create_spatial_index: Optional[Callable] = None
+
+
+def execute_ogr_spatial_selection(
+    layer: Any,
+    current_layer: Any,
+    param_old_subset: str,
+    context: OGRSpatialSelectionContext
+) -> None:
+    """
+    Execute spatial selection using QGIS processing for OGR/non-PostgreSQL layers.
+    
+    EPIC-1 Phase E4-S7b: Extracted from filter_task.py _execute_ogr_spatial_selection()
+    
+    STABILITY FIX v2.3.9: Added comprehensive validation before calling selectbylocation
+    to prevent access violations from invalid geometries.
+    
+    Args:
+        layer: Original layer
+        current_layer: Potentially reprojected working layer
+        param_old_subset: Existing subset string
+        context: OGRSpatialSelectionContext with source geom and callbacks
+        
+    Returns:
+        None (modifies current_layer selection)
+        
+    Raises:
+        Exception: If source geometry is invalid or unavailable
+    """
+    from qgis.core import (
+        QgsVectorLayer, QgsWkbTypes, QgsProcessingContext, 
+        QgsProcessingFeedback, QgsFeatureRequest
+    )
+    from qgis import processing
+    
+    # Import geometry validation
+    try:
+        from core.geometry.geometry_utils import validate_geometry, create_geos_safe_layer
+    except ImportError:
+        def validate_geometry(geom):
+            return geom is not None and not geom.isNull() and not geom.isEmpty()
+        create_geos_safe_layer = None
+    
+    # Import safe subset setter
+    try:
+        from modules.appUtils import safe_set_subset_string
+    except ImportError:
+        def safe_set_subset_string(lyr, subset):
+            return lyr.setSubsetString(subset)
+    
+    ogr_source_geom = context.ogr_source_geom
+    
+    # Validate source geometry
+    if not ogr_source_geom:
+        logger.error("ogr_source_geom is None - cannot execute spatial selection")
+        raise Exception("Source geometry layer is not available for spatial selection")
+    
+    if not isinstance(ogr_source_geom, QgsVectorLayer):
+        logger.error(f"ogr_source_geom is not a QgsVectorLayer: {type(ogr_source_geom)}")
+        raise Exception(f"Source geometry must be a QgsVectorLayer, got {type(ogr_source_geom)}")
+    
+    if not ogr_source_geom.isValid():
+        logger.error(f"ogr_source_geom is not valid: {ogr_source_geom.name()}")
+        raise Exception("Source geometry layer is not valid")
+    
+    feature_count = ogr_source_geom.featureCount()
+    if feature_count is None or feature_count == 0:
+        logger.warning("ogr_source_geom has no features - spatial selection will return no results")
+        return
+    
+    # Validate at least one geometry
+    has_valid_geom = False
+    for feature in ogr_source_geom.getFeatures():
+        geom = feature.geometry()
+        if validate_geometry(geom):
+            has_valid_geom = True
+            break
+    
+    if not has_valid_geom:
+        logger.error("ogr_source_geom has no valid geometries")
+        raise Exception("Source geometry layer has no valid geometries")
+    
+    logger.info(f"Using ogr_source_geom: {ogr_source_geom.name()}, "
+               f"features={feature_count}, "
+               f"geomType={QgsWkbTypes.displayString(ogr_source_geom.wkbType())}")
+    
+    # Configure processing context
+    proc_context = QgsProcessingContext()
+    proc_context.setInvalidGeometryCheck(QgsFeatureRequest.GeometrySkipInvalid)
+    feedback = QgsProcessingFeedback()
+    
+    # Create GEOS-safe source layer
+    logger.info("🛡️ Creating GEOS-safe source layer...")
+    if create_geos_safe_layer:
+        safe_source_geom = create_geos_safe_layer(ogr_source_geom, "_safe_source")
+    else:
+        safe_source_geom = ogr_source_geom
+    
+    if safe_source_geom is None:
+        logger.warning("create_geos_safe_layer returned None, using original")
+        safe_source_geom = ogr_source_geom
+    
+    if not safe_source_geom.isValid() or safe_source_geom.featureCount() == 0:
+        logger.error("No valid source geometries available")
+        raise Exception("Source geometry layer has no valid geometries")
+    
+    logger.info(f"✓ Safe source layer: {safe_source_geom.featureCount()} features")
+    
+    # Process target layer for smaller datasets
+    safe_current_layer = current_layer
+    use_safe_current = False
+    target_count = current_layer.featureCount()
+    if target_count and target_count <= 50000 and create_geos_safe_layer:
+        logger.debug("🛡️ Creating GEOS-safe target layer...")
+        temp_safe = create_geos_safe_layer(current_layer, "_safe_target")
+        if temp_safe and temp_safe.isValid() and temp_safe.featureCount() > 0:
+            safe_current_layer = temp_safe
+            use_safe_current = True
+            logger.info(f"✓ Safe target layer: {safe_current_layer.featureCount()} features")
+    
+    predicate_list = [int(p) for p in context.current_predicates.keys()]
+    
+    def map_selection_to_original():
+        """Map selection back to original layer if we used safe layer."""
+        if use_safe_current and safe_current_layer is not current_layer:
+            selected_fids = list(safe_current_layer.selectedFeatureIds())
+            if selected_fids:
+                current_layer.selectByIds(selected_fids)
+                logger.debug(f"Mapped {len(selected_fids)} features to original layer")
+    
+    work_layer = safe_current_layer if use_safe_current else current_layer
+    verify_index = context.verify_and_create_spatial_index
+    
+    # Execute selection based on combine operator
+    if context.has_combine_operator:
+        work_layer.selectAll()
+        
+        op = context.param_other_layers_combine_operator
+        
+        if op == 'OR':
+            if verify_index:
+                verify_index(work_layer)
+            safe_set_subset_string(work_layer, param_old_subset)
+            work_layer.selectAll()
+            safe_set_subset_string(work_layer, '')
+            method = 1
+        elif op == 'AND':
+            if verify_index:
+                verify_index(work_layer)
+            method = 2
+        elif op == 'NOT AND':
+            if verify_index:
+                verify_index(work_layer)
+            method = 3
+        else:
+            if verify_index:
+                verify_index(work_layer)
+            method = 0
+        
+        alg_params = {
+            'INPUT': work_layer,
+            'INTERSECT': safe_source_geom,
+            'METHOD': method,
+            'PREDICATE': predicate_list
+        }
+        processing.run("qgis:selectbylocation", alg_params, context=proc_context, feedback=feedback)
+        map_selection_to_original()
+    else:
+        if verify_index:
+            verify_index(work_layer)
+        alg_params = {
+            'INPUT': work_layer,
+            'INTERSECT': safe_source_geom,
+            'METHOD': 0,
+            'PREDICATE': predicate_list
+        }
+        processing.run("qgis:selectbylocation", alg_params, context=proc_context, feedback=feedback)

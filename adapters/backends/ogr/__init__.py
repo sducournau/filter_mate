@@ -21,6 +21,9 @@ from .filter_executor import (
     determine_source_mode,
     validate_ogr_result_layer,
     prepare_ogr_source_geom,
+    # EPIC-1 Phase E4-S7b: OGR Spatial Selection
+    OGRSpatialSelectionContext,
+    execute_ogr_spatial_selection,
 )
 
 __all__ = [
@@ -40,4 +43,7 @@ __all__ = [
     'determine_source_mode',
     'validate_ogr_result_layer',
     'prepare_ogr_source_geom',
+    # EPIC-1 Phase E4-S7b
+    'OGRSpatialSelectionContext',
+    'execute_ogr_spatial_selection',
 ]

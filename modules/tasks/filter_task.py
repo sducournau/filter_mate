@@ -6819,8 +6819,7 @@ class FilterEngineTask(QgsTask):
         """
         Execute spatial selection using QGIS processing for OGR/non-PostgreSQL layers.
         
-        STABILITY FIX v2.3.9: Added comprehensive validation before calling selectbylocation
-        to prevent access violations from invalid geometries.
+        EPIC-1 Phase E4-S7b: Strangler Fig delegation to ogr_executor.
         
         Args:
             layer: Original layer
@@ -6830,6 +6829,25 @@ class FilterEngineTask(QgsTask):
         Returns:
             None (modifies current_layer selection)
         """
+        # EPIC-1 Phase E4-S7b: Try delegating to new extracted function
+        if OGR_EXECUTOR_AVAILABLE and hasattr(ogr_executor, 'OGRSpatialSelectionContext'):
+            try:
+                context = ogr_executor.OGRSpatialSelectionContext(
+                    ogr_source_geom=self.ogr_source_geom,
+                    current_predicates=self.current_predicates,
+                    has_combine_operator=self.has_combine_operator,
+                    param_other_layers_combine_operator=self.param_other_layers_combine_operator,
+                    verify_and_create_spatial_index=self._verify_and_create_spatial_index,
+                )
+                ogr_executor.execute_ogr_spatial_selection(
+                    layer, current_layer, param_old_subset, context
+                )
+                logger.debug("_execute_ogr_spatial_selection: delegated to ogr_executor")
+                return
+            except Exception as e:
+                logger.warning(f"ogr_executor delegation failed, using legacy: {e}")
+        
+        # LEGACY FALLBACK: Original implementation
         # CRITICAL FIX: Validate ogr_source_geom before using it
         if not self.ogr_source_geom:
             logger.error("ogr_source_geom is None - cannot execute spatial selection")
