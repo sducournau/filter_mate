@@ -139,9 +139,9 @@ Phase E4 extracts ~3,500 lines of backend-specific code from `filter_task.py` to
 | Performance regression       | MEDIUM | Benchmark before/after, profile critical paths   |
 | Missing dependencies         | LOW    | Extract in dependency order, stub if needed      |
 
-## Progress Summary (Updated: January 11, 2026 - E4-S3)
+## Progress Summary (Updated: January 11, 2026 - E4-S4)
 
-**Phase E4 Status**: IN PROGRESS - Major PostgreSQL extraction completed
+**Phase E4 Status**: IN PROGRESS - All three backends have utility functions extracted
 
 ### Completed Extractions
 
@@ -172,7 +172,36 @@ Phase E4 extracts ~3,500 lines of backend-specific code from `filter_task.py` to
 - `_is_pk_numeric()` → PK type detection (25 lines)
 - Commit: fe55ff8
 
-**Total Extracted**: ~900 lines / ~3,500 target (25.7%)
+✅ **Session 4 (E4-S4)**: Spatialite + OGR utility functions (~564 lines)
+
+**Spatialite (8 functions, 510 lines total):**
+
+- `apply_spatialite_subset()` → Apply subset with history update (70 lines)
+- `manage_spatialite_subset()` → Handle temp tables for filtering (80 lines)
+- `get_last_subset_info()` → Get last subset from history table (35 lines)
+- `cleanup_session_temp_tables()` → Clean session temp tables (50 lines)
+- `normalize_column_names_for_spatialite()` → Column quoting (25 lines)
+
+**OGR (6 functions, 286 lines total):**
+
+- `build_ogr_filter_from_selection()` → Build filter from selection (80 lines)
+- `format_ogr_pk_values()` → Format PK values for IN clause (25 lines)
+- `normalize_column_names_for_ogr()` → Column case normalization (40 lines)
+- `build_ogr_simple_filter()` → Simple PK IN filter builder (20 lines)
+- `apply_ogr_subset()` → Thread-safe subset application (25 lines)
+- `combine_ogr_filters()` → Combine filters with AND/OR/NOT (25 lines)
+- Commit: 17ba303
+
+**Total Extracted**: ~1,467 lines / ~3,500 target (41.9%)
+
+### Backend Summary
+
+| Backend    | Functions | Lines     | Status            |
+| ---------- | --------- | --------- | ----------------- |
+| PostgreSQL | 14        | 883       | ✅ Core complete  |
+| Spatialite | 8         | 510       | ✅ Core complete  |
+| OGR        | 6         | 286       | ✅ Core complete  |
+| **TOTAL**  | **28**    | **1,679** | **48% of target** |
 
 ### PostgreSQL filter_executor.py Status
 
@@ -250,9 +279,21 @@ The following methods require significant refactoring before extraction:
 2. ✅ Session 1: Extract HIGH priority methods (DONE - MIG-210)
 3. ✅ Session 2: Extract predicate builders (DONE - MIG-211)
 4. ✅ Session 3: Extract PostgreSQL utility functions (DONE - fe55ff8)
-5. ⏳ Session 4: Extract `prepare_spatialite_source_geom()` (629 lines)
-6. ⏳ Session 5: Extract OGR methods
-7. ⏳ Session 6: Complete extraction and integration
+5. ✅ Session 4: Extract Spatialite + OGR utility functions (DONE - 17ba303)
+6. ⏳ Session 5: Extract `prepare_spatialite_source_geom()` (629 lines) - DEFERRED
+7. ⏳ Session 6: Extract `prepare_ogr_source_geom()` (382 lines) - DEFERRED
+8. ⏳ Session 7: Add Strangler Fig delegations to filter_task.py
+
+### Deferred Methods (Need Significant Refactoring)
+
+The following methods are deferred because they have heavy dependencies on instance
+variables (`self.*`) and QGIS processing context:
+
+| Method                             | Lines | Dependencies                                    | Recommendation                   |
+| ---------------------------------- | ----- | ----------------------------------------------- | -------------------------------- |
+| `prepare_spatialite_source_geom()` | 629   | GeometryCache, safe_unary_union, thread context | Refactor into smaller components |
+| `prepare_ogr_source_geom()`        | 382   | Memory layers, reproject, QGIS processing       | Extract helpers first            |
+| `execute_ogr_spatial_selection()`  | 159   | Processing context, selection handling          | Extract after prepare_ogr        |
 
 ---
 
