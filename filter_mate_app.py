@@ -489,152 +489,55 @@ class FilterMateApp:
         init_env_vars()
         
         global ENV_VARS
-
         self.CONFIG_DATA = ENV_VARS["CONFIG_DATA"]
-        
-        # Initialize feedback level from configuration
         self._init_feedback_level()
         self.PROJECT = ENV_VARS["PROJECT"]
-
-        self.MapLayerStore = self.PROJECT.layerStore()
-        self.db_name = 'filterMate_db.sqlite'
+        self.MapLayerStore, self.db_name = self.PROJECT.layerStore(), 'filterMate_db.sqlite'
         self.db_file_path = os.path.normpath(ENV_VARS["PLUGIN_CONFIG_DIRECTORY"] + os.sep + self.db_name)
-        self.project_file_name = os.path.basename(self.PROJECT.absoluteFilePath())
-        self.project_file_path = self.PROJECT.absolutePath()
-        self.project_uuid = ''
+        self.project_file_name, self.project_file_path, self.project_uuid = os.path.basename(self.PROJECT.absoluteFilePath()), self.PROJECT.absolutePath(), ''
         
-        # v4.0: Initialize DatabaseManager (extracted from FilterMateApp)
-        if HEXAGONAL_AVAILABLE and DatabaseManager:
-            self._database_manager = DatabaseManager(
-                config_directory=ENV_VARS["PLUGIN_CONFIG_DIRECTORY"],
-                project=self.PROJECT
-            )
+        # DatabaseManager & VariablesPersistenceManager
+        self._database_manager = DatabaseManager(ENV_VARS["PLUGIN_CONFIG_DIRECTORY"], self.PROJECT) if HEXAGONAL_AVAILABLE and DatabaseManager else None
+        if self._database_manager:
             logger.info("FilterMate: DatabaseManager initialized (v4.0 migration)")
-        else:
-            self._database_manager = None
-        
-        # v4.0: Initialize VariablesPersistenceManager (extracted from FilterMateApp)
-        if HEXAGONAL_AVAILABLE and VariablesPersistenceManager:
-            self._variables_manager = VariablesPersistenceManager(
-                get_spatialite_connection=self.get_spatialite_connection,
-                get_project_uuid=lambda: str(self.project_uuid),
-                get_project_layers=lambda: self.PROJECT_LAYERS,
-                return_typped_value=return_typed_value,  # Use module function directly
-                cancel_layer_tasks=lambda layer_id: self._cancel_layer_tasks(layer_id) if hasattr(self, 'dockwidget') and self.dockwidget else None,
-                is_layer_change_in_progress=lambda: hasattr(self, 'dockwidget') and self.dockwidget and getattr(self.dockwidget, '_updating_current_layer', False)
-            )
+        self._variables_manager = VariablesPersistenceManager(self.get_spatialite_connection, lambda: str(self.project_uuid), lambda: self.PROJECT_LAYERS, return_typed_value,
+                                                               lambda layer_id: self._cancel_layer_tasks(layer_id) if hasattr(self, 'dockwidget') and self.dockwidget else None,
+                                                               lambda: hasattr(self, 'dockwidget') and self.dockwidget and getattr(self.dockwidget, '_updating_current_layer', False)) if HEXAGONAL_AVAILABLE and VariablesPersistenceManager else None
+        if self._variables_manager:
             logger.info("FilterMate: VariablesPersistenceManager initialized (v4.0 migration)")
-        else:
-            self._variables_manager = None
-
-        self.project_datasources = {}
-        self.app_postgresql_temp_schema = 'filter_mate_temp'  # PostgreSQL temp schema name
-        self.app_postgresql_temp_schema_setted = False
         
-        # Session ID for multi-client materialized view isolation
-        # Format: short hex string (8 chars) unique per QGIS session
-        import time
-        import hashlib
-        session_seed = f"{time.time()}_{os.getpid()}_{id(self)}"
-        self.session_id = hashlib.md5(session_seed.encode()).hexdigest()[:8]
-        self._signals_connected = False
-        self._dockwidget_signals_connected = False  # Flag for dockwidget signal connections
-        self._loading_new_project = False  # Flag to track when loading a new project
-        self._loading_new_project_timestamp = 0  # Timestamp when flag was set
-        self._initializing_project = False  # Flag to prevent recursive project initialization
-        self._initializing_project_timestamp = 0  # Timestamp when flag was set
-        self._pending_add_layers_tasks = 0  # Counter for concurrent add_layers tasks prevention
-        self._add_layers_queue = []  # Queue for deferred add_layers operations
-        self._processing_queue = False  # Flag to prevent concurrent queue processing
-        self._widgets_ready = False  # Flag to track when widgets are fully initialized and ready
-        self._last_layer_change_timestamp = 0  # Debounce for layer change signals
-        
-        # Initialize PROJECT_LAYERS as instance attribute (shadows class attribute for isolation)
+        # Session & Flags
+        self.project_datasources, self.app_postgresql_temp_schema, self.app_postgresql_temp_schema_setted = {}, 'filter_mate_temp', False
+        import time, hashlib
+        self.session_id = hashlib.md5(f"{time.time()}_{os.getpid()}_{id(self)}".encode()).hexdigest()[:8]
+        self._signals_connected = self._dockwidget_signals_connected = self._loading_new_project = self._initializing_project = self._processing_queue = self._widgets_ready = False
+        self._loading_new_project_timestamp = self._initializing_project_timestamp = self._last_layer_change_timestamp = self._pending_add_layers_tasks = 0
+        self._add_layers_queue = []
         self.PROJECT_LAYERS = {}
         
-        # v4.1: Initialize TaskOrchestrator (extracted from FilterMateApp.manage_task)
-        if HEXAGONAL_AVAILABLE and TaskOrchestrator:
-            self._task_orchestrator = TaskOrchestrator(
-                get_dockwidget=lambda: self.dockwidget,
-                get_project_layers=lambda: self.PROJECT_LAYERS,
-                get_config_data=lambda: self.CONFIG_DATA,
-                get_project=lambda: self.PROJECT,
-                check_reset_stale_flags=self._check_and_reset_stale_flags,
-                set_loading_flag=self._set_loading_flag,
-                set_initializing_flag=self._set_initializing_flag,
-                get_task_parameters=self.get_task_parameters,
-                handle_filter_task=self._execute_filter_task,
-                handle_layer_task=self._execute_layer_task,
-                handle_undo=self.handle_undo,
-                handle_redo=self.handle_redo,
-                force_reload_layers=self.force_reload_layers,
-                handle_remove_all_layers=self._handle_remove_all_layers,
-                handle_project_initialization=self._handle_project_initialization,
-            )
+        # Managers v4.1-4.7
+        self._task_orchestrator = TaskOrchestrator(lambda: self.dockwidget, lambda: self.PROJECT_LAYERS, lambda: self.CONFIG_DATA, lambda: self.PROJECT,
+                                                    self._check_and_reset_stale_flags, self._set_loading_flag, self._set_initializing_flag, self.get_task_parameters,
+                                                    self._execute_filter_task, self._execute_layer_task, self.handle_undo, self.handle_redo, self.force_reload_layers,
+                                                    self._handle_remove_all_layers, self._handle_project_initialization) if HEXAGONAL_AVAILABLE and TaskOrchestrator else None
+        if self._task_orchestrator:
             logger.info("FilterMate: TaskOrchestrator initialized (v4.1 migration)")
-        else:
-            self._task_orchestrator = None
-        
-        # v4.2: Initialize OptimizationManager (extracted from FilterMateApp)
-        if HEXAGONAL_AVAILABLE and OptimizationManager:
-            self._optimization_manager = OptimizationManager(
-                get_dockwidget=lambda: self.dockwidget,
-                get_project=lambda: self.PROJECT,
-                get_project_layers=lambda: self.PROJECT_LAYERS,
-            )
+        self._optimization_manager = OptimizationManager(lambda: self.dockwidget, lambda: self.PROJECT, lambda: self.PROJECT_LAYERS) if HEXAGONAL_AVAILABLE and OptimizationManager else None
+        if self._optimization_manager:
             logger.info("FilterMate: OptimizationManager initialized (v4.2 migration)")
-        else:
-            self._optimization_manager = None
-        
-        # v4.3: Initialize FilterResultHandler (extracted from FilterMateApp.filter_engine_task_completed)
-        if HEXAGONAL_AVAILABLE and FilterResultHandler:
-            self._filter_result_handler = FilterResultHandler(
-                refresh_layers_and_canvas_callback=self._refresh_layers_and_canvas,
-                push_filter_to_history_callback=self._push_filter_to_history,
-                clear_filter_history_callback=self._clear_filter_history,
-                update_undo_redo_buttons_callback=self.update_undo_redo_buttons,
-                get_project_layers_callback=lambda: self.PROJECT_LAYERS,
-                get_dockwidget_callback=lambda: self.dockwidget,
-                get_iface_callback=lambda: self.iface,
-            )
+        self._filter_result_handler = FilterResultHandler(self._refresh_layers_and_canvas, self._push_filter_to_history, self._clear_filter_history, self.update_undo_redo_buttons,
+                                                           lambda: self.PROJECT_LAYERS, lambda: self.dockwidget, lambda: self.iface) if HEXAGONAL_AVAILABLE and FilterResultHandler else None
+        if self._filter_result_handler:
             logger.info("FilterMate: FilterResultHandler initialized (v4.3 migration)")
-        else:
-            self._filter_result_handler = None
-        
-        # v4.4: Initialize AppInitializer (extracted from FilterMateApp.run)
-        if HEXAGONAL_AVAILABLE and AppInitializer:
-            self._app_initializer = AppInitializer(
-                init_filtermate_db_callback=self.init_filterMate_db,
-                get_spatialite_connection_callback=self.get_spatialite_connection,
-                cleanup_corrupted_layer_filters_callback=cleanup_corrupted_layer_filters,
-                filter_usable_layers_callback=self._filter_usable_layers,
-                manage_task_callback=self.manage_task,
-                get_project_layers_callback=lambda: self.PROJECT_LAYERS,
-                get_config_data_callback=lambda: self.CONFIG_DATA,
-                get_project_callback=lambda: self.PROJECT,
-                get_plugin_dir_callback=lambda: self.plugin_dir,
-                get_dock_position_callback=self._get_dock_position,
-                get_iface_callback=lambda: self.iface,
-                get_dockwidget_callback=lambda: self.dockwidget,
-                set_dockwidget_callback=lambda dw: setattr(self, 'dockwidget', dw),
-                get_task_orchestrator_callback=lambda: self._task_orchestrator,
-                get_favorites_manager_callback=lambda: self.favorites_manager,
-                get_signals_connected_callback=lambda: self._signals_connected,
-                set_signals_connected_callback=lambda val: setattr(self, '_signals_connected', val),
-                get_dockwidget_signals_connected_callback=lambda: self._dockwidget_signals_connected,
-                set_dockwidget_signals_connected_callback=lambda val: setattr(self, '_dockwidget_signals_connected', val),
-                get_map_layer_store_callback=lambda: self.MapLayerStore,
-                set_map_layer_store_callback=lambda mls: setattr(self, 'MapLayerStore', mls),
-                on_widgets_initialized_callback=self._on_widgets_initialized,
-                on_layers_added_callback=self._on_layers_added,
-                update_undo_redo_buttons_callback=self.update_undo_redo_buttons,
-                save_variables_from_layer_callback=self.save_variables_from_layer,
-                remove_variables_from_layer_callback=self.remove_variables_from_layer,
-                save_project_variables_callback=self.save_project_variables,
-            )
+        self._app_initializer = AppInitializer(self.init_filterMate_db, self.get_spatialite_connection, cleanup_corrupted_layer_filters, self._filter_usable_layers, self.manage_task,
+                                                lambda: self.PROJECT_LAYERS, lambda: self.CONFIG_DATA, lambda: self.PROJECT, lambda: self.plugin_dir, self._get_dock_position, lambda: self.iface,
+                                                lambda: self.dockwidget, lambda dw: setattr(self, 'dockwidget', dw), lambda: self._task_orchestrator, lambda: self.favorites_manager,
+                                                lambda: self._signals_connected, lambda val: setattr(self, '_signals_connected', val), lambda: self._dockwidget_signals_connected,
+                                                lambda val: setattr(self, '_dockwidget_signals_connected', val), lambda: self.MapLayerStore, lambda mls: setattr(self, 'MapLayerStore', mls),
+                                                self._on_widgets_initialized, self._on_layers_added, self.update_undo_redo_buttons, self.save_variables_from_layer,
+                                                self.remove_variables_from_layer, self.save_project_variables) if HEXAGONAL_AVAILABLE and AppInitializer else None
+        if self._app_initializer:
             logger.info("FilterMate: AppInitializer initialized (v4.4 migration)")
-        else:
-            self._app_initializer = None
         
         # v4.5: Initialize DatasourceManager (extracted from FilterMateApp datasource methods)
         if HEXAGONAL_AVAILABLE and DatasourceManager:

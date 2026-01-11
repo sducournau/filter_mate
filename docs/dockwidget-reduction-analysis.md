@@ -1,12 +1,12 @@
-# Analyse Réduction Dockwidget - FilterMate v4.0
+# Analyse Réduction - FilterMate v4.0
 
 **Date**: 12 janvier 2026  
 **Version analysée**: v4.0  
-**Fichier cible**: `filter_mate_dockwidget.py`
+**Fichiers cibles**: `filter_mate_dockwidget.py`, `filter_mate_app.py`
 
 ---
 
-## 📈 État Actuel
+## 📈 État Actuel - Dockwidget
 
 | Métrique          | Valeur        | Objectif      |
 | ----------------- | ------------- | ------------- |
@@ -14,6 +14,36 @@
 | Sprint actuel     | **Sprint 15** | Sprint 15     |
 | Réduction totale  | **-9,013**    | -11,049       |
 | Progrès           | **69.2%**     | 30.8% restant |
+
+## 📈 État Actuel - App Orchestrator
+
+| Métrique      | Valeur        | Objectif  | Notes                        |
+| ------------- | ------------- | --------- | ---------------------------- |
+| Lignes app.py | **2,838**     | <2,000    | v4.0 Sprint 16 en cours      |
+| Sprint actuel | **Sprint 16** | Sprint 16 | Compression **init** (318→?) |
+| Réduction     | **-182**      | -1,020    | Début session: 3,020         |
+| Progrès       | **17.8%**     | 82.2%     | Focus: managers verbeux      |
+
+---
+
+## 🎯 Progression filter_mate_app.py
+
+### Sprint 16 (session 12 janvier 2026)
+
+| Action                                     | Lignes avant | Lignes après | Réduction |
+| ------------------------------------------ | ------------ | ------------ | --------- |
+| **Début Sprint 16**                        | **3,020**    | -            | -         |
+| Compresser **init** docstring + setup      | 3,020        | 2,935        | -85       |
+| Compresser DatabaseManager + Variables     | 2,935        | 2,898        | -37       |
+| Compresser TaskOrchestrator + Optimization | 2,898        | 2,864        | -34       |
+| Compresser AppInitializer (33→10 lignes)   | 2,864        | 2,838        | -26       |
+| **Total Sprint 16 (partiel)**              | **3,020**    | **2,838**    | **-182**  |
+
+**Note**: Sprint 16 axé sur compression massive `__init__` (318 lignes) - managers initialisations verbose → one-liners.
+
+---
+
+## 🎯 Progression filter_mate_dockwidget.py
 
 ### Progression Sprint 15 (session 11 janvier 2026)
 
