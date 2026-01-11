@@ -25,6 +25,16 @@ from .filter_executor import (
     build_postgis_filter_expression,
     apply_combine_operator,
 )
+from .filter_actions import (
+    # EPIC-1 Phase E5/E6: Filter action execution
+    execute_filter_action_postgresql,
+    execute_filter_action_postgresql_direct,
+    execute_filter_action_postgresql_materialized,
+    has_expensive_spatial_expression,
+    should_combine_filters,
+    build_combined_expression,
+    MATERIALIZED_VIEW_THRESHOLD,
+)
 
 __all__ = [
     # Main backend
@@ -52,4 +62,12 @@ __all__ = [
     # EPIC-1 Phase E4-S4b: Filter expression building
     'build_postgis_filter_expression',
     'apply_combine_operator',
+    # EPIC-1 Phase E5/E6: Filter action execution
+    'execute_filter_action_postgresql',
+    'execute_filter_action_postgresql_direct',
+    'execute_filter_action_postgresql_materialized',
+    'has_expensive_spatial_expression',
+    'should_combine_filters',
+    'build_combined_expression',
+    'MATERIALIZED_VIEW_THRESHOLD',
 ]

@@ -214,9 +214,19 @@ except ImportError:
 # These provide Strangler Fig delegation for PostgreSQL/Spatialite/OGR utilities
 try:
     from adapters.backends.postgresql import filter_executor as pg_executor
+    from adapters.backends.postgresql.filter_actions import (
+        execute_filter_action_postgresql as pg_execute_filter,
+        execute_filter_action_postgresql_direct as pg_execute_direct,
+        execute_filter_action_postgresql_materialized as pg_execute_materialized,
+        has_expensive_spatial_expression as pg_has_expensive_expr,
+    )
     PG_EXECUTOR_AVAILABLE = True
 except ImportError:
     pg_executor = None
+    pg_execute_filter = None
+    pg_execute_direct = None
+    pg_execute_materialized = None
+    pg_has_expensive_expr = None
     PG_EXECUTOR_AVAILABLE = False
 
 try:
@@ -4763,16 +4773,7 @@ class FilterEngineTask(QgsTask):
         """
         Execute filter action using PostgreSQL backend.
         
-        Adapts filtering strategy based on dataset size and expression complexity:
-        - Small datasets (< 10k features) with simple expressions: Uses direct setSubsetString
-        - Large datasets (≥ 10k features): Uses materialized views for performance
-        - Custom buffer expressions: Always uses materialized views
-        - Complex expressions (EXISTS + ST_Buffer + ST_Intersects): Always uses materialized views
-          to avoid re-execution on each canvas interaction (pan, zoom, render)
-        
-        v2.8.6: Added expression complexity detection - complex spatial predicates with
-        EXISTS clauses and ST_Buffer are now always materialized to prevent slow canvas
-        rendering caused by re-executing expensive queries on each feature request.
+        EPIC-1 Phase E5/E6: Delegates to adapters.backends.postgresql.filter_actions.
         
         Args:
             layer: QgsVectorLayer to filter
@@ -4788,53 +4789,58 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if successful
         """
-        # Get feature count to determine strategy
+        if PG_EXECUTOR_AVAILABLE and pg_execute_filter:
+            return pg_execute_filter(
+                layer=layer,
+                sql_subset_string=sql_subset_string,
+                primary_key_name=primary_key_name,
+                geom_key_name=geom_key_name,
+                name=name,
+                custom=custom,
+                cur=cur,
+                conn=conn,
+                seq_order=seq_order,
+                # Callback functions
+                queue_subset_fn=self._queue_subset_string,
+                get_connection_fn=self._get_valid_postgresql_connection,
+                ensure_stats_fn=self._ensure_source_table_stats,
+                extract_where_fn=self._extract_where_clause_from_select,
+                insert_history_fn=self._insert_subset_history,
+                get_session_name_fn=self._get_session_prefixed_name,
+                ensure_schema_fn=self._ensure_temp_schema_exists,
+                execute_commands_fn=self._execute_postgresql_commands,
+                create_simple_mv_fn=self._create_simple_materialized_view_sql,
+                create_custom_mv_fn=self._create_custom_buffer_view_sql,
+                parse_where_clauses_fn=self._parse_where_clauses,
+                # Context parameters
+                source_schema=self.param_source_schema,
+                source_table=self.param_source_table,
+                source_geom=self.param_source_geom,
+                current_mv_schema=self.current_materialized_view_schema,
+                project_uuid=self.project_uuid,
+                session_id=self.session_id,
+                param_buffer_expression=getattr(self, 'param_buffer_expression', None)
+            )
+        
+        # Fallback to legacy implementation (inline)
+        return self._filter_action_postgresql_legacy(
+            layer, sql_subset_string, primary_key_name, geom_key_name,
+            name, custom, cur, conn, seq_order
+        )
+    
+    def _filter_action_postgresql_legacy(self, layer, sql_subset_string, primary_key_name, geom_key_name, name, custom, cur, conn, seq_order):
+        """Legacy implementation - kept for fallback if extracted module unavailable."""
         feature_count = layer.featureCount()
-        
-        # Threshold for using materialized views (10,000 features)
         MATERIALIZED_VIEW_THRESHOLD = 10000
-        
-        # v2.8.6: Check if expression contains complex spatial predicates that are expensive
-        # to re-execute on each canvas interaction. These patterns require materialization
-        # to cache the result and avoid slow rendering.
         has_complex_expression = self._has_expensive_spatial_expression(sql_subset_string)
-        
-        # Decide on strategy based on dataset size, filter type, and expression complexity
-        # Custom buffer filters always need materialized views for geometry operations
-        # Complex expressions need materialization to avoid slow canvas rendering
         use_materialized_view = custom or feature_count >= MATERIALIZED_VIEW_THRESHOLD or has_complex_expression
         
         if use_materialized_view:
-            # Log strategy decision
-            if custom:
-                logger.info(f"PostgreSQL: Using materialized views for custom buffer expression")
-            elif has_complex_expression:
-                logger.info(
-                    f"PostgreSQL: Complex spatial expression detected (EXISTS/ST_Buffer/ST_Intersects). "
-                    f"Using materialized views to cache result and prevent slow canvas rendering."
-                )
-            elif feature_count >= 100000:
-                logger.info(
-                    f"PostgreSQL: Very large dataset ({feature_count:,} features). "
-                    f"Using materialized views with spatial index for optimal performance."
-                )
-            else:
-                logger.info(
-                    f"PostgreSQL: Large dataset ({feature_count:,} features ≥ {MATERIALIZED_VIEW_THRESHOLD:,}). "
-                    f"Using materialized views for better performance."
-                )
-            
             return self._filter_action_postgresql_materialized(
                 layer, sql_subset_string, primary_key_name, geom_key_name, 
                 name, custom, cur, conn, seq_order
             )
         else:
-            # Small dataset - use direct setSubsetString
-            logger.info(
-                f"PostgreSQL: Small dataset ({feature_count:,} features < {MATERIALIZED_VIEW_THRESHOLD:,}). "
-                f"Using direct setSubsetString for simplicity."
-            )
-            
             return self._filter_action_postgresql_direct(
                 layer, sql_subset_string, primary_key_name, cur, conn, seq_order
             )
