@@ -146,6 +146,38 @@ Phase E6 focused on:
 
 ---
 
+## Additional Changes (Out of E6 Scope)
+
+The following files were modified in the repository alongside E6 work but belong to other phases/sprints:
+
+**Phase E7-S1 (Fallback Implementations):**
+
+- `filter_mate_app.py` (+261 lines): Added legacy fallbacks (`_legacy_dispatch_task()`, `_show_degraded_mode_warning()`, fallbacks for filter_usable_layers, manage_task, undo/redo, get_spatialite_connection)
+- `tests/test_service_fallbacks.py` (NEW FILE ~350 lines): Unit tests for E7-S1 fallback implementations
+
+**Sprint 16 (Dockwidget Refactoring):**
+
+- `filter_mate_dockwidget.py` (extensive modifications): Ultra-compact one-liner style, delegation to ConfigurationManager
+- `ui/managers/configuration_manager.py` (+227 lines): Migrated methods from dockwidget (configure_pushbuttons, configure_other_widgets, configure_key_widgets_sizes, setup tab widgets)
+
+**Note:** These changes improve code organization but were developed in parallel with E6. They are documented here for traceability but are not counted in E6 metrics.
+
+---
+
+## Code Review Fixes (January 11, 2026)
+
+Following adversarial code review, the following issues were fixed:
+
+**MEDIUM Priority Fixes:**
+
+1. ✅ **Import location**: Moved `import traceback` to module top in `geometry_optimizer.py` (was in except block)
+2. ✅ **Missing tests**: Created `tests/test_geometry_preparer.py` with 5 unit tests covering success/failure scenarios
+3. ✅ **Documentation gap**: Added "Additional Changes" section documenting E7/Sprint 16 files (above)
+
+**Note:** Scope mixing (E6 + E7 in same git state) documented but not separated to preserve working state. Consider git stash approach for future phases.
+
+---
+
 ## Planned Sessions
 
 ### E6-S4: Optional Further Optimization (~200-300 lines)

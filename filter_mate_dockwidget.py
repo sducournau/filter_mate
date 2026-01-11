@@ -399,28 +399,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._setup_truncation_tooltips()
     
     def _load_all_pushbutton_icons(self):
-        """v3.1 Sprint 14: Load icons for all PushButton widgets from config."""
+        """v4.0 S16: Load icons from config."""
         try:
-            pb_config = self.CONFIG_DATA.get("APP", {}).get("DOCKWIDGET", {}).get("PushButton", {})
-            icons_config = pb_config.get("ICONS", {})
-            sizes = pb_config.get("ICONS_SIZES", {})
-            action_size = sizes.get("ACTION", {}).get("value", 24)
-            other_size = sizes.get("OTHERS", {}).get("value", 20)
-            if not icons_config:
-                return
-            for widget_group in ["ACTION", "EXPLORING", "FILTERING", "EXPORTING"]:
-                icon_size = action_size if widget_group == "ACTION" else other_size
-                for widget_name, icon_file in icons_config.get(widget_group, {}).items():
-                    widget_attr = self._get_widget_attr_name(widget_group, widget_name)
-                    if hasattr(self, widget_attr):
-                        widget = getattr(self, widget_attr)
-                        icon_path = os.path.join(self.plugin_dir, "icons", icon_file)
-                        if os.path.exists(icon_path):
-                            icon = get_themed_icon(icon_path) if ICON_THEME_AVAILABLE else QtGui.QIcon(icon_path)
-                            widget.setIcon(icon)
-                            widget.setIconSize(QtCore.QSize(icon_size, icon_size))
-        except Exception:
-            pass
+            pb_cfg = self.CONFIG_DATA.get("APP", {}).get("DOCKWIDGET", {}).get("PushButton", {})
+            icons, sizes = pb_cfg.get("ICONS", {}), pb_cfg.get("ICONS_SIZES", {})
+            sz_act, sz_oth = sizes.get("ACTION", {}).get("value", 24), sizes.get("OTHERS", {}).get("value", 20)
+            if not icons: return
+            for grp in ["ACTION", "EXPLORING", "FILTERING", "EXPORTING"]:
+                sz = sz_act if grp == "ACTION" else sz_oth
+                for name, ico_file in icons.get(grp, {}).items():
+                    attr = self._get_widget_attr_name(grp, name)
+                    if hasattr(self, attr):
+                        w, p = getattr(self, attr), os.path.join(self.plugin_dir, "icons", ico_file)
+                        if os.path.exists(p):
+                            w.setIcon(get_themed_icon(p) if ICON_THEME_AVAILABLE else QtGui.QIcon(p))
+                            w.setIconSize(QtCore.QSize(sz, sz))
+        except Exception: pass
     
     def _get_widget_attr_name(self, widget_group, widget_name):
         """v3.1 Sprint 14: Map config names to widget attribute names."""
@@ -452,95 +446,61 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return widget_map.get((widget_group, widget_name), "")
 
     def _setup_main_splitter(self):
-        """v3.1 Sprint 14: Setup main splitter between frames."""
+        """v4.0 S16: Setup splitter."""
         from .ui.config import UIConfig
         try:
-            self.main_splitter = self.splitter_main
-            cfg = UIConfig.get_config('splitter')
-            handle_width = cfg.get('handle_width', 6)
-            handle_margin = cfg.get('handle_margin', 40)
+            self.main_splitter, cfg = self.splitter_main, UIConfig.get_config('splitter')
+            hw, hm = cfg.get('handle_width', 6), cfg.get('handle_margin', 40)
             self.main_splitter.setChildrenCollapsible(cfg.get('collapsible', False))
-            self.main_splitter.setHandleWidth(handle_width)
+            self.main_splitter.setHandleWidth(hw)
             self.main_splitter.setOpaqueResize(cfg.get('opaque_resize', True))
-            self.main_splitter.setStyleSheet(f"""
-                QSplitter::handle:vertical {{
-                    background-color: #d0d0d0; height: {handle_width - 2}px;
-                    margin: 2px {handle_margin}px; border-radius: {(handle_width - 2) // 2}px;
-                }}
-                QSplitter::handle:vertical:hover {{ background-color: #3498db; }}""")
+            self.main_splitter.setStyleSheet(f"QSplitter::handle:vertical{{background-color:#d0d0d0;height:{hw-2}px;margin:2px {hm}px;border-radius:{(hw-2)//2}px;}}QSplitter::handle:vertical:hover{{background-color:#3498db;}}")
             self._apply_splitter_frame_policies()
             self.main_splitter.setStretchFactor(0, cfg.get('exploring_stretch', 2))
             self.main_splitter.setStretchFactor(1, cfg.get('toolset_stretch', 5))
             self._set_initial_splitter_sizes()
-        except Exception:
-            self.main_splitter = None
+        except Exception: self.main_splitter = None
     
     def _apply_splitter_frame_policies(self):
-        """v3.1 Sprint 14: Apply size policies to splitter frames."""
+        """v4.0 S16: Apply frame size policies."""
         from .ui.config import UIConfig
-        from qgis.PyQt.QtWidgets import QSizePolicy
-        policy_map = {'Fixed': QSizePolicy.Fixed, 'Minimum': QSizePolicy.Minimum,
-                      'Maximum': QSizePolicy.Maximum, 'Preferred': QSizePolicy.Preferred,
-                      'Expanding': QSizePolicy.Expanding, 'MinimumExpanding': QSizePolicy.MinimumExpanding,
-                      'Ignored': QSizePolicy.Ignored}
-        for frame_name, defaults in [('frame_exploring', ('Preferred', 'Minimum')),
-                                      ('frame_toolset', ('Preferred', 'Expanding'))]:
-            if hasattr(self, frame_name):
-                cfg = UIConfig.get_config(frame_name) or {}
-                h = policy_map.get(cfg.get('size_policy_h', defaults[0]), QSizePolicy.Preferred)
-                v = policy_map.get(cfg.get('size_policy_v', defaults[1]), QSizePolicy.Preferred)
-                getattr(self, frame_name).setSizePolicy(h, v)
+        from qgis.PyQt.QtWidgets import QSizePolicy as SP
+        pm = {'Fixed':SP.Fixed,'Minimum':SP.Minimum,'Maximum':SP.Maximum,'Preferred':SP.Preferred,'Expanding':SP.Expanding,'MinimumExpanding':SP.MinimumExpanding,'Ignored':SP.Ignored}
+        for fn, defs in [('frame_exploring',('Preferred','Minimum')), ('frame_toolset',('Preferred','Expanding'))]:
+            if hasattr(self, fn):
+                cfg = UIConfig.get_config(fn) or {}
+                getattr(self, fn).setSizePolicy(pm.get(cfg.get('size_policy_h', defs[0]), SP.Preferred), pm.get(cfg.get('size_policy_v', defs[1]), SP.Preferred))
     
     def _set_initial_splitter_sizes(self):
-        """v3.1 Sprint 14: Set initial splitter sizes based on ratios."""
+        """v4.0 S16: Set splitter ratios."""
         from .ui.config import UIConfig
         cfg = UIConfig.get_config('splitter')
-        exp_ratio = cfg.get('initial_exploring_ratio', 0.50)
-        tool_ratio = cfg.get('initial_toolset_ratio', 0.50)
-        total = self.main_splitter.height() if self.main_splitter.height() >= 100 else 600
-        self.main_splitter.setSizes([int(total * exp_ratio), int(total * tool_ratio)])
+        tot = self.main_splitter.height() if self.main_splitter.height() >= 100 else 600
+        self.main_splitter.setSizes([int(tot * cfg.get('initial_exploring_ratio', 0.50)), int(tot * cfg.get('initial_toolset_ratio', 0.50))])
 
 
     def apply_dynamic_dimensions(self):
-        """v3.1 Sprint 14: Apply dynamic dimensions to widgets."""
+        """v4.0 S16: Apply dynamic dimensions."""
         if self._dimensions_manager is not None:
-            try:
-                self._dimensions_manager.apply()
-                return
-            except Exception:
-                pass
+            try: self._dimensions_manager.apply(); return
+            except Exception: pass
         try:
-            self._apply_dockwidget_dimensions()
-            self._apply_widget_dimensions()
-            self._apply_frame_dimensions()
-            self._harmonize_checkable_pushbuttons()
+            self._apply_dockwidget_dimensions(); self._apply_widget_dimensions(); self._apply_frame_dimensions(); self._harmonize_checkable_pushbuttons()
             if self._spacing_manager is not None:
-                try:
-                    self._spacing_manager.apply()
-                except Exception:
-                    self._apply_layout_spacing()
-                    self._harmonize_spacers()
-                    self._adjust_row_spacing()
-            else:
-                self._apply_layout_spacing()
-                self._harmonize_spacers()
-                self._adjust_row_spacing()
-            self._apply_qgis_widget_dimensions()
-            self._align_key_layouts()
-        except Exception:
-            pass
+                try: self._spacing_manager.apply()
+                except Exception: self._apply_layout_spacing(); self._harmonize_spacers(); self._adjust_row_spacing()
+            else: self._apply_layout_spacing(); self._harmonize_spacers(); self._adjust_row_spacing()
+            self._apply_qgis_widget_dimensions(); self._align_key_layouts()
+        except Exception: pass
     
     def _apply_dockwidget_dimensions(self):
-        """v3.1 Sprint 14: Apply minimum size to dockwidget based on profile."""
+        """v4.0 S16: Set dockwidget size."""
         from .ui.config import UIConfig
         from qgis.PyQt.QtCore import QSize
-        min_w, min_h = UIConfig.get_config('dockwidget', 'min_width'), UIConfig.get_config('dockwidget', 'min_height')
-        pref_w, pref_h = UIConfig.get_config('dockwidget', 'preferred_width'), UIConfig.get_config('dockwidget', 'preferred_height')
-        if min_w and min_h:
-            self.setMinimumSize(QSize(min_w, min_h))
-        if pref_w and pref_h:
-            if self.size().width() > pref_w or self.size().height() > pref_h:
-                self.resize(pref_w, pref_h)
+        min_w, min_h = UIConfig.get_config('dockwidget','min_width'), UIConfig.get_config('dockwidget','min_height')
+        pref_w, pref_h = UIConfig.get_config('dockwidget','preferred_width'), UIConfig.get_config('dockwidget','preferred_height')
+        if min_w and min_h: self.setMinimumSize(QSize(min_w, min_h))
+        if pref_w and pref_h and (self.size().width() > pref_w or self.size().height() > pref_h): self.resize(pref_w, pref_h)
     
     def _apply_widget_dimensions(self):
         """v3.1 Sprint 14: Apply dimensions to standard Qt widgets."""
@@ -694,51 +654,29 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             pass
 
     def _setup_backend_indicator(self):
-        """v3.1 Sprint 15: Create header bar with favorites and backend indicators."""
+        """v4.0 S16: Create header with indicators."""
         self.frame_header = QtWidgets.QFrame(self.dockWidgetContents)
-        self.frame_header.setObjectName("frame_header")
-        self.frame_header.setFrameShape(QtWidgets.QFrame.NoFrame)
-        self.frame_header.setMaximumHeight(22)
-        self.frame_header.setMinimumHeight(18)
-        
-        header_layout = QtWidgets.QHBoxLayout(self.frame_header)
-        header_layout.setContentsMargins(10, 1, 10, 1)
-        header_layout.setSpacing(8)
-        header_layout.addSpacerItem(QtWidgets.QSpacerItem(40, 10, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))
-        
+        self.frame_header.setObjectName("frame_header"); self.frame_header.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.frame_header.setMaximumHeight(22); self.frame_header.setMinimumHeight(18)
+        hl = QtWidgets.QHBoxLayout(self.frame_header)
+        hl.setContentsMargins(10,1,10,1); hl.setSpacing(8)
+        hl.addSpacerItem(QtWidgets.QSpacerItem(40,10,QtWidgets.QSizePolicy.Expanding,QtWidgets.QSizePolicy.Minimum))
         self.plugin_title_label = None
-        
-        # Favorites and backend indicators with common badge style
-        badge_base = "color:white;font-size:9pt;font-weight:600;padding:3px 10px;border-radius:12px;border:none;"
-        
-        self.favorites_indicator_label = self._create_indicator_label("label_favorites_indicator", "★", 
-            badge_base + "background-color:#f39c12;", badge_base + "background-color:#d68910;",
-            "★ Favorites\nClick to manage", self._on_favorite_indicator_clicked, 35)
-        header_layout.addWidget(self.favorites_indicator_label)
-        
-        self.backend_indicator_label = self._create_indicator_label("label_backend_indicator", 
-            "OGR" if self.has_loaded_layers else "...",
-            badge_base + "background-color:#3498db;", badge_base + "background-color:#2980b9;",
-            "Click to change backend", self._on_backend_indicator_clicked, 40)
-        header_layout.addWidget(self.backend_indicator_label)
-        
+        bb = "color:white;font-size:9pt;font-weight:600;padding:3px 10px;border-radius:12px;border:none;"
+        self.favorites_indicator_label = self._create_indicator_label("label_favorites_indicator","★",bb+"background-color:#f39c12;",bb+"background-color:#d68910;","★ Favorites\nClick to manage",self._on_favorite_indicator_clicked,35)
+        hl.addWidget(self.favorites_indicator_label)
+        self.backend_indicator_label = self._create_indicator_label("label_backend_indicator","OGR" if self.has_loaded_layers else "...",bb+"background-color:#3498db;",bb+"background-color:#2980b9;","Click to change backend",self._on_backend_indicator_clicked,40)
+        hl.addWidget(self.backend_indicator_label)
         self.forced_backends = {}
-        if hasattr(self, 'verticalLayout_8'):
-            self.verticalLayout_8.insertWidget(0, self.frame_header)
+        if hasattr(self,'verticalLayout_8'): self.verticalLayout_8.insertWidget(0,self.frame_header)
     
     def _create_indicator_label(self, name, text, style, hover_style, tooltip, click_handler, min_width):
-        """v3.1 Sprint 15: Create styled indicator label."""
-        label = QtWidgets.QLabel(self.frame_header)
-        label.setObjectName(name)
-        label.setText(text)
-        label.setStyleSheet(f"QLabel#{name}{{{style}}}QLabel#{name}:hover{{{hover_style}}}")
-        label.setAlignment(Qt.AlignCenter)
-        label.setMinimumWidth(min_width)
-        label.setMaximumHeight(20)
-        label.setCursor(Qt.PointingHandCursor)
-        label.setToolTip(tooltip)
-        label.mousePressEvent = click_handler
-        return label
+        """v4.0 S16: Create indicator label."""
+        lbl = QtWidgets.QLabel(self.frame_header)
+        lbl.setObjectName(name); lbl.setText(text); lbl.setStyleSheet(f"QLabel#{name}{{{style}}}QLabel#{name}:hover{{{hover_style}}}")
+        lbl.setAlignment(Qt.AlignCenter); lbl.setMinimumWidth(min_width); lbl.setMaximumHeight(20)
+        lbl.setCursor(Qt.PointingHandCursor); lbl.setToolTip(tooltip); lbl.mousePressEvent = click_handler
+        return lbl
     
     def _on_backend_indicator_clicked(self, event):
         """v4.0 S16: → BackendController."""
@@ -782,32 +720,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if result: self._update_favorite_indicator()
     
     def _update_favorite_indicator(self):
-        """v3.1 Sprint 17: Update the favorites indicator badge with current count."""
+        """v4.0 S16: Update favorites badge."""
         if not hasattr(self, 'favorites_indicator_label') or not self.favorites_indicator_label: return
-        fm = getattr(self, '_favorites_manager', None)
-        count = fm.count if fm else 0
-        
-        if count > 0:
-            self.favorites_indicator_label.setText(f"★ {count}")
-            self.favorites_indicator_label.setToolTip(f"★ {count} Favorites saved\nClick to apply or manage")
-            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator { color: white; font-size: 9pt; font-weight: 600; padding: 3px 10px; border-radius: 12px; border: none; background-color: #f39c12; } QLabel#label_favorites_indicator:hover { background-color: #d68910; }")
+        fm, cnt = getattr(self, '_favorites_manager', None), getattr(getattr(self, '_favorites_manager', None), 'count', 0)
+        if cnt > 0:
+            self.favorites_indicator_label.setText(f"★ {cnt}")
+            self.favorites_indicator_label.setToolTip(f"★ {cnt} Favorites saved\nClick to apply or manage")
+            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:white;font-size:9pt;font-weight:600;padding:3px 10px;border-radius:12px;border:none;background-color:#f39c12;}QLabel#label_favorites_indicator:hover{background-color:#d68910;}")
         else:
             self.favorites_indicator_label.setText("★")
             self.favorites_indicator_label.setToolTip("★ No favorites saved\nClick to add current filter")
-            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator { color: #95a5a6; font-size: 9pt; font-weight: 600; padding: 3px 10px; border-radius: 12px; border: none; background-color: #ecf0f1; } QLabel#label_favorites_indicator:hover { background-color: #d5dbdb; }")
+            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:#95a5a6;font-size:9pt;font-weight:600;padding:3px 10px;border-radius:12px;border:none;background-color:#ecf0f1;}QLabel#label_favorites_indicator:hover{background-color:#d5dbdb;}")
         self.favorites_indicator_label.adjustSize()
 
     def _get_available_backends_for_layer(self, layer):
         """v4.0 S16: → BackendController."""
-        if self._controller_integration and self._controller_integration._backend_controller:
-            return self._controller_integration._backend_controller.get_available_backends_for_layer(layer)
-        return [('ogr', 'OGR', '📁')]
+        return self._controller_integration._backend_controller.get_available_backends_for_layer(layer) if self._controller_integration and self._controller_integration._backend_controller else [('ogr', 'OGR', '📁')]
     
     def _detect_current_backend(self, layer):
         """v4.0 S16: → BackendController."""
-        if self._controller_integration and self._controller_integration._backend_controller:
-            return self._controller_integration._backend_controller.get_current_backend(layer)
-        return 'ogr'
+        return self._controller_integration._backend_controller.get_current_backend(layer) if self._controller_integration and self._controller_integration._backend_controller else 'ogr'
 
     def _set_forced_backend(self, layer_id, backend_type):
         """v4.0 S16: → BackendController."""
@@ -824,15 +756,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def get_forced_backend_for_layer(self, layer_id):
         """v4.0 S16: → BackendController."""
-        if self._controller_integration and self._controller_integration._backend_controller:
-            return self._controller_integration._backend_controller.forced_backends.get(layer_id)
-        return None
+        return self._controller_integration._backend_controller.forced_backends.get(layer_id) if self._controller_integration and self._controller_integration._backend_controller else None
     
     def _get_optimal_backend_for_layer(self, layer):
         """v4.0 S16: → BackendController."""
-        if self._controller_integration and self._controller_integration._backend_controller:
-            return self._controller_integration._backend_controller._get_optimal_backend_for_layer(layer)
-        return 'ogr'
+        return self._controller_integration._backend_controller._get_optimal_backend_for_layer(layer) if self._controller_integration and self._controller_integration._backend_controller else 'ogr'
 
     # ========================================
     # POSTGRESQL MAINTENANCE METHODS
@@ -918,40 +846,34 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     # ========================================
     
     def _toggle_optimization_enabled(self):
-        """v4.0 Sprint 12: Delegate to BackendController."""
+        """v4.0 S16: → BackendController."""
         if self._controller_integration and self._controller_integration._backend_controller:
             enabled = self._controller_integration._backend_controller.toggle_optimization_enabled()
             (show_success if enabled else show_info)("FilterMate", f"Auto-optimization {'enabled' if enabled else 'disabled'}")
     
     def _toggle_centroid_auto(self):
-        """v4.0 Sprint 12: Delegate to BackendController."""
+        """v4.0 S16: → BackendController."""
         if self._controller_integration and self._controller_integration._backend_controller:
             enabled = self._controller_integration._backend_controller.toggle_centroid_auto()
             (show_success if enabled else show_info)("FilterMate", f"Auto-centroid {'enabled' if enabled else 'disabled'}")
     
     def _toggle_optimization_ask_before(self):
-        """v3.1 Sprint 15: Toggle confirmation dialog."""
+        """v4.0 S16: Toggle confirmation."""
         self._optimization_ask_before = not getattr(self, '_optimization_ask_before', True)
         (show_success if self._optimization_ask_before else show_info)("FilterMate", "Confirmation " + ("enabled" if self._optimization_ask_before else "disabled"))
     
     def _analyze_layer_optimizations(self):
-        """v4.0 Sprint 16: Analyze layer and show optimization recommendations."""
-        if not self.current_layer:
-            show_warning("FilterMate", "No layer selected. Please select a layer first."); return
+        """v4.0 S16: Analyze layer optimizations."""
+        if not self.current_layer: show_warning("FilterMate", "No layer selected. Please select a layer first."); return
         try:
             from .core.services.auto_optimizer import LayerAnalyzer, AutoOptimizer, AUTO_OPTIMIZER_AVAILABLE
-            if not AUTO_OPTIMIZER_AVAILABLE:
-                show_warning("FilterMate", "Auto-optimizer module not available"); return
+            if not AUTO_OPTIMIZER_AVAILABLE: show_warning("FilterMate", "Auto-optimizer module not available"); return
             layer_analysis = LayerAnalyzer().analyze_layer(self.current_layer)
-            if not layer_analysis:
-                show_info("FilterMate", f"Could not analyze layer '{self.current_layer.name()}'"); return
-            has_buffer = getattr(self, 'mQgsDoubleSpinBox_filtering_buffer_value', None) and self.mQgsDoubleSpinBox_filtering_buffer_value.value() != 0.0
-            has_buffer_type = getattr(self, 'checkBox_filtering_buffer_type', None) and self.checkBox_filtering_buffer_type.isChecked()
-            recommendations = AutoOptimizer().get_recommendations(
-                layer_analysis, user_centroid_enabled=self._is_centroid_already_enabled(self.current_layer),
-                has_buffer=has_buffer, has_buffer_type=has_buffer_type, is_source_layer=True)
-            if not recommendations:
-                show_success("FilterMate", f"Layer '{self.current_layer.name()}' is already optimally configured.\nType: {layer_analysis.location_type.value}\nFeatures: {layer_analysis.feature_count:,}"); return
+            if not layer_analysis: show_info("FilterMate", f"Could not analyze layer '{self.current_layer.name()}'"); return
+            has_buf = getattr(self,'mQgsDoubleSpinBox_filtering_buffer_value',None) and self.mQgsDoubleSpinBox_filtering_buffer_value.value()!=0.0
+            has_buf_type = getattr(self,'checkBox_filtering_buffer_type',None) and self.checkBox_filtering_buffer_type.isChecked()
+            recommendations = AutoOptimizer().get_recommendations(layer_analysis, user_centroid_enabled=self._is_centroid_already_enabled(self.current_layer), has_buffer=has_buf, has_buffer_type=has_buf_type, is_source_layer=True)
+            if not recommendations: show_success("FilterMate", f"Layer '{self.current_layer.name()}' is already optimally configured.\nType: {layer_analysis.location_type.value}\nFeatures: {layer_analysis.feature_count:,}"); return
             from .modules.optimization_dialogs import OptimizationRecommendationDialog
             dialog = OptimizationRecommendationDialog(layer_name=self.current_layer.name(), recommendations=[r.to_dict() for r in recommendations],
                 feature_count=layer_analysis.feature_count, location_type=layer_analysis.location_type.value, parent=self)

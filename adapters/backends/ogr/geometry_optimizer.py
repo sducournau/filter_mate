@@ -155,6 +155,5 @@ def simplify_source_for_ogr_fallback(source_layer, logger=None):
             
     except Exception as e:
         log_warning(f"  OGR simplification error: {e}, using original")
-        import traceback
         log_debug(f"  Traceback: {traceback.format_exc()}")
         return source_layer
