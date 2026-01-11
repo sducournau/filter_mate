@@ -3507,8 +3507,47 @@ class FilterEngineTask(QgsTask):
 
 
     def prepare_postgresql_source_geom(self):
+        """
+        Prepare PostgreSQL source geometry with buffer/centroid transformations.
         
-
+        EPIC-1 Phase E4-S9: Strangler Fig pattern - delegates to extracted module.
+        """
+        # =============================================================================
+        # EPIC-1 Phase E4-S9: Strangler Fig Delegation
+        # Delegate to extracted prepare_postgresql_source_geom() in postgresql/filter_executor.py
+        # =============================================================================
+        try:
+            from adapters.backends.postgresql import prepare_postgresql_source_geom as pg_prepare_source_geom
+            
+            # Call extracted function
+            result_geom, mv_name = pg_prepare_source_geom(
+                source_table=self.param_source_table,
+                source_schema=self.param_source_schema,
+                source_geom=self.param_source_geom,
+                buffer_value=getattr(self, 'param_buffer_value', None),
+                buffer_expression=getattr(self, 'param_buffer_expression', None),
+                use_centroids=getattr(self, 'param_use_centroids_source_layer', False),
+                buffer_segments=getattr(self, 'param_buffer_segments', 5),
+                buffer_type=self.task_parameters.get("filtering", {}).get("buffer_type", "Round"),
+                primary_key_name=getattr(self, 'primary_key_name', None)
+            )
+            
+            self.postgresql_source_geom = result_geom
+            if mv_name:
+                self.current_materialized_view_name = mv_name
+            
+            logger.info(f"✓ EPIC-1: Delegated to pg_prepare_source_geom (extracted)")
+            logger.debug(f"prepare_postgresql_source_geom: {self.postgresql_source_geom}")
+            return
+            
+        except ImportError as e:
+            logger.debug(f"EPIC-1: postgresql module not available ({e}), using legacy")
+        except Exception as e:
+            logger.warning(f"EPIC-1: Delegation failed ({e}), using legacy fallback")
+        
+        # =============================================================================
+        # Legacy Implementation (fallback)
+        # =============================================================================
         source_table = self.param_source_table
         source_schema = self.param_source_schema
         
