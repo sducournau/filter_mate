@@ -6737,22 +6737,18 @@ class FilterEngineTask(QgsTask):
         """
         Apply SQL set operator to combine with existing subset.
         
-        Args:
-            primary_key_name: Primary key field name
-            param_expression: The subquery expression
-            param_old_subset: Existing subset to combine with
-            param_combine_operator: SQL set operator (UNION, INTERSECT, EXCEPT)
-            
-        Returns:
-            str: Complete IN expression with optional combine operator
+        EPIC-1 Phase E4-S6: Strangler Fig delegation to pg_executor.
         """
-        if param_old_subset and param_combine_operator:
-            return (
-                f'"{primary_key_name}" IN ( {param_old_subset} '
-                f'{param_combine_operator} {param_expression} )'
+        # Strangler Fig: Delegate to extracted module
+        if PG_EXECUTOR_AVAILABLE:
+            return pg_executor.apply_combine_operator(
+                primary_key_name, param_expression, param_old_subset, param_combine_operator
             )
-        else:
-            return f'"{primary_key_name}" IN {param_expression}'
+        
+        # Legacy fallback
+        if param_old_subset and param_combine_operator:
+            return f'"{primary_key_name}" IN ( {param_old_subset} {param_combine_operator} {param_expression} )'
+        return f'"{primary_key_name}" IN {param_expression}'
 
     def _build_postgis_filter_expression(self, layer_props, param_postgis_sub_expression, sub_expression, param_old_subset, param_combine_operator):
         """
@@ -10510,50 +10506,38 @@ class FilterEngineTask(QgsTask):
         """
         Build Spatialite query for simple or complex (buffered) subsets.
         
-        Args:
-            sql_subset_string: SQL query for subset
-            table_name: Source table name
-            geom_key_name: Geometry field name
-            primary_key_name: Primary key field name
-            custom: Whether custom buffer expression is used
-            
-        Returns:
-            str: Spatialite SELECT query
+        EPIC-1 Phase E4-S6: Strangler Fig delegation to sl_executor.
         """
+        # Strangler Fig: Delegate to extracted module
+        if SL_EXECUTOR_AVAILABLE:
+            return sl_executor.build_spatialite_query(
+                sql_subset_string=sql_subset_string,
+                table_name=table_name,
+                geom_key_name=geom_key_name,
+                primary_key_name=primary_key_name,
+                custom=custom,
+                buffer_expression=getattr(self, 'param_buffer_expression', None),
+                buffer_value=getattr(self, 'param_buffer_value', None),
+                buffer_segments=getattr(self, 'param_buffer_segments', 5),
+                task_parameters=getattr(self, 'task_parameters', None)
+            )
+        
+        # Legacy fallback
         if custom is False:
-            # Simple subset - use query as-is
             return sql_subset_string
         
-        # Complex subset with buffer (adapt from PostgreSQL logic)
         buffer_expr = (
             self.qgis_expression_to_spatialite(self.param_buffer_expression) 
-            if self.param_buffer_expression 
-            else str(self.param_buffer_value)
+            if self.param_buffer_expression else str(self.param_buffer_value)
         )
-        
-        # Build ST_Buffer style parameters (quad_segs for segments, endcap for buffer type)
         buffer_type_mapping = {"Round": "round", "Flat": "flat", "Square": "square"}
         buffer_type_str = self.task_parameters["filtering"].get("buffer_type", "Round")
         endcap_style = buffer_type_mapping.get(buffer_type_str, "round")
-        quad_segs = self.param_buffer_segments
-        
-        # Build style string for Spatialite ST_Buffer
-        style_params = f"quad_segs={quad_segs}"
+        style_params = f"quad_segs={self.param_buffer_segments}"
         if endcap_style != 'round':
             style_params += f" endcap={endcap_style}"
         
-        # Build Spatialite SELECT (similar to PostgreSQL CREATE MATERIALIZED VIEW)
-        # Note: Spatialite uses same ST_Buffer syntax as PostGIS
-        query = f"""
-            SELECT 
-                ST_Buffer({geom_key_name}, {buffer_expr}, '{style_params}') as {geom_key_name},
-                {primary_key_name},
-                {buffer_expr} as buffer_value
-            FROM {table_name}
-            WHERE {primary_key_name} IN ({sql_subset_string})
-        """
-        
-        return query
+        return f"SELECT ST_Buffer({geom_key_name}, {buffer_expr}, '{style_params}') as {geom_key_name}, {primary_key_name}, {buffer_expr} as buffer_value FROM {table_name} WHERE {primary_key_name} IN ({sql_subset_string})"
 
     def _apply_spatialite_subset(self, layer, name, primary_key_name, sql_subset_string, 
                                  cur, conn, current_seq_order):
@@ -10972,22 +10956,20 @@ class FilterEngineTask(QgsTask):
         """
         Clean up all materialized views for the current session.
         
-        Drops all materialized views and indexes prefixed with the session_id.
-        Should be called when closing the plugin or resetting.
-        
-        Args:
-            connexion: psycopg2 connection
-            schema_name: Schema containing the materialized views
-            
-        Returns:
-            int: Number of views cleaned up
+        EPIC-1 Phase E4-S6: Strangler Fig delegation to pg_executor.
         """
+        # Strangler Fig: Delegate to extracted module
+        if PG_EXECUTOR_AVAILABLE:
+            return pg_executor.cleanup_session_materialized_views(
+                connexion, schema_name, self.session_id
+            )
+        
+        # Legacy fallback
         if not self.session_id:
             return 0
         
         try:
             with connexion.cursor() as cursor:
-                # Find all materialized views for this session
                 cursor.execute("""
                     SELECT matviewname FROM pg_matviews 
                     WHERE schemaname = %s AND matviewname LIKE %s
@@ -10997,18 +10979,12 @@ class FilterEngineTask(QgsTask):
                 count = 0
                 for (view_name,) in views:
                     try:
-                        # Drop associated index first
-                        index_name = view_name.replace('mv_', f'{schema_name}_').replace('_dump', '') + '_cluster'
-                        cursor.execute(f'DROP INDEX IF EXISTS "{schema_name}"."{index_name}" CASCADE;')
-                        # Drop the view
                         cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema_name}"."{view_name}" CASCADE;')
                         count += 1
                     except Exception as e:
                         logger.warning(f"Error dropping view {view_name}: {e}")
                 
                 connexion.commit()
-                if count > 0:
-                    logger.info(f"Cleaned up {count} materialized view(s) for session {self.session_id}")
                 return count
         except Exception as e:
             logger.error(f"Error cleaning up session views: {e}")
