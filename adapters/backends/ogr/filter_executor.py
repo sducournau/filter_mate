@@ -283,3 +283,405 @@ def combine_ogr_filters(
         return f"({existing_filter}) AND NOT ({new_filter})"
     else:
         return f"({existing_filter}) {combine_operator.upper()} ({new_filter})"
+
+
+# =============================================================================
+# EPIC-1 Phase E4-S7: OGR Source Geometry Preparation
+# =============================================================================
+
+from dataclasses import dataclass, field
+from typing import Optional, List, Any, Callable
+
+
+@dataclass
+class OGRSourceContext:
+    """
+    Context object for OGR source geometry preparation.
+    
+    EPIC-1 Phase E4-S7: Encapsulates all parameters needed for prepare_ogr_source_geom()
+    to enable extraction from filter_task.py with minimal coupling.
+    
+    This replaces the many self.* references with a clean data structure.
+    """
+    # Source layer reference
+    source_layer: Any = None  # QgsVectorLayer
+    
+    # Task parameters
+    task_parameters: dict = field(default_factory=dict)
+    
+    # Field expression info: tuple (is_field_expr, field_name) or None
+    is_field_expression: Optional[tuple] = None
+    
+    # Filter expression (from execute_source_layer_filtering)
+    expression: Optional[str] = None
+    
+    # New subset string
+    param_source_new_subset: Optional[str] = None
+    
+    # Reprojection settings
+    has_to_reproject_source_layer: bool = False
+    source_layer_crs_authid: Optional[str] = None
+    
+    # Centroid optimization
+    param_use_centroids_source_layer: bool = False
+    
+    # Spatialite fallback mode (for buffer handling)
+    spatialite_fallback_mode: bool = False
+    
+    # Buffer parameter (None = no buffer, float/QgsProperty = buffer distance)
+    buffer_distance: Any = None
+    
+    # Helper method callbacks (dependency injection)
+    copy_filtered_layer_to_memory: Optional[Callable] = None
+    copy_selected_features_to_memory: Optional[Callable] = None
+    create_memory_layer_from_features: Optional[Callable] = None
+    reproject_layer: Optional[Callable] = None
+    convert_layer_to_centroids: Optional[Callable] = None
+    get_buffer_distance_parameter: Optional[Callable] = None
+
+
+def validate_task_features(task_features: list, layer: Any = None) -> tuple:
+    """
+    Validate QgsFeature objects from task parameters.
+    
+    EPIC-1 Phase E4-S7: Extracted validation logic from prepare_ogr_source_geom().
+    Handles thread-safety issues where QgsFeature objects become invalid.
+    
+    Args:
+        task_features: List of QgsFeature objects or feature-like objects
+        layer: Source layer for FID recovery fallback
+        
+    Returns:
+        tuple: (valid_features: list, invalid_count: int, recovered_via_fids: bool)
+    """
+    valid_features = []
+    invalid_count = 0
+    recovered_via_fids = False
+    
+    for f in task_features:
+        if f is None or f == "":
+            continue
+        try:
+            if hasattr(f, 'hasGeometry') and hasattr(f, 'geometry'):
+                if f.hasGeometry():
+                    geom = f.geometry()
+                    if geom is not None and not geom.isEmpty():
+                        valid_features.append(f)
+                    else:
+                        invalid_count += 1
+                        logger.debug(f"  Skipping feature with empty geometry")
+                else:
+                    invalid_count += 1
+                    logger.debug(f"  Skipping feature without geometry")
+            elif f:
+                # Non-QgsFeature truthy value (e.g., feature ID)
+                valid_features.append(f)
+        except (RuntimeError, AttributeError) as e:
+            invalid_count += 1
+            logger.warning(f"  ⚠️ Feature access error (thread-safety issue?): {e}")
+    
+    return valid_features, invalid_count, recovered_via_fids
+
+
+def recover_features_from_fids(
+    layer: Any, 
+    feature_fids: list
+) -> list:
+    """
+    Recover features using FIDs when QgsFeature objects are invalid.
+    
+    EPIC-1 Phase E4-S7: FID recovery logic for thread-safety issues.
+    
+    Args:
+        layer: Source layer to fetch features from
+        feature_fids: List of feature IDs
+        
+    Returns:
+        list: Recovered features or empty list
+    """
+    if not feature_fids or not layer:
+        return []
+    
+    try:
+        from qgis.core import QgsFeatureRequest
+        request = QgsFeatureRequest().setFilterFids(feature_fids)
+        recovered_features = list(layer.getFeatures(request))
+        if recovered_features:
+            logger.info(f"  ✓ Recovered {len(recovered_features)} features using FIDs")
+        return recovered_features
+    except Exception as e:
+        logger.error(f"  ❌ FID recovery failed: {e}")
+        return []
+
+
+def determine_source_mode(
+    context: OGRSourceContext
+) -> tuple:
+    """
+    Determine which mode to use for OGR source geometry preparation.
+    
+    EPIC-1 Phase E4-S7: Mode detection logic extracted for clarity.
+    
+    Args:
+        context: OGRSourceContext with all parameters
+        
+    Returns:
+        tuple: (mode: str, features_or_none)
+        Modes: "TASK_PARAMS", "SUBSET", "SELECTION", "FIELD_BASED", "EXPRESSION_FALLBACK", "DIRECT"
+    """
+    layer = context.source_layer
+    if not layer:
+        return "INVALID", None
+    
+    has_subset = bool(layer.subsetString())
+    has_selection = layer.selectedFeatureCount() > 0
+    
+    # Check field-based mode
+    is_field_based = (
+        context.is_field_expression is not None and
+        isinstance(context.is_field_expression, tuple) and
+        len(context.is_field_expression) >= 2 and
+        context.is_field_expression[0] is True
+    )
+    
+    # Check task features
+    task_features_raw = context.task_parameters.get("task", {}).get("features", [])
+    valid_features, invalid_count, _ = validate_task_features(task_features_raw, layer)
+    
+    # FID recovery if all features invalid
+    if len(valid_features) == 0 and len(task_features_raw) > 0 and invalid_count > 0:
+        feature_fids = context.task_parameters.get("task", {}).get("feature_fids", [])
+        if not feature_fids:
+            feature_fids = context.task_parameters.get("feature_fids", [])
+        valid_features = recover_features_from_fids(layer, feature_fids)
+    
+    # Determine mode
+    if valid_features and len(valid_features) > 0:
+        return "TASK_PARAMS", valid_features
+    elif has_subset or has_selection:
+        if has_selection and not has_subset:
+            return "SELECTION", None
+        return "SUBSET", None
+    elif is_field_based:
+        return "FIELD_BASED", None
+    elif context.expression and context.expression.strip():
+        return "EXPRESSION_FALLBACK", context.expression
+    elif context.param_source_new_subset and context.param_source_new_subset.strip():
+        return "EXPRESSION_FALLBACK", context.param_source_new_subset
+    else:
+        return "DIRECT", None
+
+
+def validate_ogr_result_layer(layer: Any) -> tuple:
+    """
+    Validate the final OGR source layer before storing.
+    
+    EPIC-1 Phase E4-S7: Result validation logic extracted.
+    
+    Args:
+        layer: Processed layer to validate
+        
+    Returns:
+        tuple: (is_valid: bool, error_message: str or None)
+    """
+    if layer is None:
+        return False, "Final layer is None"
+    
+    if not layer.isValid():
+        return False, "Final layer is not valid"
+    
+    feature_count = layer.featureCount()
+    if feature_count is None or feature_count == 0:
+        return False, "Final layer has no features"
+    
+    # Check for at least one valid geometry
+    has_valid_geom = False
+    invalid_reason = "unknown"
+    
+    try:
+        from core.geometry.geometry_utils import validate_geometry
+    except ImportError:
+        # Fallback validation
+        def validate_geometry(geom):
+            return geom is not None and not geom.isNull() and not geom.isEmpty()
+    
+    for feature in layer.getFeatures():
+        geom = feature.geometry()
+        if validate_geometry(geom):
+            has_valid_geom = True
+            break
+        else:
+            if geom is None:
+                invalid_reason = "geometry is None"
+            elif geom.isNull():
+                invalid_reason = "geometry is Null"
+            elif geom.isEmpty():
+                invalid_reason = "geometry is Empty"
+            else:
+                wkb_type = geom.wkbType()
+                invalid_reason = f"wkbType={wkb_type} (Unknown or NoGeometry)"
+    
+    if not has_valid_geom:
+        return False, f"No valid geometries (reason: {invalid_reason})"
+    
+    return True, None
+
+
+def prepare_ogr_source_geom(
+    context: OGRSourceContext
+) -> Any:
+    """
+    Prepare OGR source geometry with optional reprojection and buffering.
+    
+    EPIC-1 Phase E4-S7: Extracted from filter_task.py (382 lines → callable function)
+    
+    Uses OGRSourceContext to decouple from FilterEngineTask instance.
+    Helper methods are injected via context callbacks.
+    
+    Process:
+    1. Determine source mode (task_params, subset, selection, field-based, direct)
+    2. Copy layer to memory if needed
+    3. Reproject if needed
+    4. Apply centroid optimization if enabled
+    5. Validate result
+    
+    Args:
+        context: OGRSourceContext with all required parameters and callbacks
+        
+    Returns:
+        QgsVectorLayer or None: Prepared source geometry layer
+    """
+    from qgis.core import QgsMessageLog, Qgis, QgsProject, QgsExpressionContext
+    try:
+        from qgis.core import QgsProperty
+    except ImportError:
+        QgsProperty = None
+    
+    layer = context.source_layer
+    
+    if not layer:
+        logger.error("prepare_ogr_source_geom: source_layer is None")
+        return None
+    
+    # Step 0: Determine mode and prepare layer
+    mode, mode_data = determine_source_mode(context)
+    
+    logger.info(f"=== prepare_ogr_source_geom ({mode} MODE) ===")
+    logger.info(f"  Source layer: {layer.name()}")
+    logger.info(f"  Feature count: {layer.featureCount()}")
+    
+    if mode == "INVALID":
+        logger.error("  Mode is INVALID, returning None")
+        return None
+    
+    elif mode == "TASK_PARAMS":
+        valid_features = mode_data
+        logger.info(f"  Using {len(valid_features)} features from task_parameters")
+        
+        if context.create_memory_layer_from_features:
+            layer = context.create_memory_layer_from_features(
+                valid_features, layer.crs(), "source_from_task"
+            )
+            if layer:
+                logger.info(f"  ✓ Memory layer created with {layer.featureCount()} features")
+            else:
+                logger.error("  ✗ Failed to create memory layer")
+                layer = context.source_layer
+    
+    elif mode == "SELECTION":
+        logger.info(f"  Copying selected features to memory")
+        if context.copy_selected_features_to_memory:
+            layer = context.copy_selected_features_to_memory(layer, "source_selection")
+    
+    elif mode == "SUBSET":
+        logger.info(f"  Copying filtered layer to memory")
+        if context.copy_filtered_layer_to_memory:
+            layer = context.copy_filtered_layer_to_memory(layer, "source_filtered")
+    
+    elif mode == "FIELD_BASED":
+        logger.info(f"  Field-based mode: using all filtered features")
+        if context.copy_filtered_layer_to_memory:
+            layer = context.copy_filtered_layer_to_memory(layer, "source_field_based")
+    
+    elif mode == "EXPRESSION_FALLBACK":
+        filter_to_use = mode_data
+        logger.info(f"  Expression fallback: '{filter_to_use[:80]}...'")
+        
+        try:
+            from qgis.core import QgsFeatureRequest, QgsExpression
+            expr = QgsExpression(filter_to_use)
+            if expr.hasParserError():
+                logger.warning(f"  Expression parse error: {expr.parserErrorString()}")
+            else:
+                request = QgsFeatureRequest(expr)
+                filtered_features = list(layer.getFeatures(request))
+                
+                if filtered_features and context.create_memory_layer_from_features:
+                    layer = context.create_memory_layer_from_features(
+                        filtered_features, layer.crs(), "source_expr_filtered"
+                    )
+                    if layer:
+                        logger.info(f"  ✓ Filtered to {layer.featureCount()} features")
+        except Exception as e:
+            logger.error(f"  Expression filtering failed: {e}")
+    
+    elif mode == "DIRECT":
+        logger.info(f"  Direct mode: using source layer as-is")
+        QgsMessageLog.logMessage(
+            f"OGR DIRECT MODE: Using {layer.featureCount()} features",
+            "FilterMate", Qgis.Warning
+        )
+    
+    # Step 1: Handle buffer CRS check
+    buffer_distance = context.buffer_distance
+    if context.get_buffer_distance_parameter:
+        buffer_distance = context.get_buffer_distance_parameter()
+    
+    if buffer_distance is not None and layer:
+        crs = layer.crs()
+        is_geographic = crs.isGeographic()
+        
+        eval_distance = buffer_distance
+        if QgsProperty and isinstance(buffer_distance, QgsProperty):
+            features = list(layer.getFeatures())
+            if features:
+                ctx = QgsExpressionContext()
+                ctx.setFeature(features[0])
+                eval_distance = buffer_distance.value(ctx, 0)
+        
+        if is_geographic and eval_distance and float(eval_distance) > 1:
+            logger.warning(
+                f"⚠️ Geographic CRS ({crs.authid()}) with buffer {eval_distance}. "
+                f"Auto-reprojecting to EPSG:3857."
+            )
+            context.has_to_reproject_source_layer = True
+            context.source_layer_crs_authid = 'EPSG:3857'
+    
+    # Step 2: Reproject if needed
+    if context.has_to_reproject_source_layer and context.reproject_layer:
+        layer = context.reproject_layer(layer, context.source_layer_crs_authid)
+    
+    # Step 3: Validate result
+    is_valid, error_msg = validate_ogr_result_layer(layer)
+    if not is_valid:
+        logger.error(f"prepare_ogr_source_geom: {error_msg}")
+        QgsMessageLog.logMessage(
+            f"OGR source preparation FAILED: {error_msg}",
+            "FilterMate", Qgis.Critical
+        )
+        return None
+    
+    # Step 4: Centroid optimization
+    if context.param_use_centroids_source_layer and context.convert_layer_to_centroids:
+        logger.info("  Applying centroid optimization")
+        centroid_layer = context.convert_layer_to_centroids(layer)
+        if centroid_layer and centroid_layer.isValid() and centroid_layer.featureCount() > 0:
+            layer = centroid_layer
+            logger.info(f"  ✓ Converted to centroids: {layer.featureCount()} points")
+    
+    # Step 5: Prevent garbage collection for memory layers
+    if layer and layer.isValid() and layer.providerType() == 'memory':
+        logger.debug("  Adding memory layer to project (prevent GC)")
+        QgsProject.instance().addMapLayer(layer, addToLegend=False)
+    
+    return layer

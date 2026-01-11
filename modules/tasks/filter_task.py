@@ -6171,8 +6171,9 @@ class FilterEngineTask(QgsTask):
         """
         Prepare OGR source geometry with optional reprojection and buffering.
         
-        REFACTORED: Decomposed from 173 lines to ~35 lines using helper methods.
-        Main method now orchestrates geometry preparation workflow.
+        EPIC-1 Phase E4-S7: Strangler Fig delegation to ogr_executor.
+        Delegates to adapters.backends.ogr.filter_executor.prepare_ogr_source_geom()
+        using OGRSourceContext to pass parameters.
         
         Process:
         1. Copy filtered layer to memory (if subset string active OR features selected OR field-based mode)
@@ -6181,6 +6182,36 @@ class FilterEngineTask(QgsTask):
         4. Apply buffer if specified
         5. Store result in self.ogr_source_geom
         """
+        # EPIC-1 Phase E4-S7: Try delegating to new extracted function
+        if OGR_EXECUTOR_AVAILABLE and hasattr(ogr_executor, 'OGRSourceContext'):
+            try:
+                context = ogr_executor.OGRSourceContext(
+                    source_layer=self.source_layer,
+                    task_parameters=self.task_parameters,
+                    is_field_expression=getattr(self, 'is_field_expression', None),
+                    expression=getattr(self, 'expression', None),
+                    param_source_new_subset=getattr(self, 'param_source_new_subset', None),
+                    has_to_reproject_source_layer=self.has_to_reproject_source_layer,
+                    source_layer_crs_authid=self.source_layer_crs_authid,
+                    param_use_centroids_source_layer=self.param_use_centroids_source_layer,
+                    spatialite_fallback_mode=getattr(self, '_spatialite_fallback_mode', False),
+                    buffer_distance=None,  # Will be fetched via callback
+                    # Inject helper methods
+                    copy_filtered_layer_to_memory=self._copy_filtered_layer_to_memory,
+                    copy_selected_features_to_memory=self._copy_selected_features_to_memory,
+                    create_memory_layer_from_features=self._create_memory_layer_from_features,
+                    reproject_layer=self._reproject_layer,
+                    convert_layer_to_centroids=self._convert_layer_to_centroids,
+                    get_buffer_distance_parameter=self._get_buffer_distance_parameter,
+                )
+                result = ogr_executor.prepare_ogr_source_geom(context)
+                self.ogr_source_geom = result
+                logger.debug(f"prepare_ogr_source_geom: delegated to ogr_executor, result={result}")
+                return
+            except Exception as e:
+                logger.warning(f"ogr_executor delegation failed, using legacy: {e}")
+        
+        # LEGACY FALLBACK: Original implementation
         layer = self.source_layer
         
         # Step 0: CRITICAL - Copy to memory if layer has subset string OR selected features
