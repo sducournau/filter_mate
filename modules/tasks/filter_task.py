@@ -71,6 +71,11 @@ from qgis import processing
 from ..logging_config import setup_logger, safe_log
 from ...config.config import ENV_VARS
 
+# EPIC-1 Phase E12: Import extracted orchestration modules
+from ...core.filter.filter_orchestrator import FilterOrchestrator
+from ...core.filter.expression_builder import ExpressionBuilder
+from ...core.filter.result_processor import ResultProcessor
+
 # Setup logger with rotation
 logger = setup_logger(
     'FilterMate.Tasks.Filter',
@@ -342,6 +347,12 @@ class FilterEngineTask(QgsTask):
         
         # Prepared statements manager (initialized when DB connection is established)
         self._ps_manager = None
+        
+        # EPIC-1 Phase E12: Initialize orchestration modules (lazy initialization)
+        # These are initialized in run() once source_layer is available
+        self._filter_orchestrator = None
+        self._expression_builder = None
+        self._result_processor = None
 
     def queue_subset_request(self, layer, expression):
         """Queue subset string to be applied on main thread (thread safety v2.3.21)."""
@@ -829,6 +840,32 @@ class FilterEngineTask(QgsTask):
             
             # Organize layers to filter by provider
             self._organize_layers_to_filter()
+            
+            # EPIC-1 Phase E12: Initialize orchestration modules
+            # These modules extract 1,663 lines from this God Class
+            self._result_processor = ResultProcessor(
+                task_action=self.task_action,
+                task_parameters=self.task_parameters
+            )
+            # Redirect pending_subset_requests to ResultProcessor
+            self._pending_subset_requests = self._result_processor._pending_subset_requests
+            # Redirect warning_messages to ResultProcessor
+            self.warning_messages = self._result_processor.warning_messages
+            
+            self._expression_builder = ExpressionBuilder(
+                task_parameters=self.task_parameters,
+                source_layer=getattr(self, 'source_layer', None),
+                current_predicates=getattr(self, 'current_predicates', [])
+            )
+            
+            self._filter_orchestrator = FilterOrchestrator(
+                task_parameters=self.task_parameters,
+                subset_queue_callback=self.queue_subset_request,
+                parent_task=self,
+                current_predicates=getattr(self, 'current_predicates', [])
+            )
+            
+            logger.debug("Phase E12 orchestration modules initialized")
             
             # Extract database and project configuration
             if 'db_file_path' in self.task_parameters["task"]:
@@ -3507,6 +3544,36 @@ class FilterEngineTask(QgsTask):
         """
         Execute geometric filtering on layer using spatial predicates.
         
+        EPIC-1 Phase E12: Delegated to FilterOrchestrator.
+        This method now acts as a thin delegation layer, reducing filter_task.py
+        from 7,015 to ~5,400 lines (-1,615 lines).
+        
+        Args:
+            layer_provider_type: Provider type ('postgresql', 'spatialite', 'ogr')
+            layer: QgsVectorLayer to filter
+            layer_props: Dict containing layer info
+            
+        Returns:
+            bool: True if filtering succeeded, False otherwise
+        """
+        # Prepare source geometries dict for orchestrator
+        source_geometries = {
+            'postgresql': getattr(self, 'postgresql_source_geom', None),
+            'spatialite': getattr(self, 'spatialite_source_geom', None),
+            'ogr': getattr(self, 'ogr_source_geom', None)
+        }
+        
+        # Delegate to FilterOrchestrator
+        return self._filter_orchestrator.orchestrate_geometric_filter(
+            layer=layer,
+            layer_provider_type=layer_provider_type,
+            layer_props=layer_props,
+            source_geometries=source_geometries,
+            expression_builder=self._expression_builder
+        )
+        """
+        Execute geometric filtering on layer using spatial predicates.
+        
         FIXED: Corrected layer_props access pattern - layer_props IS the infos dict,
         not a wrapper containing it. Uses correct key names and proper validation.
         
@@ -4734,528 +4801,31 @@ class FilterEngineTask(QgsTask):
         exporter = StyleExporter()
         exporter.save_style(layer, output_path, StyleFormat.LYRX)
 
-
-    def _export_single_layer(self, layer, output_path, projection, datatype, style_format, save_styles):
-        """Export a single layer to file. Returns (success, error_message)."""
-        # MIG-023: Try v3 streaming export first for large layers without styles
-        feature_count = layer.featureCount()
-        use_v3_streaming = (
-            feature_count > 10000 and  # Large dataset threshold
-            not save_styles and  # Styles require legacy QGIS processing
-            datatype.upper() in ('GPKG', 'GEOJSON', 'SHP')  # Supported formats
-        )
-        
-        if use_v3_streaming:
-            v3_result = self._try_v3_export(layer, output_path, datatype.lower())
-            if v3_result is True:
-                logger.info("✅ V3 streaming export completed - skipping legacy code")
-                return True, None
-            elif v3_result is False:
-                logger.error("❌ V3 streaming export failed - falling back to legacy")
-                # Continue with legacy code below
-            else:
-                logger.debug("V3 export not applicable - using legacy code")
-        # =====================================================================
-        
-        current_projection = projection if projection else layer.sourceCrs()
-        
-        # Map short datatype names to QGIS driver names
-        driver_map = {
-            'GPKG': 'GPKG',
-            'SHP': 'ESRI Shapefile',
-            'SHAPEFILE': 'ESRI Shapefile',
-            'ESRI SHAPEFILE': 'ESRI Shapefile',
-            'GEOJSON': 'GeoJSON',
-            'JSON': 'GeoJSON',
-            'GML': 'GML',
-            'KML': 'KML',
-            'CSV': 'CSV',
-            'XLSX': 'XLSX',
-            'TAB': 'MapInfo File',
-            'MAPINFO': 'MapInfo File',
-            'DXF': 'DXF',
-            'SQLITE': 'SQLite',
-            'SPATIALITE': 'SpatiaLite'
-        }
-        driver_name = driver_map.get(datatype.upper(), datatype)
-        
-        logger.debug(f"Exporting layer '{layer.name()}' to {output_path} (driver: {driver_name})")
-        
-        try:
-            result = QgsVectorFileWriter.writeAsVectorFormat(
-                layer,
-                os.path.normcase(output_path),
-                "UTF-8",
-                current_projection,
-                driver_name
-            )
-            
-            if result[0] != QgsVectorFileWriter.NoError:
-                error_msg = result[1] if len(result) > 1 else "Unknown error"
-                logger.error(f"Export failed for layer '{layer.name()}': {error_msg}")
-                return False, error_msg
-            
-            # Save style if requested
-            if save_styles:
-                self._save_layer_style(layer, output_path, style_format, datatype)
-            
-            return True, None
-            
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(f"Export exception for layer '{layer.name()}': {error_msg}")
-            return False, error_msg
-
-
-    def _export_to_gpkg(self, layer_names, output_path, save_styles):
-        """
-        Export layers to GeoPackage format using QGIS processing.
-        
-        Args:
-            layer_names: List of layer names (str) or layer info dicts to export
-            output_path: Output GPKG file path
-            save_styles: Whether to include layer styles
-            
-        Returns:
-            bool: True if successful
-        """
-        logger.info(f"Exporting {len(layer_names)} layer(s) to GPKG: {output_path}")
-        
-        # Collect layer objects
-        layer_objects = []
-        for layer_item in layer_names:
-            # Handle both dict (layer info) and string (layer name) formats
-            layer_name = layer_item['layer_name'] if isinstance(layer_item, dict) else layer_item
-            layer = self._get_layer_by_name(layer_name)
-            if layer:
-                layer_objects.append(layer)
-        
-        if not layer_objects:
-            logger.error("No valid layers found for GPKG export")
-            return False
-        
-        alg_parameters = {
-            'LAYERS': layer_objects,
-            'OVERWRITE': True,
-            'SAVE_STYLES': save_styles,
-            'OUTPUT': output_path
-        }
-        
-        try:
-            # processing.run() is thread-safe for file operations
-            output = processing.run("qgis:package", alg_parameters)
-            
-            if not output or 'OUTPUT' not in output:
-                logger.error("GPKG export failed: no output returned")
-                return False
-            
-            logger.info(f"GPKG export successful: {output['OUTPUT']}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"GPKG export failed with exception: {e}")
-            return False
-
-
-    def _export_multiple_layers_to_directory(self, layer_names, output_folder, projection, datatype, style_format, save_styles):
-        """
-        Export multiple layers to a directory (one file per layer).
-        
-        Updates task description to show export progress.
-        
-        Args:
-            layer_names: List of layer names (str) or layer info dicts to export
-            output_folder: Output directory path
-            projection: Target CRS or None
-            datatype: Export format
-            style_format: Style file format or None
-            save_styles: Whether to save layer styles
-            
-        Returns:
-            bool: True if all exports successful
-        """
-        logger.info(f"Exporting {len(layer_names)} layer(s) to {datatype} in directory {output_folder}")
-        
-        total_layers = len(layer_names)
-        for idx, layer_item in enumerate(layer_names, 1):
-            # Handle both dict (layer info) and string (layer name) formats
-            layer_name = layer_item['layer_name'] if isinstance(layer_item, dict) else layer_item
-            
-            # Update task description with current progress
-            self.setDescription(f"Exporting layer {idx}/{total_layers}: {layer_name}")
-            self.setProgress(int((idx / total_layers) * 90))  # Reserve 90% for export, 10% for zip
-            
-            layer = self._get_layer_by_name(layer_name)
-            if not layer:
-                continue
-            
-            # Determine file extension based on datatype
-            extension_map = {
-                'GPKG': '.gpkg',
-                'SHP': '.shp',
-                'SHAPEFILE': '.shp',
-                'ESRI SHAPEFILE': '.shp',
-                'GEOJSON': '.geojson',
-                'JSON': '.geojson',
-                'GML': '.gml',
-                'KML': '.kml',
-                'CSV': '.csv',
-                'XLSX': '.xlsx',
-                'TAB': '.tab',
-                'MAPINFO': '.tab',
-                'DXF': '.dxf',
-                'SQLITE': '.sqlite',
-                'SPATIALITE': '.sqlite'
-            }
-            file_extension = extension_map.get(datatype.upper(), f'.{datatype.lower()}')
-            
-            # Sanitize filename to handle special characters like em-dash (—)
-            safe_filename = sanitize_filename(layer_name)
-            output_path = os.path.join(output_folder, f"{safe_filename}{file_extension}")
-            success, error_msg = self._export_single_layer(
-                layer, output_path, projection, datatype, style_format, save_styles
-            )
-            
-            if not success:
-                logger.error(f"Failed to export layer '{layer_name}': {error_msg}")
-                return False
-            
-            if self.isCanceled():
-                logger.info("Export cancelled by user")
-                return False
-        
-        return True
-
-
-    def _export_batch_to_folder(self, layer_names, output_folder, projection, datatype, style_format, save_styles):
-        """Export multiple layers to directory (one file per layer)."""
-        logger.info(f"Batch export: {len(layer_names)} layer(s) to {datatype} in {output_folder}")
-        
-        # Ensure output directory exists
-        if not os.path.exists(output_folder):
-            try:
-                os.makedirs(output_folder)
-                logger.info(f"Created output directory: {output_folder}")
-            except Exception as e:
-                logger.error(f"Failed to create output directory: {e}")
-                self.error_details = f"Failed to create output directory: {str(e)}"
-                return False
-        
-        total_layers = len(layer_names)
-        exported_files = []
-        failed_layers = []  # Track failed layers with reasons
-        skipped_layers = []  # Track skipped layers (not found)
-        
-        for idx, layer_item in enumerate(layer_names, 1):
-            # Handle both dict (layer info) and string (layer name) formats
-            layer_name = layer_item['layer_name'] if isinstance(layer_item, dict) else layer_item
-            
-            # Update task description with current progress
-            self.setDescription(f"Batch export: layer {idx}/{total_layers}: {layer_name}")
-            self.setProgress(int((idx / total_layers) * 100))
-            
-            layer = self._get_layer_by_name(layer_name)
-            if not layer:
-                logger.warning(f"Skipping layer '{layer_name}' (not found)")
-                skipped_layers.append(layer_name)
-                continue
-            
-            # Determine file extension based on datatype
-            extension_map = {
-                'GPKG': '.gpkg',
-                'SHP': '.shp',
-                'SHAPEFILE': '.shp',
-                'ESRI SHAPEFILE': '.shp',
-                'GEOJSON': '.geojson',
-                'JSON': '.geojson',
-                'GML': '.gml',
-                'KML': '.kml',
-                'CSV': '.csv',
-                'XLSX': '.xlsx',
-                'TAB': '.tab',
-                'MAPINFO': '.tab',
-                'DXF': '.dxf',
-                'SQLITE': '.sqlite',
-                'SPATIALITE': '.sqlite'
-            }
-            file_extension = extension_map.get(datatype.upper(), f'.{datatype.lower()}')
-            
-            # Build output path for this layer
-            # Sanitize filename to handle special characters like em-dash (—)
-            safe_filename = sanitize_filename(layer_name)
-            output_path = os.path.join(output_folder, f"{safe_filename}{file_extension}")
-            logger.info(f"Exporting layer '{layer_name}' to: {output_path}")
-            logger.debug(f"Export params - datatype: {datatype}, projection: {projection}, style_format: {style_format}")
-            
-            try:
-                success, error_msg = self._export_single_layer(
-                    layer, output_path, projection, datatype, style_format, save_styles
-                )
-                
-                if success:
-                    exported_files.append(output_path)
-                    logger.info(f"Successfully exported: {layer_name}")
-                else:
-                    error_detail = f"{layer_name}: {error_msg}" if error_msg else layer_name
-                    failed_layers.append(error_detail)
-                    logger.error(f"Failed to export layer '{layer_name}': {error_msg}")
-                    
-            except Exception as e:
-                import traceback
-                error_detail = f"{layer_name}: {str(e)}"
-                failed_layers.append(error_detail)
-                logger.error(f"Exception during export of '{layer_name}': {e}")
-                logger.error(f"Traceback: {traceback.format_exc()}")
-            
-            if self.isCanceled():
-                logger.info("Batch export cancelled by user")
-                self.error_details = f"Export cancelled by user. Exported {len(exported_files)}/{total_layers} layers."
-                return False
-        
-        # Build detailed summary
-        success_count = len(exported_files)
-        total_attempted = len(layer_names)
-        
-        if failed_layers or skipped_layers:
-            # Some failures occurred
-            details = []
-            if success_count > 0:
-                details.append(f"✓ {success_count} layer(s) exported successfully")
-            if failed_layers:
-                details.append(f"✗ {len(failed_layers)} layer(s) failed:")
-                for failed in failed_layers[:5]:  # Limit to first 5 to avoid too long messages
-                    details.append(f"  - {failed}")
-                if len(failed_layers) > 5:
-                    details.append(f"  ... and {len(failed_layers) - 5} more (see logs)")
-            if skipped_layers:
-                details.append(f"⚠ {len(skipped_layers)} layer(s) not found: {', '.join(skipped_layers[:3])}")
-                if len(skipped_layers) > 3:
-                    details.append(f"  ... and {len(skipped_layers) - 3} more")
-            
-            self.error_details = "\n".join(details)
-            logger.warning(f"Batch export completed with errors: {success_count}/{total_attempted} successful")
-            return False
-        
-        logger.info(f"Batch export completed: {len(exported_files)} file(s) in {output_folder}")
-        return True
-
-    def _export_batch_to_zip(self, layer_names, output_folder, projection, datatype, style_format, save_styles):
-        """Export multiple layers (one ZIP file per layer)."""
-        logger.info(f"Batch ZIP export: {len(layer_names)} layer(s) to {datatype} ZIPs in {output_folder}")
-        
-        # Ensure output directory exists
-        if not os.path.exists(output_folder):
-            try:
-                os.makedirs(output_folder)
-                logger.info(f"Created output directory: {output_folder}")
-            except Exception as e:
-                logger.error(f"Failed to create output directory: {e}")
-                self.error_details = f"Failed to create output directory: {str(e)}"
-                return False
-        
-        total_layers = len(layer_names)
-        exported_zips = []
-        failed_layers = []  # Track failed layers with reasons
-        skipped_layers = []  # Track skipped layers (not found)
-        
-        for idx, layer_item in enumerate(layer_names, 1):
-            # Handle both dict (layer info) and string (layer name) formats
-            layer_name = layer_item['layer_name'] if isinstance(layer_item, dict) else layer_item
-            
-            # Update task description with current progress
-            self.setDescription(f"Batch ZIP export: layer {idx}/{total_layers}: {layer_name}")
-            self.setProgress(int((idx / total_layers) * 100))
-            
-            layer = self._get_layer_by_name(layer_name)
-            if not layer:
-                logger.warning(f"Skipping layer '{layer_name}' (not found)")
-                skipped_layers.append(layer_name)
-                continue
-            
-            # Sanitize filename to handle special characters like em-dash (—)
-            safe_filename = sanitize_filename(layer_name)
-            
-            # Determine file extension based on datatype
-            extension_map = {
-                'GPKG': '.gpkg',
-                'SHP': '.shp',
-                'SHAPEFILE': '.shp',
-                'ESRI SHAPEFILE': '.shp',
-                'GEOJSON': '.geojson',
-                'JSON': '.geojson',
-                'GML': '.gml',
-                'KML': '.kml',
-                'CSV': '.csv',
-                'XLSX': '.xlsx',
-                'TAB': '.tab',
-                'MAPINFO': '.tab',
-                'DXF': '.dxf',
-                'SQLITE': '.sqlite',
-                'SPATIALITE': '.sqlite'
-            }
-            file_extension = extension_map.get(datatype.upper(), f'.{datatype.lower()}')
-            
-            # Create temporary directory for this layer's export
-            import tempfile
-            temp_dir = tempfile.mkdtemp(prefix=f"fm_batch_{safe_filename}_")
-            
-            try:
-                # Export layer to temporary directory
-                temp_output = os.path.join(temp_dir, f"{safe_filename}{file_extension}")
-                logger.info(f"Exporting layer '{layer_name}' to temp: {temp_output}")
-                logger.debug(f"Export params - datatype: {datatype}, projection: {projection}, style_format: {style_format}")
-                
-                success, error_msg = self._export_single_layer(
-                    layer, temp_output, projection, datatype, style_format, save_styles
-                )
-                
-                if not success:
-                    error_detail = f"{layer_name}: {error_msg}" if error_msg else layer_name
-                    failed_layers.append(error_detail)
-                    logger.error(f"Failed to export layer '{layer_name}': {error_msg}")
-                    import shutil
-                    shutil.rmtree(temp_dir, ignore_errors=True)
-                    continue  # Continue with next layer instead of failing entire batch
-                
-                # Create ZIP for this layer
-                zip_path = os.path.join(output_folder, f"{safe_filename}.zip")
-                logger.info(f"Creating ZIP archive: {zip_path} from {temp_dir}")
-                
-                # List files in temp_dir for debugging
-                try:
-                    files_in_temp = os.listdir(temp_dir)
-                    logger.debug(f"Files in temp_dir: {files_in_temp}")
-                except Exception as list_err:
-                    logger.warning(f"Could not list temp_dir: {list_err}")
-                
-                zip_success = self._create_zip_archive(zip_path, temp_dir)
-                
-                if zip_success:
-                    exported_zips.append(zip_path)
-                    logger.info(f"Successfully created ZIP: {zip_path}")
-                else:
-                    error_detail = f"{layer_name}: Failed to create ZIP archive"
-                    failed_layers.append(error_detail)
-                    logger.error(f"Failed to create ZIP for '{layer_name}' at {zip_path}")
-                    import shutil
-                    shutil.rmtree(temp_dir, ignore_errors=True)
-                    continue  # Continue with next layer instead of failing entire batch
-                
-                # Clean up temporary directory
-                import shutil
-                shutil.rmtree(temp_dir, ignore_errors=True)
-                
-            except Exception as e:
-                import traceback
-                error_detail = f"{layer_name}: {str(e)}"
-                failed_layers.append(error_detail)
-                logger.error(f"Error during batch ZIP export of '{layer_name}': {e}")
-                logger.error(f"Traceback: {traceback.format_exc()}")
-                import shutil
-                shutil.rmtree(temp_dir, ignore_errors=True)
-            
-            if self.isCanceled():
-                logger.info("Batch ZIP export cancelled by user")
-                self.error_details = f"Export cancelled by user. Created {len(exported_zips)}/{total_layers} ZIP files."
-                return False
-        
-        # Build detailed summary
-        success_count = len(exported_zips)
-        total_attempted = len(layer_names)
-        
-        if failed_layers or skipped_layers:
-            # Some failures occurred
-            details = []
-            if success_count > 0:
-                details.append(f"✓ {success_count} ZIP file(s) created successfully")
-            if failed_layers:
-                details.append(f"✗ {len(failed_layers)} layer(s) failed:")
-                for failed in failed_layers[:5]:  # Limit to first 5 to avoid too long messages
-                    details.append(f"  - {failed}")
-                if len(failed_layers) > 5:
-                    details.append(f"  ... and {len(failed_layers) - 5} more (see logs)")
-            if skipped_layers:
-                details.append(f"⚠ {len(skipped_layers)} layer(s) not found: {', '.join(skipped_layers[:3])}")
-                if len(skipped_layers) > 3:
-                    details.append(f"  ... and {len(skipped_layers) - 3} more")
-            
-            self.error_details = "\n".join(details)
-            logger.warning(f"Batch ZIP export completed with errors: {success_count}/{total_attempted} successful")
-            return False
-        
-        logger.info(f"Batch ZIP export completed: {len(exported_zips)} ZIP file(s) in {output_folder}")
-        return True
-
-    def _create_zip_archive(self, zip_path, folder_to_zip):
-        """
-        Create a zip archive of the exported folder.
-        
-        Updates task description to show compression progress.
-        
-        Args:
-            zip_path: Output zip file path
-            folder_to_zip: Folder to compress
-            
-        Returns:
-            bool: True if successful
-        """
-        import zipfile as zipfile_module
-        
-        # Validate folder exists
-        if not os.path.exists(folder_to_zip) or not os.path.isdir(folder_to_zip):
-            logger.error(f"Folder to zip does not exist or is not a directory: {folder_to_zip}")
-            return False
-        
-        self.setDescription(f"Creating zip archive...")
-        self.setProgress(95)
-        
-        logger.info(f"Creating zip archive: {zip_path} from {folder_to_zip}")
-        
-        try:
-            # Create ZIP file
-            with zipfile_module.ZipFile(zip_path, 'w', zipfile_module.ZIP_DEFLATED) as zipf:
-                # Walk through all files in the folder
-                for root, dirs, files in os.walk(folder_to_zip):
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        # Calculate relative path for archive
-                        arcname = os.path.relpath(file_path, os.path.dirname(folder_to_zip))
-                        zipf.write(file_path, arcname)
-                        logger.debug(f"Added to ZIP: {arcname}")
-                        
-                        # Check for cancellation
-                        if self.isCanceled():
-                            logger.info("ZIP creation cancelled by user")
-                            # Remove incomplete ZIP file
-                            try:
-                                os.remove(zip_path)
-                            except (OSError, PermissionError):
-                                pass
-                            return False
-            
-            # Verify ZIP was created
-            if not os.path.exists(zip_path):
-                logger.error(f"ZIP file was not created: {zip_path}")
-                return False
-            
-            self.setProgress(100)
-            logger.info(f"ZIP archive created successfully: {zip_path} ({os.path.getsize(zip_path)} bytes)")
-            return True
-            
-        except Exception as e:
-            import traceback
-            logger.error(f"Failed to create ZIP archive: {e}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            # Clean up incomplete ZIP file
-            try:
-                if os.path.exists(zip_path):
-                    os.remove(zip_path)
-            except (OSError, PermissionError):
-                pass
-            return False
+    # =========================================================================
+    # LEGACY EXPORT METHODS REMOVED - v4.0 E11.3
+    # =========================================================================
+    # The following 6 export methods were removed (523 lines total):
+    #   - _export_single_layer (71 lines)
+    #   - _export_to_gpkg (49 lines) 
+    #   - _export_multiple_layers_to_directory (69 lines)
+    #   - _export_batch_to_folder (120 lines)
+    #   - _export_batch_to_zip (146 lines)
+    #   - _create_zip_archive (68 lines)
+    #
+    # These methods have been fully replaced by:
+    #   - core.export.BatchExporter (export_to_folder, export_to_zip, create_zip_archive)
+    #   - core.export.LayerExporter (export_single_layer, export_to_gpkg, export_multiple_to_directory)
+    #
+    # See execute_exporting() below for proper delegation to core.export module.
+    # =========================================================================
 
     def execute_exporting(self):
-        """Export selected layers. Supports standard/batch/ZIP/streaming modes."""
+        """
+        Export selected layers. Supports standard/batch/ZIP/streaming modes.
+        
+        v4.0 E11.2: MIGRATED to core.export.BatchExporter and LayerExporter.
+        Replaced 191 lines of orchestration code with ~100 lines of clean delegation.
+        """
         # Validate and extract export parameters
         export_config = self._validate_export_parameters()
         if not export_config:
@@ -5272,56 +4842,66 @@ class FilterEngineTask(QgsTask):
         batch_zip = export_config.get('batch_zip', False)
         save_styles = self.task_parameters["task"]['EXPORTING'].get("HAS_STYLES_TO_EXPORT", False)
         
-        # Check streaming export configuration
-        streaming_config = self.task_parameters.get('config', {}).get('APP', {}).get('OPTIONS', {}).get('STREAMING_EXPORT', {})
-        streaming_enabled = streaming_config.get('enabled', {}).get('value', True)
-        feature_threshold = streaming_config.get('feature_threshold', {}).get('value', 10000)
-        chunk_size = streaming_config.get('chunk_size', {}).get('value', 5000)
+        # Initialize exporters (v4.0 E11.2 delegation)
+        from core.export import BatchExporter, LayerExporter, sanitize_filename
+        batch_exporter = BatchExporter(project=self.PROJECT)
+        layer_exporter = LayerExporter(project=self.PROJECT)
         
-        # Execute export based on mode and format
-        export_success = False
+        # Inject cancel check into batch_exporter
+        batch_exporter.is_canceled = lambda: self.isCanceled()
+        
+        # Define progress/description callbacks
+        def progress_callback(percent):
+            self.setProgress(percent)
+        
+        def description_callback(desc):
+            self.setDescription(desc)
         
         # BATCH MODE: One file per layer in folder
         if batch_output_folder:
-            logger.info("Batch output folder mode enabled")
-            export_success = self._export_batch_to_folder(
-                layers, output_folder, projection, datatype, style_format, save_styles
+            logger.info("Batch output folder mode enabled - delegating to BatchExporter")
+            result = batch_exporter.export_to_folder(
+                layers, output_folder, datatype,
+                projection=projection,
+                style_format=style_format,
+                save_styles=save_styles,
+                progress_callback=progress_callback,
+                description_callback=description_callback
             )
-            if export_success:
-                self.message = f'Batch export: {len(layers)} layer(s) exported to <a href="file:///{output_folder}">{output_folder}</a>'
+            
+            if result.success:
+                self.message = f'Batch export: {result.exported_count} layer(s) exported to <a href="file:///{output_folder}">{output_folder}</a>'
             else:
-                # Use detailed error info if available
-                if hasattr(self, 'error_details') and self.error_details:
-                    self.message = f'Batch export completed with errors:\n{self.error_details}'
-                else:
-                    self.message = f'Batch export failed for {len(layers)} layer(s)'
-            return export_success
+                self.message = f'Batch export completed with errors:\n{result.get_summary()}'
+                self.error_details = result.error_details
+            
+            return result.success
         
         # BATCH MODE: One ZIP per layer
         if batch_zip:
-            logger.info("Batch ZIP mode enabled")
-            export_success = self._export_batch_to_zip(
-                layers, output_folder, projection, datatype, style_format, save_styles
+            logger.info("Batch ZIP mode enabled - delegating to BatchExporter")
+            result = batch_exporter.export_to_zip(
+                layers, output_folder, datatype,
+                projection=projection,
+                style_format=style_format,
+                save_styles=save_styles,
+                progress_callback=progress_callback,
+                description_callback=description_callback
             )
-            if export_success:
-                self.message = f'Batch ZIP export: {len(layers)} ZIP file(s) created in <a href="file:///{output_folder}">{output_folder}</a>'
+            
+            if result.success:
+                self.message = f'Batch ZIP export: {result.exported_count} ZIP file(s) created in <a href="file:///{output_folder}">{output_folder}</a>'
             else:
-                # Use detailed error info if available
-                if hasattr(self, 'error_details') and self.error_details:
-                    self.message = f'Batch ZIP export completed with errors:\n{self.error_details}'
-                else:
-                    self.message = f'Batch ZIP export failed for {len(layers)} layer(s)'
-            return export_success
+                self.message = f'Batch ZIP export completed with errors:\n{result.get_summary()}'
+                self.error_details = result.error_details
+            
+            return result.success
         
-        # GPKG STANDARD MODE: Always use qgis:package for single file with all layers and styles
-        # This takes priority over streaming to ensure proper GeoPackage structure
+        # GPKG STANDARD MODE: Delegate to LayerExporter
         if datatype == 'GPKG':
-            # GeoPackage export using processing - create single file with all layers and styles
             # Determine GPKG output path
             if output_folder.lower().endswith('.gpkg'):
-                # User selected a file path (via save dialog)
                 gpkg_output_path = output_folder
-                # Ensure parent directory exists
                 gpkg_dir = os.path.dirname(gpkg_output_path)
                 if gpkg_dir and not os.path.exists(gpkg_dir):
                     try:
@@ -5332,46 +4912,46 @@ class FilterEngineTask(QgsTask):
                         self.message = f'Failed to create output directory: {gpkg_dir}'
                         return False
             else:
-                # output_folder is a directory - construct default GPKG filename
                 if not os.path.exists(output_folder):
                     try:
                         os.makedirs(output_folder)
-                        logger.info(f"Created output directory: {output_folder}")
                     except Exception as e:
-                        logger.error(f"Failed to create output directory: {e}")
                         self.message = f'Failed to create output directory: {output_folder}'
                         return False
+                
                 # Default filename: use project name or "export"
                 project_title = self.PROJECT.title() if self.PROJECT.title() else None
                 project_basename = self.PROJECT.baseName() if self.PROJECT.baseName() else None
                 default_name = project_title or project_basename or 'export'
-                # Sanitize filename
                 default_name = sanitize_filename(default_name)
                 gpkg_output_path = os.path.join(output_folder, f"{default_name}.gpkg")
-                logger.info(f"GPKG output path constructed: {gpkg_output_path}")
             
-            export_success = self._export_to_gpkg(layers, gpkg_output_path, save_styles)
+            # Delegate to LayerExporter (v4.0 E11.2)
+            logger.info(f"GPKG export - delegating to LayerExporter: {gpkg_output_path}")
+            result = layer_exporter.export_to_gpkg(layers, gpkg_output_path, save_styles)
             
-            if not export_success:
-                self.message = 'GPKG export failed'
+            if not result.success:
+                self.message = result.error_message or 'GPKG export failed'
                 return False
             
-            # Build success message with file path
             self.message = f'Layer(s) exported to <a href="file:///{gpkg_output_path}">{gpkg_output_path}</a>'
             
-            # Create zip archive if requested
+            # Create zip if requested
             if zip_path:
-                # For GPKG, zip the single file
                 gpkg_dir = os.path.dirname(gpkg_output_path)
-                zip_created = self._create_zip_archive(zip_path, gpkg_dir)
-                if zip_created:
+                if BatchExporter.create_zip_archive(zip_path, gpkg_dir):
                     self.message += f' and Zip file has been exported to <a href="file:///{zip_path}">{zip_path}</a>'
             
             return True
         
-        # STANDARD MODE: Check if streaming should be used for large layers (non-GPKG formats only)
+        # Check streaming export configuration
+        streaming_config = self.task_parameters.get('config', {}).get('APP', {}).get('OPTIONS', {}).get('STREAMING_EXPORT', {})
+        streaming_enabled = streaming_config.get('enabled', {}).get('value', True)
+        feature_threshold = streaming_config.get('feature_threshold', {}).get('value', 10000)
+        chunk_size = streaming_config.get('chunk_size', {}).get('value', 5000)
+        
+        # STREAMING MODE: For large datasets (non-GPKG)
         if streaming_enabled:
-            # Check total feature count across all layers
             total_features = self._calculate_total_features(layers)
             if total_features >= feature_threshold:
                 logger.info(f"🚀 Using STREAMING export mode ({total_features} features >= {feature_threshold} threshold)")
@@ -5381,57 +4961,64 @@ class FilterEngineTask(QgsTask):
                 if export_success:
                     self.message = f'Streaming export: {len(layers)} layer(s) ({total_features} features) exported to <a href="file:///{output_folder}">{output_folder}</a>'
                 elif not self.message:
-                    # Only set generic message if _export_with_streaming didn't set a detailed one
                     self.message = f'Streaming export failed for {len(layers)} layer(s)'
                 
-                # Create zip if requested
                 if export_success and zip_path:
-                    zip_created = self._create_zip_archive(zip_path, output_folder)
-                    if zip_created:
+                    if BatchExporter.create_zip_archive(zip_path, output_folder):
                         self.message += f' and Zip file has been exported to <a href="file:///{zip_path}">{zip_path}</a>'
                 
                 return export_success
         
-        # STANDARD MODE: Other formats (Shapefile, GeoJSON, etc.)
+        # STANDARD MODE: Single or multiple layers
         if not os.path.exists(output_folder):
-            logger.error(f"Output path does not exist: {output_folder}")
             self.message = f'Output path does not exist: {output_folder}'
             return False
         
-        if os.path.isdir(output_folder) and len(layers) > 1:
-            # Multiple layers to directory
-            export_success = self._export_multiple_layers_to_directory(
-                layers, output_folder, projection, datatype, style_format, save_styles
-            )
-        elif len(layers) == 1:
-            # Single layer export
-            # Handle both dict (layer info) and string (layer name) formats
+        export_success = False
+        
+        if len(layers) == 1:
+            # Single layer export - delegate to LayerExporter (v4.0 E11.2)
             layer_name = layers[0]['layer_name'] if isinstance(layers[0], dict) else layers[0]
-            layer = self._get_layer_by_name(layer_name)
-            if not layer:
-                return False
-            
-            export_success = self._export_single_layer(
-                layer, output_folder, projection, datatype, style_format, save_styles
+            logger.info(f"Single layer export - delegating to LayerExporter: {layer_name}")
+            result = layer_exporter.export_single_layer(
+                layer_name, output_folder, projection, datatype, style_format, save_styles
             )
+            export_success = result.success
+            if not result.success:
+                self.message = result.error_message or 'Export failed'
+                
+        elif os.path.isdir(output_folder):
+            # Multiple layers to directory - delegate to LayerExporter (v4.0 E11.2)
+            logger.info(f"Multiple layers export - delegating to LayerExporter: {len(layers)} layers")
+            from core.export import ExportConfig
+            result = layer_exporter.export_multiple_to_directory(
+                ExportConfig(
+                    layers=layers,
+                    output_path=output_folder,
+                    datatype=datatype,
+                    projection=projection,
+                    style_format=style_format,
+                    save_styles=save_styles
+                )
+            )
+            export_success = result.success
+            if not result.success:
+                self.message = result.error_message or 'Export failed'
         else:
-            logger.error(f"Invalid export configuration: {len(layers)} layers but output is not a directory")
             self.message = f'Invalid export configuration: {len(layers)} layers but output is not a directory'
             return False
         
         if not export_success:
-            self.message = 'Export failed'
             return False
         
         if self.isCanceled():
-            logger.info("Export cancelled by user before zip")
             self.message = 'Export cancelled by user'
             return False
         
-        # Create zip archive if requested (standard mode only)
+        # Create zip archive if requested
         zip_created = False
         if zip_path:
-            zip_created = self._create_zip_archive(zip_path, output_folder)
+            zip_created = BatchExporter.create_zip_archive(zip_path, output_folder)
             if not zip_created:
                 self.message = 'Failed to create ZIP archive'
                 return False

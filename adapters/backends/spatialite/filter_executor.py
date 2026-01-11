@@ -940,7 +940,7 @@ def manage_spatialite_subset(
         bool: True if successful
     """
     try:
-        from modules.appUtils import create_temp_spatialite_table
+        from infrastructure.database.sql_utils import create_temp_spatialite_table
     except ImportError:
         logger.error("create_temp_spatialite_table not available")
         return False
@@ -1022,7 +1022,7 @@ def get_last_subset_info(cur, layer, project_uuid: str) -> tuple:
     Returns:
         tuple: (last_subset_id, last_seq_order, layer_name, sanitized_name)
     """
-    from modules.appUtils import sanitize_sql_identifier
+    from infrastructure.database.sql_utils import sanitize_sql_identifier
     
     layer_name = layer.name()
     # Use sanitize_sql_identifier to handle all special chars (em-dash, etc.)

@@ -10,7 +10,7 @@ from qgis.PyQt.QtWidgets import (
 )
 from qgis.PyQt.QtCore import Qt
 
-from modules.qt_json_view import view, model
+from . import view, model
 
 
 class JsonViewerWithThemes(QMainWindow):
@@ -101,7 +101,7 @@ def show_json_viewer_with_themes():
     Example function to show JSON viewer with themes in a QGIS plugin.
     
     Usage:
-        from modules.qt_json_view.example_themes import show_json_viewer_with_themes
+        from ui.widgets.json_view.example_themes import show_json_viewer_with_themes
         show_json_viewer_with_themes()
     """
     from qgis.utils import iface

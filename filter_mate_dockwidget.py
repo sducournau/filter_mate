@@ -72,16 +72,16 @@ except ImportError:
 from qgis.utils import iface
 
 import webbrowser
-from .modules.widgets import QgsCheckableComboBoxFeaturesListPickerWidget, QgsCheckableComboBoxLayer
-from .modules.qt_json_view.model import JsonModel
-from .modules.qt_json_view.view import JsonView
+from .ui.widgets import QgsCheckableComboBoxFeaturesListPickerWidget, QgsCheckableComboBoxLayer
+from .ui.widgets.json_view.model import JsonModel
+from .ui.widgets.json_view.view import JsonView
 from .modules.object_safety import is_valid_layer
 from .modules.appUtils import (
     get_best_display_field,
     is_layer_source_available
 )
-from .modules.customExceptions import SignalStateChangeError
-from .modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR, get_geometry_type_string
+from .core.domain.exceptions import SignalStateChangeError
+from .infrastructure.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR, get_geometry_type_string
 from .ui.styles import StyleLoader, QGISThemeWatcher
 from .infrastructure.feedback import show_info, show_warning, show_error, show_success
 from .modules.config_helpers import set_config_value, get_optimization_thresholds
@@ -119,7 +119,6 @@ except ImportError: LAYOUT_MANAGERS_AVAILABLE = False; SplitterManager = Dimensi
 # Style Managers
 try: from .ui.styles import ThemeManager, IconManager, ButtonStyler; STYLE_MANAGERS_AVAILABLE = True
 except ImportError: STYLE_MANAGERS_AVAILABLE = False; ThemeManager = IconManager = ButtonStyler = None
-
 
 class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
@@ -548,8 +547,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return lbl
     
     def _on_backend_indicator_clicked(self, event):
-        """v4.0 Sprint 18: → BackendController (no legacy fallback)."""
-        if not (self._controller_integration and self._controller_integration.backend_controller and self._controller_integration.delegate_handle_backend_click()):
+        """v4.0 Sprint 19: → BackendController."""
+        if self._controller_integration and self._controller_integration.backend_controller:
+            self._controller_integration.delegate_handle_backend_click()
+        else:
             logger.warning("Backend controller unavailable")
 
     def _on_favorite_indicator_clicked(self, event):
@@ -1052,7 +1053,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.pending_config_changes = []
         self.config_changes_pending = False
 
-
     def cancel_pending_config_changes(self):
         """Cancel pending configuration changes."""
         if not self.config_changes_pending or not self.pending_config_changes: return
@@ -1064,20 +1064,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if hasattr(self, 'buttonBox'): self.buttonBox.setEnabled(False)
         except Exception as e: show_error("FilterMate", f"Error cancelling changes: {str(e)}")
 
-
     def on_config_buttonbox_accepted(self):
         """v4.0 S18: → ConfigController."""
         logger.info("Configuration OK button clicked")
         if self._controller_integration and self._controller_integration.delegate_config_apply_pending_changes(): return
         self.apply_pending_config_changes()
 
-
     def on_config_buttonbox_rejected(self):
         """v4.0 S18: → ConfigController."""
         logger.info("Configuration Cancel button clicked")
         if self._controller_integration and self._controller_integration.delegate_config_cancel_pending_changes(): return
         self.cancel_pending_config_changes()
-
 
     def reload_configuration_model(self):
         """v4.0 S18: Reload config model and save."""
@@ -1087,7 +1084,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if hasattr(self, 'config_view') and self.config_view: self.config_view.setModel(self.config_model); self.config_view.model = self.config_model
             with open(ENV_VARS.get('CONFIG_JSON_PATH', self.plugin_dir + '/config/config.json'), 'w') as f: f.write(json.dumps(self.CONFIG_DATA, indent=4))
         except Exception as e: logger.error(f"Error reloading configuration model: {e}")
-
 
     def save_configuration_model(self):
         """v4.0 S18: Save config to file."""
@@ -1208,22 +1204,23 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self._configuration_manager: self._configuration_manager.configure_key_widgets_sizes(icons_sizes)
 
     def manage_ui_style(self):
-        """v4.0 Sprint 18: Apply stylesheet, icons, and styling via managers."""
-        try: self._theme_manager.setup() if self._theme_manager else (self._apply_auto_configuration(), self._apply_stylesheet(), self._setup_theme_watcher())
-        except: self._apply_auto_configuration(); self._apply_stylesheet(); self._setup_theme_watcher()
-        try: self._icon_manager.setup() if self._icon_manager else self._init_icon_theme()
-        except: self._init_icon_theme()
-        try: self._button_styler.setup() if self._button_styler else self._legacy_configure_widgets()
-        except: self._legacy_configure_widgets()
-    
-    def _init_icon_theme(self):
-        """Initialize icon theme."""
-        if ICON_THEME_AVAILABLE: IconThemeManager.set_theme(StyleLoader.detect_qgis_theme())
-    
-    def _legacy_configure_widgets(self):
-        """Legacy widget config - delegates to ConfigurationManager."""
-        if not self.widgets or not self._configuration_manager: return
-        self._configuration_manager.configure_all_widgets()
+        """v4.0 Sprint 19: Apply stylesheet, icons, and styling via managers."""
+        if self._theme_manager:
+            self._theme_manager.setup()
+        else:
+            self._apply_auto_configuration()
+            self._apply_stylesheet()
+            self._setup_theme_watcher()
+        
+        if self._icon_manager:
+            self._icon_manager.setup()
+        elif ICON_THEME_AVAILABLE:
+            IconThemeManager.set_theme(StyleLoader.detect_qgis_theme())
+        
+        if self._button_styler:
+            self._button_styler.setup()
+        elif self._configuration_manager and self.widgets:
+            self._configuration_manager.configure_all_widgets()
     
     def _setup_theme_watcher(self):
         """Setup QGIS theme watcher for dark/light mode switching."""

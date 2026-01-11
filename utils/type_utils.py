@@ -2,7 +2,8 @@
 Type Utilities Module
 
 Provides type casting and conversion utilities used throughout FilterMate.
-Extracted during code quality improvements (Phase B - Dec 2025).
+
+Migrated from modules/type_utils.py to utils/type_utils.py
 
 Functions:
     - can_cast: Check if a value can be cast to a target type

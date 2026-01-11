@@ -87,7 +87,7 @@ from infrastructure.database.spatialite_support import (
 )
 
 # Import type utilities
-from modules.type_utils import can_cast, return_typed_value
+from utils.type_utils import can_cast, return_typed_value
 
 # Centralized psycopg2 availability (v2.8.6 refactoring)
 from infrastructure.database.postgresql_support import psycopg2, PSYCOPG2_AVAILABLE, POSTGRESQL_AVAILABLE

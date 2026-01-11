@@ -1,13 +1,13 @@
 """
 FilterMate Export Module
 
-v4.0 EPIC-1 Phase E1: Extracted from filter_task.py
+v4.0 EPIC-1 Phase E1-E11: Extracted from filter_task.py
 
 This module handles layer export operations, including:
 - Export parameter validation
 - Style export (QML, SLD, LYRX)
 - Single layer export
-- Batch export to folder/zip
+- Batch export to folder/zip (E11: BatchExporter)
 - GeoPackage export
 - Streaming export for large datasets
 
@@ -33,6 +33,12 @@ from .export_validator import (
     ExportValidationResult,
 )
 
+from .batch_exporter import (
+    BatchExporter,
+    BatchExportResult,
+    sanitize_filename,
+)
+
 __all__ = [
     # Layer exporter
     'LayerExporter',
@@ -46,4 +52,8 @@ __all__ = [
     # Validator
     'validate_export_parameters',
     'ExportValidationResult',
+    # Batch exporter (v4.0 E11)
+    'BatchExporter',
+    'BatchExportResult',
+    'sanitize_filename',
 ]

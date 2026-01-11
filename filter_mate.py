@@ -469,7 +469,7 @@ class FilterMate:
                     return
                 
                 try:
-                    from .modules.appUtils import get_value_relation_info
+                    from .infrastructure.field_utils import get_value_relation_info
                     
                     project = QgsProject.instance()
                     

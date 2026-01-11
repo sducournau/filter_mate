@@ -10,7 +10,7 @@ from qgis.PyQt.QtWidgets import (
 )
 from qgis.PyQt.QtCore import Qt
 
-from modules.qt_json_view import view, model
+from . import view, model
 
 
 class ThemeDemoDialog(QDialog):
@@ -18,7 +18,7 @@ class ThemeDemoDialog(QDialog):
     Dialog to demonstrate and preview all available themes.
     
     Usage in QGIS Python console:
-        from modules.qt_json_view.theme_demo import ThemeDemoDialog
+        from ui.widgets.json_view.theme_demo import ThemeDemoDialog
         demo = ThemeDemoDialog()
         demo.exec_()
     """
@@ -189,7 +189,7 @@ def show_theme_demo():
     Show the theme demo dialog.
     
     Usage in QGIS Python console:
-        from modules.qt_json_view.theme_demo import show_theme_demo
+        from ui.widgets.json_view.theme_demo import show_theme_demo
         show_theme_demo()
     """
     from qgis.utils import iface

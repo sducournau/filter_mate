@@ -5,16 +5,8 @@ FilterMate Constants Module
 Provides global constants used throughout FilterMate.
 Includes provider types, spatial predicates, and performance thresholds.
 
-This file provides backward compatibility for modules.constants imports.
+Migrated from modules/constants.py to infrastructure/constants.py
 """
-import warnings
-
-# Deprecation warning for tracking usage
-warnings.warn(
-    "modules.constants: Consider using specific imports from infrastructure/adapters.",
-    DeprecationWarning,
-    stacklevel=2
-)
 
 # =============================================================================
 # Provider Types

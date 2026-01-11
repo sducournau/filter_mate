@@ -229,7 +229,7 @@ class ExportingController(BaseController):
             # Import required modules
             from qgis.core import QgsVectorLayer, QgsProject
             from qgis.PyQt.QtCore import Qt
-            from ..modules.constants import REMOTE_PROVIDERS, get_geometry_type_string
+            from ...infrastructure.constants import REMOTE_PROVIDERS, get_geometry_type_string
             from ..modules.appUtils import is_layer_source_available
             import logging
             logger = logging.getLogger(__name__)

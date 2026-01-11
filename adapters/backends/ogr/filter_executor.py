@@ -754,7 +754,7 @@ def execute_ogr_spatial_selection(
     
     # Import safe subset setter
     try:
-        from modules.appUtils import safe_set_subset_string
+        from infrastructure.database.sql_utils import safe_set_subset_string
     except ImportError:
         def safe_set_subset_string(lyr, subset):
             return lyr.setSubsetString(subset)

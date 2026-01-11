@@ -60,7 +60,7 @@ def prepare_postgresql_source_geom(
         tuple: (postgresql_source_geom_expr, materialized_view_name or None)
     """
     import re
-    from modules.appUtils import sanitize_sql_identifier
+    from infrastructure.database.sql_utils import sanitize_sql_identifier
     
     logger = logging.getLogger('FilterMate.Adapters.Backends.PostgreSQL.FilterExecutor')
     

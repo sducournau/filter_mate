@@ -42,17 +42,15 @@ from .modules.tasks import (
 )
 from .modules.appUtils import (
     POSTGRESQL_AVAILABLE,
-    sanitize_sql_identifier,
     get_data_source_uri,
     get_datasource_connexion_from_layer,
     is_layer_source_available,
-    safe_set_subset_string,
     detect_layer_provider_type,
-    cleanup_corrupted_layer_filters,
     validate_and_cleanup_postgres_layers,  # v2.8.1: Orphaned MV cleanup on project load
-    clean_buffer_value,  # v3.0.12: Clean buffer values from float precision errors
 )
-from .modules.type_utils import return_typed_value
+from .infrastructure.database.sql_utils import sanitize_sql_identifier, safe_set_subset_string
+from .infrastructure.field_utils import clean_buffer_value, cleanup_corrupted_layer_filters
+from .utils.type_utils import return_typed_value
 from .infrastructure.feedback import (
     show_backend_info, show_success_with_backend,
     show_info, show_warning, show_error
