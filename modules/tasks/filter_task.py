@@ -4826,11 +4826,13 @@ class FilterEngineTask(QgsTask):
                 param_buffer_expression=getattr(self, 'param_buffer_expression', None)
             )
         
-        # Fallback to legacy implementation (inline)
-        return self._filter_action_postgresql_legacy(
-            layer, sql_subset_string, primary_key_name, geom_key_name,
-            name, custom, cur, conn, seq_order
+        # Module not available - this should not happen in production
+        error_msg = (
+            "PostgreSQL filter_actions module not available. "
+            "This indicates a critical installation issue."
         )
+        logger.error(error_msg)
+        raise ImportError(error_msg)
     
     def _filter_action_postgresql_legacy(self, layer, sql_subset_string, primary_key_name, geom_key_name, name, custom, cur, conn, seq_order):
         """Legacy implementation - kept for fallback if extracted module unavailable."""
@@ -5159,8 +5161,9 @@ class FilterEngineTask(QgsTask):
                 current_mv_schema=self.current_materialized_view_schema
             )
         
-        # Legacy fallback
-        return self._reset_action_postgresql_legacy(layer, name, cur, conn)
+        error_msg = "PostgreSQL filter_actions module not available"
+        logger.error(error_msg)
+        raise ImportError(error_msg)
     
     def _reset_action_postgresql_legacy(self, layer, name, cur, conn):
         """Legacy implementation - kept for fallback."""
@@ -5285,15 +5288,20 @@ class FilterEngineTask(QgsTask):
                 project_uuid=self.project_uuid,
                 current_mv_schema=self.current_materialized_view_schema
             )
+        elif use_postgresql:
+            # PostgreSQL but module not available
+            error_msg = "PostgreSQL filter_actions module not available"
+            logger.error(error_msg)
+            raise ImportError(error_msg)
         
-        # Legacy/Spatialite implementation
-        return self._unfilter_action_legacy(
+        # Spatialite path
+        return self._unfilter_action_spatialite(
             layer, primary_key_name, geom_key_name, name, custom,
-            cur, conn, last_subset_id, use_postgresql, use_spatialite
+            cur, conn, last_subset_id
         )
     
-    def _unfilter_action_legacy(self, layer, primary_key_name, geom_key_name, name, custom, cur, conn, last_subset_id, use_postgresql, use_spatialite):
-        """Legacy unfilter implementation for Spatialite and PostgreSQL fallback."""
+    def _unfilter_action_spatialite(self, layer, primary_key_name, geom_key_name, name, custom, cur, conn, last_subset_id):
+        """Unfilter implementation for Spatialite backend."""
         # Delete last subset from history
         if last_subset_id:
             cur.execute(
@@ -5325,36 +5333,14 @@ class FilterEngineTask(QgsTask):
                 self._queue_subset_string(layer, '')
                 return True
             
-            if use_spatialite:
-                logger.info("Unfilter - Spatialite backend - recreating previous subset")
-                success = self._manage_spatialite_subset(
-                    layer, sql_subset_string, primary_key_name, geom_key_name,
-                    name, custom=False, cur=None, conn=None, current_seq_order=0
-                )
-                if not success:
-                    # THREAD SAFETY: Queue subset clear for application in finished()
-                    self._queue_subset_string(layer, '')
-            
-            elif use_postgresql:
-                schema = self.current_materialized_view_schema
-                
-                # Use session-prefixed name for multi-client isolation
-                session_name = self._get_session_prefixed_name(name)
-                
-                sql_drop = f'DROP INDEX IF EXISTS {schema}_{session_name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{session_name}" CASCADE;'
-                sql_create = self._create_simple_materialized_view_sql(schema, session_name, sql_subset_string)
-                sql_create_index = f'CREATE INDEX IF NOT EXISTS {schema}_{session_name}_cluster ON "{schema}"."mv_{session_name}" USING GIST ({geom_key_name});'
-                sql_cluster = f'ALTER MATERIALIZED VIEW IF EXISTS  "{schema}"."mv_{session_name}" CLUSTER ON {schema}_{session_name}_cluster;'
-                sql_analyze = f'ANALYZE VERBOSE "{schema}"."mv_{session_name}";'
-                
-                sql_create = sql_create.replace('\n', '').replace('\t', '').replace('  ', ' ').strip()
-                
-                connexion = self._get_valid_postgresql_connection()
-                self._execute_postgresql_commands(connexion, [sql_drop, sql_create, sql_create_index, sql_cluster, sql_analyze])
-                
-                layer_subset_string = f'"{primary_key_name}" IN (SELECT "mv_{session_name}"."{primary_key_name}" FROM "{schema}"."mv_{session_name}")'
-                # THREAD SAFETY: Queue subset for application in finished()
-                self._queue_subset_string(layer, layer_subset_string)
+            logger.info("Unfilter - Spatialite backend - recreating previous subset")
+            success = self._manage_spatialite_subset(
+                layer, sql_subset_string, primary_key_name, geom_key_name,
+                name, custom=False, cur=None, conn=None, current_seq_order=0
+            )
+            if not success:
+                # THREAD SAFETY: Queue subset clear for application in finished()
+                self._queue_subset_string(layer, '')
         else:
             # THREAD SAFETY: Queue subset clear for application in finished()
             self._queue_subset_string(layer, '')
