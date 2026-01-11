@@ -3635,7 +3635,7 @@ class FilterEngineTask(QgsTask):
         """
         Get appropriate WKT precision based on CRS units.
         
-        v4.0 DELEGATION: Delegates to BufferService for consistency.
+        EPIC-1 Phase E5-S4: Legacy code removed - fully delegates to BufferService.
         
         Args:
             crs_authid: CRS authority ID (e.g., 'EPSG:2154', 'EPSG:4326')
@@ -3644,29 +3644,14 @@ class FilterEngineTask(QgsTask):
         Returns:
             int: Number of decimal places for WKT coordinates
         """
+        from core.services.buffer_service import BufferService
+        
         # Use instance CRS if not specified
         if crs_authid is None:
             crs_authid = getattr(self, 'source_layer_crs_authid', None)
         
-        # v4.0: Delegate to BufferService
-        try:
-            from core.services.buffer_service import BufferService
-            service = BufferService()
-            return service.get_wkt_precision(crs_authid)
-        except ImportError:
-            pass
-        
-        # LEGACY FALLBACK
-        if not crs_authid:
-            return 6
-        
-        try:
-            srid = int(crs_authid.split(':')[1]) if ':' in crs_authid else int(crs_authid)
-            is_geographic = srid == 4326 or (4000 <= srid < 5000)
-        except (ValueError, IndexError):
-            is_geographic = False
-        
-        return 8 if is_geographic else 2
+        service = BufferService()
+        return service.get_wkt_precision(crs_authid)
 
     def _geometry_to_wkt(self, geometry, crs_authid: str = None) -> str:
         """
@@ -3699,7 +3684,7 @@ class FilterEngineTask(QgsTask):
         """
         Calculate optimal simplification tolerance based on buffer parameters.
         
-        v4.0 DELEGATION: Delegates to BufferService.calculate_buffer_aware_tolerance().
+        EPIC-1 Phase E5-S4: Legacy code removed - fully delegates to BufferService.
         
         Args:
             buffer_value: Buffer distance in map units
@@ -3711,36 +3696,15 @@ class FilterEngineTask(QgsTask):
         Returns:
             float: Recommended simplification tolerance
         """
-        # v4.0: Delegate to BufferService
-        try:
-            from core.services.buffer_service import BufferService, BufferConfig, BufferEndCapStyle
-            service = BufferService()
-            config = BufferConfig(
-                distance=buffer_value or 0,
-                segments=buffer_segments,
-                end_cap_style=BufferEndCapStyle(buffer_type)
-            )
-            return service.calculate_buffer_aware_tolerance(config, extent_size, is_geographic)
-        except ImportError:
-            pass
+        from core.services.buffer_service import BufferService, BufferConfig, BufferEndCapStyle
         
-        # LEGACY FALLBACK
-        import math
-        
-        abs_buffer = abs(buffer_value) if buffer_value else 0
-        
-        if abs_buffer == 0:
-            base_tolerance = extent_size * 0.001
-        else:
-            angle_per_segment = math.pi / (2 * buffer_segments)
-            max_arc_error = abs_buffer * (1 - math.cos(angle_per_segment / 2))
-            tolerance_factor = 2.0 if buffer_type in [1, 2] else 1.0
-            base_tolerance = max_arc_error * tolerance_factor
-        
-        if is_geographic:
-            base_tolerance = base_tolerance / 111000.0
-        
-        return base_tolerance
+        service = BufferService()
+        config = BufferConfig(
+            distance=buffer_value or 0,
+            segments=buffer_segments,
+            end_cap_style=BufferEndCapStyle(buffer_type)
+        )
+        return service.calculate_buffer_aware_tolerance(config, extent_size, is_geographic)
 
     def _simplify_geometry_adaptive(self, geometry, max_wkt_length=None, crs_authid=None):
         """
@@ -4159,8 +4123,7 @@ class FilterEngineTask(QgsTask):
         """
         Convert a layer's geometries to their centroids.
         
-        v4.0 DELEGATION: Delegates to GeometryPreparationAdapter.
-        Legacy implementation preserved as fallback.
+        EPIC-1 Phase E5-S4: Legacy code removed - fully delegates to GeometryPreparationAdapter.
         
         Args:
             layer: QgsVectorLayer with polygon/line geometries
@@ -4169,70 +4132,17 @@ class FilterEngineTask(QgsTask):
             QgsVectorLayer: Memory layer with point geometries (centroids),
                            or None on failure
         """
-        # v4.0: Delegate to GeometryPreparationAdapter
-        try:
-            from adapters.qgis.geometry_preparation import GeometryPreparationAdapter
-            adapter = GeometryPreparationAdapter()
-            result = adapter.convert_to_centroids(layer)
-            if result.success and result.layer:
-                return result.layer
-            elif result.error_message:
-                logger.debug(f"GeometryPreparationAdapter: {result.error_message}")
-        except ImportError:
-            logger.debug("GeometryPreparationAdapter not available, using legacy")
-        except Exception as e:
-            logger.debug(f"GeometryPreparationAdapter failed: {e}, using legacy")
+        from adapters.qgis.geometry_preparation import GeometryPreparationAdapter
         
-        # LEGACY FALLBACK (to be removed in v5.0)
-        if not layer or not layer.isValid():
-            logger.warning("_convert_layer_to_centroids: Invalid input layer")
+        adapter = GeometryPreparationAdapter()
+        result = adapter.convert_to_centroids(layer)
+        
+        if result.success and result.layer:
+            return result.layer
+        else:
+            error_msg = result.error_message if result.error_message else "Unknown error"
+            logger.error(f"_convert_layer_to_centroids failed: {error_msg}")
             return None
-        
-        # Create point memory layer
-        crs_authid = layer.crs().authid()
-        centroid_layer = QgsVectorLayer(f"Point?crs={crs_authid}", "centroids", "memory")
-        
-        if not centroid_layer.isValid():
-            logger.error("_convert_layer_to_centroids: Failed to create memory layer")
-            return None
-        
-        # Copy fields
-        if layer.fields().count() > 0:
-            centroid_layer.dataProvider().addAttributes(layer.fields())
-            centroid_layer.updateFields()
-        
-        # Convert geometries to centroids
-        features_to_add = []
-        skipped = 0
-        
-        for feature in layer.getFeatures():
-            if not feature.hasGeometry() or feature.geometry().isEmpty():
-                skipped += 1
-                continue
-            
-            geom = feature.geometry()
-            centroid = geom.centroid()
-            
-            if centroid and not centroid.isEmpty():
-                new_feat = QgsFeature(feature)
-                new_feat.setGeometry(centroid)
-                features_to_add.append(new_feat)
-            else:
-                skipped += 1
-        
-        if not features_to_add:
-            logger.error("_convert_layer_to_centroids: No valid centroids created")
-            return None
-        
-        centroid_layer.dataProvider().addFeatures(features_to_add)
-        centroid_layer.updateExtents()
-        
-        if skipped > 0:
-            logger.warning(f"  ⚠️ Skipped {skipped} features during centroid conversion")
-        
-        logger.debug(f"_convert_layer_to_centroids: Created {centroid_layer.featureCount()} centroid features")
-        
-        return centroid_layer
 
     def _fix_invalid_geometries(self, layer, output_key):
         """
@@ -7925,7 +7835,7 @@ class FilterEngineTask(QgsTask):
         """
         Save layer style to file if format supports it.
         
-        v4.0 DELEGATION: Delegates to core.export.save_layer_style()
+        EPIC-1 Phase E5-S4: Legacy code removed - fully delegates to core.export.save_layer_style().
         
         Args:
             layer: QgsVectorLayer
@@ -7933,34 +7843,9 @@ class FilterEngineTask(QgsTask):
             style_format: Style file format (e.g., 'qml', 'sld', 'lyrx')
             datatype: Export datatype (to check if styles are supported)
         """
-        # v4.0: Delegate to style exporter
-        try:
-            from core.export import save_layer_style
-            save_layer_style(layer, output_path, style_format, datatype)
-            return
-        except ImportError:
-            logger.debug("Style exporter not available, using legacy")
-        except Exception as e:
-            logger.debug(f"Style exporter failed: {e}, using legacy")
+        from core.export import save_layer_style
         
-        # LEGACY FALLBACK
-        if datatype == 'XLSX' or not style_format:
-            return
-        
-        # Normalize format name
-        format_lower = style_format.lower().replace('arcgis (lyrx)', 'lyrx').strip()
-        
-        # Handle ArcGIS LYRX format
-        if format_lower == 'lyrx' or 'arcgis' in format_lower:
-            self._save_layer_style_lyrx(layer, output_path)
-            return
-        
-        style_path = os.path.normcase(f"{output_path}.{format_lower}")
-        try:
-            layer.saveNamedStyle(style_path)
-            logger.debug(f"Style saved: {style_path}")
-        except Exception as e:
-            logger.warning(f"Could not save style for '{layer.name()}': {e}")
+        save_layer_style(layer, output_path, style_format, datatype)
 
     def _save_layer_style_lyrx(self, layer, output_path):
         """

@@ -437,100 +437,43 @@ class FilterMateApp:
 
 
     def __init__(self, plugin_dir):
-        """
-        Initialize FilterMate application controller.
-        
-        Sets up the main application state, task registry, and environment variables.
-        Does not create UI - that happens in run() when plugin is activated.
-        
-        Args:
-            plugin_dir (str): Absolute path to plugin directory
-            
-        Attributes:
-            PROJECT_LAYERS (dict): Registry of all managed layers with metadata
-            appTasks (dict): Active QgsTask instances for async operations
-            tasks_descriptions (dict): Human-readable task names for UI
-            project_datasources (dict): Data source connection information
-            db_file_path (str): Path to Spatialite database for project
-            
-        Notes:
-            - Initializes environment variables via init_env_vars()
-            - Sets up QGIS project and layer store references
-            - Prepares task manager for PostgreSQL/Spatialite operations
-        """
-        self.iface = iface
-        
-        self.dockwidget = None
-        self.flags = {}
-
-
-        self.plugin_dir = plugin_dir
+        """v4.0 Sprint 16: Initialize FilterMate app with managers, services, and state."""
+        self.iface, self.dockwidget, self.flags, self.plugin_dir = iface, None, {}, plugin_dir
         self.appTasks = {"filter":None,"unfilter":None,"reset":None,"export":None,"add_layers":None,"remove_layers":None,"remove_all_layers":None,"new_project":None,"project_read":None}
-        self.tasks_descriptions = {
-                                    'filter':'Filtering data',
-                                    'unfilter':'Unfiltering data',
-                                    'reset':'Reseting data',
-                                    'export':'Exporting data',
-                                    'undo':'Undo filter',
-                                    'redo':'Redo filter',
-                                    'add_layers':'Adding layers',
-                                    'remove_layers':'Removing layers',
-                                    'remove_all_layers':'Removing all layers',
-                                    'new_project':'New project',
-                                    'project_read':'Existing project loaded',
-                                    'reload_layers':'Reloading layers'
-                                    }
+        self.tasks_descriptions = {'filter':'Filtering data','unfilter':'Unfiltering data','reset':'Reseting data','export':'Exporting data',
+                                    'undo':'Undo filter','redo':'Redo filter','add_layers':'Adding layers','remove_layers':'Removing layers',
+                                    'remove_all_layers':'Removing all layers','new_project':'New project','project_read':'Existing project loaded','reload_layers':'Reloading layers'}
         
-        # Initialize filter history manager for undo/redo functionality
-        # Get max_history_size from configuration (default: 100)
+        # History & Favorites
         history_max_size = self._get_history_max_size_from_config()
         self.history_manager = HistoryManager(max_size=history_max_size)
         logger.info(f"FilterMate: HistoryManager initialized for undo/redo functionality (max_size={history_max_size})")
-        
-        # v4.0: Initialize UndoRedoHandler (extracted from FilterMateApp)
-        if HEXAGONAL_AVAILABLE and UndoRedoHandler:
-            self._undo_redo_handler = UndoRedoHandler(
-                history_manager=self.history_manager,
-                get_project_layers=lambda: self.PROJECT_LAYERS,
-                get_project=lambda: self.PROJECT,
-                get_iface=lambda: self.iface,
-                refresh_layers_callback=self._refresh_layers_and_canvas,
-                show_warning_callback=lambda t, m: iface.messageBar().pushWarning(t, m)
-            )
+        self._undo_redo_handler = UndoRedoHandler(self.history_manager, lambda: self.PROJECT_LAYERS, lambda: self.PROJECT, lambda: self.iface,
+                                                   self._refresh_layers_and_canvas, lambda t, m: iface.messageBar().pushWarning(t, m)) if HEXAGONAL_AVAILABLE and UndoRedoHandler else None
+        if self._undo_redo_handler:
             logger.info("FilterMate: UndoRedoHandler initialized (v4.0 migration)")
-        else:
-            self._undo_redo_handler = None
-        
-        # Initialize filter favorites manager for saving/loading favorites
         self.favorites_manager = FavoritesManager(max_favorites=50)
         self.favorites_manager.load_from_project()
         logger.info(f"FilterMate: FavoritesManager initialized ({self.favorites_manager.count} favorites loaded)")
         
-        # v2.8.11: Initialize Spatialite cache for multi-step filtering
+        # Spatialite cache
         try:
             from .infrastructure.cache import get_cache, cleanup_cache
             self._spatialite_cache = get_cache()
-            # Cleanup expired entries on startup
             expired_count = cleanup_cache()
             if expired_count > 0:
                 logger.info(f"FilterMate: Cleaned up {expired_count} expired cache entries")
             cache_stats = self._spatialite_cache.get_cache_stats()
             logger.info(f"FilterMate: Spatialite cache initialized ({cache_stats['total_entries']} entries, {cache_stats['db_size_mb']} MB)")
         except Exception as e:
-            import traceback
             logger.debug(f"FilterMate: Spatialite cache not available: {e}")
-            logger.debug(f"Traceback: {traceback.format_exc()}")
             self._spatialite_cache = None
         
-        # Log PostgreSQL availability status
+        # PostgreSQL & Hexagonal services
         if POSTGRESQL_AVAILABLE:
             logger.info("FilterMate: PostgreSQL support enabled (psycopg2 available)")
         else:
-            logger.warning(
-                "FilterMate: PostgreSQL support DISABLED - psycopg2 not installed. "
-                "Plugin will work with local files (Shapefile, GeoPackage, Spatialite) only. "
-                "For PostgreSQL layers, install psycopg2."
-            )
+            logger.warning("FilterMate: PostgreSQL support DISABLED - psycopg2 not installed. Plugin will work with local files (Shapefile, GeoPackage, Spatialite) only. For PostgreSQL layers, install psycopg2.")
         
         # v3.0: Initialize hexagonal architecture services
         if HEXAGONAL_AVAILABLE:
@@ -2019,39 +1962,32 @@ class FilterMateApp:
 
             if self.dockwidget is None or self.dockwidget.current_layer is None:
                 return None
-            else:
-                current_layer = self.dockwidget.current_layer 
-
-            # Guard: current layer must be valid and source available
-            if not is_layer_source_available(current_layer):
-                logger.warning(
-                    f"FilterMate: Layer '{current_layer.name() if current_layer else 'Unknown'}' is invalid or source missing."
-                )
-                iface.messageBar().pushWarning(
-                    "FilterMate",
-                    "La couche sélectionnée est invalide ou sa source est introuvable. Opération annulée."
-                )
-                return None
-
-            # CRITICAL: Verify layer is in PROJECT_LAYERS before proceeding
-            if current_layer.id() not in self.PROJECT_LAYERS.keys():
-                logger.warning(f"FilterMate: Layer '{current_layer.name()}' (id: {current_layer.id()}) not found in PROJECT_LAYERS. "
-                              "The layer may not have been processed yet. Try selecting another layer and then back.")
-                iface.messageBar().pushWarning(
-                    "FilterMate", 
-                    f"La couche '{current_layer.name()}' n'est pas encore initialisée. "
-                    "Essayez de sélectionner une autre couche puis revenez à celle-ci."
-                )
-                return None
             
-            # v4.4: Delegate UI→PROJECT_LAYERS synchronization to TaskParameterBuilder
-            # This replaces ~100 lines of SYNC blocks with a single delegation call
+            current_layer = self.dockwidget.current_layer
+            
+            # v4.7: Create TaskParameterBuilder once for all delegations
+            builder = None
             if TaskParameterBuilder and self.dockwidget:
                 builder = TaskParameterBuilder(
                     dockwidget=self.dockwidget,
                     project_layers=self.PROJECT_LAYERS,
                     config_data=self.CONFIG_DATA
                 )
+            
+            # v4.7: Delegate layer validation
+            if builder:
+                error = builder.validate_current_layer_for_task(current_layer, self.PROJECT_LAYERS)
+                if error:
+                    return None
+            else:
+                # Minimal fallback validation
+                if not is_layer_source_available(current_layer):
+                    return None
+                if current_layer.id() not in self.PROJECT_LAYERS.keys():
+                    return None
+            
+            # v4.4: Delegate UI→PROJECT_LAYERS synchronization
+            if builder:
                 task_parameters = builder.sync_ui_to_project_layers(current_layer)
                 if task_parameters is None:
                     logger.error("sync_ui_to_project_layers returned None")
@@ -2059,54 +1995,33 @@ class FilterMateApp:
             else:
                 task_parameters = self.PROJECT_LAYERS[current_layer.id()]
 
-            # v4.7: Delegate feature extraction and validation to TaskParameterBuilder
+            # v4.7: Delegate feature extraction and validation
             try:
-                if TaskParameterBuilder and self.dockwidget:
-                    builder = TaskParameterBuilder(
-                        dockwidget=self.dockwidget,
-                        project_layers=self.PROJECT_LAYERS,
-                        config_data=self.CONFIG_DATA
-                    )
+                if builder:
                     features, expression = builder.get_and_validate_features(task_name)
                 else:
-                    # Minimal fallback
                     features, expression = [], ""
             except ValueError:
-                # single_selection mode with no features - abort
-                return None
+                return None  # single_selection mode with no features
 
             if task_name in ('filter', 'unfilter', 'reset'):
                 # Build validated list of layers to filter
                 layers_to_filter = self._build_layers_to_filter(current_layer)
                 
-                # v4.7: Delegate diagnostic logging to TaskParameterBuilder
-                if TaskParameterBuilder and self.dockwidget:
-                    builder = TaskParameterBuilder(
-                        dockwidget=self.dockwidget,
-                        project_layers=self.PROJECT_LAYERS,
-                        config_data=self.CONFIG_DATA
-                    )
+                # v4.7: Delegate diagnostic logging
+                if builder:
                     builder.log_filtering_diagnostic(current_layer, layers_to_filter)
                 
                 # Build common task parameters
-                # Note: unfilter no longer needs history_manager (just clears filters)
                 include_history = False
                 task_parameters["task"] = self._build_common_task_params(
                     features, expression, layers_to_filter, include_history
                 )
                 
-                # v4.7: Delegate skip_source_filter logic to TaskParameterBuilder
-                if TaskParameterBuilder and self.dockwidget:
-                    builder = TaskParameterBuilder(
-                        dockwidget=self.dockwidget,
-                        project_layers=self.PROJECT_LAYERS,
-                        config_data=self.CONFIG_DATA
-                    )
-                    skip_source_filter = builder.determine_skip_source_filter(
-                        task_name, task_parameters, expression
-                    )
-                else:
-                    skip_source_filter = False
+                # v4.7: Delegate skip_source_filter logic
+                skip_source_filter = builder.determine_skip_source_filter(
+                    task_name, task_parameters, expression
+                ) if builder else False
                 
                 task_parameters["task"]["skip_source_filter"] = skip_source_filter
                 
@@ -2122,13 +2037,8 @@ class FilterMateApp:
                 return task_parameters
 
             elif task_name == 'export':
-                # v4.7: Delegate export params building to TaskParameterBuilder
-                if TaskParameterBuilder and self.dockwidget:
-                    builder = TaskParameterBuilder(
-                        dockwidget=self.dockwidget,
-                        project_layers=self.PROJECT_LAYERS,
-                        config_data=self.CONFIG_DATA
-                    )
+                # v4.7: Delegate export params building
+                if builder:
                     export_params = builder.build_export_params(self.PROJECT_LAYERS, self.PROJECT)
                     if export_params:
                         export_params["task"]["session_id"] = self.session_id

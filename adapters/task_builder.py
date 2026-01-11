@@ -862,3 +862,50 @@ class TaskParameterBuilder:
             return True
         
         return False
+    
+    def validate_current_layer_for_task(
+        self,
+        current_layer: 'QgsVectorLayer',
+        project_layers: Dict
+    ) -> Optional[str]:
+        """
+        Validate that current layer is ready for task execution.
+        
+        v4.7: Extracted from FilterMateApp.get_task_parameters() for God Class reduction.
+        
+        Args:
+            current_layer: Current layer to validate
+            project_layers: PROJECT_LAYERS dictionary
+            
+        Returns:
+            str: Error message if validation fails, None if OK
+        """
+        from ..modules.appUtils import is_layer_source_available
+        from qgis.utils import iface
+        
+        # Check layer validity and source availability
+        if not is_layer_source_available(current_layer):
+            logger.warning(
+                f"FilterMate: Layer '{current_layer.name() if current_layer else 'Unknown'}' "
+                "is invalid or source missing."
+            )
+            iface.messageBar().pushWarning(
+                "FilterMate",
+                "La couche sélectionnée est invalide ou sa source est introuvable. Opération annulée."
+            )
+            return "invalid_layer"
+        
+        # Check if layer is in PROJECT_LAYERS
+        if current_layer.id() not in project_layers.keys():
+            logger.warning(
+                f"FilterMate: Layer '{current_layer.name()}' (id: {current_layer.id()}) "
+                "not found in PROJECT_LAYERS. The layer may not have been processed yet."
+            )
+            iface.messageBar().pushWarning(
+                "FilterMate",
+                f"La couche '{current_layer.name()}' n'est pas encore initialisée. "
+                "Essayez de sélectionner une autre couche puis revenez à celle-ci."
+            )
+            return "layer_not_initialized"
+        
+        return None  # Validation OK

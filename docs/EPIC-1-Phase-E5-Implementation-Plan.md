@@ -45,18 +45,32 @@ Removed legacy fallback code from memory layer methods with v4.0 delegations:
 
 Removed legacy fallback code from geometry repair methods with v4.0 delegations:
 
-| Method                           | Before    | After     | Saved          |
-| -------------------------------- | --------- | --------- | -------------- |
-| `_aggressive_geometry_repair()`  | ~84 lines | ~15 lines | **~69 lines**  |
-| `_repair_invalid_geometries()`   | ~98 lines | ~19 lines | **~79 lines**  |
-| **Total E5-S3**                  |           |           | **~148 lines** |
+| Method                          | Before    | After     | Saved          |
+| ------------------------------- | --------- | --------- | -------------- |
+| `_aggressive_geometry_repair()` | ~84 lines | ~15 lines | **~69 lines**  |
+| `_repair_invalid_geometries()`  | ~98 lines | ~19 lines | **~79 lines**  |
+| **Total E5-S3**                 |           |           | **~148 lines** |
 
 **File size**: 11,456 → 11,314 lines (**-142 lines**, ~1.2% reduction)
 
-### Combined Progress (E5-S1 + E5-S2 + E5-S3)
+### E5-S4: Utility Methods Cleanup (COMPLETED ✅)
 
-**Total removed**: 1,580 lines  
-**File size**: 12,894 → 11,314 lines (**-12.3% reduction**)
+Removed legacy fallback code from utility methods with v4.0 delegations:
+
+| Method                          | Before    | After     | Saved          |
+| ------------------------------- | --------- | --------- | -------------- |
+| `_get_wkt_precision()`          | ~36 lines | ~21 lines | **~15 lines**  |
+| `_get_buffer_aware_tolerance()` | ~50 lines | ~25 lines | **~25 lines**  |
+| `_convert_layer_to_centroids()` | ~82 lines | ~24 lines | **~58 lines**  |
+| `_save_layer_style()`           | ~46 lines | ~15 lines | **~31 lines**  |
+| **Total E5-S4**                 |           |           | **~129 lines** |
+
+**File size**: 11,314 → 11,199 lines (**-115 lines**, ~1.0% reduction)
+
+### Combined Progress (E5-S1 + E5-S2 + E5-S3 + E5-S4)
+
+**Total removed**: 1,695 lines  
+**File size**: 12,894 → 11,199 lines (**-13.1% reduction**)
 
 ---
 

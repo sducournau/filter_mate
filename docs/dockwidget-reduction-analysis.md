@@ -10,10 +10,27 @@
 
 | Métrique          | Valeur        | Objectif      |
 | ----------------- | ------------- | ------------- |
-| Lignes dockwidget | **4,172**     | <2,000        |
-| Sprint actuel     | **Sprint 14** | Sprint 14     |
-| Réduction totale  | **-8,877**    | -11,049       |
-| Progrès           | **68.3%**     | 31.7% restant |
+| Lignes dockwidget | **4,036**     | <2,000        |
+| Sprint actuel     | **Sprint 15** | Sprint 15     |
+| Réduction totale  | **-9,013**    | -11,049       |
+| Progrès           | **69.2%**     | 30.8% restant |
+
+### Progression Sprint 15 (session 11 janvier 2026)
+
+| Action                                        | Lignes avant | Lignes après | Réduction |
+| --------------------------------------------- | ------------ | ------------ | --------- |
+| **Début Sprint 15**                           | **4,172**    | -            | -         |
+| Compresser `__init__` commentaires verbose    | 4,172        | 4,140        | -32       |
+| Compresser `_initialize_layer_state`          | 4,140        | 4,117        | -23       |
+| Compresser `setupUiCustom`                    | 4,117        | 4,099        | -18       |
+| Compresser `dockwidget_widgets_configuration` | 4,099        | 4,083        | -16       |
+| Compresser `manage_ui_style`                  | 4,083        | 4,074        | -9        |
+| Compresser `_legacy_configure_widgets`        | 4,074        | 4,067        | -7        |
+| Compresser `manage_configuration_model`       | 4,067        | 4,046        | -21       |
+| Compresser `_setup_reload_button`             | 4,046        | 4,036        | -10       |
+| **Total Sprint 15**                           | **4,172**    | **4,036**    | **-136**  |
+
+**Note**: Sprint 15 axé sur compression `__init__`, setup, et config (commentaires verbose → docstrings concis).
 
 ### Progression Sprint 14 (session 11 janvier 2026)
 
