@@ -139,9 +139,9 @@ Phase E4 extracts ~3,500 lines of backend-specific code from `filter_task.py` to
 | Performance regression       | MEDIUM | Benchmark before/after, profile critical paths   |
 | Missing dependencies         | LOW    | Extract in dependency order, stub if needed      |
 
-## Progress Summary (Updated: January 11, 2026 - E4-S4)
+## Progress Summary (Updated: January 11, 2026 - E4-S6)
 
-**Phase E4 Status**: IN PROGRESS - All three backends have utility functions extracted
+**Phase E4 Status**: IN PROGRESS - All backends complete + Strangler Fig delegations active
 
 ### Completed Extractions
 
@@ -192,7 +192,23 @@ Phase E4 extracts ~3,500 lines of backend-specific code from `filter_task.py` to
 - `combine_ogr_filters()` → Combine filters with AND/OR/NOT (25 lines)
 - Commit: 17ba303
 
-**Total Extracted**: ~1,467 lines / ~3,500 target (41.9%)
+✅ **Session 5 (E4-S5)**: Strangler Fig pattern implementation
+
+- Added imports for pg_executor, sl_executor, ogr_executor in filter_task.py
+- Created availability flags (PG_EXECUTOR_AVAILABLE, SL_EXECUTOR_AVAILABLE, OGR_EXECUTOR_AVAILABLE)
+- Added Strangler Fig delegations for 5 utility methods with legacy fallbacks
+- Commit: bec6ed8
+
+✅ **Session 6 (E4-S6)**: Additional Strangler Fig delegations
+
+- `_apply_combine_operator()` → pg_executor.apply_combine_operator()
+- `_cleanup_session_materialized_views()` → pg_executor.cleanup_session_materialized_views()
+- `_build_spatialite_query()` → sl_executor.build_spatialite_query()
+- filter_task.py: 12,803 → 12,746 lines (-57 lines via delegations)
+- Commit: c30704f
+
+**Total Extracted**: ~1,679 lines / ~3,500 target (48%)
+**Total Delegation Reduction**: 57 lines in filter_task.py
 
 ### Backend Summary
 
