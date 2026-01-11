@@ -219,6 +219,8 @@ try:
         execute_filter_action_postgresql_direct as pg_execute_direct,
         execute_filter_action_postgresql_materialized as pg_execute_materialized,
         has_expensive_spatial_expression as pg_has_expensive_expr,
+        execute_reset_action_postgresql as pg_execute_reset,
+        execute_unfilter_action_postgresql as pg_execute_unfilter,
     )
     PG_EXECUTOR_AVAILABLE = True
 except ImportError:
@@ -227,6 +229,8 @@ except ImportError:
     pg_execute_direct = None
     pg_execute_materialized = None
     pg_has_expensive_expr = None
+    pg_execute_reset = None
+    pg_execute_unfilter = None
     PG_EXECUTOR_AVAILABLE = False
 
 try:
@@ -5125,6 +5129,8 @@ class FilterEngineTask(QgsTask):
         """
         Execute reset action using PostgreSQL backend.
         
+        EPIC-1 Phase E5/E6: Delegates to adapters.backends.postgresql.filter_actions.
+        
         Args:
             layer: QgsVectorLayer to reset
             name: Layer identifier
@@ -5134,28 +5140,48 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if successful
         """
-        # Delete history using prepared statement
+        if PG_EXECUTOR_AVAILABLE and pg_execute_reset:
+            delete_history_fn = None
+            if self._ps_manager:
+                delete_history_fn = self._ps_manager.delete_subset_history
+            
+            return pg_execute_reset(
+                layer=layer,
+                name=name,
+                cur=cur,
+                conn=conn,
+                queue_subset_fn=self._queue_subset_string,
+                get_connection_fn=self._get_valid_postgresql_connection,
+                execute_commands_fn=self._execute_postgresql_commands,
+                get_session_name_fn=self._get_session_prefixed_name,
+                delete_history_fn=delete_history_fn,
+                project_uuid=self.project_uuid,
+                current_mv_schema=self.current_materialized_view_schema
+            )
+        
+        # Legacy fallback
+        return self._reset_action_postgresql_legacy(layer, name, cur, conn)
+    
+    def _reset_action_postgresql_legacy(self, layer, name, cur, conn):
+        """Legacy implementation - kept for fallback."""
         if self._ps_manager:
             try:
                 self._ps_manager.delete_subset_history(self.project_uuid, layer.id())
             except Exception as e:
                 logger.warning(f"Prepared statement failed, falling back to direct SQL: {e}")
-                # Fallback
                 cur.execute(
                     f"""DELETE FROM fm_subset_history 
-                        WHERE fk_project = '{self.project_uuid}' AND layer_id = '{layer.id()}';""" 
+                        WHERE fk_project = '{self.project_uuid}' AND layer_id = '{layer.id()}';"""
                 )
                 conn.commit()
         else:
-            # Direct SQL if no prepared statements
             cur.execute(
                 f"""DELETE FROM fm_subset_history 
-                    WHERE fk_project = '{self.project_uuid}' AND layer_id = '{layer.id()}';""" 
+                    WHERE fk_project = '{self.project_uuid}' AND layer_id = '{layer.id()}';"""
             )
-            conn.commit()        # Drop materialized view
-        schema = self.current_materialized_view_schema
+            conn.commit()
         
-        # Use session-prefixed name for multi-client isolation
+        schema = self.current_materialized_view_schema
         session_name = self._get_session_prefixed_name(name)
         sql_drop = f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{session_name}" CASCADE;'
         sql_drop += f' DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{session_name}_dump" CASCADE;'
@@ -5164,7 +5190,6 @@ class FilterEngineTask(QgsTask):
         connexion = self._get_valid_postgresql_connection()
         self._execute_postgresql_commands(connexion, [sql_drop])
         
-        # THREAD SAFETY: Queue subset clear for application in finished()
         self._queue_subset_string(layer, '')
         return True
 
@@ -5226,6 +5251,8 @@ class FilterEngineTask(QgsTask):
         """
         Execute unfilter action (restore previous filter state).
         
+        EPIC-1 Phase E5/E6: PostgreSQL logic delegates to filter_actions module.
+        
         Args:
             layer: QgsVectorLayer to unfilter
             primary_key_name: Primary key field name
@@ -5241,6 +5268,32 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if successful
         """
+        if use_postgresql and PG_EXECUTOR_AVAILABLE and pg_execute_unfilter:
+            return pg_execute_unfilter(
+                layer=layer,
+                primary_key_name=primary_key_name,
+                geom_key_name=geom_key_name,
+                name=name,
+                cur=cur,
+                conn=conn,
+                last_subset_id=last_subset_id,
+                queue_subset_fn=self._queue_subset_string,
+                get_connection_fn=self._get_valid_postgresql_connection,
+                execute_commands_fn=self._execute_postgresql_commands,
+                get_session_name_fn=self._get_session_prefixed_name,
+                create_simple_mv_fn=self._create_simple_materialized_view_sql,
+                project_uuid=self.project_uuid,
+                current_mv_schema=self.current_materialized_view_schema
+            )
+        
+        # Legacy/Spatialite implementation
+        return self._unfilter_action_legacy(
+            layer, primary_key_name, geom_key_name, name, custom,
+            cur, conn, last_subset_id, use_postgresql, use_spatialite
+        )
+    
+    def _unfilter_action_legacy(self, layer, primary_key_name, geom_key_name, name, custom, cur, conn, last_subset_id, use_postgresql, use_spatialite):
+        """Legacy unfilter implementation for Spatialite and PostgreSQL fallback."""
         # Delete last subset from history
         if last_subset_id:
             cur.execute(

@@ -606,3 +606,184 @@ def execute_filter_action_postgresql_materialized(
     )
     
     return True
+
+
+# =============================================================================
+# Reset and Unfilter Actions
+# =============================================================================
+
+def execute_reset_action_postgresql(
+    layer,
+    name: str,
+    cur,
+    conn,
+    # Callback functions
+    queue_subset_fn: Callable,
+    get_connection_fn: Callable,
+    execute_commands_fn: Callable,
+    get_session_name_fn: Callable,
+    delete_history_fn: Callable = None,
+    # Context parameters
+    project_uuid: str = None,
+    current_mv_schema: str = "filter_mate_temp"
+) -> bool:
+    """
+    Execute reset action using PostgreSQL backend.
+    
+    Clears the filter on a layer and drops associated materialized views.
+    
+    Args:
+        layer: QgsVectorLayer to reset
+        name: Layer identifier
+        cur: Database cursor
+        conn: Database connection
+        queue_subset_fn: Function to queue subset string
+        get_connection_fn: Function to get PostgreSQL connection
+        execute_commands_fn: Function to execute SQL commands
+        get_session_name_fn: Function to get session-prefixed name
+        delete_history_fn: Function to delete subset history
+        project_uuid: Project UUID for history
+        current_mv_schema: Schema for materialized views
+            
+    Returns:
+        bool: True if successful
+    """
+    # Delete history
+    if delete_history_fn:
+        try:
+            delete_history_fn(project_uuid, layer.id())
+        except Exception as e:
+            logger.warning(f"Delete history failed, falling back to direct SQL: {e}")
+            cur.execute(
+                f"""DELETE FROM fm_subset_history 
+                    WHERE fk_project = '{project_uuid}' AND layer_id = '{layer.id()}';"""
+            )
+            conn.commit()
+    else:
+        cur.execute(
+            f"""DELETE FROM fm_subset_history 
+                WHERE fk_project = '{project_uuid}' AND layer_id = '{layer.id()}';"""
+        )
+        conn.commit()
+    
+    # Drop materialized view
+    schema = current_mv_schema
+    session_name = get_session_name_fn(name)
+    
+    sql_drop = f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{session_name}" CASCADE;'
+    sql_drop += f' DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{session_name}_dump" CASCADE;'
+    sql_drop += f' DROP INDEX IF EXISTS {schema}_{session_name}_cluster CASCADE;'
+    
+    connexion = get_connection_fn()
+    execute_commands_fn(connexion, [sql_drop])
+    
+    # THREAD SAFETY: Queue subset clear for application in finished()
+    queue_subset_fn(layer, '')
+    return True
+
+
+def execute_unfilter_action_postgresql(
+    layer,
+    primary_key_name: str,
+    geom_key_name: str,
+    name: str,
+    cur,
+    conn,
+    last_subset_id: Optional[str],
+    # Callback functions
+    queue_subset_fn: Callable,
+    get_connection_fn: Callable,
+    execute_commands_fn: Callable,
+    get_session_name_fn: Callable,
+    create_simple_mv_fn: Callable,
+    # Context parameters
+    project_uuid: str = None,
+    current_mv_schema: str = "filter_mate_temp"
+) -> bool:
+    """
+    Execute unfilter action for PostgreSQL (restore previous filter state).
+    
+    Removes the most recent filter and restores the previous one from history.
+    
+    Args:
+        layer: QgsVectorLayer to unfilter
+        primary_key_name: Primary key field name
+        geom_key_name: Geometry field name
+        name: Layer identifier
+        cur: Database cursor
+        conn: Database connection
+        last_subset_id: Last subset ID to remove
+        queue_subset_fn: Function to queue subset string
+        get_connection_fn: Function to get PostgreSQL connection
+        execute_commands_fn: Function to execute SQL commands
+        get_session_name_fn: Function to get session-prefixed name
+        create_simple_mv_fn: Function to create simple MV SQL
+        project_uuid: Project UUID for history
+        current_mv_schema: Schema for materialized views
+            
+    Returns:
+        bool: True if successful
+    """
+    # Delete last subset from history
+    if last_subset_id:
+        cur.execute(
+            f"""DELETE FROM fm_subset_history 
+                WHERE fk_project = '{project_uuid}' 
+                  AND layer_id = '{layer.id()}' 
+                  AND id = '{last_subset_id}';"""
+        )
+        conn.commit()
+    
+    # Get previous subset
+    cur.execute(
+        f"""SELECT * FROM fm_subset_history 
+            WHERE fk_project = '{project_uuid}' AND layer_id = '{layer.id()}' 
+            ORDER BY seq_order DESC LIMIT 1;"""
+    )
+    
+    results = cur.fetchall()
+    if len(results) == 1:
+        sql_subset_string = results[0][-1]
+        
+        # Validate sql_subset_string from history
+        if not sql_subset_string or not sql_subset_string.strip():
+            logger.warning(
+                f"Unfilter: Previous subset string from history is empty for {layer.name()}. "
+                "Clearing layer filter."
+            )
+            queue_subset_fn(layer, '')
+            return True
+        
+        schema = current_mv_schema
+        session_name = get_session_name_fn(name)
+        
+        sql_drop = (
+            f'DROP INDEX IF EXISTS {schema}_{session_name}_cluster CASCADE; '
+            f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{session_name}" CASCADE;'
+        )
+        sql_create = create_simple_mv_fn(schema, session_name, sql_subset_string)
+        sql_create_index = (
+            f'CREATE INDEX IF NOT EXISTS {schema}_{session_name}_cluster '
+            f'ON "{schema}"."mv_{session_name}" USING GIST ({geom_key_name});'
+        )
+        sql_cluster = (
+            f'ALTER MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{session_name}" '
+            f'CLUSTER ON {schema}_{session_name}_cluster;'
+        )
+        sql_analyze = f'ANALYZE VERBOSE "{schema}"."mv_{session_name}";'
+        
+        sql_create = sql_create.replace('\n', '').replace('\t', '').replace('  ', ' ').strip()
+        
+        connexion = get_connection_fn()
+        execute_commands_fn(connexion, [sql_drop, sql_create, sql_create_index, sql_cluster, sql_analyze])
+        
+        layer_subset_string = (
+            f'"{primary_key_name}" IN '
+            f'(SELECT "mv_{session_name}"."{primary_key_name}" FROM "{schema}"."mv_{session_name}")'
+        )
+        queue_subset_fn(layer, layer_subset_string)
+    else:
+        # No previous filter - clear
+        queue_subset_fn(layer, '')
+    
+    return True

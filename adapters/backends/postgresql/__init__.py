@@ -34,6 +34,9 @@ from .filter_actions import (
     should_combine_filters,
     build_combined_expression,
     MATERIALIZED_VIEW_THRESHOLD,
+    # Reset and unfilter actions
+    execute_reset_action_postgresql,
+    execute_unfilter_action_postgresql,
 )
 
 __all__ = [
@@ -70,4 +73,7 @@ __all__ = [
     'should_combine_filters',
     'build_combined_expression',
     'MATERIALIZED_VIEW_THRESHOLD',
+    # Reset and unfilter actions
+    'execute_reset_action_postgresql',
+    'execute_unfilter_action_postgresql',
 ]
