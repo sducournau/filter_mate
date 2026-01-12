@@ -55,21 +55,85 @@ PROVIDER_POSTGRES = "postgres"
 PROVIDER_SPATIALITE = "spatialite"
 PROVIDER_OGR = "ogr"
 
-# Import utilities
-from modules.appUtils import (
-    get_source_table_name,
+# Import utilities (migrated from modules.appUtils)
+from infrastructure.utils import (
     get_datasource_connexion_from_layer,
     detect_layer_provider_type,
-    geometry_type_to_string,
-    escape_json_string,
     get_best_display_field
 )
 
-# Import object safety utilities (v2.3.9 - stability fix)
-from modules.object_safety import (
-    is_sip_deleted, is_valid_layer, is_layer_in_project, safe_disconnect, safe_emit,
-    safe_set_layer_variable, safe_set_layer_variables, is_qgis_alive
+# Additional utilities that may still be in appUtils shim
+try:
+    from modules.appUtils import (
+        get_source_table_name,
+        geometry_type_to_string,
+        escape_json_string,
+    )
+except ImportError:
+    # Fallback definitions
+    def get_source_table_name(layer):
+        try:
+            return layer.source().split('table=')[1].split(' ')[0].strip('"')
+        except:
+            return layer.name()
+    
+    def geometry_type_to_string(geom_type):
+        return str(geom_type)
+    
+    def escape_json_string(s):
+        return s.replace('\\', '\\\\').replace('"', '\\"')
+
+# Import object safety utilities (migrated from modules.object_safety)
+from infrastructure.utils import (
+    is_sip_deleted, 
+    is_layer_valid as is_valid_layer,
+    is_layer_source_available,
+    safe_layer_access
 )
+
+# Additional object safety utilities with fallback
+try:
+    from modules.object_safety import (
+        is_layer_in_project, safe_disconnect, safe_emit,
+        safe_set_layer_variable, safe_set_layer_variables, is_qgis_alive
+    )
+except ImportError:
+    def is_layer_in_project(layer):
+        try:
+            from qgis.core import QgsProject
+            return layer.id() in QgsProject.instance().mapLayers()
+        except:
+            return False
+    
+    def safe_disconnect(signal, slot):
+        try:
+            signal.disconnect(slot)
+        except:
+            pass
+    
+    def safe_emit(signal, *args):
+        try:
+            signal.emit(*args)
+        except:
+            pass
+    
+    def safe_set_layer_variable(layer, key, value):
+        try:
+            from qgis.core import QgsExpressionContextUtils
+            QgsExpressionContextUtils.setLayerVariable(layer, key, value)
+        except:
+            pass
+    
+    def safe_set_layer_variables(layer, variables):
+        for key, value in variables.items():
+            safe_set_layer_variable(layer, key, value)
+    
+    def is_qgis_alive():
+        try:
+            from qgis.utils import iface
+            return iface is not None
+        except:
+            return False
 
 # Import sip for direct C++ object deletion check (v2.3.11 - crash fix)
 try:

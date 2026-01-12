@@ -15,7 +15,7 @@ This replaces the 164-line dockwidget_widgets_configuration() method.
 """
 
 from qgis.PyQt.QtCore import QObject
-from infrastructure.logging import get_app_logger
+from ...infrastructure.logging import get_app_logger
 
 logger = get_app_logger()
 
@@ -814,7 +814,7 @@ class ConfigurationManager(QObject):
         import os
         from qgis.PyQt import QtGui, QtCore, QtWidgets
         from qgis.gui import QgsMapLayerProxyModel
-        from modules.custom_widgets import QgsCheckableComboBoxLayer
+        from ui.widgets.custom_widgets import QgsCheckableComboBoxLayer
         
         d = self.dockwidget
         d.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
@@ -854,7 +854,7 @@ class ConfigurationManager(QObject):
         """v4.0 Sprint 16: Configure widgets for Exporting tab (migrated from dockwidget)."""
         from qgis.PyQt import QtWidgets
         from qgis.PyQt.QtGui import QColor
-        from modules.custom_widgets import QgsCheckableComboBoxLayer
+        from ui.widgets.custom_widgets import QgsCheckableComboBoxLayer
         
         d = self.dockwidget
         d.checkableComboBoxLayer_exporting_layers = QgsCheckableComboBoxLayer(d.EXPORTING)

@@ -358,20 +358,15 @@ def process_spatialite_geometries(
     """
     from qgis.core import QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsGeometry, QgsWkbTypes
     
-    # Import geometry safety functions
-    try:
-        from modules.geometry_safety import (
-            validate_geometry,
-            safe_unary_union,
-            safe_collect_geometry,
-            safe_as_geometry_collection,
-            extract_polygons_from_collection,
-            get_geometry_type_name
-        )
-    except ImportError:
-        # Fallback for testing
-        logger.warning("Could not import geometry_safety module")
-        return None
+    # Import geometry safety functions (migrated from modules.geometry_safety)
+    from core.geometry import (
+        validate_geometry,
+        safe_unary_union,
+        safe_collect_geometry,
+        safe_as_geometry_collection,
+        extract_polygons_from_collection,
+        get_geometry_type_name
+    )
     
     raw_geometries = [f.geometry() for f in features if f.hasGeometry()]
     logger.debug(f"process_spatialite_geometries: {len(raw_geometries)} geometries")

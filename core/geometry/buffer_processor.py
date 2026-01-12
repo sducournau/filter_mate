@@ -37,8 +37,8 @@ from qgis.core import (
 )
 from qgis import processing
 
-# Import geometry safety utilities
-from modules.geometry_safety import (
+# Import geometry safety utilities (migrated from modules.geometry_safety)
+from .geometry_safety import (
     validate_geometry,
     safe_buffer,
     safe_unary_union,

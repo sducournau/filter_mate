@@ -36,10 +36,10 @@ warnings.warn(
 from .filter_task import FilterEngineTask
 
 # Re-export LayersManagementEngineTask (EPIC-1 migration to core/tasks/)
-from core.tasks import LayersManagementEngineTask
+from ...core.tasks import LayersManagementEngineTask
 
 # Import from infrastructure (EPIC-1 migration)
-from infrastructure.utils import (
+from ...infrastructure.utils import (
     spatialite_connect,
     safe_spatialite_connect,
     sqlite_execute_with_retry,
@@ -54,7 +54,7 @@ from infrastructure.utils import (
     MESSAGE_TASKS_CATEGORIES
 )
 
-from infrastructure.cache import SourceGeometryCache
+from ...infrastructure.cache import SourceGeometryCache
 
 __all__ = [
     # Main task classes

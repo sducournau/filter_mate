@@ -29,19 +29,11 @@ from qgis.core import (
     QgsWkbTypes
 )
 
-# Import geometry safety utilities (if not available, use local fallbacks)
-try:
-    from modules.geometry_safety import (
-        validate_geometry,
-        get_geometry_type_name
-    )
-except ImportError:
-    # Fallback for standalone usage
-    def validate_geometry(geom):
-        return geom and not geom.isNull() and not geom.isEmpty()
-    
-    def get_geometry_type_name(geom):
-        return QgsWkbTypes.displayString(geom.wkbType())
+# Import geometry safety utilities (migrated from modules.geometry_safety)
+from .geometry_safety import (
+    validate_geometry,
+    get_geometry_type_name
+)
 
 logger = logging.getLogger('FilterMate.Core.Geometry.Repair')
 

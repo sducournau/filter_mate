@@ -224,7 +224,7 @@ class DockWidgetOrchestrator:
     
     def _init_services(self) -> None:
         """Initialize business services."""
-        from core.services import (
+        from ..core.services import (
             BackendService,
             FilterService,
             FavoritesService,
@@ -244,7 +244,7 @@ class DockWidgetOrchestrator:
     
     def _init_controllers(self) -> None:
         """Initialize UI controllers."""
-        from ui.controllers import (
+        from .controllers import (
             FilteringController,
             ExploringController,
             ExportingController,
