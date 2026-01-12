@@ -14,7 +14,7 @@ Used by FilterEngineTask for spatial operations.
 """
 
 # Buffer operations
-from core.geometry.buffer_processor import (
+from .buffer_processor import (
     apply_qgis_buffer,
     create_buffered_memory_layer,
     simplify_buffer_result,
@@ -22,13 +22,13 @@ from core.geometry.buffer_processor import (
 )
 
 # Geometry repair
-from core.geometry.geometry_repair import (
+from .geometry_repair import (
     aggressive_geometry_repair,
     repair_invalid_geometries
 )
 
 # Geometry converters
-from core.geometry.geometry_converter import (
+from .geometry_converter import (
     convert_geometry_collection_to_multipolygon
 )
 

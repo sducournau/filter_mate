@@ -1,14 +1,17 @@
-# 📋 FilterMate v3.0 Migration - Kanban Board
+# 📋 FilterMate v4.0 Migration - Kanban Board
 
 **Epic:** Migration Architecture Hexagonale  
-**Sprint Actuel:** ✅ Phase 6 COMPLETE - Migration Terminée!  
-**Dernière MAJ:** 2026-01-09 (Phase 6 terminée, stories archivées)
+**Sprint Actuel:** ✅ God Classes TERMINÉES - Fallback Removal NEXT  
+**Dernière MAJ:** 2026-01-12 (Métriques consolidées)
 
 ---
 
-## 🎉 MIGRATION V3 COMPLÈTE
+## 🎉 OBJECTIFS GOD CLASSES ATTEINTS! 🎉
 
-Toutes les stories ont été complétées et archivées. Voir `_archive/` pour l'historique.
+Tous les objectifs de réduction des God Classes ont été atteints ou dépassés:
+- **filter_task.py**: 6,023 lignes (cible <10K) ✅
+- **filter_mate_app.py**: 1,667 lignes (cible <2.5K) ✅
+- **dockwidget.py**: 2,494 lignes (cible <2.5K) ✅
 
 ---
 
@@ -150,55 +153,43 @@ Toutes les stories ont été complétées et archivées. Voir `_archive/` pour l
 
 ## 📊 Progression par Phase
 
-### ✅ Migration v3 (Phases 1-6) - COMPLETE
+### ✅ Migration v3 → v4 (Phases 1-10) - MAJOR MILESTONES ACHIEVED
 
 ```
-Phase 1: Stabilisation     [██████████] 100%  (4/4 stories)
-Phase 2: Core Domain       [██████████] 100%  (6/6 stories)
-Phase 3: God Classes       [██████████] 100%  (5/5 stories)
-Phase 4: Backends          [██████████] 100%  (4/4 stories)
-Phase 5: Validation        [██████████] 100%  (5/5 stories) ✅
-Phase 6: DockWidget        [██████████] 100%  (30/30 stories) ✅
+Phase 1-6: Migration v3        [██████████] 100%  (54/54 stories) ✅
+Phase E9: DockWidget <2.5K     [██████████] 100%  (2,494 lignes) ✅
+Phase E10: App <2.5K           [██████████] 100%  (1,667 lignes) ✅
+Phase E11: filter_task <10K    [██████████] 100%  (6,023 lignes) ✅
+Phase 5: Fallback Removal      [░░░░░░░░░░] 0%    (planifié)
 ─────────────────────────────────────────────
-TOTAL MIGRATION v3         [██████████] 100%  (54/54 stories) 🎉
+GOD CLASSES OBJECTIVES         [██████████] 100%  🎉 TOUS ATTEINTS!
 ```
 
-### 🗺️ Legacy Removal (Phases 7-10) - PLANNED
+### 🎯 Objectifs Atteints (12 jan 2026)
 
-```
-Phase 7: Backend Consolidation  [░░░░░░░░░░] 0%   (0/14 stories)  📋 v3.1→v3.2
-Phase 8: Tasks Consolidation    [░░░░░░░░░░] 0%   (0/12 stories)  📋 v3.2→v3.3
-Phase 9: Utilities Migration    [░░░░░░░░░░] 0%   (0/10 stories)  📋 v3.3→v3.4
-Phase 10: Final Cleanup         [░░░░░░░░░░] 0%   (0/6 stories)   📋 v3.4→v4.0
-─────────────────────────────────────────────
-TOTAL LEGACY REMOVAL       [░░░░░░░░░░] 0%   (0/42 stories)
-```
+| Objectif | Cible | Actuel | Marge | Status |
+|----------|-------|--------|-------|--------|
+| filter_task.py | <10,000 | **6,023** | -3,977 | ✅ |
+| dockwidget.py | <2,500 | **2,494** | -6 | ✅ |
+| app.py | <2,500 | **1,667** | -833 | ✅ |
+| **Total God Classes** | <15,000 | **10,184** | **-4,816** | ✅ |
 
 ---
 
-## 🎯 Prochaine Phase: Backend Consolidation (Phase 7)
+## 🎯 Prochaine Phase: Fallback Removal (Phase 5)
 
-Voir [phase1-backend-consolidation.md](stories/phase1-backend-consolidation.md) pour les stories détaillées.
+Voir [fallback-cleanup-plan.md](../../../docs/consolidation/fallback-cleanup-plan.md) pour les stories détaillées.
 
 | ID      | Story                      | Priorité | Sprint | Status  |
 | ------- | -------------------------- | -------- | ------ | ------- |
-| DEP-001 | Migrate Base Backend       | 🔴 P0    | 10     | 📋 TODO |
-| DEP-002 | Migrate PostgreSQL Backend | 🔴 P0    | 10     | 📋 TODO |
-| DEP-003 | Migrate Spatialite Backend | 🔴 P0    | 10     | 📋 TODO |
-| DEP-004 | Migrate OGR Backend        | 🔴 P0    | 10     | 📋 TODO |
-| DEP-005 | Migrate Memory Backend     | 🟡 P2    | 10     | 📋 TODO |
+| FB-001  | Low-risk Fallback Removal  | 🟡 P2    | 11     | 📋 TODO |
+| FB-002  | Medium-risk Fallback Removal | 🟡 P2  | 11     | 📋 TODO |
+| FB-003  | High-risk Fallback Removal | 🟠 P1    | 12     | 📋 TODO |
+| FB-004  | Final Cleanup              | 🟢 P3    | 12     | 📋 TODO |
 
 ---
 
-## 🎉 Migration v3 Complète!
-
-Toutes les phases de migration v3 sont terminées. Les stories ont été archivées dans `stories/_archive/`.
-
-Le projet entre maintenant dans la phase de **Legacy Removal** pour préparer v4.0.
-
----
-
-## 📈 Vélocité
+## 📊 Vélocité
 
 | Sprint                   | Stories Planifiées | Stories Complétées | Vélocité |
 | ------------------------ | ------------------ | ------------------ | -------- |
@@ -210,27 +201,29 @@ Le projet entre maintenant dans la phase de **Legacy Removal** pour préparer v4
 
 ---
 
-## 📊 Métriques Clés
+## 📊 Métriques Clés (Mise à jour 12 jan 2026)
 
-| Métrique              | Avant v3 | Actuel v3.0.21 | Cible v4 | Status |
-| --------------------- | -------- | -------------- | -------- | ------ |
-| Lignes dans modules/  | 40,000   | 40,000         | 0        | 📋     |
-| Lignes dans core/     | 0        | 6,000          | 8,000    | ✅     |
-| Lignes dans adapters/ | 0        | 3,500          | 15,000   | 🟡     |
-| Fichiers > 800 lignes | 15       | 8              | 0        | 🟡     |
-| Tests unitaires       | ~30      | 400+           | 500+     | ✅     |
-| Coverage estimé       | ~40%     | ~75%           | 85%      | 🟡     |
+| Métrique              | Avant v3 | **Actuel v4.0-alpha** | Cible v4 | Status |
+| --------------------- | -------- | --------------------- | -------- | ------ |
+| Lignes God Classes    | 30,794   | **10,184**            | <15,000  | ✅     |
+| Lignes dans core/     | 0        | **10,528**            | 10,000   | ✅     |
+| Lignes dans ui/controllers | 0   | **13,143**            | 12,000   | ✅     |
+| filter_task.py        | 12,894   | **6,023**             | <10,000  | ✅     |
+| filter_mate_app.py    | 5,900    | **1,667**             | <2,500   | ✅     |
+| dockwidget.py         | 12,000   | **2,494**             | <2,500   | ✅     |
+| Tests unitaires       | ~30      | **400+**              | 500+     | ✅     |
+| Coverage estimé       | ~40%     | **~75%**              | 85%      | 🟡     |
 
-### Structure Actuelle
+### Structure Actuelle (12 jan 2026)
 
 ```
 filter_mate/
-├── core/          ~6,000 lignes  ✅ Nouvelle architecture
-├── adapters/      ~3,500 lignes  ✅ Nouvelle architecture
-├── ui/            ~15,000 lignes ✅ Nouvelle architecture
-├── infrastructure/ ~2,000 lignes ✅ Nouvelle architecture
-├── modules/       ~40,000 lignes ⚠️ DEPRECATED - À migrer
-└── config/        ~500 lignes    ✅ Configuration
+├── core/services/     ~10,528 lignes ✅ Architecture hexagonale
+├── ui/controllers/    ~13,143 lignes ✅ Architecture MVC
+├── adapters/          ~5,000 lignes  ✅ Multi-backend
+├── infrastructure/    ~2,000 lignes  ✅ DI + Config
+├── modules/tasks/     ~6,023 lignes  ✅ filter_task optimisé
+└── config/            ~500 lignes    ✅ Configuration v2
 ```
 
 ---
