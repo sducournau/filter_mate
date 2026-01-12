@@ -605,6 +605,8 @@ class FilterEngineTask(QgsTask):
         """
         Organize layers to be filtered by provider type.
         
+        EPIC-1 Phase 14.3: Delegates to core.services.layer_organizer.
+        
         Populates self.layers dictionary with layers grouped by provider,
         and updates layers_count.
         
@@ -612,180 +614,29 @@ class FilterEngineTask(QgsTask):
         For 'unfilter' and 'reset': processes all layers in the list regardless of flag
         (to clean up filters that were applied previously)
         """
-        # FIX v3.0.8: Import QgsMessageLog for visible diagnostic logs
-        from qgis.core import QgsMessageLog, Qgis as QgisLevel
+        from core.services.layer_organizer import organize_layers_for_filtering
+        from ..appUtils import detect_layer_provider_type
         
-        logger.info(f"🔍 _organize_layers_to_filter() called for action: {self.task_action}")
-        logger.info(f"  has_layers_to_filter: {self.task_parameters['filtering']['has_layers_to_filter']}")
-        logger.info(f"  task['layers'] count: {len(self.task_parameters['task'].get('layers', []))}")
+        # Delegate to LayerOrganizer service
+        result = organize_layers_for_filtering(
+            task_action=self.task_action,
+            task_parameters=self.task_parameters,
+            project=self.PROJECT,
+            postgresql_available=POSTGRESQL_AVAILABLE,
+            detect_provider_fn=detect_layer_provider_type,
+            is_valid_layer_fn=is_valid_layer,
+            is_sip_deleted_fn=is_sip_deleted
+        )
         
-        # For 'filter' action, process layers if:
-        # - has_layers_to_filter is True, OR
-        # - There are layers in the task parameters (user selected layers)
-        # For 'unfilter' and 'reset', always process layers to clean up previous filters
-        has_layers_to_filter = self.task_parameters["filtering"]["has_layers_to_filter"]
-        has_layers_in_params = len(self.task_parameters['task'].get('layers', [])) > 0
+        # Update task state from result
+        self.layers = result.layers_by_provider
+        self.layers_count = result.layers_count
+        self.provider_list = result.provider_list
         
-        # FIX CRITIQUE: Ne retourner que si vraiment aucune couche n'est disponible
-        # La vérification has_layers_to_filter peut être False même si des couches sont présentes
-        if self.task_action == 'filter' and not has_layers_in_params:
-            logger.info("  ℹ️ No layers in task params - skipping distant layers organization")
-            return
-        
-        # Get forced backends from task parameters (set by user in UI)
-        forced_backends = self.task_parameters.get('forced_backends', {})
-        
-        # Process all layers in the list
-        for layer_props_original in self.task_parameters["task"]["layers"]:
-            # CRITICAL FIX v2.7.8: Create a COPY of layer_props to avoid modifying
-            # the original dict in self.PROJECT_LAYERS. Without this, modifications
-            # like _effective_provider_type and _postgresql_fallback persist between
-            # filter executions, causing PostgreSQL layers to incorrectly use OGR backend.
-            layer_props = layer_props_original.copy()
-            
-            # Remove stale runtime keys from previous executions that may have been
-            # copied from PROJECT_LAYERS (in case copy() was added after some runs)
-            for stale_key in ['_effective_provider_type', '_postgresql_fallback', '_forced_backend']:
-                layer_props.pop(stale_key, None)
-            
-            provider_type = layer_props["layer_provider_type"]
-            layer_name = layer_props.get("layer_name", "unknown")
-            layer_id = layer_props.get("layer_id", "unknown")
-            
-            # FIX v3.0.8: Log each layer being organized (NOT filtered yet)
-            # Note: Use different emoji to distinguish from actual filtering phase
-            QgsMessageLog.logMessage(
-                f"📂 Organizing layer: {layer_name} ({provider_type})",
-                "FilterMate", QgisLevel.Info
-            )
-            
-            # DIAGNOSTIC: Log initial provider type
-            logger.debug(f"  📋 Layer '{layer_name}' initial provider_type='{provider_type}'")
-            
-            # PRIORITY 1: Check if backend is forced by user for this layer
-            forced_backend = forced_backends.get(layer_id)
-            if forced_backend:
-                logger.info(f"  🔒 Using FORCED backend '{forced_backend}' for layer '{layer_name}'")
-                provider_type = forced_backend
-                # Mark in layer_props for later reference
-                layer_props["_effective_provider_type"] = forced_backend
-                layer_props["_forced_backend"] = True
-            else:
-                # PRIORITY 2: Check if PostgreSQL connection is available
-                # CRITICAL FIX v2.5.14: PostgreSQL layers loaded in QGIS are ALWAYS filterable
-                # via QGIS native API (setSubsetString). Default to True for PostgreSQL layers.
-                if provider_type == PROVIDER_POSTGRES:
-                    postgresql_connection_available = layer_props.get("postgresql_connection_available", True)
-                    if not postgresql_connection_available or not POSTGRESQL_AVAILABLE:
-                        logger.warning(f"  PostgreSQL layer '{layer_name}' has no connection available - using OGR fallback")
-                        provider_type = PROVIDER_OGR
-                        # Mark in layer_props for later reference
-                        layer_props["_effective_provider_type"] = PROVIDER_OGR
-                        layer_props["_postgresql_fallback"] = True
-                    else:
-                        logger.debug(f"  PostgreSQL layer '{layer_name}': using native PostgreSQL backend")
-                
-                # PRIORITY 3: Verify provider_type is correct by detecting it from actual layer
-                # This ensures GeoPackage layers are correctly identified as 'spatialite'
-                # even if layer_props had incorrect provider_type from previous operations
-                # STABILITY FIX v2.3.9: Validate layer before access to prevent access violations
-                from ..appUtils import detect_layer_provider_type
-                layer_by_id = self.PROJECT.mapLayer(layer_id)
-                if layer_by_id and is_valid_layer(layer_by_id):
-                    detected_provider = detect_layer_provider_type(layer_by_id)
-                    if detected_provider != provider_type and detected_provider != 'unknown':
-                        logger.warning(
-                            f"  ⚠️ Provider type mismatch for '{layer_name}': "
-                            f"stored='{provider_type}', detected='{detected_provider}'. "
-                            f"Using detected type."
-                        )
-                        provider_type = detected_provider
-                        # Update layer_props with correct provider type
-                        layer_props["layer_provider_type"] = provider_type
-            
-            logger.info(f"  Processing layer: {layer_name} ({provider_type}), id={layer_id}")
-            
-            # Initialize provider list if needed
-            if provider_type not in self.layers:
-                self.layers[provider_type] = []
-            
-            # STABILITY FIX v2.3.9: Validate layers before adding to prevent access violations
-            # Find layer by name and ID (preferred method)
-            layers = []
-            layers_by_name = self.PROJECT.mapLayersByName(layer_props["layer_name"])
-            logger.debug(f"    Found {len(layers_by_name)} layers by name '{layer_props['layer_name']}'")
-            
-            for layer in layers_by_name:
-                if is_sip_deleted(layer):
-                    logger.debug(f"    Skipping sip-deleted layer")
-                    continue
-                if layer.id() == layer_props["layer_id"]:
-                    if is_valid_layer(layer):
-                        layers.append(layer)
-                    else:
-                        logger.warning(f"    Layer '{layer_name}' found by name+ID but is_valid_layer=False!")
-                        QgsMessageLog.logMessage(
-                            f"⚠️ Layer invalid: {layer_name}",
-                            "FilterMate", QgisLevel.Warning
-                        )
-            
-            # Fallback: If not found by name, try by ID only (layer may have been renamed)
-            if not layers:
-                logger.debug(f"    Layer not found by name '{layer_name}', trying by ID...")
-                layer_by_id = self.PROJECT.mapLayer(layer_id)
-                if layer_by_id:
-                    if is_valid_layer(layer_by_id):
-                        layers = [layer_by_id]
-                        try:
-                            logger.info(f"    Found layer by ID (name may have changed to '{layer_by_id.name()}')")
-                            # Update layer_props with current name
-                            layer_props["layer_name"] = layer_by_id.name()
-                        except RuntimeError:
-                            logger.warning(f"    Layer {layer_id} became invalid during access")
-                            layers = []
-                    else:
-                        logger.warning(f"    Layer found by ID but is_valid_layer=False for '{layer_name}'!")
-                        QgsMessageLog.logMessage(
-                            f"⚠️ Layer invalid (by ID): {layer_name}",
-                            "FilterMate", QgisLevel.Warning
-                        )
-                else:
-                    logger.warning(f"    Layer not found by ID: {layer_id[:16]}...")
-            
-            if layers:
-                self.layers[provider_type].append([layers[0], layer_props])
-                self.layers_count += 1
-                logger.info(f"    ✓ Added to filter list (total: {self.layers_count})")
-            else:
-                logger.warning(f"    ⚠️ Layer not found in project: {layer_name} (id: {layer_id})")
-                # FIX v3.0.8: Log to QGIS message panel for visibility
-                QgsMessageLog.logMessage(
-                    f"⚠️ Layer not found: {layer_name} (id: {layer_id[:16]}...)",
-                    "FilterMate", QgisLevel.Warning
-                )
-                # Log all layer IDs in project for debugging
-                all_layer_ids = list(self.PROJECT.mapLayers().keys())
-                logger.debug(f"    Available layer IDs in project: {all_layer_ids[:10]}{'...' if len(all_layer_ids) > 10 else ''}")
-        
-        self.provider_list = list(self.layers.keys())
-        logger.info(f"  📊 Final organized layers count: {self.layers_count}, providers: {self.provider_list}")
-        
-        # FIX v3.0.8: Log organized layers to QGIS message panel for visibility
-        organized_count = sum(len(v) for v in self.layers.values())
-        input_count = len(self.task_parameters['task'].get('layers', []))
-        if organized_count < input_count:
-            QgsMessageLog.logMessage(
-                f"⚠️ Only {organized_count}/{input_count} distant layers found in project!",
-                "FilterMate", QgisLevel.Warning
-            )
-        else:
-            QgsMessageLog.logMessage(
-                f"✓ {organized_count} distant layers organized for filtering",
-                "FilterMate", QgisLevel.Info
-            )
-        
-        if self.layers_count > 0:
-            logger.info(f"  ✓ Layers organized: {[(layer.name(), provider) for provider, layers_list in self.layers.items() for layer, props in layers_list]}")
+        # Update task state from result
+        self.layers = result.layers_by_provider
+        self.layers_count = result.layers_count
+        self.provider_list = result.provider_list
 
     def _queue_subset_string(self, layer, expression):
         """Queue a subset string request for thread-safe application in finished()."""
