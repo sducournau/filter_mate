@@ -71,6 +71,10 @@ from .buffer_service import (
 # NOT exported here - orchestration logic for run() method
 # Import directly: from core.services.task_run_orchestrator import execute_task_run
 
+# EPIC-1 Phase 14.8: CanvasRefreshService
+# NOT exported here - has QGIS dependencies (iface, QgsProject)
+# Import directly: from core.services.canvas_refresh_service import single_canvas_refresh
+
 __all__ = [
     # Expression Service
     'ExpressionService',

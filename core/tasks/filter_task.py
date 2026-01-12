@@ -4213,255 +4213,30 @@ class FilterEngineTask(QgsTask):
         from core.optimization.query_analyzer import is_complex_filter
         return is_complex_filter(subset, provider_type)
 
+
     def _single_canvas_refresh(self):
         """
-        Perform a single comprehensive canvas refresh after filter application.
+        Perform a single comprehensive canvas refresh (v2).
         
-        FIX v2.5.21: Replaces the previous multi-refresh approach that caused
-        overlapping refreshes to cancel each other, leaving the canvas white.
+        PHASE 14.8: Migrated to CanvasRefreshService.
+        Delegates to single_canvas_refresh() for actual refresh logic.
         
-        FIX v2.6.5: PERFORMANCE - Only refresh layers involved in filtering,
-        not ALL project layers. Skip updateExtents() for large layers.
-        
-        FIX v2.9.11: REMOVED stopRendering() for Spatialite/OGR layers
-        For large FID filters (100k+ FIDs), rendering can take 30+ seconds.
-        Calling stopRendering() after the 1500ms delay cancels in-progress
-        rendering, causing "Building features list was canceled" messages
-        and empty/incomplete layer display.
-        
-        This method:
-        1. Checks if only file-based layers are filtered (skip stopRendering)
-        2. Forces reload for layers with complex filters (PostgreSQL only)
-        3. Triggers repaint for filtered layers (skip expensive updateExtents for large layers)
-        4. Performs a single final canvas refresh
+        Extracted 138 lines to core/services/canvas_refresh_service.py (v5.0-alpha).
         """
-        try:
-            from qgis.core import QgsProject
-            
-            canvas = iface.mapCanvas()
-            
-            # v2.9.11: Only stop rendering for PostgreSQL layers
-            # For OGR/Spatialite with large FID filters, stopRendering() cancels
-            # in-progress feature loading, causing incomplete display
-            has_postgres_filtered = False
-            for layer_id, layer in QgsProject.instance().mapLayers().items():
-                try:
-                    if layer.type() == 0 and layer.providerType() == 'postgres':
-                        subset = layer.subsetString() or ''
-                        if subset:
-                            has_postgres_filtered = True
-                            break
-                except Exception:
-                    pass
-            
-            if has_postgres_filtered:
-                # PostgreSQL layers benefit from stopRendering() to clear stale cache
-                canvas.stopRendering()
-                logger.debug("stopRendering() called for PostgreSQL layers")
-            else:
-                # Skip stopRendering() for OGR/Spatialite to avoid canceling feature loading
-                logger.debug("Skipping stopRendering() for file-based layers")
-            
-            layers_reloaded = 0
-            layers_repainted = 0
-            
-            # v2.6.5: Limit expensive operations to prevent UI freeze
-            MAX_FEATURES_FOR_UPDATE_EXTENTS = 50000  # Skip updateExtents for large layers
-            
-            # Step 2: Process only filtered vector layers (not ALL layers)
-            for layer_id, layer in QgsProject.instance().mapLayers().items():
-                try:
-                    if layer.type() != 0:  # Not a vector layer
-                        continue
-                    
-                    subset = layer.subsetString() or ''
-                    if not subset:
-                        continue  # Skip unfiltered layers - MAJOR OPTIMIZATION
-                    
-                    provider_type = layer.providerType()
-                    
-                    # v2.6.6: FREEZE FIX - Only use reloadData() for PostgreSQL
-                    # For OGR/Spatialite, reloadData() can block for a long time
-                    # on large FID IN (...) filters, causing QGIS to freeze.
-                    # triggerRepaint() is sufficient for file-based providers.
-                    # 
-                    # v3.0.10: CRITICAL FIX - Block signals during reload() to prevent
-                    # currentLayerChanged signals from triggering combobox changes
-                    if provider_type == 'postgres':
-                        # PostgreSQL: Force reload for complex filters (MV-based)
-                        if self._is_complex_filter(subset, provider_type):
-                            try:
-                                layer.blockSignals(True)  # v3.0.10: Block async signals
-                                layer.dataProvider().reloadData()
-                                layers_reloaded += 1
-                            except Exception as reload_err:
-                                logger.debug(f"reloadData() failed for {layer.name()}: {reload_err}")
-                                try:
-                                    layer.reload()
-                                except Exception:
-                                    pass
-                            finally:
-                                layer.blockSignals(False)  # v3.0.10: Always unblock
-                        else:
-                            try:
-                                layer.blockSignals(True)  # v3.0.10: Block async signals
-                                layer.reload()
-                            except Exception:
-                                pass
-                            finally:
-                                layer.blockSignals(False)  # v3.0.10: Always unblock
-                    # v2.9.24: For Spatialite, use reload() to ensure features display correctly on second filter
-                    # For OGR without FID filters, just triggerRepaint() is enough
-                    elif provider_type == 'spatialite':
-                        try:
-                            layer.blockSignals(True)  # v3.0.10: Block async signals
-                            layer.reload()
-                            layers_reloaded += 1
-                            logger.debug(f"Forced reload() for Spatialite layer {layer.name()}")
-                        except Exception as reload_err:
-                            logger.debug(f"reload() failed for {layer.name()}: {reload_err}")
-                        finally:
-                            layer.blockSignals(False)  # v3.0.10: Always unblock
-                    # v2.6.6: For OGR, just triggerRepaint() - NO reloadData()
-                    # This prevents the freeze caused by re-evaluating large FID IN filters
-                    
-                    # v2.6.5: Skip updateExtents for large layers to prevent freeze
-                    # v3.0.10: Also protect against None feature_count
-                    feature_count = layer.featureCount()
-                    if feature_count is not None and feature_count >= 0 and feature_count < MAX_FEATURES_FOR_UPDATE_EXTENTS:
-                        layer.updateExtents()
-                    # else: skip expensive updateExtents for very large layers or unknown count
-                    
-                    layer.triggerRepaint()
-                    layers_repainted += 1
-                    
-                except Exception as layer_err:
-                    logger.debug(f"Layer refresh failed: {layer_err}")
-            
-            # Step 3: Single final canvas refresh
-            canvas.refresh()
-            
-            logger.debug(f"Single canvas refresh: reloaded {layers_reloaded}, repainted {layers_repainted} layers")
-            
-        except Exception as e:
-            logger.debug(f"Single canvas refresh failed: {e}")
-            # Last resort fallback
-            try:
-                iface.mapCanvas().refresh()
-            except Exception:
-                pass
+        from core.services.canvas_refresh_service import single_canvas_refresh
+        single_canvas_refresh()
 
     def _delayed_canvas_refresh(self):
         """
-        Perform a delayed canvas refresh for all filtered layers.
+        Perform a delayed canvas refresh (v2).
         
-        FIX v2.5.15: This is called via QTimer.singleShot after the initial
-        refresh to allow providers to complete their data fetch.
-        Using a timer avoids blocking the main thread while still ensuring
-        the canvas is properly updated.
+        PHASE 14.8: Migrated to CanvasRefreshService.
+        Delegates to delayed_canvas_refresh() for actual refresh logic.
         
-        FIX v2.5.11: Also force updateExtents for all visible layers to fix
-        display issues with complex spatial queries (e.g., buffered EXISTS).
-        
-        FIX v2.5.19: Force aggressive reload for layers with complex filters
-        (EXISTS, ST_Buffer, IN clauses, etc.) to ensure data provider cache is cleared.
-        This fixes display issues after multi-step filtering with spatial predicates.
-        
-        FIX v2.5.20: Extended support for Spatialite and OGR layers with complex filters.
-        - Spatialite: ST_*, Intersects, Contains, Within functions
-        - OGR: IN clause with many IDs (typical for selectbylocation results)
+        Extracted 112 lines to core/services/canvas_refresh_service.py (v5.0-alpha).
         """
-        try:
-            from qgis.core import QgsProject
-            
-            layers_refreshed = {
-                'postgres': 0,
-                'spatialite': 0,
-                'ogr': 0,
-                'other': 0
-            }
-            
-            # v2.6.6: Skip updateExtents for large layers to prevent freeze
-            MAX_FEATURES_FOR_UPDATE_EXTENTS = 50000
-            
-            for layer_id, layer in QgsProject.instance().mapLayers().items():
-                try:
-                    if layer.type() == 0:  # Vector layer
-                        provider_type = layer.providerType()
-                        subset = layer.subsetString() or ''
-                        if not subset:
-                            continue  # Skip unfiltered layers
-                        
-                        subset_upper = subset.upper()
-                        
-                        # v2.6.6: FREEZE FIX - Only use reloadData() for PostgreSQL
-                        # For OGR/Spatialite, reloadData() blocks on large FID IN filters
-                        if provider_type == 'postgres':
-                            # PostgreSQL: EXISTS, ST_*, __source
-                            has_complex_filter = (
-                                'EXISTS' in subset_upper or
-                                'ST_BUFFER' in subset_upper or
-                                'ST_INTERSECTS' in subset_upper or
-                                'ST_CONTAINS' in subset_upper or
-                                'ST_WITHIN' in subset_upper or
-                                '__source' in subset.lower() or
-                                # Large IN clause (> 100 IDs)
-                                (subset_upper.count(',') > 100 and ' IN (' in subset_upper)
-                            )
-                            
-                            if has_complex_filter:
-                                try:
-                                    # CRIT-005 FIX: Block signals during reload to prevent
-                                    # currentLayerChanged emissions that cause combobox reset
-                                    layer.blockSignals(True)
-                                    layer.dataProvider().reloadData()
-                                    logger.debug(f"  → Forced reloadData() for {layer.name()} (postgres, complex filter)")
-                                except Exception as reload_err:
-                                    logger.debug(f"  → reloadData() failed for {layer.name()}: {reload_err}")
-                                    try:
-                                        layer.reload()
-                                    except Exception:
-                                        pass
-                                finally:
-                                    layer.blockSignals(False)
-                                layers_refreshed['postgres'] += 1
-                            else:
-                                try:
-                                    # CRIT-005 FIX: Block signals during reload
-                                    layer.blockSignals(True)
-                                    layer.reload()
-                                except Exception:
-                                    pass
-                                finally:
-                                    layer.blockSignals(False)
-                        # v2.6.6: For OGR/Spatialite, just triggerRepaint - NO reloadData()
-                        # This prevents freeze on large FID IN filters
-                        
-                        # v2.6.6: Skip updateExtents for large layers to prevent freeze
-                        # v3.0.10: Protect against None feature_count
-                        feature_count = layer.featureCount()
-                        if feature_count is not None and feature_count >= 0 and feature_count < MAX_FEATURES_FOR_UPDATE_EXTENTS:
-                            layer.updateExtents()
-                        layer.triggerRepaint()
-                        
-                except Exception as layer_err:
-                    logger.debug(f"  → Layer refresh failed: {layer_err}")
-            
-            # Final canvas refresh
-            iface.mapCanvas().refresh()
-            
-            # Log summary
-            total_refreshed = sum(layers_refreshed.values())
-            if total_refreshed > 0:
-                refresh_summary = ", ".join(
-                    f"{count} {ptype}" for ptype, count in layers_refreshed.items() if count > 0
-                )
-                logger.debug(f"Delayed canvas refresh: reloaded {refresh_summary} layer(s)")
-            else:
-                logger.debug("Delayed canvas refresh completed")
-                
-        except Exception as e:
-            logger.debug(f"Delayed canvas refresh skipped: {e}")
+        from core.services.canvas_refresh_service import delayed_canvas_refresh
+        delayed_canvas_refresh()
 
     def _final_canvas_refresh(self):
         """
