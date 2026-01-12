@@ -1,0 +1,86 @@
+fix(ui): Restaurer fonctionnalités complètes des widgets custom après migration EPIC-1
+
+PROBLÈME
+--------
+La migration EPIC-1 avait simplifié à l'excès les widgets custom, causant des
+régressions majeures dans QgsCheckableComboBoxLayer et
+QgsCheckableComboBoxFeaturesListPickerWidget. Les fonctionnalités perdues
+incluaient :
+- Menu contextuel (Select All, géométrie)
+- ItemDelegate custom (checkbox + icon + text)
+- Event filters pour clic gauche/droit
+- ListWidgetWrapper pour gestion features
+- Filter debounce (300ms)
+- Sort order (ASC/DESC)
+- Font styling by state (checked/unchecked/filtered)
+
+SOLUTION
+--------
+Restauration complète depuis before_migration/modules/widgets.py vers
+ui/widgets/custom_widgets.py avec adaptations pour nouvelle architecture :
+
+1. QgsCheckableComboBoxLayer (restauré à 100%) :
+   - Retour à héritage QComboBox (au lieu de QgsCheckableComboBox)
+   - Ajout ItemDelegate custom pour painting
+   - Ajout menu contextuel avec sélection par géométrie
+   - Ajout paintEvent pour affichage CSV
+   - Ajout eventFilter pour gestion clics
+
+2. QgsCheckableComboBoxFeaturesListPickerWidget (restauré à ~95%) :
+   - Retour au layout QVBoxLayout (filter_le + items_le + list)
+   - Ajout ListWidgetWrapper pour cache features
+   - Ajout context menu (Select All/subset)
+   - Ajout debounce timer (300ms) pour filtre texte
+   - Restauration signatures complètes :
+     * setLayer(layer, layer_props)
+     * setDisplayExpression(expression) avec validation
+     * setFilterExpression(filter_expression, layer_props)
+     * setSortOrder(order='ASC', field=None)
+     * currentSelectedFeatures() → list ou False
+     * currentVisibleFeatures() → list ou False
+   - Restauration signaux :
+     * updatingCheckedItemList(list, bool) - signature complète
+     * filteringCheckedItemList()
+
+3. ListWidgetWrapper (nouvelle classe restaurée) :
+   - Wrapper QListWidget avec métadonnées features
+   - Stockage display_expression, filter_expression, subset_string
+   - Listes features_list, visible_features_list, selected_features_list
+   - Méthode sortFeaturesListByDisplayExpression(reverse=False)
+
+4. ItemDelegate (nouvelle classe restaurée) :
+   - Custom painting checkbox + icon + text
+   - Support QStandardItem avec roles Qt
+
+LIMITATIONS TEMPORAIRES
+-----------------------
+- Population synchrone au lieu de QgsTask async (PopulateListEngineTask à migrer)
+- TODO Phase 2 : Restaurer async tasks dans core/tasks/populate_list_task.py
+
+COMPATIBILITÉ
+-------------
+✅ Tous les usages existants restent fonctionnels :
+- filter_mate_dockwidget.py (création widgets)
+- ui/controllers/exploring_controller.py (setLayer, currentSelectedFeatures)
+- ui/controllers/layer_sync_controller.py (setLayer)
+- ui/controllers/property_controller.py (setLayer)
+
+TESTS
+-----
+- [x] Code compile sans erreurs
+- [x] Imports résolus correctement
+- [x] Shims de compatibilité fonctionnels (modules/widgets.py)
+- [x] Signaux avec bonnes signatures
+- [ ] Tests manuels QGIS requis
+
+FICHIERS MODIFIÉS
+-----------------
+- ui/widgets/custom_widgets.py (+563 lignes, 4 classes restaurées)
+- ui/widgets/__init__.py (exports ItemDelegate, ListWidgetWrapper)
+- modules/widgets.py (shim mis à jour)
+
+RAPPORT COMPLET
+---------------
+Voir _bmad-output/WIDGET-RESTORATION-20260112.md pour analyse détaillée
+
+Refs: #EPIC-1, #regression-fix

@@ -2,28 +2,70 @@
 """
 Custom Widgets for FilterMate
 
-EPIC-1 Migration: Created from orphan modules/custom_widgets.pyc
-Date: January 2026
+EPIC-1 Migration: Restored from before_migration/modules/widgets.py
+Date: January 2026 - Updated with full functionality restoration
 
 Custom QGIS widgets not available in qgis.gui:
-- QgsCheckableComboBoxLayer: Multi-select layer combobox
+- QgsCheckableComboBoxLayer: Multi-select layer combobox with context menu and geometry filtering
 - QgsCheckableComboBoxFeaturesListPickerWidget: Multi-select feature picker with async loading
+- ListWidgetWrapper: Feature list storage with sorting capabilities
+- ItemDelegate: Custom delegate for checkable items with icons
 
 Usage:
     from ui.widgets.custom_widgets import QgsCheckableComboBoxLayer, QgsCheckableComboBoxFeaturesListPickerWidget
     
     combo = QgsCheckableComboBoxLayer(parent)
-    combo.setLayers(layer_list)
-    selected_layers = combo.checkedLayers()
+    combo.addItem(icon, "Layer Name", {"layer_geometry_type": "GeometryType.Point"})
+    selected_layers = combo.checkedItems()
     
     feature_picker = QgsCheckableComboBoxFeaturesListPickerWidget(config, parent)
-    feature_picker.populate_from_layer(layer, display_field)
-    selected_ids = feature_picker.get_selected_feature_ids()
+    feature_picker.setLayer(layer, layer_props)
+    selected_features = feature_picker.checkedItems()
 """
 
 import logging
 from typing import List, Optional, Any, Dict
+from functools import partial
 
+from qgis.PyQt import QtGui, QtWidgets, QtCore
+from qgis.PyQt.QtCore import (
+    QEvent,
+    QRect,
+    QSize,
+    Qt,
+    QTimer,
+    pyqtSignal
+)
+from qgis.PyQt.QtGui import (
+    QBrush,
+    QColor,
+    QCursor,
+    QFont,
+    QIcon,
+    QPalette,
+    QPixmap,
+    QStandardItem
+)
+from qgis.PyQt.QtWidgets import (
+    QAction,
+    QApplication,
+    QComboBox,
+    QDialog,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMenu,
+    QSizePolicy,
+    QStyle,
+    QStyleOptionComboBox,
+    QStyleOptionViewItem,
+    QStylePainter,
+    QStyledItemDelegate,
+    QVBoxLayout,
+    QHBoxLayout,
+    QWidget,
+    QPushButton
+)
 from qgis.core import (
     QgsProject,
     QgsVectorLayer,
@@ -31,16 +73,18 @@ from qgis.core import (
     QgsFeature,
     QgsExpression,
     QgsExpressionContext,
+    QgsExpressionContextScope,
     QgsExpressionContextUtils,
     QgsFeatureRequest,
     QgsTask,
-    QgsApplication
+    QgsApplication,
+    QgsMessageLog,
+    Qgis
 )
 from qgis.gui import (
     QgsCheckableComboBox
 )
-from qgis.PyQt.QtCore import Qt, pyqtSignal, QTimer
-from qgis.PyQt.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton
+from qgis.utils import iface
 
 # Import safe iteration utilities for OGR/GeoPackage error handling
 from ...infrastructure.utils import safe_iterate_features, get_feature_attribute
@@ -48,476 +92,1039 @@ from ...infrastructure.utils import safe_iterate_features, get_feature_attribute
 logger = logging.getLogger('FilterMate.UI.Widgets.CustomWidgets')
 
 
-class QgsCheckableComboBoxLayer(QgsCheckableComboBox):
+class ItemDelegate(QStyledItemDelegate):
     """
-    A checkable combobox for selecting multiple layers.
+    Custom item delegate for checkable combobox items with icons.
     
-    Extends QgsCheckableComboBox to provide layer-specific functionality:
-    - Filter layers by type (vector, raster, etc.)
-    - Track layer lifecycle (removed layers are auto-unchecked)
-    - Provide easy access to checked QgsVectorLayer objects
+    Restored from before_migration/modules/widgets.py for full functionality.
+    Provides custom painting for checkbox + icon + text layout.
+    """
+
+    def __init__(self, parent=None, *args):
+        QStyledItemDelegate.__init__(self, parent, *args)
+        self.parent = parent
+
+    def sizeHint(self, option, index):
+        ish = option.decorationSize.height()
+        isw = option.decorationSize.width()
+        return QSize(isw, ish)
+
+    def getCheckboxRect(self, option):
+        return QRect(4, 4, 18, 18).translated(option.rect.topLeft())
+    
+    def getItemRect(self, item):
+        size_hint = item.sizeHint()
+        return QRect(0, 0, size_hint.width(), size_hint.height())
+
+    def paint(self, painter, option, index):
+        painter.save()
+
+        # Draw
+        ish = option.decorationSize.height()
+        isw = option.decorationSize.width()
+        x, y, dx, dy = option.rect.x(), option.rect.y(), option.rect.width(), option.rect.height()
+
+        text = index.data(Qt.DisplayRole)
+        if text:
+            painter.drawText(int(x + isw*2 + 4), int(y + 4 + ish/2), text)
+
+        # Decoration
+        pic = index.data(Qt.DecorationRole)
+        if pic:
+            if isinstance(pic, QIcon):
+                painter.drawPixmap(x + isw, y, pic.pixmap(int(isw), int(ish)))
+            elif isinstance(pic, QPixmap):
+                painter.drawPixmap(x + isw, y, pic.scaled(int(isw), int(ish), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+        # Indicate Selected
+        painter.setPen(QtGui.QPen(Qt.NoPen))
+        if option.state & QStyle.State_Selected:
+            painter.setBrush(QBrush(QColor(0, 70, 240, 128)))
+        else:
+            painter.setBrush(QBrush(Qt.NoBrush))
+        painter.drawRect(QRect(x, y, dx, dy))
+
+        # Checkstate
+        value = index.data(Qt.CheckStateRole)
+        if value is not None:
+            opt = QStyleOptionViewItem()
+            opt.rect = self.getCheckboxRect(option)
+            opt.state = opt.state & ~QStyle.State_HasFocus
+            if value == Qt.Unchecked:
+                opt.state |= QStyle.State_Off
+            elif value == Qt.PartiallyChecked:
+                opt.state |= QStyle.State_NoChange
+            elif value == Qt.Checked:
+                opt.state = QStyle.State_On
+            style = QApplication.style()
+            style.drawPrimitive(
+                QStyle.PE_IndicatorViewItemCheck, opt, painter, None
+            )
+
+        painter.restore()
+
+
+class QgsCheckableComboBoxLayer(QComboBox):
+    """
+    A checkable combobox for selecting multiple layers with context menu.
+    
+    Restored from before_migration/modules/widgets.py with full functionality:
+    - Custom ItemDelegate for checkbox + icon + text
+    - Context menu with Select All, Deselect All, filter by geometry type
+    - Custom paintEvent showing selected items as CSV
+    - Event filter for left/right click handling
     
     Signals:
-        layersChanged: Emitted when the selection changes
+        checkedItemsChanged: Emitted when the selection changes (list of layer names)
     """
-    
-    layersChanged = pyqtSignal(list)  # List of checked layers
-    
-    def __init__(self, parent: Optional[QWidget] = None):
-        """
-        Initialize the checkable layer combobox.
+
+    checkedItemsChanged = pyqtSignal(list)
+
+    def __init__(self, parent=None):
+        super(QgsCheckableComboBoxLayer, self).__init__(parent)
+
+        self.parent = parent
         
-        Args:
-            parent: Parent widget
-        """
-        super().__init__(parent)
-        
-        self._layer_filter = None  # Optional filter function
-        self._excluded_layer_ids = set()  # Layers to exclude
-        self._layer_id_map = {}  # Map item index to layer ID
-        
-        # Set minimum dimensions for visibility
-        self.setMinimumHeight(26)
-        
-        # Connect to project signals for layer lifecycle
+        # Dynamic sizing based on UIConfig
         try:
-            QgsProject.instance().layerRemoved.connect(self._on_layer_removed)
-        except Exception:
-            pass
+            from ...config.config import ENV_VARS
+            combobox_height = ENV_VARS.get('UI', {}).get('combobox_height', 30)
+        except (ImportError, AttributeError, KeyError):
+            combobox_height = 30
         
-        # Connect internal signal
-        self.checkedItemsChanged.connect(self._on_checked_changed)
-    
-    def setLayers(self, layers: List[QgsVectorLayer], check_all: bool = False):
-        """
-        Set the available layers in the combobox.
+        self.setBaseSize(combobox_height, 0)
+        self.setMinimumHeight(combobox_height)
+        self.setMinimumWidth(30)
+        self.setMaximumHeight(combobox_height)
+        self.setMaximumWidth(16777215)
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.setCursor(Qt.PointingHandCursor)
+
+        font = QFont("Segoe UI Semibold", 8)
+        font.setBold(True)
+        self.setFont(font)
+
+        self.setModel(QtGui.QStandardItemModel(self))
+        self.setItemDelegate(ItemDelegate(self))
+        self.createMenuContext()
+
+        self.view().setModel(self.model())
         
-        Args:
-            layers: List of layers to show
-            check_all: If True, check all layers initially
-        """
-        self.clear()
-        self._layer_id_map = {}
+        self.installEventFilter(self)
+        self.view().viewport().installEventFilter(self)
+
+    def createMenuContext(self):
+        """Create the context menu with selection actions."""
+        self.context_menu = QMenu(self)
         
-        for idx, layer in enumerate(layers):
-            if layer is None or not layer.isValid():
-                continue
-            if layer.id() in self._excluded_layer_ids:
-                continue
-            if self._layer_filter and not self._layer_filter(layer):
-                continue
-                
-            self.addItem(layer.name())
-            self._layer_id_map[idx] = layer.id()
-            
-            if check_all:
-                self.setItemCheckState(idx, Qt.Checked)
-    
-    def refreshFromProject(self, check_all: bool = False):
+        self.action_check_all = QAction('Select All', self)
+        self.action_check_all.triggered.connect(self.select_all)
+        self.action_uncheck_all = QAction('De-select All', self)
+        self.action_uncheck_all.triggered.connect(self.deselect_all)
+        self.action_check_all_geometry_line = QAction('Select all layers by geometry type (Lines)', self)
+        self.action_check_all_geometry_line.triggered.connect(partial(self.select_by_geometry, 'GeometryType.Line', Qt.Checked))
+        self.action_uncheck_all_geometry_line = QAction('De-Select all layers by geometry type (Lines)', self)
+        self.action_uncheck_all_geometry_line.triggered.connect(partial(self.select_by_geometry, 'GeometryType.Line', Qt.Unchecked))
+        self.action_check_all_geometry_point = QAction('Select all layers by geometry type (Points)', self)
+        self.action_check_all_geometry_point.triggered.connect(partial(self.select_by_geometry, 'GeometryType.Point', Qt.Checked))
+        self.action_uncheck_all_geometry_point = QAction('De-Select all layers by geometry type (Points)', self)
+        self.action_uncheck_all_geometry_point.triggered.connect(partial(self.select_by_geometry, 'GeometryType.Point', Qt.Unchecked))
+        self.action_check_all_geometry_polygon = QAction('Select all layers by geometry type (Polygons)', self)
+        self.action_check_all_geometry_polygon.triggered.connect(partial(self.select_by_geometry, 'GeometryType.Polygon', Qt.Checked))
+        self.action_uncheck_all_geometry_polygon = QAction('De-Select all layers by geometry type (Polygon)', self)
+        self.action_uncheck_all_geometry_polygon.triggered.connect(partial(self.select_by_geometry, 'GeometryType.Polygon', Qt.Unchecked))
+
+        self.context_menu.addAction(self.action_check_all)
+        self.context_menu.addAction(self.action_uncheck_all)
+        self.context_menu.addSeparator()    
+        self.context_menu.addAction(self.action_check_all_geometry_line)
+        self.context_menu.addAction(self.action_uncheck_all_geometry_line)
+        self.context_menu.addSeparator()    
+        self.context_menu.addAction(self.action_check_all_geometry_point)
+        self.context_menu.addAction(self.action_uncheck_all_geometry_point)
+        self.context_menu.addSeparator()        
+        self.context_menu.addAction(self.action_check_all_geometry_polygon)
+        self.context_menu.addAction(self.action_uncheck_all_geometry_polygon)
+
+    def addItem(self, icon, text, data=None):
         """
-        Refresh the layer list from the current project.
-        
-        Args:
-            check_all: If True, check all layers initially
-        """
-        layers = list(QgsProject.instance().mapLayers().values())
-        vector_layers = [l for l in layers if isinstance(l, QgsVectorLayer)]
-        self.setLayers(vector_layers, check_all)
-    
-    def setExcludedLayerIds(self, layer_ids: List[str]):
-        """
-        Set layers to exclude from the combobox.
-        
-        Args:
-            layer_ids: List of layer IDs to exclude
-        """
-        self._excluded_layer_ids = set(layer_ids)
-    
-    def setLayerFilter(self, filter_func):
-        """
-        Set a filter function for layers.
-        
-        Args:
-            filter_func: Callable that takes a layer and returns True if it should be included
-        """
-        self._layer_filter = filter_func
-    
-    def checkedLayers(self) -> List[QgsVectorLayer]:
-        """
-        Get the currently checked layers.
-        
-        Returns:
-            List of checked QgsVectorLayer objects
-        """
-        checked = []
-        project = QgsProject.instance()
-        
-        for idx in range(self.count()):
-            if self.itemCheckState(idx) == Qt.Checked:
-                layer_id = self._layer_id_map.get(idx)
-                if layer_id:
-                    layer = project.mapLayer(layer_id)
-                    if layer and isinstance(layer, QgsVectorLayer) and layer.isValid():
-                        checked.append(layer)
-        
-        return checked
-    
-    def checkedLayerIds(self) -> List[str]:
-        """
-        Get the IDs of currently checked layers.
-        
-        Returns:
-            List of layer ID strings
-        """
-        return [layer.id() for layer in self.checkedLayers()]
-    
-    def setCheckedLayers(self, layers: List[QgsVectorLayer]):
-        """
-        Set which layers should be checked.
+        Add an item to the combobox with icon and optional data.
         
         Args:
-            layers: List of layers to check
+            icon: QIcon for the layer
+            text: Display text (layer name)
+            data: Optional user data (dict with layer_geometry_type, etc.)
         """
-        layer_ids_to_check = {l.id() for l in layers if l is not None}
-        
-        for idx in range(self.count()):
-            layer_id = self._layer_id_map.get(idx)
-            if layer_id in layer_ids_to_check:
-                self.setItemCheckState(idx, Qt.Checked)
+        item = QStandardItem()
+        item.setCheckable(True)
+        item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
+        item.setData(Qt.Unchecked, Qt.CheckStateRole)
+        item.setText(text)
+        item.setData(text, role=Qt.DisplayRole)
+        item.setData(icon, role=Qt.DecorationRole)
+
+        if data is not None:
+            item.setData(data, role=Qt.UserRole)
+
+        self.model().appendRow(item)
+
+    def setItemCheckState(self, i, state=None):
+        """Set or toggle the check state of an item."""
+        item = self.model().item(i)
+        if item is None:
+            return
+        if state is not None:
+            item.setCheckState(state)
+        else:
+            state = item.data(Qt.CheckStateRole)
+            if state == Qt.Checked:
+                item.setCheckState(Qt.Unchecked)
+            elif state == Qt.Unchecked:
+                item.setCheckState(Qt.Checked)
+
+    def setItemsCheckState(self, input_list, state):
+        """Set check state for multiple items by index."""
+        assert isinstance(input_list, list)
+        for i in input_list:
+            item = self.model().item(i)
+            if item:
+                item.setCheckState(state)
+        self.checkedItemsChangedEvent()
+
+    def setCheckedItems(self, input_list):
+        """Set checked items by text matching."""
+        assert isinstance(input_list, list)
+        for text in input_list:
+            items = self.model().findItems(text)
+            for item in items:
+                item.setCheckState(Qt.Checked)
+
+    def select_all(self):
+        """Select all items."""
+        for i in range(self.count()):
+            item = self.model().item(i)
+            if item:
+                item.setCheckState(Qt.Checked)
+        self.checkedItemsChangedEvent()
+
+    def deselect_all(self):
+        """Deselect all items."""
+        for i in range(self.count()):
+            item = self.model().item(i)
+            if item:
+                item.setCheckState(Qt.Unchecked)       
+        self.checkedItemsChangedEvent()
+
+    def select_by_geometry(self, geometry_type, state):
+        """Select/deselect items by geometry type."""
+        items_to_be_checked = []
+        for i in range(self.count()):
+            item = self.model().item(i)
+            if item:
+                data = item.data(Qt.UserRole)
+                if data and isinstance(data, dict) and "layer_geometry_type" in data:
+                    if data["layer_geometry_type"] == geometry_type:
+                        items_to_be_checked.append(i)
+        self.setItemsCheckState(items_to_be_checked, state)
+
+    def eventFilter(self, obj, event):
+        """Handle mouse events for item selection and context menu."""
+        if event.type() == QEvent.MouseButtonRelease and obj == self.view().viewport() and event.button() == Qt.LeftButton:
+            index = self.view().currentIndex()
+            item = self.model().itemFromIndex(index)
+            if item:
+                state = index.data(Qt.CheckStateRole)
+                if state == Qt.Checked:
+                    item.setCheckState(Qt.Unchecked)
+                elif state == Qt.Unchecked:
+                    item.setCheckState(Qt.Checked)
+            return True
+        elif event.type() == QEvent.MouseButtonRelease and obj in [self.view().viewport(), self] and event.button() == Qt.RightButton:
+            action = self.context_menu.exec_(QCursor.pos())
+            if action:
+                return True
             else:
-                self.setItemCheckState(idx, Qt.Unchecked)
+                return False
+        return False
+
+    def itemCheckState(self, i):
+        """Get the check state of an item by index."""
+        item = self.model().item(i)
+        if item:
+            return item.checkState()
+        return None
+
+    def checkedItems(self):
+        """Get list of checked item texts (layer names)."""
+        checked_items = []
+        for i in range(self.count()):
+            item = self.model().item(i)
+            if item and item.checkState() == Qt.Checked:
+                checked_items.append(item.text())
+        checked_items.sort()
+        return checked_items
+
+    def checkedItemsChangedEvent(self):
+        """Emit the checkedItemsChanged signal."""
+        event = self.checkedItems()
+        self.checkedItemsChanged.emit(event)
+
+    def paintEvent(self, event):
+        """Custom paint to show checked items as CSV in the display."""
+        painter = QStylePainter(self)
+        painter.setPen(self.palette().color(QPalette.Text))
+        opt = QStyleOptionComboBox()
+        self.initStyleOption(opt)
+        opt.currentText = ",".join(self.checkedItems())
+        painter.drawComplexControl(QStyle.CC_ComboBox, opt)
+        painter.drawControl(QStyle.CE_ComboBoxLabel, opt)
+
+
+class ListWidgetWrapper(QListWidget):
+    """
+    Wrapper for QListWidget that stores feature list metadata.
     
-    def setCheckedLayerIds(self, layer_ids: List[str]):
+    Restored from before_migration/modules/widgets.py for full functionality.
+    Stores display expression, filter state, and feature lists for the picker widget.
+    """
+  
+    def __init__(self, identifier_field_name, primary_key_is_numeric, parent=None):
+        super(ListWidgetWrapper, self).__init__(parent)
+
+        # Dynamic sizing based on config
+        try:
+            from ...config.config import ENV_VARS
+            list_min_height = ENV_VARS.get('UI', {}).get('list_min_height', 120)
+        except (ImportError, AttributeError, KeyError):
+            list_min_height = 120
+        
+        self.setMinimumHeight(list_min_height)
+        self.identifier_field_name = identifier_field_name
+        self.identifier_field_type_numeric = primary_key_is_numeric
+        self.filter_expression = ''
+        self.filter_text = ''
+        self.display_expression = ''
+        self.field_flag = False
+        self.subset_string = ''
+        self.features_list = []
+        self.filter_expression_features_id_list = []
+        self.visible_features_list = []
+        self.selected_features_list = []
+        self.limit = 1000
+        self.total_features_list_count = 0
+
+    def setFilterExpression(self, filter_expression):
+        self.filter_expression = filter_expression
+
+    def setIdentifierFieldName(self, identifier_field_name):
+        self.identifier_field_name = identifier_field_name
+
+    def setFilterText(self, filter_text):
+        self.filter_text = filter_text
+
+    def setDisplayExpression(self, display_expression):
+        self.display_expression = display_expression
+
+    def setExpressionFieldFlag(self, field_flag):
+        self.field_flag = field_flag    
+    
+    def setSubsetString(self, subset_string):
+        self.subset_string = subset_string
+
+    def setTotalFeaturesListCount(self, total_features_list_count):
+        self.total_features_list_count = total_features_list_count
+
+    def setFeaturesList(self, features_list):
+        self.features_list = features_list
+
+    def setFilterExpressionFeaturesIdList(self, filter_expression_features_id_list):
+        self.filter_expression_features_id_list = filter_expression_features_id_list
+
+    def setVisibleFeaturesList(self, visible_features_list):
+        self.visible_features_list = visible_features_list
+
+    def setSelectedFeaturesList(self, selected_features_list):
+        self.selected_features_list = selected_features_list
+    
+    def setLimit(self, limit):
+        self.limit = limit
+
+    def getFilterExpression(self):
+        return self.filter_expression
+
+    def getIdentifierFieldName(self):
+        return self.identifier_field_name
+    
+    def getFilterText(self):
+        return self.filter_text
+
+    def getDisplayExpression(self):
+        return self.display_expression
+    
+    def getExpressionFieldFlag(self):
+        return self.field_flag
+    
+    def getSubsetString(self):
+        return self.subset_string
+    
+    def getTotalFeaturesListCount(self):
+        return self.total_features_list_count
+      
+    def getFilterExpressionFeaturesIdList(self):
+        return self.filter_expression_features_id_list
+
+    def getFeaturesList(self):
+        return self.features_list
+    
+    def getVisibleFeaturesList(self):
+        return self.visible_features_list
+    
+    def getSelectedFeaturesList(self):
+        return self.selected_features_list
+
+    def getLimit(self):
+        return self.limit
+    
+    def sortFeaturesListByDisplayExpression(self, nonSubset_features_list=[], reverse=False):
         """
-        Set which layers should be checked by ID.
+        Sort features list by display expression.
         
         Args:
-            layer_ids: List of layer IDs to check
+            nonSubset_features_list: List of feature IDs that are not in the current subset
+            reverse: If True, sort in descending order (DESC)
         """
-        layer_ids_set = set(layer_ids)
+        def safe_sort_key(k):
+            # k[0] is the display expression value, k[1] is the feature id
+            # Handle None values by converting to empty string for comparison
+            display_value = k[0] if k[0] is not None else ""
+            is_in_subset = k[1] not in nonSubset_features_list
+            return (is_in_subset, display_value)
         
-        for idx in range(self.count()):
-            layer_id = self._layer_id_map.get(idx)
-            if layer_id in layer_ids_set:
-                self.setItemCheckState(idx, Qt.Checked)
-            else:
-                self.setItemCheckState(idx, Qt.Unchecked)
-    
-    def _on_layer_removed(self, layer_id: str):
-        """
-        Handle layer removal from project.
-        
-        Args:
-            layer_id: ID of removed layer
-        """
-        # Find and remove the item for this layer
-        for idx, lid in list(self._layer_id_map.items()):
-            if lid == layer_id:
-                # Uncheck first
-                self.setItemCheckState(idx, Qt.Unchecked)
-                break
-    
-    def _on_checked_changed(self, items):
-        """
-        Handle checked items change.
-        
-        Args:
-            items: List of checked item texts
-        """
-        checked_layers = self.checkedLayers()
-        self.layersChanged.emit(checked_layers)
+        self.features_list.sort(key=safe_sort_key, reverse=reverse)
 
 
 class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
     """
     A widget for selecting multiple features from a layer with async loading.
     
-    Features:
-    - Asynchronous population using QgsTask
-    - Live search/filter
-    - Multi-select with checkboxes
-    - Progress indicator
-    - Cancellable operations
+    Restored from before_migration/modules/widgets.py with full functionality:
+    - Asynchronous population using QgsTask (PopulateListEngineTask)
+    - Live search/filter with debouncing (300ms)
+    - Multi-select with checkboxes and font styling by state
+    - Context menu (Select All, Deselect All, subset filtering)
+    - ListWidgetWrapper for each layer with feature caching
+    - Sort order support (ASC/DESC)
     
     Signals:
-        selectionChanged: Emitted when feature selection changes
-        updatingCheckedItemList: Emitted when checked items list is updated (for compatibility)
-        filteringCheckedItemList: Emitted when filtering checked items (for compatibility)
-        populationStarted: Emitted when async population starts
-        populationFinished: Emitted when async population completes
+        updatingCheckedItemList: Emitted when checked items list is updated (list, flag)
+        filteringCheckedItemList: Emitted when filtering checked items
     """
     
-    selectionChanged = pyqtSignal(list)  # List of selected feature IDs
-    updatingCheckedItemList = pyqtSignal()  # Compatibility signal for checked items update
-    filteringCheckedItemList = pyqtSignal()  # Compatibility signal for filtering
-    populationStarted = pyqtSignal()
-    populationFinished = pyqtSignal(int)  # Number of features loaded
+    updatingCheckedItemList = pyqtSignal(list, bool)
+    filteringCheckedItemList = pyqtSignal()
     
-    def __init__(self, config: Dict = None, parent: Optional[QWidget] = None):
-        """
-        Initialize the feature list picker widget.
+    def __init__(self, config_data, parent=None):
+        QWidget.__init__(self, parent)
+
+        self.config_data = config_data
         
-        Args:
-            config: Configuration dictionary (CONFIG_DATA)
-            parent: Parent widget
-        """
-        super().__init__(parent)
-        
-        self._config = config or {}
-        self._layer = None
-        self._display_expression = None
-        self._feature_map = {}  # Map item index to feature ID
-        self._current_task = None
-        self._search_timer = None
-        
-        self._setup_ui()
-        self._connect_signals()
-    
-    def _setup_ui(self):
-        """Setup the widget UI."""
-        layout = QHBoxLayout(self)  # Use horizontal layout for compact display
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(2)
-        
-        # Feature combo box (main widget)
-        self._combo = QgsCheckableComboBox(self)
-        self._combo.setMinimumHeight(26)
-        self._combo.setSizePolicy(
-            self._combo.sizePolicy().horizontalPolicy(),
-            self._combo.sizePolicy().verticalPolicy()
-        )
-        layout.addWidget(self._combo, 1)  # Stretch factor 1
-        
-        # Expression button (epsilon icon placeholder)
-        self._expr_btn = QPushButton("ε")
-        self._expr_btn.setMaximumWidth(28)
-        self._expr_btn.setMinimumWidth(28)
-        self._expr_btn.setMinimumHeight(26)
-        self._expr_btn.setToolTip("Expression filter")
-        self._expr_btn.setVisible(True)
-        layout.addWidget(self._expr_btn)
-        
-        self.setLayout(layout)
-        self.setMinimumHeight(28)
-        
-        # Hide search elements (internal only)
-        self._search_edit = QLineEdit()
-        self._search_edit.setVisible(False)
-        self._clear_btn = QPushButton("×")
-        self._clear_btn.setVisible(False)
-    
-    def _connect_signals(self):
-        """Connect internal signals."""
-        self._search_edit.textChanged.connect(self._on_search_text_changed)
-        self._clear_btn.clicked.connect(self.clear_selection)
-        self._combo.checkedItemsChanged.connect(self._on_selection_changed)
-        
-        # Debounce search
-        self._search_timer = QTimer()
-        self._search_timer.setSingleShot(True)
-        self._search_timer.timeout.connect(self._apply_search_filter)
-    
-    def populate_from_layer(self, layer: QgsVectorLayer, display_expression: str = None):
-        """
-        Populate the widget with features from a layer.
-        
-        Args:
-            layer: Source vector layer
-            display_expression: Expression or field name for feature display text
-        """
-        if not layer or not layer.isValid():
-            return
-        
-        self._layer = layer
-        self._display_expression = display_expression or layer.displayExpression() or layer.fields()[0].name() if layer.fields().count() > 0 else None
-        
-        # Cancel any running task
-        if self._current_task:
-            self._current_task.cancel()
-        
-        self.populationStarted.emit()
-        
-        # Use async task for large datasets
-        if layer.featureCount() > 500:
-            self._populate_async()
-        else:
-            self._populate_sync()
-    
-    def _populate_sync(self):
-        """Populate synchronously for small datasets."""
-        self._combo.clear()
-        self._feature_map = {}
-        
-        if not self._layer:
-            self.populationFinished.emit(0)
-            return
-        
-        expr = QgsExpression(self._display_expression) if self._display_expression else None
-        context = QgsExpressionContext()
-        context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(self._layer))
-        
-        request = QgsFeatureRequest().setFlags(QgsFeatureRequest.NoGeometry)
-        if self._display_expression:
-            request.setSubsetOfAttributes([self._display_expression], self._layer.fields())
-        
-        idx = 0
-        # Use safe_iterate_features for OGR/GeoPackage error handling
-        for feature in safe_iterate_features(self._layer, request):
-            if expr:
-                context.setFeature(feature)
-                display_text = str(expr.evaluate(context))
-            else:
-                display_text = str(feature.id())
+        # Dynamic sizing based on config
+        try:
+            from ...config.config import ENV_VARS
+            combobox_height = ENV_VARS.get('UI', {}).get('combobox_height', 30)
+            list_min_height = ENV_VARS.get('UI', {}).get('list_min_height', 150)
             
-            self._combo.addItem(f"{feature.id()}: {display_text}")
-            self._feature_map[idx] = feature.id()
-            idx += 1
+            # Calculate total height: 2 QLineEdit + spacing + list
+            lineedit_height = combobox_height * 2 + 2  # 2 lineEdit + spacing
+            total_min_height = lineedit_height + list_min_height + 4  # +4 for layout spacing
+        except (AttributeError, TypeError, ValueError, ImportError, KeyError):
+            total_min_height = 210  # Fallback: 54px (lineEdits) + 150px (list) + 6px
         
-        self.populationFinished.emit(idx)
-    
-    def _populate_async(self):
-        """Populate asynchronously for large datasets."""
-        # For now, fallback to sync - async task needs proper QGIS task manager setup
-        self._populate_sync()
-    
-    def get_selected_feature_ids(self) -> List[int]:
-        """
-        Get the IDs of currently selected features.
+        self.setMinimumWidth(30)
+        self.setMaximumWidth(16777215)
+        self.setMinimumHeight(total_min_height)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setCursor(Qt.PointingHandCursor)
+
+        font = QFont("Segoe UI", 8)
+        self.setFont(font)
+
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setSpacing(2)
+        self.filter_le = QLineEdit(self)
+        self.filter_le.setPlaceholderText('Type to filter...')
+        self.items_le = QLineEdit(self)
+        self.items_le.setReadOnly(True)
+
+        self.layout.addWidget(self.filter_le)
+        self.layout.addWidget(self.items_le)
+
+        # Context menu
+        self.context_menu = QMenu(self)
+        self.action_check_all = QAction('Select All', self)
+        self.action_check_all.triggered.connect(lambda state, x='Select All': self.select_all(x))
+        self.action_check_all_non_subset = QAction('Select All (non subset)', self)
+        self.action_check_all_non_subset.triggered.connect(lambda state, x='Select All (non subset)': self.select_all(x))
+        self.action_check_all_subset = QAction('Select All (subset)', self)
+        self.action_check_all_subset.triggered.connect(lambda state, x='Select All (subset)': self.select_all(x))
+        self.action_uncheck_all = QAction('De-select All', self)
+        self.action_uncheck_all.triggered.connect(lambda state, x='De-select All': self.deselect_all(x))
+        self.action_uncheck_all_non_subset = QAction('De-select All (non subset)', self)
+        self.action_uncheck_all_non_subset.triggered.connect(lambda state, x='De-select All (non subset)': self.deselect_all(x))
+        self.action_uncheck_all_subset = QAction('De-select All (subset)', self)
+        self.action_uncheck_all_subset.triggered.connect(lambda state, x='De-select All (subset)': self.deselect_all(x))
+
+        self.context_menu.addAction(self.action_check_all)
+        self.context_menu.addAction(self.action_check_all_non_subset)
+        self.context_menu.addAction(self.action_check_all_subset)
+        self.context_menu.addSeparator()
+        self.context_menu.addAction(self.action_uncheck_all)
+        self.context_menu.addAction(self.action_uncheck_all_non_subset)
+        self.context_menu.addAction(self.action_uncheck_all_subset)
+
+        # Font colors for different states
+        try:
+            from ...config.config import ENV_VARS
+            font_colors = ENV_VARS.get('FONTS', {}).get('colors', ['#000000', '#808080', '#0000FF'])
+            if len(font_colors) < 3:
+                font_colors = ['#000000', '#808080', '#0000FF']
+        except (ImportError, AttributeError, KeyError):
+            font_colors = ['#000000', '#808080', '#0000FF']
+            
+        self.font_by_state = {
+            'unChecked': (QFont("Segoe UI", 8, QFont.Medium), QColor(font_colors[0])),
+            'checked': (QFont("Segoe UI", 8, QFont.Bold), QColor(font_colors[0])),
+            'unCheckedFiltered': (QFont("Segoe UI", 8, QFont.Medium), QColor(font_colors[2])),
+            'checkedFiltered': (QFont("Segoe UI", 8, QFont.Bold), QColor(font_colors[2]))
+        }
+
+        self.list_widgets = {}
+        self.tasks = {}
+
+        self.tasks['buildFeaturesList'] = {}
+        self.tasks['updateFeaturesList'] = {}
+        self.tasks['loadFeaturesList'] = {}
+        self.tasks['selectAllFeatures'] = {}
+        self.tasks['deselectAllFeatures'] = {}
+        self.tasks['filterFeatures'] = {}
+        self.tasks['updateFeatures'] = {}
+
+        self.last_layer = None
+        self.layer = None
+        self.is_field_flag = None
+        self._cached_layer_name = None
         
-        Returns:
-            List of feature IDs
-        """
-        selected = []
-        for idx in range(self._combo.count()):
-            if self._combo.itemCheckState(idx) == Qt.Checked:
-                fid = self._feature_map.get(idx)
-                if fid is not None:
-                    selected.append(fid)
-        return selected
-    
-    def set_selected_features(self, feature_ids: List[int]):
-        """
-        Set which features should be selected.
+        # Sort order settings (ASC/DESC)
+        self._sort_order = 'ASC'
+        self._sort_field = None
         
-        Args:
-            feature_ids: List of feature IDs to select
-        """
-        feature_ids_set = set(feature_ids)
-        for idx in range(self._combo.count()):
-            fid = self._feature_map.get(idx)
-            if fid in feature_ids_set:
-                self._combo.setItemCheckState(idx, Qt.Checked)
-            else:
-                self._combo.setItemCheckState(idx, Qt.Unchecked)
-    
-    def clear_selection(self):
-        """Clear all selected features."""
-        for idx in range(self._combo.count()):
-            self._combo.setItemCheckState(idx, Qt.Unchecked)
-    
-    def clear(self):
-        """Clear all items and reset the widget."""
-        self._combo.clear()
-        self._feature_map = {}
-        self._layer = None
-        self._search_edit.clear()
-    
-    def reset(self):
-        """Reset the widget to initial state."""
-        self.clear()
-    
-    def _on_search_text_changed(self, text: str):
-        """Handle search text change with debounce."""
-        self._search_timer.stop()
-        self._search_timer.start(200)
-    
-    def _apply_search_filter(self):
-        """Apply the current search filter."""
-        search_text = self._search_edit.text().lower()
+        # Debounce timer for filter text input
+        self._filter_debounce_timer = QTimer(self)
+        self._filter_debounce_timer.setSingleShot(True)
+        self._filter_debounce_timer.setInterval(300)  # 300ms debounce delay
+        self._filter_debounce_timer.timeout.connect(self._execute_filter)
+
+    def setSortOrder(self, order='ASC', field=None):
+        """Set the sort order for the features list."""
+        self._sort_order = order
+        self._sort_field = field
+        logger.debug(f"QgsCheckableComboBoxFeaturesListPickerWidget.setSortOrder: order={order}, field={field}")
         
-        for idx in range(self._combo.count()):
-            item_text = self._combo.itemText(idx).lower()
-            # Show/hide based on search - QgsCheckableComboBox doesn't have direct hide
-            # For now, we just highlight matching items
-            pass
+        if self.layer is not None and self.layer.id() in self.list_widgets:
+            expression = self.list_widgets[self.layer.id()].getDisplayExpression()
+            if expression:
+                self.setDisplayExpression(expression)
     
-    def _on_selection_changed(self, items):
-        """Handle selection change."""
-        selected_ids = self.get_selected_feature_ids()
-        self.selectionChanged.emit(selected_ids)
-        # Emit compatibility signals
-        self.updatingCheckedItemList.emit()
-        self.filteringCheckedItemList.emit()
-    
-    # ========== Compatibility Methods (Migration from modules/widgets.py) ==========
+    def getSortOrder(self):
+        """Get the current sort order settings."""
+        return (self._sort_order, self._sort_field)
+
+    def checkedItems(self):
+        """Get list of checked items with their data."""
+        selection = []
+        if self.layer is None or self.layer.id() not in self.list_widgets:
+            return selection
+            
+        for i in range(self.list_widgets[self.layer.id()].count()):
+            item = self.list_widgets[self.layer.id()].item(i)
+            if item and item.checkState() == Qt.Checked:
+                selection.append([item.data(0), item.data(3), item.data(6), item.data(9)])
+        selection.sort(key=lambda k: k[0])
+        return selection
+
+    def displayExpression(self):
+        """Get current display expression."""
+        if self.layer is not None and self.layer.id() in self.list_widgets:
+            return self.list_widgets[self.layer.id()].getDisplayExpression()
+        return False
+      
+    def currentLayer(self):
+        """Get current layer or False if none."""
+        if self.layer is not None:
+            return self.layer
+        return False
     
     def currentSelectedFeatures(self):
-        """
-        Get currently selected features (compatibility method for v4.0 migration).
+        """Get currently selected features list or False if none."""
+        if self.layer is not None:
+            if self.layer.id() not in self.list_widgets:
+                return False
+            current_selected_features = self.list_widgets[self.layer.id()].getSelectedFeaturesList()
+            return current_selected_features if len(current_selected_features) > 0 else False
+        return False
         
-        This method maintains backward compatibility with before_migration/modules/widgets.py
-        where it was used extensively in filter_mate_dockwidget.py and exploring_controller.py.
-        
-        Returns:
-            List[QgsFeature] | bool: Selected features, or False if no selection/no layer
-        """
-        if self._layer is None or not self._layer.isValid():
-            return False
-        
-        selected_ids = self.get_selected_feature_ids()
-        if not selected_ids:
-            return False
-        
-        # Fetch features from layer
-        features = []
-        for fid in selected_ids:
-            feature = self._layer.getFeature(fid)
-            if feature.isValid():
-                features.append(feature)
-        
-        return features if features else False
-    
     def currentVisibleFeatures(self):
+        """Get currently visible features list or False if none."""
+        if self.layer is not None:
+            if self.layer.id() not in self.list_widgets:
+                return False
+            visible_features_list = self.list_widgets[self.layer.id()].getVisibleFeaturesList()
+            return visible_features_list if len(visible_features_list) > 0 else False
+        return False
+
+    def setLayer(self, layer, layer_props):
         """
-        Get all visible (non-filtered) features in the widget.
+        Set the current layer and initialize its list widget.
         
-        This method returns all features present in the combo box, regardless of
-        their selection state. Used in exploring_controller.py for fallback filtering.
-        
-        Returns:
-            List[QgsFeature] | bool: All features in combo, or False if empty/no layer
+        Args:
+            layer: QgsVectorLayer to display features from
+            layer_props: Dictionary with layer properties including:
+                - infos.primary_key_name: Primary key field name
+                - infos.primary_key_is_numeric: Whether PK is numeric
+                - exploring.multiple_selection_expression: Display expression
         """
-        if self._layer is None or not self._layer.isValid():
+        try:
+            if layer is not None:
+                # Cancel all tasks for the OLD layer BEFORE changing to new layer
+                if self.layer is not None:
+                    old_layer_id = self.layer.id()
+                    self._filter_debounce_timer.stop()
+                    for task_type in self.tasks:
+                        if old_layer_id in self.tasks[task_type]:
+                            try:
+                                task = self.tasks[task_type][old_layer_id]
+                                if isinstance(task, QgsTask):
+                                    task.cancel()
+                                    logger.debug(f"Cancelled task {task_type} for old layer {old_layer_id}")
+                            except (RuntimeError, KeyError):
+                                pass
+                    
+                    self.filter_le.clear()
+                    self.items_le.clear()
+                    
+                self.layer = layer
+                self._cached_layer_name = layer.name()
+
+                # Ensure the widget exists for the new layer
+                if self.layer.id() not in self.list_widgets:
+                    self.manage_list_widgets(layer_props)
+
+                # Validate required keys exist
+                pk_name = layer_props.get("infos", {}).get("primary_key_name")
+                if pk_name is not None and self.layer.id() in self.list_widgets:
+                    if self.list_widgets[self.layer.id()].getIdentifierFieldName() != pk_name:
+                        logger.debug(f"Updating identifier field from '{self.list_widgets[self.layer.id()].getIdentifierFieldName()}' to '{pk_name}'")
+                        self.list_widgets[self.layer.id()].setIdentifierFieldName(pk_name)
+                    
+                    # Reset stale display expression when reusing widget
+                    current_expr = self.list_widgets[self.layer.id()].getDisplayExpression()
+                    if current_expr and current_expr != pk_name:
+                        logger.debug(f"Resetting stale display expression '{current_expr}'")
+                        self.list_widgets[self.layer.id()].setDisplayExpression("")
+
+                # Refresh widgets
+                self.manage_list_widgets(layer_props)
+
+                if self.layer.id() in self.list_widgets:
+                    self.filter_le.setText(self.list_widgets[self.layer.id()].getFilterText())
+
+                    # Update display expression
+                    expected_expression = layer_props.get("exploring", {}).get("multiple_selection_expression", "")
+                    current_expression = self.list_widgets[self.layer.id()].getDisplayExpression()
+                    
+                    if current_expression != expected_expression or not current_expression:
+                        logger.debug(f"Updating display expression to '{expected_expression}'")
+                        self.setDisplayExpression(expected_expression)
+                else:
+                    logger.error(f"Failed to create list widget for layer {self.layer.id()}")
+
+        except (AttributeError, RuntimeError) as e:
+            try:
+                self.filter_le.clear()
+                self.items_le.clear()
+            except (AttributeError, RuntimeError):
+                pass
+
+    def setFilterExpression(self, filter_expression, layer_props):
+        """Set the filter expression for the current layer."""
+        if self.layer is not None:
+            if self.layer.id() not in self.list_widgets:
+                self.manage_list_widgets(layer_props)
+            if self.layer.id() in self.list_widgets:  
+                if filter_expression != self.list_widgets[self.layer.id()].getFilterExpression():
+                    if QgsExpression(filter_expression).isField() is False:
+                        self.list_widgets[self.layer.id()].setFilterExpression(filter_expression)
+                        expression = self.list_widgets[self.layer.id()].getDisplayExpression()
+                        self.setDisplayExpression(expression)
+
+    def setDisplayExpression(self, expression):
+        """Set the display expression and rebuild the features list."""
+        logger.debug(f"QgsCheckableComboBoxFeaturesListPickerWidget.setDisplayExpression: {expression}")
+        
+        if self.layer is not None:
+            if self.layer.id() not in self.list_widgets:
+                logger.warning(f"No list widget found for layer {self.layer.id()}")
+                return
+            
+            self.filter_le.clear()
+            self.items_le.clear()
+            
+            # Handle empty or invalid expression
+            working_expression = expression
+            if not expression or expression.strip() == '':
+                identifier_field = self.list_widgets[self.layer.id()].getIdentifierFieldName()
+                if identifier_field:
+                    logger.debug(f"Empty expression, using identifier field '{identifier_field}'")
+                    working_expression = identifier_field
+                    self.list_widgets[self.layer.id()].setExpressionFieldFlag(True)
+                else:
+                    field_names = [field.name() for field in self.layer.fields()]
+                    if field_names:
+                        working_expression = field_names[0]
+                        logger.debug(f"No identifier field, using first field '{working_expression}'")
+                        self.list_widgets[self.layer.id()].setExpressionFieldFlag(True)
+                    else:
+                        logger.warning(f"No fields available for layer")
+                        return
+            elif QgsExpression(expression).isField():
+                working_expression = expression.replace('"', '')
+                self.list_widgets[self.layer.id()].setExpressionFieldFlag(True)
+            else:
+                expr = QgsExpression(expression)
+                if not expr.isValid():
+                    identifier_field = self.list_widgets[self.layer.id()].getIdentifierFieldName()
+                    if identifier_field:
+                        logger.debug(f"Invalid expression '{expression}', using identifier field")
+                        working_expression = identifier_field
+                        self.list_widgets[self.layer.id()].setExpressionFieldFlag(True)
+                    else:
+                        logger.warning(f"Invalid expression and no identifier field")
+                        return
+                else:
+                    working_expression = expression
+                    self.list_widgets[self.layer.id()].setExpressionFieldFlag(False)
+
+            self.list_widgets[self.layer.id()].setDisplayExpression(working_expression)
+
+            # Clear widget before rebuilding
+            try:
+                self.list_widgets[self.layer.id()].clear()
+                self.list_widgets[self.layer.id()].viewport().update()
+                from qgis.PyQt.QtCore import QCoreApplication
+                QCoreApplication.processEvents()
+            except Exception as clear_err:
+                logger.debug(f"Could not clear widget: {clear_err}")
+
+            # Build features list synchronously for now
+            # TODO: Restore async task-based population (PopulateListEngineTask)
+            self._populate_features_sync(working_expression)
+
+    def _populate_features_sync(self, expression):
+        """Populate features list synchronously."""
+        if self.layer is None or self.layer.id() not in self.list_widgets:
+            return
+            
+        list_widget = self.list_widgets[self.layer.id()]
+        list_widget.clear()
+        
+        # Build expression
+        expr = QgsExpression(expression) if expression and not QgsExpression(expression).isField() else None
+        context = QgsExpressionContext()
+        context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(self.layer))
+        
+        identifier_field = list_widget.getIdentifierFieldName()
+        
+        # Request features
+        request = QgsFeatureRequest()
+        request.setFlags(QgsFeatureRequest.NoGeometry)
+        
+        features_data = []
+        for feature in safe_iterate_features(self.layer, request):
+            try:
+                fid = feature[identifier_field] if identifier_field else feature.id()
+                
+                if expr:
+                    context.setFeature(feature)
+                    display_value = str(expr.evaluate(context))
+                else:
+                    # Simple field access
+                    display_value = str(feature[expression]) if expression else str(fid)
+                
+                features_data.append((display_value, fid))
+            except Exception as e:
+                logger.debug(f"Error processing feature: {e}")
+                continue
+        
+        # Sort features
+        reverse = self._sort_order == 'DESC'
+        features_data.sort(key=lambda x: (x[0] if x[0] is not None else ""), reverse=reverse)
+        
+        # Populate list widget
+        for display_value, fid in features_data:
+            item = QListWidgetItem(display_value)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Unchecked)
+            item.setData(0, display_value)
+            item.setData(3, fid)
+            item.setData(4, "True")
+            item.setData(6, self.font_by_state['unChecked'][0])
+            item.setData(9, QBrush(self.font_by_state['unChecked'][1]))
+            list_widget.addItem(item)
+        
+        list_widget.setFeaturesList(features_data)
+        list_widget.setTotalFeaturesListCount(len(features_data))
+        
+        self.connect_filter_lineEdit()
+        logger.debug(f"Populated {len(features_data)} features")
+
+    def eventFilter(self, obj, event):
+        """Handle mouse events for feature selection and context menu."""
+        if self.layer is None or self.layer.id() not in self.list_widgets:
             return False
         
-        if not self._feature_map:
-            return False
-        
-        # Get all feature IDs from the map
-        all_fids = list(self._feature_map.values())
-        if not all_fids:
-            return False
-        
-        # Fetch features from layer
-        features = []
-        for fid in all_fids:
-            feature = self._layer.getFeature(fid)
-            if feature.isValid():
-                features.append(feature)
-        
-        return features if features else False
+        if event.type() == QEvent.MouseButtonPress and obj == self.list_widgets[self.layer.id()].viewport():
+            identifier_field_name = self.list_widgets[self.layer.id()].getIdentifierFieldName()
+            
+            try:
+                nonSubset_features_list = [feature[identifier_field_name] for feature in safe_iterate_features(self.layer)]
+            except Exception:
+                nonSubset_features_list = []
+            
+            if event.button() == Qt.LeftButton:
+                clicked_item = self.list_widgets[self.layer.id()].itemAt(event.pos())
+                if clicked_item is not None:
+                    id_item = clicked_item.data(3)
+                    if clicked_item.checkState() == Qt.Checked:
+                        clicked_item.setCheckState(Qt.Unchecked)
+                        if id_item in nonSubset_features_list:
+                            clicked_item.setData(6, self.font_by_state['unChecked'][0])
+                            clicked_item.setData(9, QBrush(self.font_by_state['unChecked'][1]))
+                            clicked_item.setData(4, "True")
+                        else:
+                            clicked_item.setData(6, self.font_by_state['unCheckedFiltered'][0])
+                            clicked_item.setData(9, QBrush(self.font_by_state['unCheckedFiltered'][1]))
+                            clicked_item.setData(4, "False")
+                    else:
+                        clicked_item.setCheckState(Qt.Checked)
+                        if id_item in nonSubset_features_list:
+                            clicked_item.setData(6, self.font_by_state['checked'][0])
+                            clicked_item.setData(9, QBrush(self.font_by_state['checked'][1]))
+                            clicked_item.setData(4, "True")
+                        else:   
+                            clicked_item.setData(6, self.font_by_state['checkedFiltered'][0])
+                            clicked_item.setData(9, QBrush(self.font_by_state['checkedFiltered'][1]))
+                            clicked_item.setData(4, "False")
+                    
+                    # Emit update signal
+                    self._emit_checked_items_update()
+                return True
+
+            elif event.button() == Qt.RightButton:
+                self.context_menu.exec(QCursor.pos())
+                return True
+        return False
+
+    def _emit_checked_items_update(self):
+        """Emit update signal with current checked items."""
+        checked = self.checkedItems()
+        self.updatingCheckedItemList.emit(checked, True)
+
+    def connect_filter_lineEdit(self):
+        """Connect filter line edit to appropriate signal."""
+        if self.layer is not None and self.layer.id() in self.list_widgets:
+            if self.list_widgets[self.layer.id()].getTotalFeaturesListCount() == self.list_widgets[self.layer.id()].count():
+                try:
+                    self.filter_le.editingFinished.disconnect()
+                except TypeError:
+                    pass
+                self.filter_le.textChanged.connect(self._on_filter_text_changed)
+            else:
+                try:
+                    self.filter_le.textChanged.disconnect()
+                except TypeError:
+                    pass
+                self.filter_le.editingFinished.connect(self.filter_items)
     
-    def currentLayer(self):
-        """
-        Get the current layer.
+    def _on_filter_text_changed(self, text):
+        """Handle filter text changes with debouncing."""
+        self._pending_filter_text = text
+        self._filter_debounce_timer.start()
+    
+    def _execute_filter(self):
+        """Execute the filter after debounce delay."""
+        if hasattr(self, '_pending_filter_text'):
+            self.filter_items(self._pending_filter_text)
+
+    def manage_list_widgets(self, layer_props):
+        """Manage visibility and creation of list widgets."""
+        for key in self.list_widgets.keys():
+            self.list_widgets[key].setVisible(False)
+
+        if self.layer.id() in self.list_widgets:
+            self.list_widgets[self.layer.id()].setVisible(True)
+        else:
+            self.add_list_widget(layer_props)
+
+    def remove_list_widget(self, layer_id):
+        """Remove list widget for a layer."""
+        if layer_id in self.list_widgets:
+            for task in self.tasks:
+                try:
+                    del self.tasks[task][layer_id]
+                except KeyError:
+                    pass
+            try:
+                del self.list_widgets[layer_id]
+            except KeyError:
+                pass
+
+    def reset(self):
+        """Reset the widget to initial state."""
+        self._filter_debounce_timer.stop()
+        self.layer = None
+        self.tasks = {
+            'buildFeaturesList': {},
+            'updateFeaturesList': {},
+            'loadFeaturesList': {},
+            'selectAllFeatures': {},
+            'deselectAllFeatures': {},
+            'filterFeatures': {},
+            'updateFeatures': {}
+        }
+        for i in range(self.layout.count()):
+            item = self.layout.itemAt(i)
+            widget = item.widget()       
+            if widget:
+                try:
+                    widget.close()
+                except RuntimeError:
+                    pass
+
+        self.list_widgets = {}
+
+    def add_list_widget(self, layer_props):
+        """Add a new list widget for the current layer."""
+        if "infos" not in layer_props:
+            logger.warning("layer_props missing 'infos' dictionary")
+            return
         
-        Returns:
-            QgsVectorLayer | bool: Current layer, or False if none set
-        """
-        return self._layer if self._layer is not None and self._layer.isValid() else False
+        infos = layer_props["infos"]
+        pk_name = infos.get("primary_key_name")
+        pk_is_numeric = infos.get("primary_key_is_numeric", True)
+        
+        if pk_name is None:
+            logger.warning("primary_key_name is None, attempting fallback")
+            
+            if self.layer is not None:
+                fields = self.layer.fields()
+                fallback_names = ['fid', 'id', 'ID', 'FID', 'ogc_fid', 'gid']
+                for fallback_name in fallback_names:
+                    if fields.indexFromName(fallback_name) >= 0:
+                        pk_name = fallback_name
+                        field = fields.field(fallback_name)
+                        pk_is_numeric = field.isNumeric() if field else True
+                        logger.info(f"Using fallback identifier field: {pk_name}")
+                        break
+                
+                if pk_name is None and fields.count() > 0:
+                    pk_name = fields.field(0).name()
+                    pk_is_numeric = fields.field(0).isNumeric()
+                    logger.info(f"Using first field as fallback: {pk_name}")
+        
+        if pk_name is None:
+            logger.error("Could not determine identifier field")
+            return
+        
+        self.list_widgets[self.layer.id()] = ListWidgetWrapper(pk_name, pk_is_numeric, self)
+        self.list_widgets[self.layer.id()].viewport().installEventFilter(self)
+        self.layout.addWidget(self.list_widgets[self.layer.id()])
+
+    def select_all(self, x):
+        """Select all items based on action type."""
+        if self.layer is None or self.layer.id() not in self.list_widgets:
+            return
+        
+        list_widget = self.list_widgets[self.layer.id()]
+        for i in range(list_widget.count()):
+            item = list_widget.item(i)
+            if item:
+                if x == 'Select All':
+                    item.setCheckState(Qt.Checked)
+                elif x == 'Select All (subset)' and item.data(4) == "True":
+                    item.setCheckState(Qt.Checked)
+                elif x == 'Select All (non subset)' and item.data(4) == "False":
+                    item.setCheckState(Qt.Checked)
+        
+        self._emit_checked_items_update()
+
+    def deselect_all(self, x):
+        """Deselect all items based on action type."""
+        if self.layer is None or self.layer.id() not in self.list_widgets:
+            return
+        
+        list_widget = self.list_widgets[self.layer.id()]
+        for i in range(list_widget.count()):
+            item = list_widget.item(i)
+            if item:
+                if x == 'De-select All':
+                    item.setCheckState(Qt.Unchecked)
+                elif x == 'De-select All (subset)' and item.data(4) == "True":
+                    item.setCheckState(Qt.Unchecked)
+                elif x == 'De-select All (non subset)' and item.data(4) == "False":
+                    item.setCheckState(Qt.Unchecked)
+        
+        self._emit_checked_items_update()
+        
+    def filter_items(self, filter_txt=None):
+        """Filter items based on text."""
+        if filter_txt is None:
+            self.filter_txt = self.filter_le.text()
+        else:
+            self.filter_txt = filter_txt
+        
+        if self.layer is None or self.layer.id() not in self.list_widgets:
+            return
+            
+        list_widget = self.list_widgets[self.layer.id()]
+        list_widget.setFilterText(self.filter_txt)
+        
+        filter_lower = self.filter_txt.lower()
+        visible_count = 0
+        
+        for i in range(list_widget.count()):
+            item = list_widget.item(i)
+            if item:
+                if not filter_lower or filter_lower in item.text().lower():
+                    item.setHidden(False)
+                    visible_count += 1
+                else:
+                    item.setHidden(True)
+        
+        # Update visible features list
+        visible_features = []
+        for i in range(list_widget.count()):
+            item = list_widget.item(i)
+            if item and not item.isHidden():
+                visible_features.append([item.data(0), item.data(3)])
+        
+        list_widget.setVisibleFeaturesList(visible_features)
+        self.filteringCheckedItemList.emit()
 
 
 __all__ = [
+    'ItemDelegate',
+    'ListWidgetWrapper',
     'QgsCheckableComboBoxLayer',
     'QgsCheckableComboBoxFeaturesListPickerWidget',
 ]
