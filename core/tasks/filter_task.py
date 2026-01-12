@@ -1389,181 +1389,39 @@ class FilterEngineTask(QgsTask):
         return True
 
     def execute_source_layer_filtering(self):
-        """Manage the creation of the origin filtering expression"""
+        """
+        Manage the creation of the origin filtering expression (v2).
+        
+        PHASE 14.6: Migrated to SourceLayerFilterExecutor service.
+        Delegates to execute_source_layer_filtering() for actual execution.
+        
+        Extracted 220 lines to core/services/source_layer_filter_executor.py (v5.0-alpha).
+        """
         # Initialize all parameters and configuration
         self._initialize_source_filtering_parameters()
         
-        result = False
-        task_expression = self.task_parameters["task"]["expression"]
-        task_features = self.task_parameters["task"]["features"]
+        # PHASE 14.6: Delegate to SourceLayerFilterExecutor service
+        from core.services.source_layer_filter_executor import execute_source_layer_filtering
         
-        # ================================================================
-        # V3 TASKBRIDGE DELEGATION (Strangler Fig Pattern)
-        # ================================================================
-        # Try v3 backend via TaskBridge for simple attribute filters.
-        # This progressively migrates filtering logic to hexagonal architecture.
-        # Fallback to legacy code if TaskBridge fails or is not available.
-        # ================================================================
-        if self._task_bridge and self._task_bridge.is_available():
-            bridge_result = self._try_v3_attribute_filter(task_expression, task_features)
-            if bridge_result is not None:
-                # v3 backend succeeded, return its result
-                return bridge_result
-            # bridge_result is None means fallback to legacy code
-            logger.debug("TaskBridge: Falling back to legacy attribute filter")
+        # Execute filtering with service
+        result_obj = execute_source_layer_filtering(
+            task_parameters=self.task_parameters,
+            source_layer=self.source_layer,
+            param_source_old_subset=self.param_source_old_subset,
+            primary_key_name=self.primary_key_name,
+            task_bridge=getattr(self, '_task_bridge', None),
+            process_qgis_expression_callback=self._process_qgis_expression,
+            combine_with_old_subset_callback=self._combine_with_old_subset,
+            apply_filter_and_update_subset_callback=self._apply_filter_and_update_subset,
+            build_feature_id_expression_callback=self._build_feature_id_expression
+        )
         
-        # DIAGNOSTIC: Log incoming parameters
-        logger.info("=" * 60)
-        logger.info("🔧 execute_source_layer_filtering DIAGNOSTIC")
-        logger.info("=" * 60)
-        logger.info(f"   task_expression = '{task_expression}'")
-        logger.info(f"   task_features count = {len(task_features) if task_features else 0}")
-        if task_features and len(task_features) > 0:
-            for i, f in enumerate(task_features[:3]):  # Show first 3
-                logger.info(f"      feature[{i}]: id={f.id()}, isValid={f.isValid()}")
-        logger.info(f"   source_layer = '{self.source_layer.name() if self.source_layer else 'None'}'")
-        logger.info(f"   primary_key_name = '{self.primary_key_name}'")
-        logger.info("=" * 60)
+        # Apply results to task instance
+        self.expression = result_obj.expression
+        if result_obj.is_field_expression:
+            self.is_field_expression = result_obj.is_field_expression
         
-        logger.debug(f"Task expression: {task_expression}")
-        
-        # Check if expression is just a field name (no comparison operators)
-        is_simple_field = False
-        if task_expression:
-            qgs_expr = QgsExpression(task_expression)
-            # FIX v2.3.9: Use case-insensitive check for operators (e.g., 'in' vs 'IN')
-            task_expr_upper = task_expression.upper()
-            is_simple_field = qgs_expr.isField() and not any(
-                op in task_expr_upper for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']
-            )
-        
-        # Check if skip_source_filter is enabled (custom selection with non-filter expression)
-        skip_source_filter = self.task_parameters["task"].get("skip_source_filter", False)
-        
-        # Check if geometric filtering is enabled (for logging purposes)
-        has_geom_predicates = self.task_parameters["filtering"]["has_geometric_predicates"]
-        geom_predicates_list = self.task_parameters["filtering"].get("geometric_predicates", [])
-        has_geometric_filtering = has_geom_predicates and len(geom_predicates_list) > 0
-        
-        # ================================================================
-        # MODE ALL-FEATURES: Custom Selection sans filtre valide
-        # ================================================================
-        # Quand skip_source_filter=True (but not single_selection_mode), 
-        # utiliser TOUTES les features de la couche source
-        # sans modifier son subset (garder l'existant)
-        # ================================================================
-        if skip_source_filter:
-            logger.info("=" * 60)
-            logger.info("🔄 ALL-FEATURES MODE (skip_source_filter=True)")
-            logger.info("=" * 60)
-            logger.info("  Custom selection active with non-filter expression")
-            logger.info("  → Source layer will NOT be filtered (keeps existing subset)")
-            logger.info("  → All features from source layer will be used for geometric predicates")
-            
-            # Store that we're using all features
-            self.is_field_expression = (True, "__all_features__")
-            
-            # Keep existing subset - don't modify source layer filter
-            self.expression = self.param_source_old_subset if self.param_source_old_subset else ""
-            
-            # Log detailed information about source layer state
-            current_subset = self.source_layer.subsetString()
-            feature_count = self.source_layer.featureCount()
-            
-            if current_subset:
-                logger.info(f"  ✓ Source layer has active subset: '{current_subset[:80]}...'")
-                logger.info(f"  ✓ {feature_count} filtered features will be used for geometric intersection")
-            else:
-                logger.info(f"  ✓ Source layer has NO subset - all {feature_count} features will be used")
-            
-            # Mark as successful - source layer remains with current filter
-            result = True
-            logger.info("=" * 60)
-            return result
-        
-        # ================================================================
-        # MODE FIELD-BASED: Custom Selection avec champ simple
-        # ================================================================
-        # COMPORTEMENT ATTENDU:
-        #   1. COUCHE SOURCE: Garder le subset existant (PAS de modification)
-        #   2. COUCHES DISTANTES: Appliquer filtre géométrique en intersection
-        #                         avec TOUTES les géométries de la couche source (avec son filtre existant)
-        #
-        # Ce mode s'active dès que l'expression est un simple champ, peu importe
-        # si des prédicats géométriques explicites sont configurés. Cela permet
-        # aux filtres distants d'utiliser l'ensemble de la couche source.
-        #
-        # EXEMPLE:
-        #   - Couche source avec subset: "homecount > 5" (affiche 100 features)
-        #   - Custom selection active avec champ: "drop_ID"
-        #   - Prédicats géométriques: "intersects" vers couche distante (ou filtrage implicite)
-        #   → Résultat: Source garde "homecount > 5", distant filtré par intersection avec ces 100 features
-        # ================================================================
-        if is_simple_field:
-            logger.info("=" * 60)
-            logger.info("🔄 FIELD-BASED GEOMETRIC FILTER MODE")
-            logger.info("=" * 60)
-            logger.info(f"  Expression is simple field: '{task_expression}'")
-            logger.info(f"  Geometric filtering enabled: {has_geometric_filtering}")
-            logger.info("  → Source layer will NOT be filtered (keeps existing subset)")
-            
-            # Store the field expression for later use in geometric filtering
-            self.is_field_expression = (True, task_expression)
-            
-            # Keep existing subset - don't modify source layer filter
-            self.expression = self.param_source_old_subset if self.param_source_old_subset else ""
-            
-            # Log detailed information about source layer state
-            current_subset = self.source_layer.subsetString()
-            feature_count = self.source_layer.featureCount()
-            
-            if current_subset:
-                logger.info(f"  ✓ Source layer has active subset: '{current_subset[:80]}...'")
-                logger.info(f"  ✓ {feature_count} filtered features will be used for geometric intersection")
-            else:
-                logger.info(f"  ℹ Source layer has NO subset - all {feature_count} features will be used")
-            
-            # Mark as successful - source layer remains with current filter
-            result = True
-            logger.info("=" * 60)
-            return result
-        
-        # Process QGIS expression if provided
-        if task_expression:
-            logger.info(f"   → Processing task_expression: '{task_expression}'")
-            processed_expr, is_field_expr = self._process_qgis_expression(task_expression)
-            logger.info(f"   → processed_expr: '{processed_expr}', is_field_expr: {is_field_expr}")
-            
-            if processed_expr:
-                # Combine with existing subset if needed
-                self.expression = self._combine_with_old_subset(processed_expr)
-                logger.info(f"   → combined expression: '{self.expression}'")
-                
-                # Apply filter and update subset
-                result = self._apply_filter_and_update_subset(self.expression)
-                logger.info(f"   → filter applied result: {result}")
-        else:
-            logger.info(f"   → No task_expression provided, will try fallback to feature IDs")
-        
-        # Fallback to feature ID list if expression processing failed
-        if not result:
-            logger.info(f"   → Fallback: trying feature ID list...")
-            self.is_field_expression = None
-            features_list = self.task_parameters["task"]["features"]
-            logger.info(f"   → features_list count: {len(features_list) if features_list else 0}")
-            
-            if features_list:
-                self.expression = self._build_feature_id_expression(features_list)
-                logger.info(f"   → built expression from features: '{self.expression}'")
-                
-                if self.expression:
-                    result = self._apply_filter_and_update_subset(self.expression)
-                    logger.info(f"   → fallback filter applied result: {result}")
-            else:
-                logger.warning(f"   ⚠️ No features in list - cannot apply filter!")
-        
-        logger.info(f"🔧 execute_source_layer_filtering RESULT: {result}")
-        return result
+        return result_obj.success
     
     def _initialize_source_subset_and_buffer(self):
         """

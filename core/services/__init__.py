@@ -63,6 +63,10 @@ from .buffer_service import (
 # NOT exported here - has QGIS dependencies (QgsExpression)
 # Import directly: from core.services.source_subset_buffer_builder import build_source_subset_buffer_config
 
+# EPIC-1 Phase 14.6: SourceLayerFilterExecutor service
+# NOT exported here - has QGIS dependencies (QgsExpression, QgsFeature)
+# Import directly: from core.services.source_layer_filter_executor import execute_source_layer_filtering
+
 __all__ = [
     # Expression Service
     'ExpressionService',
