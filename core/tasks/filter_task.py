@@ -19,11 +19,11 @@ Performance: Uses geometry caching and backend-specific optimizations.
 
 Location: core/tasks/filter_task.py (Hexagonal Architecture - Application Layer)
 
-For backward compatibility, import from modules.tasks which re-exports this class:
-    from modules.tasks import FilterEngineTask
-    
-Or import directly from the new location:
+Import directly from this location:
     from core.tasks.filter_task import FilterEngineTask
+    
+Or from the package:
+    from core.tasks import FilterEngineTask
 """
 
 import logging
@@ -2998,12 +2998,12 @@ class FilterEngineTask(QgsTask):
             return None, None, None, None
         return layer_table, primary_key, geom_field, layer_schema
 
-    def _build_backend_expression(self, backend, layer_props, source_geom):
+    def _build_backend_expression_v2(self, backend, layer_props, source_geom):
         """
-        Build filter expression using backend.
+        Build filter expression using backend - PHASE 14.1 REFACTORED VERSION.
         
-        For PostgreSQL with few source features, passes WKT for simplified expressions.
-        Uses expression cache for repeated operations (Phase 4 optimization).
+        Delegates to BackendExpressionBuilder service to reduce God Class size.
+        Extracted 426 lines to core/services/backend_expression_builder.py (v5.0-alpha).
         
         Args:
             backend: Backend instance
@@ -3013,417 +3013,59 @@ class FilterEngineTask(QgsTask):
         Returns:
             str: Filter expression or None on error
         """
-        # Get source layer filter for EXISTS subqueries
-        # CRITICAL FIX v2.5.11: For PostgreSQL EXISTS mode, we MUST include the source
-        # layer's filter to ensure the EXISTS query only considers the filtered
-        # source features. Without this, EXISTS queries the ENTIRE source table!
-        #
-        # The previous fix (v2.3.15) set source_filter=None thinking "featureCount reflects
-        # the subset" - but that's WRONG for EXISTS because PostgreSQL doesn't know about
-        # QGIS's subsetString. The EXISTS query goes directly to PostgreSQL.
-        #
-        # v2.5.12 FIX: Pass the ENTIRE source subsetString to EXISTS, not just spatial
-        # clauses. The subsetString contains ALL legitimate filter conditions:
-        # - Spatial filters (ST_Intersects with emprise)
-        # - Attribute filters from exploring (SELECT CASE for custom expressions)
-        # - Any other user-defined filters
-        #
-        # Note: Style rules from renderers are NOT in subsetString - they're handled
-        # separately by QGIS rendering engine. So we can safely use the full filter.
-        source_filter = None
+        # PHASE 14.1: Delegate to BackendExpressionBuilder service
+        from core.services.backend_expression_builder import create_expression_builder
         
-        # For PostgreSQL EXISTS mode, use entire source layer subsetString
-        if backend.get_backend_name() == 'PostgreSQL':
-            source_subset = self.source_layer.subsetString() if self.source_layer else None
-            
-            # v2.7.10/E5: Delegate skip check to source_filter_builder
-            # Checks for patterns that would be skipped in postgresql_backend.build_expression()
-            skip_source_subset = should_skip_source_subset(source_subset)
-                
-            if skip_source_subset:
-                logger.info(f"⚠️ PostgreSQL EXISTS: Source subset contains patterns that would be skipped")
-                logger.info(f"   Subset preview: '{source_subset[:100]}...'")
-                logger.info(f"   → Falling through to generate filter from task_features instead")
-            
-            # CRITICAL FIX v2.8.1: Check for task_features FIRST before using source_subset!
-            # When user selects specific features (e.g., 9 roads out of 161), task_features
-            # contains those 9 features. We MUST use those, not the source_subset which
-            # contains the filter from previous operation (e.g., 161 roads from first filter).
-            #
-            # Priority order:
-            # 1. task_features (user's current selection) - ALWAYS takes priority
-            # 2. source_subset (existing layer filter) - only if no selection
-            task_features = self.task_parameters.get("task", {}).get("features", [])
-            use_task_features = task_features and len(task_features) > 0
-            
-            if use_task_features:
-                # PRIORITY: Generate filter from task_features (user's selected features)
-                # This ensures the second filter uses the 9 selected features, not the 161 from previous filter
-                logger.debug(f"🎯 PostgreSQL EXISTS: Using {len(task_features)} task_features (selection priority)")
-                
-                # E5: Delegate PK field detection to source_filter_builder
-                pk_field = sfb_get_primary_key_field(self.source_layer)
-                
-                if pk_field:
-                    # E5: Delegate feature ID extraction to source_filter_builder
-                    fids = extract_feature_ids(task_features, pk_field, self.source_layer)
-                    
-                    if fids:
-                        # E5: Delegate source table name resolution
-                        source_table_name = sfb_get_source_table_name(
-                            self.source_layer, 
-                            getattr(self, 'param_source_table', None)
-                        )
-                        
-                        # v2.8.0: Check if we should create a MV for large source selections
-                        # This optimizes EXISTS subqueries by avoiding inline IN(...) with thousands of FIDs
-                        thresholds = self._get_optimization_thresholds()
-                        source_mv_fid_threshold = thresholds.get('source_mv_fid_threshold', 500)
-                        
-                        if len(fids) > source_mv_fid_threshold:
-                            # Large source selection: create MV for better performance
-                            logger.info(f"🗄️ v2.8.0: Source selection ({len(fids)} FIDs) > threshold ({source_mv_fid_threshold})")
-                            logger.info(f"   → Creating temporary MV for optimized EXISTS query")
-                            
-                            # Get geometry field name
-                            source_geom_field = getattr(self, 'param_source_geom', None)
-                            if not source_geom_field and self.source_layer:
-                                try:
-                                    uri = QgsDataSourceUri(self.source_layer.source())
-                                    source_geom_field = uri.geometryColumn() or 'geom'
-                                except Exception:
-                                    source_geom_field = 'geom'
-                            
-                            # Create MV using backend method
-                            from ..backends.postgresql_backend import PostgreSQLGeometricFilter
-                            pg_backend = PostgreSQLGeometricFilter(self.task_parameters)
-                            
-                            mv_ref = pg_backend.create_source_selection_mv(
-                                layer=self.source_layer,
-                                fids=fids,
-                                pk_field=pk_field,
-                                geom_field=source_geom_field
-                            )
-                            
-                            if mv_ref:
-                                # E5: Use build_source_filter_with_mv for MV-based filter
-                                source_filter = build_source_filter_with_mv(
-                                    fids, pk_field, source_table_name, mv_ref
-                                )
-                                
-                                # Store MV reference for cleanup
-                                if not hasattr(self, '_source_selection_mvs'):
-                                    self._source_selection_mvs = []
-                                self._source_selection_mvs.append(mv_ref)
-                                
-                                logger.debug(f"   ✓ MV created: {mv_ref}")
-                                logger.debug(f"   → v2.8.0: Using source selection MV ({len(fids)} features) for EXISTS optimization")
-                            else:
-                                # MV creation failed, fall back to inline IN clause
-                                logger.warning(f"   ⚠️ MV creation failed, using inline IN clause (may be slow)")
-                                # E5: Use build_source_filter_inline for inline filter
-                                source_filter = build_source_filter_inline(
-                                    fids, pk_field, source_table_name,
-                                    lambda vals: self._format_pk_values_for_sql(vals, layer=self.source_layer, pk_field=pk_field)
-                                )
-                        else:
-                            # Small source selection: use inline IN clause (fast enough)
-                            # E5: Delegate inline filter building
-                            source_filter = build_source_filter_inline(
-                                fids, pk_field, source_table_name,
-                                lambda vals: self._format_pk_values_for_sql(vals, layer=self.source_layer, pk_field=pk_field)
-                            )
-                        
-                        logger.debug(f"🎯 PostgreSQL EXISTS: Generated selection filter from {len(fids)} features")
-                        logger.debug(f"   v2.7.9: Generated qualified source filter: {source_filter[:80]}...")
-                    else:
-                        logger.warning(f"⚠️ PostgreSQL EXISTS: Could not extract feature IDs from task_features")
-                else:
-                    logger.warning(f"⚠️ PostgreSQL EXISTS: Could not determine primary key field for source layer")
-            
-            elif source_subset and not skip_source_subset:
-                # No task_features selection - use the existing source subset filter
-                source_filter = source_subset
-                logger.info(f"🎯 PostgreSQL EXISTS: Using full source filter ({len(source_filter)} chars)")
-                logger.debug(f"   Source filter preview: '{source_filter[:100]}...'")
-            elif skip_source_subset and source_subset and self.source_layer:
-                # CRITICAL FIX v2.8.3: Handle cascading geometric filters
-                # When source_subset contains EXISTS/MV patterns from a previous filter,
-                # we can't use it directly. But the source layer IS filtered - we just need
-                # to generate a new filter from the currently visible features.
-                #
-                # Example scenario:
-                # 1. First filter: commune -> routes (sets EXISTS filter on routes)
-                # 2. Second filter: routes with buffer -> other layers
-                #    - source_subset = "EXISTS (...)" from step 1 -> skip_source_subset = True
-                #    - task_features = empty (user didn't manually select routes)
-                #    - Without this fix: source_filter = None -> all routes used!
-                #    - With this fix: generate filter from currently visible routes (411 in this case)
-                logger.info(f"🔄 PostgreSQL EXISTS: Generating filter from currently visible source features")
-                logger.info(f"   → Source layer has filtered subset but it contains unadaptable patterns")
-                logger.info(f"   → Fetching visible feature IDs to create new source_filter")
-                
-                try:
-                    # E5: Delegate PK field detection
-                    pk_field = sfb_get_primary_key_field(self.source_layer)
-                    
-                    if pk_field:
-                        # E5: Delegate visible feature ID extraction
-                        visible_fids = get_visible_feature_ids(self.source_layer, pk_field)
-                        
-                        if visible_fids:
-                            # E5: Delegate source table name resolution
-                            source_table_name = sfb_get_source_table_name(
-                                self.source_layer,
-                                getattr(self, 'param_source_table', None)
-                            )
-                            
-                            # Check if we should use MV for large selections
-                            thresholds = self._get_optimization_thresholds()
-                            source_mv_fid_threshold = thresholds.get('source_mv_fid_threshold', 500)
-                            
-                            if len(visible_fids) > source_mv_fid_threshold:
-                                # Large selection: create MV for performance
-                                logger.info(f"   → {len(visible_fids)} visible features > threshold ({source_mv_fid_threshold})")
-                                logger.info(f"   → Creating temporary MV for optimized EXISTS query")
-                                
-                                source_geom_field = getattr(self, 'param_source_geom', None)
-                                if not source_geom_field:
-                                    try:
-                                        uri = QgsDataSourceUri(self.source_layer.source())
-                                        source_geom_field = uri.geometryColumn() or 'geom'
-                                    except Exception:
-                                        source_geom_field = 'geom'
-                                
-                                from ..backends.postgresql_backend import PostgreSQLGeometricFilter
-                                pg_backend = PostgreSQLGeometricFilter(self.task_parameters)
-                                mv_ref = pg_backend.create_source_selection_mv(
-                                    layer=self.source_layer,
-                                    fids=visible_fids,
-                                    pk_field=pk_field,
-                                    geom_field=source_geom_field
-                                )
-                                
-                                if mv_ref:
-                                    # E5: Use build_source_filter_with_mv
-                                    source_filter = build_source_filter_with_mv(
-                                        visible_fids, pk_field, source_table_name, mv_ref
-                                    )
-                                    if not hasattr(self, '_source_selection_mvs'):
-                                        self._source_selection_mvs = []
-                                    self._source_selection_mvs.append(mv_ref)
-                                    logger.info(f"   ✓ Created MV for {len(visible_fids)} visible features")
-                                else:
-                                    # MV failed, use inline IN clause
-                                    # E5: Use build_source_filter_inline
-                                    source_filter = build_source_filter_inline(
-                                        visible_fids, pk_field, source_table_name,
-                                        lambda vals: self._format_pk_values_for_sql(vals, layer=self.source_layer, pk_field=pk_field)
-                                    )
-                                    logger.warning(f"   ⚠️ MV creation failed, using inline IN clause")
-                            else:
-                                # Small selection: use inline IN clause
-                                # E5: Use build_source_filter_inline
-                                source_filter = build_source_filter_inline(
-                                    visible_fids, pk_field, source_table_name,
-                                    lambda vals: self._format_pk_values_for_sql(vals, layer=self.source_layer, pk_field=pk_field)
-                                )
-                            
-                            logger.info(f"   ✓ Generated source_filter from {len(visible_fids)} visible features")
-                            logger.debug(f"   → Filter preview: '{source_filter[:100]}...'")
-                        else:
-                            logger.warning(f"   ⚠️ No visible features found in source layer!")
-                    else:
-                        logger.warning(f"   ⚠️ Could not determine primary key field for source layer")
-                except Exception as e:
-                    logger.error(f"   ❌ Failed to generate filter from visible features: {e}")
-                    import traceback
-                    logger.debug(f"   Traceback: {traceback.format_exc()}")
-            else:
-                logger.debug(f"Geometric filtering: Source layer has no subsetString and no selection")
-        else:
-            logger.debug(f"Geometric filtering: Non-PostgreSQL backend, source_filter=None")
-        
-        # REMOVED: Old logic that picked up source layer filter including style rules
-        # if hasattr(self, 'param_source_new_subset') and self.param_source_new_subset:
-        #     source_filter = self.param_source_new_subset
-        # elif hasattr(self, 'expression') and self.expression:
-        #     source_filter = self.expression
-        
-        # Get source feature count and WKT for simplified PostgreSQL expressions
-        source_wkt = None
-        source_srid = None
-        source_feature_count = None
-        
-        # For PostgreSQL, provide WKT for small datasets (simpler expression)
-        if backend.get_backend_name() == 'PostgreSQL':
-            # E5: Delegate feature count calculation
-            task_features = self.task_parameters.get("task", {}).get("features", [])
-            ogr_source = getattr(self, 'ogr_source_geom', None)
-            source_feature_count = get_source_feature_count(
-                task_features=task_features,
-                ogr_source_geom=ogr_source,
-                source_layer=self.source_layer
-            )
-            
-            # E5: Delegate WKT and SRID extraction
-            spatialite_wkt = getattr(self, 'spatialite_source_geom', None)
-            crs_authid = getattr(self, 'source_layer_crs_authid', None)
-            source_wkt, source_srid = get_source_wkt_and_srid(spatialite_wkt, crs_authid)
-            
-            if source_wkt:
-                logger.debug(f"PostgreSQL simple mode: {source_feature_count} features, SRID={source_srid}")
-                # DIAGNOSTIC v2.7.3
-                from qgis.core import QgsMessageLog, Qgis
-                QgsMessageLog.logMessage(
-                    f"v2.7.3: PostgreSQL will use WKT mode (count={source_feature_count}, wkt_len={len(source_wkt)}, srid={source_srid})",
-                    "FilterMate", Qgis.Info
-                )
-            else:
-                # DIAGNOSTIC v2.7.3: WKT not available - this is expected for PostgreSQL EXISTS mode
-                logger.debug(
-                    f"PostgreSQL: spatialite_source_geom not available (expected for EXISTS mode with source_filter)"
-                )
-        
-        # Phase 4: Check expression cache before building
-        layer = layer_props.get('layer')
-        layer_id = layer.id() if layer and hasattr(layer, 'id') else None
-        
-        if layer_id and self.expr_cache:
-            # Compute cache key
-            source_hash = self.expr_cache.compute_source_hash(source_geom)
-            buffer_value = self.param_buffer_value if hasattr(self, 'param_buffer_value') else None
-            provider_type = backend.get_backend_name().lower()
-            
-            # v2.5.19: Include source_filter hash in cache key for PostgreSQL EXISTS mode
-            # This ensures cache invalidation when source filter changes (e.g., refiltering)
-            # Without this, cached expressions would use stale source filters in EXISTS queries
-            source_filter_hash = None
-            if source_filter:
-                import hashlib
-                source_filter_hash = hashlib.md5(source_filter.encode()).hexdigest()[:16]
-                logger.debug(f"  Cache: source_filter_hash={source_filter_hash} (filter length: {len(source_filter)})")
-            
-            # v2.5.14: Include use_centroids in cache key to invalidate when centroid option changes
-            use_centroids_distant = self.param_use_centroids_distant_layers if hasattr(self, 'param_use_centroids_distant_layers') else False
-            use_centroids_source = self.param_use_centroids_source_layer if hasattr(self, 'param_use_centroids_source_layer') else False
-            cache_key = self.expr_cache.get_cache_key(
-                layer_id=layer_id,
-                predicates=self.current_predicates,
-                buffer_value=buffer_value,
-                source_geometry_hash=source_hash,
-                provider_type=provider_type,
-                source_filter_hash=source_filter_hash,  # v2.5.19: Include for refilter cache invalidation
-                use_centroids=use_centroids_distant,  # v2.5.14: Include centroid flag for distant layers
-                use_centroids_source=use_centroids_source  # v2.5.15: Include centroid flag for source layer
-            )
-            
-            # Try to get cached expression
-            cached_expression = self.expr_cache.get(cache_key)
-            if cached_expression:
-                logger.info(f"✓ Expression cache HIT for {layer.name() if layer else 'unknown'}")
-                return cached_expression
-        else:
-            cache_key = None
-        
-        # Log buffer values being passed to backend
-        passed_buffer_value = self.param_buffer_value if hasattr(self, 'param_buffer_value') else None
-        passed_buffer_expression = self.param_buffer_expression if hasattr(self, 'param_buffer_expression') else None
-        passed_use_centroids_distant = self.param_use_centroids_distant_layers if hasattr(self, 'param_use_centroids_distant_layers') else False
-        
-        # v2.7.0: OPTIMIZATION - Check for pre-approved optimizations from UI
-        # Optimizations are now handled BEFORE task launch via user confirmation dialog
-        # This ensures user consent is always obtained before applying optimizations
-        if not passed_use_centroids_distant:
-            # Check if optimization was pre-approved for this layer
-            approved_optimizations = getattr(self, 'approved_optimizations', {})
-            layer_id = layer.id() if layer else None
-            
-            if layer_id and layer_id in approved_optimizations:
-                layer_opts = approved_optimizations[layer_id]
-                if layer_opts.get('use_centroid_distant', False):
-                    passed_use_centroids_distant = True
-                    logger.info(f"🎯 USER-APPROVED OPTIMIZATION: Centroid mode for {layer.name()}")
-            
-            # Fallback: Auto-detection (only if auto_apply is enabled)
-            # This only triggers if user has disabled "ask before apply" in settings
-            if not passed_use_centroids_distant and getattr(self, 'auto_apply_optimizations', False):
-                try:
-                    from ..backends.factory import get_optimization_plan, AUTO_OPTIMIZER_AVAILABLE
-                    if AUTO_OPTIMIZER_AVAILABLE and layer:
-                        # Get optimization recommendations
-                        source_wkt_len = len(source_wkt) if source_wkt else 0
-                        # v2.7.x: Pass buffer parameters to optimizer
-                        has_buffer = passed_buffer_value is not None and passed_buffer_value != 0
-                        optimization_plan = get_optimization_plan(
-                            target_layer=layer,
-                            source_layer=self.source_layer if hasattr(self, 'source_layer') else None,
-                            source_wkt_length=source_wkt_len,
-                            predicates=self.current_predicates,
-                            user_requested_centroids=None,  # None = auto-detect
-                            has_buffer=has_buffer,
-                            buffer_value=passed_buffer_value if passed_buffer_value else 0.0
-                        )
-                        
-                        if optimization_plan:
-                            if optimization_plan.final_use_centroids:
-                                passed_use_centroids_distant = True
-                                logger.info(f"🎯 AUTO-OPTIMIZATION: Centroid mode enabled for {layer.name()}")
-                                logger.info(f"   Reason: {optimization_plan.recommendations[0].reason if optimization_plan.recommendations else 'auto-detected'}")
-                                logger.info(f"   Expected speedup: ~{optimization_plan.estimated_total_speedup:.1f}x")
-                            
-                            # v2.7.x: Apply buffer simplification optimization if recommended
-                            if optimization_plan.final_simplify_tolerance and optimization_plan.final_simplify_tolerance > 0:
-                                # Update task_parameters to enable simplification
-                                if hasattr(self, 'task_parameters') and self.task_parameters:
-                                    filtering_params = self.task_parameters.get("filtering", {})
-                                    # Only apply if not already set by user
-                                    if not filtering_params.get("has_simplify_tolerance", False):
-                                        filtering_params["has_simplify_tolerance"] = True
-                                        filtering_params["simplify_tolerance"] = optimization_plan.final_simplify_tolerance
-                                        self.task_parameters["filtering"] = filtering_params
-                                        logger.info(f"🎯 AUTO-OPTIMIZATION: Buffer simplification enabled")
-                                        logger.info(f"   Tolerance: {optimization_plan.final_simplify_tolerance:.2f}m")
-                except Exception as e:
-                    logger.debug(f"Auto-optimization check failed: {e}")
-        
-        logger.info(f"📐 _build_backend_expression - Buffer being passed to backend:")
-        logger.info(f"  - param_buffer_value: {passed_buffer_value}")
-        logger.info(f"  - param_buffer_expression: {passed_buffer_expression}")
-        logger.info(f"  - use_centroids_distant_layers: {passed_use_centroids_distant}")
-        if passed_buffer_value is not None and passed_buffer_value < 0:
-            logger.info(f"  ⚠️ NEGATIVE BUFFER (erosion) will be passed: {passed_buffer_value}m")
-        
-        expression = backend.build_expression(
-            layer_props=layer_props,
-            predicates=self.current_predicates,
-            source_geom=source_geom,
-            buffer_value=passed_buffer_value,
-            buffer_expression=passed_buffer_expression,
-            source_filter=source_filter,
-            source_wkt=source_wkt,
-            source_srid=source_srid,
-            source_feature_count=source_feature_count,
-            use_centroids=passed_use_centroids_distant
+        # Create builder with all required dependencies
+        builder = create_expression_builder(
+            source_layer=self.source_layer,
+            task_parameters=self.task_parameters,
+            expr_cache=self.expr_cache,
+            format_pk_values_callback=self._format_pk_values_for_sql,
+            get_optimization_thresholds_callback=self._get_optimization_thresholds
         )
         
-        # v2.9.27: Check for USE_OGR_FALLBACK sentinel from Spatialite backend
-        # This is returned when GeometryCollection cannot be converted and MakeValid would fail
-        if expression == "__USE_OGR_FALLBACK__":
-            logger.warning(f"Backend returned USE_OGR_FALLBACK sentinel - forcing OGR fallback")
-            logger.info(f"  → GeometryCollection conversion failed, RTTOPO MakeValid would error")
-            return None
+        # Transfer task state to builder
+        builder.param_buffer_value = self.param_buffer_value
+        builder.param_buffer_expression = self.param_buffer_expression
+        builder.param_use_centroids_distant_layers = self.param_use_centroids_distant_layers
+        builder.param_use_centroids_source_layer = self.param_use_centroids_source_layer
+        builder.param_source_table = self.param_source_table
+        builder.param_source_geom = self.param_source_geom
+        builder.current_predicates = self.current_predicates
+        builder.approved_optimizations = self.approved_optimizations
+        builder.auto_apply_optimizations = self.auto_apply_optimizations
+        builder.spatialite_source_geom = self.spatialite_source_geom
+        builder.ogr_source_geom = self.ogr_source_geom
+        builder.source_layer_crs_authid = self.source_layer_crs_authid
         
-        if not expression:
-            logger.warning(f"No expression generated by backend")
-            return None
+        # Build expression
+        expression = builder.build(backend, layer_props, source_geom)
         
-        # Phase 4: Store in cache for future use
-        if cache_key and self.expr_cache:
-            self.expr_cache.put(cache_key, expression)
-            logger.debug(f"Expression cached for {layer.name() if layer else 'unknown'}")
+        # Collect created MVs for cleanup
+        created_mvs = builder.get_created_mvs()
+        if created_mvs:
+            self._source_selection_mvs.extend(created_mvs)
         
         return expression
+
+    def _build_backend_expression(self, backend, layer_props, source_geom):
+        """
+        Build filter expression using backend.
+        
+        PHASE 14.1 GOD CLASS REDUCTION: Delegates to _build_backend_expression_v2().
+        Wrapper method for backward compatibility - all logic moved to service-based v2.
+        
+        Args:
+            backend: Backend instance
+            layer_props: Layer properties dict
+            source_geom: Prepared source geometry
+            
+        Returns:
+            str: Filter expression or None on error
+        """
+        # PHASE 14.1: Simple delegation to refactored version
+        return self._build_backend_expression_v2(backend, layer_props, source_geom)
 
     def _combine_with_old_filter(self, expression, layer):
         """Delegates to core.filter.expression_combiner.combine_with_old_filter()."""
