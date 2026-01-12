@@ -751,9 +751,9 @@ class BackendController(BaseController):
             return None, None, None, None
         
         try:
-            from ..adapters.backends import get_datasource_connexion_from_layer
+            from ...infrastructure.utils.layer_utils import get_datasource_connexion_from_layer
         except ImportError:
-            from ...modules.appUtils import get_datasource_connexion_from_layer
+            from ...infrastructure.utils.layer_utils import get_datasource_connexion_from_layer
         
         # Get app reference
         app = getattr(self.dockwidget, '_app_ref', None)

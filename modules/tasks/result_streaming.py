@@ -29,7 +29,7 @@ warnings.warn(
 )
 
 # Re-export from infrastructure
-from infrastructure.streaming import (
+from ...infrastructure.streaming import (
     StreamingConfig,
     ExportProgress,
     StreamingExporter,

@@ -356,7 +356,7 @@ class FilterMate:
         for confirmation before resetting to default values.
         """
         try:
-            from .modules.config_migration import ConfigMigration
+            from .infrastructure.config.config_migration import ConfigMigration
             
             migrator = ConfigMigration()
             
@@ -1080,7 +1080,7 @@ class FilterMate:
         
         # PERFORMANCE v2.4.0: Clean up PostgreSQL connection pools
         try:
-            from .modules.connection_pool import cleanup_pools
+            from .infrastructure.database.connection_pool import cleanup_pools
             cleanup_pools()
             logger.debug("FilterMate: PostgreSQL connection pools cleaned up")
         except ImportError:

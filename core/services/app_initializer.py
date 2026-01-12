@@ -172,7 +172,7 @@ class AppInitializer:
         
         # Cleanup corrupted filters
         if self._cleanup_corrupted_layer_filters:
-            from ...modules.appUtils import cleanup_corrupted_layer_filters
+            from ...infrastructure.field_utils import cleanup_corrupted_layer_filters
             cleared_layers = cleanup_corrupted_layer_filters(project)
             if cleared_layers:
                 show_warning(

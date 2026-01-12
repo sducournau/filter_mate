@@ -18,14 +18,14 @@ from qgis.PyQt.QtCore import QObject
 
 # Local imports
 from ...config.config import logger, ENV_VARS
-from ...modules.appUtils import (
+from ...infrastructure.utils.layer_utils import (
     get_datasource_connexion_from_layer,
     get_data_source_uri,
-    spatialite_connect,
-    sanitize_sql_identifier,
-    is_layer_source_available,
-    POSTGRESQL_AVAILABLE
 )
+from ...infrastructure.utils.task_utils import spatialite_connect
+from ...infrastructure.database.sql_utils import sanitize_sql_identifier
+from ...infrastructure.utils.validation_utils import is_layer_source_available
+from ...adapters.backends import POSTGRESQL_AVAILABLE
 
 # Conditional imports
 try:

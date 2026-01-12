@@ -22,7 +22,7 @@ warnings.warn(
 )
 
 # Re-export from new location
-from core.geometry.crs_utils import (
+from ..core.geometry.crs_utils import (
     DEFAULT_METRIC_CRS,
     is_geographic_crs,
     is_metric_crs,

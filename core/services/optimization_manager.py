@@ -367,7 +367,7 @@ class OptimizationManager:
         Returns:
             OptimizationResult with user's choices
         """
-        from ..modules.optimization_dialogs import OptimizationRecommendationDialog
+        from ...ui.dialogs.optimization_dialog import RecommendationDialog as OptimizationRecommendationDialog
         
         # Build dialog parameters
         recommendations = []

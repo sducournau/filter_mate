@@ -35,12 +35,16 @@ import os.path
 import logging
 from .config.config import init_env_vars, ENV_VARS
 import json
-from .modules.tasks import (
+
+# Core tasks (migrated from modules/tasks/)
+from .core.tasks import (
     FilterEngineTask,
     LayersManagementEngineTask,
-    spatialite_connect
 )
-from .modules.appUtils import (
+from .infrastructure.utils import spatialite_connect
+
+# Infrastructure utilities (migrated from modules/appUtils)
+from .infrastructure.utils import (
     POSTGRESQL_AVAILABLE,
     get_data_source_uri,
     get_datasource_connexion_from_layer,
@@ -55,12 +59,16 @@ from .infrastructure.feedback import (
     show_backend_info, show_success_with_backend,
     show_info, show_warning, show_error
 )
-from .core.services.history_service import HistoryManager
-from .core.services.favorites_service import FavoritesManager
+from .core.services.history_service import HistoryService
+from .core.services.favorites_service import FavoritesService
 from .ui.config import UIConfig, DisplayProfile
-from .modules.config_helpers import get_optimization_thresholds
-from .modules.object_safety import (
-    is_sip_deleted, is_valid_layer, is_qgis_alive,
+
+# Config helpers (migrated to config/)
+from .config.config import get_optimization_thresholds
+
+# Object safety utilities (migrated to infrastructure/utils/)
+from .infrastructure.utils import (
+    is_sip_deleted, is_layer_valid as is_valid_layer, is_qgis_alive,
     GdalErrorHandler
 )
 from .infrastructure.logging import get_app_logger
@@ -247,15 +255,15 @@ class FilterMateApp:
         
         # History & Favorites
         history_max_size = self._get_history_max_size_from_config()
-        self.history_manager = HistoryManager(max_size=history_max_size)
-        logger.info(f"FilterMate: HistoryManager initialized for undo/redo functionality (max_size={history_max_size})")
+        self.history_manager = HistoryService(max_size=history_max_size)
+        logger.info(f"FilterMate: HistoryService initialized for undo/redo functionality (max_size={history_max_size})")
         self._undo_redo_handler = UndoRedoHandler(self.history_manager, lambda: self.PROJECT_LAYERS, lambda: self.PROJECT, lambda: self.iface,
                                                    self._refresh_layers_and_canvas, lambda t, m: iface.messageBar().pushWarning(t, m)) if HEXAGONAL_AVAILABLE and UndoRedoHandler else None
         if self._undo_redo_handler:
             logger.info("FilterMate: UndoRedoHandler initialized (v4.0 migration)")
-        self.favorites_manager = FavoritesManager(max_favorites=50)
+        self.favorites_manager = FavoritesService(max_favorites=50)
         self.favorites_manager.load_from_project()
-        logger.info(f"FilterMate: FavoritesManager initialized ({self.favorites_manager.count} favorites loaded)")
+        logger.info(f"FilterMate: FavoritesService initialized ({self.favorites_manager.count} favorites loaded)")
         
         # Spatialite cache
         try:
@@ -611,7 +619,7 @@ class FilterMateApp:
         
         # Fallback: direct connection
         try:
-            from .modules.tasks import spatialite_connect
+            from .infrastructure.utils import spatialite_connect
             return spatialite_connect(self.db_file_path)
         except Exception as e:
             logger.error(f"Spatialite connection fallback failed: {e}")
@@ -698,7 +706,7 @@ class FilterMateApp:
     
     def _execute_filter_task(self, task_name: str, task_parameters: dict):
         """Execute filter/unfilter/reset task (callback for TaskOrchestrator)."""
-        from .modules.tasks import FilterEngineTask
+        from .core.tasks import FilterEngineTask
         
         if self.dockwidget is None or self.dockwidget.current_layer is None:
             return
@@ -743,7 +751,7 @@ class FilterMateApp:
     
     def _execute_layer_task(self, task_name: str, task_parameters: dict):
         """Execute layer management task (callback for TaskOrchestrator)."""
-        from .modules.tasks import LayersManagementEngineTask
+        from .core.tasks import LayersManagementEngineTask
         
         self.appTasks[task_name] = LayersManagementEngineTask(
             self.tasks_descriptions[task_name], 
@@ -1468,11 +1476,11 @@ class FilterMateApp:
             self.db_file_path = self._database_manager.db_file_path
             self.project_uuid = self._database_manager.project_uuid
             
-            # Configure FavoritesManager with SQLite database
+            # Configure FavoritesService with SQLite database
             if hasattr(self, 'favorites_manager') and self.db_file_path and self.project_uuid:
                 self.favorites_manager.set_database(self.db_file_path, str(self.project_uuid))
                 self.favorites_manager.load_from_project()
-                logger.info(f"FavoritesManager configured with SQLite database ({self.favorites_manager.count} favorites loaded)")
+                logger.info(f"FavoritesService configured with SQLite database ({self.favorites_manager.count} favorites loaded)")
 
     def add_project_datasource(self, layer):
         """Add PostgreSQL datasource and create temp schema via DatasourceManager."""

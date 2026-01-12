@@ -40,7 +40,7 @@ warnings.warn(
 )
 
 # Re-export from new location
-from core.optimization import (
+from ...core.optimization import (
     OptimizationType,
     MaterializedViewInfo,
     FidListInfo,

@@ -31,7 +31,7 @@ warnings.warn(
 )
 
 # Re-export from infrastructure
-from infrastructure.cache import (
+from ...infrastructure.cache import (
     QueryExpressionCache,
     CacheEntry,
     get_query_cache,

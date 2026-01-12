@@ -38,8 +38,8 @@ except ImportError:
     QgsUnitTypes = None
 
 # FilterMate imports
-from infrastructure.logging import setup_logger
-from config.config import ENV_VARS
+from ..logging import setup_logger
+from ...config.config import ENV_VARS
 
 # Setup logger with rotation
 logger = setup_logger(

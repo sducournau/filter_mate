@@ -30,7 +30,7 @@ warnings.warn(
 )
 
 # Re-export from new location
-from core.tasks.expression_evaluation_task import (
+from ...core.tasks.expression_evaluation_task import (
     ExpressionEvaluationSignals,
     ExpressionEvaluationTask,
     ExpressionEvaluationManager,

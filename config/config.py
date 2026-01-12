@@ -2,6 +2,9 @@ from qgis.core import QgsApplication, QgsProject, QgsUserProfileManager, QgsUser
 import os, sys
 import json
 
+# Re-export get_optimization_thresholds for backward compatibility
+# Function was moved to core.optimization.config_provider in EPIC-1 Phase E7.5
+from filter_mate.core.optimization.config_provider import get_optimization_thresholds
 
 ENV_VARS = {}
 

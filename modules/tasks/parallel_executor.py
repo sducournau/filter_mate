@@ -29,7 +29,7 @@ warnings.warn(
 )
 
 # Re-export from new location
-from infrastructure.parallel import (
+from ...infrastructure.parallel import (
     FilterResult,
     ParallelFilterExecutor,
     ParallelConfig

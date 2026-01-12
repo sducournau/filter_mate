@@ -193,7 +193,7 @@ class StyleLoader:
         
         # Extract colors from config using helpers
         try:
-            from ...modules.config_helpers import (
+            from ...config.theme_helpers import (
                 get_active_theme, get_theme_colors,
                 get_background_colors, get_font_colors, get_accent_colors
             )
@@ -294,7 +294,7 @@ class StyleLoader:
         """
         if config_data:
             try:
-                from ...modules.config_helpers import get_config_value
+                from ...config.theme_helpers import get_config_value
                 # Try new structure
                 themes = get_config_value(config_data, "app", "themes")
                 if themes:
@@ -354,7 +354,7 @@ class StyleLoader:
             str: Active theme name or 'default'
         """
         try:
-            from ...modules.config_helpers import get_active_theme as get_active_theme_helper
+            from ...config.theme_helpers import get_active_theme as get_active_theme_helper
             active_theme = get_active_theme_helper(config_data)
             
             # Auto-detect from QGIS if set to 'auto'
@@ -484,7 +484,7 @@ class StyleLoader:
         
         # Also update icon theme
         try:
-            from ...modules.icon_utils import IconThemeManager
+            from .icon_manager import IconManager as IconThemeManager
             IconThemeManager.set_theme(theme_to_apply)
         except ImportError:
             pass
@@ -505,7 +505,7 @@ class StyleLoader:
         Synchronize IconThemeManager with current StyleLoader theme.
         """
         try:
-            from ...modules.icon_utils import IconThemeManager
+            from .icon_manager import IconManager as IconThemeManager
             IconThemeManager.set_theme(cls._current_theme)
             logger.debug(f"Synced IconThemeManager to theme: {cls._current_theme}")
         except ImportError:

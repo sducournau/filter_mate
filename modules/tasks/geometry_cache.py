@@ -24,6 +24,6 @@ warnings.warn(
 )
 
 # Re-export from infrastructure
-from infrastructure.cache import SourceGeometryCache
+from ...infrastructure.cache import SourceGeometryCache
 
 __all__ = ['SourceGeometryCache']

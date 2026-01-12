@@ -729,7 +729,7 @@ class TaskParameterBuilder:
                 # Handle layers not in PROJECT_LAYERS but still in QGIS project
                 layer = project.mapLayer(layer_key)
                 if layer and isinstance(layer, QgsVectorLayer) and layer.isValid():
-                    from ..modules.appUtils import detect_layer_provider_type
+                    from ..infrastructure.utils.layer_utils import detect_layer_provider_type
                     
                     geom_type_map = {
                         0: 'GeometryType.Point', 
@@ -880,7 +880,7 @@ class TaskParameterBuilder:
         Returns:
             str: Error message if validation fails, None if OK
         """
-        from ..modules.appUtils import is_layer_source_available
+        from ..infrastructure.utils.validation_utils import is_layer_source_available
         from qgis.utils import iface
         
         # Check layer validity and source availability

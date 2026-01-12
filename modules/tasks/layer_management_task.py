@@ -24,6 +24,6 @@ warnings.warn(
 )
 
 # Re-export from new location
-from core.tasks.layer_management_task import LayersManagementEngineTask
+from ...core.tasks.layer_management_task import LayersManagementEngineTask
 
 __all__ = ['LayersManagementEngineTask']

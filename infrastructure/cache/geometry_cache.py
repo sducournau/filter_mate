@@ -30,7 +30,7 @@ Usage:
 Migrated from modules/tasks/geometry_cache.py (EPIC-1 v3.0).
 """
 
-from infrastructure.logging import get_logger
+from ..logging import get_logger
 
 logger = get_logger(__name__)
 

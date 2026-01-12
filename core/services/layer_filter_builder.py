@@ -20,10 +20,8 @@ import logging
 if TYPE_CHECKING:
     from qgis.core import QgsVectorLayer, QgsProject
 
-from ...modules.appUtils import (
-    is_layer_source_available,
-    detect_layer_provider_type
-)
+from ...infrastructure.utils.validation_utils import is_layer_source_available
+from ...infrastructure.utils.layer_utils import detect_layer_provider_type
 
 logger = logging.getLogger('FilterMate.LayerFilterBuilder')
 

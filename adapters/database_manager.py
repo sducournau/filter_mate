@@ -25,7 +25,7 @@ from qgis.core import (
     QgsProject
 )
 
-from ..modules.tasks import spatialite_connect
+from ..infrastructure.utils.task_utils import spatialite_connect
 from ..infrastructure.feedback import show_error
 
 logger = logging.getLogger('FilterMate.DatabaseManager')

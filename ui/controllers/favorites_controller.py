@@ -23,7 +23,7 @@ from .base_controller import BaseController
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
-    from core.services.favorites_service import FavoritesManager, FilterFavorite
+    from core.services.favorites_service import FavoritesService, FilterFavorite
 
 logger = logging.getLogger(__name__)
 
@@ -427,8 +427,8 @@ class FavoritesController(BaseController):
 
         # Create new manager
         try:
-            from core.services.favorites_service import FavoritesManager
-            self._favorites_manager = FavoritesManager()
+            from core.services.favorites_service import FavoritesService
+            self._favorites_manager = FavoritesService()
 
             # Try to connect to database
             project = getattr(self.dockwidget, 'PROJECT', None) or QgsProject.instance()

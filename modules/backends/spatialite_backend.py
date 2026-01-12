@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-FilterMate Modules Spatialite Backend - Compatibility Shim
+FilterMate Modules Spatialite Backend - DEPRECATED SHIM
 
+DEPRECATED: Legacy compatibility shim.
 Re-exports SpatialiteBackend as SpatialiteGeometricFilter for backward compatibility.
 
-Usage:
+Usage (deprecated):
     from modules.backends.spatialite_backend import SpatialiteGeometricFilter
+
+Use instead:
+    from adapters.backends.spatialite import SpatialiteBackend
 """
 
 import warnings

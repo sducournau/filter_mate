@@ -45,7 +45,7 @@ from typing import Optional, Dict, Any, Tuple, List
 from collections import OrderedDict
 from dataclasses import dataclass, field
 
-from infrastructure.logging import get_logger
+from ..logging import get_logger
 
 logger = get_logger(__name__)
 

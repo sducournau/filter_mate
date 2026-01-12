@@ -47,12 +47,12 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from contextlib import contextmanager
 
-from infrastructure.logging import get_logger
+from ...infrastructure.logging import get_logger
 
 logger = get_logger(__name__)
 
 # Centralized psycopg2 availability (v2.8.6 refactoring)
-from infrastructure.database.postgresql_support import psycopg2, PSYCOPG2_AVAILABLE
+from ...infrastructure.database.postgresql_support import psycopg2, PSYCOPG2_AVAILABLE
 
 # For backward compatibility
 POSTGRESQL_AVAILABLE = PSYCOPG2_AVAILABLE

@@ -7,10 +7,10 @@ You are working on **FilterMate**, a QGIS plugin written in Python that provides
 | Field             | Value                                       |
 | ----------------- | ------------------------------------------- |
 | **Type**          | QGIS Plugin (Python 3.7+)                   |
-| **Version**       | 2.8.5 (January 2026)                        |
-| **Status**        | Production - Stable                         |
+| **Version**       | 4.0-alpha (January 2026)                    |
+| **Status**        | Production - Hexagonal Architecture         |
 | **Framework**     | QGIS API, PyQt5                             |
-| **Architecture**  | Multi-backend (PostgreSQL, Spatialite, OGR) |
+| **Architecture**  | Hexagonal (Core/Adapters/Infrastructure)    |
 | **Quality Score** | 9.0/10                                      |
 
 ## 🔗 Documentation System
@@ -22,7 +22,8 @@ FilterMate uses **Serena + BMAD** for comprehensive development support:
 | Need                  | Location                                                                   |
 | --------------------- | -------------------------------------------------------------------------- |
 | **Coding patterns**   | This file + `.serena/memories/code_style_conventions.md`                   |
-| **Architecture**      | `_bmad/bmm/data/` + `.serena/memories/architecture_overview.md`           |
+| **Architecture**      | `.serena/memories/architecture_overview.md`                                |
+| **Migration Status**  | `_bmad-output/REFACTORING-STATUS-20260112.md`                             |
 | **Requirements**      | `_bmad/bmm/data/` (PRDs et spécifications)                                |
 | **User stories**      | `_bmad/bmm/data/` (stories et epics)                                      |
 | **Workflows**         | `_bmad/core/workflows/` et `_bmad/bmm/workflows/`                         |
@@ -35,29 +36,45 @@ Use Serena symbolic tools for efficient code navigation:
 
 ```python
 # Overview first (NOT read_file!)
-get_symbols_overview("modules/appTasks.py")
+get_symbols_overview("core/tasks/filter_task.py")
 
 # Find specific symbol
-find_symbol("FilterTask", depth=1, include_body=False)
+find_symbol("FilterEngineTask", depth=1, include_body=False)
 
 # Read only what you need
-find_symbol("FilterTask/run", include_body=True)
+find_symbol("FilterEngineTask/run", include_body=True)
 ```
 
-## 🏗️ Current Architecture
+## 🏗️ Current Architecture (v4.0 Hexagonal)
 
 ```
-filter_mate.py          → Plugin entry point
-filter_mate_app.py      → Application orchestrator
-filter_mate_dockwidget.py → UI management
-modules/
-├── backends/           → Multi-backend system (Factory pattern)
-│   ├── factory.py     → Backend selection
-│   ├── postgresql_backend.py
-│   ├── spatialite_backend.py
-│   └── ogr_backend.py
-├── tasks/              → Async operations (QgsTask)
-└── *.py                → Utility modules
+filter_mate.py              → Plugin entry point
+filter_mate_app.py          → Application orchestrator (1,667 lines)
+filter_mate_dockwidget.py   → UI management (2,494 lines)
+ui/controllers/             → MVC Controllers (13,143 lines)
+core/
+├── tasks/                  → Async operations (QgsTask)
+│   ├── filter_task.py     → Main filtering task (6,022 lines)
+│   └── layer_management_task.py
+├── services/               → Hexagonal services (10,528 lines)
+│   ├── filter_service.py
+│   ├── layer_service.py
+│   └── ... (20 services)
+├── filter/                 → Filter domain logic
+└── geometry/               → Geometry utilities
+adapters/
+├── backends/               → Multi-backend system
+│   ├── postgresql/
+│   ├── spatialite/
+│   └── ogr/
+└── repositories/           → Data access
+infrastructure/
+├── logging/                → Logging setup
+├── cache/                  → Query/geometry cache
+├── utils/                  → Utilities (migrated from modules/)
+└── database/               → Database utilities
+
+⚠️ DEPRECATED: modules/ (shims only - will be removed in v5.0)
 ```
 
 ## Code Style Guidelines
@@ -72,16 +89,16 @@ modules/
 
 ### Naming Conventions
 
-- Classes: `PascalCase` (e.g., `FilterMateApp`, `FilterTask`)
+- Classes: `PascalCase` (e.g., `FilterMateApp`, `FilterEngineTask`)
 - Functions/Methods: `snake_case` (e.g., `manage_task`, `get_datasource_connexion_from_layer`)
 - Constants: `UPPER_SNAKE_CASE` (e.g., `POSTGRESQL_AVAILABLE`)
 - Private methods: prefix with `_` (e.g., `_internal_method`)
 
-### Import Order
+### Import Order (NEW - v4.0)
 
 1. Standard library imports
 2. Third-party imports (QGIS, PyQt5)
-3. Local application imports
+3. Local application imports (NEW LOCATIONS!)
 
 Example:
 
@@ -94,7 +111,24 @@ from qgis.core import QgsVectorLayer, QgsProject
 from qgis.PyQt.QtCore import Qt
 
 from .config.config import ENV_VARS
-from .modules.appUtils import get_datasource_connexion_from_layer
+# NEW: Import from new locations (not modules/)
+from .adapters.backends.postgresql_availability import POSTGRESQL_AVAILABLE
+from .infrastructure.utils import get_datasource_connexion_from_layer
+from .core.tasks import FilterEngineTask
+```
+
+## ⚠️ DEPRECATED IMPORTS (DON'T USE!)
+
+```python
+# ❌ OLD - Will be removed in v5.0
+from modules.appUtils import POSTGRESQL_AVAILABLE
+from modules.tasks import FilterEngineTask
+from modules.backends import BackendFactory
+
+# ✅ NEW - Use these instead
+from adapters.backends.postgresql_availability import POSTGRESQL_AVAILABLE
+from core.tasks import FilterEngineTask
+from adapters.backends import BackendFactory
 ```
 
 ## Critical Patterns
@@ -502,16 +536,25 @@ transformed_geom = geom.transform(transform)
 - Phase 6: Configuration v2.0 (metadata, migration)
 - Phase 7: Advanced features (undo/redo, favorites)
 
-### 🔄 Current Phase: Testing & Documentation
+### ✅ EPIC-1 Migration Complete (v4.0-alpha)
 
-- Target: 80% test coverage (currently ~70%)
-- Focus: Stability, documentation, user guide
+- Phase E9-E11: God classes eliminated (-67% reduction)
+- Phase E12: filter_task.py migrated to core/tasks/
+- **modules/ folder: SHIMS ONLY (~1,978 lines)**
+- All code migrated to hexagonal architecture
 
-### 📋 Future Phases (see .bmad-core/roadmap.md)
+### 🔄 Current Phase: v5.0 Preparation
 
-- Phase 9: Performance optimization (caching)
-- Phase 10: Extensibility (plugin API)
-- Phase 11: Enterprise features
+- [ ] Remove modules/ folder entirely
+- [ ] Update all external imports
+- Target: 80% test coverage (currently ~75%)
+- Focus: Stability, documentation, cleanup
+
+### 📋 Future Phases
+
+- Phase E13: Remove modules/ folder (v5.0)
+- Phase 14: Performance optimization (caching)
+- Phase 15: Extensibility (plugin API)
 
 ## Quick Reference
 

@@ -26,9 +26,9 @@ from qgis.core import (
     Qgis
 )
 
-from adapters.backends.factory import BackendFactory
-from infrastructure.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
-from core.domain.exceptions import BackendNotAvailableError, LayerInvalidError
+from ...adapters.backends.factory import BackendFactory
+from ...infrastructure.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
+from ..domain.exceptions import BackendNotAvailableError, LayerInvalidError
 
 logger = logging.getLogger('filter_mate')
 

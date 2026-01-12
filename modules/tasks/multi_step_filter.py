@@ -43,7 +43,7 @@ warnings.warn(
 )
 
 # Re-export from new location
-from core.strategies.multi_step_filter import (
+from ...core.strategies.multi_step_filter import (
     FilterStepType,
     FilterStrategy,
     FilterStepResult,

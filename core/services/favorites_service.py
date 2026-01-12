@@ -136,13 +136,13 @@ class FavoritesService(QObject):
         """
         if self._favorites_manager is None:
             try:
-                from core.services.favorites_service import FavoritesManager
-                self._favorites_manager = FavoritesManager(
+                from core.services.favorites_service import FavoritesService
+                self._favorites_manager = FavoritesService(
                     db_path=db_path,
                     project_uuid=project_uuid
                 )
             except ImportError:
-                logger.error("Could not import FavoritesManager")
+                logger.error("Could not import FavoritesService")
                 return False
         else:
             if db_path and project_uuid:

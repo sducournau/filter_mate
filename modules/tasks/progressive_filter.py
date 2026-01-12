@@ -40,7 +40,7 @@ warnings.warn(
 
 # Re-export from new location
 # Note: FilterStrategy and FilterResult are renamed to avoid conflicts
-from core.strategies.progressive_filter import (
+from ...core.strategies.progressive_filter import (
     FilterStrategy,
     FilterResult,
     LayerProperties,

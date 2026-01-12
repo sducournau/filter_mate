@@ -39,7 +39,7 @@ from typing import Dict, Optional, List, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 
-from infrastructure.logging import get_logger
+from ..logging import get_logger
 
 logger = get_logger(__name__)
 

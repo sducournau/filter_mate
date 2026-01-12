@@ -44,7 +44,7 @@ from dataclasses import dataclass
 import threading
 import time
 
-from infrastructure.logging import get_logger
+from ..logging import get_logger
 
 logger = get_logger(__name__)
 

@@ -32,7 +32,7 @@ warnings.warn(
 )
 
 # Re-export from infrastructure
-from infrastructure.utils import (
+from ...infrastructure.utils import (
     spatialite_connect,
     safe_spatialite_connect,
     sqlite_execute_with_retry,

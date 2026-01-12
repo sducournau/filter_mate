@@ -31,7 +31,7 @@ from typing import Optional, Callable, Dict, Any, Iterator, List
 from dataclasses import dataclass
 import time
 
-from infrastructure.logging import get_logger
+from ..logging import get_logger
 
 logger = get_logger(__name__)
 

@@ -75,8 +75,10 @@ import webbrowser
 from .ui.widgets import QgsCheckableComboBoxFeaturesListPickerWidget, QgsCheckableComboBoxLayer
 from .ui.widgets.json_view.model import JsonModel
 from .ui.widgets.json_view.view import JsonView
-from .modules.object_safety import is_valid_layer
-from .modules.appUtils import (
+
+# Object safety and layer utilities (migrated to infrastructure)
+from .infrastructure.utils import is_layer_valid as is_valid_layer
+from .infrastructure.utils import (
     get_best_display_field,
     is_layer_source_available
 )
@@ -84,28 +86,32 @@ from .core.domain.exceptions import SignalStateChangeError
 from .infrastructure.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR, get_geometry_type_string
 from .ui.styles import StyleLoader, QGISThemeWatcher
 from .infrastructure.feedback import show_info, show_warning, show_error, show_success
-from .modules.config_helpers import set_config_value, get_optimization_thresholds
+
+# Config helpers (migrated to config/)
+from .config.config import get_optimization_thresholds
+from .infrastructure.config import set_config_value
+
 from .infrastructure.cache import ExploringFeaturesCache
 from .filter_mate_dockwidget_base import Ui_FilterMateDockWidgetBase
 
 # Import async expression evaluation for large layers (v2.5.10)
 # EPIC-1: Migrated to core/tasks/
 try:
-    from core.tasks import get_expression_manager
+    from .core.tasks import get_expression_manager
     ASYNC_EXPRESSION_AVAILABLE = True
 except ImportError:
     ASYNC_EXPRESSION_AVAILABLE = False; get_expression_manager = None
 
-# CRS utilities
-try: from .modules.crs_utils import is_geographic_crs, get_optimal_metric_crs, DEFAULT_METRIC_CRS; CRS_UTILS_AVAILABLE = True
+# CRS utilities (migrated to core/geometry/)
+try: from .core.geometry.crs_utils import is_geographic_crs, get_optimal_metric_crs, DEFAULT_METRIC_CRS; CRS_UTILS_AVAILABLE = True
 except ImportError: CRS_UTILS_AVAILABLE = False; DEFAULT_METRIC_CRS = "EPSG:3857"
 
-# Icon utilities for dark mode
-try: from .modules.icon_utils import IconThemeManager, get_themed_icon; ICON_THEME_AVAILABLE = True
+# Icon utilities for dark mode (migrated to ui/)
+try: from .ui.icons import IconThemeManager, get_themed_icon; ICON_THEME_AVAILABLE = True
 except ImportError: ICON_THEME_AVAILABLE = False
 
 # UI configuration system
-try: from .ui.config import UIConfig; from .modules import ui_widget_utils as ui_utils; UI_CONFIG_AVAILABLE = True
+try: from .ui.config import UIConfig; from .ui import widget_utils as ui_utils; UI_CONFIG_AVAILABLE = True
 except ImportError: UI_CONFIG_AVAILABLE = False
 
 # MVC Controllers
@@ -771,7 +777,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             has_buf_type = getattr(self,'checkBox_filtering_buffer_type',None) and self.checkBox_filtering_buffer_type.isChecked()
             recommendations = AutoOptimizer().get_recommendations(layer_analysis, user_centroid_enabled=self._is_centroid_already_enabled(self.current_layer), has_buffer=has_buf, has_buffer_type=has_buf_type, is_source_layer=True)
             if not recommendations: show_success("FilterMate", f"Layer '{self.current_layer.name()}' is already optimally configured.\nType: {layer_analysis.location_type.value}\nFeatures: {layer_analysis.feature_count:,}"); return
-            from .modules.optimization_dialogs import OptimizationRecommendationDialog
+            from .ui.dialogs.optimization_dialog import RecommendationDialog as OptimizationRecommendationDialog
             dialog = OptimizationRecommendationDialog(layer_name=self.current_layer.name(), recommendations=[r.to_dict() for r in recommendations],
                 feature_count=layer_analysis.feature_count, location_type=layer_analysis.location_type.value, parent=self)
             if dialog.exec_():
@@ -802,13 +808,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _show_optimization_settings_dialog(self):
         """v3.1 Sprint 15: Show optimization settings dialog."""
         try:
-            from .modules.backend_optimization_widget import BackendOptimizationDialog
+            from .ui.dialogs.optimization_dialog import OptimizationDialog as BackendOptimizationDialog
             dialog = BackendOptimizationDialog(self)
             if dialog.exec_():
                 self._apply_optimization_dialog_settings(dialog.get_settings())
         except ImportError:
             try:
-                from .modules.optimization_dialogs import OptimizationSettingsDialog
+                from .ui.dialogs.optimization_dialog import OptimizationDialog as OptimizationSettingsDialog
                 dialog = OptimizationSettingsDialog(self)
                 if dialog.exec_():
                     s = dialog.get_settings()
@@ -837,7 +843,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _show_backend_optimization_dialog(self):
         """Show backend optimization dialog."""
         try:
-            from .modules.backend_optimization_widget import BackendOptimizationDialog
+            from .ui.dialogs.optimization_dialog import OptimizationDialog as BackendOptimizationDialog
             dialog = BackendOptimizationDialog(self)
             if not dialog.exec_(): return
             all_settings, global_s = dialog.get_settings(), dialog.get_settings().get('global', {})

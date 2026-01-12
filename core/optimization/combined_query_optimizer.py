@@ -57,7 +57,7 @@ from typing import Optional, Dict, Any, Tuple, List, NamedTuple
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
-from infrastructure.logging import get_logger
+from ...infrastructure.logging import get_logger
 # DEFAULT_TEMP_SCHEMA is hardcoded - no longer imported from constants
 
 logger = get_logger(__name__)

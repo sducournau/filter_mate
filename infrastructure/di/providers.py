@@ -15,16 +15,16 @@ import logging
 from .container import Container
 
 # Ports
-from core.ports.backend_port import BackendPort
-from core.ports.cache_port import CachePort
-from core.ports.repository_port import LayerRepositoryPort
+from ...core.ports.backend_port import BackendPort
+from ...core.ports.cache_port import CachePort
+from ...core.ports.repository_port import LayerRepositoryPort
 
 # Domain
-from core.domain.filter_expression import ProviderType
+from ...core.domain.filter_expression import ProviderType
 
 # Services
-from core.services.filter_service import FilterService
-from core.services.expression_service import ExpressionService
+from ...core.services.filter_service import FilterService
+from ...core.services.expression_service import ExpressionService
 
 logger = logging.getLogger('FilterMate.DI.Providers')
 

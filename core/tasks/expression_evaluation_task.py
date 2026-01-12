@@ -42,7 +42,7 @@ from qgis.core import (
 )
 from qgis.PyQt.QtCore import pyqtSignal, QObject
 
-from infrastructure.logging import get_logger
+from ...infrastructure.logging import get_logger
 
 logger = get_logger(__name__)
 

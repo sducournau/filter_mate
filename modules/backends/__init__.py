@@ -1,12 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-FilterMate Modules Backends Package - Compatibility Shim
+FilterMate Modules Backends Package - DEPRECATED SHIM
 
+DEPRECATED: Legacy compatibility shim.
 Re-exports backend classes from adapters.backends for backward compatibility.
 
-Usage:
+Usage (deprecated):
     from modules.backends import BackendFactory
     from modules.backends.spatialite_backend import SpatialiteGeometricFilter
+
+Use instead:
+    from adapters.backends import BackendFactory, BackendSelector
 """
 
 import warnings

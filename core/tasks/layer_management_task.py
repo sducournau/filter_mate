@@ -39,8 +39,8 @@ from collections import OrderedDict
 import re
 
 # Import logging configuration
-from infrastructure.logging import get_logger, setup_logger, safe_log
-from config.config import ENV_VARS
+from ...infrastructure.logging import get_logger, setup_logger, safe_log
+from ...config.config import ENV_VARS
 
 # Setup logger
 logger = setup_logger(
@@ -56,19 +56,20 @@ PROVIDER_SPATIALITE = "spatialite"
 PROVIDER_OGR = "ogr"
 
 # Import utilities (migrated from modules.appUtils)
-from infrastructure.utils import (
+from ...infrastructure.utils import (
     get_datasource_connexion_from_layer,
     detect_layer_provider_type,
     get_best_display_field
 )
 
-# Additional utilities that may still be in appUtils shim
+# Additional utilities from infrastructure
 try:
-    from modules.appUtils import (
+    from ...infrastructure.utils import (
         get_source_table_name,
         geometry_type_to_string,
-        escape_json_string,
     )
+    def escape_json_string(s):
+        return s.replace('\\', '\\\\').replace('"', '\\"')
 except ImportError:
     # Fallback definitions
     def get_source_table_name(layer):
@@ -84,16 +85,16 @@ except ImportError:
         return s.replace('\\', '\\\\').replace('"', '\\"')
 
 # Import object safety utilities (migrated from modules.object_safety)
-from infrastructure.utils import (
+from ...infrastructure.utils import (
     is_sip_deleted, 
     is_layer_valid as is_valid_layer,
     is_layer_source_available,
     safe_layer_access
 )
 
-# Additional object safety utilities with fallback
+# Additional object safety utilities from infrastructure
 try:
-    from modules.object_safety import (
+    from ...infrastructure.utils.object_safety import (
         is_layer_in_project, safe_disconnect, safe_emit,
         safe_set_layer_variable, safe_set_layer_variables, is_qgis_alive
     )
@@ -142,7 +143,7 @@ except ImportError:
     sip = None
 
 # Import task utilities
-from infrastructure.database.spatialite_support import (
+from ...infrastructure.database.spatialite_support import (
     spatialite_connect,
     safe_spatialite_connect,
     sqlite_execute_with_retry, 
@@ -151,20 +152,22 @@ from infrastructure.database.spatialite_support import (
 )
 
 # Import type utilities
-from utils.type_utils import can_cast, return_typed_value
+from ...utils.type_utils import can_cast, return_typed_value
 
 # Centralized psycopg2 availability (v2.8.6 refactoring)
-from infrastructure.database.postgresql_support import psycopg2, PSYCOPG2_AVAILABLE, POSTGRESQL_AVAILABLE
+from ...infrastructure.database.postgresql_support import psycopg2, PSYCOPG2_AVAILABLE, POSTGRESQL_AVAILABLE
 
 # Import connection pool for optimized PostgreSQL operations
 try:
-    from modules.connection_pool import (
-        get_pool_manager,
-        pooled_connection_from_layer,
-        POSTGRESQL_AVAILABLE as POOL_AVAILABLE
+    from ...infrastructure.database.connection_pool import (
+        get_pool,
+        register_pool,
     )
-    from modules.postgresql_optimizer import BatchMetadataLoader
-    CONNECTION_POOL_AVAILABLE = POOL_AVAILABLE
+    # Pool manager and optimizers are optional
+    get_pool_manager = None
+    pooled_connection_from_layer = None
+    BatchMetadataLoader = None
+    CONNECTION_POOL_AVAILABLE = True
 except ImportError:
     CONNECTION_POOL_AVAILABLE = False
     get_pool_manager = None

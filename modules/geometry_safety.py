@@ -22,7 +22,7 @@ warnings.warn(
 )
 
 # Re-export from new location
-from core.geometry.geometry_safety import (
+from ..core.geometry.geometry_safety import (
     # Validation
     validate_geometry,
     validate_geometry_for_geos,

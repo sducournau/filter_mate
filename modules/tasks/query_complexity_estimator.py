@@ -31,7 +31,7 @@ warnings.warn(
 )
 
 # Re-export from infrastructure
-from infrastructure.utils import (
+from ...infrastructure.utils import (
     QueryComplexity,
     ComplexityBreakdown,
     OperationCosts,
