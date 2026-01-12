@@ -1579,14 +1579,17 @@ class FilterMateApp:
         )
         
         if success:
-            # Also save to config file
+            # Also save to config file - use cleaned data to avoid non-serializable objects
+            # (e.g., psycopg2 connections that may be stored in CONFIG_DATA)
+            config_data_clean = self._database_manager._clean_for_json(self.CONFIG_DATA)
             with open(ENV_VARS["CONFIG_JSON_PATH"], 'w') as outfile:
-                outfile.write(json.dumps(self.CONFIG_DATA, indent=4))
+                outfile.write(json.dumps(config_data_clean, indent=4))
             
             # Save favorites to project
-            if hasattr(self, 'favorites_manager'):
-                self.favorites_manager.save_to_project()
-                logger.debug(f"Saved {self.favorites_manager.count} favorites to project")
+            if hasattr(self, 'favorites_manager') and self.favorites_manager is not None:
+                self.favorites_manager.save()
+                count = getattr(self.favorites_manager, 'count', 0)
+                logger.debug(f"Saved {count} favorites to project")
 
     def layer_management_engine_task_completed(self, result_project_layers, task_name):
         """Handle layer management task completion. Delegates to LayerTaskCompletionHandler."""

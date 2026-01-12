@@ -124,14 +124,14 @@ class UndoRedoHandler:
         has_remote_layers = bool(layers_to_filter)
         
         if has_remote_layers:
-            # Global history mode
-            can_undo = self._history_manager.can_undo_global()
-            can_redo = self._history_manager.can_redo_global()
+            # Global history mode - use global undo/redo availability
+            can_undo = self._history_manager.can_undo
+            can_redo = self._history_manager.can_redo
         else:
-            # Source layer only mode
-            history = self._history_manager.get_history(current_layer.id())
-            can_undo = history.can_undo() if history else False
-            can_redo = history.can_redo() if history else False
+            # Source layer only mode - check if any history entries affect this layer
+            layer_history = self._history_manager.get_history_for_layer(current_layer.id())
+            can_undo = len(layer_history) > 0 and self._history_manager.can_undo
+            can_redo = self._history_manager.can_redo
         
         undo_button.setEnabled(can_undo)
         redo_button.setEnabled(can_redo)
@@ -229,7 +229,7 @@ class UndoRedoHandler:
         has_remote_layers = bool(layers_to_filter)
         use_global_redo = use_global and has_remote_layers
         
-        if use_global_redo and self._history_manager.can_redo_global():
+        if use_global_redo and self._history_manager.can_redo:
             result = self._perform_global_redo(source_layer, project_layers)
         else:
             result = self._perform_layer_redo(source_layer, project_layers)
@@ -247,25 +247,28 @@ class UndoRedoHandler:
     ) -> bool:
         """Perform global undo affecting all filtered layers."""
         logger.info("Performing global undo (remote layers are filtered)")
-        global_state = self._history_manager.undo_global()
+        history_entry = self._history_manager.undo()
         
-        if not global_state:
+        if not history_entry:
             logger.info("No global undo history available")
             return False
         
-        # Apply state to source layer
-        safe_set_subset_string(source_layer, global_state.source_expression)
-        project_layers[source_layer.id()]["infos"]["is_already_subset"] = bool(global_state.source_expression)
-        expr_preview = global_state.source_expression[:60] if global_state.source_expression else 'no filter'
-        logger.info(f"Restored source layer: {expr_preview}")
-        
-        # Apply state to ALL remote layers
-        restored_layers = self._restore_remote_layers(global_state, project_layers)
+        # Restore previous filters for all affected layers
+        restored_layers = []
+        for layer_id, previous_filter in history_entry.previous_filters:
+            if layer_id in project_layers:
+                layer = project_layers[layer_id].get("layer")
+                if layer:
+                    safe_set_subset_string(layer, previous_filter)
+                    project_layers[layer_id]["infos"]["is_already_subset"] = bool(previous_filter)
+                    restored_layers.append(layer)
+                    expr_preview = previous_filter[:60] if previous_filter else 'no filter'
+                    logger.info(f"Restored layer {layer.name()}: {expr_preview}")
         
         # Refresh all affected layers
         self._refresh_affected_layers(source_layer, restored_layers)
         
-        logger.info(f"Global undo completed - restored {len(restored_layers) + 1} layers")
+        logger.info(f"Global undo completed - restored {len(restored_layers)} layers")
         return True
     
     def _perform_global_redo(
@@ -275,23 +278,29 @@ class UndoRedoHandler:
     ) -> bool:
         """Perform global redo affecting all filtered layers."""
         logger.info("Performing global redo")
-        global_state = self._history_manager.redo_global()
+        history_entry = self._history_manager.redo()
         
-        if not global_state:
+        if not history_entry:
             logger.info("No global redo history available")
             return False
         
-        # Apply state to source layer
-        safe_set_subset_string(source_layer, global_state.source_expression)
-        project_layers[source_layer.id()]["infos"]["is_already_subset"] = bool(global_state.source_expression)
-        expr_preview = global_state.source_expression[:60] if global_state.source_expression else 'no filter'
-        logger.info(f"Restored source layer: {expr_preview}")
-        
-        # Apply state to ALL remote layers
-        restored_layers = self._restore_remote_layers(global_state, project_layers)
+        # Apply the filter expression to all affected layers
+        restored_layers = []
+        for layer_id in history_entry.layer_ids:
+            if layer_id in project_layers:
+                layer = project_layers[layer_id].get("layer")
+                if layer:
+                    safe_set_subset_string(layer, history_entry.expression)
+                    project_layers[layer_id]["infos"]["is_already_subset"] = bool(history_entry.expression)
+                    restored_layers.append(layer)
+                    expr_preview = history_entry.expression[:60] if history_entry.expression else 'no filter'
+                    logger.info(f"Redone layer {layer.name()}: {expr_preview}")
         
         # Refresh all affected layers
         self._refresh_affected_layers(source_layer, restored_layers)
+        
+        logger.info(f"Global redo completed - restored {len(restored_layers)} layers")
+        return True
         
         logger.info(f"Global redo completed - restored {len(restored_layers) + 1} layers")
         return True
@@ -303,18 +312,26 @@ class UndoRedoHandler:
     ) -> bool:
         """Perform undo for source layer only."""
         logger.info("Performing source layer undo only")
-        history = self._history_manager.get_history(source_layer.id())
         
-        if not history or not history.can_undo():
+        # Check if there's any history that affects this layer
+        layer_history = self._history_manager.get_history_for_layer(source_layer.id())
+        if not layer_history or not self._history_manager.can_undo:
             logger.info("No undo history for source layer")
             return False
         
-        previous_state = history.undo()
+        previous_state = self._history_manager.undo()
         if not previous_state:
             return False
         
-        safe_set_subset_string(source_layer, previous_state.expression)
-        project_layers[source_layer.id()]["infos"]["is_already_subset"] = bool(previous_state.expression)
+        # Find the previous filter for this specific layer
+        previous_expression = ""
+        for layer_id, expr in previous_state.previous_filters:
+            if layer_id == source_layer.id():
+                previous_expression = expr
+                break
+        
+        safe_set_subset_string(source_layer, previous_expression)
+        project_layers[source_layer.id()]["infos"]["is_already_subset"] = bool(previous_expression)
         logger.info(f"Undo source layer to: {previous_state.description}")
         
         # Refresh
@@ -328,16 +345,16 @@ class UndoRedoHandler:
     ) -> bool:
         """Perform redo for source layer only."""
         logger.info("Performing source layer redo only")
-        history = self._history_manager.get_history(source_layer.id())
         
-        if not history or not history.can_redo():
+        if not self._history_manager.can_redo:
             logger.info("No redo history for source layer")
             return False
         
-        next_state = history.redo()
+        next_state = self._history_manager.redo()
         if not next_state:
             return False
         
+        # Apply the expression from the redo entry
         safe_set_subset_string(source_layer, next_state.expression)
         project_layers[source_layer.id()]["infos"]["is_already_subset"] = bool(next_state.expression)
         logger.info(f"Redo source layer to: {next_state.description}")
@@ -464,15 +481,9 @@ class UndoRedoHandler:
             source_layer: Source layer whose history to clear
             remote_layer_ids: Optional list of remote layer IDs
         """
-        # Clear history for source layer
-        history = self._history_manager.get_history(source_layer.id())
-        if history:
-            history.clear()
-            logger.info(f"Cleared filter history for source layer {source_layer.id()}")
-        
-        # Clear global history
-        self._history_manager.clear_global_history()
-        logger.info("Cleared global filter history")
+        # Clear all history (HistoryService has a single global history)
+        cleared_count = self._history_manager.clear()
+        logger.info(f"Cleared {cleared_count} filter history entries")
     
     def push_filter_to_history(
         self,

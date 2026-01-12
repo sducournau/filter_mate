@@ -13,7 +13,8 @@ try:
         QgsProject,
         QgsFeature,
         QgsFeatureRequest,
-        QgsRectangle
+        QgsRectangle,
+        QgsExpression
     )
     from qgis.PyQt.QtCore import pyqtSignal, QObject
     from qgis.PyQt.QtGui import QColor

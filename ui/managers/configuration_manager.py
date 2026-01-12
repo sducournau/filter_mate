@@ -406,7 +406,8 @@ class ConfigurationManager(QObject):
                 "SIGNALS": [(
                     "clicked",
                     lambda state, x='has_buffer_type', custom_functions={
-                        "ON_CHANGE": lambda x: d.filtering_buffer_type_state_changed()
+                        # v4.0 Migration Fix: Restored original callback from v2.9.42
+                        "ON_CHANGE": lambda x: d.filtering_buffer_property_changed()
                     }: d.layer_property_changed(x, state, custom_functions)
                 )],
                 "ICON": None
@@ -664,8 +665,8 @@ class ConfigurationManager(QObject):
         
         # Check if UI managers available
         try:
-            from ui.config.ui_config import UIConfig
-            from ui.styling.icon_theme import get_themed_icon
+            from ..config.ui_config import UIConfig
+            from ..styling.icon_theme import get_themed_icon
             UI_CONFIG_AVAILABLE = True
             ICON_THEME_AVAILABLE = True
         except ImportError:
@@ -750,7 +751,7 @@ class ConfigurationManager(QObject):
         
         # Check if UI config available
         try:
-            from ui.config.ui_config import UIConfig
+            from ..config.ui_config import UIConfig
             UI_CONFIG_AVAILABLE = True
         except ImportError:
             UI_CONFIG_AVAILABLE = False
@@ -786,11 +787,16 @@ class ConfigurationManager(QObject):
     
     def setup_exploring_tab_widgets(self):
         """v4.0 Sprint 16: Configure Exploring tab widgets (migrated from dockwidget)."""
-        from qgis.gui import QgsFieldProxyModel
+        from qgis.core import QgsFieldProxyModel
         
         d = self.dockwidget
+        # Insert the multiple selection widget into the layout
         d.horizontalLayout_exploring_multiple_feature_picker.insertWidget(
             0, d.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, 1)
+        # Ensure visibility after insertion
+        d.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.show()
+        logger.debug(f"Inserted multiple selection widget into layout, count: {d.horizontalLayout_exploring_multiple_feature_picker.count()}")
+        
         field_filters = QgsFieldProxyModel.AllTypes
         for widget in [d.mFieldExpressionWidget_exploring_single_selection,
                        d.mFieldExpressionWidget_exploring_multiple_selection,
@@ -813,37 +819,53 @@ class ConfigurationManager(QObject):
         """v4.0 Sprint 16: Configure widgets for Filtering tab (migrated from dockwidget)."""
         import os
         from qgis.PyQt import QtGui, QtCore, QtWidgets
-        from qgis.gui import QgsMapLayerProxyModel
-        from ui.widgets.custom_widgets import QgsCheckableComboBoxLayer
+        from qgis.core import QgsMapLayerProxyModel
         
         d = self.dockwidget
         d.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
         
+        # Apply themed icon to centroids checkbox
+        try:
+            from ..icons import get_themed_icon, ICON_THEME_AVAILABLE
+        except ImportError:
+            ICON_THEME_AVAILABLE = False
+        
         icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "icons", "centroid.png")
         if os.path.exists(icon_path) and hasattr(d, 'checkBox_filtering_use_centroids_source_layer'):
-            d.checkBox_filtering_use_centroids_source_layer.setIcon(QtGui.QIcon(icon_path))
+            icon = get_themed_icon(icon_path) if ICON_THEME_AVAILABLE else QtGui.QIcon(icon_path)
+            d.checkBox_filtering_use_centroids_source_layer.setIcon(icon)
             d.checkBox_filtering_use_centroids_source_layer.setText("")
             d.checkBox_filtering_use_centroids_source_layer.setLayoutDirection(QtCore.Qt.RightToLeft)
 
-        d.checkableComboBoxLayer_filtering_layers_to_filter = QgsCheckableComboBoxLayer(d.dockWidgetContents)
+        # Configure centroids distant layers checkbox (created in setupUiCustom)
+        # Widget already created in setupUiCustom() - just configure appearance
+        if hasattr(d, 'checkBox_filtering_use_centroids_distant_layers'):
+            d.checkBox_filtering_use_centroids_distant_layers.setText("")
+            d.checkBox_filtering_use_centroids_distant_layers.setToolTip(d.tr("Use centroids instead of full geometries for distant layers"))
+            d.checkBox_filtering_use_centroids_distant_layers.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+            if os.path.exists(icon_path):
+                icon = get_themed_icon(icon_path) if ICON_THEME_AVAILABLE else QtGui.QIcon(icon_path)
+                d.checkBox_filtering_use_centroids_distant_layers.setIcon(icon)
+            d.checkBox_filtering_use_centroids_distant_layers.setLayoutDirection(QtCore.Qt.RightToLeft)
+            d.checkBox_filtering_use_centroids_distant_layers.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+
         
-        d.checkBox_filtering_use_centroids_distant_layers = QtWidgets.QCheckBox(d.dockWidgetContents)
-        d.checkBox_filtering_use_centroids_distant_layers.setText("")
-        d.checkBox_filtering_use_centroids_distant_layers.setToolTip(d.tr("Use centroids instead of full geometries for distant layers"))
-        d.checkBox_filtering_use_centroids_distant_layers.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        if os.path.exists(icon_path):
-            d.checkBox_filtering_use_centroids_distant_layers.setIcon(QtGui.QIcon(icon_path))
-        d.checkBox_filtering_use_centroids_distant_layers.setLayoutDirection(QtCore.Qt.RightToLeft)
-        d.checkBox_filtering_use_centroids_distant_layers.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        
+        # Create horizontal layout and insert widgets
         d.horizontalLayout_filtering_distant_layers = QtWidgets.QHBoxLayout()
         d.horizontalLayout_filtering_distant_layers.setSpacing(4)
         d.horizontalLayout_filtering_distant_layers.addWidget(d.checkableComboBoxLayer_filtering_layers_to_filter)
         d.horizontalLayout_filtering_distant_layers.addWidget(d.checkBox_filtering_use_centroids_distant_layers)
-        d.verticalLayout_filtering_values.insertLayout(2, d.horizontalLayout_filtering_distant_layers)
+        
+        # Insert into main vertical layout at position 2 (after current layer, before predicates)
+        if hasattr(d, 'verticalLayout_filtering_values'):
+            d.verticalLayout_filtering_values.insertLayout(2, d.horizontalLayout_filtering_distant_layers)
+            # Ensure visibility
+            d.checkableComboBoxLayer_filtering_layers_to_filter.show()
+            d.checkBox_filtering_use_centroids_distant_layers.show()
+            logger.debug(f"Inserted filtering layers layout, widget visible: {d.checkableComboBoxLayer_filtering_layers_to_filter.isVisible()}")
         
         try:
-            from ui.config import UIConfig
+            from ..config import UIConfig
             h = UIConfig.get_config('combobox', 'height')
             d.checkableComboBoxLayer_filtering_layers_to_filter.setMinimumHeight(h)
             d.checkableComboBoxLayer_filtering_layers_to_filter.setMaximumHeight(h)
@@ -854,17 +876,18 @@ class ConfigurationManager(QObject):
         """v4.0 Sprint 16: Configure widgets for Exporting tab (migrated from dockwidget)."""
         from qgis.PyQt import QtWidgets
         from qgis.PyQt.QtGui import QColor
-        from ui.widgets.custom_widgets import QgsCheckableComboBoxLayer
         
         d = self.dockwidget
-        d.checkableComboBoxLayer_exporting_layers = QgsCheckableComboBoxLayer(d.EXPORTING)
+        # Widget already created in setupUiCustom() - just configure it
         
         if hasattr(d, 'verticalLayout_exporting_values'):
             d.verticalLayout_exporting_values.insertWidget(0, d.checkableComboBoxLayer_exporting_layers)
+            d.checkableComboBoxLayer_exporting_layers.show()
+            logger.debug(f"Inserted exporting layers widget, visible: {d.checkableComboBoxLayer_exporting_layers.isVisible()}")
             d.verticalLayout_exporting_values.insertItem(1, QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
         
         try:
-            from ui.config import UIConfig
+            from ..config import UIConfig
             h = UIConfig.get_config('combobox', 'height')
             d.checkableComboBoxLayer_exporting_layers.setMinimumHeight(h)
             d.checkableComboBoxLayer_exporting_layers.setMaximumHeight(h)

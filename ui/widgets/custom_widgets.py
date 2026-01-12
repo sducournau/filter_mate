@@ -42,6 +42,9 @@ from qgis.gui import (
 from qgis.PyQt.QtCore import Qt, pyqtSignal, QTimer
 from qgis.PyQt.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton
 
+# Import safe iteration utilities for OGR/GeoPackage error handling
+from ...infrastructure.utils import safe_iterate_features, get_feature_attribute
+
 logger = logging.getLogger('FilterMate.UI.Widgets.CustomWidgets')
 
 
@@ -72,6 +75,9 @@ class QgsCheckableComboBoxLayer(QgsCheckableComboBox):
         self._layer_filter = None  # Optional filter function
         self._excluded_layer_ids = set()  # Layers to exclude
         self._layer_id_map = {}  # Map item index to layer ID
+        
+        # Set minimum dimensions for visibility
+        self.setMinimumHeight(26)
         
         # Connect to project signals for layer lifecycle
         try:
@@ -235,11 +241,15 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
     
     Signals:
         selectionChanged: Emitted when feature selection changes
+        updatingCheckedItemList: Emitted when checked items list is updated (for compatibility)
+        filteringCheckedItemList: Emitted when filtering checked items (for compatibility)
         populationStarted: Emitted when async population starts
         populationFinished: Emitted when async population completes
     """
     
     selectionChanged = pyqtSignal(list)  # List of selected feature IDs
+    updatingCheckedItemList = pyqtSignal()  # Compatibility signal for checked items update
+    filteringCheckedItemList = pyqtSignal()  # Compatibility signal for filtering
     populationStarted = pyqtSignal()
     populationFinished = pyqtSignal(int)  # Number of features loaded
     
@@ -265,32 +275,36 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
     
     def _setup_ui(self):
         """Setup the widget UI."""
-        layout = QVBoxLayout(self)
+        layout = QHBoxLayout(self)  # Use horizontal layout for compact display
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(2)
         
-        # Search bar
-        search_layout = QHBoxLayout()
-        search_layout.setContentsMargins(0, 0, 0, 0)
-        
-        self._search_edit = QLineEdit()
-        self._search_edit.setPlaceholderText("Search features...")
-        self._search_edit.setClearButtonEnabled(True)
-        search_layout.addWidget(self._search_edit)
-        
-        self._clear_btn = QPushButton("×")
-        self._clear_btn.setMaximumWidth(24)
-        self._clear_btn.setToolTip("Clear selection")
-        search_layout.addWidget(self._clear_btn)
-        
-        layout.addLayout(search_layout)
-        
-        # Feature combo box
+        # Feature combo box (main widget)
         self._combo = QgsCheckableComboBox(self)
         self._combo.setMinimumHeight(26)
-        layout.addWidget(self._combo)
+        self._combo.setSizePolicy(
+            self._combo.sizePolicy().horizontalPolicy(),
+            self._combo.sizePolicy().verticalPolicy()
+        )
+        layout.addWidget(self._combo, 1)  # Stretch factor 1
+        
+        # Expression button (epsilon icon placeholder)
+        self._expr_btn = QPushButton("ε")
+        self._expr_btn.setMaximumWidth(28)
+        self._expr_btn.setMinimumWidth(28)
+        self._expr_btn.setMinimumHeight(26)
+        self._expr_btn.setToolTip("Expression filter")
+        self._expr_btn.setVisible(True)
+        layout.addWidget(self._expr_btn)
         
         self.setLayout(layout)
+        self.setMinimumHeight(28)
+        
+        # Hide search elements (internal only)
+        self._search_edit = QLineEdit()
+        self._search_edit.setVisible(False)
+        self._clear_btn = QPushButton("×")
+        self._clear_btn.setVisible(False)
     
     def _connect_signals(self):
         """Connect internal signals."""
@@ -347,7 +361,8 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             request.setSubsetOfAttributes([self._display_expression], self._layer.fields())
         
         idx = 0
-        for feature in self._layer.getFeatures(request):
+        # Use safe_iterate_features for OGR/GeoPackage error handling
+        for feature in safe_iterate_features(self._layer, request):
             if expr:
                 context.setFeature(feature)
                 display_text = str(expr.evaluate(context))
@@ -430,6 +445,76 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         """Handle selection change."""
         selected_ids = self.get_selected_feature_ids()
         self.selectionChanged.emit(selected_ids)
+        # Emit compatibility signals
+        self.updatingCheckedItemList.emit()
+        self.filteringCheckedItemList.emit()
+    
+    # ========== Compatibility Methods (Migration from modules/widgets.py) ==========
+    
+    def currentSelectedFeatures(self):
+        """
+        Get currently selected features (compatibility method for v4.0 migration).
+        
+        This method maintains backward compatibility with before_migration/modules/widgets.py
+        where it was used extensively in filter_mate_dockwidget.py and exploring_controller.py.
+        
+        Returns:
+            List[QgsFeature] | bool: Selected features, or False if no selection/no layer
+        """
+        if self._layer is None or not self._layer.isValid():
+            return False
+        
+        selected_ids = self.get_selected_feature_ids()
+        if not selected_ids:
+            return False
+        
+        # Fetch features from layer
+        features = []
+        for fid in selected_ids:
+            feature = self._layer.getFeature(fid)
+            if feature.isValid():
+                features.append(feature)
+        
+        return features if features else False
+    
+    def currentVisibleFeatures(self):
+        """
+        Get all visible (non-filtered) features in the widget.
+        
+        This method returns all features present in the combo box, regardless of
+        their selection state. Used in exploring_controller.py for fallback filtering.
+        
+        Returns:
+            List[QgsFeature] | bool: All features in combo, or False if empty/no layer
+        """
+        if self._layer is None or not self._layer.isValid():
+            return False
+        
+        if not self._feature_map:
+            return False
+        
+        # Get all feature IDs from the map
+        all_fids = list(self._feature_map.values())
+        if not all_fids:
+            return False
+        
+        # Fetch features from layer
+        features = []
+        for fid in all_fids:
+            feature = self._layer.getFeature(fid)
+            if feature.isValid():
+                features.append(feature)
+        
+        return features if features else False
+    
+    def currentLayer(self):
+        """
+        Get the current layer.
+        
+        Returns:
+            QgsVectorLayer | bool: Current layer, or False if none set
+        """
+        return self._layer if self._layer is not None and self._layer.isValid() else False
 
 
 __all__ = [

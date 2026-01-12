@@ -1,0 +1,181 @@
+{
+  "_schema_version": "2.0",
+  "_note": "This is the proposed v2 configuration structure - EXAMPLE ONLY, not yet in use",
+  "app": {
+    "ui": {
+      "profile": {
+        "value": "auto",
+        "choices": ["auto", "compact", "normal"]
+      },
+      "theme": {
+        "active": {
+          "value": "auto",
+          "choices": ["auto", "default", "dark", "light"]
+        },
+        "source": {
+          "value": "config",
+          "choices": ["config", "qgis", "system"]
+        }
+      },
+      "action_bar": {
+        "position": {
+          "value": "left",
+          "choices": ["top", "bottom", "left", "right"]
+        },
+        "vertical_alignment": {
+          "value": "top",
+          "choices": ["top", "bottom"]
+        }
+      },
+      "feedback": {
+        "level": {
+          "value": "normal",
+          "choices": ["minimal", "normal", "verbose"]
+        }
+      }
+    },
+    "buttons": {
+      "style": {
+        "border_radius": "10px",
+        "padding": "10px 10px 10px 10px",
+        "background_color": "#F0F0F0"
+      },
+      "icon_sizes": {
+        "action": 25,
+        "others": 20
+      },
+      "icons": {
+        "action": {
+          "filter": "filter.png",
+          "undo": "undo.png",
+          "redo": "redo.png",
+          "unfilter": "unfilter.png",
+          "reset": "reset.png",
+          "export": "export.png",
+          "about": "icon.png"
+        },
+        "exploring": {
+          "identify": "identify_alt.png",
+          "zoom": "zoom.png",
+          "select": "select_black.png",
+          "track": "track.png",
+          "link": "link.png",
+          "reset_properties": "save_properties.png"
+        },
+        "filtering": {
+          "auto_layer": "auto_layer_white.png",
+          "layers": "layers.png",
+          "combine": "add_multi.png",
+          "predicates": "geo_predicates.png",
+          "buffer_value": "buffer_value.png",
+          "buffer_type": "buffer_type.png"
+        },
+        "exporting": {
+          "layers": "layers.png",
+          "projection": "projection_black.png",
+          "styles": "styles_black.png",
+          "datatype": "datatype.png",
+          "folder": "folder_black.png",
+          "zip": "zip.png"
+        }
+      }
+    },
+    "themes": {
+      "default": {
+        "background": ["#F5F5F5", "#FFFFFF", "#E0E0E0", "#2196F3"],
+        "font": ["#212121", "#616161", "#BDBDBD"],
+        "accent": {
+          "primary": "#1976D2",
+          "hover": "#2196F3",
+          "pressed": "#0D47A1",
+          "light_bg": "#E3F2FD",
+          "dark": "#01579B"
+        }
+      },
+      "dark": {
+        "background": ["#1E1E1E", "#2D2D30", "#3E3E42", "#007ACC"],
+        "font": ["#EFF0F1", "#D0D0D0", "#808080"],
+        "accent": {
+          "primary": "#007ACC",
+          "hover": "#1E90FF",
+          "pressed": "#005A9E",
+          "light_bg": "#1E3A5F",
+          "dark": "#003D66"
+        }
+      },
+      "light": {
+        "background": ["#FFFFFF", "#F5F5F5", "#E0E0E0", "#2196F3"],
+        "font": ["#000000", "#424242", "#9E9E9E"],
+        "accent": {
+          "primary": "#2196F3",
+          "hover": "#64B5F6",
+          "pressed": "#1976D2",
+          "light_bg": "#E3F2FD",
+          "dark": "#0D47A1"
+        }
+      }
+    },
+    "paths": {
+      "github_page": "https://sducournau.github.io/filter_mate/",
+      "github_repo": "https://github.com/sducournau/filter_mate/",
+      "plugin_repo": "https://plugins.qgis.org/plugins/filter_mate/",
+      "sqlite_storage": ""
+    },
+    "flags": {
+      "fresh_reload": false
+    }
+  },
+  "project": {
+    "meta": {
+      "id": "",
+      "path": ""
+    },
+    "layers": {
+      "link_legend": true,
+      "properties_count": 35,
+      "feature_limit": 10000,
+      "list": []
+    },
+    "postgresql": {
+      "active_connection": "",
+      "is_active": false,
+      "sqlite_path": ""
+    },
+    "export": {
+      "layers": {
+        "enabled": false,
+        "selected": []
+      },
+      "projection": {
+        "enabled": false,
+        "epsg": "EPSG:3857"
+      },
+      "styles": {
+        "enabled": false,
+        "format": {
+          "value": "QML",
+          "choices": ["QML", "SLD", "None"]
+        }
+      },
+      "format": {
+        "enabled": false,
+        "type": {
+          "value": "GPKG",
+          "choices": ["GPKG", "SHP", "GEOJSON", "KML"]
+        }
+      },
+      "output": {
+        "folder": {
+          "enabled": false,
+          "path": ""
+        },
+        "zip": {
+          "enabled": false,
+          "path": ""
+        },
+        "batch_folder": false,
+        "batch_zip": false
+      }
+    }
+  }
+}

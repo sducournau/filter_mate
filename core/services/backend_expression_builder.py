@@ -18,8 +18,8 @@ from typing import Optional, Dict, Any, List, Tuple, Callable
 
 from qgis.core import QgsDataSourceUri, QgsMessageLog, Qgis, QgsVectorLayer
 
-from infrastructure.logging import setup_logger
-from config.config import ENV_VARS
+from ...infrastructure.logging import setup_logger
+from ...config.config import ENV_VARS
 
 # Setup logger
 logger = setup_logger(
@@ -28,7 +28,7 @@ logger = setup_logger(
 )
 
 # Import source filter builder functions
-from core.filter.source_filter_builder import (
+from ..filter.source_filter_builder import (
     should_skip_source_subset,
     get_primary_key_field as sfb_get_primary_key_field,
     get_source_table_name as sfb_get_source_table_name,

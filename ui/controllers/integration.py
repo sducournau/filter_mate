@@ -268,8 +268,7 @@ class ControllerIntegration:
         
         # v4.0 Sprint 1: Create PropertyController
         self._property_controller = PropertyController(
-            dockwidget=self._dockwidget,
-            signal_manager=self._signal_manager
+            dockwidget=self._dockwidget
         )
         
         # v4.0 Sprint 4: Create UILayoutController

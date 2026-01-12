@@ -1,0 +1,77 @@
+fix(backends): Respect combine_operator=None as REPLACE signal in multi-step filters
+
+PROBLÈME:
+---------
+Lors de filtres géométriques successifs, les backends ignoraient combine_operator=None 
+et combinaient incorrectement les filtres FID avec AND au lieu de les REMPLACER.
+
+Scénario bugué:
+1. Filtre géométrique 1 → crée filtre FID: "fid IN (1,2,3,...)"
+2. Filtre géométrique 2 → devrait REMPLACER par "fid IN (4,5,6,...)"
+   MAIS: combinait avec AND → "(fid IN (1,2,3)) AND (fid IN (4,5,6))"
+   Résultat: 0 features (intersection vide)
+
+CAUSE:
+------
+filter_task.py détectait correctement les filtres FID-only et mettait 
+combine_operator=None pour signaler "REPLACE, ne PAS combiner".
+
+MAIS tous les backends traitaient None comme "" et appliquaient AND par défaut:
+
+  # ❌ Code bugué
+  if not combine_operator:
+      combine_operator = 'AND'  # None → 'AND'
+
+SOLUTION:
+---------
+Distinction explicite entre None (REPLACE) et "" (default AND):
+
+  # ✅ Code corrigé
+  if combine_operator is None:
+      # Explicit None = REPLACE (multi-step filter)
+      final_expression = expression
+  else:
+      # Use provided operator or default to AND
+      op = combine_operator if combine_operator else 'AND'
+      final_expression = f"({old_subset}) {op} ({expression})"
+
+CORRECTIONS:
+------------
+✅ postgresql_backend.py (1 occurrence, ligne ~1840)
+✅ spatialite_backend.py (1 occurrence, ligne ~2600)
+✅ ogr_backend.py (4 occurrences, lignes ~630, 2565, 2940, 3110)
+✅ memory_backend.py (2 occurrences, lignes ~550, 590)
+
+TOTAL: 8 corrections dans 4 backends
+
+IMPACT:
+-------
+- ✅ Filtres multi-étapes fonctionnent correctement sur TOUS les backends
+- ✅ Cache FID Spatialite: intersection correcte entre étapes
+- ✅ Logs plus clairs: messages explicites sur REPLACE vs COMBINE
+- ✅ Cohérence totale entre backends
+
+LOGS AMÉLIORÉS:
+--------------
+Avant: "🔗 Préservation du filtre existant avec AND"
+Après: "🔄 combine_operator=None → REPLACING old subset (multi-step filter)"
+
+SÉMANTIQUE combine_operator:
+----------------------------
+| Valeur      | Action                        |
+|-------------|-------------------------------|
+| None        | REPLACE (multi-step signal)   |
+| '' (absent) | Default to AND                |
+| 'AND'       | Explicit AND                  |
+| 'OR'        | Explicit OR                   |
+
+TESTS:
+------
+✅ PostgreSQL: Filtres successifs OK
+✅ Spatialite: Filtres successifs OK  
+✅ OGR: Filtres successifs OK
+✅ Memory: Filtres successifs OK
+
+Version: 2.9.42
+Fichiers modifiés: 5 backends + metadata.txt + docs
+Documentation: docs/FIX_MULTI_STEP_COMBINE_OPERATOR_v2.9.42.md

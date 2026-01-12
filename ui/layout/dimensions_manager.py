@@ -235,8 +235,9 @@ class DimensionsManager(LayoutManagerBase):
             return
         
         # Get widget_keys dimensions
-        widget_keys_min_width = UIConfig.get_config('widget_keys', 'min_width')
-        widget_keys_max_width = UIConfig.get_config('widget_keys', 'max_width')
+        widget_keys_config = UIConfig.get_config('widget_keys')
+        widget_keys_min_width = widget_keys_config.get('min_width', 50) if widget_keys_config else 50
+        widget_keys_max_width = widget_keys_config.get('max_width', 80) if widget_keys_config else 80
         
         # Get frame exploring configuration
         exploring_config = UIConfig.get_config('frame_exploring')
@@ -256,8 +257,7 @@ class DimensionsManager(LayoutManagerBase):
         filtering_config = UIConfig.get_config('frame_filtering')
         filtering_min = filtering_config.get('min_height', 180) if filtering_config else 180
         
-        # Get widget_keys padding and border radius from config
-        widget_keys_config = UIConfig.get_config('widget_keys')
+        # Get widget_keys padding from config (widget_keys_config already loaded above)
         widget_keys_padding = widget_keys_config.get('padding', 2) if widget_keys_config else 2
         
         # Apply to widget keys containers with enhanced styling
@@ -318,7 +318,7 @@ class DimensionsManager(LayoutManagerBase):
             key_button_config = UIConfig.get_config('key_button')
             
             # Profile-aware fallback values
-            current_profile = UIConfig.get_profile()
+            current_profile = UIConfig.get_active_profile()
             if key_button_config:
                 pushbutton_min_size = key_button_config.get('min_size', 26)
                 pushbutton_max_size = key_button_config.get('max_size', 32)
@@ -389,8 +389,10 @@ class DimensionsManager(LayoutManagerBase):
                         # Set consistent icon size
                         button.setIconSize(QSize(pushbutton_icon_size, pushbutton_icon_size))
                         
-                        # Ensure consistent style properties
-                        button.setFlat(True)
+                        # v4.0 Migration Fix: Do NOT force setFlat(True) here
+                        # This breaks the visual feedback for checked state
+                        # Let button_styler.py handle flat state based on isChecked()
+                        # button.setFlat(True)  # REMOVED - causes regression
                         
                         # Set consistent size policy - Fixed for uniform sizing
                         button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
@@ -549,10 +551,13 @@ class DimensionsManager(LayoutManagerBase):
             is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
             
             # Get dynamic spacer sizes based on active profile
+            # Use 'small' for compact mode, 'medium' for normal
+            spacer_size_name = 'small' if is_compact else 'medium'
+            default_spacer_size = get_spacer_size(spacer_size_name)
             spacer_sizes = {
-                'exploring': get_spacer_size('verticalSpacer_exploring_tab_top', is_compact),
-                'filtering': get_spacer_size('verticalSpacer_filtering_keys_field_top', is_compact),
-                'exporting': get_spacer_size('verticalSpacer_exporting_keys_field_top', is_compact)
+                'exploring': default_spacer_size,
+                'filtering': default_spacer_size,
+                'exporting': default_spacer_size
             }
             
             spacer_width = 20  # Standard width for vertical spacers
@@ -824,9 +829,12 @@ class DimensionsManager(LayoutManagerBase):
             is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
             layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 4
             
+            # Use 'small' for compact mode, 'medium' for normal
+            spacer_size_name = 'small' if is_compact else 'medium'
+            default_spacer_size = get_spacer_size(spacer_size_name)
             spacer_sizes = {
-                'filtering': get_spacer_size('verticalSpacer_filtering_keys_field_top', is_compact),
-                'exporting': get_spacer_size('verticalSpacer_exporting_keys_field_top', is_compact)
+                'filtering': default_spacer_size,
+                'exporting': default_spacer_size
             }
             
             # Adjust spacers in filtering values layout to match keys layout

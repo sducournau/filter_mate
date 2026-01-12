@@ -307,8 +307,8 @@ class LayersManagementEngineTask(QgsTask):
                 
                 # Verify database is accessible before processing
                 try:
-                    conn = self._safe_spatialite_connect()
-                    conn.close()
+                    with self._safe_spatialite_connect() as conn:
+                        pass  # Connection test - context manager handles close
                     logger.debug("Database accessibility check: OK")
                 except Exception as db_err:
                     logger.error(f"Database accessibility check FAILED: {db_err}", exc_info=True)
@@ -1622,9 +1622,7 @@ class LayersManagementEngineTask(QgsTask):
             list: List of (meta_type, meta_key, meta_value) tuples
         """
         def do_select():
-            conn = None
-            try:
-                conn = self._safe_spatialite_connect()
+            with self._safe_spatialite_connect() as conn:
                 cur = conn.cursor()
                 cur.execute(
                     """SELECT meta_type, meta_key, meta_value FROM fm_project_layers_properties  
@@ -1635,12 +1633,6 @@ class LayersManagementEngineTask(QgsTask):
                 logger.debug(f"📖 Loaded {len(results)} properties from DB for layer {layer_id}")
                 cur.close()
                 return results
-            finally:
-                if conn:
-                    try:
-                        conn.close()
-                    except (AttributeError, OSError, sqlite3.Error):
-                        pass
         
         return sqlite_execute_with_retry(
             do_select, 
@@ -1658,46 +1650,38 @@ class LayersManagementEngineTask(QgsTask):
             layer_props (dict): Dictionary of layer properties to insert
         """
         def do_insert():
-            conn = None
-            try:
-                conn = self._safe_spatialite_connect()
-                # Begin explicit transaction for better lock management
-                conn.execute('BEGIN IMMEDIATE')
-                cur = conn.cursor()
-                for key_group in layer_props:
-                    for key in layer_props[key_group]:
-                        value_typped, type_returned = self.return_typped_value(layer_props[key_group][key], 'save')
-                        if type_returned in (list, dict):
-                            value_typped = json.dumps(value_typped)
-                        cur.execute(
-                            """INSERT INTO fm_project_layers_properties 
-                               VALUES(?, datetime(), ?, ?, ?, ?, ?)""",
-                            (
-                                str(uuid.uuid4()),
-                                str(self.project_uuid),
-                                layer_id,
-                                key_group,
-                                key,
-                                value_typped.replace("\'", "\'\'") if type_returned in (str, dict, list) else value_typped
+            with self._safe_spatialite_connect() as conn:
+                try:
+                    # Begin explicit transaction for better lock management
+                    conn.execute('BEGIN IMMEDIATE')
+                    cur = conn.cursor()
+                    for key_group in layer_props:
+                        for key in layer_props[key_group]:
+                            value_typped, type_returned = self.return_typped_value(layer_props[key_group][key], 'save')
+                            if type_returned in (list, dict):
+                                value_typped = json.dumps(value_typped)
+                            cur.execute(
+                                """INSERT INTO fm_project_layers_properties 
+                                   VALUES(?, datetime(), ?, ?, ?, ?, ?)""",
+                                (
+                                    str(uuid.uuid4()),
+                                    str(self.project_uuid),
+                                    layer_id,
+                                    key_group,
+                                    key,
+                                    value_typped.replace("\'", "\'\'") if type_returned in (str, dict, list) else value_typped
+                                )
                             )
-                        )
-                conn.commit()
-                cur.close()
-                return True
-            except (sqlite3.Error, OSError, ValueError) as e:
-                logger.debug(f"Error inserting properties to Spatialite: {e}")
-                if conn:
+                    conn.commit()
+                    cur.close()
+                    return True
+                except (sqlite3.Error, OSError, ValueError) as e:
+                    logger.debug(f"Error inserting properties to Spatialite: {e}")
                     try:
                         conn.rollback()
-                    except (AttributeError, OSError, sqlite3.Error):
+                    except (sqlite3.Error, OSError):
                         pass
-                raise
-            finally:
-                if conn:
-                    try:
-                        conn.close()
-                    except (AttributeError, OSError, sqlite3.Error):
-                        pass
+                    raise
         
         sqlite_execute_with_retry(
             do_insert, 
@@ -1839,10 +1823,9 @@ class LayersManagementEngineTask(QgsTask):
 
         if self.exception is None:
             if result is None:
-                # STABILITY FIX: Use safe_emit and safe_disconnect
+                # STABILITY FIX: Use safe_emit
                 if self.project_layers is not None:
                     safe_emit(self.resultingLayers, self.project_layers)
-                safe_disconnect(self.resultingLayers)
                 
                 # Task was likely canceled by user - log only, no message bar notification
                 logger.info('Task completed with no result (likely canceled by user)')
@@ -1870,12 +1853,8 @@ class LayersManagementEngineTask(QgsTask):
                             result_action = f'All properties removed for {self.layer_id} layer'
                         # Message bar notification removed - internal operation, too verbose for UX
                         logger.info(f'Layers properties updated: {result_action}')
-                
-                # STABILITY FIX: Use safe_disconnect
-                safe_disconnect(self.resultingLayers)
         else:
-            # STABILITY FIX: Use safe_disconnect even on error
-            safe_disconnect(self.resultingLayers)
+            # Error case - log and raise
             
             iface.messageBar().pushMessage(
                 message_category,

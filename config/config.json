@@ -14,7 +14,7 @@
     },
     "DOCKWIDGET": {
       "FEEDBACK_LEVEL": {
-        "value": "normal",
+        "value": "verbose",
         "choices": ["minimal", "normal", "verbose"],
         "description": "User feedback verbosity: 'minimal' (errors only), 'normal' (balanced), 'verbose' (all messages including debug)",
         "categories_affected": [

@@ -49,6 +49,25 @@ from .layer_utils import (
     PROVIDER_SPATIALITE,
     PROVIDER_OGR,
     PROVIDER_MEMORY,
+    # ValueRelation utilities (EPIC-1 migration)
+    is_value_relation_layer_available,
+    get_value_relation_info,
+    get_field_display_expression,
+    get_layer_display_expression,
+    get_fields_with_value_relations,
+    # GeoPackage utilities
+    is_valid_geopackage,
+    get_geopackage_path,
+    get_geopackage_related_layers,
+    # MV utilities
+    detect_filtermate_mv_reference,
+    validate_mv_exists,
+    clear_orphaned_mv_subset,
+    # Filter cleanup
+    cleanup_corrupted_layer_filters,
+    # Utility functions
+    truncate,
+    escape_json_string,
 )
 from .task_utils import (
     spatialite_connect,
@@ -197,6 +216,125 @@ def safe_disconnect(signal, slot):
     except (RuntimeError, TypeError):
         pass  # Signal was not connected or objects deleted
 
+
+def safe_iterate_features(layer_or_source, request=None, max_retries=5, retry_delay=0.3):
+    """
+    Safely iterate over features from a layer or feature source.
+    
+    Handles OGR/GeoPackage errors like "unable to open database file" with retry logic.
+    Suppresses transient GDAL/OGR warnings that are handled internally.
+    
+    IMPORTANT: For multi-layer filtering with Spatialite/GeoPackage, concurrent database
+    access can cause transient "unable to open database file" errors. This function uses
+    exponential backoff to wait for database locks to clear.
+    
+    Args:
+        layer_or_source: QgsVectorLayer, QgsVectorDataProvider, or QgsAbstractFeatureSource
+        request: Optional QgsFeatureRequest
+        max_retries: Number of retry attempts (default 5, increased for concurrent access)
+        retry_delay: Initial delay between retries in seconds (default 0.3)
+        
+    Yields:
+        Features from the layer/source
+        
+    Example:
+        for feature in safe_iterate_features(layer):
+            process_feature(feature)
+    """
+    import time
+    import logging
+    
+    logger = logging.getLogger('FilterMate')
+    
+    # Use GDAL error handler to suppress transient SQLite warnings during iteration
+    with GdalErrorHandler():
+        for attempt in range(max_retries):
+            try:
+                if request:
+                    iterator = layer_or_source.getFeatures(request)
+                else:
+                    iterator = layer_or_source.getFeatures()
+                
+                for feature in iterator:
+                    yield feature
+                return  # Successfully completed iteration
+                
+            except Exception as e:
+                error_str = str(e).lower()
+                
+                # Check for known recoverable OGR/SQLite errors
+                is_recoverable = any(x in error_str for x in [
+                    'unable to open database file',
+                    'database is locked',
+                    'disk i/o error',
+                    'sqlite3_step',
+                    'busy',
+                ])
+                
+                if is_recoverable and attempt < max_retries - 1:
+                    layer_name = getattr(layer_or_source, 'name', lambda: 'unknown')()
+                    logger.debug(
+                        f"OGR access retry on '{layer_name}' (attempt {attempt + 1}/{max_retries}): {e}. "
+                        f"Waiting {retry_delay:.2f}s..."
+                    )
+                    time.sleep(retry_delay)
+                    retry_delay = min(retry_delay * 2, 5.0)  # Exponential backoff, max 5 seconds
+                else:
+                    layer_name = getattr(layer_or_source, 'name', lambda: 'unknown')()
+                    logger.error(f"Failed to iterate features from '{layer_name}' after {max_retries} attempts: {e}")
+                    return  # Stop iteration on unrecoverable error
+
+
+def get_feature_attribute(feature, field_name):
+    """
+    Safely get an attribute value from a feature.
+    
+    Handles special cases like 'fid' which may be a pseudo-field
+    representing the feature ID rather than an actual attribute.
+    
+    Args:
+        feature: QgsFeature object
+        field_name: Name of the field to retrieve
+        
+    Returns:
+        The attribute value, or None if not found
+        
+    Example:
+        value = get_feature_attribute(feature, 'name')
+        fid = get_feature_attribute(feature, 'fid')  # Gets feature.id() as fallback
+    """
+    import logging
+    
+    logger = logging.getLogger('FilterMate')
+    
+    if field_name is None:
+        return None
+    
+    # Handle special case for 'fid' (feature ID)
+    # In QGIS, 'fid' is often a pseudo-column representing feature.id()
+    if field_name.lower() == 'fid':
+        try:
+            # First try to get it as a regular attribute
+            return feature[field_name]
+        except (KeyError, IndexError):
+            # Fall back to feature.id() if 'fid' is not a real field
+            return feature.id()
+    
+    # For regular fields, try to access by name
+    try:
+        return feature[field_name]
+    except (KeyError, IndexError):
+        # If field access fails, try to get by index
+        try:
+            fields = feature.fields()
+            idx = fields.lookupField(field_name)
+            if idx >= 0:
+                return feature.attributes()[idx]
+        except (KeyError, IndexError, AttributeError) as e:
+            logger.debug(f"Could not get feature attribute '{field_name}': {e}")
+        return None
+
+
 __all__ = [
     # Provider utils
     'ProviderType',
@@ -233,6 +371,25 @@ __all__ = [
     'PROVIDER_SPATIALITE',
     'PROVIDER_OGR',
     'PROVIDER_MEMORY',
+    # ValueRelation utilities (EPIC-1 migration)
+    'is_value_relation_layer_available',
+    'get_value_relation_info',
+    'get_field_display_expression',
+    'get_layer_display_expression',
+    'get_fields_with_value_relations',
+    # GeoPackage utilities
+    'is_valid_geopackage',
+    'get_geopackage_path',
+    'get_geopackage_related_layers',
+    # MV utilities
+    'detect_filtermate_mv_reference',
+    'validate_mv_exists',
+    'clear_orphaned_mv_subset',
+    # Filter cleanup
+    'cleanup_corrupted_layer_filters',
+    # Utility functions
+    'truncate',
+    'escape_json_string',
     # Task utils (EPIC-1 migration)
     'spatialite_connect',
     'safe_spatialite_connect',
@@ -268,4 +425,7 @@ __all__ = [
     # QGIS safety utilities
     'is_qgis_alive',
     'GdalErrorHandler',
+    # Feature iteration utilities (EPIC-1 migration from widgets.py)
+    'safe_iterate_features',
+    'get_feature_attribute',
 ]

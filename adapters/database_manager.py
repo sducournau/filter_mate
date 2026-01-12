@@ -79,6 +79,41 @@ class DatabaseManager:
         """Set the project UUID."""
         self._project_uuid = value
     
+    def _clean_for_json(self, obj: Any) -> Any:
+        """
+        Recursively clean an object for JSON serialization.
+        
+        Removes non-serializable objects like database connections.
+        
+        Args:
+            obj: Object to clean
+            
+        Returns:
+            JSON-serializable version of the object
+        """
+        if obj is None:
+            return None
+        elif isinstance(obj, (str, int, float, bool)):
+            return obj
+        elif isinstance(obj, dict):
+            cleaned = {}
+            for key, value in obj.items():
+                # Skip connection objects (psycopg2, sqlite3, etc.)
+                if hasattr(value, 'cursor') and callable(getattr(value, 'cursor', None)):
+                    cleaned[key] = None  # Replace connection with None
+                else:
+                    cleaned[key] = self._clean_for_json(value)
+            return cleaned
+        elif isinstance(obj, (list, tuple)):
+            return [self._clean_for_json(item) for item in obj]
+        else:
+            # Try to convert to string for unknown types
+            try:
+                json.dumps(obj)
+                return obj
+            except (TypeError, ValueError):
+                return None
+    
     def get_connection(self):
         """
         Get a Spatialite connection with proper error handling.
@@ -484,6 +519,9 @@ class DatabaseManager:
             project_file_path = self._project.absolutePath()
             project_settings = config_data.get("CURRENT_PROJECT", {})
             
+            # Clean non-serializable objects (e.g., psycopg2 connections) before JSON serialization
+            project_settings_clean = self._clean_for_json(project_settings)
+            
             cur.execute(
                 """UPDATE fm_projects SET 
                    _updated_at = datetime(),
@@ -492,7 +530,7 @@ class DatabaseManager:
                    project_settings = ?
                    WHERE project_id = ?""",
                 (project_file_name, project_file_path,
-                 json.dumps(project_settings), str(self._project_uuid))
+                 json.dumps(project_settings_clean), str(self._project_uuid))
             )
             conn.commit()
             return True

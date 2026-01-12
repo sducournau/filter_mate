@@ -4,8 +4,23 @@ FilterMate Base Controller.
 Abstract base class for all tab controllers in the MVC pattern.
 Provides common infrastructure for signal management, lifecycle, and service access.
 """
-from abc import ABC, abstractmethod
+from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, Optional, List, Callable, Any
+
+from qgis.PyQt.QtCore import QObject
+
+# Resolve metaclass conflict between QObject (sip.wrappertype) and ABC (ABCMeta)
+# by creating a combined metaclass
+try:
+    from sip import wrappertype
+    class QObjectABCMeta(wrappertype, ABCMeta):
+        """Combined metaclass for QObject + ABC compatibility."""
+        pass
+except ImportError:
+    # Fallback for different sip versions
+    class QObjectABCMeta(type(QObject), ABCMeta):
+        """Combined metaclass for QObject + ABC compatibility."""
+        pass
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
@@ -13,11 +28,12 @@ if TYPE_CHECKING:
     from adapters.qgis.signals.signal_manager import SignalManager
 
 
-class BaseController(ABC):
+class BaseController(QObject, metaclass=QObjectABCMeta):
     """
     Abstract base class for all tab controllers.
 
     Provides common infrastructure for:
+    - PyQt signal support (inherits QObject)
     - Signal management via SignalManager
     - Service access (FilterService, etc.)
     - Lifecycle management (setup/teardown)
@@ -25,6 +41,8 @@ class BaseController(ABC):
 
     Usage:
         class MyController(BaseController):
+            my_signal = pyqtSignal(str)  # Can use signals!
+            
             def setup(self) -> None:
                 self._connect_signal(widget, 'clicked', self._on_click)
 
@@ -50,6 +68,8 @@ class BaseController(ABC):
             filter_service: Filter service for business logic
             signal_manager: Centralized signal manager for connections
         """
+        # Initialize QObject with dockwidget as parent for proper Qt object tree
+        super().__init__(dockwidget if dockwidget else None)
         self._dockwidget = dockwidget
         self._filter_service = filter_service
         self._signal_manager = signal_manager

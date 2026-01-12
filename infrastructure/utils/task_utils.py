@@ -22,7 +22,7 @@ import logging
 import os
 import sqlite3
 import time
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Callable, Any, Union
 from contextlib import contextmanager
 
 # QGIS imports
@@ -165,11 +165,12 @@ def safe_spatialite_connect(db_path: str, timeout: float = SQLITE_TIMEOUT):
 
 
 def sqlite_execute_with_retry(
-    conn,
-    sql: str,
+    conn_or_callable: Union[Any, Callable],
+    sql: str = None,
     params: tuple = None,
     max_retries: int = SQLITE_MAX_RETRIES,
-    retry_delay: float = SQLITE_RETRY_DELAY
+    retry_delay: float = SQLITE_RETRY_DELAY,
+    operation_name: str = None
 ):
     """
     Execute SQLite query with automatic retry on database lock.
@@ -177,31 +178,47 @@ def sqlite_execute_with_retry(
     This function handles SQLite's database lock errors by retrying with
     exponential backoff. Useful for concurrent access scenarios.
     
+    Supports two modes:
+    1. Direct mode: sqlite_execute_with_retry(conn, sql, params)
+    2. Callable mode: sqlite_execute_with_retry(callable_func, operation_name="...")
+    
     Args:
-        conn: sqlite3.Connection object
-        sql: SQL query to execute
-        params: Query parameters (optional)
+        conn_or_callable: sqlite3.Connection object OR a callable that performs the operation
+        sql: SQL query to execute (only for direct mode)
+        params: Query parameters (optional, only for direct mode)
         max_retries: Maximum number of retry attempts
         retry_delay: Initial delay between retries (seconds)
+        operation_name: Human-readable name for logging (only for callable mode)
     
     Returns:
-        cursor: Result cursor if successful
+        cursor: Result cursor if successful (direct mode)
+        Any: Return value from callable (callable mode)
     
     Raises:
         sqlite3.OperationalError: If max retries exceeded
     """
+    # Detect mode: callable or direct
+    is_callable_mode = callable(conn_or_callable) and sql is None
+    
     retry_count = 0
     current_delay = retry_delay
     start_time = time.time()
     
+    op_name = operation_name or "SQLite operation"
+    
     while retry_count < max_retries:
         try:
-            cursor = conn.cursor()
-            if params:
-                cursor.execute(sql, params)
+            if is_callable_mode:
+                # Callable mode: execute the function
+                return conn_or_callable()
             else:
-                cursor.execute(sql)
-            return cursor
+                # Direct mode: execute SQL on connection
+                cursor = conn_or_callable.cursor()
+                if params:
+                    cursor.execute(sql, params)
+                else:
+                    cursor.execute(sql)
+                return cursor
         
         except sqlite3.OperationalError as e:
             if "database is locked" in str(e):
@@ -209,15 +226,15 @@ def sqlite_execute_with_retry(
                 elapsed = time.time() - start_time
                 
                 if elapsed > SQLITE_MAX_RETRY_TIME:
-                    logger.error(f"SQLite retry timeout exceeded ({SQLITE_MAX_RETRY_TIME}s)")
+                    logger.error(f"{op_name}: SQLite retry timeout exceeded ({SQLITE_MAX_RETRY_TIME}s)")
                     raise
                 
                 if retry_count >= max_retries:
-                    logger.error(f"SQLite max retries ({max_retries}) exceeded")
+                    logger.error(f"{op_name}: SQLite max retries ({max_retries}) exceeded")
                     raise
                 
                 logger.debug(
-                    f"Database locked, retry {retry_count}/{max_retries} "
+                    f"{op_name}: Database locked, retry {retry_count}/{max_retries} "
                     f"after {current_delay:.2f}s delay"
                 )
                 time.sleep(current_delay)
@@ -225,7 +242,7 @@ def sqlite_execute_with_retry(
             else:
                 raise
     
-    raise sqlite3.OperationalError(f"Max retries ({max_retries}) exceeded")
+    raise sqlite3.OperationalError(f"{op_name}: Max retries ({max_retries}) exceeded")
 
 
 # =============================================================================

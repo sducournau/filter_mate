@@ -312,8 +312,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if hasattr(self, 'checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection') and self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection:
                 try: self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.reset(); self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.close(); self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.deleteLater()
                 except (RuntimeError, AttributeError): pass
-            self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = None
-            self.set_multiple_checkable_combobox()
+            # Recreate the widget
+            self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self.CONFIG_DATA, self)
             if self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection:
                 layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, 1); layout.update()
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"] = {"TYPE": "CustomCheckableFeatureComboBox", "WIDGET": self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection,
@@ -329,7 +329,35 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def setupUiCustom(self):
         """v4.0 Sprint 15: Setup custom UI - splitter, dimensions, tabs, icons, tooltips."""
+        # CRITICAL: Create all custom widgets FIRST (before configure_widgets() references them)
         self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self.CONFIG_DATA, self)
+        self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.setMinimumHeight(28)
+        self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.show()
+        logger.debug(f"Created multiple selection widget: {self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection}")
+        
+        # Create custom combobox widgets early so configure_widgets() can reference them
+        from .ui.widgets.custom_widgets import QgsCheckableComboBoxLayer
+        self.checkableComboBoxLayer_filtering_layers_to_filter = QgsCheckableComboBoxLayer(self.dockWidgetContents)
+        self.checkableComboBoxLayer_filtering_layers_to_filter.setMinimumHeight(26)
+        self.checkableComboBoxLayer_filtering_layers_to_filter.show()
+        logger.debug(f"Created filtering layers widget: {self.checkableComboBoxLayer_filtering_layers_to_filter}")
+        
+        self.checkableComboBoxLayer_exporting_layers = QgsCheckableComboBoxLayer(self.dockWidgetContents)
+        self.checkableComboBoxLayer_exporting_layers.setMinimumHeight(26)
+        self.checkableComboBoxLayer_exporting_layers.show()
+        logger.debug(f"Created exporting layers widget: {self.checkableComboBoxLayer_exporting_layers}")
+        
+        # Create centroids checkbox BEFORE configure_widgets() to ensure it's in the registry
+        from qgis.PyQt import QtWidgets
+        self.checkBox_filtering_use_centroids_distant_layers = QtWidgets.QCheckBox(self.dockWidgetContents)
+        self.checkBox_filtering_use_centroids_distant_layers.setObjectName("checkBox_filtering_use_centroids_distant_layers")
+        logger.debug(f"Created centroids distant layers checkbox: {self.checkBox_filtering_use_centroids_distant_layers}")
+        
+        # Initialize ConfigurationManager BEFORE tab widget setup (needed for custom widget creation)
+        from .ui.managers.configuration_manager import ConfigurationManager
+        if self._configuration_manager is None:
+            self._configuration_manager = ConfigurationManager(self)
+        
         if self._splitter_manager:
             self._splitter_manager.setup()
         else:
@@ -429,7 +457,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.main_splitter.setSizes([int(tot * cfg.get('initial_exploring_ratio', 0.50)), int(tot * cfg.get('initial_toolset_ratio', 0.50))])
 
     def apply_dynamic_dimensions(self):
-        """v4.0 S16: Apply dynamic dimensions."""
+        """
+        Apply dynamic dimensions to widgets based on active UI profile (compact/normal).
+        
+        Orchestrates the application of dimensions by calling specialized methods.
+        Called from setupUiCustom() during initialization.
+        """
         if self._dimensions_manager is not None:
             try: self._dimensions_manager.apply(); return
             except Exception: pass
@@ -440,19 +473,37 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 except Exception: self._apply_layout_spacing(); self._harmonize_spacers(); self._adjust_row_spacing()
             else: self._apply_layout_spacing(); self._harmonize_spacers(); self._adjust_row_spacing()
             self._apply_qgis_widget_dimensions(); self._align_key_layouts()
-        except Exception: pass
+            logger.info("Successfully applied dynamic dimensions to all widgets")
+        except Exception as e:
+            logger.error(f"Error applying dynamic dimensions: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _apply_dockwidget_dimensions(self):
-        """v4.0 S16: Set dockwidget size."""
+        """
+        Apply minimum size to the dockwidget based on active UI profile (compact/normal).
+        
+        This ensures the dockwidget can be resized smaller in compact mode,
+        allowing better screen space management.
+        """
         from .ui.config import UIConfig
         from qgis.PyQt.QtCore import QSize
         min_w, min_h = UIConfig.get_config('dockwidget','min_width'), UIConfig.get_config('dockwidget','min_height')
         pref_w, pref_h = UIConfig.get_config('dockwidget','preferred_width'), UIConfig.get_config('dockwidget','preferred_height')
-        if min_w and min_h: self.setMinimumSize(QSize(min_w, min_h))
-        if pref_w and pref_h and (self.size().width() > pref_w or self.size().height() > pref_h): self.resize(pref_w, pref_h)
+        if min_w and min_h:
+            self.setMinimumSize(QSize(min_w, min_h))
+            logger.debug(f"Applied dockwidget minimum size: {min_w}x{min_h}px")
+        if pref_w and pref_h and (self.size().width() > pref_w or self.size().height() > pref_h):
+            self.resize(pref_w, pref_h)
+            logger.debug(f"Resized dockwidget to preferred size: {pref_w}x{pref_h}px")
     
     def _apply_widget_dimensions(self):
-        """v3.1 Sprint 14: Apply dimensions to standard Qt widgets."""
+        """
+        Apply dimensions to standard Qt widgets (ComboBox, LineEdit, SpinBox, GroupBox).
+        
+        Reads dimensions from UIConfig and applies them to all relevant widgets
+        using findChildren() for batch processing.
+        """
         from .ui.config import UIConfig
         from qgis.PyQt.QtWidgets import QComboBox, QLineEdit, QDoubleSpinBox, QSpinBox, QGroupBox
         combo_h = UIConfig.get_config('combobox', 'height')
@@ -472,9 +523,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             spinbox.setSizePolicy(spinbox.sizePolicy().horizontalPolicy(), QtWidgets.QSizePolicy.Fixed)
         for gb in self.findChildren(QGroupBox):
             gb.setMinimumHeight(gb_min_h)
+        logger.debug(f"Applied widget dimensions: ComboBox={combo_h}px, Input={input_h}px")
     
     def _apply_frame_dimensions(self):
-        """v3.1 Sprint 14: Apply dimensions to frames and containers."""
+        """
+        Apply dimensions and size policies to frames and widget key containers.
+        
+        This method configures:
+        - Widget key containers (sidebar buttons area)
+        - Main frames (exploring, toolset)
+        - Sub-frames (filtering)
+        
+        Size policies work in conjunction with the splitter configuration
+        to ensure proper resize behavior.
+        """
         from .ui.config import UIConfig
         from qgis.PyQt.QtWidgets import QSizePolicy
         policy_map = {'Fixed': QSizePolicy.Fixed, 'Minimum': QSizePolicy.Minimum,
@@ -494,47 +556,137 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     w.layout().setContentsMargins(wk_pad, wk_pad, wk_pad, wk_pad)
                     w.layout().setSpacing(0)
         exp_cfg = UIConfig.get_config('frame_exploring') or {}
+        exp_min = exp_cfg.get('min_height', 120)
+        exp_max = exp_cfg.get('max_height', 350)
+        exp_v_policy = exp_cfg.get('size_policy_v', 'Minimum')
         if hasattr(self, 'frame_exploring'):
-            self.frame_exploring.setMinimumHeight(exp_cfg.get('min_height', 120))
-            self.frame_exploring.setMaximumHeight(exp_cfg.get('max_height', 350))
+            self.frame_exploring.setMinimumHeight(exp_min)
+            self.frame_exploring.setMaximumHeight(exp_max)
             self.frame_exploring.setSizePolicy(policy_map.get(exp_cfg.get('size_policy_h', 'Preferred'), QSizePolicy.Preferred),
-                                               policy_map.get(exp_cfg.get('size_policy_v', 'Minimum'), QSizePolicy.Minimum))
+                                               policy_map.get(exp_v_policy, QSizePolicy.Minimum))
         ts_cfg = UIConfig.get_config('frame_toolset') or {}
+        ts_min = ts_cfg.get('min_height', 200)
+        ts_v_policy = ts_cfg.get('size_policy_v', 'Expanding')
         if hasattr(self, 'frame_toolset'):
-            self.frame_toolset.setMinimumHeight(ts_cfg.get('min_height', 200))
+            self.frame_toolset.setMinimumHeight(ts_min)
             self.frame_toolset.setMaximumHeight(ts_cfg.get('max_height', 16777215))
             self.frame_toolset.setSizePolicy(policy_map.get(ts_cfg.get('size_policy_h', 'Preferred'), QSizePolicy.Preferred),
-                                             policy_map.get(ts_cfg.get('size_policy_v', 'Expanding'), QSizePolicy.Expanding))
+                                             policy_map.get(ts_v_policy, QSizePolicy.Expanding))
         flt_cfg = UIConfig.get_config('frame_filtering') or {}
         if hasattr(self, 'frame_filtering'):
             self.frame_filtering.setMinimumHeight(flt_cfg.get('min_height', 180))
+        logger.debug(f"Applied frame dimensions: exploring={exp_min}-{exp_max}px ({exp_v_policy}), toolset={ts_min}px+ ({ts_v_policy}), widget_keys={wk_min}-{wk_max}px")
     
     def _harmonize_checkable_pushbuttons(self):
-        """v3.1 Sprint 14: Delegate to UILayoutController."""
+        """
+        Harmonize dimensions of all checkable pushbuttons across tabs.
+        
+        Applies consistent sizing to exploring, filtering, and exporting pushbuttons
+        based on the active UI profile (compact/normal/hidpi) using key_button dimensions
+        from UIConfig.
+        """
         if self._controller_integration and self._controller_integration.delegate_harmonize_checkable_pushbuttons():
             return
+        # Fallback: Apply pushbutton dimensions directly
+        try:
+            from qgis.PyQt.QtWidgets import QPushButton, QSizePolicy
+            from qgis.PyQt.QtCore import QSize
+            from .ui.config import UIConfig, DisplayProfile
+            key_cfg = UIConfig.get_config('key_button') or {}
+            profile = UIConfig.get_profile()
+            if profile == DisplayProfile.COMPACT:
+                min_size, max_size, icon_size = 26, 32, 16
+                mode_name = 'compact'
+            elif profile == DisplayProfile.HIDPI:
+                min_size, max_size, icon_size = 36, 44, 24
+                mode_name = 'hidpi'
+            else:
+                min_size, max_size, icon_size = key_cfg.get('min_size', 30), key_cfg.get('max_size', 36), key_cfg.get('icon_size', 18)
+                mode_name = 'normal'
+            buttons = ['pushButton_exploring_identify', 'pushButton_exploring_zoom', 'pushButton_checkable_exploring_selecting',
+                       'pushButton_checkable_exploring_tracking', 'pushButton_checkable_exploring_linking_widgets',
+                       'pushButton_exploring_reset_layer_properties', 'pushButton_checkable_filtering_auto_current_layer',
+                       'pushButton_checkable_filtering_layers_to_filter', 'pushButton_checkable_filtering_current_layer_combine_operator',
+                       'pushButton_checkable_filtering_geometric_predicates', 'pushButton_checkable_filtering_buffer_value',
+                       'pushButton_checkable_filtering_buffer_type', 'pushButton_checkable_exporting_layers',
+                       'pushButton_checkable_exporting_projection', 'pushButton_checkable_exporting_styles',
+                       'pushButton_checkable_exporting_datatype', 'pushButton_checkable_exporting_output_folder',
+                       'pushButton_checkable_exporting_zip']
+            checkable_buttons = []
+            for name in buttons:
+                if hasattr(self, name):
+                    btn = getattr(self, name)
+                    if isinstance(btn, QPushButton):
+                        btn.setMinimumSize(min_size, min_size)
+                        btn.setMaximumSize(max_size, max_size)
+                        btn.setIconSize(QSize(icon_size, icon_size))
+                        btn.setFlat(True)
+                        btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+                        checkable_buttons.append(name)
+            logger.debug(f"Harmonized {len(checkable_buttons)} key pushbuttons in {mode_name} mode: {min_size}-{max_size}px (icon: {icon_size}px)")
+        except Exception as e:
+            logger.warning(f"Could not harmonize checkable pushbuttons: {e}")
     
     def _apply_layout_spacing(self):
-        """v3.1 Sprint 14: Delegate to UILayoutController."""
+        """v3.1 Sprint 14: Apply layout spacing with fallback."""
         if self._controller_integration and self._controller_integration.delegate_apply_layout_spacing():
             return
+        # Fallback: Apply spacing directly
+        try:
+            from .ui.config import UIConfig
+            layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 8
+            content_spacing = UIConfig.get_config('layout', 'spacing_content') or 6
+            key_cfg = UIConfig.get_config('key_button') or {}
+            button_spacing = key_cfg.get('spacing', 2)
+            # Apply spacing to exploring layouts
+            for name in ['verticalLayout_exploring_single_selection', 'verticalLayout_exploring_multiple_selection', 'verticalLayout_exploring_custom_selection']:
+                if hasattr(self, name): getattr(self, name).setSpacing(layout_spacing)
+            # Apply button spacing to key layouts
+            for name in ['verticalLayout_filtering_keys', 'verticalLayout_exporting_keys', 'verticalLayout_exploring_content']:
+                if hasattr(self, name): getattr(self, name).setSpacing(button_spacing)
+            # Apply content spacing
+            for name in ['verticalLayout_filtering_values', 'verticalLayout_exporting_values']:
+                if hasattr(self, name): getattr(self, name).setSpacing(content_spacing)
+            logger.debug(f"Applied harmonized layout spacing: {layout_spacing}px")
+        except Exception as e:
+            logger.debug(f"Could not apply layout spacing: {e}")
     
     def _harmonize_spacers(self):
-        """Harmonize vertical spacers across key widgets."""
+        """
+        Harmonize vertical spacers across all key widget sections.
+        
+        Applies consistent spacer dimensions to exploring/filtering/exporting key widgets
+        based on section-specific sizes from UI config.
+        """
         try:
             from qgis.PyQt.QtWidgets import QSpacerItem; from .ui.elements import get_spacer_size; from .ui.config import UIConfig, DisplayProfile
             is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
+            mode_name = 'compact' if is_compact else 'normal'
+            spacer_sizes = {}
             for section, widget_name in [('exploring', 'widget_exploring_keys'), ('filtering', 'widget_filtering_keys'), ('exporting', 'widget_exporting_keys')]:
                 target_h = get_spacer_size(f'verticalSpacer_{section}_keys_field_top' if section != 'exploring' else 'verticalSpacer_exploring_tab_top', is_compact)
+                spacer_sizes[section] = target_h
+                spacer_count = 0
                 if hasattr(self, widget_name) and (layout := getattr(self, widget_name).layout()):
                     for i in range(layout.count()):
                         if (item := layout.itemAt(i)) and hasattr(item, 'layout') and item.layout():
                             for j in range(item.layout().count()):
-                                if (nested := item.layout().itemAt(j)) and isinstance(nested, QSpacerItem): nested.changeSize(20, target_h, nested.sizePolicy().horizontalPolicy(), nested.sizePolicy().verticalPolicy())
-        except: pass
+                                if (nested := item.layout().itemAt(j)) and isinstance(nested, QSpacerItem):
+                                    nested.changeSize(20, target_h, nested.sizePolicy().horizontalPolicy(), nested.sizePolicy().verticalPolicy())
+                                    spacer_count += 1
+                if spacer_count > 0:
+                    logger.debug(f"Harmonized {spacer_count} spacers in {section} to {target_h}px")
+            logger.debug(f"Applied spacer dimensions ({mode_name} mode): {spacer_sizes}")
+        except Exception as e:
+            logger.warning(f"Could not harmonize spacers: {e}")
     
     def _apply_qgis_widget_dimensions(self):
-        """v4.0 Sprint 17: Apply dimensions to QGIS widgets."""
+        """
+        Apply dimensions to QGIS custom widgets.
+        
+        Sets heights for QgsFeaturePickerWidget, QgsFieldExpressionWidget, 
+        QgsProjectionSelectionWidget, and forces QgsPropertyOverrideButton to exact 22px.
+        """
         try:
             from qgis.PyQt.QtWidgets import QSizePolicy
             from qgis.gui import QgsPropertyOverrideButton
@@ -543,25 +695,64 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             for cls in [QgsFeaturePickerWidget, QgsFieldExpressionWidget, QgsProjectionSelectionWidget, QgsMapLayerComboBox, QgsFieldComboBox, QgsCheckableComboBox]:
                 for w in self.findChildren(cls): w.setMinimumHeight(cb_h); w.setMaximumHeight(cb_h); w.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             for w in self.findChildren(QgsPropertyOverrideButton): w.setFixedSize(22, 22); w.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        except: pass
+            logger.debug(f"Applied QGIS widget dimensions: ComboBox={cb_h}px, Input={cb_h}px")
+        except Exception as e:
+            logger.debug(f"Could not apply dimensions to QGIS widgets: {e}")
     
     def _align_key_layouts(self):
-        """v3.1 Sprint 14: Delegate to UILayoutController."""
+        """
+        Align key layouts (exploring/filtering/exporting) for visual consistency.
+        
+        Sets consistent spacing, margins, and alignment for all key widget layouts
+        and their parent containers. Harmonizes vertical bars of pushbuttons.
+        """
         if self._controller_integration and self._controller_integration.delegate_align_key_layouts():
             return
+        # Fallback: Apply alignment directly
+        try:
+            from .ui.config import UIConfig
+            margins = UIConfig.get_config('layout', 'margins_frame') or {'left': 8, 'top': 8, 'right': 8, 'bottom': 10}
+            left, top, right, bottom = margins.get('left', 8), margins.get('top', 8), margins.get('right', 8), margins.get('bottom', 10)
+            key_cfg = UIConfig.get_config('key_button') or {}
+            button_spacing = key_cfg.get('spacing', 2)
+            widget_keys_config = UIConfig.get_config('widget_keys') or {}
+            widget_keys_padding = widget_keys_config.get('padding', 2)
+            # Align horizontal layouts with zero margins for visual consistency
+            for name in ['horizontalLayout_filtering_content', 'horizontalLayout_exporting_content']:
+                if hasattr(self, name):
+                    layout = getattr(self, name)
+                    layout.setContentsMargins(0, 0, 0, 0)
+            # Apply margins to groupbox layouts
+            for name in ['gridLayout_exploring_single_content', 'gridLayout_exploring_multiple_content', 'verticalLayout_exploring_custom_container']:
+                if hasattr(self, name):
+                    getattr(self, name).setContentsMargins(left, top, right, bottom)
+            # Apply margins to value layouts
+            for name in ['verticalLayout_filtering_values', 'verticalLayout_exporting_values']:
+                if hasattr(self, name):
+                    getattr(self, name).setContentsMargins(left, top, right, bottom)
+            logger.debug(f"Aligned key layouts with {button_spacing}px spacing, {widget_keys_padding}px padding")
+        except Exception as e:
+            logger.warning(f"Could not align key layouts: {e}")
     
     def _adjust_row_spacing(self):
-        """Adjust row spacing for filtering/exporting alignment."""
+        """
+        Adjust row spacing for filtering/exporting alignment.
+        
+        Ensures consistent vertical spacing between widgets in filtering and exporting tabs.
+        """
         try:
             from qgis.PyQt.QtWidgets import QSpacerItem; from .ui.elements import get_spacer_size; from .ui.config import UIConfig, DisplayProfile
-            is_compact = UIConfig._active_profile == DisplayProfile.COMPACT; spacing = UIConfig.get_config('layout', 'spacing_frame') or 4
+            is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
+            layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 4
             for name, layout_attr in [('filtering', 'verticalLayout_filtering_values'), ('exporting', 'verticalLayout_exporting_values')]:
                 target = get_spacer_size(f'verticalSpacer_{name}_keys_field_top', is_compact)
                 if hasattr(self, layout_attr) and (layout := getattr(self, layout_attr)):
                     for i in range(layout.count()):
                         if (item := layout.itemAt(i)) and isinstance(item, QSpacerItem): item.changeSize(item.sizeHint().width(), target, item.sizePolicy().horizontalPolicy(), item.sizePolicy().verticalPolicy())
-                    layout.setSpacing(spacing)
-        except: pass
+                    layout.setSpacing(layout_spacing)
+            logger.debug(f"Adjusted row spacing: filtering/exporting aligned with {layout_spacing}px spacing")
+        except Exception as e:
+            logger.warning(f"Could not adjust row spacing: {e}")
 
     def _setup_backend_indicator(self):
         """v4.0 S16: Create header with indicators."""
@@ -1190,10 +1381,35 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def icon_per_geometry_type(self, geometry_type):
-        """v4.0 Sprint 17: Get cached icon for geometry type."""
+        """v4.0 Sprint 17: Get cached icon for geometry type.
+        
+        Supports both legacy format ('GeometryType.Point') and 
+        short format ('Point') for backward compatibility.
+        
+        Args:
+            geometry_type: Geometry type string (either format)
+            
+        Returns:
+            QIcon: Icon for the geometry type
+        """
         if geometry_type in self._icon_cache: return self._icon_cache[geometry_type]
-        icon_map = {'GeometryType.Line': QgsLayerItem.iconLine, 'GeometryType.Point': QgsLayerItem.iconPoint,
-                    'GeometryType.Polygon': QgsLayerItem.iconPolygon, 'GeometryType.UnknownGeometry': QgsLayerItem.iconTable}
+        
+        # Support both legacy and short formats
+        icon_map = {
+            # Legacy format (from PROJECT_LAYERS infos)
+            'GeometryType.Line': QgsLayerItem.iconLine,
+            'GeometryType.Point': QgsLayerItem.iconPoint,
+            'GeometryType.Polygon': QgsLayerItem.iconPolygon,
+            'GeometryType.UnknownGeometry': QgsLayerItem.iconTable,
+            'GeometryType.Null': QgsLayerItem.iconTable,
+            'GeometryType.Unknown': QgsLayerItem.iconDefault,
+            # Short format (from get_geometry_type_string without legacy_format)
+            'Line': QgsLayerItem.iconLine,
+            'Point': QgsLayerItem.iconPoint,
+            'Polygon': QgsLayerItem.iconPolygon,
+            'Unknown': QgsLayerItem.iconTable,
+            'Null': QgsLayerItem.iconTable,
+        }
         icon = icon_map.get(geometry_type, QgsLayerItem.iconDefault)()
         self._icon_cache[geometry_type] = icon
         return icon
@@ -1254,8 +1470,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         if self._button_styler:
             self._button_styler.setup()
-        elif self._configuration_manager and self.widgets:
-            self._configuration_manager.configure_all_widgets()
     
     def _setup_theme_watcher(self):
         """Setup QGIS theme watcher for dark/light mode switching."""
@@ -1779,8 +1993,100 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except Exception as e: logger.debug(f"Error syncing additive mode widgets: {e}")
     
     def _synchronize_layer_widgets(self, layer, layer_props):
-        """v4.0 S18: → LayerSyncController."""
-        if self._layer_sync_ctrl: self._controller_integration.delegate_synchronize_layer_widgets(layer, layer_props)
+        """v4.0 S18: → LayerSyncController with fallback for controller unavailable."""
+        # Try delegation first
+        if self._layer_sync_ctrl:
+            if self._controller_integration.delegate_synchronize_layer_widgets(layer, layer_props):
+                return
+        
+        # Fallback: Minimal inline logic when controller unavailable (v4.0 Migration Fix)
+        if not self._is_ui_ready() or not layer:
+            return
+        
+        # Detect multi-step filter
+        self._detect_multi_step_filter(layer, layer_props)
+        
+        # Sync current layer combo
+        last_layer = self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].currentLayer()
+        if last_layer is None or last_layer.id() != layer.id():
+            self.manageSignal(["FILTERING", "CURRENT_LAYER"], 'disconnect')
+            self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].setLayer(layer)
+            self.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
+        
+        # Update backend indicator
+        forced_backend = getattr(self, 'forced_backends', {}).get(layer.id())
+        infos = layer_props.get('infos', {})
+        provider_type = infos.get('layer_provider_type', layer.providerType())
+        postgresql_conn = infos.get('postgresql_connection_available')
+        self._update_backend_indicator(provider_type, postgresql_conn, actual_backend=forced_backend)
+        
+        # Initialize buffer property widget
+        self.filtering_init_buffer_property()
+        
+        # CRITICAL: Update all layer property widgets (enable/disable based on group state)
+        for group_name, tuple_group in self.layer_properties_tuples_dict.items():
+            group_state = True
+            # Skip groups that are always enabled
+            if group_name not in ('is', 'selection_expression', 'source_layer'):
+                if tuple_group:
+                    group_property = tuple_group[0]
+                    group_state = layer_props.get(group_property[0], {}).get(group_property[1], True)
+                    if group_state is False:
+                        self.properties_group_state_reset_to_default(tuple_group, group_name, group_state)
+                    else:
+                        self.properties_group_state_enabler(tuple_group)
+            
+            if group_state is True:
+                for prop_tuple in tuple_group:
+                    if prop_tuple[0].upper() not in self.widgets:
+                        continue
+                    if prop_tuple[1].upper() not in self.widgets.get(prop_tuple[0].upper(), {}):
+                        continue
+                    widget_info = self.widgets[prop_tuple[0].upper()][prop_tuple[1].upper()]
+                    widget = widget_info.get("WIDGET")
+                    widget_type = widget_info.get("TYPE")
+                    stored_value = layer_props.get(prop_tuple[0], {}).get(prop_tuple[1])
+                    
+                    if widget is None:
+                        continue
+                    
+                    # Sync widget based on type
+                    widget.blockSignals(True)
+                    try:
+                        if widget_type == 'PushButton' and widget.isCheckable():
+                            widget.setChecked(bool(stored_value))
+                            if "ICON_ON_TRUE" in widget_info and "ICON_ON_FALSE" in widget_info:
+                                self.switch_widget_icon(prop_tuple, stored_value)
+                        elif widget_type == 'CheckableComboBox':
+                            widget.setCheckedItems(stored_value if isinstance(stored_value, list) else [])
+                        elif widget_type == 'ComboBox':
+                            if prop_tuple[1] in ('source_layer_combine_operator', 'other_layers_combine_operator'):
+                                widget.setCurrentIndex(self._combine_operator_to_index(stored_value))
+                            else:
+                                idx = widget.findText(str(stored_value) if stored_value else "")
+                                widget.setCurrentIndex(max(idx, 0))
+                        elif widget_type == 'QgsFieldExpressionWidget':
+                            widget.setLayer(layer)
+                            widget.setExpression(str(stored_value) if stored_value else "")
+                        elif widget_type in ('QgsDoubleSpinBox', 'QgsSpinBox'):
+                            widget.setValue(float(stored_value) if stored_value else 0)
+                        elif widget_type == 'CheckBox':
+                            widget.setChecked(bool(stored_value))
+                        elif widget_type == 'LineEdit':
+                            widget.setText(str(stored_value) if stored_value else "")
+                        elif widget_type == 'QgsProjectionSelectionWidget':
+                            crs = QgsCoordinateReferenceSystem(str(stored_value) if stored_value else "")
+                            if crs.isValid():
+                                widget.setCrs(crs)
+                        elif widget_type == 'PropertyOverrideButton':
+                            widget.setActive(bool(stored_value))
+                    finally:
+                        widget.blockSignals(False)
+        
+        # Populate layers combobox
+        self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
+        self.filtering_populate_layers_chekableCombobox()
+        self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'connect')
     
     def _reload_exploration_widgets(self, layer, layer_props):
         """v4.0 S18: → ExploringController."""
@@ -1887,8 +2193,60 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     # _update_selection_expression_property, _update_other_property (~130 lines)
 
     def layer_property_changed(self, input_property, input_data=None, custom_functions={}):
-        """v4.0 S18: → PropertyController."""
-        if self._property_ctrl: self._controller_integration.delegate_change_layer_property(input_property, input_data, custom_functions)
+        """v4.0 S18: → PropertyController with fallback for controller unavailable."""
+        if custom_functions is None:
+            custom_functions = {}
+        
+        # Try delegation to PropertyController first
+        if self._property_ctrl:
+            if self._controller_integration.delegate_change_layer_property(input_property, input_data, custom_functions):
+                return
+        
+        # Fallback: Minimal inline logic when controller is unavailable (v4.0 Migration Fix)
+        if not self.widgets_initialized or not self.current_layer:
+            return
+        if self.current_layer.id() not in self.PROJECT_LAYERS:
+            return
+        
+        # Find property path in layer_properties_tuples_dict
+        properties_group_key, property_path, properties_tuples = None, None, None
+        for group_key, tuples in self.layer_properties_tuples_dict.items():
+            for tup in tuples:
+                if tup[1] == input_property:
+                    properties_group_key, property_path, properties_tuples = group_key, tup, tuples
+                    break
+            if properties_group_key:
+                break
+        
+        if not properties_group_key or not property_path:
+            logger.warning(f"layer_property_changed fallback: property '{input_property}' not found")
+            return
+        
+        # Get group state from parent widget
+        group_state = True
+        if properties_tuples:
+            group_widget_info = self.widgets.get(properties_tuples[0][0].upper(), {}).get(properties_tuples[0][1].upper(), {})
+            group_widget = group_widget_info.get("WIDGET")
+            if group_widget and hasattr(group_widget, 'isChecked'):
+                group_state = group_widget.isChecked()
+        
+        # Enable/disable widgets based on group state
+        if group_state:
+            self.properties_group_state_enabler(properties_tuples)
+        else:
+            self.properties_group_state_reset_to_default(properties_tuples, properties_group_key, group_state)
+        
+        # Update PROJECT_LAYERS
+        if property_path[0] in self.PROJECT_LAYERS[self.current_layer.id()]:
+            self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
+        
+        # Call custom callbacks
+        if "ON_CHANGE" in custom_functions:
+            custom_functions["ON_CHANGE"](0)
+        if input_data and "ON_TRUE" in custom_functions:
+            custom_functions["ON_TRUE"](0)
+        elif not input_data and "ON_FALSE" in custom_functions:
+            custom_functions["ON_FALSE"](0)
 
     def layer_property_changed_with_buffer_style(self, input_property, input_data=None):
         """v4.0 S18: → PropertyController."""
@@ -1967,8 +2325,34 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def properties_group_state_reset_to_default(self, tuple_group, group_name, state):
-        """v4.0 S18: → PropertyController."""
-        if self._property_ctrl: self._controller_integration.delegate_reset_property_group(tuple_group, group_name, state)
+        """v4.0 S18: → PropertyController with fallback."""
+        # Try delegation first
+        if self._property_ctrl:
+            if self._controller_integration.delegate_reset_property_group(tuple_group, group_name, state):
+                return
+        
+        # Fallback: Minimal inline reset logic when controller unavailable (v4.0 Migration Fix)
+        if not self._is_ui_ready():
+            return
+        
+        for i, property_path in enumerate(tuple_group):
+            if property_path[0].upper() not in self.widgets:
+                continue
+            if property_path[1].upper() not in self.widgets.get(property_path[0].upper(), {}):
+                continue
+            
+            widget_info = self.widgets[property_path[0].upper()][property_path[1].upper()]
+            widget = widget_info.get("WIDGET")
+            widget_type = widget_info.get("TYPE")
+            
+            if widget is None:
+                continue
+            
+            # Handle enabled state: first widget (HAS_xxx) stays enabled, others disabled
+            if i == 0 and property_path[1].upper().find('HAS') >= 0:
+                widget.setEnabled(True)
+            else:
+                widget.setEnabled(state)
 
     def filtering_init_buffer_property(self):
         """v4.0 S18: Init buffer property override widget."""
@@ -2342,13 +2726,54 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def _update_backend_indicator(self, provider_type, postgresql_connection_available=None, actual_backend=None):
         """v4.0 Sprint 18: Update backend indicator via BackendController."""
-        if self._controller_integration and self._controller_integration.backend_controller and self.current_layer:
-            if self._controller_integration.delegate_update_backend_indicator(self.current_layer, postgresql_connection_available, actual_backend):
-                self._current_provider_type = provider_type
-                self._current_postgresql_available = postgresql_connection_available
+        # Store provider info for later use
+        self._current_provider_type = provider_type
+        self._current_postgresql_available = postgresql_connection_available
+        
+        # Try delegation to BackendController first
+        if self._controller_integration and self._controller_integration.backend_controller:
+            # Use current_layer if available, otherwise create minimal layer context
+            layer = self.current_layer
+            if layer and self._controller_integration.delegate_update_backend_indicator(layer, postgresql_connection_available, actual_backend):
                 return
-        if hasattr(self, 'backend_indicator_label') and self.backend_indicator_label:
-            self.backend_indicator_label.setText(actual_backend.upper() if actual_backend else provider_type.upper()[:3])
+        
+        # Fallback: Apply styling directly (v4.0 Migration Fix - restored from v2.9.42)
+        if not hasattr(self, 'backend_indicator_label') or not self.backend_indicator_label:
+            return
+        
+        # Determine backend type
+        backend_type = actual_backend.lower() if actual_backend else provider_type.lower() if provider_type else 'unknown'
+        if backend_type == 'postgres':
+            backend_type = 'postgresql'
+        
+        # Backend styling configuration (same as BackendController.BACKEND_STYLES)
+        BACKEND_STYLES = {
+            'postgresql': {'text': 'PostgreSQL', 'color': 'white', 'background': '#27ae60'},
+            'spatialite': {'text': 'Spatialite', 'color': 'white', 'background': '#9b59b6'},
+            'ogr': {'text': 'OGR', 'color': 'white', 'background': '#3498db'},
+            'ogr_fallback': {'text': 'OGR*', 'color': 'white', 'background': '#e67e22'},
+            'unknown': {'text': '...', 'color': '#7f8c8d', 'background': '#ecf0f1'}
+        }
+        
+        style = BACKEND_STYLES.get(backend_type, BACKEND_STYLES['unknown'])
+        self.backend_indicator_label.setText(style['text'])
+        
+        base_style = f"""
+            QLabel#label_backend_indicator {{
+                color: {style['color']};
+                background-color: {style['background']};
+                font-size: 9pt;
+                font-weight: 600;
+                padding: 3px 10px;
+                border-radius: 12px;
+                border: none;
+            }}
+            QLabel#label_backend_indicator:hover {{
+                opacity: 0.85;
+            }}
+        """
+        self.backend_indicator_label.setStyleSheet(base_style)
+        self.backend_indicator_label.adjustSize()
     
     def getProjectLayersEvent(self, event):
         if self.widgets_initialized: self.gettingProjectLayers.emit()

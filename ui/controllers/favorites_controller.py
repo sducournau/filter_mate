@@ -668,7 +668,7 @@ class FavoritesController(BaseController):
     def _show_success(self, message: str) -> None:
         """Show success message."""
         try:
-            from infrastructure.feedback import show_success
+            from ...infrastructure.feedback import show_success
             show_success("FilterMate", message)
         except ImportError:
             logger.info(f"Success: {message}")
@@ -676,7 +676,7 @@ class FavoritesController(BaseController):
     def _show_warning(self, message: str) -> None:
         """Show warning message."""
         try:
-            from infrastructure.feedback import show_warning
+            from ...infrastructure.feedback import show_warning
             show_warning("FilterMate", message)
         except ImportError:
             logger.warning(message)
