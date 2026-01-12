@@ -14,7 +14,7 @@ Usage:
     In closeEvent:
         self._controller_integration.teardown()
 """
-from typing import TYPE_CHECKING, Optional, Dict, Any, Tuple
+from typing import TYPE_CHECKING, Optional, Dict, Any
 import logging
 
 from .registry import ControllerRegistry, TabIndex
