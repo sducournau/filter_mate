@@ -360,7 +360,7 @@ class ConfigurationManager(QObject):
                 "TYPE": "PushButton",
                 "WIDGET": d.pushButton_checkable_filtering_layers_to_filter,
                 "SIGNALS": [(
-                    "clicked",
+                    "toggled",
                     lambda state, x='has_layers_to_filter', custom_functions={
                         "ON_CHANGE": lambda x: d.filtering_layers_to_filter_state_changed()
                     }: d.layer_property_changed(x, state, custom_functions)
@@ -371,7 +371,7 @@ class ConfigurationManager(QObject):
                 "TYPE": "PushButton",
                 "WIDGET": d.pushButton_checkable_filtering_current_layer_combine_operator,
                 "SIGNALS": [(
-                    "clicked",
+                    "toggled",
                     lambda state, x='has_combine_operator', custom_functions={
                         "ON_CHANGE": lambda x: d.filtering_combine_operator_state_changed()
                     }: d.layer_property_changed(x, state, custom_functions)
@@ -382,7 +382,7 @@ class ConfigurationManager(QObject):
                 "TYPE": "PushButton",
                 "WIDGET": d.pushButton_checkable_filtering_geometric_predicates,
                 "SIGNALS": [(
-                    "clicked",
+                    "toggled",
                     lambda state, x='has_geometric_predicates', custom_functions={
                         "ON_CHANGE": lambda x: d.filtering_geometric_predicates_state_changed()
                     }: d.layer_property_changed(x, state, custom_functions)
@@ -393,7 +393,7 @@ class ConfigurationManager(QObject):
                 "TYPE": "PushButton",
                 "WIDGET": d.pushButton_checkable_filtering_buffer_value,
                 "SIGNALS": [(
-                    "clicked",
+                    "toggled",
                     lambda state, x='has_buffer_value', custom_functions={
                         "ON_CHANGE": lambda x: d.filtering_buffer_property_changed()
                     }: d.layer_property_changed(x, state, custom_functions)
@@ -404,7 +404,7 @@ class ConfigurationManager(QObject):
                 "TYPE": "PushButton",
                 "WIDGET": d.pushButton_checkable_filtering_buffer_type,
                 "SIGNALS": [(
-                    "clicked",
+                    "toggled",
                     lambda state, x='has_buffer_type', custom_functions={
                         # v4.0 Migration Fix: Restored original callback from v2.9.42
                         "ON_CHANGE": lambda x: d.filtering_buffer_property_changed()

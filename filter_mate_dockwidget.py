@@ -1391,24 +1391,35 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
         Returns:
             QIcon: Icon for the geometry type
+            
+        v4.0.1: REGRESSION FIX - Added all geometry type format variations
         """
         if geometry_type in self._icon_cache: return self._icon_cache[geometry_type]
         
-        # Support both legacy and short formats
+        # Support ALL format variations for maximum compatibility
+        # Legacy format: 'GeometryType.Point', 'GeometryType.Line', 'GeometryType.Polygon'
+        # Short format: 'Point', 'Line', 'Polygon' 
+        # New format: 'LineString' (from infrastructure/utils geometry_type_to_string)
         icon_map = {
-            # Legacy format (from PROJECT_LAYERS infos)
+            # Legacy format (from PROJECT_LAYERS infos - original v2.3.8)
             'GeometryType.Line': QgsLayerItem.iconLine,
             'GeometryType.Point': QgsLayerItem.iconPoint,
             'GeometryType.Polygon': QgsLayerItem.iconPolygon,
             'GeometryType.UnknownGeometry': QgsLayerItem.iconTable,
             'GeometryType.Null': QgsLayerItem.iconTable,
             'GeometryType.Unknown': QgsLayerItem.iconDefault,
-            # Short format (from get_geometry_type_string without legacy_format)
+            # Short format 
             'Line': QgsLayerItem.iconLine,
             'Point': QgsLayerItem.iconPoint,
             'Polygon': QgsLayerItem.iconPolygon,
             'Unknown': QgsLayerItem.iconTable,
             'Null': QgsLayerItem.iconTable,
+            'NoGeometry': QgsLayerItem.iconTable,
+            # New format from infrastructure/utils geometry_type_to_string
+            'LineString': QgsLayerItem.iconLine,
+            'MultiPoint': QgsLayerItem.iconPoint,
+            'MultiLineString': QgsLayerItem.iconLine,
+            'MultiPolygon': QgsLayerItem.iconPolygon,
         }
         icon = icon_map.get(geometry_type, QgsLayerItem.iconDefault)()
         self._icon_cache[geometry_type] = icon
@@ -2086,7 +2097,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Populate layers combobox
         self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
         self.filtering_populate_layers_chekableCombobox()
-        self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'connect')
+        self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
+        
+        # Synchronize checkable button associated widgets enabled state
+        self.filtering_layers_to_filter_state_changed()
+        self.filtering_combine_operator_state_changed()
+        self.filtering_geometric_predicates_state_changed()
     
     def _reload_exploration_widgets(self, layer, layer_props):
         """v4.0 S18: → ExploringController."""
@@ -2415,38 +2431,95 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def filtering_layers_to_filter_state_changed(self):
-        """v3.1 Sprint 11: Simplified - handle layers_to_filter button changes."""
-        if not self._is_ui_ready(): return
-        is_checked = self.widgets["FILTERING"]["HAS_LAYERS_TO_FILTER"]["WIDGET"].isChecked()
-        if self._controller_integration:
-            self._controller_integration.delegate_filtering_layers_to_filter_state_changed(is_checked)
-        self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].setEnabled(is_checked)
-        self.widgets["FILTERING"]["USE_CENTROIDS_DISTANT_LAYERS"]["WIDGET"].setEnabled(is_checked)
+        """Handle changes to the has_layers_to_filter checkable button.
+        
+        When checked (True): Enable layers_to_filter combobox and use_centroids_distant_layers checkbox
+        When unchecked (False): Disable these widgets
+        
+        v4.0.1: REGRESSION FIX - Restored original condition from v2.3.8
+        """
+        # CRITICAL: Use original condition - _is_ui_ready() was too restrictive and blocked state changes
+        if self.widgets_initialized is True and self.has_loaded_layers is True:
+            is_checked = self.widgets["FILTERING"]["HAS_LAYERS_TO_FILTER"]["WIDGET"].isChecked()
+            
+            # CRITICAL: ALWAYS enable/disable the associated widgets directly
+            # This must happen BEFORE controller delegation to ensure UI is updated
+            self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].setEnabled(is_checked)
+            self.widgets["FILTERING"]["USE_CENTROIDS_DISTANT_LAYERS"]["WIDGET"].setEnabled(is_checked)
+            
+            # Optional controller delegation for additional logic
+            if self._controller_integration:
+                self._controller_integration.delegate_filtering_layers_to_filter_state_changed(is_checked)
+            
+            logger.debug(f"filtering_layers_to_filter_state_changed: is_checked={is_checked}")
 
 
     def filtering_combine_operator_state_changed(self):
-        """v4.0 S18: Handle combine operator button changes."""
-        if not self._is_ui_ready(): return
-        is_checked = self.widgets["FILTERING"]["HAS_COMBINE_OPERATOR"]["WIDGET"].isChecked()
-        if self._controller_integration: self._controller_integration.delegate_filtering_combine_operator_state_changed(is_checked)
-        self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].setEnabled(is_checked)
-        self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].setEnabled(is_checked)
+        """Handle changes to the has_combine_operator checkable button.
+        
+        When checked (True): Enable combine operator comboboxes
+        When unchecked (False): Disable these widgets
+        
+        v4.0.1: REGRESSION FIX - Restored original condition from v2.3.8
+        """
+        # CRITICAL: Use original condition - _is_ui_ready() was too restrictive
+        if self.widgets_initialized is True and self.has_loaded_layers is True:
+            is_checked = self.widgets["FILTERING"]["HAS_COMBINE_OPERATOR"]["WIDGET"].isChecked()
+            
+            # CRITICAL: ALWAYS enable/disable the associated widgets directly FIRST
+            self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].setEnabled(is_checked)
+            self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].setEnabled(is_checked)
+            
+            # Optional controller delegation
+            if self._controller_integration:
+                self._controller_integration.delegate_filtering_combine_operator_state_changed(is_checked)
+            
+            logger.debug(f"filtering_combine_operator_state_changed: is_checked={is_checked}")
 
 
     def filtering_geometric_predicates_state_changed(self):
-        """v4.0 S18: Handle geometric predicates button changes."""
-        if not self._is_ui_ready(): return
-        is_checked = self.widgets["FILTERING"]["HAS_GEOMETRIC_PREDICATES"]["WIDGET"].isChecked()
-        if self._controller_integration: self._controller_integration.delegate_filtering_geometric_predicates_state_changed(is_checked)
-        self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].setEnabled(is_checked)
+        """Handle changes to the has_geometric_predicates checkable button.
+        
+        When checked (True): Enable geometric predicates combobox
+        When unchecked (False): Disable this widget
+        
+        v4.0.1: REGRESSION FIX - Restored original condition from v2.3.8
+        """
+        # CRITICAL: Use original condition - _is_ui_ready() was too restrictive
+        if self.widgets_initialized is True and self.has_loaded_layers is True:
+            is_checked = self.widgets["FILTERING"]["HAS_GEOMETRIC_PREDICATES"]["WIDGET"].isChecked()
+            
+            # CRITICAL: ALWAYS enable/disable the associated widgets directly FIRST
+            self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].setEnabled(is_checked)
+            
+            # Optional controller delegation
+            if self._controller_integration:
+                self._controller_integration.delegate_filtering_geometric_predicates_state_changed(is_checked)
+            
+            logger.debug(f"filtering_geometric_predicates_state_changed: is_checked={is_checked}")
 
 
     def filtering_buffer_type_state_changed(self):
-        """v4.0 S18: Handle buffer type button changes."""
-        if not self._is_ui_ready(): return
-        is_checked = self.widgets["FILTERING"]["HAS_BUFFER_TYPE"]["WIDGET"].isChecked()
-        if self._controller_integration: self._controller_integration.delegate_filtering_buffer_type_state_changed(is_checked)
-        self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].setEnabled(is_checked); self.widgets["FILTERING"]["BUFFER_SEGMENTS"]["WIDGET"].setEnabled(is_checked)
+        """Handle changes to the has_buffer_type checkable button.
+        
+        When checked (True): Enable buffer type and segments widgets
+        When unchecked (False): Disable these widgets
+        
+        v4.0.1: REGRESSION FIX - Restored original condition from v2.3.8
+        """
+        # CRITICAL: Use original condition - _is_ui_ready() was too restrictive
+        if self.widgets_initialized is True and self.has_loaded_layers is True:
+            is_checked = self.widgets["FILTERING"]["HAS_BUFFER_TYPE"]["WIDGET"].isChecked()
+            
+            # CRITICAL: ALWAYS enable/disable the associated widgets directly FIRST
+            self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].setEnabled(is_checked)
+            self.widgets["FILTERING"]["BUFFER_SEGMENTS"]["WIDGET"].setEnabled(is_checked)
+            
+            # Optional controller delegation
+            if self._controller_integration:
+                self._controller_integration.delegate_filtering_buffer_type_state_changed(is_checked)
+            
+            logger.debug(f"filtering_buffer_type_state_changed: is_checked={is_checked}")
 
     def _update_centroids_source_checkbox_state(self):
         """v4.0 Sprint 8: Optimized - update centroids checkbox enabled state."""

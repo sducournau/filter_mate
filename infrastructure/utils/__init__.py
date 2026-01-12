@@ -135,24 +135,33 @@ def geometry_type_to_string(geom_type):
     """
     Convert QgsWkbTypes geometry type to string representation.
     
+    v4.0.1: REGRESSION FIX - Returns legacy format ('GeometryType.Point') 
+    for compatibility with icon_per_geometry_type() and PROJECT_LAYERS.
+    
     Args:
-        geom_type: QgsWkbTypes geometry type enum
+        geom_type: QgsWkbTypes geometry type enum OR QgsVectorLayer
         
     Returns:
-        str: Human-readable geometry type string
+        str: Geometry type string in legacy format ('GeometryType.Point', etc.)
     """
     try:
-        from qgis.core import QgsWkbTypes
+        from qgis.core import QgsWkbTypes, QgsVectorLayer
+        
+        # Handle if a layer is passed instead of geometry type
+        if isinstance(geom_type, QgsVectorLayer):
+            geom_type = geom_type.geometryType()
+        
+        # Return LEGACY format for compatibility with v2.3.8
         type_map = {
-            QgsWkbTypes.PointGeometry: "Point",
-            QgsWkbTypes.LineGeometry: "LineString",
-            QgsWkbTypes.PolygonGeometry: "Polygon",
-            QgsWkbTypes.NullGeometry: "NoGeometry",
-            QgsWkbTypes.UnknownGeometry: "Unknown",
+            QgsWkbTypes.PointGeometry: "GeometryType.Point",
+            QgsWkbTypes.LineGeometry: "GeometryType.Line",
+            QgsWkbTypes.PolygonGeometry: "GeometryType.Polygon",
+            QgsWkbTypes.NullGeometry: "GeometryType.UnknownGeometry",
+            QgsWkbTypes.UnknownGeometry: "GeometryType.UnknownGeometry",
         }
-        return type_map.get(geom_type, str(geom_type))
+        return type_map.get(geom_type, "GeometryType.UnknownGeometry")
     except Exception:
-        return str(geom_type)
+        return "GeometryType.UnknownGeometry"
 
 
 def is_qgis_alive():
