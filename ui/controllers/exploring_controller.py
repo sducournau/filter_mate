@@ -73,7 +73,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
         self._features_cache = features_cache
         if self._features_cache is None:
             try:
-                from infrastructure.cache import ExploringFeaturesCache
+                from ...infrastructure.cache import ExploringFeaturesCache
                 self._features_cache = ExploringFeaturesCache(
                     max_layers=50,
                     max_age_seconds=300.0

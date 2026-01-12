@@ -22,6 +22,9 @@ from .query_cache import (
 # Re-export geometry cache (migrated from modules/tasks/)
 from .geometry_cache import SourceGeometryCache
 
+# Re-export exploring features cache (v4.0 Sprint 18)
+from .exploring_cache import ExploringFeaturesCache
+
 __all__ = [
     'QueryExpressionCache',
     'CacheEntry',
@@ -29,5 +32,6 @@ __all__ = [
     'clear_query_cache',
     'warm_cache_for_layer',
     'warm_cache_for_project',
-    'SourceGeometryCache'
+    'SourceGeometryCache',
+    'ExploringFeaturesCache'
 ]

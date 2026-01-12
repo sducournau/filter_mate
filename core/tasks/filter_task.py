@@ -1567,166 +1567,41 @@ class FilterEngineTask(QgsTask):
     
     def _initialize_source_subset_and_buffer(self):
         """
-        Initialize source subset expression and buffer parameters.
+        Initialize source subset expression and buffer parameters (v2).
         
-        Sets param_source_new_subset based on expression type and
-        extracts buffer value/expression from task parameters.
+        PHASE 14.5: Migrated to SourceSubsetBufferBuilder service.
+        Delegates to build_source_subset_buffer_config() for actual initialization.
         
-        CRITICAL MODE FIELD-BASED:
-        - Quand is_field_expression est activé (Custom Selection avec champ simple),
-          on PRESERVE TOUJOURS le subset existant de la couche source
-        - Le subset existant sera utilisé pour déterminer quelles géométries
-          sources utiliser pour l'intersection géométrique avec les couches distantes
-        - La couche source elle-même ne sera PAS modifiée
-        
-        Exemple:
-          Source avec subset "homecount > 5" (100 features)
-          + Custom selection "drop_ID" (champ)
-          + Prédicats géom vers distant
-          → Source garde "homecount > 5"
-          → Distant filtré par intersection avec ces 100 features
+        Extracted 163 lines to core/services/source_subset_buffer_builder.py (v5.0-alpha).
         """
-        logger.info("🔧 _initialize_source_subset_and_buffer() START")
+        # PHASE 14.5: Delegate to SourceSubsetBufferBuilder service
+        from core.services.source_subset_buffer_builder import build_source_subset_buffer_config
         
-        # Check if we're in field-based geometric filter mode
-        # In this mode, is_field_expression = (True, field_name) and expression = old_subset
-        is_field_based_mode = (
-            hasattr(self, 'is_field_expression') and 
-            self.is_field_expression is not None and
-            isinstance(self.is_field_expression, tuple) and
-            len(self.is_field_expression) >= 2 and
-            self.is_field_expression[0] is True
+        # Build configuration using service
+        config = build_source_subset_buffer_config(
+            task_parameters=self.task_parameters,
+            expression=self.expression,
+            old_subset=self.param_source_old_subset,
+            is_field_expression=getattr(self, 'is_field_expression', None)
         )
         
-        # v2.9.23: Source layer is ALWAYS filtered according to active groupbox mode
-        # (single_selection, multiple_selection, or custom_selection with valid filter)
-        if is_field_based_mode:
-            # CRITICAL: In field-based mode, ALWAYS keep existing subset
-            # The source layer stays filtered by its current subset (or no filter)
-            # Only distant layers get filtered by geometric intersection
-            field_name = self.is_field_expression[1]
-            
-            logger.info(f"  🔄 FIELD-BASED MODE: Preserving source layer filter")
-            logger.info(f"  → Field name: '{field_name}'")
-            logger.info(f"  → Source layer keeps its current state (subset preserved)")
-            
-            # ALWAYS use existing subset - do NOT build from selected features
-            self.param_source_new_subset = self.param_source_old_subset
-            
-            if self.param_source_old_subset:
-                logger.info(f"  ✓ Existing subset preserved: '{self.param_source_old_subset[:80]}...'")
-                logger.info(f"  ✓ Source geometries from filtered layer will be used for intersection")
-            else:
-                logger.info(f"  ℹ No existing subset - all features from source layer will be used")
+        # Apply results to task instance
+        self.param_source_new_subset = config.source_new_subset
+        self.param_use_centroids_source_layer = config.use_centroids_source_layer
+        self.param_use_centroids_distant_layers = config.use_centroids_distant_layers
+        self.approved_optimizations = config.approved_optimizations
+        self.auto_apply_optimizations = config.auto_apply_optimizations
+        
+        # Buffer configuration
+        if config.has_buffer:
+            self.param_buffer_value = config.buffer_value
+            self.param_buffer_expression = config.buffer_expression
         else:
-            # Standard mode: Set source subset based on expression type
-            if QgsExpression(self.expression).isField() is False:
-                self.param_source_new_subset = self.expression
-            else:
-                self.param_source_new_subset = self.param_source_old_subset
-
-        # Extract use_centroids parameters
-        self.param_use_centroids_source_layer = self.task_parameters["filtering"].get("use_centroids_source_layer", False)
-        self.param_use_centroids_distant_layers = self.task_parameters["filtering"].get("use_centroids_distant_layers", False)
-        logger.info(f"  use_centroids_source_layer: {self.param_use_centroids_source_layer}")
-        logger.info(f"  use_centroids_distant_layers: {self.param_use_centroids_distant_layers}")
-        
-        # v2.7.0: Extract pre-approved optimizations from UI confirmation dialog
-        # These are set in filter_mate_app._check_and_confirm_optimizations()
-        self.approved_optimizations = self.task_parameters.get("task", {}).get("approved_optimizations", {})
-        self.auto_apply_optimizations = self.task_parameters.get("task", {}).get("auto_apply_optimizations", False)
-        if self.approved_optimizations:
-            logger.info(f"  ✓ User-approved optimizations loaded: {len(self.approved_optimizations)} layer(s)")
-            for layer_id, opts in self.approved_optimizations.items():
-                logger.info(f"    - {layer_id[:8]}...: {opts}")
-        elif self.auto_apply_optimizations:
-            logger.info(f"  ✓ Auto-apply optimizations enabled (no confirmation required)")
-        
-        # Extract buffer parameters if configured
-        has_buffer = self.task_parameters["filtering"]["has_buffer_value"]
-        logger.info(f"  has_buffer_value: {has_buffer}")
-        
-        # Extract buffer_type configuration
-        has_buffer_type = self.task_parameters["filtering"].get("has_buffer_type", False)
-        buffer_type_str = self.task_parameters["filtering"].get("buffer_type", "Round")
-        logger.info(f"  has_buffer_type: {has_buffer_type}")
-        logger.info(f"  buffer_type: {buffer_type_str}")
-        
-        # Map buffer_type string to QGIS END_CAP_STYLE integer
-        # Round = 0 (default), Flat = 1, Square = 2
-        buffer_type_mapping = {
-            "Round": 0,
-            "Flat": 1,
-            "Square": 2
-        }
-        
-        if has_buffer_type:
-            self.param_buffer_type = buffer_type_mapping.get(buffer_type_str, 0)
-            logger.info(f"  ✓ Buffer type set: {buffer_type_str} (END_CAP_STYLE={self.param_buffer_type})")
-            # Extract buffer_segments configuration
-            self.param_buffer_segments = self.task_parameters["filtering"].get("buffer_segments", 5)
-            logger.info(f"  ✓ Buffer segments set: {self.param_buffer_segments}")
-        else:
-            self.param_buffer_type = 0  # Default to Round
-            self.param_buffer_segments = 5  # Default segments
-            logger.info(f"  ℹ️  Buffer type not configured, using default: Round (END_CAP_STYLE=0), segments=5")
-        
-        if has_buffer is True:
-            buffer_property = self.task_parameters["filtering"]["buffer_value_property"]
-            buffer_expr = self.task_parameters["filtering"]["buffer_value_expression"]
-            # FIX v3.0.12: Clean buffer value from float precision errors (0.9999999 → 1.0)
-            buffer_val = clean_buffer_value(self.task_parameters["filtering"]["buffer_value"])
-            
-            logger.info(f"  buffer_value_property (override active): {buffer_property}")
-            logger.info(f"  buffer_value_expression: '{buffer_expr}'")
-            logger.info(f"  buffer_value (spinbox): {buffer_val}")
-            
-            # CRITICAL: Check buffer_value_expression FIRST
-            # When mPropertyOverrideButton_filtering_buffer_value_property is active with valid expression,
-            # it takes precedence over the spinbox value
-            if buffer_expr != '' and buffer_expr is not None:
-                # Try to convert to float - if successful, it's a static value
-                try:
-                    # FIX v3.0.12: Clean buffer value from float precision errors
-                    numeric_value = clean_buffer_value(float(buffer_expr))
-                    self.param_buffer_value = numeric_value
-                    logger.info(f"  ✓ Buffer from property override (numeric): {self.param_buffer_value}m")
-                    logger.info(f"  ℹ️  Expression '{buffer_expr}' converted to static value")
-                except (ValueError, TypeError):
-                    # It's a real dynamic expression (e.g., field reference or complex expression)
-                    self.param_buffer_expression = buffer_expr
-                    logger.info(f"  ✓ Buffer from property override (DYNAMIC EXPRESSION): {self.param_buffer_expression}")
-                    logger.info(f"  ℹ️  Will evaluate expression per feature (e.g., field reference)")
-                    if buffer_property:
-                        logger.info(f"  ✓ Property override button confirmed ACTIVE")
-                    else:
-                        logger.warning(f"  ⚠️  Expression found but buffer_value_property=False (UI state mismatch?)")
-            elif buffer_val is not None and buffer_val != 0:
-                # Fallback to buffer_value from spinbox
-                self.param_buffer_value = buffer_val
-                logger.info(f"  ✓ Buffer from spinbox VALUE: {self.param_buffer_value}m")
-            else:
-                # No valid buffer specified
-                self.param_buffer_value = 0
-                logger.warning(f"  ⚠️  No valid buffer value found, defaulting to 0m")
-        else:
-            # CRITICAL FIX: Reset buffer parameters when no buffer is configured
-            # This prevents using buffer values from previous filtering operations
-            old_buffer = getattr(self, 'param_buffer_value', None)
-            old_expr = getattr(self, 'param_buffer_expression', None)
-            
             self.param_buffer_value = 0
             self.param_buffer_expression = None
-            
-            logger.info(f"  ℹ️  NO BUFFER configured (has_buffer_value=False)")
-            if old_buffer is not None and old_buffer != 0:
-                logger.info(f"  ✓ Reset buffer_value: {old_buffer}m → 0m")
-            if old_expr is not None:
-                logger.info(f"  ✓ Reset buffer_expression: '{old_expr}' → None")
-            if old_buffer is None or old_buffer == 0:
-                logger.info(f"  ✓ Buffer already at 0m (no reset needed)")
         
-        logger.info("✓ _initialize_source_subset_and_buffer() END")
+        self.param_buffer_type = config.buffer_type
+        self.param_buffer_segments = config.buffer_segments
 
     def _prepare_geometries_by_provider(self, provider_list):
         """
