@@ -19,11 +19,11 @@ Performance: Uses geometry caching and backend-specific optimizations.
 
 Location: core/tasks/filter_task.py (Hexagonal Architecture - Application Layer)
 
-For backward compatibility, import from modules.tasks which re-exports this class:
-    from modules.tasks import FilterEngineTask
-    
-Or import directly from the new location:
+Import directly from this location:
     from core.tasks.filter_task import FilterEngineTask
+    
+Or from the package:
+    from core.tasks import FilterEngineTask
 """
 
 import logging

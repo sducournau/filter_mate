@@ -5,10 +5,10 @@
 **Project Name**: FilterMate  
 **Type**: QGIS Plugin (Python)  
 **Repository**: https://github.com/sducournau/filter_mate  
-**Version**: 4.0-alpha (January 12, 2026)  
+**Version**: 5.0 (January 12, 2026)  
 **Primary Language**: Python 3.7+  
 **Framework**: QGIS API 3.0+, PyQt5  
-**Status**: Production - EPIC-1 Migration Complete (modules/ → hexagonal architecture)
+**Status**: Production - Hexagonal Architecture Complete (modules/ REMOVED)
 
 ---
 
@@ -73,10 +73,10 @@ FilterMate is a QGIS plugin that provides an intuitive interface for filtering a
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### ⚠️ DEPRECATED: modules/ (Shims Only)
+### ⚠️ REMOVED: modules/ Folder
 
-Le dossier `modules/` ne contient plus que des **shims de compatibilité** (~1,978 lignes).
-Ces shims seront supprimés en v5.0.
+Le dossier `modules/` a été **SUPPRIMÉ** en v5.0.
+Tout le code a été migré vers l'architecture hexagonale.
 
 **Migration effectuée:**
 - `modules/appUtils.py` → `infrastructure/utils/`

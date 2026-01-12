@@ -74,7 +74,7 @@ infrastructure/
 ├── utils/                  → Utilities (migrated from modules/)
 └── database/               → Database utilities
 
-⚠️ DEPRECATED: modules/ (shims only - will be removed in v5.0)
+✅ MIGRATION COMPLETE: modules/ folder has been REMOVED (v5.0)
 ```
 
 ## Code Style Guidelines
@@ -117,18 +117,23 @@ from .infrastructure.utils import get_datasource_connexion_from_layer
 from .core.tasks import FilterEngineTask
 ```
 
-## ⚠️ DEPRECATED IMPORTS (DON'T USE!)
+## Import Guidelines (v5.0)
 
 ```python
-# ❌ OLD - Will be removed in v5.0
-from modules.appUtils import POSTGRESQL_AVAILABLE
-from modules.tasks import FilterEngineTask
-from modules.backends import BackendFactory
-
-# ✅ NEW - Use these instead
+# PostgreSQL availability
 from adapters.backends.postgresql_availability import POSTGRESQL_AVAILABLE
-from core.tasks import FilterEngineTask
-from adapters.backends import BackendFactory
+
+# Tasks
+from core.tasks import FilterEngineTask, LayersManagementEngineTask
+
+# Backends
+from adapters.backends import BackendFactory, PostgreSQLBackend, SpatialiteBackend
+
+# Utilities
+from infrastructure.utils import get_datasource_connexion_from_layer
+
+# Services
+from core.services import FilterService, LayerService, ExpressionService
 ```
 
 ## Critical Patterns
@@ -540,13 +545,12 @@ transformed_geom = geom.transform(transform)
 
 - Phase E9-E11: God classes eliminated (-67% reduction)
 - Phase E12: filter_task.py migrated to core/tasks/
-- **modules/ folder: SHIMS ONLY (~1,978 lines)**
+- **Phase E13: modules/ folder REMOVED** ✅
 - All code migrated to hexagonal architecture
 
-### 🔄 Current Phase: v5.0 Preparation
+### 🎯 Current Version: v5.0
 
-- [ ] Remove modules/ folder entirely
-- [ ] Update all external imports
+- ✅ modules/ folder completely removed
 - Target: 80% test coverage (currently ~75%)
 - Focus: Stability, documentation, cleanup
 
