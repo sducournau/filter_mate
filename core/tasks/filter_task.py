@@ -1107,189 +1107,54 @@ class FilterEngineTask(QgsTask):
             return None
 
     def _initialize_source_filtering_parameters(self):
-        """Extract and initialize all parameters needed for source layer filtering"""
-        self.param_source_old_subset = ''
+        """
+        Extract and initialize all parameters needed for source layer filtering.
         
+        EPIC-1 Phase 14.4: Delegates to core.services.filter_parameter_builder.
+        """
+        from core.services.filter_parameter_builder import build_filter_parameters
+        from ..appUtils import detect_layer_provider_type
+        
+        # Delegate to FilterParameterBuilder service
+        params = build_filter_parameters(
+            task_parameters=self.task_parameters,
+            source_layer=self.source_layer,
+            postgresql_available=POSTGRESQL_AVAILABLE,
+            detect_provider_fn=detect_layer_provider_type,
+            sanitize_subset_fn=self._sanitize_subset_string
+        )
+        
+        # Update task state from result
+        self.param_source_provider_type = params.provider_type
+        self.param_source_layer_name = params.layer_name
+        self.param_source_layer_id = params.layer_id
+        self.param_source_table = params.table_name
+        self.param_source_schema = params.schema
+        self.param_source_geom = params.geometry_field
+        self.primary_key_name = params.primary_key_name
+        self._source_forced_backend = params.forced_backend
+        self._source_postgresql_fallback = params.postgresql_fallback
+        self.has_combine_operator = params.has_combine_operator
+        self.param_source_layer_combine_operator = params.source_layer_combine_operator
+        self.param_other_layers_combine_operator = params.other_layers_combine_operator
+        self.param_source_old_subset = params.old_subset
+        self.source_layer_fields_names = params.field_names
+        
+        logger.debug(
+            f"Filtering layer: {self.param_source_layer_name} "
+            f"(table: {self.param_source_table}, Provider: {self.param_source_provider_type})"
+        )
+        
+        # NOTE: The following code was extracted to FilterParameterBuilder service:
+        # - Auto-fill missing metadata (layer_name, layer_id, provider_type, geometry_field, primary_key, schema)
+        # - Provider type detection and PostgreSQL fallback
+        # - Schema validation for PostgreSQL layers
+        # - Filtering configuration extraction (combine operators, old subset, field names)
+        
+        # Preserve original infos dict for backward compatibility (optional)
         infos = self.task_parameters.get("infos", {})
-        
-        # Auto-fill missing keys from source_layer if available
-        if self.source_layer:
-            # Auto-fill layer_name
-            if "layer_name" not in infos or infos["layer_name"] is None:
-                infos["layer_name"] = self.source_layer.name()
-                logger.info(f"Auto-filled layer_name='{infos['layer_name']}' from source layer")
-            
-            # Auto-fill layer_id  
-            if "layer_id" not in infos or infos["layer_id"] is None:
-                infos["layer_id"] = self.source_layer.id()
-                logger.info(f"Auto-filled layer_id='{infos['layer_id']}' from source layer")
-            
-            # Auto-fill layer_provider_type
-            # Use detect_layer_provider_type to get correct provider for backend selection
-            if "layer_provider_type" not in infos or infos["layer_provider_type"] is None:
-                detected_type = detect_layer_provider_type(self.source_layer)
-                infos["layer_provider_type"] = detected_type
-                logger.info(f"Auto-filled layer_provider_type='{detected_type}' from source layer")
-            
-            # Auto-fill layer_geometry_field
-            if "layer_geometry_field" not in infos or infos["layer_geometry_field"] is None:
-                try:
-                    geom_col = self.source_layer.dataProvider().geometryColumn()
-                    if geom_col:
-                        infos["layer_geometry_field"] = geom_col
-                    else:
-                        # Default based on provider
-                        if infos.get("layer_provider_type") == 'postgresql':
-                            infos["layer_geometry_field"] = 'geom'
-                        else:
-                            infos["layer_geometry_field"] = 'geometry'
-                    logger.info(f"Auto-filled layer_geometry_field='{infos['layer_geometry_field']}' from source layer")
-                except Exception as e:
-                    infos["layer_geometry_field"] = 'geom'
-                    logger.warning(f"Could not detect geometry column, using 'geom': {e}")
-            
-            # Auto-fill primary_key_name
-            if "primary_key_name" not in infos or infos["primary_key_name"] is None:
-                pk_indices = self.source_layer.primaryKeyAttributes()
-                if pk_indices:
-                    infos["primary_key_name"] = self.source_layer.fields()[pk_indices[0]].name()
-                else:
-                    # Fallback to first field
-                    if self.source_layer.fields():
-                        infos["primary_key_name"] = self.source_layer.fields()[0].name()
-                    else:
-                        infos["primary_key_name"] = 'id'
-                logger.info(f"Auto-filled primary_key_name='{infos['primary_key_name']}' from source layer")
-            
-            # Auto-fill layer_schema (empty for non-PostgreSQL)
-            if "layer_schema" not in infos or infos["layer_schema"] is None:
-                if infos.get("layer_provider_type") == 'postgresql':
-                    import re
-                    source = self.source_layer.source()
-                    match = re.search(r'table="([^"]+)"\.', source)
-                    if match:
-                        infos["layer_schema"] = match.group(1)
-                    else:
-                        infos["layer_schema"] = 'public'
-                else:
-                    infos["layer_schema"] = ''
-                logger.info(f"Auto-filled layer_schema='{infos['layer_schema']}' from source layer")
-        
-        # Validate required keys exist after auto-fill
-        required_keys = [
-            "layer_provider_type", "layer_name", 
-            "layer_id", "layer_geometry_field", "primary_key_name"
-        ]
-        missing_keys = [k for k in required_keys if k not in infos or infos[k] is None]
-        
-        if missing_keys:
-            error_msg = f"task_parameters['infos'] missing required keys for filtering: {missing_keys}"
-            logger.error(error_msg)
-            raise KeyError(error_msg)
-        
-        # Extract basic layer information
-        self.param_source_provider_type = infos["layer_provider_type"]
-        
-        # PRIORITY 1: Check if backend is forced by user for source layer
-        forced_backends = self.task_parameters.get('forced_backends', {})
-        source_layer_id = infos.get("layer_id")
-        forced_backend = forced_backends.get(source_layer_id) if source_layer_id else None
-        
-        if forced_backend:
-            logger.info(f"🔒 Source layer: Using FORCED backend '{forced_backend}'")
-            self.param_source_provider_type = forced_backend
-            self._source_forced_backend = True
-            self._source_postgresql_fallback = False
-        else:
-            self._source_forced_backend = False
-            # PRIORITY 2: Check PostgreSQL connection availability for source layer
-            # CRITICAL FIX v2.5.14: PostgreSQL layers loaded in QGIS are ALWAYS filterable
-            # via QGIS native API (setSubsetString). The postgresql_connection_available flag
-            # should default to True for PostgreSQL layers, not False.
-            # 
-            # The flag was intended to detect if psycopg2 connection works, but basic filtering
-            # NEVER requires psycopg2 - it works via QGIS native PostgreSQL provider.
-            # Only advanced features (materialized views) need psycopg2.
-            if self.param_source_provider_type == PROVIDER_POSTGRES:
-                # Default to True for PostgreSQL layers - they're always filterable via QGIS API
-                postgresql_connection_available = infos.get("postgresql_connection_available", True)
-                if not postgresql_connection_available or not POSTGRESQL_AVAILABLE:
-                    logger.warning(f"Source layer is PostgreSQL but connection unavailable - using OGR fallback")
-                    self.param_source_provider_type = PROVIDER_OGR
-                    self._source_postgresql_fallback = True
-                else:
-                    self._source_postgresql_fallback = False
-                    logger.debug(f"Source layer PostgreSQL: using native PostgreSQL backend (postgresql_connection_available={postgresql_connection_available})")
-            else:
-                self._source_postgresql_fallback = False
-        
-        # CRITICAL FIX v2.3.15: Re-validate schema from actual layer source for PostgreSQL
-        # The stored layer_schema can be corrupted or incorrect (e.g., literal "schema" string)
-        # This causes "relation schema.table does not exist" errors
-        stored_schema = infos.get("layer_schema", "")
-        if self.param_source_provider_type == PROVIDER_POSTGRES and self.source_layer:
-            try:
-                from qgis.core import QgsDataSourceUri
-                source_uri = QgsDataSourceUri(self.source_layer.source())
-                detected_schema = source_uri.schema()
-                
-                if detected_schema:
-                    if stored_schema != detected_schema:
-                        logger.info(f"Schema mismatch detected: stored='{stored_schema}', actual='{detected_schema}'")
-                        logger.info(f"Using actual schema from layer source: '{detected_schema}'")
-                    self.param_source_schema = detected_schema
-                elif stored_schema and stored_schema != 'NULL':
-                    # Use stored value if valid and no schema detected
-                    self.param_source_schema = stored_schema
-                else:
-                    # Default to 'public' for PostgreSQL
-                    self.param_source_schema = 'public'
-                    logger.info(f"No schema detected, using default: 'public'")
-            except Exception as e:
-                logger.warning(f"Could not detect schema from layer source: {e}")
-                self.param_source_schema = stored_schema if stored_schema and stored_schema != 'NULL' else 'public'
-        else:
-            self.param_source_schema = stored_schema
-        
-        # CRITICAL FIX: Use layer_table_name (actual DB table name) for PostgreSQL, not layer_name (display name)
-        # layer_name is the QGIS layer name which can differ from the actual database table name
-        # e.g., layer_name="Distribution Cluster" but layer_table_name="distribution_clusters"
-        # This is essential for building correct SQL queries in EXISTS subqueries
-        self.param_source_table = infos.get("layer_table_name") or infos["layer_name"]
-        self.param_source_layer_name = infos["layer_name"]  # Keep display name for logging
-        self.param_source_layer_id = infos["layer_id"]
-        self.param_source_geom = infos["layer_geometry_field"]
-        self.primary_key_name = infos["primary_key_name"]
-        
-        logger.debug(f"Filtering layer: {self.param_source_layer_name} (table: {self.param_source_table}, Provider: {self.param_source_provider_type})")
-        
-        # Extract filtering configuration
-        self.has_combine_operator = self.task_parameters["filtering"]["has_combine_operator"]
-        self.source_layer_fields_names = [
-            field.name() for field in self.source_layer.fields() 
-            if field.name() != self.primary_key_name
-        ]
-        
-        # TOUJOURS capturer le filtre existant si présent
-        # Cela garantit que les filtres ne sont jamais perdus lors du changement de couche
-        if self.source_layer.subsetString():
-            self.param_source_old_subset = self._sanitize_subset_string(self.source_layer.subsetString())
-            logger.info(f"FilterMate: Filtre existant détecté sur {self.param_source_table}: {self.param_source_old_subset[:100]}...")
-        
-        if self.has_combine_operator:
-            # Combine operators are now always SQL keywords (AND, AND NOT, OR)
-            # thanks to index-based conversion in dockwidget._index_to_combine_operator()
-            self.param_source_layer_combine_operator = self.task_parameters["filtering"].get(
-                "source_layer_combine_operator", "AND"
-            )
-            self.param_other_layers_combine_operator = self.task_parameters["filtering"].get(
-                "other_layers_combine_operator", "AND"
-            )
-            # Ensure valid operator (fallback to AND if empty/invalid)
-            if not self.param_source_layer_combine_operator:
-                self.param_source_layer_combine_operator = "AND"
-            if not self.param_other_layers_combine_operator:
-                self.param_other_layers_combine_operator = "AND"
+        # Preserve original infos dict for backward compatibility (optional)
+        infos = self.task_parameters.get("infos", {})
 
     def _sanitize_subset_string(self, subset_string):
         """
