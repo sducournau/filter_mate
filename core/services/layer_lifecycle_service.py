@@ -89,7 +89,7 @@ class LayerLifecycleService:
             - Uses is_valid_layer() from object_safety module
             - More permissive with PostgreSQL layers (connection may be initializing)
         """
-        from infrastructure.utils import is_sip_deleted, is_layer_valid as is_valid_layer, is_layer_source_available
+        from ...infrastructure.utils import is_sip_deleted, is_layer_valid as is_valid_layer, is_layer_source_available
         
         try:
             input_count = len(layers or [])
@@ -183,8 +183,8 @@ class LayerLifecycleService:
             - Validates all layers before adding
             - Retries PostgreSQL layers that may not be immediately valid
         """
-        from infrastructure.utils import is_sip_deleted, validate_and_cleanup_postgres_layers
-        from infrastructure.feedback import show_warning
+        from ...infrastructure.utils import is_sip_deleted, validate_and_cleanup_postgres_layers
+        from ...infrastructure.feedback import show_warning
         
         # STABILITY: Debounce rapid layer additions
         current_time = time.time() * 1000
@@ -254,7 +254,7 @@ class LayerLifecycleService:
         retry_attempt: int = 1
     ) -> None:
         """Schedule retry for PostgreSQL layers that may become valid."""
-        from infrastructure.utils import is_sip_deleted
+        from ...infrastructure.utils import is_sip_deleted
         
         logger.info(f"FilterMate: {len(pending_layers)} PostgreSQL layers pending - scheduling retry #{retry_attempt}")
         
@@ -317,8 +317,8 @@ class LayerLifecycleService:
         if not session_id:
             return
         
-        from infrastructure.resilience import get_postgresql_breaker, CircuitOpenError
-        from infrastructure.utils import get_datasource_connexion_from_layer
+        from ...infrastructure.resilience import get_postgresql_breaker, CircuitOpenError
+        from ...infrastructure.utils import get_datasource_connexion_from_layer
         
         # Check circuit breaker before attempting PostgreSQL operations
         pg_breaker = get_postgresql_breaker()
@@ -774,7 +774,7 @@ class LayerLifecycleService:
             stability_constants: Dict with POSTGRESQL_EXTRA_DELAY_MS
             max_retries: Maximum number of retry attempts
         """
-        from infrastructure.utils import is_sip_deleted
+        from ...infrastructure.utils import is_sip_deleted
         
         if not pending_layers:
             return
@@ -841,7 +841,7 @@ class LayerLifecycleService:
             List of layer names that were cleaned
         """
         try:
-            from infrastructure.utils import validate_and_cleanup_postgres_layers
+            from ...infrastructure.utils import validate_and_cleanup_postgres_layers
         except ImportError:
             logger.debug("validate_and_cleanup_postgres_layers not available")
             return []

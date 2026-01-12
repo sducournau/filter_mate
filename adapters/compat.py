@@ -7,12 +7,12 @@ from the old modules.backends location. New code should use:
 
     from adapters.backends import BackendFactory
     from adapters.qgis.filter_optimizer import QgisFilterOptimizer
-    from core.services.auto_optimizer import AutoOptimizer
+    from ..core.services.auto_optimizer import AutoOptimizer
 
 Legacy imports (still supported but deprecated):
 
     from adapters.backends.factory import BackendFactory
-    from core.services.auto_optimizer import AutoOptimizer, LayerAnalyzer
+    from ..core.services.auto_optimizer import AutoOptimizer, LayerAnalyzer
 
 Part of FilterMate Hexagonal Architecture v3.0
 
@@ -30,7 +30,7 @@ Migration Guide (MIG-011):
     
     # New v3.0 code (preferred):
     from adapters.backends.postgresql.backend import PostgreSQLBackend
-    from core.services.filter_service import FilterService
+    from ..core.services.filter_service import FilterService
     service = FilterService(backends={ProviderType.POSTGRESQL: backend})
     response = service.apply_filter(request)
 """

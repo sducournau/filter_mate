@@ -600,7 +600,7 @@ class FavoritesController(BaseController):
             return False
 
         try:
-            from core.services.favorites_service import FilterFavorite
+            from core.domain.favorites_manager import FilterFavorite
 
             # Get layer info
             layer = self.dockwidget.current_layer
@@ -628,7 +628,7 @@ class FavoritesController(BaseController):
                             remote_layers[remote_layer.name()] = remote_layer_id
                 favorite.remote_layers = remote_layers
 
-            self._favorites_manager.add(favorite)
+            self._favorites_manager.add_favorite(favorite)
             self._favorites_manager.save_to_project()
             return True
 

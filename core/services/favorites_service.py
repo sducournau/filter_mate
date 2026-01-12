@@ -21,6 +21,9 @@ except ImportError:
 if TYPE_CHECKING:
     from qgis.core import QgsVectorLayer
 
+# Export FilterFavorite from domain
+from ..domain.favorites_manager import FilterFavorite
+
 logger = logging.getLogger(__name__)
 
 
@@ -97,7 +100,18 @@ class FavoritesService(QObject):
         """
         super().__init__(parent)
         
-        self._favorites_manager = favorites_manager
+        # If no manager provided, create internal one
+        if favorites_manager is None:
+            try:
+                from ..domain.favorites_manager import FavoritesManager
+                self._favorites_manager = FavoritesManager()
+                logger.debug("FavoritesService: Created internal FavoritesManager")
+            except Exception as e:
+                logger.warning(f"Could not create internal FavoritesManager: {e}")
+                self._favorites_manager = None
+        else:
+            self._favorites_manager = favorites_manager
+        
         self._is_initialized = False
         
         # Callbacks for applying favorites (set by controller)
@@ -134,22 +148,53 @@ class FavoritesService(QObject):
         Returns:
             bool: True if initialization succeeded
         """
+        # FavoritesService is a wrapper - it requires an external manager
+        # The manager should be injected via constructor or favorites_manager setter
         if self._favorites_manager is None:
-            try:
-                from core.services.favorites_service import FavoritesService
-                self._favorites_manager = FavoritesService(
-                    db_path=db_path,
-                    project_uuid=project_uuid
-                )
-            except ImportError:
-                logger.error("Could not import FavoritesService")
-                return False
-        else:
-            if db_path and project_uuid:
-                self._favorites_manager.set_database(db_path, project_uuid)
+            logger.warning("FavoritesService: No favorites manager provided. Use favorites_manager setter.")
+            return False
+        
+        # Configure existing manager with database
+        if db_path and project_uuid:
+            self.set_database(db_path, project_uuid)
         
         self._is_initialized = True
         return True
+    
+    def set_database(self, db_path: str, project_uuid: str) -> None:
+        """
+        Set database path and project UUID.
+        Delegates to underlying FavoritesManager.
+        
+        Args:
+            db_path: Path to SQLite database
+            project_uuid: Project UUID for favorites isolation
+        """
+        if self._favorites_manager and hasattr(self._favorites_manager, 'set_database'):
+            self._favorites_manager.set_database(db_path, project_uuid)
+        else:
+            # TODO: Implement internal database storage when manager not available
+            logger.debug(f"FavoritesService: Database set to {db_path} (stub - no manager)")
+    
+    def load_from_project(self) -> None:
+        """
+        Load favorites from project.
+        Delegates to underlying FavoritesManager.
+        """
+        if self._favorites_manager and hasattr(self._favorites_manager, 'load_from_project'):
+            self._favorites_manager.load_from_project()
+        else:
+            # TODO: Implement internal project loading when manager not available
+            logger.debug("FavoritesService: Loading from project (stub - no manager)")
+    
+    @property
+    def count(self) -> int:
+        """Get the number of favorites."""
+        if self._favorites_manager and hasattr(self._favorites_manager, '__len__'):
+            return len(self._favorites_manager)
+        elif self._favorites_manager and hasattr(self._favorites_manager, 'count'):
+            return self._favorites_manager.count
+        return 0
     
     def set_callbacks(
         self,
@@ -202,8 +247,7 @@ class FavoritesService(QObject):
             return None
         
         try:
-            from core.services.favorites_service import FilterFavorite
-            
+            # FilterFavorite is imported at top of file
             favorite = FilterFavorite(
                 name=name,
                 expression=expression,
@@ -215,14 +259,15 @@ class FavoritesService(QObject):
                 description=description
             )
             
-            favorite_id = self._favorites_manager.add_favorite(favorite)
+            success = self._favorites_manager.add_favorite(favorite)
             
-            if favorite_id:
-                self.favorite_added.emit(favorite_id, name)
+            if success:
+                self.favorite_added.emit(favorite.id, name)
                 self.favorites_changed.emit()
-                logger.info(f"Added favorite: {name} ({favorite_id})")
+                logger.info(f"Added favorite: {name} ({favorite.id})")
+                return favorite.id
             
-            return favorite_id
+            return None
             
         except Exception as e:
             logger.error(f"Error adding favorite: {e}")
@@ -627,7 +672,7 @@ class FavoritesService(QObject):
         
         try:
             import json
-            from core.services.favorites_service import FilterFavorite
+            # FilterFavorite is imported at top of file
             
             # Read file
             with open(file_path, 'r', encoding='utf-8') as f:

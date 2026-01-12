@@ -42,7 +42,7 @@ except ImportError:
 
 # psycopg2 availability
 try:
-    from adapters.backends.postgresql_availability import (
+    from ...adapters.backends.postgresql_availability import (
         psycopg2,
         PSYCOPG2_AVAILABLE,
         POSTGRESQL_AVAILABLE

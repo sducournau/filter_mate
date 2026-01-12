@@ -17,7 +17,8 @@ from typing import Dict, List, Optional, Callable, Any
 from qgis.PyQt.QtCore import QObject
 
 # Local imports
-from ...config.config import logger, ENV_VARS
+from ...config.config import ENV_VARS
+from ...infrastructure.logging import get_logger
 from ...infrastructure.utils.layer_utils import (
     get_datasource_connexion_from_layer,
     get_data_source_uri,
@@ -26,6 +27,8 @@ from ...infrastructure.utils.task_utils import spatialite_connect
 from ...infrastructure.database.sql_utils import sanitize_sql_identifier
 from ...infrastructure.utils.validation_utils import is_layer_source_available
 from ...adapters.backends import POSTGRESQL_AVAILABLE
+
+logger = get_logger(__name__)
 
 # Conditional imports
 try:

@@ -208,7 +208,7 @@ class BackendFactory:
     def _check_postgresql_available(self) -> bool:
         """Check if PostgreSQL backend is available."""
         try:
-            from adapters.backends import POSTGRESQL_AVAILABLE
+            from . import POSTGRESQL_AVAILABLE
             return POSTGRESQL_AVAILABLE
         except ImportError:
             try:
@@ -292,22 +292,22 @@ class BackendFactory:
         """Create a new backend instance."""
         try:
             if provider_type == ProviderType.MEMORY:
-                from adapters.backends.memory.backend import MemoryBackend
+                from .memory.backend import MemoryBackend
                 return MemoryBackend()
             
             elif provider_type == ProviderType.OGR:
-                from adapters.backends.ogr.backend import OGRBackend
+                from .ogr.backend import OGRBackend
                 return OGRBackend()
             
             elif provider_type == ProviderType.SPATIALITE:
-                from adapters.backends.spatialite.backend import SpatialiteBackend
+                from .spatialite.backend import SpatialiteBackend
                 return SpatialiteBackend()
             
             elif provider_type == ProviderType.POSTGRESQL:
                 if not self._postgresql_available:
                     logger.warning("PostgreSQL backend requested but not available")
                     return None
-                from adapters.backends.postgresql.backend import PostgreSQLBackend
+                from .postgresql.backend import PostgreSQLBackend
                 return PostgreSQLBackend()
             
             else:

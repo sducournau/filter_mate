@@ -28,7 +28,7 @@ except ImportError:
     sip = None
 
 try:
-    from infrastructure.logging import get_logger
+    from ..infrastructure.logging import get_logger
 except ImportError:
     # Fallback for testing
     import logging
@@ -36,7 +36,7 @@ except ImportError:
         return logging.getLogger(name)
 
 try:
-    from infrastructure.utils.object_safety import (
+    from ..infrastructure.utils.object_safety import (
         is_valid_layer,
         is_qgis_alive,
         safe_set_layer_variable

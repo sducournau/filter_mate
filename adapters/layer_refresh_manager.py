@@ -24,14 +24,14 @@ except ImportError:
     QTimer = None
 
 try:
-    from infrastructure.logging import get_logger
+    from ..infrastructure.logging import get_logger
 except ImportError:
     import logging
     def get_logger(name):
         return logging.getLogger(name)
 
 try:
-    from infrastructure.utils.gdal_error_handler import GdalErrorHandler
+    from ..infrastructure.utils.gdal_error_handler import GdalErrorHandler
 except ImportError:
     # Mock for testing
     class GdalErrorHandler:

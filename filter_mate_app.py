@@ -74,9 +74,14 @@ from .infrastructure.utils import (
 from .infrastructure.logging import get_app_logger
 from .resources import *  # Qt resources must be imported with wildcard
 
+# Get FilterMate logger BEFORE importing hexagonal services
+logger = get_app_logger()
+
 # v3.0: Hexagonal architecture services bridge
 # Provides access to new architecture while maintaining backward compatibility
+HEXAGONAL_AVAILABLE = False
 try:
+    logger.debug("Loading hexagonal services...")
     from .adapters.app_bridge import (
         initialize_services as _init_hexagonal_services,
         cleanup_services as _cleanup_hexagonal_services,
@@ -87,30 +92,51 @@ try:
         validate_expression,
         parse_expression,
     )
+    logger.debug("✓ app_bridge")
     from .adapters.task_builder import TaskParameterBuilder  # v4.0: Task parameter extraction
+    logger.debug("✓ task_builder")
     from .core.services.layer_lifecycle_service import (  # v4.0: Layer lifecycle extraction
         LayerLifecycleService,
         LayerLifecycleConfig
     )
+    logger.debug("✓ layer_lifecycle_service")
     from .core.services.task_management_service import (  # v4.0: Task management extraction
         TaskManagementService,
         TaskManagementConfig
     )
+    logger.debug("✓ task_management_service")
     from .adapters.undo_redo_handler import UndoRedoHandler  # v4.0: Undo/Redo extraction
+    logger.debug("✓ undo_redo_handler")
     from .adapters.database_manager import DatabaseManager  # v4.0: Database operations extraction
+    logger.debug("✓ database_manager")
     from .adapters.variables_manager import VariablesPersistenceManager  # v4.0: Variables persistence extraction
+    logger.debug("✓ variables_manager")
     from .core.services.task_orchestrator import TaskOrchestrator  # v4.1: Task orchestration extraction
+    logger.debug("✓ task_orchestrator")
     from .core.services.optimization_manager import OptimizationManager  # v4.2: Optimization management extraction
+    logger.debug("✓ optimization_manager")
     from .adapters.filter_result_handler import FilterResultHandler  # v4.3: Filter result handling extraction
+    logger.debug("✓ filter_result_handler")
     from .core.services.app_initializer import AppInitializer  # v4.4: App initialization extraction
+    logger.debug("✓ app_initializer")
     from .core.services.datasource_manager import DatasourceManager
+    logger.debug("✓ datasource_manager")
     from .core.services.layer_filter_builder import LayerFilterBuilder
+    logger.debug("✓ layer_filter_builder")
     from .adapters.layer_refresh_manager import LayerRefreshManager
+    logger.debug("✓ layer_refresh_manager")
     from .adapters.layer_task_completion_handler import LayerTaskCompletionHandler
+    logger.debug("✓ layer_task_completion_handler")
     from .adapters.layer_validator import LayerValidator
+    logger.debug("✓ layer_validator")
     from .core.services.filter_application_service import FilterApplicationService
+    logger.debug("✓ filter_application_service")
     HEXAGONAL_AVAILABLE = True
-except ImportError:
+    logger.info("All hexagonal services loaded successfully")
+except ImportError as e:
+    import traceback
+    logger.error(f"Failed to import hexagonal services: {e}")
+    logger.error(f"Traceback: {traceback.format_exc()}")
     HEXAGONAL_AVAILABLE = False
     TaskParameterBuilder = LayerRefreshManager = LayerTaskCompletionHandler = None
     LayerLifecycleService = LayerLifecycleConfig = TaskManagementService = TaskManagementConfig = None
@@ -122,8 +148,7 @@ except ImportError:
     def _hexagonal_initialized(): return False
     get_filter_service = get_history_service = get_expression_service = validate_expression = parse_expression = None
 
-# Get FilterMate logger with SafeStreamHandler to prevent "--- Logging error ---" on shutdown
-logger = get_app_logger()
+# Logger already initialized before hexagonal imports (line 78)
 
 
 def safe_show_message(level, title, message):
@@ -255,15 +280,14 @@ class FilterMateApp:
         
         # History & Favorites
         history_max_size = self._get_history_max_size_from_config()
-        self.history_manager = HistoryService(max_size=history_max_size)
-        logger.info(f"FilterMate: HistoryService initialized for undo/redo functionality (max_size={history_max_size})")
+        self.history_manager = HistoryService(max_depth=history_max_size)
+        logger.info(f"FilterMate: HistoryService initialized for undo/redo functionality (max_depth={history_max_size})")
         self._undo_redo_handler = UndoRedoHandler(self.history_manager, lambda: self.PROJECT_LAYERS, lambda: self.PROJECT, lambda: self.iface,
                                                    self._refresh_layers_and_canvas, lambda t, m: iface.messageBar().pushWarning(t, m)) if HEXAGONAL_AVAILABLE and UndoRedoHandler else None
         if self._undo_redo_handler:
             logger.info("FilterMate: UndoRedoHandler initialized (v4.0 migration)")
-        self.favorites_manager = FavoritesService(max_favorites=50)
-        self.favorites_manager.load_from_project()
-        logger.info(f"FilterMate: FavoritesService initialized ({self.favorites_manager.count} favorites loaded)")
+        self.favorites_manager = FavoritesService()
+        logger.info(f"FilterMate: FavoritesService initialized ({self.favorites_manager.get_favorites_count()} favorites)")
         
         # Spatialite cache
         try:
@@ -541,22 +565,67 @@ class FilterMateApp:
 
     def run(self):
         """Initialize and display the FilterMate dockwidget. Delegates to AppInitializer."""
+        print(f"DEBUG: FilterMateApp.run() called")
+        print(f"DEBUG: HEXAGONAL_AVAILABLE = {HEXAGONAL_AVAILABLE}")
+        print(f"DEBUG: self._app_initializer = {self._app_initializer}")
+        
         USE_APP_INITIALIZER = True
         if USE_APP_INITIALIZER and self._app_initializer is not None:
             logger.info(f"v4.4: Delegating application initialization to AppInitializer")
+            print(f"DEBUG: Calling AppInitializer.initialize_application()")
             try:
                 is_first_run = (self.dockwidget is None)
                 success = self._app_initializer.initialize_application(is_first_run)
+                print(f"DEBUG: AppInitializer returned {success}")
                 if success:
                     return
                 else:
-                    logger.error(f"AppInitializer returned False - initialization failed")
+                    logger.error(f"AppInitializer returned False - falling back to legacy initialization")
             except Exception as e:
                 logger.error(f"AppInitializer raised exception: {e}")
+                print(f"DEBUG: AppInitializer exception: {e}")
                 import traceback
                 logger.error(f"Traceback: {traceback.format_exc()}")
-        else:
-            logger.error("AppInitializer not available - cannot initialize plugin")
+                traceback.print_exc()
+        
+        # Fallback: Legacy initialization when AppInitializer not available or fails
+        print(f"DEBUG: Using legacy fallback initialization")
+        logger.warning("Using legacy initialization - AppInitializer not available")
+        
+        # Basic initialization: create and show dockwidget
+        if self.dockwidget is None:
+            try:
+                # Initialize database first
+                self.init_filterMate_db()
+                
+                from .filter_mate_dockwidget import FilterMateDockWidget
+                self.dockwidget = FilterMateDockWidget(
+                    project_layers=self.PROJECT_LAYERS,
+                    plugin_dir=self.plugin_dir,
+                    config_data=self.CONFIG_DATA,
+                    project=self.PROJECT
+                )
+                
+                # CRITICAL: Initialize UI from .ui file
+                self.dockwidget.setupUi(self.dockwidget)
+                
+                logger.info("Created FilterMateDockWidget (legacy mode)")
+            except Exception as e:
+                logger.error(f"Failed to create dockwidget: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                traceback.print_exc()
+                show_error("FilterMate", f"Failed to create dockwidget: {e}")
+                return
+        
+        # Show the dockwidget
+        try:
+            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dockwidget)
+            self.dockwidget.show()
+            logger.info("Dockwidget displayed (legacy mode)")
+        except Exception as e:
+            logger.error(f"Failed to show dockwidget: {e}")
+            show_error("FilterMate", f"Failed to display dockwidget: {e}")
 
     def _safe_layer_operation(self, layer, properties, operation):
         """Safely execute a layer operation by deferring to Qt event loop and re-fetching layer."""

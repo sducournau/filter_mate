@@ -110,7 +110,7 @@ class FilterMate:
         #print "** INITIALIZING FilterMate"
 
         self.pluginIsActive = False
-        self.app = False
+        self.app = None
         self._auto_activation_signals_connected = False
         self._project_read_connection = None
         self._new_project_connection = None
@@ -274,7 +274,8 @@ class FilterMate:
         #print "** CLOSING FilterMate"
 
         # disconnects
-        self.app.dockwidget.closingPlugin.disconnect(self.onClosePlugin)
+        if self.app and self.app.dockwidget:
+            self.app.dockwidget.closingPlugin.disconnect(self.onClosePlugin)
 
         # remove this statement if dockwidget is to remain
         # for reuse if plugin is reopened
@@ -295,10 +296,10 @@ class FilterMate:
             :return: Absolute path to the resources folder.
             :rtype: str
             """
-            path = str(self.plugin_dir) + str(os.sep()) + 'images'
+            path = str(self.plugin_dir) + os.sep + 'images'
 
             for item in args:
-                path = path + str(os.sep()) + item
+                path = path + os.sep + item
 
 
 
@@ -1263,18 +1264,20 @@ class FilterMate:
                     self.app = FilterMateApp(self.plugin_dir)
                     # NOW call run() after QGIS is stable and user clicked the button
                     self.app.run()
-                    self.app.dockwidget.closingPlugin.connect(self.onClosePlugin)
+                    if self.app.dockwidget:
+                        self.app.dockwidget.closingPlugin.connect(self.onClosePlugin)
                 else:
                     # App already exists, call run() which will show the dockwidget
                     # and refresh layers if needed
                     self.app.run()
                     # Reconnect closingPlugin signal only if not already connected
                     # Use try/except to safely disconnect then reconnect
-                    try:
-                        self.app.dockwidget.closingPlugin.disconnect(self.onClosePlugin)
-                    except TypeError:
-                        pass  # Not connected, ignore
-                    self.app.dockwidget.closingPlugin.connect(self.onClosePlugin)
+                    if self.app.dockwidget:
+                        try:
+                            self.app.dockwidget.closingPlugin.disconnect(self.onClosePlugin)
+                        except TypeError:
+                            pass  # Not connected, ignore
+                        self.app.dockwidget.closingPlugin.connect(self.onClosePlugin)
             except Exception as e:
                 self.iface.messageBar().pushCritical(
                     "FilterMate",

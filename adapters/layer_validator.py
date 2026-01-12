@@ -24,14 +24,14 @@ except ImportError:
     QgsVectorLayer = object
 
 try:
-    from infrastructure.logging import get_logger
+    from ..infrastructure.logging import get_logger
 except ImportError:
     import logging
     def get_logger(name):
         return logging.getLogger(name)
 
 try:
-    from infrastructure.utils.object_safety import (
+    from ..infrastructure.utils.object_safety import (
         is_valid_layer,
         is_sip_deleted,
         is_layer_source_available
@@ -295,7 +295,7 @@ class LayerValidator:
             List of layer names that were cleaned
         """
         try:
-            from infrastructure.utils import validate_and_cleanup_postgres_layers
+            from ..infrastructure.utils import validate_and_cleanup_postgres_layers
         except ImportError:
             logger.debug("validate_and_cleanup_postgres_layers not available")
             return []

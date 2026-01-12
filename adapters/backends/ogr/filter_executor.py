@@ -499,7 +499,7 @@ def validate_ogr_result_layer(layer: Any) -> tuple:
     invalid_reason = "unknown"
     
     try:
-        from core.geometry.geometry_utils import validate_geometry
+        from ....core.geometry.geometry_utils import validate_geometry
     except ImportError:
         # Fallback validation
         def validate_geometry(geom):
@@ -746,7 +746,7 @@ def execute_ogr_spatial_selection(
     
     # Import geometry validation
     try:
-        from core.geometry.geometry_utils import validate_geometry, create_geos_safe_layer
+        from ....core.geometry.geometry_utils import validate_geometry, create_geos_safe_layer
     except ImportError:
         def validate_geometry(geom):
             return geom is not None and not geom.isNull() and not geom.isEmpty()
@@ -754,7 +754,7 @@ def execute_ogr_spatial_selection(
     
     # Import safe subset setter
     try:
-        from infrastructure.database.sql_utils import safe_set_subset_string
+        from ....infrastructure.database.sql_utils import safe_set_subset_string
     except ImportError:
         def safe_set_subset_string(lyr, subset):
             return lyr.setSubsetString(subset)

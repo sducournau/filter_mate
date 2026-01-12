@@ -45,7 +45,7 @@ class ConfigMigration:
     
     def auto_migrate_if_needed(
         self,
-        confirm_reset_callback: Optional[Callable[[], bool]] = None
+        confirm_reset_callback: Optional[Callable[[str, str], bool]] = None
     ) -> Tuple[bool, List[str]]:
         """
         Automatically migrate configuration if needed.
@@ -54,7 +54,7 @@ class ConfigMigration:
         
         Args:
             confirm_reset_callback: Optional callback to confirm reset operations.
-                                   Should return True if reset is confirmed.
+                                   Should accept (reason: str, version: str) and return True if reset is confirmed.
         
         Returns:
             Tuple of (success: bool, warnings: List[str])

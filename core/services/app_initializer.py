@@ -173,7 +173,7 @@ class AppInitializer:
         # Cleanup corrupted filters
         if self._cleanup_corrupted_layer_filters:
             from ...infrastructure.field_utils import cleanup_corrupted_layer_filters
-            cleared_layers = cleanup_corrupted_layer_filters(project)
+            cleared_layers = cleanup_corrupted_layer_filters()  # Pass None to use all project layers
             if cleared_layers:
                 show_warning(
                     f"Cleared corrupted filters from {len(cleared_layers)} layer(s). Please re-apply your filters."

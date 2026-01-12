@@ -95,8 +95,8 @@ def initialize_services(config: Optional[Dict[str, Any]] = None) -> None:
         # Initialize filter service
         # FilterService expects: backends dict, cache, layer_repository
         # We create a minimal setup for now
-        from core.ports.cache_port import NullCache
-        from adapters.repositories.layer_repository import QGISLayerRepository
+        from ..core.ports.cache_port import NullCache
+        from .repositories.layer_repository import QGISLayerRepository
         
         # Build backends dict from factory
         backends = {}

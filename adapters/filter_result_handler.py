@@ -173,7 +173,7 @@ class FilterResultHandler:
             task_parameters: Task parameters containing affected layers list
         """
         try:
-            from infrastructure.cache import get_cache
+            from ..infrastructure.cache import get_cache
             cache = get_cache()
             # Clear cache for source layer
             cache.clear_layer_cache(source_layer.id())

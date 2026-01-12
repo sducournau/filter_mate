@@ -15,7 +15,7 @@ except ImportError:
     QgsVectorLayer = None
 
 try:
-    from infrastructure.utils import is_layer_source_available, safe_set_subset_string
+    from ...infrastructure.utils import is_layer_source_available, safe_set_subset_string
 except ImportError:
     def is_layer_source_available(layer, require_psycopg2=False):
         return layer is not None and hasattr(layer, 'isValid') and layer.isValid()
@@ -24,7 +24,7 @@ except ImportError:
             layer.setSubsetString(expr)
 
 try:
-    from infrastructure.logging import get_logger
+    from ...infrastructure.logging import get_logger
     logger = get_logger(__name__)
 except ImportError:
     logger = logging.getLogger(__name__)
@@ -123,7 +123,7 @@ class FilterApplicationService:
         
         # Clear Spatialite cache for this layer when unfiltering
         try:
-            from infrastructure.cache import get_cache
+            from ...infrastructure.cache import get_cache
             cache = get_cache()
             cache.clear_layer_cache(layer_id)
             logger.debug(f"FilterMate: Cleared Spatialite cache for {layer.name()}")
