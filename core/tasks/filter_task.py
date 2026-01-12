@@ -693,126 +693,59 @@ class FilterEngineTask(QgsTask):
 
     def run(self):
         """
-        Main task orchestration method.
+        Main task orchestration method (v2).
         
-        Initializes layers, configures CRS, organizes filtering layers,
-        and executes the appropriate action based on task_action.
+        PHASE 14.7: Migrated to TaskRunOrchestrator service.
+        Delegates to execute_task_run() for main orchestration flow.
+        
+        Extracted 129 lines to core/services/task_run_orchestrator.py (v5.0-alpha).
         
         Returns:
             bool: True if task completed successfully, False otherwise
         """
-        import time
-        run_start_time = time.time()
+        # PHASE 14.7: Delegate to TaskRunOrchestrator service
+        from core.services.task_run_orchestrator import execute_task_run
         
-        try:
-            # v2.4.13: Clear Spatialite support cache at the start of each filter task
-            # This ensures fresh detection of Spatialite support for GeoPackage layers
-            # and helps diagnose issues when GDAL/Spatialite configuration changes
-            if self.task_action == 'filter':
-                try:
-                    from ..backends.spatialite_backend import SpatialiteGeometricFilter
-                    SpatialiteGeometricFilter.clear_support_cache()
-                    logger.debug("Spatialite support cache cleared for fresh detection")
-                except Exception as e:
-                    logger.debug(f"Could not clear Spatialite cache: {e}")
-            
-            # Initialize source layer
-            if not self._initialize_source_layer():
-                return False
-            
-            # Configure metric CRS if needed
-            self._configure_metric_crs()
-            
-            # Organize layers to filter by provider
-            self._organize_layers_to_filter()
-            
-            # EPIC-1 Phase E12: Initialize orchestration modules
-            # These modules extract 1,663 lines from this God Class
-            self._result_processor = ResultProcessor(
-                task_action=self.task_action,
-                task_parameters=self.task_parameters
-            )
-            # Redirect pending_subset_requests to ResultProcessor
-            self._pending_subset_requests = self._result_processor._pending_subset_requests
-            # Redirect warning_messages to ResultProcessor
-            self.warning_messages = self._result_processor.warning_messages
-            
-            self._expression_builder = ExpressionBuilder(
-                task_parameters=self.task_parameters,
-                source_layer=getattr(self, 'source_layer', None),
-                current_predicates=getattr(self, 'current_predicates', [])
-            )
-            
-            self._filter_orchestrator = FilterOrchestrator(
-                task_parameters=self.task_parameters,
-                subset_queue_callback=self.queue_subset_request,
-                parent_task=self,
-                current_predicates=getattr(self, 'current_predicates', [])
-            )
-            
-            logger.debug("Phase E12 orchestration modules initialized")
-            
-            # Extract database and project configuration
-            if 'db_file_path' in self.task_parameters["task"]:
-                db_path = self.task_parameters["task"]['db_file_path']
-                if db_path not in (None, ''):
-                    self.db_file_path = db_path
-            
-            if 'project_uuid' in self.task_parameters["task"]:
-                proj_uuid = self.task_parameters["task"]['project_uuid']
-                if proj_uuid not in (None, ''):
-                    self.project_uuid = proj_uuid
-            
-            # Extract session_id for multi-client materialized view isolation
-            if 'session_id' in self.task_parameters["task"]:
-                self.session_id = self.task_parameters["task"]['session_id']
-            elif 'options' in self.task_parameters["task"] and 'session_id' in self.task_parameters["task"]["options"]:
-                self.session_id = self.task_parameters["task"]["options"]['session_id']
-            else:
-                # Fallback: generate a short session id if not provided
-                import hashlib
-                import time
-                self.session_id = hashlib.md5(f"{time.time()}".encode()).hexdigest()[:8]
-                logger.debug(f"Generated fallback session_id: {self.session_id}")
-            
-            # Initialize progress and logging
-            self.setProgress(0)
-            logger.info(f"Starting {self.task_action} task for {self.layers_count} layer(s)")
-            
-            # Log backend info and performance warnings
-            self._log_backend_info()
-            
-            # Execute the appropriate action
-            result = self._execute_task_action()
-            if self.isCanceled() or result is False:
-                return False
-            
-            # Task completed successfully
-            self.setProgress(100)
-            
-            # v2.5.11: Check for long query duration and add warning if needed
-            # v2.8.6: Contextual messages based on current backend
-            run_elapsed = time.time() - run_start_time
-            if run_elapsed >= VERY_LONG_QUERY_WARNING_THRESHOLD:
-                # Very long query (>30s): Critical warning - contextual message
-                warning_msg = self._get_contextual_performance_warning(run_elapsed, 'critical')
-                if warning_msg:
-                    self.warning_messages.append(warning_msg)
-                logger.warning(f"⚠️ Very long query: {run_elapsed:.1f}s")
-            elif run_elapsed >= LONG_QUERY_WARNING_THRESHOLD:
-                # Long query (>10s): Standard warning - contextual message
-                warning_msg = self._get_contextual_performance_warning(run_elapsed, 'warning')
-                if warning_msg:
-                    self.warning_messages.append(warning_msg)
-                logger.warning(f"⚠️ Long query: {run_elapsed:.1f}s")
-            
-            logger.info(f"{self.task_action.capitalize()} task completed successfully in {run_elapsed:.2f}s")
-            return True
+        # Execute main orchestration
+        result = execute_task_run(
+            task_action=self.task_action,
+            task_parameters=self.task_parameters,
+            layers_count=self.layers_count,
+            source_layer=getattr(self, 'source_layer', None),
+            initialize_source_layer_callback=self._initialize_source_layer,
+            configure_metric_crs_callback=self._configure_metric_crs,
+            organize_layers_to_filter_callback=self._organize_layers_to_filter,
+            log_backend_info_callback=self._log_backend_info,
+            execute_task_action_callback=self._execute_task_action,
+            get_contextual_performance_warning_callback=self._get_contextual_performance_warning,
+            is_canceled_callback=self.isCanceled,
+            set_progress_callback=self.setProgress
+        )
         
-        except Exception as e:
-            self.exception = e
-            safe_log(logger, logging.ERROR, f'FilterEngineTask run() failed: {e}', exc_info=True)
-            return False
+        # Apply orchestration modules to task instance
+        if result.success and hasattr(result, 'context'):
+            if hasattr(result.context, 'result_processor'):
+                self._result_processor = result.context.result_processor
+                self._pending_subset_requests = result.context.result_processor._pending_subset_requests
+                self.warning_messages = result.context.result_processor.warning_messages
+            
+            if hasattr(result.context, 'expression_builder'):
+                self._expression_builder = result.context.expression_builder
+            
+            if hasattr(result.context, 'filter_orchestrator'):
+                self._filter_orchestrator = result.context.filter_orchestrator
+        
+        # Store exception if any
+        if result.exception:
+            self.exception = result.exception
+        
+        # Merge warning messages
+        if result.warning_messages:
+            if not hasattr(self, 'warning_messages'):
+                self.warning_messages = []
+            self.warning_messages.extend(result.warning_messages)
+        
+        return result.success
 
     # ========================================================================
     # V3 TaskBridge Delegation Methods (Strangler Fig Pattern)
