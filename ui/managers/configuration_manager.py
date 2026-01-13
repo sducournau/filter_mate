@@ -320,7 +320,7 @@ class ConfigurationManager(QObject):
                 "WIDGET": d.mFeaturePickerWidget_exploring_single_selection,
                 "SIGNALS": [("featureChanged", d.exploring_features_changed)]
             },
-            # NOTE: fieldChanged signal handled by _setup_expression_widget_direct_connections() with debounce
+            # v4.0.1 CLEAN #1: fieldChanged handled by ExploringController via SignalManager
             "SINGLE_SELECTION_EXPRESSION": {
                 "TYPE": "QgsFieldExpressionWidget",
                 "WIDGET": d.mFieldExpressionWidget_exploring_single_selection,
@@ -334,13 +334,13 @@ class ConfigurationManager(QObject):
                     ("filteringCheckedItemList", lambda: d.exploring_source_params_changed(groupbox_override="multiple_selection"))
                 ]
             },
-            # NOTE: fieldChanged signal handled by _setup_expression_widget_direct_connections() with debounce
+            # v4.0.1 CLEAN #1: fieldChanged handled by ExploringController via SignalManager
             "MULTIPLE_SELECTION_EXPRESSION": {
                 "TYPE": "QgsFieldExpressionWidget",
                 "WIDGET": d.mFieldExpressionWidget_exploring_multiple_selection,
                 "SIGNALS": [("fieldChanged", None)]
             },
-            # NOTE: fieldChanged signal handled by _setup_expression_widget_direct_connections() with debounce
+            # v4.0.1 CLEAN #1: fieldChanged handled by ExploringController via SignalManager
             "CUSTOM_SELECTION_EXPRESSION": {
                 "TYPE": "QgsFieldExpressionWidget",
                 "WIDGET": d.mFieldExpressionWidget_exploring_custom_selection,

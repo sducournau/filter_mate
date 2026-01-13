@@ -2,6 +2,36 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [4.0.2] - 2026-01-13
+
+### Fixed
+- **CLEAN #1 (P1)**: Eliminated duplicate fieldChanged signal connections
+  - Removed obsolete references to `setup_expression_widget_direct_connections()`
+  - Cleaned up comments in ConfigurationManager
+  - All fieldChanged signals now handled ONLY by ExploringController via SignalManager
+  - Impact: Prevents triple-connection risk and potential performance issues
+  - Files: `ui/managers/configuration_manager.py`, `ui/controllers/exploring_controller.py`
+
+## [4.0.1] - 2026-01-13
+
+### Fixed
+- **FIX #3 (P0 - CRITICAL)**: Restored COMPACT as default UI profile
+  - Impact: Fixes spacing regressions in GroupBox exploring for laptops and Full HD displays
+  - Affected users: ~70% (laptops 13-17", desktop 24" Full HD)
+  - Surface gain: +12% usable vertical space (+78px on 1366x768 screens)
+  - See: `_bmad-output/UX-ANALYSIS-SPACING-GROUPBOX-20260113.md`
+
+### Changed
+- Adjusted UI profile resolution breakpoint: 1920x1080 → 2560x1440
+  - COMPACT: Now used for all screens < 2560x1440 (laptops, Full HD desktops)
+  - NORMAL: Reserved for large screens ≥ 2560x1440 (27"+ 2K/4K monitors)
+  - Fallback: COMPACT instead of NORMAL (fail-safe for small screens)
+
+### Technical Details
+- Files changed:
+  - `ui/config/__init__.py:34` - Restored COMPACT default
+  - `core/services/app_initializer.py:320,327,331` - Adjusted breakpoint and fallbacks
+
 ## [4.0.0-alpha] - 2026-01-12 (God Classes Elimination Complete!)
 
 ### 🎉 Major Milestone: All God Classes Objectives Achieved!
