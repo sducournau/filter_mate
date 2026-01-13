@@ -13,6 +13,16 @@ All notable changes to FilterMate will be documented in this file.
   - Files: `filter_mate_dockwidget.py` (+ `_setup_conditional_widget_states()`, `_toggle_associated_widgets()`)
   - Documentation: [docs/UX-ENHANCEMENT-CONDITIONAL-WIDGET-STATES.md](docs/UX-ENHANCEMENT-CONDITIONAL-WIDGET-STATES.md)
 
+### Fixed (v4.0.5 - Splitter Layout)
+- **SPLITTER TRUNCATION**: Fixed panel truncation when dragging splitter handle (2026-01-13)
+  - Splitter now properly enforces minimum heights on both frames
+  - `frame_exploring` min: 120px → 140px, `frame_toolset` min: 200px → 250px
+  - `SplitterManager._apply_frame_policies()` now applies minimum heights from config
+  - `_apply_splitter_frame_policies()` in dockwidget also applies min heights
+  - Initial splitter ratio: 50/50 → 35/65 (more space for toolset by default)
+  - Dockwidget min height: 400px → 500px to accommodate both frames
+  - Impact: Exploring groupboxes and toolset tabs no longer get hidden/truncated
+
 ## [4.0.3] - 2026-01-13
 
 ### Fixed

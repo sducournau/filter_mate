@@ -234,7 +234,7 @@ class SplitterManager(LayoutManagerBase):
     
     def _apply_frame_policies(self) -> None:
         """
-        Apply size policies to frames within the splitter.
+        Apply size policies and minimum heights to frames within the splitter.
         
         This replaces the original _apply_splitter_frame_policies() from
         filter_mate_dockwidget.py (lines 773-811).
@@ -242,6 +242,9 @@ class SplitterManager(LayoutManagerBase):
         Policies:
         - frame_exploring: Minimum policy (can shrink to min but prefers base)
         - frame_toolset: Expanding policy (takes remaining space)
+        
+        Also applies minimum heights from splitter config to prevent the splitter
+        from hiding/truncating frame contents.
         """
         UIConfig = None
         try:
@@ -252,12 +255,20 @@ class SplitterManager(LayoutManagerBase):
             except ImportError:
                 pass
         
+        # Get minimum heights from splitter config
+        min_exploring = self._config.get('min_exploring_height', 120)
+        min_toolset = self._config.get('min_toolset_height', 200)
+        
         # Configure frame_exploring
         if hasattr(self.dockwidget, 'frame_exploring'):
             if UIConfig:
                 exploring_config = UIConfig.get_config('frame_exploring') or {}
             else:
                 exploring_config = {'size_policy_h': 'Preferred', 'size_policy_v': 'Minimum'}
+            
+            # Apply minimum height to prevent truncation
+            frame_min = exploring_config.get('min_height', min_exploring)
+            self.dockwidget.frame_exploring.setMinimumHeight(frame_min)
             
             h_policy = self.POLICY_MAP.get(
                 exploring_config.get('size_policy_h', 'Preferred'),
@@ -280,6 +291,10 @@ class SplitterManager(LayoutManagerBase):
             else:
                 toolset_config = {'size_policy_h': 'Preferred', 'size_policy_v': 'Expanding'}
             
+            # Apply minimum height to prevent truncation when splitter is dragged
+            frame_min = toolset_config.get('min_height', min_toolset)
+            self.dockwidget.frame_toolset.setMinimumHeight(frame_min)
+            
             h_policy = self.POLICY_MAP.get(
                 toolset_config.get('size_policy_h', 'Preferred'),
                 QSizePolicy.Preferred
@@ -291,7 +306,8 @@ class SplitterManager(LayoutManagerBase):
             self.dockwidget.frame_toolset.setSizePolicy(h_policy, v_policy)
             logger.debug(
                 f"frame_toolset policy: "
-                f"{toolset_config.get('size_policy_h')}/{toolset_config.get('size_policy_v')}"
+                f"{toolset_config.get('size_policy_h')}/{toolset_config.get('size_policy_v')}, "
+                f"min_height={frame_min}"
             )
     
     def _apply_stretch_factors(self) -> None:

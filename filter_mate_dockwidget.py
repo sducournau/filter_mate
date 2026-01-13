@@ -474,14 +474,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except Exception: self.main_splitter = None
     
     def _apply_splitter_frame_policies(self):
-        """v4.0 S16: Apply frame size policies."""
+        """v4.0 S16: Apply frame size policies and minimum heights."""
         from .ui.config import UIConfig
         from qgis.PyQt.QtWidgets import QSizePolicy as SP
         pm = {'Fixed':SP.Fixed,'Minimum':SP.Minimum,'Maximum':SP.Maximum,'Preferred':SP.Preferred,'Expanding':SP.Expanding,'MinimumExpanding':SP.MinimumExpanding,'Ignored':SP.Ignored}
+        splitter_cfg = UIConfig.get_config('splitter') or {}
         for fn, defs in [('frame_exploring',('Preferred','Minimum')), ('frame_toolset',('Preferred','Expanding'))]:
             if hasattr(self, fn):
                 cfg = UIConfig.get_config(fn) or {}
-                getattr(self, fn).setSizePolicy(pm.get(cfg.get('size_policy_h', defs[0]), SP.Preferred), pm.get(cfg.get('size_policy_v', defs[1]), SP.Preferred))
+                frame = getattr(self, fn)
+                frame.setSizePolicy(pm.get(cfg.get('size_policy_h', defs[0]), SP.Preferred), pm.get(cfg.get('size_policy_v', defs[1]), SP.Preferred))
+                # Apply minimum heights from splitter config to prevent truncation
+                min_key = 'min_exploring_height' if fn == 'frame_exploring' else 'min_toolset_height'
+                min_height = splitter_cfg.get(min_key, cfg.get('min_height', 120 if fn == 'frame_exploring' else 200))
+                frame.setMinimumHeight(min_height)
     
     def _set_initial_splitter_sizes(self):
         """v4.0 S16: Set splitter ratios."""
