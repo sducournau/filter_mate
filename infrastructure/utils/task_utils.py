@@ -132,6 +132,44 @@ def spatialite_connect(db_path: str, timeout: float = SQLITE_TIMEOUT):
         raise
 
 
+def sqlite_connect(db_path: str, timeout: float = SQLITE_TIMEOUT):
+    """
+    Connect to a SQLite database (without Spatialite extension).
+    
+    Use this for databases that don't require spatial functions,
+    such as FilterMate's configuration database.
+    
+    Enables WAL (Write-Ahead Logging) mode for better concurrent access.
+    
+    Args:
+        db_path: Path to the SQLite database file
+        timeout: Timeout in seconds for database lock (default 60 seconds)
+    
+    Returns:
+        sqlite3.Connection: Database connection
+    
+    Raises:
+        sqlite3.OperationalError: If connection fails
+    """
+    try:
+        # Connect with timeout to handle concurrent access
+        conn = sqlite3.connect(db_path, timeout=timeout, isolation_level=None)
+        
+        # Enable WAL mode for better concurrency
+        try:
+            conn.execute('PRAGMA journal_mode=WAL')
+            conn.execute('PRAGMA synchronous=NORMAL')
+            conn.execute('PRAGMA busy_timeout=60000')  # 60 second busy timeout
+        except sqlite3.OperationalError as e:
+            logger.warning(f"Could not configure PRAGMA settings for {db_path}: {e}")
+        
+        return conn
+    
+    except Exception as e:
+        logger.error(f"Failed to connect to SQLite database {db_path}: {e}")
+        raise
+
+
 @contextmanager
 def safe_spatialite_connect(db_path: str, timeout: float = SQLITE_TIMEOUT):
     """

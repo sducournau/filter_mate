@@ -2,6 +2,17 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [Unreleased]
+
+### Added (v4.0.4 - UX Enhancement)
+- **CONDITIONAL WIDGET STATES**: Automatic enable/disable of widgets based on pushbutton toggles (2026-01-13)
+  - Widgets in FILTERING and EXPORTING sections now automatically enable/disable when their associated pushbutton is toggled
+  - 12 pushbutton→widget mappings implemented (6 FILTERING + 6 EXPORTING)
+  - Provides clear visual feedback about active/inactive options
+  - Improves user guidance and prevents configuration errors
+  - Files: `filter_mate_dockwidget.py` (+ `_setup_conditional_widget_states()`, `_toggle_associated_widgets()`)
+  - Documentation: [docs/UX-ENHANCEMENT-CONDITIONAL-WIDGET-STATES.md](docs/UX-ENHANCEMENT-CONDITIONAL-WIDGET-STATES.md)
+
 ## [4.0.3] - 2026-01-13
 
 ### Fixed

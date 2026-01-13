@@ -395,7 +395,7 @@ class ConfigurationManager(QObject):
                 "SIGNALS": [(
                     "toggled",
                     lambda state, x='has_buffer_value', custom_functions={
-                        "ON_CHANGE": lambda x: d.filtering_buffer_property_changed()
+                        "ON_CHANGE": lambda x: d.filtering_buffer_value_state_changed()
                     }: d.layer_property_changed(x, state, custom_functions)
                 )],
                 "ICON": None
@@ -406,8 +406,8 @@ class ConfigurationManager(QObject):
                 "SIGNALS": [(
                     "toggled",
                     lambda state, x='has_buffer_type', custom_functions={
-                        # v4.0 Migration Fix: Restored original callback from v2.9.42
-                        "ON_CHANGE": lambda x: d.filtering_buffer_property_changed()
+                        # v4.0.3: Fixed - Call correct state change function
+                        "ON_CHANGE": lambda x: d.filtering_buffer_type_state_changed()
                     }: d.layer_property_changed(x, state, custom_functions)
                 )],
                 "ICON": None
@@ -513,7 +513,7 @@ class ConfigurationManager(QObject):
                 "TYPE": "PushButton",
                 "WIDGET": d.pushButton_checkable_exporting_layers,
                 "SIGNALS": [(
-                    "clicked",
+                    "toggled",
                     lambda state, x='has_layers_to_export': d.project_property_changed(x, state)
                 )],
                 "ICON": None
@@ -522,7 +522,7 @@ class ConfigurationManager(QObject):
                 "TYPE": "PushButton",
                 "WIDGET": d.pushButton_checkable_exporting_projection,
                 "SIGNALS": [(
-                    "clicked",
+                    "toggled",
                     lambda state, x='has_projection_to_export': d.project_property_changed(x, state)
                 )],
                 "ICON": None
@@ -531,7 +531,7 @@ class ConfigurationManager(QObject):
                 "TYPE": "PushButton",
                 "WIDGET": d.pushButton_checkable_exporting_styles,
                 "SIGNALS": [(
-                    "clicked",
+                    "toggled",
                     lambda state, x='has_styles_to_export': d.project_property_changed(x, state)
                 )],
                 "ICON": None
@@ -540,7 +540,7 @@ class ConfigurationManager(QObject):
                 "TYPE": "PushButton",
                 "WIDGET": d.pushButton_checkable_exporting_datatype,
                 "SIGNALS": [(
-                    "clicked",
+                    "toggled",
                     lambda state, x='has_datatype_to_export': d.project_property_changed(x, state)
                 )],
                 "ICON": None
@@ -549,7 +549,7 @@ class ConfigurationManager(QObject):
                 "TYPE": "PushButton",
                 "WIDGET": d.pushButton_checkable_exporting_output_folder,
                 "SIGNALS": [(
-                    "clicked",
+                    "toggled",
                     lambda state, x='has_output_folder_to_export', custom_functions={
                         "ON_CHANGE": lambda x: d.dialog_export_output_path()
                     }: d.project_property_changed(x, state, custom_functions)
@@ -560,7 +560,7 @@ class ConfigurationManager(QObject):
                 "TYPE": "PushButton",
                 "WIDGET": d.pushButton_checkable_exporting_zip,
                 "SIGNALS": [(
-                    "clicked",
+                    "toggled",
                     lambda state, x='has_zip_to_export', custom_functions={
                         "ON_CHANGE": lambda x: d.dialog_export_output_pathzip()
                     }: d.project_property_changed(x, state, custom_functions)

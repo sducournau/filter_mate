@@ -25,7 +25,7 @@ from qgis.core import (
     QgsProject
 )
 
-from ..infrastructure.utils.task_utils import spatialite_connect
+from ..infrastructure.utils.task_utils import sqlite_connect
 from ..infrastructure.feedback import show_error
 
 logger = logging.getLogger('FilterMate.DatabaseManager')
@@ -116,7 +116,10 @@ class DatabaseManager:
     
     def get_connection(self):
         """
-        Get a Spatialite connection with proper error handling.
+        Get a SQLite connection with proper error handling.
+        
+        Note: Uses sqlite_connect (not spatialite_connect) because
+        the FilterMate configuration database doesn't need spatial functions.
         
         Returns:
             Connection object or None if connection fails
@@ -127,7 +130,7 @@ class DatabaseManager:
             return None
         
         try:
-            conn = spatialite_connect(self._db_file_path)
+            conn = sqlite_connect(self._db_file_path)
             return conn
         except Exception as error:
             error_msg = f"Failed to connect to database {self._db_file_path}: {error}"
@@ -157,7 +160,10 @@ class DatabaseManager:
     
     def _create_db_file(self, crs: QgsCoordinateReferenceSystem) -> bool:
         """
-        Create Spatialite database file if it doesn't exist.
+        Create SQLite database file if it doesn't exist.
+        
+        Note: Uses standard SQLite (not Spatialite) because the FilterMate
+        configuration database doesn't need spatial functions.
         
         Args:
             crs: QgsCoordinateReferenceSystem for database creation
@@ -181,7 +187,8 @@ class DatabaseManager:
             save_options = QgsVectorFileWriter.SaveVectorOptions()
             save_options.driverName = "SQLite"
             save_options.fileEncoding = "utf-8"
-            save_options.datasourceOptions = ["SPATIALITE=YES", "SQLITE_MAX_LENGTH=100000000"]
+            # Don't require Spatialite - use standard SQLite
+            save_options.datasourceOptions = ["SQLITE_MAX_LENGTH=100000000"]
             
             writer = QgsVectorFileWriter.create(
                 self._db_file_path,

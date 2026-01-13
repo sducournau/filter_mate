@@ -240,6 +240,9 @@ class ButtonStyler(StylerBase):
         - Pressed effects
         
         Extracted from filter_mate_dockwidget.py lines 6166-6200.
+        
+        v4.0.3: Checkable buttons in widget_filtering_keys and widget_exporting_keys
+        are styled by default.qss - don't override with inline styles.
         """
         # Get action buttons if they exist
         action_buttons = self._get_action_buttons()
@@ -248,11 +251,9 @@ class ButtonStyler(StylerBase):
             if button:
                 self._apply_action_button_style(button)
         
-        # Apply checkable button styles
-        checkable_style = self._get_checkable_button_style()
-        for button in self._styled_buttons:
-            if button.isCheckable():
-                button.setStyleSheet(checkable_style)
+        # v4.0.3: Skip inline stylesheet for checkable buttons
+        # Let default.qss handle widget_filtering_keys/widget_exporting_keys styles
+        # This ensures harmonization between FILTERING and EXPORTING tabs
     
     def _update_button_states(self) -> None:
         """
@@ -401,11 +402,6 @@ class ButtonStyler(StylerBase):
                 QPushButton:hover {
                     background-color: #3d3d3d;
                 }
-                QPushButton:checked {
-                    background-color: #264f78;
-                    color: #ffffff;
-                    border-radius: 3px;
-                }
             """
         else:
             return """
@@ -417,11 +413,6 @@ class ButtonStyler(StylerBase):
                 }
                 QPushButton:hover {
                     background-color: #e9ecef;
-                }
-                QPushButton:checked {
-                    background-color: #cce5ff;
-                    color: #004085;
-                    border-radius: 3px;
                 }
             """
     

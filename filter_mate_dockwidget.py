@@ -50,6 +50,7 @@ from qgis.core import (
 )
 from qgis.gui import (
     QgsCheckableComboBox,
+    QgsCollapsibleGroupBox,
     QgsFeaturePickerWidget,
     QgsFieldComboBox,
     QgsFieldExpressionWidget,
@@ -377,22 +378,55 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._setup_truncation_tooltips()
     
     def _load_all_pushbutton_icons(self):
-        """v4.0 S16: Load icons from config."""
+        """v4.0 S16: Load icons from config.
+        
+        v4.0.3: Fixed icon sizes extraction to support both int and dict formats.
+        """
         try:
             pb_cfg = self.CONFIG_DATA.get("APP", {}).get("DOCKWIDGET", {}).get("PushButton", {})
             icons, sizes = pb_cfg.get("ICONS", {}), pb_cfg.get("ICONS_SIZES", {})
-            sz_act, sz_oth = sizes.get("ACTION", {}).get("value", 24), sizes.get("OTHERS", {}).get("value", 20)
-            if not icons: return
+            
+            # Extract sizes - support both int direct and dict with "value" key
+            sz_act_raw = sizes.get("ACTION", 24)
+            sz_act = sz_act_raw.get("value", 24) if isinstance(sz_act_raw, dict) else sz_act_raw
+            
+            sz_oth_raw = sizes.get("OTHERS", 20)
+            sz_oth = sz_oth_raw.get("value", 20) if isinstance(sz_oth_raw, dict) else sz_oth_raw
+            
+            if not icons:
+                logger.warning("_load_all_pushbutton_icons: No icons found in CONFIG_DATA")
+                logger.warning(f"CONFIG_DATA has APP: {bool(self.CONFIG_DATA.get('APP'))}")
+                logger.warning(f"PushButton config exists: {bool(pb_cfg)}")
+                return
+            
+            loaded_count = 0
             for grp in ["ACTION", "EXPLORING", "FILTERING", "EXPORTING"]:
                 sz = sz_act if grp == "ACTION" else sz_oth
-                for name, ico_file in icons.get(grp, {}).items():
+                icons_grp = icons.get(grp, {})
+                logger.info(f"Group {grp}: {len(icons_grp)} icons configured")
+                for name, ico_file in icons_grp.items():
                     attr = self._get_widget_attr_name(grp, name)
-                    if hasattr(self, attr):
-                        w, p = getattr(self, attr), os.path.join(self.plugin_dir, "icons", ico_file)
-                        if os.path.exists(p):
-                            w.setIcon(get_themed_icon(p) if ICON_THEME_AVAILABLE else QtGui.QIcon(p))
-                            w.setIconSize(QtCore.QSize(sz, sz))
-        except Exception: pass
+                    if not attr:
+                        logger.debug(f"_load_all_pushbutton_icons: No mapping for {grp}.{name}")
+                        continue
+                    if not hasattr(self, attr):
+                        logger.warning(f"_load_all_pushbutton_icons: Widget {attr} not found for {grp}.{name}")
+                        continue
+                    w, p = getattr(self, attr), os.path.join(self.plugin_dir, "icons", ico_file)
+                    if not os.path.exists(p):
+                        logger.warning(f"_load_all_pushbutton_icons: Icon file not found: {p}")
+                        continue
+                    icon = get_themed_icon(p) if ICON_THEME_AVAILABLE else QtGui.QIcon(p)
+                    w.setIcon(icon)
+                    w.setIconSize(QtCore.QSize(sz, sz))
+                    loaded_count += 1
+                    logger.info(f"✓ {grp}.{name}: {ico_file}")
+            
+            logger.info(f"_load_all_pushbutton_icons: Loaded {loaded_count} icons TOTAL")
+        except Exception as e:
+            logger.error(f"_load_all_pushbutton_icons failed: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
     
     def _get_widget_attr_name(self, widget_group, widget_name):
         """v3.1 Sprint 14: Map config names to widget attribute names."""
@@ -521,8 +555,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             spinbox.setMinimumHeight(input_h)
             spinbox.setMaximumHeight(input_h)
             spinbox.setSizePolicy(spinbox.sizePolicy().horizontalPolicy(), QtWidgets.QSizePolicy.Fixed)
+        # Exclude EXPLORING GroupBoxes from minimum height constraint
+        excluded_groupboxes = [
+            'mGroupBox_exploring_single_selection',
+            'mGroupBox_exploring_multiple_selection',
+            'mGroupBox_exploring_custom_selection'
+        ]
+        # Apply to QGroupBox (but NOT QgsCollapsibleGroupBox in EXPLORING section)
         for gb in self.findChildren(QGroupBox):
-            gb.setMinimumHeight(gb_min_h)
+            # Skip if it's a QgsCollapsibleGroupBox in EXPLORING section
+            if isinstance(gb, QgsCollapsibleGroupBox) and gb.objectName() in excluded_groupboxes:
+                continue
+            if gb.objectName() not in excluded_groupboxes:
+                gb.setMinimumHeight(gb_min_h)
         logger.debug(f"Applied widget dimensions: ComboBox={combo_h}px, Input={input_h}px")
     
     def _apply_frame_dimensions(self):
@@ -1596,6 +1641,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._connect_groupbox_signals_directly()
         self.filtering_populate_predicates_chekableCombobox()
         self.filtering_populate_buffer_type_combobox()
+        
+        # UX Enhancement: Setup conditional widget states based on pushbutton toggles
+        self._setup_conditional_widget_states()
 
         if self.init_layer and isinstance(self.init_layer, QgsVectorLayer):
             self.manage_output_name()
@@ -1606,6 +1654,117 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.exploring_groupbox_init()
             self.current_layer_changed(self.init_layer)
             self.filtering_auto_current_layer_changed()
+    
+    def _setup_conditional_widget_states(self):
+        """
+        UX Enhancement: Setup conditional widget enable/disable based on pushbutton checkable states.
+        
+        Connects all checkable pushbuttons to automatically enable/disable their associated widgets
+        when toggled. This provides clear visual feedback about which filter/export options are active.
+        
+        Pattern: pushbutton.toggled(bool) → widgets.setEnabled(bool)
+        
+        v4.0 UX Improvement - Added January 2026
+        """
+        # Mapping: pushbutton → list of associated widgets to control
+        widget_mappings = {
+            # FILTERING Section
+            'pushButton_checkable_filtering_auto_current_layer': [
+                'comboBox_filtering_current_layer',
+                'checkBox_filtering_use_centroids_source_layer'
+            ],
+            'pushButton_checkable_filtering_layers_to_filter': [
+                'checkableComboBoxLayer_filtering_layers_to_filter',
+                'checkBox_filtering_use_centroids_distant_layers'
+            ],
+            'pushButton_checkable_filtering_current_layer_combine_operator': [
+                'comboBox_filtering_source_layer_combine_operator',
+                'comboBox_filtering_other_layers_combine_operator'
+            ],
+            'pushButton_checkable_filtering_geometric_predicates': [
+                'checkableComboBox_filtering_geometric_predicates'
+            ],
+            'pushButton_checkable_filtering_buffer_value': [
+                'mQgsDoubleSpinBox_filtering_buffer_value'
+            ],
+            'pushButton_checkable_filtering_buffer_type': [
+                'comboBox_filtering_buffer_type',
+                'mQgsSpinBox_filtering_buffer_segments'
+            ],
+            
+            # EXPORTING Section
+            'pushButton_checkable_exporting_layers': [
+                'checkableComboBoxLayer_exporting_layers'
+            ],
+            'pushButton_checkable_exporting_projection': [
+                'mQgsProjectionSelectionWidget_exporting_projection'
+            ],
+            'pushButton_checkable_exporting_styles': [
+                'checkBox_exporting_styles_save'
+            ],
+            'pushButton_checkable_exporting_datatype': [
+                'comboBox_exporting_datatype'
+            ],
+            'pushButton_checkable_exporting_output_folder': [
+                'lineEdit_exporting_output_folder',
+                'toolButton_exporting_output_folder'
+            ],
+            'pushButton_checkable_exporting_zip': [
+                'checkBox_exporting_zip'
+            ]
+        }
+        
+        # Connect each pushbutton to its widget control function
+        for pushbutton_name, widget_names in widget_mappings.items():
+            if not hasattr(self, pushbutton_name):
+                logger.warning(f"_setup_conditional_widget_states: Pushbutton {pushbutton_name} not found")
+                continue
+                
+            pushbutton = getattr(self, pushbutton_name)
+            
+            # Get actual widget references
+            widgets_to_control = []
+            for widget_name in widget_names:
+                if hasattr(self, widget_name):
+                    widgets_to_control.append(getattr(self, widget_name))
+                else:
+                    logger.warning(f"_setup_conditional_widget_states: Widget {widget_name} not found for {pushbutton_name}")
+            
+            if not widgets_to_control:
+                logger.warning(f"_setup_conditional_widget_states: No widgets found for {pushbutton_name}")
+                continue
+            
+            # Connect the toggled signal
+            pushbutton.toggled.connect(
+                lambda checked, widgets=widgets_to_control: self._toggle_associated_widgets(checked, widgets)
+            )
+            
+            # Set initial state based on current pushbutton state
+            initial_state = pushbutton.isChecked()
+            self._toggle_associated_widgets(initial_state, widgets_to_control)
+            
+            logger.debug(f"✓ Connected {pushbutton_name} to {len(widgets_to_control)} widget(s)")
+        
+        # EXPLORING section pushbuttons don't have associated widgets to disable
+        # (they are toggle-only functions: selecting, tracking, linking)
+        # So we skip them
+        
+        logger.info(f"_setup_conditional_widget_states: Configured {len(widget_mappings)} pushbutton→widget mappings")
+    
+    def _toggle_associated_widgets(self, enabled, widgets):
+        """
+        Enable or disable a list of widgets based on pushbutton toggle state.
+        
+        Args:
+            enabled (bool): True to enable widgets, False to disable
+            widgets (list): List of QWidget instances to enable/disable
+        
+        v4.0 UX Improvement - Added January 2026
+        """
+        for widget in widgets:
+            if widget is not None:
+                widget.setEnabled(enabled)
+    
     def select_tabTools_index(self):
         """v4.0 S18: Update action buttons based on active tab."""
         if not self.widgets_initialized: return
@@ -2389,7 +2548,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def filtering_buffer_property_changed(self):
-        """v4.0 Sprint 8: Optimized - handle buffer property override button changes."""
+        """v4.0 Sprint 8: Optimized - handle buffer property override button changes.
+        
+        v4.0.3: Do NOT disable layout - this is triggered by property button, not checkable pushbutton.
+        The HAS_BUFFER_VALUE pushbutton controls the layout state.
+        """
         if not self._is_ui_ready(): return
 
         self.manageSignal(["FILTERING","BUFFER_VALUE_PROPERTY"], 'disconnect')
@@ -2420,6 +2583,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         w["BUFFER_VALUE"]["WIDGET"].setEnabled(has_buffer_checked and not (is_active and has_valid_expr))
         w["BUFFER_VALUE_PROPERTY"]["WIDGET"].setEnabled(has_buffer_checked)
+        
+        # v4.0.3: Do NOT call _set_layout_widgets_enabled here - it's controlled by HAS_BUFFER_VALUE pushbutton
 
         self.manageSignal(["FILTERING","BUFFER_VALUE_PROPERTY"], 'connect')
 
@@ -2441,21 +2606,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         When unchecked (False): Disable these widgets
         
         v4.0.1: REGRESSION FIX - Restored original condition from v2.3.8
+        v4.0.3: Disable entire row layout when unchecked
         """
-        # CRITICAL: Use original condition - _is_ui_ready() was too restrictive and blocked state changes
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
-            is_checked = self.widgets["FILTERING"]["HAS_LAYERS_TO_FILTER"]["WIDGET"].isChecked()
+        # Guard: Only process after full initialization
+        if not (self.widgets_initialized is True and self.has_loaded_layers is True):
+            return
             
-            # CRITICAL: ALWAYS enable/disable the associated widgets directly
-            # This must happen BEFORE controller delegation to ensure UI is updated
-            self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].setEnabled(is_checked)
-            self.widgets["FILTERING"]["USE_CENTROIDS_DISTANT_LAYERS"]["WIDGET"].setEnabled(is_checked)
-            
-            # Optional controller delegation for additional logic
-            if self._controller_integration:
-                self._controller_integration.delegate_filtering_layers_to_filter_state_changed(is_checked)
-            
-            logger.debug(f"filtering_layers_to_filter_state_changed: is_checked={is_checked}")
+        is_checked = self.widgets["FILTERING"]["HAS_LAYERS_TO_FILTER"]["WIDGET"].isChecked()
+        
+        # v4.0.3: Disable entire row layout (includes all widgets in the row)
+        self._set_layout_widgets_enabled('horizontalLayout_filtering_distant_layers', is_checked)
+        
+        # Also set individual widgets that may not be in the layout
+        self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].setEnabled(is_checked)
+        self.widgets["FILTERING"]["USE_CENTROIDS_DISTANT_LAYERS"]["WIDGET"].setEnabled(is_checked)
+        
+        # Optional controller delegation for additional logic
+        if self._controller_integration and hasattr(self._controller_integration, 'delegate_filtering_layers_to_filter_state_changed'):
+            self._controller_integration.delegate_filtering_layers_to_filter_state_changed(is_checked)
+        
+        logger.debug(f"filtering_layers_to_filter_state_changed: is_checked={is_checked}")
 
 
     def filtering_combine_operator_state_changed(self):
@@ -2465,20 +2635,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         When unchecked (False): Disable these widgets
         
         v4.0.1: REGRESSION FIX - Restored original condition from v2.3.8
+        v4.0.3: Disable entire row layout when unchecked
         """
-        # CRITICAL: Use original condition - _is_ui_ready() was too restrictive
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
-            is_checked = self.widgets["FILTERING"]["HAS_COMBINE_OPERATOR"]["WIDGET"].isChecked()
+        # Guard: Only process after full initialization
+        if not (self.widgets_initialized is True and self.has_loaded_layers is True):
+            return
             
-            # CRITICAL: ALWAYS enable/disable the associated widgets directly FIRST
-            self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].setEnabled(is_checked)
-            self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].setEnabled(is_checked)
-            
-            # Optional controller delegation
-            if self._controller_integration:
-                self._controller_integration.delegate_filtering_combine_operator_state_changed(is_checked)
-            
-            logger.debug(f"filtering_combine_operator_state_changed: is_checked={is_checked}")
+        is_checked = self.widgets["FILTERING"]["HAS_COMBINE_OPERATOR"]["WIDGET"].isChecked()
+        
+        # v4.0.3: Disable entire row layout
+        self._set_layout_widgets_enabled('horizontalLayout_filtering_values_search', is_checked)
+        
+        # Also set individual widgets
+        self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].setEnabled(is_checked)
+        self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].setEnabled(is_checked)
+        
+        # Optional controller delegation
+        if self._controller_integration and hasattr(self._controller_integration, 'delegate_filtering_combine_operator_state_changed'):
+            self._controller_integration.delegate_filtering_combine_operator_state_changed(is_checked)
+        
+        logger.debug(f"filtering_combine_operator_state_changed: is_checked={is_checked}")
 
 
     def filtering_geometric_predicates_state_changed(self):
@@ -2489,19 +2665,47 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         v4.0.1: REGRESSION FIX - Restored original condition from v2.3.8
         """
-        # CRITICAL: Use original condition - _is_ui_ready() was too restrictive
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
-            is_checked = self.widgets["FILTERING"]["HAS_GEOMETRIC_PREDICATES"]["WIDGET"].isChecked()
+        # Guard: Only process after full initialization
+        if not (self.widgets_initialized is True and self.has_loaded_layers is True):
+            return
             
-            # CRITICAL: ALWAYS enable/disable the associated widgets directly FIRST
-            self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].setEnabled(is_checked)
-            
-            # Optional controller delegation
-            if self._controller_integration:
-                self._controller_integration.delegate_filtering_geometric_predicates_state_changed(is_checked)
-            
-            logger.debug(f"filtering_geometric_predicates_state_changed: is_checked={is_checked}")
+        is_checked = self.widgets["FILTERING"]["HAS_GEOMETRIC_PREDICATES"]["WIDGET"].isChecked()
+        
+        # Enable/disable geometric predicates widget
+        self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].setEnabled(is_checked)
+        
+        # Optional controller delegation
+        if self._controller_integration and hasattr(self._controller_integration, 'delegate_filtering_geometric_predicates_state_changed'):
+            self._controller_integration.delegate_filtering_geometric_predicates_state_changed(is_checked)
+        
+        logger.debug(f"filtering_geometric_predicates_state_changed: is_checked={is_checked}")
 
+    def filtering_buffer_value_state_changed(self):
+        """Handle changes to the has_buffer_value checkable button.
+        
+        When checked (True): Enable buffer value widgets (spin box and property button)
+        When unchecked (False): Disable these widgets
+        
+        v4.0.3: NEW - Separate from filtering_buffer_property_changed()
+        """
+        # Guard: Only process after full initialization
+        if not (self.widgets_initialized is True and self.has_loaded_layers is True):
+            return
+            
+        is_checked = self.widgets["FILTERING"]["HAS_BUFFER_VALUE"]["WIDGET"].isChecked()
+        
+        # v4.0.3: Disable entire row layout
+        self._set_layout_widgets_enabled('horizontalLayout_filtering_values_buttons', is_checked)
+        
+        # Also set individual widgets
+        self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(is_checked)
+        self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setEnabled(is_checked)
+        
+        # Optional controller delegation
+        if self._controller_integration and hasattr(self._controller_integration, 'delegate_filtering_buffer_value_state_changed'):
+            self._controller_integration.delegate_filtering_buffer_value_state_changed(is_checked)
+        
+        logger.debug(f"filtering_buffer_value_state_changed: is_checked={is_checked}")
 
     def filtering_buffer_type_state_changed(self):
         """Handle changes to the has_buffer_type checkable button.
@@ -2510,20 +2714,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         When unchecked (False): Disable these widgets
         
         v4.0.1: REGRESSION FIX - Restored original condition from v2.3.8
+        v4.0.3: Disable entire row layout when unchecked
         """
-        # CRITICAL: Use original condition - _is_ui_ready() was too restrictive
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
-            is_checked = self.widgets["FILTERING"]["HAS_BUFFER_TYPE"]["WIDGET"].isChecked()
+        # Guard: Only process after full initialization
+        if not (self.widgets_initialized is True and self.has_loaded_layers is True):
+            return
             
-            # CRITICAL: ALWAYS enable/disable the associated widgets directly FIRST
-            self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].setEnabled(is_checked)
-            self.widgets["FILTERING"]["BUFFER_SEGMENTS"]["WIDGET"].setEnabled(is_checked)
-            
-            # Optional controller delegation
-            if self._controller_integration:
-                self._controller_integration.delegate_filtering_buffer_type_state_changed(is_checked)
-            
-            logger.debug(f"filtering_buffer_type_state_changed: is_checked={is_checked}")
+        is_checked = self.widgets["FILTERING"]["HAS_BUFFER_TYPE"]["WIDGET"].isChecked()
+        
+        # v4.0.3: Disable entire row layout
+        self._set_layout_widgets_enabled('horizontalLayout_filtering_buffer_type_segments', is_checked)
+        
+        # Also set individual widgets
+        self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"].setEnabled(is_checked)
+        self.widgets["FILTERING"]["BUFFER_SEGMENTS"]["WIDGET"].setEnabled(is_checked)
+        
+        # Optional controller delegation
+        if self._controller_integration and hasattr(self._controller_integration, 'delegate_filtering_buffer_type_state_changed'):
+            self._controller_integration.delegate_filtering_buffer_type_state_changed(is_checked)
+        
+        logger.debug(f"filtering_buffer_type_state_changed: is_checked={is_checked}")
 
     def _update_centroids_source_checkbox_state(self):
         """v4.0 Sprint 8: Optimized - update centroids checkbox enabled state."""
@@ -2531,6 +2741,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if (combo := self.widgets.get("FILTERING", {}).get("CURRENT_LAYER", {}).get("WIDGET")) and \
            (checkbox := self.widgets.get("FILTERING", {}).get("USE_CENTROIDS_SOURCE_LAYER", {}).get("WIDGET")):
             checkbox.setEnabled(combo.currentLayer() is not None and combo.isEnabled())
+
+    def _set_layout_widgets_enabled(self, layout_name: str, enabled: bool):
+        """v4.0.3: Enable/disable all widgets in a horizontal layout.
+        
+        Args:
+            layout_name: Name of the layout (e.g., 'horizontalLayout_filtering_distant_layers')
+            enabled: True to enable widgets, False to disable
+        """
+        # Guard: Don't process if widgets not initialized
+        if not self.widgets_initialized:
+            return
+            
+        if not hasattr(self, layout_name):
+            logger.warning(f"Layout {layout_name} not found")
+            return
+        
+        layout = getattr(self, layout_name)
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item and item.widget():
+                widget = item.widget()
+                widget.setEnabled(enabled)
 
     def dialog_export_output_path(self):
         """v3.1 Sprint 12: Simplified - dialog for export output path."""

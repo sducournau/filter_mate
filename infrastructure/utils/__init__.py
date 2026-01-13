@@ -71,6 +71,7 @@ from .layer_utils import (
 )
 from .task_utils import (
     spatialite_connect,
+    sqlite_connect,
     safe_spatialite_connect,
     sqlite_execute_with_retry,
     ensure_db_directory_exists,
@@ -401,6 +402,7 @@ __all__ = [
     'escape_json_string',
     # Task utils (EPIC-1 migration)
     'spatialite_connect',
+    'sqlite_connect',
     'safe_spatialite_connect',
     'sqlite_execute_with_retry',
     'ensure_db_directory_exists',
