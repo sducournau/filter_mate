@@ -687,7 +687,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             from .ui.config import UIConfig
             layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 8
             content_spacing = UIConfig.get_config('layout', 'spacing_content') or 6
-            main_margins = UIConfig.get_config('layout', 'margins_main') or 4
+            main_margins = UIConfig.get_config('layout', 'margins_main') or 2
             key_cfg = UIConfig.get_config('key_button') or {}
             button_spacing = key_cfg.get('spacing', 2)
             # Apply reduced margins to main layouts (verticalLayout_8, verticalLayout_main)
@@ -695,6 +695,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if hasattr(self, name): 
                     getattr(self, name).setContentsMargins(main_margins, 0, main_margins, 0)
                     getattr(self, name).setSpacing(0)
+            # Apply zero margins to exploring content layouts
+            for name in ['verticalLayout_main_content', 'gridLayout_main_header', 'gridLayout_main_actions']:
+                if hasattr(self, name):
+                    getattr(self, name).setContentsMargins(0, 0, 0, 0)
+                    getattr(self, name).setSpacing(2)
+            # Configure column stretch for proper groupbox display
+            if hasattr(self, 'gridLayout_main_actions'):
+                self.gridLayout_main_actions.setColumnStretch(0, 0)  # Keys: fixed
+                self.gridLayout_main_actions.setColumnStretch(1, 1)  # Content: expand
+            # Apply minimal margins to groupbox content layouts
+            for name in ['verticalLayout_exploring_tabs_content']:
+                if hasattr(self, name):
+                    getattr(self, name).setContentsMargins(0, 0, 0, 0)
+                    getattr(self, name).setSpacing(2)
             # Apply spacing to exploring layouts
             for name in ['verticalLayout_exploring_single_selection', 'verticalLayout_exploring_multiple_selection', 'verticalLayout_exploring_custom_selection']:
                 if hasattr(self, name): getattr(self, name).setSpacing(layout_spacing)
@@ -815,9 +829,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 S16: Create header with indicators."""
         self.frame_header = QtWidgets.QFrame(self.dockWidgetContents)
         self.frame_header.setObjectName("frame_header"); self.frame_header.setFrameShape(QtWidgets.QFrame.NoFrame)
-        self.frame_header.setMaximumHeight(22); self.frame_header.setMinimumHeight(18)
+        self.frame_header.setMaximumHeight(20); self.frame_header.setMinimumHeight(18); self.frame_header.setFixedHeight(20)
         hl = QtWidgets.QHBoxLayout(self.frame_header)
-        hl.setContentsMargins(10,1,10,1); hl.setSpacing(8)
+        hl.setContentsMargins(4,0,4,0); hl.setSpacing(6)
         hl.addSpacerItem(QtWidgets.QSpacerItem(40,10,QtWidgets.QSizePolicy.Expanding,QtWidgets.QSizePolicy.Minimum))
         self.plugin_title_label = None
         bb = "color:white;font-size:9pt;font-weight:600;padding:3px 10px;border-radius:12px;border:none;"
@@ -832,7 +846,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 S16: Create indicator label."""
         lbl = QtWidgets.QLabel(self.frame_header)
         lbl.setObjectName(name); lbl.setText(text); lbl.setStyleSheet(f"QLabel#{name}{{{style}}}QLabel#{name}:hover{{{hover_style}}}")
-        lbl.setAlignment(Qt.AlignCenter); lbl.setMinimumWidth(min_width); lbl.setMaximumHeight(20)
+        lbl.setAlignment(Qt.AlignCenter); lbl.setMinimumWidth(min_width); lbl.setFixedHeight(18)
         lbl.setCursor(Qt.PointingHandCursor); lbl.setToolTip(tooltip); lbl.mousePressEvent = click_handler
         return lbl
     
