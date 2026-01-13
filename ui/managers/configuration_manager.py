@@ -802,18 +802,22 @@ class ConfigurationManager(QObject):
                        d.mFieldExpressionWidget_exploring_multiple_selection,
                        d.mFieldExpressionWidget_exploring_custom_selection]:
             widget.setFilters(field_filters)
-        self.setup_expression_widget_direct_connections()
+        # v4.0.1 CLEAN #1: Removed direct fieldChanged connections to avoid triple-connection
+        # fieldChanged signals now handled ONLY by ExploringController via SignalManager
+        # self.setup_expression_widget_direct_connections()  # DISABLED - causes duplicate handlers
     
-    def setup_expression_widget_direct_connections(self):
-        """v4.0 Sprint 16: Connect fieldChanged signals for expression widgets (migrated from dockwidget)."""
-        d = self.dockwidget
-        connections = [
-            (d.mFieldExpressionWidget_exploring_single_selection, "single_selection"),
-            (d.mFieldExpressionWidget_exploring_multiple_selection, "multiple_selection"),
-            (d.mFieldExpressionWidget_exploring_custom_selection, "custom_selection")
-        ]
-        for widget, groupbox in connections:
-            widget.fieldChanged.connect(lambda f, g=groupbox: d._schedule_expression_change(g, f))
+    # v4.0.1 CLEAN #1: Method disabled to prevent triple-connection of fieldChanged signals
+    # ExploringController now handles ALL fieldChanged signals via SignalManager
+    # def setup_expression_widget_direct_connections(self):
+    #     """v4.0 Sprint 16: Connect fieldChanged signals for expression widgets (migrated from dockwidget)."""
+    #     d = self.dockwidget
+    #     connections = [
+    #         (d.mFieldExpressionWidget_exploring_single_selection, "single_selection"),
+    #         (d.mFieldExpressionWidget_exploring_multiple_selection, "multiple_selection"),
+    #         (d.mFieldExpressionWidget_exploring_custom_selection, "custom_selection")
+    #     ]
+    #     for widget, groupbox in connections:
+    #         widget.fieldChanged.connect(lambda f, g=groupbox: d._schedule_expression_change(g, f))
     
     def setup_filtering_tab_widgets(self):
         """v4.0 Sprint 16: Configure widgets for Filtering tab (migrated from dockwidget)."""

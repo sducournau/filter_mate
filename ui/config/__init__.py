@@ -28,9 +28,9 @@ class UIConfig:
     """
     
     # Current active profile - Use Enum for proper comparisons
-    # REGRESSION FIX: Default to NORMAL instead of COMPACT (was causing 26-32px buttons instead of 30-36px)
-    # AppInitializer._initialize_ui_profile() will override based on screen resolution if needed
-    _active_profile: DisplayProfile = DisplayProfile.NORMAL
+    # v4.0.1 FIX #3: Restored COMPACT as default (NORMAL was causing -12% usable space on laptops)
+    # AppInitializer._initialize_ui_profile() will upgrade to NORMAL for large screens (≥2560x1440)
+    _active_profile: DisplayProfile = DisplayProfile.COMPACT
     
     # Default configuration values by profile
     # MIGRATED FROM before_migration/modules/ui_config.py - Full configuration restored

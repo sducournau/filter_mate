@@ -313,20 +313,21 @@ class AppInitializer:
                 screen_width = screen_geometry.width()
                 screen_height = screen_geometry.height()
                 
-                # Use compact mode for resolutions < 1920x1080
-                if screen_width < 1920 or screen_height < 1080:
+                # v4.0.1 FIX #3: Use NORMAL only for very large screens (≥2560x1440)
+                # This ensures laptops (1366x768, 1920x1080) get COMPACT for optimal space usage
+                if screen_width >= 2560 and screen_height >= 1440:
+                    UIConfig.set_profile(DisplayProfile.NORMAL)
+                    logger.info(f"FilterMate: Using NORMAL profile for large screen {screen_width}x{screen_height}")
+                else:
                     UIConfig.set_profile(DisplayProfile.COMPACT)
                     logger.info(f"FilterMate: Using COMPACT profile for resolution {screen_width}x{screen_height}")
-                else:
-                    UIConfig.set_profile(DisplayProfile.NORMAL)
-                    logger.info(f"FilterMate: Using NORMAL profile for resolution {screen_width}x{screen_height}")
             else:
-                # Fallback to normal if screen detection fails
-                UIConfig.set_profile(DisplayProfile.NORMAL)
-                logger.warning("FilterMate: Could not detect screen, using NORMAL profile")
+                # v4.0.1 FIX #3: Fallback to COMPACT (fail-safe for laptops)
+                UIConfig.set_profile(DisplayProfile.COMPACT)
+                logger.warning("FilterMate: Could not detect screen, using COMPACT profile (fail-safe)")
         except Exception as e:
             logger.error(f"FilterMate: Error detecting screen resolution: {e}")
-            UIConfig.set_profile(DisplayProfile.NORMAL)
+            UIConfig.set_profile(DisplayProfile.COMPACT)  # Fail-safe: COMPACT works everywhere
     
     def _create_dockwidget(self) -> bool:
         """

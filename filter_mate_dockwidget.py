@@ -1128,8 +1128,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def _setup_expression_widget_direct_connections(self):
         """v4.0 Sprint 16: Delegate to ConfigurationManager."""
-        if self._configuration_manager:
-            self._configuration_manager.setup_expression_widget_direct_connections()
+        # v4.0.1 CLEAN #1: Disabled to prevent duplicate signal connections
+        # ExploringController handles fieldChanged via SignalManager
+        # if self._configuration_manager:
+        #     self._configuration_manager.setup_expression_widget_direct_connections()
+        pass  # Method kept for backward compatibility but does nothing
     
     def _schedule_expression_change(self, groupbox: str, expression: str):
         """v4.0 Sprint 16: Schedule debounced expression change."""
