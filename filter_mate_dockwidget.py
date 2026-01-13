@@ -687,8 +687,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             from .ui.config import UIConfig
             layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 8
             content_spacing = UIConfig.get_config('layout', 'spacing_content') or 6
+            main_margins = UIConfig.get_config('layout', 'margins_main') or 4
             key_cfg = UIConfig.get_config('key_button') or {}
             button_spacing = key_cfg.get('spacing', 2)
+            # Apply reduced margins to main layouts (verticalLayout_8, verticalLayout_main)
+            for name in ['verticalLayout_8', 'verticalLayout_main']:
+                if hasattr(self, name): 
+                    getattr(self, name).setContentsMargins(main_margins, 0, main_margins, 0)
+                    getattr(self, name).setSpacing(0)
             # Apply spacing to exploring layouts
             for name in ['verticalLayout_exploring_single_selection', 'verticalLayout_exploring_multiple_selection', 'verticalLayout_exploring_custom_selection']:
                 if hasattr(self, name): getattr(self, name).setSpacing(layout_spacing)
@@ -698,7 +704,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Apply content spacing
             for name in ['verticalLayout_filtering_values', 'verticalLayout_exporting_values']:
                 if hasattr(self, name): getattr(self, name).setSpacing(content_spacing)
-            logger.debug(f"Applied harmonized layout spacing: {layout_spacing}px")
+            logger.debug(f"Applied harmonized layout spacing: {layout_spacing}px, main margins: {main_margins}px")
         except Exception as e:
             logger.debug(f"Could not apply layout spacing: {e}")
     
@@ -762,12 +768,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Fallback: Apply alignment directly
         try:
             from .ui.config import UIConfig
-            margins = UIConfig.get_config('layout', 'margins_frame') or {'left': 8, 'top': 8, 'right': 8, 'bottom': 10}
-            left, top, right, bottom = margins.get('left', 8), margins.get('top', 8), margins.get('right', 8), margins.get('bottom', 10)
+            margins = UIConfig.get_config('layout', 'margins_frame') or {'left': 4, 'top': 4, 'right': 4, 'bottom': 6}
+            left, top, right, bottom = margins.get('left', 4), margins.get('top', 4), margins.get('right', 4), margins.get('bottom', 6)
             key_cfg = UIConfig.get_config('key_button') or {}
             button_spacing = key_cfg.get('spacing', 2)
             widget_keys_config = UIConfig.get_config('widget_keys') or {}
-            widget_keys_padding = widget_keys_config.get('padding', 2)
+            widget_keys_padding = widget_keys_config.get('padding', 1)
             # Align horizontal layouts with zero margins for visual consistency
             for name in ['horizontalLayout_filtering_content', 'horizontalLayout_exporting_content']:
                 if hasattr(self, name):
