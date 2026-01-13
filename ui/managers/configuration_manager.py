@@ -663,15 +663,15 @@ class ConfigurationManager(QObject):
         from qgis.PyQt.QtWidgets import QSizePolicy
         import os
         
-        # Check if UI managers available
+        # v4.0.2 FIX: Use IconManager instead of get_themed_icon
         try:
-            from ..config.ui_config import UIConfig
-            from ..styling.icon_theme import get_themed_icon
+            from ..config import UIConfig
             UI_CONFIG_AVAILABLE = True
-            ICON_THEME_AVAILABLE = True
         except ImportError:
             UI_CONFIG_AVAILABLE = False
-            ICON_THEME_AVAILABLE = False
+        
+        # Get IconManager from dockwidget if available
+        icon_manager = getattr(self.dockwidget, '_icon_manager', None)
         
         icons_config = pushButton_config.get("ICONS", {})
         exploring_tooltips = {
@@ -689,13 +689,19 @@ class ConfigurationManager(QObject):
                     continue
                 widget_obj = widget_data["WIDGET"]
                 
-                # Load icon
+                # v4.0.2 FIX: Load icon using IconManager for proper theming
                 icon_file = icons_config.get(widget_group, {}).get(widget_name)
                 if icon_file:
-                    icon_path = os.path.join(self.dockwidget.plugin_dir, "icons", icon_file)
-                    if os.path.exists(icon_path):
-                        widget_obj.setIcon(get_themed_icon(icon_path) if ICON_THEME_AVAILABLE else QtGui.QIcon(icon_path))
-                        widget_data["ICON"] = icon_path
+                    if icon_manager and hasattr(icon_manager, 'set_button_icon'):
+                        # Use new IconManager system (theme-aware + stores icon_name)
+                        icon_manager.set_button_icon(widget_obj, icon_file)
+                        widget_data["ICON"] = os.path.join(self.dockwidget.plugin_dir, "icons", icon_file)
+                    else:
+                        # Fallback to old method
+                        icon_path = os.path.join(self.dockwidget.plugin_dir, "icons", icon_file)
+                        if os.path.exists(icon_path):
+                            widget_obj.setIcon(QtGui.QIcon(icon_path))
+                            widget_data["ICON"] = icon_path
                 
                 widget_obj.setCursor(Qt.PointingHandCursor)
                 if widget_group == "EXPLORING" and widget_name in exploring_tooltips:

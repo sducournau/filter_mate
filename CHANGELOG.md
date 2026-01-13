@@ -2,6 +2,31 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [4.0.3] - 2026-01-13
+
+### Fixed
+- **ICONS**: Fixed missing button icons by migrating to IconManager system
+  - ConfigurationManager now uses `IconManager.set_button_icon()` instead of deprecated `get_themed_icon()`
+  - Icons now properly store `icon_name` property for theme refresh support
+  - Impact: All pushbutton icons now display correctly with theme support
+
+### Improved
+- **COMPACT Mode**: Adjusted button dimensions for better visibility and usability
+  - Button height: 48px → 42px (more compact but still readable)
+  - Action button: 32px → 34px, icon 20px → 22px
+  - Tool button: icon 22px → 24px (better icon visibility)
+  - Key button: spacing 2px → 3px
+- **COMPACT Mode**: Improved layout spacing for better visual comfort
+  - Main/section/content spacing: 6px → 8px
+  - Margins frame: 8px → 10px (left/top/right), 10px → 12px (bottom)
+  - GroupBox padding: 6px → 8px, title 4px → 6px
+  - Impact: More breathing room without losing screen space
+
+### Technical Details
+- Files changed:
+  - `ui/managers/configuration_manager.py` - IconManager integration
+  - `ui/config/__init__.py` - COMPACT profile dimensions & spacing
+
 ## [4.0.2] - 2026-01-13
 
 ### Fixed
