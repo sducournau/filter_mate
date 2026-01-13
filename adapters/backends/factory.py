@@ -14,12 +14,12 @@ Date: January 2026
 import logging
 from typing import Dict, Optional, Tuple, TYPE_CHECKING
 
-from core.ports.backend_port import BackendPort
-from core.domain.filter_expression import ProviderType
-from core.domain.layer_info import LayerInfo
+from ...core.ports.backend_port import BackendPort
+from ...core.domain.filter_expression import ProviderType
+from ...core.domain.layer_info import LayerInfo
 
 if TYPE_CHECKING:
-    from infrastructure.di.container import Container
+    from ...infrastructure.di.container import Container
 
 logger = logging.getLogger('FilterMate.Backend.Factory')
 

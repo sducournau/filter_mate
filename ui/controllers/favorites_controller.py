@@ -427,7 +427,7 @@ class FavoritesController(BaseController):
 
         # Create new manager
         try:
-            from core.services.favorites_service import FavoritesService
+            from ...core.services.favorites_service import FavoritesService
             self._favorites_manager = FavoritesService()
 
             # Try to connect to database
@@ -600,7 +600,7 @@ class FavoritesController(BaseController):
             return False
 
         try:
-            from core.domain.favorites_manager import FilterFavorite
+            from ...core.domain.favorites_manager import FilterFavorite
 
             # Get layer info
             layer = self.dockwidget.current_layer

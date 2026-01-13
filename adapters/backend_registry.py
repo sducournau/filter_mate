@@ -11,7 +11,7 @@ FilterEngineTask, eliminating direct imports from core/ to adapters/.
 import logging
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
-from core.ports.filter_executor_port import (
+from ..core.ports.filter_executor_port import (
     FilterExecutorPort,
     FilterExecutionResult,
     FilterStatus,

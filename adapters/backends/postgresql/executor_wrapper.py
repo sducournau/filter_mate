@@ -8,7 +8,7 @@ Delegates to existing PostgreSQLBackend to avoid breaking changes.
 import logging
 from typing import Any, Dict, List, Optional, Tuple, Callable
 
-from ...core.ports.filter_executor_port import (
+from ....core.ports.filter_executor_port import (
     FilterExecutorPort,
     FilterExecutionResult,
     FilterStatus,

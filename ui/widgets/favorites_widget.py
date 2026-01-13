@@ -337,11 +337,8 @@ class FavoritesWidget(QLabel if HAS_QGIS else object):
         try:
             from ...core.domain.favorites_manager import FilterFavorite
         except ImportError:
-            try:
-                from core.domain.favorites_manager import FilterFavorite
-            except ImportError:
-                logger.error("Could not import FilterFavorite")
-                return
+            logger.error("Could not import FilterFavorite")
+            return
         
         fav = FilterFavorite(
             name=name,

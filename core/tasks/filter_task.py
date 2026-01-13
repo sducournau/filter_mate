@@ -452,12 +452,15 @@ class FilterEngineTask(QgsTask):
         # Fallback to legacy import
         return POSTGRESQL_AVAILABLE
 
-    def _prepare_source_geometry(self, layer_info: dict, feature_ids=None, 
+    def _prepare_source_geometry_via_executor(self, layer_info: dict, feature_ids=None, 
                                   buffer_value: float = 0.0, use_centroids: bool = False):
         """
         Prepare source geometry using backend executor.
         
         v4.0.1: Uses BackendRegistry if available, otherwise falls back to legacy imports.
+        
+        NOTE: This method is named _prepare_source_geometry_via_executor to avoid
+        collision with the legacy _prepare_source_geometry(layer_provider_type) method.
         
         Args:
             layer_info: Dict with layer metadata
