@@ -95,6 +95,8 @@ logger = setup_logger(
 )
 
 # Centralized psycopg2 availability (v2.8.6 refactoring - migrated to adapters)
+# DEPRECATED v4.0.1: Use self._is_postgresql_available() instead
+# Kept for backward compatibility - will be removed in v5.0
 from ...adapters.backends.postgresql_availability import psycopg2, PSYCOPG2_AVAILABLE, POSTGRESQL_AVAILABLE
 
 # Import constants (migrated to infrastructure)
@@ -108,6 +110,8 @@ from ...infrastructure.constants import (
 )
 
 # Import backend architecture (migrated to adapters)
+# DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
+# These imports are kept for backward compatibility - will be removed in v5.0
 from ...adapters.backends import BackendFactory
 from ...adapters.backends.spatialite import SpatialiteBackend as SpatialiteGeometricFilter
 
@@ -210,6 +214,8 @@ except ImportError:
 
 # EPIC-1 Phase E4-S5: Import extracted backend filter_executor modules
 # These provide Strangler Fig delegation for PostgreSQL/Spatialite/OGR utilities
+# DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
+# These imports are kept for backward compatibility - will be removed in v5.0
 try:
     from ...adapters.backends.postgresql import filter_executor as pg_executor
     from ...adapters.backends.postgresql.filter_actions import (
@@ -231,6 +237,7 @@ except ImportError:
     pg_execute_unfilter = None
     PG_EXECUTOR_AVAILABLE = False
 
+# DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
 try:
     from ...adapters.backends.spatialite import filter_executor as sl_executor
     SL_EXECUTOR_AVAILABLE = True
@@ -238,6 +245,7 @@ except ImportError:
     sl_executor = None
     SL_EXECUTOR_AVAILABLE = False
 
+# DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
 try:
     from ...adapters.backends.ogr import filter_executor as ogr_executor
     OGR_EXECUTOR_AVAILABLE = True
@@ -267,13 +275,27 @@ class FilterEngineTask(QgsTask):
             cls._geometry_cache = SourceGeometryCache()
         return cls._geometry_cache
 
-    def __init__(self, description, task_action, task_parameters):
-
+    def __init__(self, description, task_action, task_parameters, backend_registry=None):
+        """
+        Initialize FilterEngineTask.
+        
+        Args:
+            description: Task description for QGIS task manager
+            task_action: Action to perform ('filter', 'unfilter', 'reset', 'export')
+            task_parameters: Dict with task configuration
+            backend_registry: Optional BackendRegistry for hexagonal architecture.
+                             If None, falls back to legacy direct imports.
+                             (v4.0.1 - Strangler Fig pattern)
+        """
         QgsTask.__init__(self, description, QgsTask.CanCancel)
 
         self.exception = None
         self.task_action = task_action
         self.task_parameters = task_parameters
+        
+        # v4.0.1: Backend registry for hexagonal architecture compliance
+        # If provided, use registry for backend selection instead of direct imports
+        self._backend_registry = backend_registry
         
         # THREAD SAFETY FIX v2.5.6: Store warnings from worker thread for display in finished()
         # Cannot call iface.messageBar() from worker thread - would cause crash
@@ -387,6 +409,118 @@ class FilterEngineTask(QgsTask):
         self._filter_orchestrator = None
         self._expression_builder = None
         self._result_processor = None
+
+    # ========================================================================
+    # v4.0.1: Hexagonal Architecture - Backend Access Methods
+    # ========================================================================
+    
+    def _get_backend_executor(self, layer_info: dict):
+        """
+        Get appropriate backend executor for a layer.
+        
+        v4.0.1: Uses BackendRegistry if available (hexagonal pattern),
+        otherwise falls back to legacy direct imports (Strangler Fig).
+        
+        Args:
+            layer_info: Dict with 'layer_provider_type' key
+            
+        Returns:
+            FilterExecutorPort implementation or None
+        """
+        if self._backend_registry:
+            try:
+                return self._backend_registry.get_executor(layer_info)
+            except Exception as e:
+                logger.warning(f"BackendRegistry.get_executor failed: {e}, using legacy imports")
+        
+        # Fallback: return None, caller should use legacy imports
+        return None
+    
+    def _has_backend_registry(self) -> bool:
+        """Check if backend registry is available."""
+        return self._backend_registry is not None
+    
+    def _is_postgresql_available(self) -> bool:
+        """
+        Check if PostgreSQL backend is available.
+        
+        v4.0.1: Uses registry if available, otherwise legacy import.
+        """
+        if self._backend_registry:
+            return self._backend_registry.postgresql_available
+        
+        # Fallback to legacy import
+        return POSTGRESQL_AVAILABLE
+
+    def _prepare_source_geometry(self, layer_info: dict, feature_ids=None, 
+                                  buffer_value: float = 0.0, use_centroids: bool = False):
+        """
+        Prepare source geometry using backend executor.
+        
+        v4.0.1: Uses BackendRegistry if available, otherwise falls back to legacy imports.
+        
+        Args:
+            layer_info: Dict with layer metadata
+            feature_ids: Optional list of feature IDs
+            buffer_value: Buffer distance
+            use_centroids: Use centroids instead of full geometries
+            
+        Returns:
+            Tuple of (geometry_data, error_message)
+        """
+        executor = self._get_backend_executor(layer_info)
+        if executor:
+            try:
+                return executor.prepare_source_geometry(
+                    layer_info=layer_info,
+                    feature_ids=feature_ids,
+                    buffer_value=buffer_value,
+                    use_centroids=use_centroids
+                )
+            except Exception as e:
+                logger.debug(f"Executor.prepare_source_geometry failed: {e}, using legacy")
+        
+        # Fallback to legacy imports (inline imports for backward compatibility)
+        return None, "Legacy fallback required"
+
+    def _apply_subset_via_executor(self, layer, expression: str) -> bool:
+        """
+        Apply subset string using backend executor.
+        
+        v4.0.1: Uses BackendRegistry if available, otherwise falls back to legacy.
+        
+        Args:
+            layer: QgsVectorLayer
+            expression: Filter expression
+            
+        Returns:
+            True if applied successfully, False if fallback required
+        """
+        if not self._backend_registry:
+            return False
+        
+        try:
+            layer_info = {'layer': layer, 'layer_provider_type': detect_layer_provider_type(layer)}
+            executor = self._get_backend_executor(layer_info)
+            if executor:
+                return executor.apply_subset_string(layer, expression)
+        except Exception as e:
+            logger.debug(f"Executor.apply_subset_string failed: {e}")
+        
+        return False
+
+    def _cleanup_backend_resources(self):
+        """
+        Cleanup backend resources using registry.
+        
+        v4.0.1: Delegates to BackendRegistry.cleanup_all() if available.
+        """
+        if self._backend_registry:
+            try:
+                self._backend_registry.cleanup_all()
+                logger.debug("Backend resources cleaned up via registry")
+            except Exception as e:
+                logger.debug(f"Registry cleanup failed: {e}")
 
     def queue_subset_request(self, layer, expression):
         """Queue subset string to be applied on main thread (thread safety v2.3.21)."""
@@ -614,7 +748,7 @@ class FilterEngineTask(QgsTask):
         For 'unfilter' and 'reset': processes all layers in the list regardless of flag
         (to clean up filters that were applied previously)
         """
-        from core.services.layer_organizer import organize_layers_for_filtering
+        from ..services.layer_organizer import organize_layers_for_filtering
         from ..appUtils import detect_layer_provider_type
         
         # Delegate to LayerOrganizer service
@@ -650,7 +784,7 @@ class FilterEngineTask(QgsTask):
 
     def _log_backend_info(self):
         """Log backend info and performance warnings. Delegated to core.optimization.logging_utils."""
-        from core.optimization.logging_utils import log_backend_info
+        from ..optimization.logging_utils import log_backend_info
         thresholds = self._get_optimization_thresholds()
         log_backend_info(
             task_action=self.task_action, provider_type=self.param_source_provider_type,
@@ -661,7 +795,7 @@ class FilterEngineTask(QgsTask):
 
     def _get_contextual_performance_warning(self, elapsed_time: float, severity: str = 'warning') -> str:
         """Generate contextual performance warning. Delegated to core.optimization.performance_advisor."""
-        from core.optimization.performance_advisor import get_contextual_performance_warning
+        from ..optimization.performance_advisor import get_contextual_performance_warning
         return get_contextual_performance_warning(
             elapsed_time=elapsed_time, provider_type=self.param_source_provider_type,
             postgresql_available=POSTGRESQL_AVAILABLE, severity=severity
@@ -704,7 +838,7 @@ class FilterEngineTask(QgsTask):
             bool: True if task completed successfully, False otherwise
         """
         # PHASE 14.7: Delegate to TaskRunOrchestrator service
-        from core.services.task_run_orchestrator import execute_task_run
+        from ..services.task_run_orchestrator import execute_task_run
         
         # Execute main orchestration
         result = execute_task_run(
@@ -734,6 +868,16 @@ class FilterEngineTask(QgsTask):
             
             if hasattr(result.context, 'filter_orchestrator'):
                 self._filter_orchestrator = result.context.filter_orchestrator
+        
+        # v4.0.1 FIX: Retrieve critical configuration values from context
+        # These are REQUIRED for Spatialite connections and filter history
+        if hasattr(result, 'context') and result.context:
+            if result.context.db_file_path is not None:
+                self.db_file_path = result.context.db_file_path
+            if result.context.project_uuid is not None:
+                self.project_uuid = result.context.project_uuid
+            if result.context.session_id is not None:
+                self.session_id = result.context.session_id
         
         # Store exception if any
         if result.exception:
@@ -1726,7 +1870,8 @@ class FilterEngineTask(QgsTask):
 
     def prepare_postgresql_source_geom(self):
         """Prepare PostgreSQL source geometry with buffer/centroid. Delegated to adapters.backends.postgresql."""
-        from adapters.backends.postgresql import prepare_postgresql_source_geom as pg_prepare_source_geom
+        # DEPRECATED v4.0.1: Use self._prepare_source_geometry() with BackendRegistry instead
+        from ...adapters.backends.postgresql import prepare_postgresql_source_geom as pg_prepare_source_geom
         result_geom, mv_name = pg_prepare_source_geom(
             source_table=self.param_source_table, source_schema=self.param_source_schema,
             source_geom=self.param_source_geom, buffer_value=getattr(self, 'param_buffer_value', None),
@@ -1782,7 +1927,7 @@ class FilterEngineTask(QgsTask):
             return geometry
         
         try:
-            from adapters.qgis.geometry_preparation import GeometryPreparationAdapter
+            from ...adapters.qgis.geometry_preparation import GeometryPreparationAdapter
             adapter = GeometryPreparationAdapter()
             
             # Get buffer parameters for tolerance calculation
@@ -1812,7 +1957,8 @@ class FilterEngineTask(QgsTask):
 
     def prepare_spatialite_source_geom(self):
         """Prepare source geometry for Spatialite filtering. Delegated to spatialite backend."""
-        from adapters.backends.spatialite import (
+        # DEPRECATED v4.0.1: Use self._prepare_source_geometry() with BackendRegistry instead
+        from ...adapters.backends.spatialite import (
             SpatialiteSourceContext,
             prepare_spatialite_source_geom as spatialite_prepare_source_geom
         )
@@ -1850,7 +1996,7 @@ class FilterEngineTask(QgsTask):
 
     def _copy_filtered_layer_to_memory(self, layer, layer_name="filtered_copy"):
         """Copy filtered layer to memory layer. Delegated to GeometryPreparationAdapter."""
-        from adapters.qgis.geometry_preparation import GeometryPreparationAdapter
+        from ...adapters.qgis.geometry_preparation import GeometryPreparationAdapter
         result = GeometryPreparationAdapter().copy_filtered_to_memory(layer, layer_name)
         if result.success and result.layer:
             self._verify_and_create_spatial_index(result.layer, layer_name)
@@ -1859,7 +2005,7 @@ class FilterEngineTask(QgsTask):
 
     def _copy_selected_features_to_memory(self, layer, layer_name="selected_copy"):
         """Copy selected features to memory layer. Delegated to GeometryPreparationAdapter."""
-        from adapters.qgis.geometry_preparation import GeometryPreparationAdapter
+        from ...adapters.qgis.geometry_preparation import GeometryPreparationAdapter
         result = GeometryPreparationAdapter().copy_selected_to_memory(layer, layer_name)
         if result.success and result.layer:
             self._verify_and_create_spatial_index(result.layer, layer_name)
@@ -1868,7 +2014,7 @@ class FilterEngineTask(QgsTask):
 
     def _create_memory_layer_from_features(self, features, crs, layer_name="from_features"):
         """Create memory layer from QgsFeature objects. Delegated to GeometryPreparationAdapter."""
-        from adapters.qgis.geometry_preparation import GeometryPreparationAdapter
+        from ...adapters.qgis.geometry_preparation import GeometryPreparationAdapter
         result = GeometryPreparationAdapter().create_memory_from_features(features, crs, layer_name)
         if result.success and result.layer:
             self._verify_and_create_spatial_index(result.layer, layer_name)
@@ -1878,7 +2024,7 @@ class FilterEngineTask(QgsTask):
 
     def _convert_layer_to_centroids(self, layer):
         """Convert layer geometries to centroids. Delegated to GeometryPreparationAdapter."""
-        from adapters.qgis.geometry_preparation import GeometryPreparationAdapter
+        from ...adapters.qgis.geometry_preparation import GeometryPreparationAdapter
         result = GeometryPreparationAdapter().convert_to_centroids(layer)
         if result.success and result.layer:
             return result.layer
@@ -2600,7 +2746,8 @@ class FilterEngineTask(QgsTask):
         Returns:
             QgsVectorLayer: Simplified source layer (may be new memory layer)
         """
-        from adapters.backends.ogr.geometry_optimizer import simplify_source_for_ogr_fallback
+        # DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
+        from ...adapters.backends.ogr.geometry_optimizer import simplify_source_for_ogr_fallback
         return simplify_source_for_ogr_fallback(source_layer, logger=logger)
     
     def _prepare_source_geometry(self, layer_provider_type):
@@ -3464,7 +3611,8 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if successful
         """
-        from adapters.backends.spatialite import apply_spatialite_subset
+        # DEPRECATED v4.0.1: Use self._apply_subset_via_executor() with BackendRegistry instead
+        from ...adapters.backends.spatialite import apply_spatialite_subset
         
         return apply_spatialite_subset(
             layer=layer,
@@ -3503,7 +3651,8 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if successful
         """
-        from adapters.backends.spatialite import manage_spatialite_subset
+        # DEPRECATED v4.0.1: Use self._apply_subset_via_executor() with BackendRegistry instead
+        from ...adapters.backends.spatialite import manage_spatialite_subset
         
         return manage_spatialite_subset(
             layer=layer,
@@ -3537,7 +3686,8 @@ class FilterEngineTask(QgsTask):
         Returns:
             tuple: (last_subset_id, last_seq_order, layer_name, name)
         """
-        from adapters.backends.spatialite import get_last_subset_info
+        # DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
+        from ...adapters.backends.spatialite import get_last_subset_info
         
         return get_last_subset_info(cur, layer, self.project_uuid)
 
@@ -3579,13 +3729,15 @@ class FilterEngineTask(QgsTask):
 
     def _create_simple_materialized_view_sql(self, schema, name, sql_subset_string):
         """Delegated to adapters.backends.postgresql.schema_manager."""
-        from adapters.backends.postgresql.schema_manager import create_simple_materialized_view_sql
+        # DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
+        from ...adapters.backends.postgresql.schema_manager import create_simple_materialized_view_sql
         return create_simple_materialized_view_sql(schema, name, sql_subset_string)
 
 
     def _parse_where_clauses(self):
         """Delegated to adapters.backends.postgresql.schema_manager."""
-        from adapters.backends.postgresql.schema_manager import parse_case_to_where_clauses
+        # DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
+        from ...adapters.backends.postgresql.schema_manager import parse_case_to_where_clauses
         return parse_case_to_where_clauses(self.where_clause)
 
 
@@ -3659,7 +3811,8 @@ class FilterEngineTask(QgsTask):
         Returns:
             str: Name of the schema to use (schema_name if created, 'public' as fallback)
         """
-        from adapters.backends.postgresql.schema_manager import ensure_temp_schema_exists
+        # DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
+        from ...adapters.backends.postgresql.schema_manager import ensure_temp_schema_exists
         
         result = ensure_temp_schema_exists(connexion, schema_name)
         
@@ -3676,7 +3829,8 @@ class FilterEngineTask(QgsTask):
         
         Delegated to adapters.backends.postgresql.schema_manager.get_session_prefixed_name().
         """
-        from adapters.backends.postgresql.schema_manager import get_session_prefixed_name
+        # DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
+        from ...adapters.backends.postgresql.schema_manager import get_session_prefixed_name
         
         return get_session_prefixed_name(base_name, self.session_id)
 
@@ -3694,7 +3848,8 @@ class FilterEngineTask(QgsTask):
             )
         
         # Fallback to schema_manager
-        from adapters.backends.postgresql.schema_manager import cleanup_session_materialized_views
+        # DEPRECATED v4.0.1: Use self._cleanup_backend_resources() with BackendRegistry instead
+        from ...adapters.backends.postgresql.schema_manager import cleanup_session_materialized_views
         
         return cleanup_session_materialized_views(connexion, schema_name, self.session_id)
 
@@ -3705,7 +3860,8 @@ class FilterEngineTask(QgsTask):
         
         Delegated to adapters.backends.postgresql.schema_manager.cleanup_orphaned_materialized_views().
         """
-        from adapters.backends.postgresql.schema_manager import cleanup_orphaned_materialized_views
+        # DEPRECATED v4.0.1: Use self._cleanup_backend_resources() with BackendRegistry instead
+        from ...adapters.backends.postgresql.schema_manager import cleanup_orphaned_materialized_views
         
         return cleanup_orphaned_materialized_views(connexion, schema_name, self.session_id, max_age_hours)
 
@@ -3723,7 +3879,8 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if all commands succeeded
         """
-        from adapters.backends.postgresql.schema_manager import execute_commands
+        # DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
+        from ...adapters.backends.postgresql.schema_manager import execute_commands
         
         # Test connection and reconnect if needed
         try:
@@ -3733,6 +3890,7 @@ class FilterEngineTask(QgsTask):
             logger.debug(f"PostgreSQL connection test failed, reconnecting: {e}")
             connexion, _ = get_datasource_connexion_from_layer(self.source_layer)
         
+        # DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
         return execute_commands(connexion, commands)
 
 
@@ -3742,7 +3900,8 @@ class FilterEngineTask(QgsTask):
         
         Delegated to adapters.backends.postgresql.schema_manager.ensure_table_stats().
         """
-        from adapters.backends.postgresql.schema_manager import ensure_table_stats
+        # DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
+        from ...adapters.backends.postgresql.schema_manager import ensure_table_stats
         
         return ensure_table_stats(connexion, schema, table, geom_field)
 
@@ -3800,6 +3959,10 @@ class FilterEngineTask(QgsTask):
         Execute filter action using PostgreSQL backend.
         
         EPIC-1 Phase E5/E6: Delegates to adapters.backends.postgresql.filter_actions.
+        
+        TODO v5.0: Refactor to use self._get_backend_executor() with FilterExecutorPort
+                   instead of direct pg_execute_filter import. This will complete the
+                   hexagonal architecture compliance for filter execution.
         
         Args:
             layer: QgsVectorLayer to filter

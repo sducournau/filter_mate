@@ -319,6 +319,15 @@ class FilterMateApp:
             except Exception as e:
                 logger.warning(f"FilterMate: Hexagonal services initialization failed: {e}")
         
+        # v4.0.1: Initialize BackendRegistry for hexagonal architecture compliance
+        self._backend_registry = None
+        try:
+            from .adapters.backend_registry import BackendRegistry
+            self._backend_registry = BackendRegistry()
+            logger.info(f"FilterMate: BackendRegistry initialized (postgresql_available: {self._backend_registry.postgresql_available})")
+        except Exception as e:
+            logger.warning(f"FilterMate: BackendRegistry not available: {e}")
+        
         init_env_vars()
         
         global ENV_VARS
@@ -782,11 +791,12 @@ class FilterMateApp:
         
         current_layer = self.dockwidget.current_layer
         
-        # Create task
+        # Create task with backend registry for hexagonal architecture (v4.0.1)
         self.appTasks[task_name] = FilterEngineTask(
             self.tasks_descriptions[task_name], 
             task_name, 
-            task_parameters
+            task_parameters,
+            backend_registry=self._backend_registry  # v4.0.1: Hexagonal DI
         )
         
         # Get layers from task parameters

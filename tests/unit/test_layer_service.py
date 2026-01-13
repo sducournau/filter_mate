@@ -41,15 +41,129 @@ class MockQObject:
         self.parent = parent
 
 
-# Apply mocks
+class MockQgsField:
+    """Mock QGIS Field for testing."""
+    def __init__(self, name, type_name="String"):
+        self._name = name
+        self._type_name = type_name
+    
+    def name(self): return self._name
+    def typeName(self): return self._type_name
+
+
+class MockQgsFields:
+    """Mock QGIS Fields collection for testing."""
+    def __init__(self, fields=None):
+        self._fields = fields or []
+    
+    def __len__(self): return len(self._fields)
+    def __iter__(self): return iter(self._fields)
+    def __getitem__(self, index): return self._fields[index]
+    def at(self, index): return self._fields[index] if 0 <= index < len(self._fields) else None
+    def names(self): return [f.name() for f in self._fields]
+    def count(self): return len(self._fields)
+
+
+class MockQgsVectorLayer:
+    """
+    Mock QgsVectorLayer that properly works with isinstance() checks.
+    This fixes the TypeError: isinstance() arg 2 must be a type error.
+    
+    Use set_* methods to change behavior dynamically in tests:
+        mock_layer.set_valid(False)  # Instead of mock_layer.isValid.return_value = False
+    """
+    def __init__(
+        self,
+        layer_id="test_layer_123",
+        name="test_layer",
+        provider_type="postgres",
+        is_valid=True,
+        deleted=False
+    ):
+        self._id = layer_id
+        self._name = name
+        self._provider_type = provider_type
+        self._is_valid = is_valid
+        self._deleted = deleted
+        self._subset = ""
+        self._editable = False
+        self._feature_count = 1000
+        self._primary_key_attributes = []
+        # Default fields include common PK names for testing
+        self._fields = MockQgsFields([
+            MockQgsField("id", "Integer"),
+            MockQgsField("name", "String"),
+            MockQgsField("geom", "Geometry")
+        ])
+    
+    # Setters for dynamic test behavior modification
+    def set_id(self, value): self._id = value
+    def set_name(self, value): self._name = value
+    def set_valid(self, value): self._is_valid = value
+    def set_deleted(self, value): self._deleted = value
+    def set_editable(self, value): self._editable = value
+    def set_feature_count(self, value): self._feature_count = value
+    def set_subset(self, value): self._subset = value
+    def set_primary_key_attributes(self, value): self._primary_key_attributes = value
+    def set_fields(self, value): self._fields = value
+    
+    def id(self):
+        if self._deleted:
+            raise RuntimeError("C++ object deleted")
+        return self._id
+    
+    def name(self):
+        if self._deleted:
+            raise RuntimeError("C++ object deleted")
+        return self._name
+    
+    def providerType(self): return self._provider_type
+    def isValid(self): return self._is_valid
+    def isEditable(self): return self._editable
+    def subsetString(self): return self._subset
+    def setSubsetString(self, s): self._subset = s; return True
+    def featureCount(self): return self._feature_count
+    def crs(self):
+        crs = Mock()
+        crs.authid.return_value = "EPSG:4326"
+        return crs
+    def wkbType(self): return 1
+    def fields(self): return self._fields
+    def primaryKeyAttributes(self): return self._primary_key_attributes
+
+
+# Apply mocks with proper QgsVectorLayer class
 import sys
 mock_pyqt = Mock()
 mock_pyqt.pyqtSignal = MockSignal
 mock_pyqt.QObject = MockQObject
+
+# Create QgsWkbTypes mock
+class MockQgsWkbTypes:
+    """Mock QgsWkbTypes for geometry type display."""
+    @staticmethod
+    def displayString(wkb_type):
+        type_map = {
+            0: "Unknown",
+            1: "Point",
+            2: "LineString",
+            3: "Polygon",
+            4: "MultiPoint",
+            5: "MultiLineString",
+            6: "MultiPolygon"
+        }
+        return type_map.get(wkb_type, "Unknown")
+
+
+# Create qgis.core mock with proper QgsVectorLayer class
+mock_qgis_core = Mock()
+mock_qgis_core.QgsVectorLayer = MockQgsVectorLayer
+mock_qgis_core.QgsWkbTypes = MockQgsWkbTypes
+
 sys.modules['qgis'] = Mock()
 sys.modules['qgis.PyQt'] = Mock()
 sys.modules['qgis.PyQt.QtCore'] = mock_pyqt
-sys.modules['qgis.core'] = Mock()
+sys.modules['qgis.core'] = mock_qgis_core
 sys.modules['PyQt5'] = Mock()
 sys.modules['PyQt5.QtCore'] = mock_pyqt
 
@@ -76,35 +190,25 @@ def service():
 
 @pytest.fixture
 def mock_layer():
-    """Create a mock QGIS vector layer."""
-    layer = Mock()
-    layer.id.return_value = "test_layer_123"
-    layer.name.return_value = "test_layer"
-    layer.providerType.return_value = "postgres"
-    layer.isValid.return_value = True
-    layer.isEditable.return_value = False
-    layer.subsetString.return_value = ""
-    layer.featureCount.return_value = 1000
-    layer.crs.return_value.authid.return_value = "EPSG:4326"
-    layer.wkbType.return_value = 1
-    layer.primaryKeyAttributes.return_value = []
-    
-    # Mock fields
-    mock_field1 = Mock()
-    mock_field1.name.return_value = "id"
-    mock_field1.type.return_value = 4  # QVariant.Int
-    
-    mock_field2 = Mock()
-    mock_field2.name.return_value = "name"
-    mock_field2.type.return_value = 10  # QVariant.String
-    
-    mock_fields = Mock()
-    mock_fields.__iter__ = Mock(return_value=iter([mock_field1, mock_field2]))
-    mock_fields.__len__ = Mock(return_value=2)
-    mock_fields.__getitem__ = Mock(side_effect=lambda i: [mock_field1, mock_field2][i])
-    layer.fields.return_value = mock_fields
-    
-    return layer
+    """Create a mock QGIS vector layer using MockQgsVectorLayer."""
+    # Use MockQgsVectorLayer class which properly supports isinstance() checks
+    return MockQgsVectorLayer(
+        layer_id="test_layer_123",
+        name="test_layer",
+        provider_type="postgres",
+        is_valid=True,
+        deleted=False
+    )
+
+
+@pytest.fixture
+def deleted_layer():
+    """Create a mock layer that simulates a deleted C++ object."""
+    return MockQgsVectorLayer(
+        layer_id="deleted_layer",
+        name="deleted",
+        deleted=True
+    )
 
 
 @pytest.fixture
@@ -173,19 +277,16 @@ class TestLayerValidation:
         assert result.status == LayerValidationStatus.PLUGIN_BUSY
         assert "busy" in result.error_message.lower()
     
-    def test_validate_deleted_layer(self, service):
+    def test_validate_deleted_layer(self, service, deleted_layer):
         """Test validation handles deleted C++ object."""
-        layer = Mock()
-        layer.id.side_effect = RuntimeError("C++ object deleted")
-        
-        result = service.validate_layer(layer)
+        result = service.validate_layer(deleted_layer)
         
         assert result.status == LayerValidationStatus.DELETED
         assert "deleted" in result.error_message.lower()
     
     def test_validate_source_unavailable(self, service, mock_layer):
         """Test validation detects unavailable source."""
-        mock_layer.isValid.return_value = False
+        mock_layer.set_valid(False)
         
         with patch.object(service, '_is_layer_source_available', return_value=False):
             result = service.validate_layer(mock_layer)
@@ -195,7 +296,7 @@ class TestLayerValidation:
     
     def test_validate_not_in_project_layers(self, service, mock_layer, mock_project_layers):
         """Test validation fails if layer not in PROJECT_LAYERS."""
-        mock_layer.id.return_value = "unknown_layer_999"
+        mock_layer.set_id("unknown_layer_999")
         
         result = service.validate_layer(mock_layer, project_layers=mock_project_layers)
         
@@ -225,26 +326,22 @@ class TestLayerInfo:
         result = service.get_layer_info(None)
         assert result is None
     
-    def test_get_layer_info_deleted(self, service):
+    def test_get_layer_info_deleted(self, service, deleted_layer):
         """Test get_layer_info handles deleted layer."""
-        layer = Mock()
-        layer.id.side_effect = RuntimeError("deleted")
-        
-        result = service.get_layer_info(layer)
+        result = service.get_layer_info(deleted_layer)
         assert result is None
     
     def test_get_layer_info_caching(self, service, mock_layer):
         """Test that layer info is cached."""
-        with patch('core.services.layer_service.QgsWkbTypes') as mock_types:
-            mock_types.displayString.return_value = "Point"
-            
-            # First call
-            info1 = service.get_layer_info(mock_layer)
-            
-            # Second call should use cache
-            info2 = service.get_layer_info(mock_layer, use_cache=True)
-            
-            assert info1 is info2
+        # QgsWkbTypes is already mocked globally via mock_qgis_core
+        
+        # First call
+        info1 = service.get_layer_info(mock_layer)
+        
+        # Second call should use cache
+        info2 = service.get_layer_info(mock_layer, use_cache=True)
+        
+        assert info1 is info2
     
     def test_clear_cache_specific(self, service, mock_layer):
         """Test clearing specific layer from cache."""
@@ -282,7 +379,7 @@ class TestPrimaryKeyDetection:
     
     def test_detect_pk_from_provider(self, service, mock_layer):
         """Test PK from provider attributes."""
-        mock_layer.primaryKeyAttributes.return_value = [1]
+        mock_layer.set_primary_key_attributes([1])
         
         result = service._detect_primary_key(mock_layer)
         
@@ -290,7 +387,7 @@ class TestPrimaryKeyDetection:
     
     def test_detect_pk_common_names(self, service, mock_layer):
         """Test PK detection using common names."""
-        mock_layer.primaryKeyAttributes.return_value = []
+        mock_layer.set_primary_key_attributes([])
         
         result = service._detect_primary_key(mock_layer)
         
@@ -337,7 +434,7 @@ class TestLayerSyncState:
     
     def test_get_sync_state_with_subset(self, service, mock_layer):
         """Test sync state with active subset."""
-        mock_layer.subsetString.return_value = "id > 100"
+        mock_layer.set_subset("id > 100")
         
         state = service.get_sync_state(mock_layer)
         
@@ -354,7 +451,7 @@ class TestLayerSyncState:
     
     def test_detect_multi_step_filter(self, service, mock_layer):
         """Test multi-step filter detection."""
-        mock_layer.subsetString.return_value = "id > 10 AND name = 'test'"
+        mock_layer.set_subset("id > 10 AND name = 'test'")
         
         result = service._detect_multi_step_filter(mock_layer)
         
@@ -362,7 +459,7 @@ class TestLayerSyncState:
     
     def test_detect_multi_step_from_props(self, service, mock_layer):
         """Test multi-step detection from layer_props."""
-        mock_layer.subsetString.return_value = "id > 10"
+        mock_layer.set_subset("id > 10")
         layer_props = {'has_combine_operator': {'has_combine_operator': True}}
         
         result = service._detect_multi_step_filter(mock_layer, layer_props)
@@ -498,18 +595,15 @@ class TestUtilityMethods:
         result = service.get_layer_display_name(None)
         assert result == "(No layer)"
     
-    def test_get_layer_display_name_deleted(self, service):
+    def test_get_layer_display_name_deleted(self, service, deleted_layer):
         """Test display name for deleted layer."""
-        layer = Mock()
-        layer.name.side_effect = RuntimeError("deleted")
-        
-        result = service.get_layer_display_name(layer)
+        result = service.get_layer_display_name(deleted_layer)
         
         assert result == "(Deleted)"
     
     def test_get_layer_display_name_truncated(self, service, mock_layer):
         """Test display name truncation."""
-        mock_layer.name.return_value = "A" * 50
+        mock_layer.set_name("A" * 50)
         
         result = service.get_layer_display_name(mock_layer, max_length=20)
         
@@ -598,10 +692,8 @@ class TestIntegration:
             result = service.validate_layer(mock_layer, mock_project_layers)
             assert result.is_valid
             
-            # Get info
-            with patch('core.services.layer_service.QgsWkbTypes') as mock_types:
-                mock_types.displayString.return_value = "Point"
-                info = service.get_layer_info(mock_layer)
+            # Get info - QgsWkbTypes is already mocked globally
+            info = service.get_layer_info(mock_layer)
             
             # Get sync state
             state = service.get_sync_state(mock_layer)

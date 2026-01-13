@@ -16,6 +16,13 @@ For backward compatibility imports, see adapters.compat module.
 # Re-export key components for convenience
 from .backends import BackendFactory, BackendSelector, create_backend_factory
 
+# v4.0.1: Backend registry for hexagonal architecture compliance
+from .backend_registry import (
+    BackendRegistry,
+    get_backend_registry,
+    reset_backend_registry,
+)
+
 # Application bridge for legacy integration
 from .app_bridge import (
     initialize_services,

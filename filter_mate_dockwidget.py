@@ -1559,9 +1559,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def force_reconnect_exploring_signals(self):
         """v4.0 S18: Force reconnect EXPLORING signals bypassing cache."""
         if 'EXPLORING' not in self.widgets: return
+        # REGRESSION FIX 2026-01-13: IS_SELECTING, IS_TRACKING, IS_LINKING use 'toggled' not 'clicked'
         ws = {'SINGLE_SELECTION_FEATURES': ['featureChanged'], 'SINGLE_SELECTION_EXPRESSION': ['fieldChanged'], 'MULTIPLE_SELECTION_FEATURES': ['updatingCheckedItemList', 'filteringCheckedItemList'],
               'MULTIPLE_SELECTION_EXPRESSION': ['fieldChanged'], 'CUSTOM_SELECTION_EXPRESSION': ['fieldChanged'], 'IDENTIFY': ['clicked'], 'ZOOM': ['clicked'],
-              'IS_SELECTING': ['clicked'], 'IS_TRACKING': ['clicked'], 'IS_LINKING': ['clicked'], 'RESET_ALL_LAYER_PROPERTIES': ['clicked']}
+              'IS_SELECTING': ['toggled'], 'IS_TRACKING': ['toggled'], 'IS_LINKING': ['toggled'], 'RESET_ALL_LAYER_PROPERTIES': ['clicked']}
         for w, signals in ws.items():
             if w not in self.widgets['EXPLORING']: continue
             for s_tuple in self.widgets['EXPLORING'][w].get("SIGNALS", []):

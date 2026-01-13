@@ -13,6 +13,7 @@ Part of Phase 4 Backend Refactoring (ARCH-040 through ARCH-043).
 from .backend import SpatialiteBackend, create_spatialite_backend, spatialite_connect
 from .cache import SpatialiteCache, CacheStats, create_cache
 from .index_manager import RTreeIndexManager, IndexInfo, create_index_manager
+from .executor_wrapper import SpatialiteFilterExecutor
 from .filter_executor import (
     # EPIC-1 Phase E4-S8: Source geometry preparation
     SpatialiteSourceContext,

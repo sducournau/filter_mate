@@ -58,6 +58,12 @@ class TaskRunContext:
     result_processor: Optional[Any] = None
     expression_builder: Optional[Any] = None
     filter_orchestrator: Optional[Any] = None
+    
+    # v4.0.1 FIX: Configuration values extracted from task_parameters
+    # These MUST be returned to FilterEngineTask for Spatialite/history operations
+    db_file_path: Optional[str] = None
+    project_uuid: Optional[str] = None
+    session_id: Optional[str] = None
 
 
 @dataclass
@@ -67,6 +73,8 @@ class TaskRunResult:
     elapsed_time: float
     warning_messages: list
     exception: Optional[Exception] = None
+    # v4.0.1 FIX: Include context to pass extracted configuration back to parent
+    context: Optional['TaskRunContext'] = None
 
 
 # =============================================================================
@@ -109,7 +117,8 @@ class TaskRunOrchestrator:
                 return TaskRunResult(
                     success=False,
                     elapsed_time=time.time() - run_start_time,
-                    warning_messages=warning_messages
+                    warning_messages=warning_messages,
+                    context=context  # v4.0.1 FIX: Pass context back
                 )
             
             # Step 3: Configure metric CRS if needed
@@ -136,7 +145,8 @@ class TaskRunOrchestrator:
                 return TaskRunResult(
                     success=False,
                     elapsed_time=time.time() - run_start_time,
-                    warning_messages=warning_messages
+                    warning_messages=warning_messages,
+                    context=context  # v4.0.1 FIX: Pass context back
                 )
             
             # Step 10: Task completed successfully
@@ -151,7 +161,8 @@ class TaskRunOrchestrator:
             return TaskRunResult(
                 success=True,
                 elapsed_time=run_elapsed,
-                warning_messages=warning_messages
+                warning_messages=warning_messages,
+                context=context  # v4.0.1 FIX: Pass context back with extracted config
             )
         
         except Exception as e:
@@ -160,7 +171,8 @@ class TaskRunOrchestrator:
                 success=False,
                 elapsed_time=time.time() - run_start_time,
                 warning_messages=warning_messages,
-                exception=e
+                exception=e,
+                context=context  # v4.0.1 FIX: Pass context back even on exception
             )
     
     def _clear_spatialite_cache(self, context: TaskRunContext):
@@ -229,22 +241,32 @@ class TaskRunOrchestrator:
         logger.debug("Phase E12 orchestration modules initialized")
     
     def _extract_configuration(self, context: TaskRunContext):
-        """Extract database, project, and session configuration."""
+        """
+        Extract database, project, and session configuration.
+        
+        v4.0.1 FIX: Store extracted values in context so they can be
+        returned to FilterEngineTask. These are CRITICAL for:
+        - db_file_path: Spatialite database connection
+        - project_uuid: Filter history tracking
+        - session_id: Materialized view isolation
+        """
         task_params = context.task_parameters["task"]
         
-        # Extract database path
+        # Extract database path and STORE in context
         db_path = task_params.get('db_file_path')
         if db_path not in (None, ''):
+            context.db_file_path = db_path
             logger.debug(f"Database path: {db_path}")
         
-        # Extract project UUID
+        # Extract project UUID and STORE in context
         proj_uuid = task_params.get('project_uuid')
         if proj_uuid not in (None, ''):
+            context.project_uuid = proj_uuid
             logger.debug(f"Project UUID: {proj_uuid}")
         
-        # Extract or generate session_id
-        session_id = self._get_or_generate_session_id(task_params)
-        logger.debug(f"Session ID: {session_id}")
+        # Extract or generate session_id and STORE in context
+        context.session_id = self._get_or_generate_session_id(task_params)
+        logger.debug(f"Session ID: {context.session_id}")
     
     def _get_or_generate_session_id(self, task_params: Dict[str, Any]) -> str:
         """Get or generate session_id for multi-client MV isolation."""

@@ -25,6 +25,7 @@ from .filter_executor import (
     build_postgis_filter_expression,
     apply_combine_operator,
 )
+from .executor_wrapper import PostgreSQLFilterExecutor
 from .filter_actions import (
     # EPIC-1 Phase E5/E6: Filter action execution
     execute_filter_action_postgresql,

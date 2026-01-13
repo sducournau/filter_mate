@@ -36,6 +36,14 @@ from .cache_port import (
     ResultCachePort,
     GeometryCachePort,
 )
+from .filter_executor_port import (
+    FilterExecutorPort,
+    FilterExecutionResult,
+    FilterStatus,
+    BackendRegistryPort,
+    CancellationCallback,
+    ProgressCallback,
+)
 
 __all__ = [
     # Backend
@@ -54,4 +62,11 @@ __all__ = [
     'CacheEntry',
     'ResultCachePort',
     'GeometryCachePort',
+    # Filter Executor (v4.0.1)
+    'FilterExecutorPort',
+    'FilterExecutionResult',
+    'FilterStatus',
+    'BackendRegistryPort',
+    'CancellationCallback',
+    'ProgressCallback',
 ]
