@@ -780,6 +780,6 @@ class FilterService:
 # Type hints for forward references
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from core.ports.backend_port import BackendPort
-    from core.ports.cache_port import CachePort
-    from core.ports.repository_port import LayerRepositoryPort
+    from ..ports.backend_port import BackendPort
+    from ..ports.cache_port import CachePort
+    from ..ports.repository_port import LayerRepositoryPort

@@ -400,6 +400,20 @@ class FilteringController(BaseController, LayerSelectionMixin):
             has_layers = layer_props.get("filtering", {}).get("has_layers_to_filter", False)
             layers_to_filter = layer_props.get("filtering", {}).get("layers_to_filter", [])
             
+            # CRITICAL: Remove current layer from layers_to_filter if present
+            # The current layer cannot be a target layer (couche distante)
+            source_layer_id = layer.id()
+            if source_layer_id in layers_to_filter:
+                layers_to_filter = [lid for lid in layers_to_filter if lid != source_layer_id]
+                # Update the stored property
+                if "filtering" in layer_props:
+                    layer_props["filtering"]["layers_to_filter"] = layers_to_filter
+                    # Update has_layers_to_filter flag if list is now empty
+                    if not layers_to_filter:
+                        layer_props["filtering"]["has_layers_to_filter"] = False
+                        has_layers = False
+                logger.info(f"Removed source layer {layer.name()} from layers_to_filter")
+            
             # Diagnostic logging
             qgis_vector_layers = [l for l in project.mapLayers().values() 
                                   if isinstance(l, QgsVectorLayer) and l.id() != layer.id()]

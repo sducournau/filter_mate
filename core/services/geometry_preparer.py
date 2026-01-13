@@ -108,7 +108,7 @@ def prepare_geometries_by_provider(
     # Check if any OGR layer needs Spatialite geometry
     ogr_needs_spatialite_geom = False
     if 'ogr' in provider_list and layers_dict and 'ogr' in layers_dict:
-        from adapters.backends.spatialite_backend import SpatialiteGeometricFilter
+        from ...adapters.backends.spatialite_backend import SpatialiteGeometricFilter
         spatialite_backend = SpatialiteGeometricFilter(task_parameters)
         for layer, layer_props in layers_dict['ogr']:
             if spatialite_backend.supports_layer(layer):

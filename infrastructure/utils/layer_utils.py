@@ -1109,6 +1109,26 @@ def escape_json_string(s: str) -> str:
     return escaped
 
 
+def get_spatialite_datasource_from_layer(layer) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Get Spatialite database path from layer.
+    
+    Args:
+        layer (QgsVectorLayer): QGIS vector layer
+    
+    Returns:
+        tuple: (db_path, table_name) or (None, None) if not Spatialite
+    """
+    if layer.providerType() != 'spatialite':
+        return None, None
+    
+    source_uri = QgsDataSourceUri(layer.source())
+    db_path = source_uri.database()
+    table_name = source_uri.table()
+    
+    return db_path, table_name
+
+
 # =============================================================================
 # Exports
 # =============================================================================
@@ -1124,6 +1144,7 @@ __all__ = [
     # PostgreSQL connection
     'get_datasource_connexion_from_layer',
     'get_data_source_uri',
+    'get_spatialite_datasource_from_layer',
     'POSTGRESQL_AVAILABLE',
     'PSYCOPG2_AVAILABLE',
     

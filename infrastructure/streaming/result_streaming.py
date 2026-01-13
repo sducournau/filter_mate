@@ -12,7 +12,7 @@ Performance Benefits:
 - Configurable batch sizes
 
 Usage:
-    from modules.tasks.result_streaming import StreamingExporter, StreamingConfig
+    from infrastructure.streaming import StreamingExporter, StreamingConfig
     
     config = StreamingConfig(batch_size=5000)
     exporter = StreamingExporter(config)

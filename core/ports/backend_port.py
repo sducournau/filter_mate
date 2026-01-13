@@ -271,4 +271,4 @@ class BackendPort(ABC):
 # These are imported at runtime by implementations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from core.domain import FilterExpression, FilterResult, LayerInfo
+    from ..domain import FilterExpression, FilterResult, LayerInfo

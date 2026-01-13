@@ -27,7 +27,7 @@ Safety Implementation:
 - Parallel mode only enabled for database-backed operations
 
 Usage:
-    from modules.tasks.parallel_executor import ParallelFilterExecutor
+    from infrastructure.parallel import ParallelFilterExecutor
     
     executor = ParallelFilterExecutor(max_workers=4)
     results = executor.filter_layers_parallel(

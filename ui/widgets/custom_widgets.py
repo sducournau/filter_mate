@@ -528,22 +528,22 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
         self.config_data = config_data
         
-        # Dynamic sizing based on config
+        # Dynamic sizing based on config - use minimum size that fits content
         try:
             from ...config.config import ENV_VARS
-            combobox_height = ENV_VARS.get('UI', {}).get('combobox_height', 30)
-            list_min_height = ENV_VARS.get('UI', {}).get('list_min_height', 150)
-            
-            # Calculate total height: 2 QLineEdit + spacing + list
-            lineedit_height = combobox_height * 2 + 2  # 2 lineEdit + spacing
-            total_min_height = lineedit_height + list_min_height + 4  # +4 for layout spacing
+            combobox_height = ENV_VARS.get('UI', {}).get('combobox_height', 26)
         except (AttributeError, TypeError, ValueError, ImportError, KeyError):
-            total_min_height = 210  # Fallback: 54px (lineEdits) + 150px (list) + 6px
+            combobox_height = 26
+        
+        # Minimum height: just enough for 2 QLineEdits + some list space
+        # 2 * 26px (lineEdits) + 2px spacing + 30px (min list) = ~84px
+        total_min_height = combobox_height * 2 + 2 + 30
         
         self.setMinimumWidth(30)
         self.setMaximumWidth(16777215)
         self.setMinimumHeight(total_min_height)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        # Use MinimumExpanding for vertical to allow shrinking but prefer expanding
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
         self.setCursor(Qt.PointingHandCursor)
 
         font = QFont("Segoe UI", 8)

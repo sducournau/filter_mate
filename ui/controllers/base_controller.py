@@ -24,8 +24,8 @@ except ImportError:
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
-    from core.services.filter_service import FilterService
-    from adapters.qgis.signals.signal_manager import SignalManager
+    from ...core.services.filter_service import FilterService
+    from ...adapters.qgis.signals.signal_manager import SignalManager
 
 
 class BaseController(QObject, metaclass=QObjectABCMeta):

@@ -478,4 +478,4 @@ class HistoryRepositoryPort(ABC):
 # Type hints for forward references
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from core.domain import LayerInfo, ProviderType
+    from ..domain import LayerInfo, ProviderType

@@ -37,7 +37,7 @@ Performance Benefits:
 - Reduced memory usage (smaller intermediate result sets)
 
 Usage:
-    from modules.tasks.combined_query_optimizer import CombinedQueryOptimizer
+    from core.optimization import CombinedQueryOptimizer
     
     optimizer = CombinedQueryOptimizer()
     optimized = optimizer.optimize_combined_expression(

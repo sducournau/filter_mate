@@ -94,9 +94,7 @@ logger = setup_logger(
     level=logging.INFO
 )
 
-# Centralized psycopg2 availability (v2.8.6 refactoring - migrated to adapters)
-# DEPRECATED v4.0.1: Use self._is_postgresql_available() instead
-# Kept for backward compatibility - will be removed in v5.0
+# PostgreSQL availability check (migrated to adapters.backends.postgresql_availability)
 from ...adapters.backends.postgresql_availability import psycopg2, PSYCOPG2_AVAILABLE, POSTGRESQL_AVAILABLE
 
 # Import constants (migrated to infrastructure)
@@ -109,11 +107,7 @@ from ...infrastructure.constants import (
     LONG_QUERY_WARNING_THRESHOLD, VERY_LONG_QUERY_WARNING_THRESHOLD
 )
 
-# Import backend architecture (migrated to adapters)
-# DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
-# These imports are kept for backward compatibility - will be removed in v5.0
-from ...adapters.backends import BackendFactory
-from ...adapters.backends.spatialite import SpatialiteBackend as SpatialiteGeometricFilter
+# Backend architecture (migrated to adapters.backends)
 
 # Import utilities (migrated to infrastructure)
 from ...infrastructure.utils import (
@@ -212,10 +206,7 @@ except ImportError:
     TASK_BRIDGE_AVAILABLE = False
     logger.debug("TaskBridge not available - using legacy backends only")
 
-# EPIC-1 Phase E4-S5: Import extracted backend filter_executor modules
-# These provide Strangler Fig delegation for PostgreSQL/Spatialite/OGR utilities
-# DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
-# These imports are kept for backward compatibility - will be removed in v5.0
+# PostgreSQL filter executor
 try:
     from ...adapters.backends.postgresql import filter_executor as pg_executor
     from ...adapters.backends.postgresql.filter_actions import (
@@ -237,7 +228,7 @@ except ImportError:
     pg_execute_unfilter = None
     PG_EXECUTOR_AVAILABLE = False
 
-# DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
+# Spatialite filter executor
 try:
     from ...adapters.backends.spatialite import filter_executor as sl_executor
     SL_EXECUTOR_AVAILABLE = True
@@ -245,7 +236,7 @@ except ImportError:
     sl_executor = None
     SL_EXECUTOR_AVAILABLE = False
 
-# DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
+# OGR filter executor
 try:
     from ...adapters.backends.ogr import filter_executor as ogr_executor
     OGR_EXECUTOR_AVAILABLE = True
@@ -752,7 +743,7 @@ class FilterEngineTask(QgsTask):
         (to clean up filters that were applied previously)
         """
         from ..services.layer_organizer import organize_layers_for_filtering
-        from ..appUtils import detect_layer_provider_type
+        from ...infrastructure.utils import detect_layer_provider_type
         
         # Delegate to LayerOrganizer service
         result = organize_layers_for_filtering(
@@ -863,7 +854,14 @@ class FilterEngineTask(QgsTask):
         if result.success and hasattr(result, 'context'):
             if hasattr(result.context, 'result_processor'):
                 self._result_processor = result.context.result_processor
-                self._pending_subset_requests = result.context.result_processor._pending_subset_requests
+                # v4.0.2 FIX: Merge pending subset requests instead of overwriting
+                # For 'unfilter' and 'reset' actions, requests are added directly to
+                # self._pending_subset_requests in execute_unfiltering()/execute_reseting().
+                # We must extend the existing list, not replace it.
+                if result.context.result_processor._pending_subset_requests:
+                    self._pending_subset_requests.extend(
+                        result.context.result_processor._pending_subset_requests
+                    )
                 self.warning_messages = result.context.result_processor.warning_messages
             
             if hasattr(result.context, 'expression_builder'):
@@ -1192,8 +1190,8 @@ class FilterEngineTask(QgsTask):
         
         EPIC-1 Phase 14.4: Delegates to core.services.filter_parameter_builder.
         """
-        from core.services.filter_parameter_builder import build_filter_parameters
-        from ..appUtils import detect_layer_provider_type
+        from ..services.filter_parameter_builder import build_filter_parameters
+        from ...infrastructure.utils import detect_layer_provider_type
         
         # Delegate to FilterParameterBuilder service
         params = build_filter_parameters(
@@ -1248,12 +1246,12 @@ class FilterEngineTask(QgsTask):
         Returns:
             str: Sanitized subset string with non-boolean expressions removed
         """
-        from core.services.expression_service import sanitize_subset_string
+        from ..services.expression_service import sanitize_subset_string
         return sanitize_subset_string(subset_string, logger=logger)
     
     def _extract_spatial_clauses_for_exists(self, filter_expr, source_table=None):
         """Delegates to core.filter.expression_sanitizer.extract_spatial_clauses_for_exists()."""
-        from core.filter.expression_sanitizer import extract_spatial_clauses_for_exists
+        from ..filter.expression_sanitizer import extract_spatial_clauses_for_exists
         
         return extract_spatial_clauses_for_exists(filter_expr, source_table)
     
@@ -1333,8 +1331,8 @@ class FilterEngineTask(QgsTask):
 
     def _combine_with_old_subset(self, expression):
         """Delegates to core.filter.expression_combiner.combine_with_old_subset()."""
-        from core.filter.expression_combiner import combine_with_old_subset
-        from core.filter.expression_sanitizer import optimize_duplicate_in_clauses
+        from ..filter.expression_combiner import combine_with_old_subset
+        from ..filter.expression_sanitizer import optimize_duplicate_in_clauses
         
         # If no existing filter, return new expression
         if not self.param_source_old_subset:
@@ -1356,9 +1354,9 @@ class FilterEngineTask(QgsTask):
 
     def _build_feature_id_expression(self, features_list):
         """Delegates to core.filter.expression_builder.build_feature_id_expression()."""
-        from core.filter.expression_builder import build_feature_id_expression
-        from core.filter.expression_combiner import combine_with_old_subset
-        from core.filter.expression_sanitizer import optimize_duplicate_in_clauses
+        from ..filter.expression_builder import build_feature_id_expression
+        from ..filter.expression_combiner import combine_with_old_subset
+        from ..filter.expression_sanitizer import optimize_duplicate_in_clauses
         
         # Extract feature IDs
         # CRITICAL FIX: Handle ctid (PostgreSQL internal identifier)
@@ -1412,7 +1410,7 @@ class FilterEngineTask(QgsTask):
     
     def _optimize_duplicate_in_clauses(self, expression):
         """Delegates to core.filter.expression_sanitizer.optimize_duplicate_in_clauses()."""
-        from core.filter.expression_sanitizer import optimize_duplicate_in_clauses
+        from ..filter.expression_sanitizer import optimize_duplicate_in_clauses
         
         return optimize_duplicate_in_clauses(expression)
 
@@ -1481,7 +1479,7 @@ class FilterEngineTask(QgsTask):
         self._initialize_source_filtering_parameters()
         
         # PHASE 14.6: Delegate to SourceLayerFilterExecutor service
-        from core.services.source_layer_filter_executor import execute_source_layer_filtering
+        from ..services.source_layer_filter_executor import execute_source_layer_filtering
         
         # Execute filtering with service
         result_obj = execute_source_layer_filtering(
@@ -1513,7 +1511,7 @@ class FilterEngineTask(QgsTask):
         Extracted 163 lines to core/services/source_subset_buffer_builder.py (v5.0-alpha).
         """
         # PHASE 14.5: Delegate to SourceSubsetBufferBuilder service
-        from core.services.source_subset_buffer_builder import build_source_subset_buffer_config
+        from ..services.source_subset_buffer_builder import build_source_subset_buffer_config
         
         # Build configuration using service
         config = build_source_subset_buffer_config(
@@ -1554,7 +1552,7 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if all required geometries prepared successfully
         """
-        from core.services.geometry_preparer import prepare_geometries_by_provider
+        from ..services.geometry_preparer import prepare_geometries_by_provider
         
         result = prepare_geometries_by_provider(
             provider_list=provider_list,
@@ -1805,7 +1803,7 @@ class FilterEngineTask(QgsTask):
     
     def _log_filtering_summary(self, successful_filters: int, failed_filters: int, failed_layer_names=None):
         """Log summary of filtering results. Delegated to core.optimization.logging_utils."""
-        from core.optimization.logging_utils import log_filtering_summary
+        from ..optimization.logging_utils import log_filtering_summary
         log_filtering_summary(
             layers_count=self.layers_count, successful_filters=successful_filters,
             failed_filters=failed_filters, failed_layer_names=failed_layer_names, log_to_qgis=True
@@ -1856,8 +1854,8 @@ class FilterEngineTask(QgsTask):
         if not expression:
             return expression
         geom_col = getattr(self, 'param_source_geom', None) or 'geometry'
-        from core.services.expression_service import ExpressionService
-        from core.domain.filter_expression import ProviderType
+        from ..services.expression_service import ExpressionService
+        from ..domain.filter_expression import ProviderType
         return ExpressionService().to_sql(expression, ProviderType.POSTGRESQL, geom_col)
 
 
@@ -1866,8 +1864,8 @@ class FilterEngineTask(QgsTask):
         if not expression:
             return expression
         geom_col = getattr(self, 'param_source_geom', None) or 'geometry'
-        from core.services.expression_service import ExpressionService
-        from core.domain.filter_expression import ProviderType
+        from ..services.expression_service import ExpressionService
+        from ..domain.filter_expression import ProviderType
         return ExpressionService().to_sql(expression, ProviderType.SPATIALITE, geom_col)
 
 
@@ -1892,17 +1890,17 @@ class FilterEngineTask(QgsTask):
 
     def _get_optimization_thresholds(self):
         """Get optimization thresholds config. Delegated to core.optimization.config_provider."""
-        from core.optimization.config_provider import get_optimization_thresholds
+        from ..optimization.config_provider import get_optimization_thresholds
         return get_optimization_thresholds(getattr(self, 'task_parameters', None))
 
     def _get_simplification_config(self):
         """Get geometry simplification config. Delegated to core.optimization.config_provider."""
-        from core.optimization.config_provider import get_simplification_config
+        from ..optimization.config_provider import get_simplification_config
         return get_simplification_config(getattr(self, 'task_parameters', None))
 
     def _get_wkt_precision(self, crs_authid: str = None) -> int:
         """Get appropriate WKT precision based on CRS units. Delegated to BufferService."""
-        from core.services.buffer_service import BufferService
+        from ..services.buffer_service import BufferService
         if crs_authid is None:
             crs_authid = getattr(self, 'source_layer_crs_authid', None)
         return BufferService().get_wkt_precision(crs_authid)
@@ -1918,7 +1916,7 @@ class FilterEngineTask(QgsTask):
 
     def _get_buffer_aware_tolerance(self, buffer_value, buffer_segments, buffer_type, extent_size, is_geographic=False):
         """Calculate optimal simplification tolerance. Delegated to BufferService."""
-        from core.services.buffer_service import BufferService, BufferConfig, BufferEndCapStyle
+        from ..services.buffer_service import BufferService, BufferConfig, BufferEndCapStyle
         config = BufferConfig(distance=buffer_value or 0, segments=buffer_segments, end_cap_style=BufferEndCapStyle(buffer_type))
         return BufferService().calculate_buffer_aware_tolerance(config, extent_size, is_geographic)
 
@@ -2080,7 +2078,7 @@ class FilterEngineTask(QgsTask):
     def _apply_qgis_buffer(self, layer, buffer_distance):
         """Apply buffer - delegated to core.geometry.apply_qgis_buffer."""
         try:
-            from core.geometry import apply_qgis_buffer, BufferConfig
+            from ..geometry import apply_qgis_buffer, BufferConfig
             config = BufferConfig(buffer_type=self.param_buffer_type, buffer_segments=self.param_buffer_segments, dissolve=True)
             buffered_layer = apply_qgis_buffer(layer, buffer_distance, config, self._convert_geometry_collection_to_multipolygon)
             self.outputs['alg_source_layer_params_buffer'] = {'OUTPUT': buffered_layer}
@@ -2094,13 +2092,13 @@ class FilterEngineTask(QgsTask):
 
     def _convert_geometry_collection_to_multipolygon(self, layer):
         """Convert GeometryCollection to MultiPolygon. Delegated to core.geometry."""
-        from core.geometry import convert_geometry_collection_to_multipolygon
+        from ..geometry import convert_geometry_collection_to_multipolygon
         return convert_geometry_collection_to_multipolygon(layer)
 
 
     def _evaluate_buffer_distance(self, layer, buffer_param):
         """Delegates to core.geometry.buffer_processor.evaluate_buffer_distance()."""
-        from core.geometry.buffer_processor import evaluate_buffer_distance
+        from ..geometry.buffer_processor import evaluate_buffer_distance
         
         return evaluate_buffer_distance(layer, buffer_param)
 
@@ -2116,34 +2114,34 @@ class FilterEngineTask(QgsTask):
         Returns:
             QgsVectorLayer: Empty memory layer configured for buffered geometries
         """
-        from core.geometry.buffer_processor import create_memory_layer_for_buffer
+        from ..geometry.buffer_processor import create_memory_layer_for_buffer
         
         return create_memory_layer_for_buffer(layer)
 
     def _buffer_all_features(self, layer, buffer_dist):
         """Buffer all features from layer. Delegated to core.geometry.buffer_processor."""
-        from core.geometry.buffer_processor import buffer_all_features
+        from ..geometry.buffer_processor import buffer_all_features
         segments = getattr(self, 'param_buffer_segments', 5)
         return buffer_all_features(layer, buffer_dist, segments)
 
     def _dissolve_and_add_to_layer(self, geometries, buffered_layer):
         """Delegates to core.geometry.buffer_processor.dissolve_and_add_to_layer()."""
-        from core.geometry.buffer_processor import dissolve_and_add_to_layer
+        from ..geometry.buffer_processor import dissolve_and_add_to_layer
         return dissolve_and_add_to_layer(geometries, buffered_layer, self._verify_and_create_spatial_index)
 
     def _create_buffered_memory_layer(self, layer, buffer_distance):
         """Delegates to core.geometry.create_buffered_memory_layer()."""
-        from core.geometry import create_buffered_memory_layer
+        from ..geometry import create_buffered_memory_layer
         return create_buffered_memory_layer(layer, buffer_distance, self.param_buffer_segments, self._verify_and_create_spatial_index, self._store_warning_message)
 
     def _aggressive_geometry_repair(self, geom):
         """Delegates to core.geometry.aggressive_geometry_repair()."""
-        from core.geometry import aggressive_geometry_repair
+        from ..geometry import aggressive_geometry_repair
         return aggressive_geometry_repair(geom)
 
     def _repair_invalid_geometries(self, layer):
         """Validate and repair invalid geometries. Delegated to core.geometry."""
-        from core.geometry import repair_invalid_geometries
+        from ..geometry import repair_invalid_geometries
         return repair_invalid_geometries(
             layer=layer,
             verify_spatial_index_fn=self._verify_and_create_spatial_index
@@ -2152,7 +2150,7 @@ class FilterEngineTask(QgsTask):
     def _simplify_buffer_result(self, layer, buffer_distance):
         """Simplify polygon(s) from buffer operations. Delegated to core.geometry."""
         from ..backends.auto_optimizer import get_auto_optimization_config
-        from core.geometry import simplify_buffer_result
+        from ..geometry import simplify_buffer_result
         config = get_auto_optimization_config()
         return simplify_buffer_result(
             layer=layer,
@@ -2242,7 +2240,7 @@ class FilterEngineTask(QgsTask):
 
     def _verify_and_create_spatial_index(self, layer, layer_name=None):
         """Verify/create spatial index on layer. Delegated to core.geometry.spatial_index."""
-        from core.geometry.spatial_index import verify_and_create_spatial_index
+        from ..geometry.spatial_index import verify_and_create_spatial_index
         return verify_and_create_spatial_index(layer, layer_name)
 
 
@@ -2387,7 +2385,7 @@ class FilterEngineTask(QgsTask):
         Returns:
             str: Expression with qualified field names
         """
-        from core.filter.expression_builder import qualify_field_names_in_expression
+        from ..filter.expression_builder import qualify_field_names_in_expression
         
         return qualify_field_names_in_expression(
             expression=expression,
@@ -2545,7 +2543,7 @@ class FilterEngineTask(QgsTask):
             str: Filter expression or None on error
         """
         # PHASE 14.1: Delegate to BackendExpressionBuilder service
-        from core.services.backend_expression_builder import create_expression_builder
+        from ..services.backend_expression_builder import create_expression_builder
         
         # Create builder with all required dependencies
         builder = create_expression_builder(
@@ -2600,7 +2598,7 @@ class FilterEngineTask(QgsTask):
 
     def _combine_with_old_filter(self, expression, layer):
         """Delegates to core.filter.expression_combiner.combine_with_old_filter()."""
-        from core.filter.expression_combiner import combine_with_old_filter
+        from ..filter.expression_combiner import combine_with_old_filter
         
         old_subset = layer.subsetString() if layer.subsetString() != '' else None
         
@@ -3136,7 +3134,7 @@ class FilterEngineTask(QgsTask):
                     'zip_path': zip file path or None
                 }
         """
-        from core.export import validate_export_parameters
+        from ..export import validate_export_parameters
         
         result = validate_export_parameters(self.task_parameters, ENV_VARS)
         if result.valid:
@@ -3166,13 +3164,13 @@ class FilterEngineTask(QgsTask):
 
     def _save_layer_style(self, layer, output_path, style_format, datatype):
         """Delegates to core.export.save_layer_style()."""
-        from core.export import save_layer_style
+        from ..export import save_layer_style
         
         save_layer_style(layer, output_path, style_format, datatype)
 
     def _save_layer_style_lyrx(self, layer, output_path):
         """Delegates to core.export.StyleExporter for LYRX format."""
-        from core.export.style_exporter import StyleExporter, StyleFormat
+        from ..export.style_exporter import StyleExporter, StyleFormat
         
         exporter = StyleExporter()
         exporter.save_style(layer, output_path, StyleFormat.LYRX)
@@ -3219,7 +3217,7 @@ class FilterEngineTask(QgsTask):
         save_styles = self.task_parameters["task"]['EXPORTING'].get("HAS_STYLES_TO_EXPORT", False)
         
         # Initialize exporters (v4.0 E11.2 delegation)
-        from core.export import BatchExporter, LayerExporter, sanitize_filename
+        from ..export import BatchExporter, LayerExporter, sanitize_filename
         batch_exporter = BatchExporter(project=self.PROJECT)
         layer_exporter = LayerExporter(project=self.PROJECT)
         
@@ -3366,7 +3364,7 @@ class FilterEngineTask(QgsTask):
         elif os.path.isdir(output_folder):
             # Multiple layers to directory - delegate to LayerExporter (v4.0 E11.2)
             logger.info(f"Multiple layers export - delegating to LayerExporter: {len(layers)} layers")
-            from core.export import ExportConfig
+            from ..export import ExportConfig
             result = layer_exporter.export_multiple_to_directory(
                 ExportConfig(
                     layers=layers,
@@ -3561,7 +3559,7 @@ class FilterEngineTask(QgsTask):
         Returns:
             tuple: (db_path, table_name, layer_srid, is_native_spatialite)
         """
-        from ..appUtils import get_spatialite_datasource_from_layer
+        from ...infrastructure.utils import get_spatialite_datasource_from_layer
         
         # Get Spatialite datasource
         db_path, table_name = get_spatialite_datasource_from_layer(layer)
@@ -4034,7 +4032,7 @@ class FilterEngineTask(QgsTask):
         
         Delegated to core.filter.expression_builder.extract_where_clause_from_select().
         """
-        from core.filter.expression_builder import extract_where_clause_from_select
+        from ..filter.expression_builder import extract_where_clause_from_select
         
         return extract_where_clause_from_select(sql_select)
     
@@ -4080,38 +4078,6 @@ class FilterEngineTask(QgsTask):
         error_msg = "PostgreSQL filter_actions module not available"
         logger.error(error_msg)
         raise ImportError(error_msg)
-    
-    def _reset_action_postgresql_legacy(self, layer, name, cur, conn):
-        """Legacy implementation - kept for fallback."""
-        if self._ps_manager:
-            try:
-                self._ps_manager.delete_subset_history(self.project_uuid, layer.id())
-            except Exception as e:
-                logger.warning(f"Prepared statement failed, falling back to direct SQL: {e}")
-                cur.execute(
-                    f"""DELETE FROM fm_subset_history 
-                        WHERE fk_project = '{self.project_uuid}' AND layer_id = '{layer.id()}';"""
-                )
-                conn.commit()
-        else:
-            cur.execute(
-                f"""DELETE FROM fm_subset_history 
-                    WHERE fk_project = '{self.project_uuid}' AND layer_id = '{layer.id()}';"""
-            )
-            conn.commit()
-        
-        schema = self.current_materialized_view_schema
-        session_name = self._get_session_prefixed_name(name)
-        sql_drop = f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{session_name}" CASCADE;'
-        sql_drop += f' DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{session_name}_dump" CASCADE;'
-        sql_drop += f' DROP INDEX IF EXISTS {schema}_{session_name}_cluster CASCADE;'
-        
-        connexion = self._get_valid_postgresql_connection()
-        self._execute_postgresql_commands(connexion, [sql_drop])
-        
-        self._queue_subset_string(layer, '')
-        return True
-
 
     def _reset_action_spatialite(self, layer, name, cur, conn):
         """
@@ -4367,7 +4333,7 @@ class FilterEngineTask(QgsTask):
         
         EPIC-1 Phase E7.5: Legacy code removed - fully delegates to core.optimization.query_analyzer.
         """
-        from core.optimization.query_analyzer import has_expensive_spatial_expression
+        from ..optimization.query_analyzer import has_expensive_spatial_expression
         return has_expensive_spatial_expression(sql_string)
 
     def _is_complex_filter(self, subset: str, provider_type: str) -> bool:
@@ -4376,7 +4342,7 @@ class FilterEngineTask(QgsTask):
         
         EPIC-1 Phase E7.5: Legacy code removed - fully delegates to core.optimization.query_analyzer.
         """
-        from core.optimization.query_analyzer import is_complex_filter
+        from ..optimization.query_analyzer import is_complex_filter
         return is_complex_filter(subset, provider_type)
 
 
@@ -4389,7 +4355,7 @@ class FilterEngineTask(QgsTask):
         
         Extracted 138 lines to core/services/canvas_refresh_service.py (v5.0-alpha).
         """
-        from core.services.canvas_refresh_service import single_canvas_refresh
+        from ..services.canvas_refresh_service import single_canvas_refresh
         single_canvas_refresh()
 
     def _delayed_canvas_refresh(self):
@@ -4401,7 +4367,7 @@ class FilterEngineTask(QgsTask):
         
         Extracted 112 lines to core/services/canvas_refresh_service.py (v5.0-alpha).
         """
-        from core.services.canvas_refresh_service import delayed_canvas_refresh
+        from ..services.canvas_refresh_service import delayed_canvas_refresh
         delayed_canvas_refresh()
 
     def _final_canvas_refresh(self):

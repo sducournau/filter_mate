@@ -437,7 +437,7 @@ class GeometryCachePort(CachePort[str, 'GeometryData']):
 # Type hints for forward references
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from core.domain import FilterResult
+    from ..domain import FilterResult
     
     @dataclass
     class GeometryData:

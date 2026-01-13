@@ -417,7 +417,7 @@ def wrap_legacy_postgresql_backend(task_params: Dict) -> LegacyBackendAdapter:
         LegacyBackendAdapter wrapping PostgreSQLBackend
     """
     try:
-        from adapters.backends.postgresql import PostgreSQLBackend
+        from .backends.postgresql import PostgreSQLBackend
         legacy = PostgreSQLBackend(task_params)
         return LegacyBackendAdapter(legacy, ProviderType.POSTGRESQL)
     except ImportError as e:
@@ -436,7 +436,7 @@ def wrap_legacy_spatialite_backend(task_params: Dict) -> LegacyBackendAdapter:
         LegacyBackendAdapter wrapping SpatialiteBackend
     """
     try:
-        from adapters.backends.spatialite import SpatialiteBackend
+        from .backends.spatialite import SpatialiteBackend
         legacy = SpatialiteBackend(task_params)
         return LegacyBackendAdapter(legacy, ProviderType.SPATIALITE)
     except ImportError as e:
@@ -455,7 +455,7 @@ def wrap_legacy_ogr_backend(task_params: Dict) -> LegacyBackendAdapter:
         LegacyBackendAdapter wrapping OGRBackend
     """
     try:
-        from adapters.backends.ogr import OGRBackend
+        from .backends.ogr import OGRBackend
         legacy = OGRBackend(task_params)
         return LegacyBackendAdapter(legacy, ProviderType.OGR)
     except ImportError as e:
@@ -479,7 +479,7 @@ def create_all_legacy_adapters(
     
     # Try PostgreSQL
     try:
-        from adapters.backends.postgresql import PostgreSQLBackend
+        from .backends.postgresql import PostgreSQLBackend
         adapters[ProviderType.POSTGRESQL] = LegacyBackendAdapter(
             PostgreSQLBackend(task_params),
             ProviderType.POSTGRESQL
@@ -489,7 +489,7 @@ def create_all_legacy_adapters(
     
     # Try Spatialite
     try:
-        from adapters.backends.spatialite import SpatialiteBackend
+        from .backends.spatialite import SpatialiteBackend
         adapters[ProviderType.SPATIALITE] = LegacyBackendAdapter(
             SpatialiteBackend(task_params),
             ProviderType.SPATIALITE
@@ -499,7 +499,7 @@ def create_all_legacy_adapters(
     
     # Try OGR
     try:
-        from adapters.backends.ogr import OGRBackend
+        from .backends.ogr import OGRBackend
         adapters[ProviderType.OGR] = LegacyBackendAdapter(
             OGRBackend(task_params),
             ProviderType.OGR
@@ -514,4 +514,4 @@ def create_all_legacy_adapters(
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from qgis.core import QgsVectorLayer
-    from adapters.backends.base import GeometricFilterBackend
+    from .backends.base import GeometricFilterBackend

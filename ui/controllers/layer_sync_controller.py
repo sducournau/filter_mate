@@ -626,7 +626,7 @@ class LayerSyncController(BaseController):
         self._sync_layer_property_widgets(layer, layer_props)
         
         # Populate layers combobox
-        self._sync_layers_to_filter_combobox()
+        self._sync_layers_to_filter_combobox(layer)
         
         # Synchronize state-dependent widgets
         self._sync_state_dependent_widgets()
@@ -999,15 +999,19 @@ class LayerSyncController(BaseController):
         except Exception as e:
             logger.warning(f"Error syncing widget {property_tuple}: {e}")
 
-    def _sync_layers_to_filter_combobox(self) -> None:
-        """Populate the layers_to_filter combobox."""
+    def _sync_layers_to_filter_combobox(self, layer=None) -> None:
+        """Populate the layers_to_filter combobox.
+        
+        Args:
+            layer: Source layer to exclude from the list (uses current_layer if None)
+        """
         dw = self.dockwidget
         
         if hasattr(dw, 'manageSignal'):
             dw.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
         
         if hasattr(dw, 'filtering_populate_layers_chekableCombobox'):
-            dw.filtering_populate_layers_chekableCombobox()
+            dw.filtering_populate_layers_chekableCombobox(layer)
         
         if hasattr(dw, 'manageSignal'):
             dw.manageSignal(

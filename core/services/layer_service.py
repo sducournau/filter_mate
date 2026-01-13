@@ -230,10 +230,9 @@ class LayerService(QObject):
             bool: True if source is available
         """
         try:
-            # Try importing helper function
-            from core.services.layer_service import is_layer_source_available
+            # Use local function instead of self-import
             return is_layer_source_available(layer)
-        except ImportError:
+        except Exception:
             # Fallback: check isValid()
             try:
                 return layer.isValid()

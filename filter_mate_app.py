@@ -1087,7 +1087,7 @@ class FilterMateApp:
         """Pre-warm query cache for loaded layers to reduce cold-start latency."""
         if not self.PROJECT_LAYERS: return
         try:
-            from infrastructure.cache import warm_cache_for_project
+            from .infrastructure.cache import warm_cache_for_project
             layers_info = [{'id': lid, 'provider_type': linfo.get('layer_provider_type', 'unknown')}
                           for lid, linfo in self.PROJECT_LAYERS.items()
                           if linfo.get('layer') and is_valid_layer(linfo.get('layer'))]

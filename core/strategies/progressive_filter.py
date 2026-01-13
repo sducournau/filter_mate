@@ -18,7 +18,7 @@ Performance Benefits:
 - Better PostgreSQL query plan utilization
 
 Usage:
-    from modules.tasks.progressive_filter import (
+    from core.strategies import (
         ProgressiveFilterExecutor,
         TwoPhaseFilter,
         LazyResultIterator

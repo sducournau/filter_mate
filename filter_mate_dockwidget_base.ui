@@ -917,7 +917,7 @@
                   <item>
                    <widget class="QgsCollapsibleGroupBox" name="mGroupBox_exploring_single_selection">
                     <property name="sizePolicy">
-                     <sizepolicy hsizetype="Expanding" vsizetype="MinimumExpanding">
+                     <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
                       <horstretch>50</horstretch>
                       <verstretch>0</verstretch>
                      </sizepolicy>
@@ -925,7 +925,7 @@
                     <property name="minimumSize">
                      <size>
                       <width>100</width>
-                      <height>0</height>
+                      <height>70</height>
                      </size>
                     </property>
                     <property name="font">
@@ -1085,7 +1085,7 @@
                     <property name="minimumSize">
                      <size>
                       <width>100</width>
-                      <height>0</height>
+                      <height>120</height>
                      </size>
                     </property>
                     <property name="font">
@@ -1133,7 +1133,7 @@
                       <number>4</number>
                      </property>
                      <property name="sizeConstraint">
-                      <enum>QLayout::SetMinimumSize</enum>
+                      <enum>QLayout::SetDefaultConstraint</enum>
                      </property>
                      <property name="leftMargin">
                       <number>4</number>
@@ -1151,6 +1151,9 @@
                       <layout class="QHBoxLayout" name="horizontalLayout_exploring_multiple_feature_picker">
                        <property name="spacing">
                         <number>4</number>
+                       </property>
+                       <property name="sizeConstraint">
+                        <enum>QLayout::SetDefaultConstraint</enum>
                        </property>
                        <property name="leftMargin">
                         <number>0</number>
@@ -1325,6 +1328,22 @@
                      </item>
                     </layout>
                    </widget>
+                  </item>
+                  <item>
+                   <spacer name="verticalSpacer_exploring_tabs_bottom">
+                    <property name="orientation">
+                     <enum>Qt::Vertical</enum>
+                    </property>
+                    <property name="sizeType">
+                     <enum>QSizePolicy::Expanding</enum>
+                    </property>
+                    <property name="sizeHint" stdset="0">
+                     <size>
+                      <width>20</width>
+                      <height>10</height>
+                     </size>
+                    </property>
+                   </spacer>
                   </item>
                  </layout>
                 </item>

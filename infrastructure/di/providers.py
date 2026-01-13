@@ -55,7 +55,7 @@ class BackendProvider:
         # when dependencies are not available
         
         # Memory backend (always available)
-        from adapters.backends.memory.backend import MemoryBackend
+        from ...adapters.backends.memory.backend import MemoryBackend
         container.register_singleton(
             MemoryBackend,
             lambda c: MemoryBackend()
@@ -63,7 +63,7 @@ class BackendProvider:
         logger.debug("Registered MemoryBackend")
         
         # OGR backend (always available)
-        from adapters.backends.ogr.backend import OGRBackend
+        from ...adapters.backends.ogr.backend import OGRBackend
         container.register_singleton(
             OGRBackend,
             lambda c: OGRBackend()
@@ -71,7 +71,7 @@ class BackendProvider:
         logger.debug("Registered OGRBackend")
         
         # Spatialite backend (always available)
-        from adapters.backends.spatialite.backend import SpatialiteBackend
+        from ...adapters.backends.spatialite.backend import SpatialiteBackend
         container.register_singleton(
             SpatialiteBackend,
             lambda c: SpatialiteBackend(
@@ -82,9 +82,9 @@ class BackendProvider:
         
         # PostgreSQL backend (conditional on psycopg2)
         try:
-            from adapters.backends import POSTGRESQL_AVAILABLE
+            from ...adapters.backends import POSTGRESQL_AVAILABLE
             if POSTGRESQL_AVAILABLE:
-                from adapters.backends.postgresql.backend import PostgreSQLBackend
+                from ...adapters.backends.postgresql.backend import PostgreSQLBackend
                 container.register_singleton(
                     PostgreSQLBackend,
                     lambda c: PostgreSQLBackend(
@@ -150,16 +150,16 @@ class BackendFactory:
             try:
                 # Get the class from the name
                 if provider_type == ProviderType.POSTGRESQL:
-                    from adapters.backends.postgresql.backend import PostgreSQLBackend
+                    from ...adapters.backends.postgresql.backend import PostgreSQLBackend
                     return self._container.try_resolve(PostgreSQLBackend)
                 elif provider_type == ProviderType.SPATIALITE:
-                    from adapters.backends.spatialite.backend import SpatialiteBackend
+                    from ...adapters.backends.spatialite.backend import SpatialiteBackend
                     return self._container.try_resolve(SpatialiteBackend)
                 elif provider_type == ProviderType.OGR:
-                    from adapters.backends.ogr.backend import OGRBackend
+                    from ...adapters.backends.ogr.backend import OGRBackend
                     return self._container.try_resolve(OGRBackend)
                 elif provider_type == ProviderType.MEMORY:
-                    from adapters.backends.memory.backend import MemoryBackend
+                    from ...adapters.backends.memory.backend import MemoryBackend
                     return self._container.try_resolve(MemoryBackend)
             except Exception as e:
                 logger.warning(f"Failed to resolve backend for {provider_type}: {e}")
@@ -229,7 +229,7 @@ class ServiceProvider:
         
         # Register cache (infrastructure)
         try:
-            from infrastructure.cache.filter_cache import FilterCache
+            from ..cache.filter_cache import FilterCache
             cache_config = config.get('cache', {})
             container.register_singleton(
                 CachePort,
@@ -244,7 +244,7 @@ class ServiceProvider:
         
         # Register layer repository
         try:
-            from adapters.repositories.layer_repository import QGISLayerRepository
+            from ...adapters.repositories.layer_repository import QGISLayerRepository
             container.register_singleton(
                 LayerRepositoryPort,
                 lambda c: QGISLayerRepository()

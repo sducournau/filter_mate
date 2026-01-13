@@ -13,7 +13,7 @@ PROBLEM SOLVED:
 - This task moves expression evaluation to a background thread
 
 USAGE:
-    from modules.tasks.expression_evaluation_task import ExpressionEvaluationTask
+    from core.tasks import ExpressionEvaluationTask
     
     task = ExpressionEvaluationTask(
         description="Evaluating expression",

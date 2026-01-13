@@ -400,14 +400,20 @@ class ControllerIntegration:
                 pass
     
     def _on_current_layer_changed(self) -> None:
-        """Handle current layer change event."""
+        """Handle current layer change event.
+        
+        Note: This is triggered by the currentLayerChanged signal which is emitted
+        DURING current_layer_changed() execution. The actual widget updates are
+        handled by current_layer_changed() in dockwidget after this signal.
+        This method is kept for controller state synchronization only.
+        """
         layer = getattr(self._dockwidget, 'current_layer', None)
         
-        # Update exploring controller
+        # Update exploring controller internal state
         if self._exploring_controller:
             self._exploring_controller.set_layer(layer)
         
-        # Update filtering controller
+        # Update filtering controller internal state
         if self._filtering_controller:
             self._filtering_controller.set_source_layer(layer)
     

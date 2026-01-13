@@ -393,7 +393,7 @@ class ExpressionBuilder:
         source_geom_field = self._get_source_geom_field()
         
         # Create MV using backend method
-        from adapters.backends.postgresql.filter_executor import PostgreSQLGeometricFilter
+        from ...adapters.backends.postgresql.filter_executor import PostgreSQLGeometricFilter
         pg_backend = PostgreSQLGeometricFilter(self.task_parameters)
         
         mv_ref = pg_backend.create_source_selection_mv(

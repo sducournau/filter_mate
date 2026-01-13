@@ -332,7 +332,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 Sprint 15: Setup custom UI - splitter, dimensions, tabs, icons, tooltips."""
         # CRITICAL: Create all custom widgets FIRST (before configure_widgets() references them)
         self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self.CONFIG_DATA, self)
-        self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.setMinimumHeight(28)
+        # Don't override the widget's calculated minimum height - it knows its own size needs
         self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.show()
         logger.debug(f"Created multiple selection widget: {self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection}")
         
@@ -2285,7 +2285,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # Populate layers combobox
         self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
-        self.filtering_populate_layers_chekableCombobox()
+        self.filtering_populate_layers_chekableCombobox(layer)
         self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
         
         # Synchronize checkable button associated widgets enabled state
@@ -2356,6 +2356,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if not should_continue: return
             self._reset_layer_expressions(layer_props); widgets = self._disconnect_layer_signals()
             self._synchronize_layer_widgets(validated_layer, layer_props); self._reload_exploration_widgets(validated_layer, layer_props)
+            # Initialize exploring groupbox for the new layer
+            if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
+                self.exploring_groupbox_init()
             self._update_exploring_buttons_state(); self._reconnect_layer_signals(widgets, layer_props)
         except Exception as e: logger.error(f"Error in current_layer_changed: {e}")
         finally: self._updating_current_layer = False
@@ -2930,17 +2933,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         self.manage_output_name()
         self.select_tabTools_index()
+        # current_layer_changed handles all widget updates including:
+        # - exploring_groupbox_init()
+        # - _synchronize_layer_widgets (which includes filtering_populate_layers_chekableCombobox)
+        # - _reload_exploration_widgets
         self.current_layer_changed(layer)
         
-        if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
-            self.exploring_groupbox_init()
-        
         self.filtering_auto_current_layer_changed()
-        
-        if self.current_layer and isinstance(self.current_layer, QgsVectorLayer):
-            self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'disconnect')
-            self.filtering_populate_layers_chekableCombobox(self.current_layer)
-            self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
 
     def get_project_layers_from_app(self, project_layers, project=None):
         """v3.1 Sprint 16: Simplified - update dockwidget with layer info from app."""

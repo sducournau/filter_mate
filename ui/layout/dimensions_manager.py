@@ -215,10 +215,59 @@ class DimensionsManager(LayoutManagerBase):
                                 QSizePolicy.Fixed)
         
         # Apply to GroupBoxes (QgsCollapsibleGroupBox included)
+        # Exclude exploring groupboxes which need specific heights for their dynamic content
+        exploring_groupbox_names = [
+            'mGroupBox_exploring_single_selection',
+            'mGroupBox_exploring_multiple_selection',
+            'mGroupBox_exploring_custom_selection'
+        ]
         for groupbox in self.dockwidget.findChildren(QGroupBox):
-            groupbox.setMinimumHeight(groupbox_min_height)
+            if groupbox.objectName() not in exploring_groupbox_names:
+                groupbox.setMinimumHeight(groupbox_min_height)
+        
+        # Apply specific heights for exploring groupboxes based on their content
+        self._apply_exploring_groupbox_dimensions()
         
         logger.debug(f"Applied widget dimensions: ComboBox={combobox_height}px, Input={input_height}px")
+    
+    def _apply_exploring_groupbox_dimensions(self) -> None:
+        """
+        Apply specific dimensions to exploring groupboxes.
+        
+        These groupboxes contain dynamic content (feature pickers, expression widgets)
+        that require specific minimum heights to display properly without overlap.
+        """
+        UIConfig = self._get_ui_config()
+        if UIConfig is None:
+            return
+        
+        # Get input height for calculating content-based heights
+        input_height = UIConfig.get_config('input', 'height') or 28
+        
+        # Single selection: FeaturePicker + FieldExpressionWidget + margins
+        # ~28px each widget + 8px spacing + 16px margins = ~80px minimum
+        single_min_height = input_height * 2 + 24
+        
+        # Multiple selection: CheckableComboBox (large) + FieldExpressionWidget + margins
+        # The checkable combo has filter line + items line + list = needs more space
+        # ~84px (widget minimum) + 28px (expression) + margins = ~130px minimum
+        multiple_min_height = 84 + input_height + 20
+        
+        # Custom selection: Just FieldExpressionWidget + margins
+        custom_min_height = input_height + 16
+        
+        # Apply to exploring groupboxes
+        groupbox_heights = {
+            'mGroupBox_exploring_single_selection': single_min_height,
+            'mGroupBox_exploring_multiple_selection': multiple_min_height,
+            'mGroupBox_exploring_custom_selection': custom_min_height
+        }
+        
+        for name, min_height in groupbox_heights.items():
+            if hasattr(self.dockwidget, name):
+                groupbox = getattr(self.dockwidget, name)
+                groupbox.setMinimumHeight(min_height)
+                logger.debug(f"Set {name} minimum height to {min_height}px")
     
     def apply_frame_dimensions(self) -> None:
         """

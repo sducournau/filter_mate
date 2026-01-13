@@ -239,7 +239,7 @@ class BackendExpressionBuilder:
         
         # Create MV using backend method
         try:
-            from adapters.backends.postgresql_backend import PostgreSQLGeometricFilter
+            from ...adapters.backends.postgresql_backend import PostgreSQLGeometricFilter
             pg_backend = PostgreSQLGeometricFilter(self.task_parameters)
             
             mv_ref = pg_backend.create_source_selection_mv(

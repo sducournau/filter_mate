@@ -698,7 +698,9 @@ class PropertyController(BaseController):
             dw.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
             
             if hasattr(dw, 'filtering_populate_layers_chekableCombobox'):
-                dw.filtering_populate_layers_chekableCombobox()
+                # Pass current_layer to ensure it's excluded from the list
+                layer = getattr(dw, 'current_layer', None)
+                dw.filtering_populate_layers_chekableCombobox(layer)
             
             dw.manageSignal(
                 ["FILTERING", "LAYERS_TO_FILTER"],
