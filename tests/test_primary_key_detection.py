@@ -19,7 +19,8 @@ class TestPrimaryKeyDetection(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        from filter_mate.modules.tasks.layer_management_task import LayersManagementEngineTask
+        # v4.0: migrated from modules/ to core/tasks/
+        from filter_mate.core.tasks.layer_management_task import LayersManagementEngineTask
         self.task = LayersManagementEngineTask("Test Task", {})
     
     def test_postgresql_with_declared_primary_key(self):
@@ -253,7 +254,8 @@ class TestPrimaryKeyEdgeCases(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        from filter_mate.modules.tasks.layer_management_task import LayersManagementEngineTask
+        # v4.0: migrated from modules/ to core/tasks/
+        from filter_mate.core.tasks.layer_management_task import LayersManagementEngineTask
         self.task = LayersManagementEngineTask("Test Task", {})
     
     def test_composite_primary_key_uses_first(self):

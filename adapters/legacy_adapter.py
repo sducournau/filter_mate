@@ -514,4 +514,7 @@ def create_all_legacy_adapters(
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from qgis.core import QgsVectorLayer
-    from .backends.base import GeometricFilterBackend
+    # Note: GeometricFilterBackend was the v2.x base class
+    # In v4.0+, backends implement BackendPort instead
+    # Legacy type hint kept for documentation purposes
+    GeometricFilterBackend = object  # Type alias for legacy compatibility

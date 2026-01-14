@@ -587,6 +587,10 @@ class FilterMateApp:
                 success = self._app_initializer.initialize_application(is_first_run)
                 print(f"DEBUG: AppInitializer returned {success}")
                 if success:
+                    # v4.5: Ensure signal connections even after AppInitializer success
+                    # This is the simplified direct connection system
+                    self._connect_layer_store_signals()
+                    self._connect_dockwidget_signals()
                     return
                 else:
                     logger.error(f"AppInitializer returned False - falling back to legacy initialization")
@@ -635,6 +639,164 @@ class FilterMateApp:
         except Exception as e:
             logger.error(f"Failed to show dockwidget: {e}")
             show_error("FilterMate", f"Failed to display dockwidget: {e}")
+        
+        # CRITICAL: Ensure signal connections are established
+        # This is the simplified direct connection system (v4.5)
+        self._connect_layer_store_signals()
+        self._connect_dockwidget_signals()
+
+    # ========================================
+    # SIGNAL CONNECTION SYSTEM (v4.5 Simplified)
+    # ========================================
+    # 
+    # FilterMate uses a layered signal connection architecture:
+    # 
+    # 1. LAYER STORE SIGNALS (MapLayerStore):
+    #    - layersAdded -> _on_layers_added() -> manage_task('add_layers')
+    #    - layersWillBeRemoved -> manage_task('remove_layers')
+    #    - allLayersRemoved -> manage_task('remove_all_layers')
+    #    Connected via: _connect_layer_store_signals()
+    # 
+    # 2. DOCKWIDGET SIGNALS:
+    #    - launchingTask -> manage_task(task_name)
+    #    - currentLayerChanged -> update_undo_redo_buttons()
+    #    - settingLayerVariable -> save_variables_from_layer()
+    #    - resettingLayerVariable -> remove_variables_from_layer()
+    #    - settingProjectVariables -> save_project_variables()
+    #    - widgetsInitialized -> _on_widgets_initialized()
+    #    Connected via: _connect_dockwidget_signals()
+    # 
+    # 3. WIDGET SIGNALS (in dockwidget):
+    #    Managed by ConfigurationManager.configure_widgets()
+    #    Connected/disconnected via manageSignal()
+    # 
+    # Connection is done directly here (not via AppInitializer callbacks)
+    # to ensure reliability and simplify debugging.
+    # ========================================
+
+    def _connect_layer_store_signals(self):
+        """
+        Connect layer store signals for layer management.
+        
+        Called once during initialization and after project changes.
+        Uses flag to prevent duplicate connections.
+        """
+        if self._signals_connected:
+            return
+        
+        if not self.MapLayerStore:
+            logger.warning("Cannot connect layer store signals: MapLayerStore is None")
+            return
+        
+        logger.debug("Connecting layer store signals (layersAdded, layersWillBeRemoved...)")
+        
+        self.MapLayerStore.layersAdded.connect(self._on_layers_added)
+        self.MapLayerStore.layersWillBeRemoved.connect(
+            lambda layers: self.manage_task('remove_layers', layers)
+        )
+        self.MapLayerStore.allLayersRemoved.connect(
+            lambda: self.manage_task('remove_all_layers')
+        )
+        
+        self._signals_connected = True
+        logger.info("✓ Layer store signals connected")
+
+    def _connect_dockwidget_signals(self):
+        """
+        Connect dockwidget signals for task management and variable persistence.
+        
+        CRITICAL: These connections enable:
+        - Task launching (filter, unfilter, export)
+        - Undo/redo button state updates
+        - Layer variable persistence
+        - Project variable persistence
+        
+        Called once after dockwidget creation.
+        """
+        if self._dockwidget_signals_connected:
+            return
+        
+        if not self.dockwidget:
+            logger.warning("Cannot connect dockwidget signals: dockwidget is None")
+            return
+        
+        logger.debug("Connecting dockwidget signals...")
+        
+        # Task launching signal - triggers filter/unfilter/export tasks
+        self.dockwidget.launchingTask.connect(
+            lambda task_name: self.manage_task(task_name)
+        )
+        
+        # Current layer changed - update undo/redo buttons
+        self.dockwidget.currentLayerChanged.connect(
+            self.update_undo_redo_buttons
+        )
+        
+        # Layer variable signals - persist layer properties
+        self.dockwidget.settingLayerVariable.connect(
+            lambda layer, properties: self._safe_layer_operation(
+                layer, properties, self.save_variables_from_layer
+            )
+        )
+        self.dockwidget.resettingLayerVariable.connect(
+            lambda layer, properties: self._safe_layer_operation(
+                layer, properties, self.remove_variables_from_layer
+            )
+        )
+        self.dockwidget.resettingLayerVariableOnError.connect(
+            lambda layer, properties: self._safe_layer_operation(
+                layer, properties, self.remove_variables_from_layer
+            )
+        )
+        
+        # Project variable signals - persist project-level settings
+        self.dockwidget.settingProjectVariables.connect(
+            self.save_project_variables
+        )
+        self.PROJECT.fileNameChanged.connect(
+            lambda: self.save_project_variables()
+        )
+        
+        # Widget initialization signal - sync state when widgets ready
+        self.dockwidget.widgetsInitialized.connect(
+            self._on_widgets_initialized
+        )
+        
+        self._dockwidget_signals_connected = True
+        logger.info("✓ Dockwidget signals connected")
+
+    def _disconnect_all_signals(self):
+        """
+        Disconnect all signals during cleanup or project change.
+        
+        Called before plugin unload or project change to prevent
+        access violations from stale signal connections.
+        """
+        # Disconnect layer store signals
+        if self._signals_connected and self.MapLayerStore:
+            try:
+                self.MapLayerStore.layersAdded.disconnect()
+                self.MapLayerStore.layersWillBeRemoved.disconnect()
+                self.MapLayerStore.allLayersRemoved.disconnect()
+                self._signals_connected = False
+                logger.debug("Layer store signals disconnected")
+            except (TypeError, RuntimeError) as e:
+                logger.debug(f"Could not disconnect layer store signals: {e}")
+        
+        # Disconnect dockwidget signals
+        if self._dockwidget_signals_connected and self.dockwidget:
+            try:
+                self.dockwidget.launchingTask.disconnect()
+                self.dockwidget.currentLayerChanged.disconnect()
+                self.dockwidget.settingLayerVariable.disconnect()
+                self.dockwidget.resettingLayerVariable.disconnect()
+                self.dockwidget.resettingLayerVariableOnError.disconnect()
+                self.dockwidget.settingProjectVariables.disconnect()
+                self.dockwidget.widgetsInitialized.disconnect()
+                self._dockwidget_signals_connected = False
+                logger.debug("Dockwidget signals disconnected")
+            except (TypeError, RuntimeError) as e:
+                logger.debug(f"Could not disconnect dockwidget signals: {e}")
 
     def _safe_layer_operation(self, layer, properties, operation):
         """Safely execute a layer operation by deferring to Qt event loop and re-fetching layer."""
@@ -1205,16 +1367,26 @@ class FilterMateApp:
                     return False
             
             elif task_name == 'unfilter':
-                # Unfilter is currently handled by legacy code
-                # TODO: Implement delegate_unfilter() in controllers
-                logger.debug("Controller delegation for 'unfilter' not yet implemented")
-                return False
+                # v4.0: Delegate to controller's execute_unfilter()
+                integration.sync_from_dockwidget()
+                success = integration.delegate_execute_unfilter()
+                if success:
+                    logger.info("v4.0: Unfilter executed via FilteringController")
+                    return True
+                else:
+                    logger.debug("v4.0: FilteringController.execute_unfilter() returned False, using legacy")
+                    return False
             
             elif task_name == 'reset':
-                # Reset is currently handled by legacy code
-                # TODO: Implement delegate_reset() in controllers
-                logger.debug("Controller delegation for 'reset' not yet implemented")
-                return False
+                # v4.0: Delegate to controller's execute_reset_filters()
+                integration.sync_from_dockwidget()
+                success = integration.delegate_execute_reset()
+                if success:
+                    logger.info("v4.0: Reset executed via FilteringController")
+                    return True
+                else:
+                    logger.debug("v4.0: FilteringController.execute_reset_filters() returned False, using legacy")
+                    return False
             
             else:
                 logger.debug(f"Controller delegation not available for task: {task_name}")

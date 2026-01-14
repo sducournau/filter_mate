@@ -363,16 +363,85 @@ class AttributeFilterExecutor:
     # ========================================================================
     
     def _qualify_field_names(self, expression: str) -> str:
-        """Qualify field names in expression (stub - needs full implementation)."""
-        # TODO: Extract from FilterEngineTask._qualify_field_names_in_expression
-        return expression
+        """
+        Qualify field names in expression with table prefix.
+        
+        Delegates to core.filter.expression_builder module.
+        
+        v4.0: Extracted from FilterEngineTask._qualify_field_names_in_expression
+        """
+        if not expression or not self.layer:
+            return expression
+        
+        try:
+            from ....core.filter.expression_builder import qualify_field_names_in_expression
+            
+            # Get field names from layer
+            field_names = [field.name() for field in self.layer.fields()]
+            
+            # Determine if PostgreSQL
+            is_postgresql = self.provider_type == PROVIDER_POSTGRES
+            
+            return qualify_field_names_in_expression(
+                expression=expression,
+                field_names=field_names,
+                primary_key_name=None,  # Will be auto-detected
+                table_name=self.layer.name(),
+                is_postgresql=is_postgresql,
+                provider_type=self.provider_type,
+                normalize_columns_fn=None
+            )
+        except ImportError:
+            logger.debug("expression_builder not available, returning expression unchanged")
+            return expression
+        except Exception as e:
+            logger.warning(f"qualify_field_names failed: {e}")
+            return expression
     
     def _convert_to_postgis(self, expression: str) -> str:
-        """Convert QGIS expression to PostGIS SQL (stub - needs full implementation)."""
-        # TODO: Extract from FilterEngineTask.qgis_expression_to_postgis
-        return expression
+        """
+        Convert QGIS expression to PostGIS SQL.
+        
+        Delegates to ExpressionService for dialect-specific conversion.
+        
+        v4.0: Extracted from FilterEngineTask.qgis_expression_to_postgis
+        """
+        if not expression:
+            return expression
+        
+        try:
+            from ....core.services.expression_service import ExpressionService
+            from ....core.domain.filter_expression import ProviderType
+            
+            geom_col = 'geometry'  # Default geometry column
+            return ExpressionService().to_sql(expression, ProviderType.POSTGRESQL, geom_col)
+        except ImportError:
+            logger.debug("ExpressionService not available, returning expression unchanged")
+            return expression
+        except Exception as e:
+            logger.warning(f"convert_to_postgis failed: {e}")
+            return expression
     
     def _convert_to_spatialite(self, expression: str) -> str:
-        """Convert QGIS expression to Spatialite SQL (stub - needs full implementation)."""
-        # TODO: Extract from FilterEngineTask.qgis_expression_to_spatialite
-        return expression
+        """
+        Convert QGIS expression to Spatialite SQL.
+        
+        Delegates to ExpressionService for dialect-specific conversion.
+        
+        v4.0: Extracted from FilterEngineTask.qgis_expression_to_spatialite
+        """
+        if not expression:
+            return expression
+        
+        try:
+            from ....core.services.expression_service import ExpressionService
+            from ....core.domain.filter_expression import ProviderType
+            
+            geom_col = 'geometry'  # Default geometry column
+            return ExpressionService().to_sql(expression, ProviderType.SPATIALITE, geom_col)
+        except ImportError:
+            logger.debug("ExpressionService not available, returning expression unchanged")
+            return expression
+        except Exception as e:
+            logger.warning(f"convert_to_spatialite failed: {e}")
+            return expression

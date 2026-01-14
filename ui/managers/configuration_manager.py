@@ -320,11 +320,12 @@ class ConfigurationManager(QObject):
                 "WIDGET": d.mFeaturePickerWidget_exploring_single_selection,
                 "SIGNALS": [("featureChanged", d.exploring_features_changed)]
             },
-            # v4.0.1 CLEAN #1: fieldChanged handled by ExploringController via SignalManager
+            # v4.5: fieldChanged now uses fallback handler (was None in v4.0.1)
+            # ExploringController handles debouncing if available, otherwise direct call
             "SINGLE_SELECTION_EXPRESSION": {
                 "TYPE": "QgsFieldExpressionWidget",
                 "WIDGET": d.mFieldExpressionWidget_exploring_single_selection,
-                "SIGNALS": [("fieldChanged", None)]
+                "SIGNALS": [("fieldChanged", lambda f: d._on_expression_field_changed('single_selection', f))]
             },
             "MULTIPLE_SELECTION_FEATURES": {
                 "TYPE": "CustomCheckableFeatureComboBox",
@@ -334,17 +335,17 @@ class ConfigurationManager(QObject):
                     ("filteringCheckedItemList", lambda: d.exploring_source_params_changed(groupbox_override="multiple_selection"))
                 ]
             },
-            # v4.0.1 CLEAN #1: fieldChanged handled by ExploringController via SignalManager
+            # v4.5: fieldChanged now uses fallback handler (was None in v4.0.1)
             "MULTIPLE_SELECTION_EXPRESSION": {
                 "TYPE": "QgsFieldExpressionWidget",
                 "WIDGET": d.mFieldExpressionWidget_exploring_multiple_selection,
-                "SIGNALS": [("fieldChanged", None)]
+                "SIGNALS": [("fieldChanged", lambda f: d._on_expression_field_changed('multiple_selection', f))]
             },
-            # v4.0.1 CLEAN #1: fieldChanged handled by ExploringController via SignalManager
+            # v4.5: fieldChanged now uses fallback handler (was None in v4.0.1)
             "CUSTOM_SELECTION_EXPRESSION": {
                 "TYPE": "QgsFieldExpressionWidget",
                 "WIDGET": d.mFieldExpressionWidget_exploring_custom_selection,
-                "SIGNALS": [("fieldChanged", None)]
+                "SIGNALS": [("fieldChanged", lambda f: d._on_expression_field_changed('custom_selection', f))]
             }
         }
         
@@ -646,11 +647,13 @@ class ConfigurationManager(QObject):
         }
         
         # QGIS widgets - QGIS interface integration
+        # Note: LAYER_TREE_VIEW passes manual_change=False since it's an automatic change
+        # from QGIS layer tree, not a manual user selection in FilterMate combobox
         widgets["QGIS"] = {
             "LAYER_TREE_VIEW": {
                 "TYPE": "LayerTreeView",
                 "WIDGET": d.iface.layerTreeView(),
-                "SIGNALS": [("currentLayerChanged", d.current_layer_changed)]
+                "SIGNALS": [("currentLayerChanged", lambda layer: d.current_layer_changed(layer, manual_change=False))]
             }
         }
         

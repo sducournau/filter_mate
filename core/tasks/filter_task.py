@@ -192,6 +192,11 @@ from .executors.spatial_filter_executor import SpatialFilterExecutor
 from .cache.geometry_cache import GeometryCache
 from .cache.expression_cache import ExpressionCache
 from .connectors.backend_connector import BackendConnector
+from .builders.subset_string_builder import SubsetStringBuilder
+from .collectors.feature_collector import FeatureCollector
+from .dispatchers.action_dispatcher import (
+    ActionDispatcher, ActionContext, create_dispatcher_for_task, create_action_context_from_task
+)
 
 # E6: Task completion handler functions (relative import, same package)
 from .task_completion_handler import (
@@ -305,6 +310,8 @@ class FilterEngineTask(QgsTask):
         self._attribute_executor = None  # Lazy init
         self._spatial_executor = None  # Lazy init
         self._backend_connector = None  # Lazy init
+        self._subset_builder = None  # Lazy init (Phase E13 Step 4)
+        self._feature_collector = None  # Lazy init (Phase E13 Step 5)
 
         self.db_file_path = None
         self.project_uuid = None
@@ -408,6 +415,9 @@ class FilterEngineTask(QgsTask):
         self._filter_orchestrator = None
         self._expression_builder = None
         self._result_processor = None
+        
+        # Phase E13 Step 6: ActionDispatcher for clean action routing
+        self._action_dispatcher = None
 
     # ========================================================================
     # Phase E13: Lazy Initialization for Extracted Classes
@@ -439,6 +449,45 @@ class FilterEngineTask(QgsTask):
                 backend_registry=self._backend_registry
             )
         return self._backend_connector
+    
+    def _get_subset_builder(self):
+        """
+        Get or create SubsetStringBuilder (lazy initialization).
+        
+        Phase E13 Step 4: Extracted subset string building logic.
+        """
+        if self._subset_builder is None:
+            self._subset_builder = SubsetStringBuilder(
+                sanitize_fn=self._sanitize_subset_string,
+                use_optimizer=True
+            )
+        return self._subset_builder
+    
+    def _get_feature_collector(self):
+        """
+        Get or create FeatureCollector (lazy initialization).
+        
+        Phase E13 Step 5: Centralized feature ID collection.
+        """
+        if self._feature_collector is None:
+            self._feature_collector = FeatureCollector(
+                layer=self.source_layer,
+                primary_key_field=getattr(self, 'primary_key_name', None),
+                is_pk_numeric=self.task_parameters.get("infos", {}).get("primary_key_is_numeric", True),
+                cache_enabled=True
+            )
+        return self._feature_collector
+    
+    def _get_action_dispatcher(self):
+        """
+        Get or create ActionDispatcher (lazy initialization).
+        
+        Phase E13 Step 6: Clean action routing via dispatcher pattern.
+        """
+        if self._action_dispatcher is None:
+            self._action_dispatcher = create_dispatcher_for_task(self)
+            logger.debug("ActionDispatcher initialized for FilterEngineTask")
+        return self._action_dispatcher
 
     # ========================================================================
     # v4.0.1: Hexagonal Architecture - Backend Access Methods
@@ -779,14 +828,22 @@ class FilterEngineTask(QgsTask):
         self.provider_list = result.provider_list
 
     def _queue_subset_string(self, layer, expression):
-        """Queue a subset string request for thread-safe application in finished()."""
-        if not hasattr(self, '_pending_subset_requests'):
-            self._pending_subset_requests = []
-        if layer is not None:
-            self._pending_subset_requests.append((layer, expression))
-            logger.debug(f"Queued subset request for {layer.name()}: {len(expression) if expression else 0} chars")
-            return True
-        return False
+        """
+        Queue a subset string request for thread-safe application in finished().
+        
+        Phase E13 Step 4: Delegates to SubsetStringBuilder.
+        """
+        builder = self._get_subset_builder()
+        return builder.queue_subset_request(layer, expression)
+    
+    def _get_pending_subset_requests(self):
+        """
+        Get pending subset requests for main thread processing.
+        
+        Phase E13 Step 4: Delegates to SubsetStringBuilder.
+        """
+        builder = self._get_subset_builder()
+        return builder.get_pending_requests()
 
     def _log_backend_info(self):
         """Log backend info and performance warnings. Delegated to core.optimization.logging_utils."""
@@ -811,8 +868,36 @@ class FilterEngineTask(QgsTask):
         """
         Execute the appropriate action based on task_action parameter.
         
+        Phase E13 Step 6: Uses ActionDispatcher for clean action routing.
+        Falls back to legacy if/elif for backward compatibility during migration.
+        
         Returns:
             bool: True if action succeeded, False otherwise
+        """
+        # Phase E13: Try dispatcher-based routing first
+        try:
+            dispatcher = self._get_action_dispatcher()
+            context = create_action_context_from_task(self)
+            result = dispatcher.dispatch(self.task_action, context)
+            
+            # Log dispatch result
+            if result.success:
+                logger.info(f"Action '{self.task_action}' completed via dispatcher: {result.message}")
+            else:
+                logger.warning(f"Action '{self.task_action}' failed via dispatcher: {result.message}")
+            
+            return result.success
+            
+        except Exception as e:
+            # Fallback to legacy routing if dispatcher fails
+            logger.warning(f"ActionDispatcher failed, using legacy routing: {e}")
+            return self._execute_task_action_legacy()
+    
+    def _execute_task_action_legacy(self):
+        """
+        Legacy action routing (pre-Phase E13).
+        
+        Kept as fallback during Strangler Fig migration.
         """
         if self.task_action == 'filter':
             return self.execute_filtering()
@@ -2250,6 +2335,8 @@ class FilterEngineTask(QgsTask):
         """
         Combine new filter expression with existing subset using specified operator.
         
+        Phase E13 Step 4: Delegates to SubsetStringBuilder.combine_expressions().
+        
         OPTIMIZATION v2.8.0: Uses CombinedQueryOptimizer to detect and reuse
         materialized views from previous filter operations, providing 10-50x
         speedup for successive filters on large datasets.
@@ -2266,62 +2353,31 @@ class FilterEngineTask(QgsTask):
         Returns:
             str: Combined filter expression (optimized when possible)
         """
-        if not old_subset or not combine_operator:
-            return new_expression
+        builder = self._get_subset_builder()
+        result = builder.combine_expressions(
+            new_expression=new_expression,
+            old_subset=old_subset,
+            combine_operator=combine_operator,
+            layer_props=layer_props
+        )
         
-        # CRITICAL: Sanitize old_subset to remove non-boolean display expressions
-        # Display expressions like coalesce("field",'<NULL>') cause PostgreSQL type errors
-        old_subset = self._sanitize_subset_string(old_subset)
-        if not old_subset:
-            return new_expression
-        
-        # OPTIMIZATION v2.8.0: Try to optimize combined expression
-        # This is especially effective when old_subset contains a materialized view reference
-        # and new_expression is a spatial predicate (EXISTS with ST_Intersects, etc.)
-        try:
-            optimizer = get_combined_query_optimizer()
-            result = optimizer.optimize_combined_expression(
-                old_subset=old_subset,
-                new_expression=new_expression,
-                combine_operator=combine_operator,
-                layer_props=layer_props
-            )
-            
-            if result.success:
-                # v2.9.0: If source MV needs to be created, do it now
-                if hasattr(result, 'source_mv_info') and result.source_mv_info is not None:
-                    self._create_source_mv_if_needed(result.source_mv_info)
-                
-                logger.info(
-                    f"✓ Combined expression optimized ({result.optimization_type.name}): "
-                    f"~{result.estimated_speedup:.1f}x speedup expected"
+        # v2.9.0: Handle source MV creation (kept here as it's task-specific)
+        # The builder returns optimization info but doesn't create MVs
+        if result.optimization_applied:
+            try:
+                optimizer = get_combined_query_optimizer()
+                opt_result = optimizer.optimize_combined_expression(
+                    old_subset=self._sanitize_subset_string(old_subset) if old_subset else "",
+                    new_expression=new_expression,
+                    combine_operator=combine_operator,
+                    layer_props=layer_props
                 )
-                return result.optimized_expression
-        except Exception as e:
-            # Log but don't fail - fall back to original logic
-            logger.warning(f"Combined query optimization failed, using fallback: {e}")
+                if opt_result.success and hasattr(opt_result, 'source_mv_info') and opt_result.source_mv_info is not None:
+                    self._create_source_mv_if_needed(opt_result.source_mv_info)
+            except Exception as e:
+                logger.debug(f"MV creation skipped: {e}")
         
-        # FALLBACK: Original combination logic
-        # Extract WHERE clause from old subset if present
-        param_old_subset_where_clause = ''
-        param_source_old_subset = old_subset
-        
-        index_where_clause = old_subset.find('WHERE')
-        if index_where_clause > -1:
-            param_old_subset_where_clause = old_subset[index_where_clause:]
-            if param_old_subset_where_clause.endswith('))'):
-                param_old_subset_where_clause = param_old_subset_where_clause[:-1]
-            param_source_old_subset = old_subset[:index_where_clause]
-        
-        # CRITICAL FIX: Removed extra closing parenthesis that was causing SQL syntax errors
-        # When there's no WHERE clause, we should wrap in parentheses; when there is, just combine
-        if index_where_clause > -1:
-            # Has WHERE clause - combine with existing structure
-            combined = f'{param_source_old_subset} {param_old_subset_where_clause} {combine_operator} {new_expression}'
-        else:
-            # No WHERE clause - wrap both in parentheses for safety
-            combined = f'( {old_subset} ) {combine_operator} ( {new_expression} )'
-        return combined 
+        return result.expression
 
     def _create_source_mv_if_needed(self, source_mv_info):
         """Create source materialized view with pre-computed buffer (v2.9.0 optimization)."""
@@ -4338,9 +4394,14 @@ class FilterEngineTask(QgsTask):
         
         This ensures the selected features remain visually highlighted on the map
         after the filtering operation completes.
+        
+        Phase E13 Step 5: Uses FeatureCollector.restore_layer_selection().
         """
         if not self.source_layer or not is_valid_layer(self.source_layer):
             return
+        
+        # Phase E13: Use FeatureCollector for centralized feature management
+        collector = self._get_feature_collector()
         
         # Get feature FIDs from task parameters
         feature_fids = self.task_parameters.get("task", {}).get("feature_fids", [])
@@ -4349,15 +4410,14 @@ class FilterEngineTask(QgsTask):
         if not feature_fids:
             task_features = self.task_parameters.get("task", {}).get("features", [])
             if task_features:
-                feature_fids = [f.id() for f in task_features if hasattr(f, 'id') and f.id() is not None]
+                # Use collector to extract IDs
+                result = collector.collect_from_features(task_features)
+                feature_fids = result.feature_ids
         
         if feature_fids:
-            try:
-                # Select features by their IDs
-                self.source_layer.selectByIds(feature_fids)
-                logger.info(f"✓ Restored source layer selection: {len(feature_fids)} feature(s) selected")
-            except Exception as e:
-                logger.debug(f"Could not restore selection: {e}")
+            # Delegate selection restoration to FeatureCollector
+            collector.restore_layer_selection(feature_fids)
+            logger.info(f"✓ Restored source layer selection via FeatureCollector: {len(feature_fids)} feature(s)")
 
     def finished(self, result):
         result_action = None

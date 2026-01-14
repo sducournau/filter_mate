@@ -29,9 +29,9 @@ def test_zero_features_fallback():
     print(f"  - Provider: {layer.providerType()}")
     print(f"  - Features: {layer.featureCount():,}")
     
-    # Import backend modules
-    from filter_mate.modules.backends.factory import BackendFactory
-    from filter_mate.modules.backends.spatialite_backend import SpatialiteBackend
+    # Import backend modules (v4.0: migrated from modules/ to adapters/)
+    from filter_mate.adapters.backends.factory import BackendFactory
+    from filter_mate.adapters.backends.spatialite import SpatialiteBackend
     
     # Create backend
     task_params = {

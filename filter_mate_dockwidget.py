@@ -1250,6 +1250,34 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _schedule_expression_change(self, groupbox: str, expression: str):
         """v4.0 Sprint 16: Schedule debounced expression change."""
         self._pending_expression_change = (groupbox, expression); self._set_expression_loading_state(True, groupbox); self._expression_debounce_timer.start()
+
+    def _on_expression_field_changed(self, groupbox: str, field_or_expression: str):
+        """
+        v4.5: Handler for fieldChanged signal from QgsFieldExpressionWidget.
+        
+        This method provides a fallback when ExploringController is not available.
+        It schedules a debounced expression change to avoid rapid-fire updates.
+        
+        Args:
+            groupbox: 'single_selection', 'multiple_selection', or 'custom_selection'
+            field_or_expression: The field name or expression from the widget
+        
+        Signal Flow:
+            Widget.fieldChanged → _on_expression_field_changed() → 
+            _schedule_expression_change() → debounce timer → 
+            _execute_debounced_expression_change() → layer_property_changed()
+        """
+        # Try controller delegation first (if available)
+        if self._exploring_ctrl and hasattr(self._exploring_ctrl, 'on_expression_field_changed'):
+            try:
+                if self._exploring_ctrl.on_expression_field_changed(groupbox, field_or_expression):
+                    return  # Controller handled it
+            except Exception as e:
+                logger.debug(f"Controller delegation failed for fieldChanged: {e}")
+        
+        # Fallback: Use debounced expression change system
+        logger.debug(f"_on_expression_field_changed: {groupbox} -> '{field_or_expression}'")
+        self._schedule_expression_change(groupbox, field_or_expression)
     
     def _execute_debounced_expression_change(self):
         """v4.0 Sprint 16: Execute pending expression change after debounce."""

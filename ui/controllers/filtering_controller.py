@@ -717,14 +717,66 @@ class FilteringController(BaseController, LayerSelectionMixin):
                 else:
                     logger.debug("FilteringController: TaskParameters build returned None")
             
-            # TODO Phase 2: Actually use FilterService here
-            # For now, return False to use legacy path while we verify integration
-            # The controller is connected and config is valid - legacy will handle execution
-            logger.debug("FilteringController: Delegating to legacy (Phase 1 - verification)")
+            # v4.0 Note: FilterService integration requires additional work:
+            # 1. FilterService.apply_filter() expects FilterRequest with domain objects
+            # 2. The async task execution model (QgsTask) is currently in FilterEngineTask
+            # 3. Full integration planned for v5.0 when FilterEngineTask is fully refactored
+            # For now, delegate to legacy path which uses FilterEngineTask via TaskBuilder
+            logger.debug("FilteringController: FilterService available but delegating to legacy (v4.0)")
             return False
         else:
             logger.debug("FilteringController: No FilterService, using legacy path")
             return False
+    
+    def execute_unfilter(self) -> bool:
+        """
+        Execute unfilter action - clear all filters on current and target layers.
+        
+        v4.0: Implements delegate_unfilter() TODO for controller delegation.
+        Currently returns False to delegate to legacy code path.
+        
+        Returns:
+            True if handled by controller, False to use legacy path
+        """
+        if not self._source_layer:
+            logger.debug("FilteringController: No source layer for unfilter")
+            return False
+        
+        # Log the unfilter request
+        config = self.build_configuration()
+        logger.info(
+            f"FilteringController: Unfilter requested for source={self._source_layer.name()}, "
+            f"targets={len(config.target_layer_ids)}"
+        )
+        
+        # For now, return False to delegate to legacy FilterEngineTask.execute_unfiltering()
+        # Future: Implement direct unfilter logic here using layer.setSubsetString('')
+        return False
+    
+    def execute_reset_filters(self) -> bool:
+        """
+        Execute reset action - restore original filter state on all layers.
+        
+        v4.0: Implements delegate_reset() TODO for controller delegation.
+        Currently returns False to delegate to legacy code path.
+        
+        Returns:
+            True if handled by controller, False to use legacy path
+        """
+        if not self._source_layer:
+            logger.debug("FilteringController: No source layer for reset")
+            return False
+        
+        # Log the reset request
+        config = self.build_configuration()
+        logger.info(
+            f"FilteringController: Reset filters requested for source={self._source_layer.name()}, "
+            f"targets={len(config.target_layer_ids)}"
+        )
+        
+        # For now, return False to delegate to legacy FilterEngineTask.execute_reseting()
+        # Future: Implement direct reset logic here using history service
+        return False
     
     def build_task_parameters(self) -> Optional['TaskParameters']:
         """

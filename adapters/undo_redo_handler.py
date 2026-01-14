@@ -301,9 +301,6 @@ class UndoRedoHandler:
         
         logger.info(f"Global redo completed - restored {len(restored_layers)} layers")
         return True
-        
-        logger.info(f"Global redo completed - restored {len(restored_layers) + 1} layers")
-        return True
     
     def _perform_layer_undo(
         self,

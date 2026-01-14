@@ -448,11 +448,21 @@ class TaskOrchestrator:
                     logger.info("v4.1: Filter executed via FilteringController")
                     return True
             elif task_name == 'unfilter':
-                # TODO: Implement delegate_unfilter()
-                logger.debug("Controller delegation for 'unfilter' not yet implemented")
+                # v4.0: Delegate to controller's execute_unfilter()
+                integration.sync_from_dockwidget()
+                success = integration.delegate_execute_unfilter()
+                if success:
+                    logger.info("v4.0: Unfilter executed via FilteringController")
+                    return True
+                logger.debug("v4.0: Controller delegation for 'unfilter' returned False, using legacy")
             elif task_name == 'reset':
-                # TODO: Implement delegate_reset()
-                logger.debug("Controller delegation for 'reset' not yet implemented")
+                # v4.0: Delegate to controller's execute_reset_filters()
+                integration.sync_from_dockwidget()
+                success = integration.delegate_execute_reset()
+                if success:
+                    logger.info("v4.0: Reset executed via FilteringController")
+                    return True
+                logger.debug("v4.0: Controller delegation for 'reset' returned False, using legacy")
             
             return False
             

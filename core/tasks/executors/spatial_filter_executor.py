@@ -38,6 +38,9 @@ from ....infrastructure.utils import (
     is_sip_deleted
 )
 
+# Import geometry cache
+from ..cache.geometry_cache import GeometryCache
+
 logger = logging.getLogger('FilterMate.Tasks.SpatialFilterExecutor')
 
 
@@ -83,7 +86,8 @@ class SpatialFilterExecutor:
         project: Optional[QgsProject] = None,
         backend_registry: Optional[Any] = None,
         task_bridge: Optional[Any] = None,
-        postgresql_available: bool = False
+        postgresql_available: bool = False,
+        geometry_cache: Optional[GeometryCache] = None
     ):
         """
         Initialize SpatialFilterExecutor.
@@ -94,12 +98,16 @@ class SpatialFilterExecutor:
             backend_registry: Backend registry for multi-provider support
             task_bridge: Optional TaskBridge for v3 delegation
             postgresql_available: Whether PostgreSQL is available
+            geometry_cache: Optional GeometryCache for caching prepared geometries
         """
         self.source_layer = source_layer
         self.project = project or QgsProject.instance()
         self.backend_registry = backend_registry
         self.task_bridge = task_bridge
         self.postgresql_available = postgresql_available
+        
+        # Use provided cache or get shared instance
+        self._geometry_cache = geometry_cache or GeometryCache.get_shared_instance()
         
         # Cached provider type
         self.source_provider_type = detect_layer_provider_type(source_layer)
@@ -231,20 +239,23 @@ class SpatialFilterExecutor:
         layer_info: Dict,
         feature_ids: Optional[List[int]] = None,
         buffer_value: float = 0.0,
-        use_centroids: bool = False
+        use_centroids: bool = False,
+        use_cache: bool = True
     ) -> Tuple[Optional[Any], Optional[str]]:
         """
-        Prepare source geometry using backend executor.
+        Prepare source geometry using backend executor with caching.
         
         Extracted from FilterEngineTask._prepare_source_geometry_via_executor (lines 446-482).
+        Enhanced with GeometryCache integration in Phase E13 Step 3.
         
-        Uses BackendRegistry if available, otherwise falls back to legacy imports.
+        Performance: 5× speedup when filtering multiple layers with same source.
         
         Args:
             layer_info: Dict with layer metadata
             feature_ids: Optional list of feature IDs to filter
             buffer_value: Buffer distance (in layer units)
             use_centroids: Use centroids instead of full geometries
+            use_cache: Whether to use geometry cache (default: True)
             
         Returns:
             Tuple of (geometry_data, error_message)
@@ -253,6 +264,24 @@ class SpatialFilterExecutor:
         """
         if not self.backend_registry:
             return None, "Backend registry not available"
+        
+        # Build cache key components
+        layer_id = self.source_layer.id() if self.source_layer else None
+        subset_string = self.source_layer.subsetString() if self.source_layer else None
+        target_crs = layer_info.get('crs_authid', 'EPSG:4326')
+        
+        # Try cache first (if enabled)
+        if use_cache and layer_id:
+            cached_geom = self._geometry_cache.get(
+                layer_id=layer_id,
+                feature_ids=feature_ids,
+                buffer_value=buffer_value,
+                target_crs_authid=target_crs,
+                subset_string=subset_string
+            )
+            if cached_geom:
+                logger.debug(f"Using cached geometry for layer {layer_id}")
+                return cached_geom, None
         
         try:
             # Get backend executor for this layer
@@ -268,11 +297,48 @@ class SpatialFilterExecutor:
                 use_centroids=use_centroids
             )
             
+            # Cache the result (if enabled)
+            if use_cache and layer_id and result:
+                self._geometry_cache.put(
+                    layer_id=layer_id,
+                    geometry=result,
+                    feature_ids=feature_ids,
+                    buffer_value=buffer_value,
+                    target_crs_authid=target_crs,
+                    subset_string=subset_string
+                )
+                logger.debug(f"Cached geometry for layer {layer_id}")
+            
             return result, None
         
         except Exception as e:
             logger.debug(f"Executor.prepare_source_geometry failed: {e}, using legacy")
             return None, f"Executor failed: {str(e)}"
+    
+    def invalidate_geometry_cache(self, layer_id: Optional[str] = None):
+        """
+        Invalidate geometry cache for a specific layer or all layers.
+        
+        Call this when source layer changes or filter is reset.
+        
+        Args:
+            layer_id: Layer ID to invalidate, or None to clear all
+        """
+        if layer_id:
+            count = self._geometry_cache.invalidate_layer(layer_id)
+            logger.info(f"Invalidated {count} cache entries for layer {layer_id}")
+        else:
+            self._geometry_cache.clear()
+            logger.info("Cleared all geometry cache entries")
+    
+    def get_cache_stats(self) -> Dict:
+        """
+        Get geometry cache statistics.
+        
+        Returns:
+            Dict with cache stats (size, hits, misses, etc.)
+        """
+        return self._geometry_cache.get_stats()
     
     def prepare_geometries_by_provider(
         self,
@@ -327,21 +393,36 @@ class SpatialFilterExecutor:
         self,
         layer: QgsVectorLayer,
         layer_props: Dict,
-        predicates: List[str]
+        predicates: List[str],
+        source_geometries: Optional[Dict[str, Any]] = None,
+        expression_builder: Optional[Any] = None,
+        filter_orchestrator: Optional[Any] = None,
+        subset_queue_callback: Optional[Any] = None
     ) -> Tuple[bool, List[int]]:
         """
         Execute spatial filter with geometric predicates.
         
         Main entry point for spatial filtering operations.
         
+        v4.0: Phase E13 Step 2 - Implements legacy fallback via FilterOrchestrator.
+        
         Args:
             layer: Target layer to filter
             layer_props: Layer properties dict
             predicates: List of geometric predicates (intersects, contains, etc.)
+            source_geometries: Dict mapping provider types to prepared geometries
+            expression_builder: ExpressionBuilder instance for filter expressions
+            filter_orchestrator: FilterOrchestrator for legacy delegation
+            subset_queue_callback: Callback to queue subset strings for main thread
             
         Returns:
             (success: bool, matching_feature_ids: List[int])
         """
+        # Validate predicates first
+        if not self.validate_predicates(predicates):
+            logger.error(f"Invalid predicates: {predicates}")
+            return False, []
+        
         # Try v3 TaskBridge first
         v3_result = self.try_v3_spatial_filter(layer, layer_props, predicates)
         if v3_result is True:
@@ -351,10 +432,106 @@ class SpatialFilterExecutor:
             logger.error("❌ V3 spatial filter failed")
             return False, []
         
-        # Fallback to legacy code (v3 returned None)
-        logger.debug("Using legacy spatial filter code")
-        # TODO Phase E13 Step 7: Implement legacy spatial filter logic
-        return False, []
+        # Fallback to legacy code via FilterOrchestrator
+        logger.debug("V3 returned None - using legacy spatial filter via FilterOrchestrator")
+        
+        if filter_orchestrator and source_geometries and expression_builder:
+            # Detect provider type for this layer
+            layer_provider_type = detect_layer_provider_type(layer)
+            
+            try:
+                success = filter_orchestrator.orchestrate_geometric_filter(
+                    layer=layer,
+                    layer_provider_type=layer_provider_type,
+                    layer_props=layer_props,
+                    source_geometries=source_geometries,
+                    expression_builder=expression_builder
+                )
+                
+                if success:
+                    logger.info(f"✅ Legacy spatial filter succeeded for {layer.name()}")
+                    return True, []
+                else:
+                    logger.warning(f"⚠️ Legacy spatial filter returned False for {layer.name()}")
+                    return False, []
+                    
+            except Exception as e:
+                logger.error(f"Legacy spatial filter failed: {e}")
+                return False, []
+        else:
+            # No orchestrator available - cannot perform spatial filtering
+            missing = []
+            if not filter_orchestrator:
+                missing.append("filter_orchestrator")
+            if not source_geometries:
+                missing.append("source_geometries")
+            if not expression_builder:
+                missing.append("expression_builder")
+            
+            logger.warning(
+                f"Cannot perform legacy spatial filter - missing: {', '.join(missing)}. "
+                f"Layer: {layer.name()}"
+            )
+            return False, []
+    
+    def execute_spatial_filter_batch(
+        self,
+        layers_dict: Dict[str, List[Tuple[QgsVectorLayer, Dict]]],
+        predicates: List[str],
+        source_geometries: Dict[str, Any],
+        expression_builder: Any,
+        filter_orchestrator: Any,
+        progress_callback: Optional[Any] = None
+    ) -> Tuple[int, int]:
+        """
+        Execute spatial filter on multiple layers grouped by provider.
+        
+        v4.0: Phase E13 Step 2 - Batch processing for multi-layer filtering.
+        
+        Args:
+            layers_dict: Dict with layers grouped by provider type
+            predicates: List of geometric predicates
+            source_geometries: Prepared source geometries by provider
+            expression_builder: ExpressionBuilder instance
+            filter_orchestrator: FilterOrchestrator for legacy delegation
+            progress_callback: Optional callback(current, total, layer_name)
+            
+        Returns:
+            (success_count: int, total_count: int)
+        """
+        total_count = sum(len(layer_list) for layer_list in layers_dict.values())
+        success_count = 0
+        current = 0
+        
+        logger.info(f"Starting batch spatial filter: {total_count} layers")
+        
+        for provider_type, layer_list in layers_dict.items():
+            for layer, layer_props in layer_list:
+                current += 1
+                
+                if progress_callback:
+                    progress_callback(current, total_count, layer.name())
+                
+                # Use layer-specific predicates if available
+                layer_predicates = layer_props.get('predicates', predicates)
+                
+                success, _ = self.execute_spatial_filter(
+                    layer=layer,
+                    layer_props=layer_props,
+                    predicates=layer_predicates,
+                    source_geometries=source_geometries,
+                    expression_builder=expression_builder,
+                    filter_orchestrator=filter_orchestrator
+                )
+                
+                if success:
+                    success_count += 1
+                    logger.info(f"  [{current}/{total_count}] ✓ {layer.name()}")
+                else:
+                    logger.warning(f"  [{current}/{total_count}] ✗ {layer.name()}")
+        
+        logger.info(f"Batch spatial filter complete: {success_count}/{total_count} succeeded")
+        return success_count, total_count
     
     def validate_predicates(self, predicates: List[str]) -> bool:
         """

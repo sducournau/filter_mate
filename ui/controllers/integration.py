@@ -827,6 +827,26 @@ class ControllerIntegration:
             return self._filtering_controller.execute_filter()
         return False
     
+    def delegate_execute_unfilter(self) -> bool:
+        """
+        Delegate unfilter execution to filtering controller.
+        
+        v4.0: Implements controller delegation for unfilter action.
+        """
+        if self._filtering_controller:
+            return self._filtering_controller.execute_unfilter()
+        return False
+    
+    def delegate_execute_reset(self) -> bool:
+        """
+        Delegate reset execution to filtering controller.
+        
+        v4.0: Implements controller delegation for reset action.
+        """
+        if self._filtering_controller:
+            return self._filtering_controller.execute_reset_filters()
+        return False
+    
     def delegate_undo_filter(self) -> bool:
         """Delegate undo to filtering controller."""
         if self._filtering_controller:
