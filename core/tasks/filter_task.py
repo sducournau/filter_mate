@@ -909,148 +909,53 @@ class FilterEngineTask(QgsTask):
     # ========================================================================
     
     def _try_v3_attribute_filter(self, task_expression, task_features):
-        """Try v3 TaskBridge attribute filter. Returns True/False/None (fallback to legacy)."""
-        if not self._task_bridge:
-            return None
-            
-        # Only handle simple expression-based filters for now
-        # Skip: field-only expressions, skip_source_filter, feature lists
-        skip_source_filter = self.task_parameters["task"].get("skip_source_filter", False)
+        """
+        Try v3 TaskBridge attribute filter.
         
-        if skip_source_filter:
-            logger.debug("TaskBridge: skip_source_filter mode - using legacy code")
-            return None
+        Phase E13: Delegates to AttributeFilterExecutor.
         
-        if not task_expression or not task_expression.strip():
-            logger.debug("TaskBridge: no expression - using legacy code")
-            return None
-            
-        # Check if expression is just a field name (no operators)
-        qgs_expr = QgsExpression(task_expression)
-        task_expr_upper = task_expression.upper()
-        is_simple_field = qgs_expr.isField() and not any(
-            op in task_expr_upper for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']
+        Returns:
+            True/False/None (fallback to legacy)
+        """
+        executor = self._get_attribute_executor()
+        
+        result = executor.try_v3_attribute_filter(
+            task_expression=task_expression,
+            task_features=task_features,
+            task_bridge=self._task_bridge,
+            source_layer=self.source_layer,
+            primary_key_name=self.primary_key_name,
+            task_parameters=self.task_parameters
         )
         
-        if is_simple_field:
-            logger.debug("TaskBridge: field-only expression - using legacy code")
-            return None
+        # Update task state from executor result
+        if result is True and hasattr(executor, '_last_expression'):
+            self.expression = executor._last_expression
         
-        # Try v3 attribute filter
-        try:
-            logger.info("=" * 60)
-            logger.info("🚀 V3 TASKBRIDGE: Attempting attribute filter")
-            logger.info("=" * 60)
-            logger.info(f"   Expression: '{task_expression}'")
-            logger.info(f"   Layer: '{self.source_layer.name()}'")
-            
-            bridge_result = self._task_bridge.execute_attribute_filter(
-                layer=self.source_layer,
-                expression=task_expression,
-                combine_with_existing=True
-            )
-            
-            if bridge_result.status == BridgeStatus.SUCCESS and bridge_result.success:
-                # V3 succeeded - apply the result
-                logger.info(f"✅ V3 TaskBridge SUCCESS")
-                logger.info(f"   Backend used: {bridge_result.backend_used}")
-                logger.info(f"   Feature count: {bridge_result.feature_count}")
-                logger.info(f"   Execution time: {bridge_result.execution_time_ms:.1f}ms")
-                
-                # Apply the filter to the layer
-                self.expression = task_expression
-                if bridge_result.feature_ids:
-                    # Build expression from feature IDs
-                    pk = self.primary_key_name or '$id'
-                    ids_str = ', '.join(str(fid) for fid in bridge_result.feature_ids[:1000])
-                    if len(bridge_result.feature_ids) > 1000:
-                        logger.warning("TaskBridge: Truncating feature IDs to 1000 for expression")
-                    self.expression = f'"{pk}" IN ({ids_str})'
-                
-                # Apply subset string
-                result = safe_set_subset_string(self.source_layer, self.expression)
-                if result:
-                    logger.info(f"   ✓ Filter applied successfully")
-                    return True
-                else:
-                    logger.warning(f"   ✗ Failed to apply filter expression")
-                    return None  # Fallback to legacy
-                    
-            elif bridge_result.status == BridgeStatus.FALLBACK:
-                logger.info(f"⚠️ V3 TaskBridge: FALLBACK requested")
-                logger.info(f"   Reason: {bridge_result.error_message}")
-                return None  # Use legacy code
-                
-            elif bridge_result.status == BridgeStatus.NOT_AVAILABLE:
-                logger.debug("TaskBridge: not available - using legacy code")
-                return None
-                
-            else:
-                # Error occurred
-                logger.warning(f"⚠️ V3 TaskBridge: ERROR")
-                logger.warning(f"   Error: {bridge_result.error_message}")
-                return None  # Fallback to legacy
-                
-        except Exception as e:
-            logger.warning(f"TaskBridge delegation failed: {e}")
-            return None  # Fallback to legacy
+        return result
 
     def _try_v3_spatial_filter(self, layer, layer_props, predicates):
-        """Try v3 TaskBridge spatial filter. Returns True/False/None (fallback to legacy)."""
-        if not self._task_bridge or not self._task_bridge.is_available():
-            return None
+        """
+        Try v3 TaskBridge spatial filter.
         
-        # v3 spatial filter is experimental - only enable for simple cases
-        # Skip for now: complex predicates, buffers, multi-step
-        buffer_value = self.task_parameters.get("task", {}).get("buffer_value", 0)
-        if buffer_value and buffer_value > 0:
-            logger.debug("TaskBridge: buffer active - using legacy spatial code")
-            return None
+        Phase E13: Delegates to SpatialFilterExecutor.
         
-        if len(predicates) > 1:
-            logger.debug("TaskBridge: multiple predicates - using legacy spatial code")
-            return None
+        Returns:
+            True/False/None (fallback to legacy)
+        """
+        executor = self._get_spatial_executor()
         
-        try:
-            logger.info("=" * 60)
-            logger.info("🚀 V3 TASKBRIDGE: Attempting spatial filter")
-            logger.info("=" * 60)
-            logger.info(f"   Layer: '{layer.name()}'")
-            logger.info(f"   Predicates: {predicates}")
-            
-            bridge_result = self._task_bridge.execute_spatial_filter(
-                source_layer=self.source_layer,
-                target_layers=[layer],
-                predicates=predicates,
-                buffer_value=0.0,
-                combine_operator=self._get_combine_operator() or 'AND'
-            )
-            
-            if bridge_result.status == BridgeStatus.SUCCESS and bridge_result.success:
-                logger.info(f"✅ V3 TaskBridge SPATIAL SUCCESS")
-                logger.info(f"   Backend used: {bridge_result.backend_used}")
-                logger.info(f"   Feature count: {bridge_result.feature_count}")
-                logger.info(f"   Execution time: {bridge_result.execution_time_ms:.1f}ms")
-                
-                # Store in task_parameters for metrics
-                if 'actual_backends' not in self.task_parameters:
-                    self.task_parameters['actual_backends'] = {}
-                self.task_parameters['actual_backends'][layer.id()] = f"v3_{bridge_result.backend_used}"
-                
-                return True
-                
-            elif bridge_result.status == BridgeStatus.FALLBACK:
-                logger.info(f"⚠️ V3 TaskBridge SPATIAL: FALLBACK requested")
-                logger.info(f"   Reason: {bridge_result.error_message}")
-                return None
-                
-            else:
-                logger.debug(f"TaskBridge spatial: status={bridge_result.status}")
-                return None
-                
-        except Exception as e:
-            logger.warning(f"TaskBridge spatial delegation failed: {e}")
-            return None
+        result = executor.try_v3_spatial_filter(
+            layer=layer,
+            layer_props=layer_props,
+            predicates=predicates,
+            task_bridge=self._task_bridge,
+            source_layer=self.source_layer,
+            task_parameters=self.task_parameters,
+            combine_operator=self._get_combine_operator() or 'AND'
+        )
+        
+        return result
 
     def _try_v3_multi_step_filter(self, layers_dict, progress_callback=None):
         """Try v3 TaskBridge multi-step filter. Returns True/None (fallback to legacy)."""
