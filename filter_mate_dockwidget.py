@@ -536,6 +536,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if pref_w and pref_h and (self.size().width() > pref_w or self.size().height() > pref_h):
             self.resize(pref_w, pref_h)
             logger.debug(f"Resized dockwidget to preferred size: {pref_w}x{pref_h}px")
+        
+        # v4.0.2: Apply minimum width to groupboxes to prevent overlap when splitter is resized
+        self._apply_groupbox_minimum_widths()
     
     def _apply_widget_dimensions(self):
         """
@@ -769,6 +772,30 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.debug(f"Applied QGIS widget dimensions: ComboBox={cb_h}px, Input={cb_h}px")
         except Exception as e:
             logger.debug(f"Could not apply dimensions to QGIS widgets: {e}")
+    
+    def _apply_groupbox_minimum_widths(self):
+        """
+        v4.0.2: Apply minimum width to groupboxes to prevent widget overlap.
+        
+        When the QSplitter is resized to be narrow, widgets inside groupboxes
+        can overlap. This method sets a minimum width on all groupboxes based
+        on the active UI profile to ensure proper layout behavior.
+        """
+        try:
+            from qgis.PyQt.QtWidgets import QGroupBox
+            from .ui.config import UIConfig
+            
+            groupbox_min_width = UIConfig.get_config('groupbox', 'min_width')
+            if not groupbox_min_width:
+                return
+            
+            # Apply to all QGroupBox widgets
+            for gb in self.findChildren(QGroupBox):
+                gb.setMinimumWidth(groupbox_min_width)
+            
+            logger.debug(f"Applied groupbox minimum width: {groupbox_min_width}px to prevent overlap")
+        except Exception as e:
+            logger.debug(f"Could not apply groupbox minimum widths: {e}")
     
     def _align_key_layouts(self):
         """

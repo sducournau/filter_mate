@@ -313,21 +313,24 @@ class AppInitializer:
                 screen_width = screen_geometry.width()
                 screen_height = screen_geometry.height()
                 
-                # v4.0.1 FIX #3: Use NORMAL only for very large screens (≥2560x1440)
-                # This ensures laptops (1366x768, 1920x1080) get COMPACT for optimal space usage
-                if screen_width >= 2560 and screen_height >= 1440:
-                    UIConfig.set_profile(DisplayProfile.NORMAL)
-                    logger.info(f"FilterMate: Using NORMAL profile for large screen {screen_width}x{screen_height}")
-                else:
+                # v4.0.2 FIX: Activate NORMAL mode for 1080p and above
+                # COMPACT: Small screens (< 1920x1080) - laptops, tablets
+                # NORMAL: Standard screens (≥ 1920x1080) - desktops, large laptops
+                # Small screens (below 1080p) → COMPACT
+                if screen_width < 1920 or screen_height < 1080:
                     UIConfig.set_profile(DisplayProfile.COMPACT)
-                    logger.info(f"FilterMate: Using COMPACT profile for resolution {screen_width}x{screen_height}")
+                    logger.info(f"FilterMate: Using COMPACT profile for small screen {screen_width}x{screen_height}")
+                # Standard and large screens (1080p+) → NORMAL
+                else:
+                    UIConfig.set_profile(DisplayProfile.NORMAL)
+                    logger.info(f"FilterMate: Using NORMAL profile for resolution {screen_width}x{screen_height}")
             else:
-                # v4.0.1 FIX #3: Fallback to COMPACT (fail-safe for laptops)
-                UIConfig.set_profile(DisplayProfile.COMPACT)
-                logger.warning("FilterMate: Could not detect screen, using COMPACT profile (fail-safe)")
+                # v4.0.2 FIX: Fallback to NORMAL (better for desktop QGIS)
+                UIConfig.set_profile(DisplayProfile.NORMAL)
+                logger.warning("FilterMate: Could not detect screen, using NORMAL profile (desktop default)")
         except Exception as e:
             logger.error(f"FilterMate: Error detecting screen resolution: {e}")
-            UIConfig.set_profile(DisplayProfile.COMPACT)  # Fail-safe: COMPACT works everywhere
+            UIConfig.set_profile(DisplayProfile.NORMAL)  # Fail-safe: NORMAL for desktop QGIS
     
     def _create_dockwidget(self) -> bool:
         """

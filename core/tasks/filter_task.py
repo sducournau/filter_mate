@@ -186,6 +186,13 @@ from ...infrastructure.parallel import ParallelFilterExecutor, ParallelConfig
 # Import from core (EPIC-1 migration - relative import now that we're in core/)
 from ..optimization import get_combined_query_optimizer, optimize_combined_filter
 
+# Phase E13: Import extracted classes (January 2026)
+from .executors.attribute_filter_executor import AttributeFilterExecutor
+from .executors.spatial_filter_executor import SpatialFilterExecutor
+from .cache.geometry_cache import GeometryCache
+from .cache.expression_cache import ExpressionCache
+from .connectors.backend_connector import BackendConnector
+
 # E6: Task completion handler functions (relative import, same package)
 from .task_completion_handler import (
     display_warning_messages as tch_display_warnings,
@@ -292,11 +299,12 @@ class FilterEngineTask(QgsTask):
         # Cannot call iface.messageBar() from worker thread - would cause crash
         self.warning_messages = []
         
-        # Référence au cache partagé (lazy initialization)
-        self.geom_cache = FilterEngineTask.get_geometry_cache()
-        
-        # Référence au cache d'expressions (lazy init)
-        self.expr_cache = get_query_cache()
+        # Phase E13: Initialize extracted helper classes
+        self.geom_cache = GeometryCache()
+        self.expr_cache = ExpressionCache()
+        self._attribute_executor = None  # Lazy init
+        self._spatial_executor = None  # Lazy init
+        self._backend_connector = None  # Lazy init
 
         self.db_file_path = None
         self.project_uuid = None
@@ -402,6 +410,37 @@ class FilterEngineTask(QgsTask):
         self._result_processor = None
 
     # ========================================================================
+    # Phase E13: Lazy Initialization for Extracted Classes
+    # ========================================================================
+    
+    def _get_attribute_executor(self):
+        """Get or create AttributeFilterExecutor (lazy initialization)."""
+        if self._attribute_executor is None:
+            self._attribute_executor = AttributeFilterExecutor(
+                source_layer=self.source_layer,
+                task_parameters=self.task_parameters
+            )
+        return self._attribute_executor
+    
+    def _get_spatial_executor(self):
+        """Get or create SpatialFilterExecutor (lazy initialization)."""
+        if self._spatial_executor is None:
+            self._spatial_executor = SpatialFilterExecutor(
+                source_layer=self.source_layer,
+                task_parameters=self.task_parameters
+            )
+        return self._spatial_executor
+    
+    def _get_backend_connector(self):
+        """Get or create BackendConnector (lazy initialization)."""
+        if self._backend_connector is None:
+            self._backend_connector = BackendConnector(
+                layer=self.source_layer,
+                backend_registry=self._backend_registry
+            )
+        return self._backend_connector
+
+    # ========================================================================
     # v4.0.1: Hexagonal Architecture - Backend Access Methods
     # ========================================================================
     
@@ -412,33 +451,35 @@ class FilterEngineTask(QgsTask):
         v4.0.1: Uses BackendRegistry if available (hexagonal pattern),
         otherwise falls back to legacy direct imports (Strangler Fig).
         
+        Phase E13: Delegates to BackendConnector.
+        
         Args:
             layer_info: Dict with 'layer_provider_type' key
             
         Returns:
             FilterExecutorPort implementation or None
         """
-        if self._backend_registry:
-            try:
-                return self._backend_registry.get_executor(layer_info)
-            except Exception as e:
-                logger.warning(f"BackendRegistry.get_executor failed: {e}, using legacy imports")
-        
-        # Fallback: return None, caller should use legacy imports
-        return None
+        connector = self._get_backend_connector()
+        return connector.get_backend_executor(layer_info)
     
     def _has_backend_registry(self) -> bool:
-        """Check if backend registry is available."""
-        return self._backend_registry is not None
+        """
+        Check if backend registry is available.
+        
+        Phase E13: Delegates to BackendConnector.
+        """
+        connector = self._get_backend_connector()
+        return connector.has_backend_registry()
     
     def _is_postgresql_available(self) -> bool:
         """
         Check if PostgreSQL backend is available.
         
         v4.0.1: Uses registry if available, otherwise legacy import.
+        Phase E13: Delegates to BackendConnector.
         """
-        if self._backend_registry:
-            return self._backend_registry.postgresql_available
+        connector = self._get_backend_connector()
+        return connector.is_postgresql_available()
         
         # Fallback to legacy import
         return POSTGRESQL_AVAILABLE
@@ -508,13 +549,10 @@ class FilterEngineTask(QgsTask):
         Cleanup backend resources using registry.
         
         v4.0.1: Delegates to BackendRegistry.cleanup_all() if available.
+        Phase E13: Delegates to BackendConnector.
         """
-        if self._backend_registry:
-            try:
-                self._backend_registry.cleanup_all()
-                logger.debug("Backend resources cleaned up via registry")
-            except Exception as e:
-                logger.debug(f"Registry cleanup failed: {e}")
+        connector = self._get_backend_connector()
+        connector.cleanup_backend_resources()
 
     def queue_subset_request(self, layer, expression):
         """Queue subset string to be applied on main thread (thread safety v2.3.21)."""

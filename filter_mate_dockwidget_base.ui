@@ -283,25 +283,25 @@
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
            <horstretch>0</horstretch>
-           <verstretch>1</verstretch>
+           <verstretch>2</verstretch>
           </sizepolicy>
          </property>
          <property name="minimumSize">
           <size>
            <width>0</width>
-           <height>180</height>
+           <height>240</height>
           </size>
          </property>
          <property name="maximumSize">
           <size>
            <width>16777215</width>
-           <height>600</height>
+           <height>700</height>
           </size>
          </property>
          <property name="baseSize">
           <size>
            <width>0</width>
-           <height>180</height>
+           <height>240</height>
           </size>
          </property>
          <property name="font">
@@ -334,26 +334,26 @@
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_main_content">
           <property name="spacing">
-           <number>0</number>
+           <number>-2</number>
           </property>
           <property name="leftMargin">
-           <number>2</number>
+           <number>1</number>
           </property>
           <property name="topMargin">
            <number>0</number>
           </property>
           <property name="rightMargin">
-           <number>2</number>
+           <number>1</number>
           </property>
           <property name="bottomMargin">
-           <number>2</number>
+           <number>1</number>
           </property>
           <item>
            <widget class="QScrollArea" name="scrollArea_frame_exploring">
             <property name="sizePolicy">
-             <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
               <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
+              <verstretch>2</verstretch>
              </sizepolicy>
             </property>
             <property name="cursor" stdset="0">
@@ -371,13 +371,13 @@
             <widget class="QWidget" name="scrollAreaWidgetContents">
              <layout class="QGridLayout" name="gridLayout_main_header">
               <property name="leftMargin">
-               <number>2</number>
+               <number>1</number>
               </property>
               <property name="topMargin">
                <number>0</number>
               </property>
               <property name="rightMargin">
-               <number>2</number>
+               <number>1</number>
               </property>
               <property name="bottomMargin">
                <number>0</number>
@@ -400,7 +400,7 @@
                  <number>0</number>
                 </property>
                 <property name="spacing">
-                 <number>4</number>
+                 <number>2</number>
                 </property>
                 <item row="0" column="0">
                  <widget class="QWidget" name="widget_exploring_keys" native="true">
@@ -430,16 +430,16 @@
                   </property>
                   <layout class="QVBoxLayout" name="verticalLayout_exploring_container">
                    <property name="spacing">
-                    <number>2</number>
+                    <number>1</number>
                    </property>
                    <property name="leftMargin">
-                    <number>2</number>
+                    <number>1</number>
                    </property>
                    <property name="topMargin">
-                    <number>2</number>
+                    <number>1</number>
                    </property>
                    <property name="rightMargin">
-                    <number>2</number>
+                    <number>1</number>
                    </property>
                    <property name="bottomMargin">
                     <number>2</number>
@@ -973,27 +973,27 @@
                       <enum>QLayout::SetDefaultConstraint</enum>
                      </property>
                      <property name="leftMargin">
-                      <number>4</number>
+                      <number>2</number>
                      </property>
                      <property name="topMargin">
-                      <number>4</number>
+                      <number>2</number>
                      </property>
                      <property name="rightMargin">
-                      <number>4</number>
+                      <number>2</number>
                      </property>
                      <property name="bottomMargin">
-                      <number>4</number>
+                      <number>2</number>
                      </property>
                      <item row="0" column="0">
                       <layout class="QVBoxLayout" name="verticalLayout_exploring_single_selection">
                        <property name="spacing">
-                        <number>4</number>
+                        <number>2</number>
                        </property>
                        <item>
                         <widget class="QgsFeaturePickerWidget" name="mFeaturePickerWidget_exploring_single_selection">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                           <horstretch>1</horstretch>
+                          <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                           <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
                          </property>
@@ -1024,15 +1024,15 @@
                        <item>
                         <widget class="QgsFieldExpressionWidget" name="mFieldExpressionWidget_exploring_single_selection">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                           <horstretch>1</horstretch>
+                          <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                           <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
                          </property>
                          <property name="minimumSize">
                           <size>
                            <width>0</width>
-                           <height>28</height>
+                           <height>24</height>
                           </size>
                          </property>
                          <property name="font">
@@ -1079,7 +1079,7 @@
                     <property name="sizePolicy">
                      <sizepolicy hsizetype="Expanding" vsizetype="MinimumExpanding">
                       <horstretch>0</horstretch>
-                      <verstretch>1</verstretch>
+                      <verstretch>2</verstretch>
                      </sizepolicy>
                     </property>
                     <property name="minimumSize">
@@ -1130,30 +1130,30 @@
                     </property>
                     <layout class="QVBoxLayout" name="verticalLayout_exploring_multiple_selection">
                      <property name="spacing">
-                      <number>4</number>
+                      <number>2</number>
                      </property>
                      <property name="sizeConstraint">
-                      <enum>QLayout::SetDefaultConstraint</enum>
+                      <enum>QLayout::SetMinimumSize</enum>
                      </property>
                      <property name="leftMargin">
-                      <number>4</number>
+                      <number>2</number>
                      </property>
                      <property name="topMargin">
-                      <number>4</number>
+                      <number>2</number>
                      </property>
                      <property name="rightMargin">
-                      <number>4</number>
+                      <number>2</number>
                      </property>
                      <property name="bottomMargin">
-                      <number>4</number>
+                      <number>2</number>
                      </property>
                      <item>
                       <layout class="QHBoxLayout" name="horizontalLayout_exploring_multiple_feature_picker">
                        <property name="spacing">
-                        <number>4</number>
+                        <number>2</number>
                        </property>
                        <property name="sizeConstraint">
-                        <enum>QLayout::SetDefaultConstraint</enum>
+                        <enum>QLayout::SetMinimumSize</enum>
                        </property>
                        <property name="leftMargin">
                         <number>0</number>
@@ -1183,7 +1183,7 @@
                        <property name="minimumSize">
                         <size>
                          <width>0</width>
-                         <height>28</height>
+                         <height>24</height>
                         </size>
                        </property>
                        <property name="font">
@@ -1273,19 +1273,19 @@
                     </property>
                     <layout class="QVBoxLayout" name="verticalLayout_exploring_custom_container">
                      <property name="spacing">
-                      <number>4</number>
+                      <number>2</number>
                      </property>
                      <property name="leftMargin">
-                      <number>4</number>
+                      <number>2</number>
                      </property>
                      <property name="topMargin">
-                      <number>4</number>
+                      <number>2</number>
                      </property>
                      <property name="rightMargin">
-                      <number>4</number>
+                      <number>2</number>
                      </property>
                      <property name="bottomMargin">
-                      <number>4</number>
+                      <number>2</number>
                      </property>
                      <item>
                       <layout class="QVBoxLayout" name="verticalLayout_exploring_custom_selection">
@@ -1303,7 +1303,7 @@
                          <property name="minimumSize">
                           <size>
                            <width>0</width>
-                           <height>28</height>
+                           <height>24</height>
                           </size>
                          </property>
                          <property name="font">
@@ -1428,7 +1428,7 @@
               <property name="minimumSize">
                <size>
                 <width>0</width>
-                <height>280</height>
+                <height>320</height>
                </size>
               </property>
               <property name="maximumSize">
@@ -2734,19 +2734,19 @@
                 <item>
                  <layout class="QHBoxLayout" name="horizontalLayout_exporting_content">
                   <property name="spacing">
-                   <number>4</number>
+                   <number>2</number>
                   </property>
                   <property name="leftMargin">
-                   <number>2</number>
+                   <number>1</number>
                   </property>
                   <property name="topMargin">
-                   <number>2</number>
+                   <number>1</number>
                   </property>
                   <property name="rightMargin">
-                   <number>2</number>
+                   <number>1</number>
                   </property>
                   <property name="bottomMargin">
-                   <number>2</number>
+                   <number>1</number>
                   </property>
                   <item>
                    <widget class="QWidget" name="widget_exporting_keys" native="true">
@@ -2776,19 +2776,19 @@
                     </property>
                     <layout class="QVBoxLayout" name="verticalLayout_exporting_keys_container">
                      <property name="spacing">
-                      <number>2</number>
+                      <number>1</number>
                      </property>
                      <property name="leftMargin">
-                      <number>2</number>
+                      <number>1</number>
                      </property>
                      <property name="topMargin">
-                      <number>2</number>
+                      <number>1</number>
                      </property>
                      <property name="rightMargin">
-                      <number>2</number>
+                      <number>1</number>
                      </property>
                      <property name="bottomMargin">
-                      <number>2</number>
+                      <number>1</number>
                      </property>
                      <item>
                       <layout class="QVBoxLayout" name="verticalLayout_exporting_keys" stretch="0,0,0,0,0,0,0,0,0,0,0">

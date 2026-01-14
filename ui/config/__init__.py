@@ -88,6 +88,10 @@ class UIConfig:
                 'padding': 10,
                 'border_radius': 8,
             },
+            'groupbox': {
+                'min_width': 250,  # Prevent overlap when splitter is resized
+                'content_margins': {'top': 6, 'right': 8, 'bottom': 6, 'left': 8},
+            },
             'combobox': {
                 'height': 40,
                 'min_height': 36,
@@ -257,8 +261,10 @@ class UIConfig:
                 'base_width': 34,
                 'padding': 1,
                 'border_radius': 5,
-            },
-            'combobox': {
+            },            'groupbox': {
+                'min_width': 200,  # Prevent overlap when splitter is resized (compact mode)
+                'content_margins': {'top': 4, 'right': 6, 'bottom': 4, 'left': 6},
+            },            'combobox': {
                 'height': 36,
                 'min_height': 32,
                 'max_height': 40,
