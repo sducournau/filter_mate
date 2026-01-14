@@ -489,10 +489,7 @@ class FilterEngineTask(QgsTask):
         """
         Prepare source geometry using backend executor.
         
-        v4.0.1: Uses BackendRegistry if available, otherwise falls back to legacy imports.
-        
-        NOTE: This method is named _prepare_source_geometry_via_executor to avoid
-        collision with the legacy _prepare_source_geometry(layer_provider_type) method.
+        Phase E13: Delegates to SpatialFilterExecutor.
         
         Args:
             layer_info: Dict with layer metadata
@@ -503,20 +500,15 @@ class FilterEngineTask(QgsTask):
         Returns:
             Tuple of (geometry_data, error_message)
         """
-        executor = self._get_backend_executor(layer_info)
-        if executor:
-            try:
-                return executor.prepare_source_geometry(
-                    layer_info=layer_info,
-                    feature_ids=feature_ids,
-                    buffer_value=buffer_value,
-                    use_centroids=use_centroids
-                )
-            except Exception as e:
-                logger.debug(f"Executor.prepare_source_geometry failed: {e}, using legacy")
+        executor = self._get_spatial_executor()
         
-        # Fallback to legacy imports (inline imports for backward compatibility)
-        return None, "Legacy fallback required"
+        return executor.prepare_source_geometry_via_executor(
+            layer_info=layer_info,
+            backend_registry=self._backend_registry,
+            feature_ids=feature_ids,
+            buffer_value=buffer_value,
+            use_centroids=use_centroids
+        )
 
     def _apply_subset_via_executor(self, layer, expression: str) -> bool:
         """
@@ -771,33 +763,15 @@ class FilterEngineTask(QgsTask):
         """
         Organize layers to be filtered by provider type.
         
-        EPIC-1 Phase 14.3: Delegates to core.services.layer_organizer.
-        
-        Populates self.layers dictionary with layers grouped by provider,
-        and updates layers_count.
-        
-        For 'filter' action: respects has_layers_to_filter flag OR processes if layers exist
-        For 'unfilter' and 'reset': processes all layers in the list regardless of flag
-        (to clean up filters that were applied previously)
+        Phase E13: Delegates to SpatialFilterExecutor.
         """
-        from ..services.layer_organizer import organize_layers_for_filtering
-        from ...infrastructure.utils import detect_layer_provider_type
+        executor = self._get_spatial_executor()
         
-        # Delegate to LayerOrganizer service
-        result = organize_layers_for_filtering(
+        result = executor.organize_layers(
             task_action=self.task_action,
             task_parameters=self.task_parameters,
-            project=self.PROJECT,
-            postgresql_available=POSTGRESQL_AVAILABLE,
-            detect_provider_fn=detect_layer_provider_type,
-            is_valid_layer_fn=is_valid_layer,
-            is_sip_deleted_fn=is_sip_deleted
+            project=self.PROJECT
         )
-        
-        # Update task state from result
-        self.layers = result.layers_by_provider
-        self.layers_count = result.layers_count
-        self.provider_list = result.provider_list
         
         # Update task state from result
         self.layers = result.layers_by_provider
@@ -1304,130 +1278,61 @@ class FilterEngineTask(QgsTask):
         """
         Process and validate a QGIS expression, converting it to appropriate SQL.
         
+        Phase E13: Delegates to AttributeFilterExecutor.
+        
         Returns:
             tuple: (processed_expression, is_field_expression) or (None, None) if invalid
         """
-        # FIXED: Only reject if expression is JUST a field name (no operators)
-        # Allow expressions like "HOMECOUNT = 10" or "field > 5"
-        qgs_expr = QgsExpression(expression)
-        # FIX v2.3.9: Use case-insensitive check for operators (e.g., 'in' vs 'IN')
-        expr_upper = expression.upper()
-        if qgs_expr.isField() and not any(op in expr_upper for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']):
-            logger.debug(f"Rejecting expression '{expression}' - it's just a field name without comparison")
-            return None, None
+        executor = self._get_attribute_executor()
         
-        if not qgs_expr.isValid():
-            logger.warning(f"Invalid QGIS expression: '{expression}'")
-            return None, None
-        
-        # CRITICAL FIX: Reject "display expressions" that don't return boolean values
-        # Display expressions like coalesce("field",'<NULL>') are valid QGIS expressions
-        # but they return string/value types, not boolean - they cannot be used as SQL WHERE filters
-        # Filter expressions must contain comparison/logical operators
-        comparison_operators = ['=', '>', '<', '!=', '<>', 'IN', 'LIKE', 'ILIKE', 'IS NULL', 'IS NOT NULL', 
-                               'BETWEEN', 'NOT', 'AND', 'OR', '~', 'SIMILAR TO', '@', '&&']
-        has_comparison = any(op in expression.upper() for op in comparison_operators)
-        
-        if not has_comparison:
-            # Expression doesn't contain comparison operators - likely a display expression
-            logger.debug(f"Rejecting expression '{expression}' - no comparison operators found (display expression, not filter)")
-            return None, None
-        
-        # Add leading space and check for field equality
-        expression = " " + expression
-        is_field_expression = QgsExpression().isFieldEqualityExpression(
-            self.task_parameters["task"]["expression"]
+        # Call executor method with required context
+        result = executor.process_qgis_expression(
+            expression=expression,
+            source_layer_fields=self.source_layer_fields_names,
+            primary_key=self.primary_key_name,
+            table_name=self.param_source_table,
+            provider_type=self.param_source_provider_type,
+            task_parameters=self.task_parameters
         )
         
-        if is_field_expression[0]:
-            self.is_field_expression = is_field_expression
+        # Update task state if field expression detected
+        if result[1] and result[1][0]:
+            self.is_field_expression = result[1]
         
-        # Qualify field names
-        expression = self._qualify_field_names_in_expression(
-            expression,
-            self.source_layer_fields_names,
-            self.primary_key_name,
-            self.param_source_table,
-            self.param_source_provider_type == PROVIDER_POSTGRES
-        )
-        
-        # Convert to provider-specific SQL
-        # CRITICAL: Don't apply PostgreSQL conversions to OGR layers!
-        if self.param_source_provider_type == PROVIDER_POSTGRES:
-            expression = self.qgis_expression_to_postgis(expression)
-        elif self.param_source_provider_type == PROVIDER_SPATIALITE:
-            expression = self.qgis_expression_to_spatialite(expression)
-        # else: OGR providers - keep QGIS expression as-is
-        
-        expression = expression.strip()
-        
-        # Handle CASE statements
-        if expression.startswith("CASE"):
-            expression = 'SELECT ' + expression
-        
-        return expression, is_field_expression
+        return result
 
     def _combine_with_old_subset(self, expression):
-        """Delegates to core.filter.expression_combiner.combine_with_old_subset()."""
-        from ..filter.expression_combiner import combine_with_old_subset
-        from ..filter.expression_sanitizer import optimize_duplicate_in_clauses
+        """
+        Combine new expression with old subset.
         
-        # If no existing filter, return new expression
-        if not self.param_source_old_subset:
-            return expression
+        Phase E13: Delegates to AttributeFilterExecutor.
+        """
+        executor = self._get_attribute_executor()
         
-        # Get combine operator (or default to AND)
-        combine_operator = self._get_source_combine_operator()
-        if not combine_operator:
-            combine_operator = 'AND'
-        
-        # Delegate to core module
-        return combine_with_old_subset(
-            new_expression=expression,
+        return executor.combine_with_old_subset(
+            expression=expression,
             old_subset=self.param_source_old_subset,
-            combine_operator=combine_operator,
-            provider_type=self.param_source_provider_type if hasattr(self, 'param_source_provider_type') else 'postgresql',
-            optimize_duplicates_fn=lambda expr: optimize_duplicate_in_clauses(expr)
+            combine_operator=self._get_source_combine_operator() or 'AND',
+            provider_type=self.param_source_provider_type if hasattr(self, 'param_source_provider_type') else 'postgresql'
         )
 
     def _build_feature_id_expression(self, features_list):
-        """Delegates to core.filter.expression_builder.build_feature_id_expression()."""
-        from ..filter.expression_builder import build_feature_id_expression
-        from ..filter.expression_combiner import combine_with_old_subset
-        from ..filter.expression_sanitizer import optimize_duplicate_in_clauses
+        """
+        Build expression from feature IDs.
         
-        # Extract feature IDs
-        # CRITICAL FIX: Handle ctid (PostgreSQL internal identifier)
-        if self.primary_key_name == 'ctid':
-            features_ids = [str(feature.id()) for feature in features_list]
-        else:
-            features_ids = [str(feature[self.primary_key_name]) for feature in features_list]
+        Phase E13: Delegates to AttributeFilterExecutor.
+        """
+        executor = self._get_attribute_executor()
         
-        if not features_ids:
-            return None
-        
-        # Build base IN expression
-        is_numeric = self.task_parameters["infos"]["primary_key_is_numeric"]
-        expression = build_feature_id_expression(
-            features_ids=features_ids,
+        return executor.build_feature_id_expression(
+            features_list=features_list,
             primary_key_name=self.primary_key_name,
-            table_name=self.param_source_table if self.param_source_provider_type == PROVIDER_POSTGRES else None,
+            table_name=self.param_source_table,
             provider_type=self.param_source_provider_type,
-            is_numeric=is_numeric
+            is_numeric=self.task_parameters["infos"]["primary_key_is_numeric"],
+            old_subset=self.param_source_old_subset,
+            combine_operator=self._get_source_combine_operator()
         )
-        
-        # Combine with old subset if needed
-        if self.param_source_old_subset:
-            combined = combine_with_old_subset(
-                new_expression=expression,
-                old_subset=self.param_source_old_subset,
-                combine_operator=self._get_source_combine_operator() or 'AND',
-                provider_type=self.param_source_provider_type,
-                optimize_duplicates_fn=lambda expr: optimize_duplicate_in_clauses(expr)
-            )
-            return combined
-        
-        return expression
     
     def _is_pk_numeric(self, layer=None, pk_field=None):
         """Check if the primary key field is numeric. Delegated to pg_executor."""
