@@ -6,5 +6,6 @@ as part of Phase E13 refactoring (January 2026).
 """
 
 from .attribute_filter_executor import AttributeFilterExecutor
+from .spatial_filter_executor import SpatialFilterExecutor
 
-__all__ = ['AttributeFilterExecutor']
+__all__ = ['AttributeFilterExecutor', 'SpatialFilterExecutor']
