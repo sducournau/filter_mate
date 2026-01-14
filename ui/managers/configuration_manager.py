@@ -551,7 +551,7 @@ class ConfigurationManager(QObject):
                 "TYPE": "PushButton",
                 "WIDGET": d.pushButton_checkable_exporting_output_folder,
                 "SIGNALS": [(
-                    "toggled",
+                    "clicked",  # v4.0.6 FIX: Use clicked (not toggled) to open file dialog
                     lambda state, x='has_output_folder_to_export', custom_functions={
                         "ON_CHANGE": lambda x: d.dialog_export_output_path()
                     }: d.project_property_changed(x, state, custom_functions)
@@ -562,7 +562,7 @@ class ConfigurationManager(QObject):
                 "TYPE": "PushButton",
                 "WIDGET": d.pushButton_checkable_exporting_zip,
                 "SIGNALS": [(
-                    "toggled",
+                    "clicked",  # v4.0.6 FIX: Use clicked (not toggled) to open file dialog
                     lambda state, x='has_zip_to_export', custom_functions={
                         "ON_CHANGE": lambda x: d.dialog_export_output_pathzip()
                     }: d.project_property_changed(x, state, custom_functions)

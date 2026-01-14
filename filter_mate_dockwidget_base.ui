@@ -15,8 +15,8 @@
   </property>
   <property name="minimumSize">
    <size>
-    <width>443</width>
-    <height>650</height>
+    <width>280</width>
+    <height>280</height>
    </size>
   </property>
   <property name="baseSize">
@@ -266,8 +266,26 @@
     </sizepolicy>
    </property>
    <layout class="QVBoxLayout" name="verticalLayout_8">
+    <property name="spacing">
+     <number>0</number>
+    </property>
+    <property name="leftMargin">
+     <number>2</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>2</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
     <item>
      <layout class="QVBoxLayout" name="verticalLayout_main">
+      <property name="spacing">
+       <number>0</number>
+      </property>
       <item>
        <widget class="QSplitter" name="splitter_main">
         <property name="orientation">
@@ -292,7 +310,7 @@
          <property name="minimumSize">
           <size>
            <width>0</width>
-           <height>240</height>
+           <height>80</height>
           </size>
          </property>
          <property name="maximumSize">
@@ -416,7 +434,7 @@
                 <item row="0" column="0">
                  <widget class="QWidget" name="widget_exploring_keys" native="true">
                   <property name="sizePolicy">
-                   <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                   <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                     <horstretch>0</horstretch>
                     <verstretch>0</verstretch>
                    </sizepolicy>
@@ -424,7 +442,7 @@
                   <property name="minimumSize">
                    <size>
                     <width>38</width>
-                    <height>0</height>
+                    <height>60</height>
                    </size>
                   </property>
                   <property name="maximumSize">
@@ -936,7 +954,7 @@
                     <property name="minimumSize">
                      <size>
                       <width>100</width>
-                      <height>100</height>
+                      <height>0</height>
                      </size>
                     </property>
                     <property name="font">
@@ -979,9 +997,12 @@
                     <property name="saveCheckedState">
                      <bool>true</bool>
                     </property>
-                    <layout class="QGridLayout" name="gridLayout_exploring_single_content">
+                    <layout class="QVBoxLayout" name="verticalLayout_exploring_single_content">
+                     <property name="spacing">
+                      <number>4</number>
+                     </property>
                      <property name="sizeConstraint">
-                      <enum>QLayout::SetDefaultConstraint</enum>
+                      <enum>QLayout::SetMinimumSize</enum>
                      </property>
                      <property name="leftMargin">
                       <number>8</number>
@@ -995,76 +1016,75 @@
                      <property name="bottomMargin">
                       <number>8</number>
                      </property>
-                     <item row="0" column="0">
-                      <layout class="QVBoxLayout" name="verticalLayout_exploring_single_selection">
-                       <property name="spacing">
-                        <number>2</number>
+                     <item>
+                      <widget class="QgsFeaturePickerWidget" name="mFeaturePickerWidget_exploring_single_selection">
+                       <property name="sizePolicy">
+                        <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                         <horstretch>0</horstretch>
+                         <verstretch>0</verstretch>
+                        </sizepolicy>
                        </property>
-                       <item>
-                        <widget class="QgsFeaturePickerWidget" name="mFeaturePickerWidget_exploring_single_selection">
-                         <property name="sizePolicy">
-                          <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                           <horstretch>0</horstretch>
-                           <verstretch>0</verstretch>
-                          </sizepolicy>
-                         </property>
-                         <property name="font">
-                          <font>
-                           <family>Segoe UI</family>
-                           <pointsize>8</pointsize>
-                           <weight>75</weight>
-                           <italic>false</italic>
-                           <bold>true</bold>
-                           <underline>false</underline>
-                           <strikeout>false</strikeout>
-                           <stylestrategy>PreferDefault</stylestrategy>
-                           <kerning>true</kerning>
-                          </font>
-                         </property>
-                         <property name="cursor">
-                          <cursorShape>IBeamCursor</cursorShape>
-                         </property>
-                         <property name="fetchLimit">
-                          <number>10000</number>
-                         </property>
-                         <property name="showBrowserButtons">
-                          <bool>true</bool>
-                         </property>
-                        </widget>
-                       </item>
-                       <item>
-                        <widget class="QgsFieldExpressionWidget" name="mFieldExpressionWidget_exploring_single_selection">
-                         <property name="sizePolicy">
-                          <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                           <horstretch>0</horstretch>
-                           <verstretch>0</verstretch>
-                          </sizepolicy>
-                         </property>
-                         <property name="minimumSize">
-                          <size>
-                           <width>0</width>
-                           <height>24</height>
-                          </size>
-                         </property>
-                         <property name="font">
-                          <font>
-                           <family>Segoe UI</family>
-                           <pointsize>8</pointsize>
-                           <weight>75</weight>
-                           <italic>false</italic>
-                           <bold>true</bold>
-                           <underline>false</underline>
-                           <strikeout>false</strikeout>
-                           <stylestrategy>PreferDefault</stylestrategy>
-                           <kerning>true</kerning>
-                          </font>
-                         </property>
-                         <property name="cursor">
-                          <cursorShape>IBeamCursor</cursorShape>
-                         </property>
-                        </widget>
-                       </item>
-                      </layout>
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>26</height>
+                        </size>
+                       </property>
+                       <property name="font">
+                        <font>
+                         <family>Segoe UI</family>
+                         <pointsize>8</pointsize>
+                         <weight>75</weight>
+                         <italic>false</italic>
+                         <bold>true</bold>
+                         <underline>false</underline>
+                         <strikeout>false</strikeout>
+                         <stylestrategy>PreferDefault</stylestrategy>
+                         <kerning>true</kerning>
+                        </font>
+                       </property>
+                       <property name="cursor">
+                        <cursorShape>IBeamCursor</cursorShape>
+                       </property>
+                       <property name="fetchLimit">
+                        <number>10000</number>
+                       </property>
+                       <property name="showBrowserButtons">
+                        <bool>true</bool>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QgsFieldExpressionWidget" name="mFieldExpressionWidget_exploring_single_selection">
+                       <property name="sizePolicy">
+                        <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                         <horstretch>0</horstretch>
+                         <verstretch>0</verstretch>
+                        </sizepolicy>
+                       </property>
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>26</height>
+                        </size>
+                       </property>
+                       <property name="font">
+                        <font>
+                         <family>Segoe UI</family>
+                         <pointsize>8</pointsize>
+                         <weight>75</weight>
+                         <italic>false</italic>
+                         <bold>true</bold>
+                         <underline>false</underline>
+                         <strikeout>false</strikeout>
+                         <stylestrategy>PreferDefault</stylestrategy>
+                         <kerning>true</kerning>
+                        </font>
+                       </property>
+                       <property name="cursor">
+                        <cursorShape>IBeamCursor</cursorShape>
+                       </property>
+                      </widget>
                      </item>
                     </layout>
                    </widget>
@@ -1088,21 +1108,15 @@
                   <item>
                    <widget class="QgsCollapsibleGroupBox" name="mGroupBox_exploring_multiple_selection">
                     <property name="sizePolicy">
-                     <sizepolicy hsizetype="Expanding" vsizetype="MinimumExpanding">
+                     <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
                       <horstretch>0</horstretch>
-                      <verstretch>2</verstretch>
+                      <verstretch>0</verstretch>
                      </sizepolicy>
                     </property>
                     <property name="minimumSize">
                      <size>
                       <width>100</width>
-                      <height>200</height>
-                     </size>
-                    </property>
-                    <property name="maximumSize">
-                     <size>
-                      <width>16777215</width>
-                      <height>23</height>
+                      <height>0</height>
                      </size>
                     </property>
                     <property name="font">
@@ -1382,7 +1396,7 @@
          <property name="minimumSize">
           <size>
            <width>0</width>
-           <height>300</height>
+           <height>150</height>
           </size>
          </property>
          <property name="maximumSize">
@@ -1445,7 +1459,7 @@
               <property name="minimumSize">
                <size>
                 <width>0</width>
-                <height>320</height>
+                <height>150</height>
                </size>
               </property>
               <property name="maximumSize">

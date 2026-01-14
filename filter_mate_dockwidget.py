@@ -871,12 +871,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 S16: Create header with indicators."""
         self.frame_header = QtWidgets.QFrame(self.dockWidgetContents)
         self.frame_header.setObjectName("frame_header"); self.frame_header.setFrameShape(QtWidgets.QFrame.NoFrame)
-        self.frame_header.setFixedHeight(20)  # setFixedHeight sets both min and max
+        self.frame_header.setFixedHeight(14)  # Reduced from 16px for more compact layout
         hl = QtWidgets.QHBoxLayout(self.frame_header)
-        hl.setContentsMargins(4,0,4,0); hl.setSpacing(6)
-        hl.addSpacerItem(QtWidgets.QSpacerItem(40,10,QtWidgets.QSizePolicy.Expanding,QtWidgets.QSizePolicy.Minimum))
+        hl.setContentsMargins(2,0,2,0); hl.setSpacing(2)
+        hl.addSpacerItem(QtWidgets.QSpacerItem(40,8,QtWidgets.QSizePolicy.Expanding,QtWidgets.QSizePolicy.Minimum))
         self.plugin_title_label = None
-        bb = "color:white;font-size:9pt;font-weight:600;padding:3px 10px;border-radius:12px;border:none;"
+        bb = "color:white;font-size:8pt;font-weight:600;padding:1px 6px;border-radius:8px;border:none;"
         self.favorites_indicator_label = self._create_indicator_label("label_favorites_indicator","★",bb+"background-color:#f39c12;",bb+"background-color:#d68910;","★ Favorites\nClick to manage",self._on_favorite_indicator_clicked,35)
         hl.addWidget(self.favorites_indicator_label)
         self.backend_indicator_label = self._create_indicator_label("label_backend_indicator","OGR" if self.has_loaded_layers else "...",bb+"background-color:#3498db;",bb+"background-color:#2980b9;","Click to change backend",self._on_backend_indicator_clicked,40)
@@ -888,7 +888,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 S16: Create indicator label."""
         lbl = QtWidgets.QLabel(self.frame_header)
         lbl.setObjectName(name); lbl.setText(text); lbl.setStyleSheet(f"QLabel#{name}{{{style}}}QLabel#{name}:hover{{{hover_style}}}")
-        lbl.setAlignment(Qt.AlignCenter); lbl.setMinimumWidth(min_width); lbl.setFixedHeight(18)
+        lbl.setAlignment(Qt.AlignCenter); lbl.setMinimumWidth(min_width); lbl.setFixedHeight(12)
         lbl.setCursor(Qt.PointingHandCursor); lbl.setToolTip(tooltip); lbl.mousePressEvent = click_handler
         return lbl
     
@@ -937,11 +937,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if cnt > 0:
             self.favorites_indicator_label.setText(f"★ {cnt}")
             self.favorites_indicator_label.setToolTip(f"★ {cnt} Favorites saved\nClick to apply or manage")
-            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:white;font-size:9pt;font-weight:600;padding:3px 10px;border-radius:12px;border:none;background-color:#f39c12;}QLabel#label_favorites_indicator:hover{background-color:#d68910;}")
+            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:white;font-size:8pt;font-weight:600;padding:1px 6px;border-radius:8px;border:none;background-color:#f39c12;}QLabel#label_favorites_indicator:hover{background-color:#d68910;}")
         else:
             self.favorites_indicator_label.setText("★")
             self.favorites_indicator_label.setToolTip("★ No favorites saved\nClick to add current filter")
-            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:#95a5a6;font-size:9pt;font-weight:600;padding:3px 10px;border-radius:12px;border:none;background-color:#ecf0f1;}QLabel#label_favorites_indicator:hover{background-color:#d5dbdb;}")
+            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:#95a5a6;font-size:8pt;font-weight:600;padding:1px 6px;border-radius:8px;border:none;background-color:#ecf0f1;}QLabel#label_favorites_indicator:hover{background-color:#d5dbdb;}")
         self.favorites_indicator_label.adjustSize()
 
     def _get_available_backends_for_layer(self, layer):
@@ -1843,7 +1843,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 'comboBox_filtering_other_layers_combine_operator'
             ],
             'pushButton_checkable_filtering_geometric_predicates': [
-                'checkableComboBox_filtering_geometric_predicates'
+                'comboBox_filtering_geometric_predicates'  # FIX: was checkableComboBox_
             ],
             'pushButton_checkable_filtering_buffer_value': [
                 'mQgsDoubleSpinBox_filtering_buffer_value'
@@ -1861,17 +1861,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 'mQgsProjectionSelectionWidget_exporting_projection'
             ],
             'pushButton_checkable_exporting_styles': [
-                'checkBox_exporting_styles_save'
+                'comboBox_exporting_styles'  # FIX: was checkBox_exporting_styles_save
             ],
             'pushButton_checkable_exporting_datatype': [
                 'comboBox_exporting_datatype'
             ],
             'pushButton_checkable_exporting_output_folder': [
                 'lineEdit_exporting_output_folder',
-                'toolButton_exporting_output_folder'
+                'checkBox_batch_exporting_output_folder'  # FIX: was toolButton_exporting_output_folder
             ],
             'pushButton_checkable_exporting_zip': [
-                'checkBox_exporting_zip'
+                'lineEdit_exporting_zip',  # FIX: was checkBox_exporting_zip
+                'checkBox_batch_exporting_zip'
             ]
         }
         
@@ -1925,6 +1926,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         v4.0 UX Improvement - Added January 2026
         """
+        for widget in widgets:
+            if widget is not None:
+                widget.setEnabled(enabled)
     
     def _ensure_always_enabled_widgets(self):
         """
@@ -1933,12 +1937,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         These widgets need to be always accessible:
         - comboBox_filtering_current_layer: Layer selection
         - checkBox_filtering_use_centroids_source_layer: Centroids option
+        - pushButton_checkable_exporting_output_folder: Always clickable
+        - pushButton_checkable_exporting_zip: Always clickable
         
         v4.0.5 - Added January 2026
         """
         always_enabled = [
             'comboBox_filtering_current_layer',
-            'checkBox_filtering_use_centroids_source_layer'
+            'checkBox_filtering_use_centroids_source_layer',
+            'pushButton_checkable_exporting_output_folder',
+            'pushButton_checkable_exporting_zip'
         ]
         
         for widget_name in always_enabled:
@@ -1946,9 +1954,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 widget = getattr(self, widget_name)
                 widget.setEnabled(True)
                 logger.debug(f"✓ Widget {widget_name} set to always enabled")
-        for widget in widgets:
-            if widget is not None:
-                widget.setEnabled(enabled)
     
     def select_tabTools_index(self):
         """v4.0 S18: Update action buttons based on active tab."""
@@ -2365,6 +2370,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if not self._is_ui_ready() or not layer:
             return
         
+        # FIX 2026-01-14: Define last_layer BEFORE using it
+        last_layer = self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].currentLayer()
         logger.debug(f"current_layer_changed: Syncing combo | last_layer={last_layer.name() if last_layer else None} | new_layer={layer.name()}")
         if last_layer is None or last_layer.id() != layer.id():
             logger.debug(f"  -> Layer changed, updating combo")
@@ -2373,11 +2380,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
         else:
             logger.debug(f"  -> Same layer, skipping combo update")
-        last_layer = self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].currentLayer()
-        if last_layer is None or last_layer.id() != layer.id():
-            self.manageSignal(["FILTERING", "CURRENT_LAYER"], 'disconnect')
-            self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].setLayer(layer)
-            self.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
+        # NOTE: Removed duplicate last_layer definition - now defined at start of fallback block
         
         # Update backend indicator
         forced_backend = getattr(self, 'forced_backends', {}).get(layer.id())
@@ -2460,8 +2463,37 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.filtering_geometric_predicates_state_changed()
     
     def _reload_exploration_widgets(self, layer, layer_props):
-        """v4.0 S18: → ExploringController."""
-        if self._exploring_ctrl: self._exploring_ctrl._reload_exploration_widgets(layer, layer_props)
+        """v4.0 S18: → ExploringController with fallback."""
+        if self._exploring_ctrl:
+            self._exploring_ctrl._reload_exploration_widgets(layer, layer_props)
+        else:
+            # Fallback: Update exploring widgets layer when controller unavailable
+            self._fallback_reload_exploration_widgets(layer, layer_props)
+    
+    def _fallback_reload_exploration_widgets(self, layer, layer_props):
+        """FIX 2026-01-14: Fallback to update exploring widgets when controller unavailable."""
+        if not self.widgets_initialized or not layer:
+            return
+        try:
+            # Update single selection widget
+            if "SINGLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
+                widget = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+                if widget:
+                    widget.setLayer(layer)
+            # Update multiple selection widget
+            if "MULTIPLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
+                widget = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
+                if widget and hasattr(widget, 'setLayer'):
+                    widget.setLayer(layer, layer_props, skip_task=True)
+            # Update expression widgets
+            for expr_key in ["SINGLE_SELECTION_EXPRESSION", "MULTIPLE_SELECTION_EXPRESSION", "CUSTOM_SELECTION_EXPRESSION"]:
+                if expr_key in self.widgets.get("EXPLORING", {}):
+                    widget = self.widgets["EXPLORING"][expr_key]["WIDGET"]
+                    if widget and hasattr(widget, 'setLayer'):
+                        widget.setLayer(layer)
+            logger.debug(f"Fallback: Exploration widgets updated for layer {layer.name()}")
+        except Exception as e:
+            logger.warning(f"Fallback _reload_exploration_widgets failed: {e}")
 
     def _restore_groupbox_ui_state(self, groupbox_name):
         """v4.0 Sprint 17: Restore exploring groupbox visual state."""
@@ -2747,10 +2779,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         for t in tuple_group:
             if t[0].upper() not in self.widgets or t[1].upper() not in self.widgets[t[0].upper()]: continue
             we = self.widgets[t[0].upper()][t[1].upper()]
-            if t[1] in ['has_output_folder_to_export', 'has_zip_to_export']:
-                has_layers = any(self.checkableComboBoxLayer_exporting_layers.itemCheckState(i) == Qt.Checked for i in range(self.checkableComboBoxLayer_exporting_layers.count())) if hasattr(self, 'checkableComboBoxLayer_exporting_layers') else False
-                we["WIDGET"].setEnabled(has_layers)
-            else: we["WIDGET"].setEnabled(True)
+            # v4.0.6: has_output_folder_to_export and has_zip_to_export pushbuttons are ALWAYS enabled
+            # They can be checked/unchecked at any time regardless of layer selection
+            we["WIDGET"].setEnabled(True)
             if we["TYPE"] == 'QgsFieldExpressionWidget' and self.current_layer: we["WIDGET"].setLayer(self.current_layer)
 
 
@@ -3418,13 +3449,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except: pass
     
     def _update_export_buttons_state(self):
-        """v4.0 Sprint 17: Update export buttons based on layer selection."""
-        try:
-            has_layers = any(self.checkableComboBoxLayer_exporting_layers.itemCheckState(i) == Qt.Checked 
-                           for i in range(self.checkableComboBoxLayer_exporting_layers.count())) if hasattr(self, 'checkableComboBoxLayer_exporting_layers') else False
-            for btn in ['pushButton_checkable_exporting_output_folder', 'pushButton_checkable_exporting_zip']:
-                if hasattr(self, btn): getattr(self, btn).setEnabled(has_layers)
-        except: pass
+        """
+        v4.0 Sprint 17: Update export buttons based on layer selection.
+        
+        NOTE: pushButton_checkable_exporting_output_folder and pushButton_checkable_exporting_zip
+        are ALWAYS enabled (can be checked/unchecked anytime). They are excluded from this logic.
+        Only their associated widgets (lineEdit, checkBox) should be controlled by toggle state.
+        """
+        # These buttons are always enabled - no state update needed here
+        # The toggle state controls their associated widgets, not the buttons themselves
+        pass
     
     def _update_expression_tooltip(self, expr_widget):
         """v4.0 Sprint 17: Update tooltip for expression widget."""

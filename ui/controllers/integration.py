@@ -348,7 +348,7 @@ class ControllerIntegration:
         logger.debug("All controllers registered")
     
     def _connect_signals(self) -> None:
-        """Connect dockwidget signals to controllers."""
+        """Connect dockwidget signals to controllers and controller signals to handlers."""
         dw = self._dockwidget
         
         # Connect tab changed signal
@@ -367,6 +367,63 @@ class ControllerIntegration:
             except Exception as e:
                 logger.warning(f"Could not connect currentLayerChanged signal: {e}")
         
+        # === v4.0.5: Connect controller signals to integration handlers ===
+        # This enables proper event-driven communication between controllers and UI
+        
+        # LayerSyncController signals
+        if self._layer_sync_controller:
+            try:
+                self._layer_sync_controller.layer_synchronized.connect(self._on_layer_synchronized)
+                self._connections.append(('layer_sync.layer_synchronized', self._on_layer_synchronized))
+                self._layer_sync_controller.sync_blocked.connect(self._on_sync_blocked)
+                self._connections.append(('layer_sync.sync_blocked', self._on_sync_blocked))
+                self._layer_sync_controller.layer_changed.connect(self._on_layer_changed_from_controller)
+                self._connections.append(('layer_sync.layer_changed', self._on_layer_changed_from_controller))
+            except Exception as e:
+                logger.warning(f"Could not connect LayerSyncController signals: {e}")
+        
+        # PropertyController signals
+        if self._property_controller:
+            try:
+                self._property_controller.property_changed.connect(self._on_property_changed)
+                self._connections.append(('property.property_changed', self._on_property_changed))
+                self._property_controller.property_error.connect(self._on_property_error)
+                self._connections.append(('property.property_error', self._on_property_error))
+                self._property_controller.buffer_style_changed.connect(self._on_buffer_style_changed)
+                self._connections.append(('property.buffer_style_changed', self._on_buffer_style_changed))
+            except Exception as e:
+                logger.warning(f"Could not connect PropertyController signals: {e}")
+        
+        # BackendController signals
+        if self._backend_controller:
+            try:
+                self._backend_controller.backend_changed.connect(self._on_backend_changed)
+                self._connections.append(('backend.backend_changed', self._on_backend_changed))
+                self._backend_controller.reload_requested.connect(self._on_reload_requested)
+                self._connections.append(('backend.reload_requested', self._on_reload_requested))
+            except Exception as e:
+                logger.warning(f"Could not connect BackendController signals: {e}")
+        
+        # FavoritesController signals
+        if self._favorites_controller:
+            try:
+                self._favorites_controller.favorites_changed.connect(self._on_favorites_changed)
+                self._connections.append(('favorites.favorites_changed', self._on_favorites_changed))
+                self._favorites_controller.favorite_applied.connect(self._on_favorite_applied)
+                self._connections.append(('favorites.favorite_applied', self._on_favorite_applied))
+            except Exception as e:
+                logger.warning(f"Could not connect FavoritesController signals: {e}")
+        
+        # ConfigController signals
+        if self._config_controller:
+            try:
+                self._config_controller.theme_changed.connect(self._on_theme_changed)
+                self._connections.append(('config.theme_changed', self._on_theme_changed))
+                self._config_controller.config_changed.connect(self._on_config_changed)
+                self._connections.append(('config.config_changed', self._on_config_changed))
+            except Exception as e:
+                logger.warning(f"Could not connect ConfigController signals: {e}")
+        
         logger.debug(f"Connected {len(self._connections)} signals")
     
     def _disconnect_signals(self) -> None:
@@ -375,10 +432,41 @@ class ControllerIntegration:
         
         for signal_name, handler in self._connections:
             try:
+                # Dockwidget signals
                 if signal_name == 'tabTools.currentChanged' and hasattr(dw, 'tabTools'):
                     dw.tabTools.currentChanged.disconnect(handler)
                 elif signal_name == 'currentLayerChanged' and hasattr(dw, 'currentLayerChanged'):
                     dw.currentLayerChanged.disconnect(handler)
+                # v4.0.5: Controller signals
+                elif signal_name.startswith('layer_sync.') and self._layer_sync_controller:
+                    if 'layer_synchronized' in signal_name:
+                        self._layer_sync_controller.layer_synchronized.disconnect(handler)
+                    elif 'sync_blocked' in signal_name:
+                        self._layer_sync_controller.sync_blocked.disconnect(handler)
+                    elif 'layer_changed' in signal_name:
+                        self._layer_sync_controller.layer_changed.disconnect(handler)
+                elif signal_name.startswith('property.') and self._property_controller:
+                    if 'property_changed' in signal_name:
+                        self._property_controller.property_changed.disconnect(handler)
+                    elif 'property_error' in signal_name:
+                        self._property_controller.property_error.disconnect(handler)
+                    elif 'buffer_style_changed' in signal_name:
+                        self._property_controller.buffer_style_changed.disconnect(handler)
+                elif signal_name.startswith('backend.') and self._backend_controller:
+                    if 'backend_changed' in signal_name:
+                        self._backend_controller.backend_changed.disconnect(handler)
+                    elif 'reload_requested' in signal_name:
+                        self._backend_controller.reload_requested.disconnect(handler)
+                elif signal_name.startswith('favorites.') and self._favorites_controller:
+                    if 'favorites_changed' in signal_name:
+                        self._favorites_controller.favorites_changed.disconnect(handler)
+                    elif 'favorite_applied' in signal_name:
+                        self._favorites_controller.favorite_applied.disconnect(handler)
+                elif signal_name.startswith('config.') and self._config_controller:
+                    if 'theme_changed' in signal_name:
+                        self._config_controller.theme_changed.disconnect(handler)
+                    elif 'config_changed' in signal_name:
+                        self._config_controller.config_changed.disconnect(handler)
             except Exception as e:
                 logger.debug(f"Could not disconnect {signal_name}: {e}")
         
@@ -417,6 +505,91 @@ class ControllerIntegration:
         if self._filtering_controller:
             self._filtering_controller.set_source_layer(layer)
     
+    # === v4.0.5: Controller Signal Handlers ===
+    # These handlers respond to signals emitted by controllers
+    
+    def _on_layer_synchronized(self, layer) -> None:
+        """Handle layer synchronized event from LayerSyncController."""
+        layer_name = layer.name() if layer and hasattr(layer, 'name') else 'None'
+        logger.debug(f"Layer synchronized: {layer_name}")
+        # Could trigger UI refresh here if needed
+    
+    def _on_sync_blocked(self, reason: str) -> None:
+        """Handle sync blocked event from LayerSyncController."""
+        logger.debug(f"Layer sync blocked: {reason}")
+        # Could show user notification for certain block reasons
+    
+    def _on_layer_changed_from_controller(self, layer) -> None:
+        """Handle layer changed event from LayerSyncController."""
+        layer_name = layer.name() if layer and hasattr(layer, 'name') else 'None'
+        logger.debug(f"Layer changed (from controller): {layer_name}")
+    
+    def _on_property_changed(self, prop_name: str, new_val, old_val) -> None:
+        """Handle property change event from PropertyController."""
+        logger.debug(f"Property '{prop_name}' changed: {old_val} -> {new_val}")
+        # Could propagate to other components that need to know about property changes
+    
+    def _on_property_error(self, prop_name: str, error_msg: str) -> None:
+        """Handle property error event from PropertyController."""
+        logger.warning(f"Property error on '{prop_name}': {error_msg}")
+        # Could show error message to user via message bar
+        try:
+            from qgis.utils import iface
+            if iface and hasattr(iface, 'messageBar'):
+                iface.messageBar().pushWarning("FilterMate", f"Property error: {error_msg}")
+        except Exception:
+            pass
+    
+    def _on_buffer_style_changed(self, buffer_value: float) -> None:
+        """Handle buffer style change event from PropertyController."""
+        logger.debug(f"Buffer style changed: {buffer_value}")
+        # Could update buffer visualization or related UI elements
+    
+    def _on_backend_changed(self, layer_id: str, backend_name: str) -> None:
+        """Handle backend change event from BackendController."""
+        logger.info(f"Backend changed for layer {layer_id}: {backend_name}")
+        # Update backend indicator display if needed
+        if self._dockwidget and hasattr(self._dockwidget, 'backend_indicator_label'):
+            # The BackendController should already update the indicator
+            pass
+    
+    def _on_reload_requested(self) -> None:
+        """Handle reload request event from BackendController."""
+        logger.info("Reload requested from BackendController")
+        if self._dockwidget and hasattr(self._dockwidget, 'get_project_layers'):
+            try:
+                self._dockwidget.get_project_layers()
+            except Exception as e:
+                logger.error(f"Failed to reload layers: {e}")
+    
+    def _on_favorites_changed(self) -> None:
+        """Handle favorites changed event from FavoritesController."""
+        logger.debug("Favorites list changed")
+        # Could trigger refresh of favorites UI widget
+    
+    def _on_favorite_applied(self, favorite_name: str) -> None:
+        """Handle favorite applied event from FavoritesController."""
+        logger.info(f"Favorite applied: {favorite_name}")
+        # Could show success notification
+    
+    def _on_theme_changed(self, theme_name: str) -> None:
+        """Handle theme change event from ConfigController."""
+        logger.info(f"Theme changed to: {theme_name}")
+        # Trigger theme application across the UI
+        if self._dockwidget:
+            try:
+                # Try to apply theme via style manager
+                from ..styles import ThemeManager
+                if ThemeManager:
+                    ThemeManager.apply_theme(theme_name)
+            except Exception as e:
+                logger.debug(f"Could not apply theme automatically: {e}")
+    
+    def _on_config_changed(self, key: str, value) -> None:
+        """Handle config change event from ConfigController."""
+        logger.debug(f"Config changed: {key} = {value}")
+        # Could propagate config changes to components that need them
+
     def _cleanup_on_error(self) -> None:
         """Cleanup after setup error."""
         self._exploring_controller = None

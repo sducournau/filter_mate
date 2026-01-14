@@ -55,6 +55,20 @@ class PreparedStatementManager(ABC):
         """Insert subset history record."""
         pass
     
+    @abstractmethod
+    def delete_subset_history(self, project_uuid: str, layer_id: str) -> bool:
+        """
+        Delete subset history records for a layer.
+        
+        Args:
+            project_uuid: Project UUID
+            layer_id: Layer ID
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        pass
+    
     def close(self):
         """Close/deallocate prepared statements."""
         pass
@@ -105,6 +119,30 @@ class PostgreSQLPreparedStatements(PreparedStatementManager):
             return True
         except Exception as e:
             logger.warning(f"PostgreSQL prepared insert failed: {e}")
+            return False
+    
+    def delete_subset_history(self, project_uuid: str, layer_id: str) -> bool:
+        """
+        Delete subset history records for a layer.
+        
+        Args:
+            project_uuid: Project UUID
+            layer_id: Layer ID
+        
+        Returns:
+            True if successful
+        """
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "DELETE FROM fm_subset_history WHERE fk_project = %s AND layer_id = %s",
+                (project_uuid, layer_id)
+            )
+            self.connection.commit()
+            logger.debug(f"Deleted subset history for layer {layer_id}")
+            return True
+        except Exception as e:
+            logger.warning(f"PostgreSQL delete_subset_history failed: {e}")
             return False
     
     def close(self):
@@ -161,6 +199,30 @@ class SpatialitePreparedStatements(PreparedStatementManager):
         except Exception as e:
             logger.warning(f"Spatialite prepared insert failed: {e}")
             return False
+    
+    def delete_subset_history(self, project_uuid: str, layer_id: str) -> bool:
+        """
+        Delete subset history records for a layer.
+        
+        Args:
+            project_uuid: Project UUID
+            layer_id: Layer ID
+        
+        Returns:
+            True if successful
+        """
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "DELETE FROM fm_subset_history WHERE fk_project = ? AND layer_id = ?",
+                (project_uuid, layer_id)
+            )
+            self.connection.commit()
+            logger.debug(f"Deleted subset history for layer {layer_id}")
+            return True
+        except Exception as e:
+            logger.warning(f"Spatialite delete_subset_history failed: {e}")
+            return False
 
 
 class NullPreparedStatements(PreparedStatementManager):
@@ -179,6 +241,10 @@ class NullPreparedStatements(PreparedStatementManager):
         seq_order: int,
         subset_string: str
     ) -> bool:
+        """Return False to indicate fallback to direct SQL should be used."""
+        return False
+    
+    def delete_subset_history(self, project_uuid: str, layer_id: str) -> bool:
         """Return False to indicate fallback to direct SQL should be used."""
         return False
 
