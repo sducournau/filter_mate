@@ -1121,42 +1121,6 @@ class FilterMate:
         del self.toolbar
 
     #--------------------------------------------------------------------------
-    
-    # def reload_config(self):
-    #     """Create qtreeview model configuration from json file"""
-    #     self.edit_config_json()
-    #     global CONFIG_SCOPE, CONFIG_DATA
-    #     if CONFIG_SCOPE:
-
-    #         self.managerWidgets.manage_widgets(CONFIG_DATA['WIDGETS'])
-
-
-
-    #             #item = self.dockwidget.WIDGETS.layout().itemAtPosition(i,1)
-    #             #self.dockwidget.WIDGETS.layout().removeItem(item)
-    #             #item = self.dockwidget.WIDGETS.layout().itemAtPosition(i,0)
-    #             #self.dockwidget.WIDGETS.layout().removeItem(item)
-
-
-
-    #         CONFIG_SCOPE = False
-
-
-
-    # def edit_config_json(self):
-    #     """Write qtreeview model configuration to json file"""
-    #     global LAYERS,COLORS, CONFIG_DATA, DIR_PROFILE
-    #     CONFIG_DATA = self.managerWidgets.model.serialize()
-    #     LAYERS = CONFIG_DATA['LAYERS']
-    #     COLORS = CONFIG_DATA['COLORS']
-    #     print('reload config')
-    #     with open(DIR_PLUGIN + '/config/config.json', 'w') as outfile:
-    #         json.dump(CONFIG_DATA, outfile)
-
-    # def qtree_signal(self):
-    #     """Signal to overload configuration qtreeview model to keep configuration file up to date"""
-    #     global CONFIG_SCOPE
-    #     CONFIG_SCOPE = True
 
     def reset_configuration(self):
         """Reset the configuration to default values and optionally delete the SQLite database.
