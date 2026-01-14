@@ -162,17 +162,23 @@ try:
     from ...infrastructure.database.connection_pool import (
         get_pool,
         register_pool,
+        get_pool_manager,
+        pooled_connection_from_layer,
+        get_pooled_connection_from_layer,
+        release_pooled_connection,
     )
-    # Pool manager and optimizers are optional
-    get_pool_manager = None
-    pooled_connection_from_layer = None
-    BatchMetadataLoader = None
     CONNECTION_POOL_AVAILABLE = True
 except ImportError:
     CONNECTION_POOL_AVAILABLE = False
     get_pool_manager = None
     pooled_connection_from_layer = None
-    BatchMetadataLoader = None
+    get_pooled_connection_from_layer = None
+    release_pooled_connection = None
+    get_pool = None
+    register_pool = None
+
+# BatchMetadataLoader is optional advanced feature
+BatchMetadataLoader = None
 
 
 class LayersManagementEngineTask(QgsTask):
