@@ -105,9 +105,9 @@ class ItemDelegate(QStyledItemDelegate):
         self.parent = parent
 
     def sizeHint(self, option, index):
-        ish = option.decorationSize.height()
-        isw = option.decorationSize.width()
-        return QSize(isw, ish)
+        # BUGFIX: Return fixed size hint for consistent row height
+        # Match QGIS standard layer item height
+        return QSize(200, 20)  # Width ignored by view, height = 20px
 
     def getCheckboxRect(self, option):
         return QRect(4, 4, 18, 18).translated(option.rect.topLeft())
@@ -119,22 +119,40 @@ class ItemDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
         painter.save()
 
-        # Draw
-        ish = option.decorationSize.height()
-        isw = option.decorationSize.width()
+        # BUGFIX: Use fixed icon size instead of option.decorationSize which can be (0,0)
+        # Standard QGIS icon size for layer items
+        ICON_SIZE = 16
+        CHECKBOX_WIDTH = 22  # Space for checkbox (18px + 4px margin)
+        
         x, y, dx, dy = option.rect.x(), option.rect.y(), option.rect.width(), option.rect.height()
 
-        text = index.data(Qt.DisplayRole)
-        if text:
-            painter.drawText(int(x + isw*2 + 4), int(y + 4 + ish/2), text)
-
-        # Decoration
+        # Decoration - Draw icon FIRST, positioned after checkbox
+        # v4.0.2: Simplified - icon is now properly stored via setData(icon, Qt.DecorationRole)
         pic = index.data(Qt.DecorationRole)
+        
+        icon_drawn = False
         if pic:
             if isinstance(pic, QIcon):
-                painter.drawPixmap(x + isw, y, pic.pixmap(int(isw), int(ish)))
+                if not pic.isNull():
+                    # Draw icon with fixed size, positioned after checkbox
+                    icon_x = x + CHECKBOX_WIDTH
+                    icon_y = y + (dy - ICON_SIZE) // 2  # Center vertically
+                    pixmap = pic.pixmap(ICON_SIZE, ICON_SIZE)
+                    painter.drawPixmap(icon_x, icon_y, pixmap)
+                    icon_drawn = True
             elif isinstance(pic, QPixmap):
-                painter.drawPixmap(x + isw, y, pic.scaled(int(isw), int(ish), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                icon_x = x + CHECKBOX_WIDTH
+                icon_y = y + (dy - ICON_SIZE) // 2
+                painter.drawPixmap(icon_x, icon_y, pic.scaled(ICON_SIZE, ICON_SIZE, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                icon_drawn = True
+        
+        # Draw text AFTER icon
+        text = index.data(Qt.DisplayRole)
+        if text:
+            # Position text after checkbox + icon + margins
+            text_x = x + CHECKBOX_WIDTH + (ICON_SIZE + 4 if icon_drawn else 0)
+            text_y = y + dy // 2 + 4  # Center vertically with offset
+            painter.drawText(text_x, text_y, text)
 
         # Indicate Selected
         painter.setPen(QtGui.QPen(Qt.NoPen))
@@ -185,17 +203,9 @@ class QgsCheckableComboBoxLayer(QComboBox):
 
         self.parent = parent
         
-        # Dynamic sizing based on UIConfig
-        try:
-            from ...config.config import ENV_VARS
-            combobox_height = ENV_VARS.get('UI', {}).get('combobox_height', 30)
-        except (ImportError, AttributeError, KeyError):
-            combobox_height = 30
-        
-        self.setBaseSize(combobox_height, 0)
-        self.setMinimumHeight(combobox_height)
+        # Dimensions managed by QSS (20px standard height from resources/styles/default.qss)
+        # Width and size policy still configured in Python for layout flexibility
         self.setMinimumWidth(30)
-        self.setMaximumHeight(combobox_height)
         self.setMaximumWidth(16777215)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.setCursor(Qt.PointingHandCursor)
@@ -254,15 +264,28 @@ class QgsCheckableComboBoxLayer(QComboBox):
             icon: QIcon for the layer
             text: Display text (layer name)
             data: Optional user data (dict with layer_geometry_type, etc.)
+            
+        v4.0.2 BUGFIX: Use setData(icon, Qt.DecorationRole) instead of setIcon()
+        This ensures the ItemDelegate can retrieve the icon via index.data(Qt.DecorationRole)
         """
         item = QStandardItem()
         item.setCheckable(True)
         item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
         item.setData(Qt.Unchecked, Qt.CheckStateRole)
+        
+        # Set text first
         item.setText(text)
         item.setData(text, role=Qt.DisplayRole)
-        item.setData(icon, role=Qt.DecorationRole)
-
+        
+        # CRITICAL: Use setData() with DecorationRole, NOT setIcon()
+        # setIcon() doesn't properly expose the icon to ItemDelegate.paint()
+        if icon and not icon.isNull():
+            item.setData(icon, role=Qt.DecorationRole)
+            geom_type = data.get('layer_geometry_type', 'Unknown') if data else 'Unknown'
+            logger.debug(f"QgsCheckableComboBoxLayer.addItem: '{text}' with icon (geom_type={geom_type})")
+        else:
+            logger.warning(f"QgsCheckableComboBoxLayer.addItem: '{text}' has NULL or missing icon!")
+        
         if data is not None:
             item.setData(data, role=Qt.UserRole)
 
@@ -391,12 +414,15 @@ class ListWidgetWrapper(QListWidget):
     def __init__(self, identifier_field_name, primary_key_is_numeric, parent=None):
         super(ListWidgetWrapper, self).__init__(parent)
 
-        # Dynamic sizing based on config
+        # Dynamic sizing based on config - match before_migration/UIConfig compact profile
+        # before_migration: list.min_height = 225px (ratio 1.5x for 5-6 items display)
         try:
             from ...config.config import ENV_VARS
-            list_min_height = ENV_VARS.get('UI', {}).get('list_min_height', 120)
-        except (ImportError, AttributeError, KeyError):
-            list_min_height = 120
+            # Try to get from config, fallback to before_migration compact profile default
+            ui_config = ENV_VARS.get('CONFIG_DATA', {}).get('APP', {}).get('DOCKWIDGET', {})
+            list_min_height = ui_config.get('list_min_height', 225)
+        except (ImportError, AttributeError, KeyError, TypeError):
+            list_min_height = 225  # Match before_migration compact profile
         
         self.setMinimumHeight(list_min_height)
         self.identifier_field_name = identifier_field_name
@@ -528,22 +554,29 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
         self.config_data = config_data
         
-        # Dynamic sizing based on config - use minimum size that fits content
+        # Dynamic sizing based on config matching before_migration/UIConfig compact profile
+        # before_migration: combobox.height = 36px, list.min_height = 225px
+        # New v4.0: combobox.height = 26px (from QSS), list.min_height = 225px (ratio 1.5x)
         try:
             from ...config.config import ENV_VARS
-            combobox_height = ENV_VARS.get('UI', {}).get('combobox_height', 26)
+            # Try to get from config, fallback to hardcoded defaults
+            ui_config = ENV_VARS.get('CONFIG_DATA', {}).get('APP', {}).get('DOCKWIDGET', {})
+            combobox_height = ui_config.get('combobox_height', 26)  # From QSS standard
+            list_min_height = ui_config.get('list_min_height', 225)  # From before_migration compact
         except (AttributeError, TypeError, ValueError, ImportError, KeyError):
-            combobox_height = 26
+            combobox_height = 26  # Match QSS standard height
+            list_min_height = 225  # Match before_migration compact profile (ratio 1.5x for 5-6 items)
         
-        # Minimum height: just enough for 2 QLineEdits + some list space
-        # 2 * 26px (lineEdits) + 2px spacing + 30px (min list) = ~84px
-        total_min_height = combobox_height * 2 + 2 + 30
+        # Calculate total height: 2 QLineEdit + spacing + list
+        # Match before_migration formula: lineedit_height + list_min_height + 4
+        lineedit_height = combobox_height * 2 + 2  # 2 lineEdit (26px each) + 2px spacing = 54px
+        total_min_height = lineedit_height + list_min_height + 4  # 54 + 225 + 4 = 283px
         
         self.setMinimumWidth(30)
         self.setMaximumWidth(16777215)
         self.setMinimumHeight(total_min_height)
-        # Use MinimumExpanding for vertical to allow shrinking but prefer expanding
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
+        # Remove setMaximumHeight to allow expansion (before_migration pattern)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setCursor(Qt.PointingHandCursor)
 
         font = QFont("Segoe UI", 8)

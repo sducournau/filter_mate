@@ -85,7 +85,8 @@ QgsCheckableComboBoxLayer {
     border-radius: 4px;
     padding: 4px 8px;
     color: {color_font_0};
-    /* min-height managed dynamically by UIConfig in Python for responsive sizing */
+    min-height: 20px;
+    max-height: 20px;
 }
 
 QgsFeaturePickerWidget:hover,
@@ -138,6 +139,17 @@ QgsCheckableComboBox::indicator {
     border: 2px solid {color_2};
     border-radius: 3px;
     background-color: transparent;
+}
+
+/* ========================================================================
+   INPUT FIELDS - Standardized 20px height
+   ======================================================================== */
+
+QLineEdit,
+QSpinBox,
+QDoubleSpinBox {
+    min-height: 20px;
+    max-height: 20px;
 }
 
 QgsCheckableComboBox::indicator:checked {
@@ -329,21 +341,21 @@ QgsCollapsibleGroupBox {
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 4px;
-    padding: 6px;
-    padding-top: 24px;
+    padding: 4px;
+    padding-top: 20px;
     margin: 0px;
     color: {color_font_0};
-    min-height: 50px;
+    min-height: 40px;
 }
 
 QgsCollapsibleGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    padding: 4px 8px;
-    margin-left: 24px;
-    margin-top: 2px;
+    padding: 2px 6px;
+    margin-left: 20px;
+    margin-top: 1px;
     left: 0px;
-    top: 4px;
+    top: 3px;
     max-width: 340px;
     text-overflow: ellipsis;
     white-space: nowrap;

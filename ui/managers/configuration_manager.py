@@ -415,7 +415,8 @@ class ConfigurationManager(QObject):
             "CURRENT_LAYER": {
                 "TYPE": "ComboBox",
                 "WIDGET": d.comboBox_filtering_current_layer,
-                "SIGNALS": [("layerChanged", d.current_layer_changed)]
+                # FIX 2026-01-14: Pass manual_change=True for manual combobox changes
+                "SIGNALS": [("layerChanged", lambda layer: d.current_layer_changed(layer, manual_change=True))]
             },
             "LAYERS_TO_FILTER": {
                 "TYPE": "CustomCheckableLayerComboBox",

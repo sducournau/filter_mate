@@ -9,8 +9,12 @@ from typing import TYPE_CHECKING, Optional, List, Dict, Any, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+import logging
 
 from .base_controller import BaseController
+
+# Module logger
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
@@ -216,6 +220,12 @@ class ExportingController(BaseController):
             if not dockwidget.widgets_initialized or not dockwidget.has_loaded_layers:
                 return False
             
+            # v4.0.4: Early return if PROJECT_LAYERS not populated yet
+            # This prevents race condition during initialization
+            if not dockwidget.PROJECT_LAYERS:
+                logger.info("populate_export_combobox: PROJECT_LAYERS empty, deferring until projectLayersReady signal")
+                return False
+            
             # Get saved preferences
             layers_to_export = []
             datatype_to_export = ''
@@ -231,8 +241,6 @@ class ExportingController(BaseController):
             from qgis.PyQt.QtCore import Qt
             from ...infrastructure.constants import REMOTE_PROVIDERS, get_geometry_type_string
             from ...infrastructure.utils.validation_utils import is_layer_source_available
-            import logging
-            logger = logging.getLogger(__name__)
             
             try:
                 from osgeo import ogr
@@ -274,13 +282,18 @@ class ExportingController(BaseController):
                 layer_id = layer_info["layer_id"]
                 layer_name = layer_info["layer_name"]
                 layer_crs_authid = layer_info["layer_crs_authid"]
-                layer_icon = dockwidget.icon_per_geometry_type(layer_info["layer_geometry_type"])
+                geom_type = layer_info["layer_geometry_type"]
+                layer_icon = dockwidget.icon_per_geometry_type(geom_type)
+                
+                # DIAGNOSTIC: Log geometry type and icon validity
+                logger.debug(f"populate_export_combobox: layer='{layer_name}', geom_type='{geom_type}', icon_isNull={layer_icon.isNull() if layer_icon else 'None'}")
                 
                 # Validate layer is usable
                 layer_obj = project.mapLayer(layer_id)
                 if layer_obj and isinstance(layer_obj, QgsVectorLayer) and is_layer_source_available(layer_obj, require_psycopg2=False):
                     display_name = f"{layer_name} [{layer_crs_authid}]"
-                    layers_widget.addItem(layer_icon, display_name, key)
+                    item_data = {"layer_id": key, "layer_geometry_type": layer_info["layer_geometry_type"]}
+                    layers_widget.addItem(layer_icon, display_name, item_data)
                     item = layers_widget.model().item(item_index)
                     item.setCheckState(Qt.Checked if key in layers_to_export else Qt.Unchecked)
                     item_index += 1
@@ -291,7 +304,9 @@ class ExportingController(BaseController):
                     display_name = f"{pg_layer.name()} [{pg_layer.crs().authid()}]"
                     geom_type_str = get_geometry_type_string(pg_layer.geometryType(), legacy_format=True)
                     layer_icon = dockwidget.icon_per_geometry_type(geom_type_str)
-                    layers_widget.addItem(layer_icon, display_name, pg_layer.id())
+                    logger.debug(f"populate_export_combobox [PostgreSQL]: layer='{pg_layer.name()}', geom_type='{geom_type_str}', icon_isNull={layer_icon.isNull() if layer_icon else 'None'}")
+                    item_data = {"layer_id": pg_layer.id(), "layer_geometry_type": geom_type_str}
+                    layers_widget.addItem(layer_icon, display_name, item_data)
                     item = layers_widget.model().item(item_index)
                     item.setCheckState(Qt.Checked if pg_layer.id() in layers_to_export else Qt.Unchecked)
                     item_index += 1
@@ -303,7 +318,9 @@ class ExportingController(BaseController):
                     display_name = f"{remote_layer.name()} [{remote_layer.crs().authid()}]"
                     geom_type_str = get_geometry_type_string(remote_layer.geometryType(), legacy_format=True)
                     layer_icon = dockwidget.icon_per_geometry_type(geom_type_str)
-                    layers_widget.addItem(layer_icon, display_name, remote_layer.id())
+                    logger.debug(f"populate_export_combobox [Remote]: layer='{remote_layer.name()}', geom_type='{geom_type_str}', icon_isNull={layer_icon.isNull() if layer_icon else 'None'}")
+                    item_data = {"layer_id": remote_layer.id(), "layer_geometry_type": geom_type_str}
+                    layers_widget.addItem(layer_icon, display_name, item_data)
                     item = layers_widget.model().item(item_index)
                     item.setCheckState(Qt.Checked if remote_layer.id() in layers_to_export else Qt.Unchecked)
                     item_index += 1
@@ -327,8 +344,7 @@ class ExportingController(BaseController):
             return True
             
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).error(f"populate_export_combobox failed: {e}")
+            logger.error(f"populate_export_combobox failed: {e}")
             return False
     
     def set_layers_to_export(self, layer_ids: List[str]) -> None:

@@ -1299,10 +1299,11 @@ class ExploringController(BaseController, LayerSelectionMixin):
         features = []
         expression = ''
         
-        logger.debug(f"get_current_features: groupbox='{groupbox_type}', layer='{dw.current_layer.name()}'")
+        logger.debug(f"get_current_features: groupbox='{groupbox_type}', layer='{dw.current_layer.name()}', use_cache={use_cache}")
         
         if groupbox_type == "single_selection":
             features, expression = self._get_single_selection_features()
+            logger.debug(f"  → single_selection returned {len(features)} features")
         elif groupbox_type == "multiple_selection":
             features, expression = self._get_multiple_selection_features()
         elif groupbox_type == "custom_selection":
@@ -1323,8 +1324,12 @@ class ExploringController(BaseController, LayerSelectionMixin):
         widget = dw.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
         input_feature = widget.feature()
         
+        logger.debug(f"_get_single_selection_features: widget.feature() = {input_feature}")
+        logger.debug(f"  widget.layer() = {widget.layer().name() if widget.layer() else 'None'}")
+        
         # Check if feature is valid
         if input_feature is None or (hasattr(input_feature, 'isValid') and not input_feature.isValid()):
+            logger.debug(f"  Feature is None or invalid, trying recovery...")
             # Try recovery from saved FID
             if (hasattr(dw, '_last_single_selection_fid') 
                 and dw._last_single_selection_fid is not None
@@ -2063,7 +2068,10 @@ class ExploringController(BaseController, LayerSelectionMixin):
             layer_props: Layer properties dictionary
         """
         if not self._dockwidget.widgets_initialized:
+            logger.debug("_reload_exploration_widgets: widgets not initialized, skipping")
             return
+        
+        logger.info(f"=== _reload_exploration_widgets called for layer: {layer.name() if layer else 'None'} ===")
         
         from qgis.core import QgsExpression
         from infrastructure.utils import get_best_display_field, is_layer_valid
@@ -2225,6 +2233,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
             logger.debug(f"  layer: {layer.name() if layer else 'None'}")
             logger.debug(f"  single_expr: {single_expr}")
             logger.debug(f"  picker layer: {picker_widget.layer().name() if picker_widget.layer() else 'None'}")
+            logger.info(f"✓ Exploration widgets reloaded for layer {layer.name()}")
         except (AttributeError, KeyError, RuntimeError) as e:
             error_type = type(e).__name__
             error_details = str(e)

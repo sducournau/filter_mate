@@ -124,7 +124,8 @@ class LayerSyncController(BaseController):
 
     def on_current_layer_changed(
         self,
-        layer: Optional[QgsVectorLayer]
+        layer: Optional[QgsVectorLayer],
+        manual_change: bool = False
     ) -> bool:
         """
         Handle current layer change event.
@@ -133,26 +134,30 @@ class LayerSyncController(BaseController):
         and synchronizing widgets.
 
         CRITICAL: This method implements CRIT-005 fix to prevent layer loss.
+        FIX 2026-01-14: Manual changes bypass protection windows.
 
         Args:
             layer: New current layer (can be None)
+            manual_change: True if user manually selected layer (bypasses protection)
 
         Returns:
             True if layer change was accepted, False if blocked
         """
         layer_name = layer.name() if layer else "(None)"
-        logger.debug(f"on_current_layer_changed called with layer='{layer_name}'")
+        logger.debug(f"on_current_layer_changed called with layer='{layer_name}', manual={manual_change}")
 
         # Check lock for reentrant calls
         if self._updating_current_layer:
             logger.debug("on_current_layer_changed BLOCKED - already updating")
             return False
 
-        # Block during active filtering
-        if self._filtering_in_progress:
-            logger.debug("🛡️ on_current_layer_changed BLOCKED - filtering in progress")
+        # Block during active filtering UNLESS manual change
+        if self._filtering_in_progress and not manual_change:
+            logger.debug("🛡️ on_current_layer_changed BLOCKED - automatic change during filtering")
             self.sync_blocked.emit("filtering_in_progress")
             return False
+        elif self._filtering_in_progress and manual_change:
+            logger.info("✓ Manual layer change during filtering - allowing (user override)")
 
         # CRITICAL: Check post-filter protection window
         if self._is_within_post_filter_protection():
@@ -578,7 +583,8 @@ class LayerSyncController(BaseController):
     def synchronize_layer_widgets(
         self,
         layer: QgsVectorLayer,
-        layer_props: dict
+        layer_props: dict,
+        manual_change: bool = False
     ) -> bool:
         """
         Synchronize all widgets with the new current layer.
@@ -589,10 +595,12 @@ class LayerSyncController(BaseController):
         v4.0 Sprint 3: Full migration from dockwidget.
         
         CRITICAL: Respects post-filter protection window to prevent CRIT-005.
+        FIX 2026-01-14: Manual changes bypass protection window.
         
         Args:
             layer: The current layer to sync widgets to
             layer_props: Layer properties from PROJECT_LAYERS
+            manual_change: True if user manually selected layer (bypasses protection)
             
         Returns:
             True if synchronization completed, False if blocked
@@ -604,8 +612,8 @@ class LayerSyncController(BaseController):
             logger.debug("synchronize_layer_widgets: widgets not initialized")
             return False
         
-        # Check protection window for combobox sync
-        skip_combobox_sync = self._should_skip_combobox_sync(layer)
+        # Check protection window for combobox sync (manual changes bypass)
+        skip_combobox_sync = self._should_skip_combobox_sync(layer, manual_change=manual_change)
         
         # Detect multi-step filter
         if hasattr(dw, '_detect_multi_step_filter'):
@@ -625,7 +633,8 @@ class LayerSyncController(BaseController):
         # Synchronize all layer property widgets
         self._sync_layer_property_widgets(layer, layer_props)
         
-        # Populate layers combobox
+        # CRITICAL: Populate layers_to_filter combobox (excluding current layer)
+        # This ensures the current layer never appears in the remote layers list
         self._sync_layers_to_filter_combobox(layer)
         
         # Synchronize state-dependent widgets
@@ -744,18 +753,25 @@ class LayerSyncController(BaseController):
     # Private Helper Methods for Widget Synchronization
     # =========================================================================
 
-    def _should_skip_combobox_sync(self, layer: Optional[QgsVectorLayer]) -> bool:
+    def _should_skip_combobox_sync(self, layer: Optional[QgsVectorLayer], manual_change: bool = False) -> bool:
         """
         Check if combobox synchronization should be skipped.
         
         Skips during post-filter protection window to prevent CRIT-005.
+        FIX 2026-01-14: Manual changes bypass protection window.
         
         Args:
             layer: Layer being synced
+            manual_change: True if user manually selected layer (bypasses protection)
             
         Returns:
             True if combobox sync should be skipped
         """
+        # Manual changes always proceed
+        if manual_change:
+            logger.debug("Manual change - bypassing protection window check")
+            return False
+        
         if not self._is_within_post_filter_protection():
             return False
         
@@ -767,7 +783,7 @@ class LayerSyncController(BaseController):
                 layer_name = layer.name() if layer else "(None)"
                 logger.info(
                     f"🛡️ synchronize_layer_widgets BLOCKED combobox sync - "
-                    f"layer={layer_name} during protection (elapsed={elapsed:.3f}s)"
+                    f"layer={layer_name} during protection (elapsed={elapsed:.3f}s) - automatic change"
                 )
                 return True
         
@@ -1007,11 +1023,18 @@ class LayerSyncController(BaseController):
         """
         dw = self.dockwidget
         
+        # Use current_layer if no layer provided
+        if layer is None and hasattr(dw, 'current_layer'):
+            layer = dw.current_layer
+        
+        logger.info(f"_sync_layers_to_filter_combobox: Refreshing combobox for current_layer={layer.name() if layer else 'None'}")
+        
         if hasattr(dw, 'manageSignal'):
             dw.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
         
         if hasattr(dw, 'filtering_populate_layers_chekableCombobox'):
             dw.filtering_populate_layers_chekableCombobox(layer)
+            logger.debug(f"✓ layers_to_filter combobox populated (excluding {layer.name() if layer else 'None'})")
         
         if hasattr(dw, 'manageSignal'):
             dw.manageSignal(

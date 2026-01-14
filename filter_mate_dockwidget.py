@@ -133,6 +133,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     launchingTask = pyqtSignal(str)
     currentLayerChanged = pyqtSignal()
     widgetsInitialized = pyqtSignal()
+    projectLayersReady = pyqtSignal()  # v4.0.4: Emitted after PROJECT_LAYERS populated
 
     gettingProjectLayers = pyqtSignal()
 
@@ -279,30 +280,65 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         widget_object, state = self.widgets[widget_path[0]][widget_path[1]], None
         signals_to_process = [(s[0], s[-1]) for s in widget_object["SIGNALS"] 
                               if s[-1] is not None and (custom_signal_name is None or s[0] == custom_signal_name)]
+        logger.debug(f"manageSignal: {widget_path} | action={custom_action} | signal={custom_signal_name} | signals_to_process={len(signals_to_process)}")
         for signal_name, func in signals_to_process:
             state_key, cached = f"{widget_path[0]}.{widget_path[1]}.{signal_name}", self._signal_connection_states.get(f"{widget_path[0]}.{widget_path[1]}.{signal_name}")
+            logger.debug(f"  Signal '{signal_name}' | state_key={state_key} | cached={cached} | action={custom_action}")
             if (custom_action == 'connect' and cached is True) or (custom_action == 'disconnect' and cached is False):
-                state = cached; continue
+                state = cached
+                logger.debug(f"  -> SKIP (already in desired state)")
+                continue
             state = self.changeSignalState(widget_path, signal_name, func, custom_action)
             self._signal_connection_states[state_key] = state
+            logger.debug(f"  -> Changed state to {state}")
         return True if state is None and widget_object["SIGNALS"] else state
         if state is None: raise SignalStateChangeError(state, widget_path)
 
     def changeSignalState(self, widget_path, signal_name, func, custom_action=None):
-        """v4.0 S16: Change signal connection state."""
-        if not isinstance(widget_path, list) or len(widget_path) != 2: raise SignalStateChangeError(None, widget_path)
+        """
+        v4.0 S16: Change signal connection state.
+        v4.0.6 FIX: Explicit flag update for LAYER_TREE_VIEW instead of relying on boolean logic.
+        """
+        if not isinstance(widget_path, list) or len(widget_path) != 2: 
+            raise SignalStateChangeError(None, widget_path)
+        
         widget = self.widgets[widget_path[0]][widget_path[1]]["WIDGET"]
-        if not hasattr(widget, signal_name): raise SignalStateChangeError(None, widget_path)
+        if not hasattr(widget, signal_name): 
+            raise SignalStateChangeError(None, widget_path)
+        
         is_ltv = widget_path == ["QGIS", "LAYER_TREE_VIEW"]
-        state, signal = (self._layer_tree_view_signal_connected if is_ltv else widget.isSignalConnected(self.getSignal(widget, signal_name))), getattr(widget, signal_name)
+        
+        # Get current state
+        if is_ltv:
+            state = self._layer_tree_view_signal_connected
+        else:
+            state = widget.isSignalConnected(self.getSignal(widget, signal_name))
+        
+        signal = getattr(widget, signal_name)
         should_connect = (custom_action == 'connect' and not state) or (custom_action is None and not state)
         should_disconnect = (custom_action == 'disconnect' and state) or (custom_action is None and state)
+        
+        # Perform connection/disconnection
         try:
-            if should_disconnect: signal.disconnect(func)
-            elif should_connect: signal.connect(func)
-        except TypeError: pass
-        if is_ltv: self._layer_tree_view_signal_connected = should_connect
-        return self._layer_tree_view_signal_connected if is_ltv else widget.isSignalConnected(self.getSignal(widget, signal_name))
+            if should_disconnect:
+                signal.disconnect(func)
+                # EXPLICIT: Update flag immediately after disconnect
+                if is_ltv:
+                    self._layer_tree_view_signal_connected = False
+            elif should_connect:
+                signal.connect(func)
+                # EXPLICIT: Update flag immediately after connect
+                if is_ltv:
+                    self._layer_tree_view_signal_connected = True
+        except TypeError:
+            # Signal was not connected or already in desired state
+            pass
+        
+        # Return current state
+        if is_ltv:
+            return self._layer_tree_view_signal_connected
+        else:
+            return widget.isSignalConnected(self.getSignal(widget, signal_name))
 
     def reset_multiple_checkable_combobox(self):
         """v4.0 S18: Reset and recreate multiple checkable combobox widget."""
@@ -339,12 +375,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Create custom combobox widgets early so configure_widgets() can reference them
         from .ui.widgets.custom_widgets import QgsCheckableComboBoxLayer
         self.checkableComboBoxLayer_filtering_layers_to_filter = QgsCheckableComboBoxLayer(self.dockWidgetContents)
-        self.checkableComboBoxLayer_filtering_layers_to_filter.setMinimumHeight(26)
+        # Height managed by QSS (20px standard)
         self.checkableComboBoxLayer_filtering_layers_to_filter.show()
         logger.debug(f"Created filtering layers widget: {self.checkableComboBoxLayer_filtering_layers_to_filter}")
         
         self.checkableComboBoxLayer_exporting_layers = QgsCheckableComboBoxLayer(self.dockWidgetContents)
-        self.checkableComboBoxLayer_exporting_layers.setMinimumHeight(26)
+        # Height managed by QSS (20px standard)
         self.checkableComboBoxLayer_exporting_layers.show()
         logger.debug(f"Created exporting layers widget: {self.checkableComboBoxLayer_exporting_layers}")
         
@@ -542,42 +578,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _apply_widget_dimensions(self):
         """
-        Apply dimensions to standard Qt widgets (ComboBox, LineEdit, SpinBox, GroupBox).
+        [DEPRECATED v4.0.3] Widget dimensions now managed by QSS.
         
-        Reads dimensions from UIConfig and applies them to all relevant widgets
-        using findChildren() for batch processing.
+        All widget heights (ComboBox, LineEdit, SpinBox, GroupBox) are defined in
+        resources/styles/default.qss with standardized 20px height.
+        
+        This function is kept for backward compatibility but does nothing.
+        QSS rules override any Python-side dimension settings.
+        
+        TODO v5.0: Remove this function entirely.
         """
-        from .ui.config import UIConfig
-        from qgis.PyQt.QtWidgets import QComboBox, QLineEdit, QDoubleSpinBox, QSpinBox, QGroupBox
-        combo_h = UIConfig.get_config('combobox', 'height')
-        input_h = UIConfig.get_config('input', 'height')
-        gb_min_h = UIConfig.get_config('groupbox', 'min_height')
-        for combo in self.findChildren(QComboBox):
-            combo.setMinimumHeight(combo_h)
-            combo.setMaximumHeight(combo_h)
-            combo.setSizePolicy(combo.sizePolicy().horizontalPolicy(), QtWidgets.QSizePolicy.Fixed)
-        for le in self.findChildren(QLineEdit):
-            le.setMinimumHeight(input_h)
-            le.setMaximumHeight(input_h)
-            le.setSizePolicy(le.sizePolicy().horizontalPolicy(), QtWidgets.QSizePolicy.Fixed)
-        for spinbox in self.findChildren(QDoubleSpinBox) + self.findChildren(QSpinBox):
-            spinbox.setMinimumHeight(input_h)
-            spinbox.setMaximumHeight(input_h)
-            spinbox.setSizePolicy(spinbox.sizePolicy().horizontalPolicy(), QtWidgets.QSizePolicy.Fixed)
-        # Exclude EXPLORING GroupBoxes from minimum height constraint
-        excluded_groupboxes = [
-            'mGroupBox_exploring_single_selection',
-            'mGroupBox_exploring_multiple_selection',
-            'mGroupBox_exploring_custom_selection'
-        ]
-        # Apply to QGroupBox (but NOT QgsCollapsibleGroupBox in EXPLORING section)
-        for gb in self.findChildren(QGroupBox):
-            # Skip if it's a QgsCollapsibleGroupBox in EXPLORING section
-            if isinstance(gb, QgsCollapsibleGroupBox) and gb.objectName() in excluded_groupboxes:
-                continue
-            if gb.objectName() not in excluded_groupboxes:
-                gb.setMinimumHeight(gb_min_h)
-        logger.debug(f"Applied widget dimensions: ComboBox={combo_h}px, Input={input_h}px")
+        # Widget dimensions managed by QSS - no Python intervention needed
+        logger.debug("Widget dimensions managed by QSS (20px standard)")
+        pass
     
     def _apply_frame_dimensions(self):
         """
@@ -756,22 +769,24 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _apply_qgis_widget_dimensions(self):
         """
-        Apply dimensions to QGIS custom widgets.
+        [PARTIALLY DEPRECATED v4.0.3] QGIS widget dimensions now managed by QSS.
         
-        Sets heights for QgsFeaturePickerWidget, QgsFieldExpressionWidget, 
-        QgsProjectionSelectionWidget, and forces QgsPropertyOverrideButton to exact 22px.
+        Only QgsPropertyOverrideButton still needs Python sizing (22px fixed).
+        All other QGIS widgets inherit 20px height from QSS rules.
+        
+        TODO v5.0: Extract QgsPropertyOverrideButton sizing to separate function.
         """
         try:
             from qgis.PyQt.QtWidgets import QSizePolicy
             from qgis.gui import QgsPropertyOverrideButton
-            from .ui.config import UIConfig
-            cb_h = UIConfig.get_config('combobox', 'height') or 24
-            for cls in [QgsFeaturePickerWidget, QgsFieldExpressionWidget, QgsProjectionSelectionWidget, QgsMapLayerComboBox, QgsFieldComboBox, QgsCheckableComboBox]:
-                for w in self.findChildren(cls): w.setMinimumHeight(cb_h); w.setMaximumHeight(cb_h); w.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            for w in self.findChildren(QgsPropertyOverrideButton): w.setFixedSize(22, 22); w.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-            logger.debug(f"Applied QGIS widget dimensions: ComboBox={cb_h}px, Input={cb_h}px")
+            # QGIS widgets heights managed by QSS (20px standard)
+            # Only PropertyOverrideButton needs manual sizing
+            for w in self.findChildren(QgsPropertyOverrideButton): 
+                w.setFixedSize(22, 22)
+                w.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            logger.debug("QGIS widget dimensions managed by QSS (20px), PropertyOverrideButton=22px")
         except Exception as e:
-            logger.debug(f"Could not apply dimensions to QGIS widgets: {e}")
+            logger.debug(f"Could not apply dimensions to PropertyOverrideButton: {e}")
     
     def _apply_groupbox_minimum_widths(self):
         """
@@ -856,7 +871,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 S16: Create header with indicators."""
         self.frame_header = QtWidgets.QFrame(self.dockWidgetContents)
         self.frame_header.setObjectName("frame_header"); self.frame_header.setFrameShape(QtWidgets.QFrame.NoFrame)
-        self.frame_header.setMaximumHeight(20); self.frame_header.setMinimumHeight(18); self.frame_header.setFixedHeight(20)
+        self.frame_header.setFixedHeight(20)  # setFixedHeight sets both min and max
         hl = QtWidgets.QHBoxLayout(self.frame_header)
         hl.setContentsMargins(4,0,4,0); hl.setSpacing(6)
         hl.addSpacerItem(QtWidgets.QSpacerItem(40,10,QtWidgets.QSizePolicy.Expanding,QtWidgets.QSizePolicy.Minimum))
@@ -1437,7 +1452,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try:
             self.pushButton_reload_plugin = QtWidgets.QPushButton("🔄 Reload Plugin"); self.pushButton_reload_plugin.setObjectName("pushButton_reload_plugin")
             self.pushButton_reload_plugin.setToolTip(QCoreApplication.translate("FilterMate", "Reload the plugin to apply layout changes (action bar position)"))
-            self.pushButton_reload_plugin.setCursor(QtGui.QCursor(Qt.PointingHandCursor)); self.pushButton_reload_plugin.setMinimumHeight(30)
+            self.pushButton_reload_plugin.setCursor(QtGui.QCursor(Qt.PointingHandCursor))
+            # Height managed by QSS
             self.pushButton_reload_plugin.clicked.connect(self._on_reload_button_clicked)
             if self.CONFIGURATION.layout(): self.CONFIGURATION.layout().insertWidget(self.CONFIGURATION.layout().count() - 1, self.pushButton_reload_plugin)
         except Exception as e: logger.error(f"Error setting up reload button: {e}")
@@ -1522,7 +1538,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             'MultiLineString': QgsLayerItem.iconLine,
             'MultiPolygon': QgsLayerItem.iconPolygon,
         }
-        icon = icon_map.get(geometry_type, QgsLayerItem.iconDefault)()
+        icon_func = icon_map.get(geometry_type, QgsLayerItem.iconDefault)
+        icon = icon_func()
+        
+        # DIAGNOSTIC: Verify icon is valid
+        if icon.isNull():
+            logger.warning(f"icon_per_geometry_type: Generated NULL icon for geometry_type='{geometry_type}'")
+        else:
+            logger.debug(f"icon_per_geometry_type: Valid icon for geometry_type='{geometry_type}'")
+        
         self._icon_cache[geometry_type] = icon
         return icon
         
@@ -1540,11 +1564,39 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def filtering_populate_layers_chekableCombobox(self, layer=None):
         """Populate layers-to-filter combobox."""
-        if self.widgets_initialized and self._controller_integration: self._controller_integration.delegate_populate_layers_checkable_combobox(layer)
+        logger.info(f"filtering_populate_layers_chekableCombobox called for layer: {layer.name() if layer else 'None'}")
+        if self.widgets_initialized and self._controller_integration:
+            self._controller_integration.delegate_populate_layers_checkable_combobox(layer)
+            # Force visual refresh of the combobox
+            if "FILTERING" in self.widgets and "LAYERS_TO_FILTER" in self.widgets["FILTERING"]:
+                widget = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
+                if widget:
+                    widget.update()
+                    logger.debug("layers_to_filter combobox visually refreshed")
 
     def exporting_populate_combobox(self):
         """Populate export layers combobox."""
         if self._controller_integration: self._controller_integration.delegate_populate_export_combobox()
+    
+    def _on_project_layers_ready(self):
+        """v4.0.4: Callback when PROJECT_LAYERS is fully populated and ready.
+        
+        This method is called via projectLayersReady signal after add_layers task completes.
+        It ensures comboboxes are populated only when PROJECT_LAYERS contains all layers.
+        """
+        logger.info("_on_project_layers_ready: Populating comboboxes with synchronized layer data")
+        
+        # Populate export layers combobox
+        try:
+            self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'disconnect')
+            self.exporting_populate_combobox()
+            self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
+            logger.info("✓ Export combobox populated successfully")
+        except Exception as e:
+            logger.error(f"Failed to populate export combobox: {e}")
+        
+        # Note: filtering_populate_layers_chekableCombobox is called per-layer in current_layer_changed
+        # and already has protection for missing layers in PROJECT_LAYERS
 
     def _apply_auto_configuration(self):
         """Apply auto-configuration from environment."""
@@ -1617,15 +1669,40 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except: pass
 
     def set_widgets_enabled_state(self, state):
-        """v4.0 S18: Enable/disable all plugin widgets."""
+        """
+        v4.0 S18: Enable/disable all plugin widgets.
+        v4.0.5: Some widgets (comboBox_filtering_current_layer, checkBox_filtering_use_centroids_source_layer)
+                are ALWAYS enabled regardless of the state parameter.
+        """
         skip_types = ("JsonTreeView","LayerTreeView","JsonModel","ToolBox")
+        
+        # v4.0.5: Widgets that should ALWAYS remain enabled
+        always_enabled_widgets = {
+            'comboBox_filtering_current_layer',
+            'checkBox_filtering_use_centroids_source_layer'
+        }
+        
         for wg in self.widgets:
             for wn in self.widgets[wg]:
                 wt, w = self.widgets[wg][wn]["TYPE"], self.widgets[wg][wn]["WIDGET"]
                 if wt in skip_types: continue
+                
+                # Check if this is an always-enabled widget
+                widget_name = None
+                if hasattr(w, 'objectName'):
+                    widget_name = w.objectName()
+                
+                is_always_enabled = widget_name in always_enabled_widgets if widget_name else False
+                
                 w.blockSignals(True)
-                if wt in ("PushButton", "GroupBox") and w.isCheckable() and not state: w.setChecked(False); (w.setCollapsed(True) if wt == "GroupBox" else None)
-                w.setEnabled(state); w.blockSignals(False)
+                if wt in ("PushButton", "GroupBox") and w.isCheckable() and not state: 
+                    w.setChecked(False)
+                    if wt == "GroupBox":
+                        w.setCollapsed(True)
+                
+                # v4.0.5: Apply state or force enabled
+                w.setEnabled(True if is_always_enabled else state)
+                w.blockSignals(False)
 
     def connect_widgets_signals(self):
         """v4.0 Sprint 7: Ultra-simplified - connect all widget signals."""
@@ -1700,9 +1777,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         if self.init_layer and isinstance(self.init_layer, QgsVectorLayer):
             self.manage_output_name()
-            self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'disconnect')
-            self.exporting_populate_combobox()
-            self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
+            # v4.0.4: Don't populate export combobox here - will be done via projectLayersReady signal
+            # self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'disconnect')
+            # self.exporting_populate_combobox()
+            # self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
             self.set_exporting_properties()
             self.exploring_groupbox_init()
             self.current_layer_changed(self.init_layer)
@@ -1718,14 +1796,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Pattern: pushbutton.toggled(bool) → widgets.setEnabled(bool)
         
         v4.0 UX Improvement - Added January 2026
+        v4.0.5: comboBox_filtering_current_layer and checkBox_filtering_use_centroids_source_layer 
+                are ALWAYS enabled (not controlled by pushbutton)
         """
         # Mapping: pushbutton → list of associated widgets to control
         widget_mappings = {
             # FILTERING Section
-            'pushButton_checkable_filtering_auto_current_layer': [
-                'comboBox_filtering_current_layer',
-                'checkBox_filtering_use_centroids_source_layer'
-            ],
+            # NOTE: pushButton_checkable_filtering_auto_current_layer has NO associated widgets
+            # comboBox_filtering_current_layer and checkBox_filtering_use_centroids_source_layer
+            # are ALWAYS enabled (see _ensure_always_enabled_widgets)
+            'pushButton_checkable_filtering_auto_current_layer': [],
             'pushButton_checkable_filtering_layers_to_filter': [
                 'checkableComboBoxLayer_filtering_layers_to_filter',
                 'checkBox_filtering_use_centroids_distant_layers'
@@ -1802,6 +1882,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # (they are toggle-only functions: selecting, tracking, linking)
         # So we skip them
         
+        # v4.0.5: Ensure certain widgets are ALWAYS enabled
+        self._ensure_always_enabled_widgets()
+        
         logger.info(f"_setup_conditional_widget_states: Configured {len(widget_mappings)} pushbutton→widget mappings")
     
     def _toggle_associated_widgets(self, enabled, widgets):
@@ -1814,6 +1897,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         v4.0 UX Improvement - Added January 2026
         """
+    
+    def _ensure_always_enabled_widgets(self):
+        """
+        Ensure certain widgets are ALWAYS enabled regardless of other states.
+        
+        These widgets need to be always accessible:
+        - comboBox_filtering_current_layer: Layer selection
+        - checkBox_filtering_use_centroids_source_layer: Centroids option
+        
+        v4.0.5 - Added January 2026
+        """
+        always_enabled = [
+            'comboBox_filtering_current_layer',
+            'checkBox_filtering_use_centroids_source_layer'
+        ]
+        
+        for widget_name in always_enabled:
+            if hasattr(self, widget_name):
+                widget = getattr(self, widget_name)
+                widget.setEnabled(True)
+                logger.debug(f"✓ Widget {widget_name} set to always enabled")
         for widget in widgets:
             if widget is not None:
                 widget.setEnabled(enabled)
@@ -2219,21 +2323,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 w = self.widgets["FILTERING"][key]["WIDGET"]; w.blockSignals(True); w.setCurrentIndex(0); w.blockSignals(False)
         except Exception as e: logger.debug(f"Error syncing additive mode widgets: {e}")
     
-    def _synchronize_layer_widgets(self, layer, layer_props):
-        """v4.0 S18: → LayerSyncController with fallback for controller unavailable."""
+    def _synchronize_layer_widgets(self, layer, layer_props, manual_change=False):
+        """
+        v4.0 S18: → LayerSyncController with fallback for controller unavailable.
+        FIX 2026-01-14: Added manual_change parameter.
+        """
         # Try delegation first
         if self._layer_sync_ctrl:
-            if self._controller_integration.delegate_synchronize_layer_widgets(layer, layer_props):
+            if self._controller_integration.delegate_synchronize_layer_widgets(layer, layer_props, manual_change=manual_change):
                 return
         
         # Fallback: Minimal inline logic when controller unavailable (v4.0 Migration Fix)
         if not self._is_ui_ready() or not layer:
             return
         
-        # Detect multi-step filter
-        self._detect_multi_step_filter(layer, layer_props)
-        
-        # Sync current layer combo
+        logger.debug(f"current_layer_changed: Syncing combo | last_layer={last_layer.name() if last_layer else None} | new_layer={layer.name()}")
+        if last_layer is None or last_layer.id() != layer.id():
+            logger.debug(f"  -> Layer changed, updating combo")
+            self.manageSignal(["FILTERING", "CURRENT_LAYER"], 'disconnect')
+            self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].setLayer(layer)
+            self.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
+        else:
+            logger.debug(f"  -> Same layer, skipping combo update")
         last_layer = self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].currentLayer()
         if last_layer is None or last_layer.id() != layer.id():
             self.manageSignal(["FILTERING", "CURRENT_LAYER"], 'disconnect')
@@ -2367,28 +2478,84 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return sip.isdeleted(layer)
         except: return True
 
-    def current_layer_changed(self, layer):
-        """v4.0 Sprint 18: Handle current layer change event."""
-        if self._updating_current_layer: return
-        if self._controller_integration and not self._controller_integration.delegate_current_layer_changed(layer): return
+    def current_layer_changed(self, layer, manual_change=False):
+        """
+        v4.0 Sprint 18: Handle current layer change event.
+        
+        Args:
+            layer: New current layer
+            manual_change: True if user manually selected layer from combobox (bypasses protection windows)
+        """
+        import traceback
+        logger.info(f"=== current_layer_changed ENTRY === layer: {layer.name() if layer else 'None'}, manual: {manual_change}")
+        logger.debug(f"Flags: _updating={self._updating_current_layer}, _filtering={self._filtering_in_progress}, _busy={self._plugin_busy}")
+        logger.debug(f"Caller stack:\n{''.join(traceback.format_stack()[-4:-1])}")
+        
+        if self._updating_current_layer:
+            logger.debug("current_layer_changed: Already updating, skipping")
+            return
+        
+        # CRITICAL FIX (2026-01-14): Delegate to controller with manual_change flag
+        # Manual changes should bypass protection windows and always update widgets
+        controller_blocked = False
+        if self._controller_integration:
+            validation_result = self._controller_integration.delegate_current_layer_changed(layer, manual_change=manual_change)
+            if validation_result is False:
+                controller_blocked = True
+                if manual_change:
+                    logger.info("⚠️ Controller blocked but continuing anyway (manual user change)")
+                else:
+                    logger.info("⚠️ Controller blocked automatic layer change (protection active)")
         layer = self._ensure_valid_current_layer(layer)
-        if layer is None: return
-        if self._plugin_busy: self._defer_layer_change(layer); return
+        if layer is None:
+            logger.debug("current_layer_changed: Layer is None after validation")
+            return
+        if self._plugin_busy:
+            logger.debug("current_layer_changed: Plugin busy, deferring")
+            self._defer_layer_change(layer)
+            return
         try: _ = layer.id()
-        except: return
+        except:
+            logger.warning("current_layer_changed: Layer C++ object deleted")
+            return
         self._updating_current_layer = True
         self._reset_selection_tracking_for_layer(layer)
         try:
             should_continue, validated_layer, layer_props = self._validate_and_prepare_layer(layer)
             if not should_continue: return
             self._reset_layer_expressions(layer_props); widgets = self._disconnect_layer_signals()
-            self._synchronize_layer_widgets(validated_layer, layer_props); self._reload_exploration_widgets(validated_layer, layer_props)
-            # Initialize exploring groupbox for the new layer
-            if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
+            logger.info("✓ Step 1: Layer validated and expressions reset")
+            
+            # FIX 2026-01-14: Pass manual_change flag to widget synchronization
+            self._synchronize_layer_widgets(validated_layer, layer_props, manual_change=manual_change)
+            logger.info("✓ Step 2: Layer widgets synchronized")
+            
+            self._reload_exploration_widgets(validated_layer, layer_props)
+            logger.info("✓ Step 3: Exploration widgets reloaded")
+            
+            # CRITICAL: Initialize exploring groupbox for ALL layers, not just existing ones
+            # This ensures widgets are updated even when switching to a new layer
+            if self.current_layer:
+                # Ensure layer is in PROJECT_LAYERS before initializing
+                if self.current_layer.id() not in self.PROJECT_LAYERS:
+                    logger.debug(f"Layer {self.current_layer.name()} not in PROJECT_LAYERS yet - will be added")
                 self.exploring_groupbox_init()
-            self._update_exploring_buttons_state(); self._reconnect_layer_signals(widgets, layer_props)
-        except Exception as e: logger.error(f"Error in current_layer_changed: {e}")
-        finally: self._updating_current_layer = False
+                logger.info("✓ Step 4: Exploring groupbox initialized")
+            
+            self._update_exploring_buttons_state()
+            logger.info("✓ Step 5: Exploring buttons state updated")
+            
+            self._reconnect_layer_signals(widgets, layer_props)
+            logger.info("✓ Step 6: Layer signals reconnected")
+            
+            logger.info(f"=== current_layer_changed SUCCESS === layer: {validated_layer.name()}")
+        except Exception as e:
+            logger.error(f"❌ Error in current_layer_changed: {e}")
+            import traceback
+            logger.error(f"Traceback:\n{traceback.format_exc()}")
+        finally:
+            self._updating_current_layer = False
+            logger.debug("current_layer_changed: Lock released")
     
     def _defer_layer_change(self, layer):
         """v4.0 Sprint 18: Defer layer change when plugin is busy."""
@@ -2884,12 +3051,23 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.project_property_changed('has_zip_to_export', False); self.project_property_changed('zip_to_export', '')
 
     def filtering_auto_current_layer_changed(self, state=None):
-        """v3.1 Sprint 12: Simplified - handle auto current layer toggle."""
+        """
+        v3.1 Sprint 12: Simplified - handle auto current layer toggle.
+        v4.0.5: When checked, synchronizes comboBox_filtering_current_layer with iface.activeLayer()
+        """
         if not self._is_ui_ready(): return
         if state is None:
             state = self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"]
         self.widgets["FILTERING"]["AUTO_CURRENT_LAYER"]["WIDGET"].setChecked(state)
         self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"] = state
+        
+        # v4.0.5: When enabling auto sync, immediately sync current layer with active layer
+        if state and hasattr(self, 'comboBox_filtering_current_layer'):
+            active_layer = self.iface.activeLayer()
+            if active_layer and isinstance(active_layer, QgsVectorLayer):
+                logger.debug(f"Auto-sync enabled: Setting current layer to {active_layer.name()}")
+                self.comboBox_filtering_current_layer.setLayer(active_layer)
+        
         self.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect' if state else 'disconnect')
         self.setProjectVariablesEvent()
 
@@ -2926,9 +3104,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.has_loaded_layers = True
         self.set_widgets_enabled_state(True)
         
-        self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'disconnect')
-        self.exporting_populate_combobox()
-        self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
+        # v4.0.4: Don't populate export combobox here - will be done via projectLayersReady signal
+        # self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'disconnect')
+        # self.exporting_populate_combobox()
+        # self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
         self.set_exporting_properties()
         
         if not self._signals_connected:
@@ -2989,6 +3168,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 layer = self._determine_active_layer()
                 self._activate_layer_ui()
                 if layer: self._refresh_layer_specific_widgets(layer)
+                # v4.0.4: Emit signal after PROJECT_LAYERS is fully populated
+                logger.info(f"Emitting projectLayersReady signal ({len(self.PROJECT_LAYERS)} layers)")
+                self.projectLayersReady.emit()
                 return
             if self.current_layer and self.current_layer.isValid():
                 if not self._signals_connected: self.connect_widgets_signals(); self._signals_connected = True

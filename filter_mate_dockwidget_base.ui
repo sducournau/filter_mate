@@ -16,7 +16,7 @@
   <property name="minimumSize">
    <size>
     <width>443</width>
-    <height>647</height>
+    <height>650</height>
    </size>
   </property>
   <property name="baseSize">
@@ -246,6 +246,9 @@
   <property name="windowOpacity">
    <double>1.000000000000000</double>
   </property>
+  <property name="styleSheet">
+   <string notr="true">/* Styles gérés par resources/styles/default.qss */</string>
+  </property>
   <property name="floating">
    <bool>true</bool>
   </property>
@@ -295,7 +298,7 @@
          <property name="maximumSize">
           <size>
            <width>16777215</width>
-           <height>700</height>
+           <height>900</height>
           </size>
          </property>
          <property name="baseSize">
@@ -334,7 +337,7 @@
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_main_content">
           <property name="spacing">
-           <number>-2</number>
+           <number>6</number>
           </property>
           <property name="leftMargin">
            <number>1</number>
@@ -369,6 +372,14 @@
              <bool>true</bool>
             </property>
             <widget class="QWidget" name="scrollAreaWidgetContents">
+             <property name="geometry">
+              <rect>
+               <x>0</x>
+               <y>0</y>
+               <width>402</width>
+               <height>337</height>
+              </rect>
+             </property>
              <layout class="QGridLayout" name="gridLayout_main_header">
               <property name="leftMargin">
                <number>1</number>
@@ -925,7 +936,7 @@
                     <property name="minimumSize">
                      <size>
                       <width>100</width>
-                      <height>70</height>
+                      <height>100</height>
                      </size>
                     </property>
                     <property name="font">
@@ -973,16 +984,16 @@
                       <enum>QLayout::SetDefaultConstraint</enum>
                      </property>
                      <property name="leftMargin">
-                      <number>2</number>
+                      <number>8</number>
                      </property>
                      <property name="topMargin">
-                      <number>2</number>
+                      <number>8</number>
                      </property>
                      <property name="rightMargin">
-                      <number>2</number>
+                      <number>8</number>
                      </property>
                      <property name="bottomMargin">
-                      <number>2</number>
+                      <number>8</number>
                      </property>
                      <item row="0" column="0">
                       <layout class="QVBoxLayout" name="verticalLayout_exploring_single_selection">
@@ -1085,7 +1096,13 @@
                     <property name="minimumSize">
                      <size>
                       <width>100</width>
-                      <height>120</height>
+                      <height>200</height>
+                     </size>
+                    </property>
+                    <property name="maximumSize">
+                     <size>
+                      <width>16777215</width>
+                      <height>23</height>
                      </size>
                     </property>
                     <property name="font">
@@ -1117,10 +1134,10 @@
                      <bool>true</bool>
                     </property>
                     <property name="checked">
-                     <bool>true</bool>
+                     <bool>false</bool>
                     </property>
                     <property name="collapsed">
-                     <bool>false</bool>
+                     <bool>true</bool>
                     </property>
                     <property name="saveCollapsedState">
                      <bool>true</bool>
@@ -1136,16 +1153,16 @@
                       <enum>QLayout::SetMinimumSize</enum>
                      </property>
                      <property name="leftMargin">
-                      <number>2</number>
+                      <number>8</number>
                      </property>
                      <property name="topMargin">
-                      <number>2</number>
+                      <number>8</number>
                      </property>
                      <property name="rightMargin">
-                      <number>2</number>
+                      <number>8</number>
                      </property>
                      <property name="bottomMargin">
-                      <number>2</number>
+                      <number>8</number>
                      </property>
                      <item>
                       <layout class="QHBoxLayout" name="horizontalLayout_exploring_multiple_feature_picker">
@@ -1276,16 +1293,16 @@
                       <number>2</number>
                      </property>
                      <property name="leftMargin">
-                      <number>2</number>
+                      <number>8</number>
                      </property>
                      <property name="topMargin">
-                      <number>2</number>
+                      <number>8</number>
                      </property>
                      <property name="rightMargin">
-                      <number>2</number>
+                      <number>8</number>
                      </property>
                      <property name="bottomMargin">
-                      <number>2</number>
+                      <number>8</number>
                      </property>
                      <item>
                       <layout class="QVBoxLayout" name="verticalLayout_exploring_custom_selection">
@@ -1474,7 +1491,7 @@
                  <x>0</x>
                  <y>0</y>
                  <width>415</width>
-                 <height>411</height>
+                 <height>366</height>
                 </rect>
                </property>
                <attribute name="icon">
@@ -2720,7 +2737,7 @@
                  <x>0</x>
                  <y>0</y>
                  <width>415</width>
-                 <height>411</height>
+                 <height>366</height>
                 </rect>
                </property>
                <attribute name="icon">
@@ -3582,7 +3599,7 @@
                  <x>0</x>
                  <y>0</y>
                  <width>415</width>
-                 <height>411</height>
+                 <height>366</height>
                 </rect>
                </property>
                <attribute name="icon">
@@ -3944,11 +3961,6 @@
    <class>QgsFeaturePickerWidget</class>
    <extends>QWidget</extends>
    <header>qgsfeaturepickerwidget.h</header>
-  </customwidget>
-  <customwidget>
-   <class>QgsFieldComboBox</class>
-   <extends>QComboBox</extends>
-   <header>qgsfieldcombobox.h</header>
   </customwidget>
   <customwidget>
    <class>QgsFieldExpressionWidget</class>

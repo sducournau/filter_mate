@@ -4,6 +4,19 @@ Dimensions Manager for FilterMate.
 Handles widget dimension management based on UI profiles (compact/normal).
 Extracted from filter_mate_dockwidget.py (lines 848-1041, 1334-1403).
 
+UI HEIGHT STANDARDIZATION (v4.0.3 - Jan 2026):
+    All input widgets (QComboBox, QLineEdit, QSpinBox, etc.) use a unified 
+    20px height for better visual consistency and screen real estate optimization.
+    
+    Strategy:
+    - Base styles defined in filter_mate_dockwidget_base.ui (inline CSS fallback)
+    - UIConfig provides 20px for both NORMAL and COMPACT profiles
+    - DimensionsManager applies these values via setMinimumHeight/setMaximumHeight
+    - QSS can override if external stylesheet is added (future enhancement)
+    
+    Note: setMinimumHeight() calls in this file are NOT obsolete - they ensure 
+    proper sizing when widgets are created dynamically or when profile changes.
+
 Story: MIG-062
 Phase: 6 - God Class DockWidget Migration
 """
@@ -172,63 +185,19 @@ class DimensionsManager(LayoutManagerBase):
     
     def apply_widget_dimensions(self) -> None:
         """
-        Apply dimensions to standard Qt widgets (ComboBox, LineEdit, SpinBox, GroupBox).
+        [DEPRECATED v4.0.3] Widget dimensions now managed by QSS.
         
-        Reads dimensions from UIConfig and applies them to all relevant widgets
-        using findChildren() for batch processing.
+        All widget heights (ComboBox, LineEdit, SpinBox, GroupBox) are defined in
+        resources/styles/default.qss with standardized 20px height.
+        
+        This function is kept for backward compatibility but does nothing.
+        QSS rules override any Python-side dimension settings.
+        
+        TODO v5.0: Remove this function and entire DimensionsManager class.
         """
-        UIConfig = self._get_ui_config()
-        if UIConfig is None:
-            logger.warning("UIConfig not available, skipping widget dimensions")
-            return
-        
-        # Get dimensions from active profile
-        combobox_height = UIConfig.get_config('combobox', 'height')
-        input_height = UIConfig.get_config('input', 'height')
-        groupbox_min_height = UIConfig.get_config('groupbox', 'min_height')
-        
-        # Apply to ComboBoxes
-        for combo in self.dockwidget.findChildren(QComboBox):
-            combo.setMinimumHeight(combobox_height)
-            combo.setMaximumHeight(combobox_height)
-            combo.setSizePolicy(combo.sizePolicy().horizontalPolicy(), 
-                              QSizePolicy.Fixed)
-        
-        # Apply to LineEdits
-        for line_edit in self.dockwidget.findChildren(QLineEdit):
-            line_edit.setMinimumHeight(input_height)
-            line_edit.setMaximumHeight(input_height)
-            line_edit.setSizePolicy(line_edit.sizePolicy().horizontalPolicy(), 
-                                   QSizePolicy.Fixed)
-        
-        # Apply to SpinBoxes (QDoubleSpinBox and QSpinBox)
-        for spinbox in self.dockwidget.findChildren(QDoubleSpinBox):
-            spinbox.setMinimumHeight(input_height)
-            spinbox.setMaximumHeight(input_height)
-            spinbox.setSizePolicy(spinbox.sizePolicy().horizontalPolicy(), 
-                                QSizePolicy.Fixed)
-        
-        for spinbox in self.dockwidget.findChildren(QSpinBox):
-            spinbox.setMinimumHeight(input_height)
-            spinbox.setMaximumHeight(input_height)
-            spinbox.setSizePolicy(spinbox.sizePolicy().horizontalPolicy(), 
-                                QSizePolicy.Fixed)
-        
-        # Apply to GroupBoxes (QgsCollapsibleGroupBox included)
-        # Exclude exploring groupboxes which need specific heights for their dynamic content
-        exploring_groupbox_names = [
-            'mGroupBox_exploring_single_selection',
-            'mGroupBox_exploring_multiple_selection',
-            'mGroupBox_exploring_custom_selection'
-        ]
-        for groupbox in self.dockwidget.findChildren(QGroupBox):
-            if groupbox.objectName() not in exploring_groupbox_names:
-                groupbox.setMinimumHeight(groupbox_min_height)
-        
-        # Apply specific heights for exploring groupboxes based on their content
-        self._apply_exploring_groupbox_dimensions()
-        
-        logger.debug(f"Applied widget dimensions: ComboBox={combobox_height}px, Input={input_height}px")
+        # Widget dimensions managed by QSS - no Python intervention needed
+        logger.debug("Widget dimensions managed by QSS (20px standard)")
+        pass
     
     def _apply_exploring_groupbox_dimensions(self) -> None:
         """

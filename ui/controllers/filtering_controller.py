@@ -8,9 +8,13 @@ filter execution, and undo/redo functionality.
 from typing import TYPE_CHECKING, Optional, List, Dict, Any, Callable
 from dataclasses import dataclass, field
 from enum import Enum
+import logging
 
 from .base_controller import BaseController
 from .mixins.layer_selection_mixin import LayerSelectionMixin
+
+# Module logger
+logger = logging.getLogger(__name__)
 
 # Import TaskParameterBuilder for clean parameter construction (v3.0 MIG-024)
 try:
@@ -364,17 +368,17 @@ class FilteringController(BaseController, LayerSelectionMixin):
         Returns:
             True if population succeeded, False otherwise
         """
+        logger.info(f"=== populate_layers_checkable_combobox START (layer={layer.name() if layer else 'None'}) ===")
         try:
             dockwidget = self._dockwidget
             if not dockwidget or not dockwidget.widgets_initialized:
+                logger.warning("populate_layers_checkable_combobox: widgets not initialized")
                 return False
             
             # Imports
             from qgis.core import QgsVectorLayer, QgsProject
             from qgis.PyQt.QtCore import Qt
             from ...infrastructure.utils.validation_utils import is_layer_source_available
-            import logging
-            logger = logging.getLogger(__name__)
             
             # Determine source layer
             if layer is None:
@@ -412,7 +416,9 @@ class FilteringController(BaseController, LayerSelectionMixin):
                     if not layers_to_filter:
                         layer_props["filtering"]["has_layers_to_filter"] = False
                         has_layers = False
-                logger.info(f"Removed source layer {layer.name()} from layers_to_filter")
+                logger.info(f"✓ Removed source layer {layer.name()} (ID: {source_layer_id}) from layers_to_filter")
+            else:
+                logger.debug(f"✓ Source layer {layer.name()} (ID: {source_layer_id}) not in layers_to_filter (correct)")
             
             # Diagnostic logging
             qgis_vector_layers = [l for l in project.mapLayers().values() 
@@ -444,7 +450,11 @@ class FilteringController(BaseController, LayerSelectionMixin):
                 layer_id = layer_info["layer_id"]
                 layer_name = layer_info["layer_name"]
                 layer_crs = layer_info["layer_crs_authid"]
-                layer_icon = dockwidget.icon_per_geometry_type(layer_info["layer_geometry_type"])
+                geom_type = layer_info["layer_geometry_type"]
+                layer_icon = dockwidget.icon_per_geometry_type(geom_type)
+                
+                # DIAGNOSTIC: Log geometry type and icon validity
+                logger.debug(f"populate_layers_checkable_combobox: layer='{layer_name}', geom_type='{geom_type}', icon_isNull={layer_icon.isNull() if layer_icon else 'None'}")
                 
                 # Validate layer is usable
                 layer_obj = project.mapLayer(layer_id)
@@ -460,7 +470,8 @@ class FilteringController(BaseController, LayerSelectionMixin):
                         item.setCheckState(Qt.Unchecked)
                     item_index += 1
             
-            logger.info(f"populate_layers_checkable_combobox: Added {item_index} layers")
+            logger.info(f"✓ populate_layers_checkable_combobox: Added {item_index} layers (source layer '{layer.name()}' excluded)")
+            logger.info(f"=== populate_layers_checkable_combobox END ===")
             return True
             
         except Exception as e:

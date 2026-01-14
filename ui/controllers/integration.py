@@ -1330,20 +1330,20 @@ class ControllerIntegration:
                 return False
         return False
     
-    def delegate_current_layer_changed(self, layer) -> bool:
+    def delegate_current_layer_changed(self, layer, manual_change=False) -> bool:
         """
         Delegate current layer change to layer sync controller.
         
         Args:
             layer: The new current layer (or None)
+            manual_change: True if user manually selected layer (bypasses protection windows)
         
         Returns:
             True if delegation succeeded, False otherwise
         """
         if self._layer_sync_controller:
             try:
-                self._layer_sync_controller.on_current_layer_changed(layer)
-                return True
+                return self._layer_sync_controller.on_current_layer_changed(layer, manual_change=manual_change)
             except Exception as e:
                 logger.warning(f"delegate_current_layer_changed failed: {e}")
                 return False
@@ -2167,16 +2167,19 @@ class ControllerIntegration:
     def delegate_synchronize_layer_widgets(
         self,
         layer,
-        layer_props: dict
+        layer_props: dict,
+        manual_change: bool = False
     ) -> bool:
         """
         Delegate layer widget synchronization to LayerSyncController.
         
         v4.0 Sprint 3: Migrated from dockwidget._synchronize_layer_widgets.
+        FIX 2026-01-14: Added manual_change parameter.
         
         Args:
             layer: The current layer to sync widgets to
             layer_props: Layer properties from PROJECT_LAYERS
+            manual_change: True if user manually selected layer (bypasses protection)
             
         Returns:
             True if delegated successfully, False otherwise
@@ -2184,7 +2187,7 @@ class ControllerIntegration:
         if self._layer_sync_controller:
             try:
                 return self._layer_sync_controller.synchronize_layer_widgets(
-                    layer, layer_props
+                    layer, layer_props, manual_change=manual_change
                 )
             except Exception as e:
                 logger.warning(f"delegate_synchronize_layer_widgets failed: {e}")
