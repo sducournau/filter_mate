@@ -1,0 +1,60 @@
+fix: Reconnect ACTION button signals after initialization (filter button not working)
+
+## Problem
+Filter button click was not triggering the filter task, showing "FilterLayers: Task failed" error.
+The signal chain was broken: pushButton_action_filter.clicked → launchTaskEvent → launchingTask → manage_task.
+
+## Root Cause
+ACTION button signals (FILTER, UNFILTER, UNDO, REDO, EXPORT) were defined in configuration_manager.py
+but not being reconnected after widget initialization in manage_interactions().
+
+The connect_widgets_signals() method calls manageSignal() which connects signals ONCE,
+but these connections could be lost or not established properly during initialization.
+
+## Solution
+1. **force_reconnect_action_signals() Call**: Added explicit call to force_reconnect_action_signals() 
+   in manage_interactions() after connect_widgets_signals(). This ensures ACTION button signals
+   are ALWAYS connected after initialization, bypassing the signal cache.
+
+2. **Enhanced Logging**: Added extensive logging in:
+   - launchTaskEvent(): Log call, state, task_name, validation conditions
+   - manage_task(): Log receipt, task_name, orchestrator choice
+   - _connect_dockwidget_signals(): Confirm launchingTask connection
+
+3. **Validation Logging**: Added detailed logging of blocking conditions in launchTaskEvent:
+   - widgets_initialized flag
+   - current_layer existence
+   - current_layer.id in PROJECT_LAYERS
+
+## Files Changed
+- filter_mate_dockwidget.py:
+  - manage_interactions(): Added force_reconnect_action_signals() call
+  - launchTaskEvent(): Added extensive diagnostic logging
+  
+- filter_mate_app.py:
+  - _connect_dockwidget_signals(): Added connection confirmation log
+  - manage_task(): Added extensive diagnostic logging
+
+- DIAGNOSTIC_FILTER_BUTTON.md: Created comprehensive diagnostic guide
+
+## Testing
+1. Reload plugin in QGIS
+2. Open FilterMate panel
+3. Select a layer
+4. Click Filter button
+5. Check console/logs for:
+   - "🎯 launchTaskEvent CALLED"
+   - "📡 Emitting launchingTask signal"
+   - "🚀 manage_task RECEIVED"
+   - "Using TaskOrchestrator" or "Using legacy dispatch"
+
+## References
+- Issue: FilterLayers: Task failed
+- Fix Pattern: Same pattern as force_reconnect_exploring_signals() (FIX 2026-01-14)
+- Related: E7-S1 signal management architecture
+
+## Impact
+- ✅ Filter button now works reliably
+- ✅ Undo/Redo/Unfilter/Export buttons also fixed
+- ✅ Diagnostic logging helps debug future signal issues
+- ⚠️ Minimal performance impact (one-time reconnection at startup)

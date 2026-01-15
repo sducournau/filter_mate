@@ -425,8 +425,13 @@ class FilterEngineTask(QgsTask):
         """Get or create AttributeFilterExecutor (lazy initialization)."""
         if self._attribute_executor is None:
             self._attribute_executor = AttributeFilterExecutor(
-                source_layer=self.source_layer,
-                task_parameters=self.task_parameters
+                layer=self.source_layer,
+                provider_type=self.param_source_provider_type,
+                primary_key=self.primary_key_name,
+                table_name=self.param_source_table,
+                old_subset=self.param_source_old_subset,
+                combine_operator=self.param_source_layer_combine_operator or 'AND',
+                task_bridge=self._task_bridge
             )
         return self._attribute_executor
     
@@ -435,7 +440,7 @@ class FilterEngineTask(QgsTask):
         if self._spatial_executor is None:
             self._spatial_executor = SpatialFilterExecutor(
                 source_layer=self.source_layer,
-                project=self.project,
+                project=self.PROJECT,
                 backend_registry=None,  # Not used in current implementation
                 task_bridge=self._task_bridge,
                 postgresql_available=POSTGRESQL_AVAILABLE,
@@ -818,10 +823,9 @@ class FilterEngineTask(QgsTask):
         """
         executor = self._get_spatial_executor()
         
-        result = executor.organize_layers(
+        result = executor.organize_layers_to_filter(
             task_action=self.task_action,
-            task_parameters=self.task_parameters,
-            project=self.PROJECT
+            task_parameters=self.task_parameters
         )
         
         # Update task state from result
@@ -930,6 +934,8 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if task completed successfully, False otherwise
         """
+        logger.info(f"🏃 FilterEngineTask.run() STARTED: action={self.task_action}")
+        
         # PHASE 14.7: Delegate to TaskRunOrchestrator service
         from ..services.task_run_orchestrator import execute_task_run
         
@@ -982,12 +988,17 @@ class FilterEngineTask(QgsTask):
         # Store exception if any
         if result.exception:
             self.exception = result.exception
+            logger.error(f"❌ FilterEngineTask.run() EXCEPTION: {result.exception}")
         
         # Merge warning messages
         if result.warning_messages:
             if not hasattr(self, 'warning_messages'):
                 self.warning_messages = []
             self.warning_messages.extend(result.warning_messages)
+        
+        logger.info(f"🏁 FilterEngineTask.run() FINISHED: success={result.success}, exception={result.exception is not None}")
+        if not result.success and not result.exception:
+            logger.warning(f"⚠️ Task returned False without exception - check task logic")
         
         return result.success
 
@@ -1313,17 +1324,16 @@ class FilterEngineTask(QgsTask):
         Build expression from feature IDs.
         
         Phase E13: Delegates to AttributeFilterExecutor.
+        
+        FIX 2026-01-15: AttributeFilterExecutor.build_feature_id_expression()
+        only accepts features_list and is_numeric. Other parameters come from
+        the executor's constructor (stored in self).
         """
         executor = self._get_attribute_executor()
         
         return executor.build_feature_id_expression(
             features_list=features_list,
-            primary_key_name=self.primary_key_name,
-            table_name=self.param_source_table,
-            provider_type=self.param_source_provider_type,
-            is_numeric=self.task_parameters["infos"]["primary_key_is_numeric"],
-            old_subset=self.param_source_old_subset,
-            combine_operator=self._get_source_combine_operator()
+            is_numeric=self.task_parameters["infos"]["primary_key_is_numeric"]
         )
     
     def _is_pk_numeric(self, layer=None, pk_field=None):

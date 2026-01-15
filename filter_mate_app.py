@@ -790,6 +790,8 @@ class FilterMateApp:
         self.dockwidget.launchingTask.connect(
             lambda task_name: self.manage_task(task_name)
         )
+        # FIX 2026-01-15: Log signal connection confirmation
+        logger.info(f"✓ Connected launchingTask signal")
         
         # Current layer changed - update undo/redo buttons
         self.dockwidget.currentLayerChanged.connect(
@@ -1012,18 +1014,23 @@ class FilterMateApp:
         """Execute filter/unfilter/reset task (callback for TaskOrchestrator)."""
         from .core.tasks import FilterEngineTask
         
+        logger.info(f"⚙️ _execute_filter_task CALLED: task_name={task_name}")
+        
         if self.dockwidget is None or self.dockwidget.current_layer is None:
+            logger.error(f"❌ Cannot execute filter task: dockwidget={self.dockwidget is not None}, current_layer={self.dockwidget.current_layer is not None if self.dockwidget else False}")
             return
         
         current_layer = self.dockwidget.current_layer
         
         # Create task with backend registry for hexagonal architecture (v4.0.1)
+        logger.info(f"📦 Creating FilterEngineTask with {len(task_parameters.get('task', {}).get('layers', []))} layers")
         self.appTasks[task_name] = FilterEngineTask(
             self.tasks_descriptions[task_name], 
             task_name, 
             task_parameters,
             backend_registry=self._backend_registry  # v4.0.1: Hexagonal DI
         )
+        logger.info(f"✓ FilterEngineTask created: {self.appTasks[task_name].description()}")
         
         # Get layers from task parameters
         layers = []
@@ -1105,10 +1112,15 @@ class FilterMateApp:
         logger.debug(f"_legacy_dispatch_task: {task_name}")
         
         # Get task parameters
+        logger.info(f"🔧 Building task parameters for {task_name}...")
         task_parameters = self.get_task_parameters(task_name, data)
         if task_parameters is None:
-            logger.warning(f"Cannot execute task {task_name}: parameters are None")
+            logger.error(f"❌ Cannot execute task {task_name}: parameters are None")
+            logger.error(f"   current_layer={self.dockwidget.current_layer if self.dockwidget else None}")
+            logger.error(f"   widgets_ready={self._widgets_ready}")
+            logger.error(f"   dockwidget_ready={self._is_dockwidget_ready_for_filtering()}")
             return
+        logger.info(f"✓ Task parameters built successfully")
         
         # Dispatch based on task type
         # E7-S1: Wrap all dispatches in try/except to prevent total failure
@@ -1213,16 +1225,21 @@ class FilterMateApp:
 
     def manage_task(self, task_name, data=None):
         """Orchestrate FilterMate tasks via TaskOrchestrator."""
+        # FIX 2026-01-15 v10: CRITICAL - Add extensive logging to debug filter button issue
+        logger.info(f"🚀 manage_task RECEIVED: task_name={task_name}, data={data is not None}")
+        
         assert task_name in list(self.tasks_descriptions.keys())
         
         if self._task_orchestrator:
             try:
+                logger.info(f"   Using TaskOrchestrator to dispatch {task_name}")
                 self._task_orchestrator.dispatch_task(task_name, data)
                 return
             except Exception as e:
                 logger.error(f"TaskOrchestrator failed: {e}, using fallback")
         
         # Fallback: legacy dispatch
+        logger.info(f"   Using legacy dispatch for {task_name}")
         self._legacy_dispatch_task(task_name, data)
 
 

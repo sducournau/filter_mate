@@ -1,0 +1,26 @@
+fix: Corriger appel AttributeFilterExecutor.build_feature_id_expression()
+
+Problème identifié via logging détaillé:
+- TypeError: got an unexpected keyword argument 'primary_key_name'
+- L'appel dans filter_task.py:1330 passait des arguments qui n'existent plus
+
+Cause:
+- AttributeFilterExecutor.build_feature_id_expression() accepte seulement:
+  * features_list
+  * is_numeric
+- Les autres paramètres (primary_key, table_name, etc.) viennent
+  du constructeur de l'executor (stockés dans self)
+
+Solution:
+- Supprimé les arguments superflus de l'appel
+- L'executor utilise maintenant ses attributs internes
+
+Fichiers modifiés:
+- core/tasks/filter_task.py: _build_feature_id_expression()
+
+Impact:
+- Le filtrage devrait maintenant fonctionner correctement
+- Les feature IDs seront convertis en expression SQL
+- Le filtrage par attributs est restauré
+
+Ref: FIX-2026-01-15-filter-task-executor-args

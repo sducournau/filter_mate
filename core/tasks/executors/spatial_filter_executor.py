@@ -66,13 +66,13 @@ class SpatialFilterExecutor:
         )
         
         # Organize layers
-        layers_dict = executor.organize_layers_to_filter(
+        result = executor.organize_layers_to_filter(
             task_action='filter',
             task_parameters=params
         )
         
         # Filter each layer
-        for provider, layers_list in layers_dict.items():
+        for provider, layers_list in result.layers_by_provider.items():
             for layer, layer_props in layers_list:
                 predicates = layer_props.get('predicates', ['intersects'])
                 success, feature_ids = executor.execute_spatial_filter(
@@ -193,7 +193,7 @@ class SpatialFilterExecutor:
         detect_provider_fn: Optional[Any] = None,
         is_valid_layer_fn: Optional[Any] = None,
         is_sip_deleted_fn: Optional[Any] = None
-    ) -> Dict[str, List[Tuple[QgsVectorLayer, Dict]]]:
+    ):
         """
         Organize layers to be filtered by provider type.
         
@@ -207,12 +207,12 @@ class SpatialFilterExecutor:
             is_sip_deleted_fn: Optional SIP deletion check function
             
         Returns:
-            Dict with layers grouped by provider type
-            {
-                'postgresql': [(layer1, props1), (layer2, props2)],
-                'spatialite': [(layer3, props3)],
-                'ogr': [(layer4, props4)]
-            }
+            OrganizedLayers object with:
+                - layers_by_provider: Dict[str, List[Tuple[layer, props]]]
+                - layers_count: Total layer count
+                - provider_list: List of provider types
+                - warnings: List of warning messages
+                - not_found_layers: List of layers not found
         """
         from ....core.services.layer_organizer import organize_layers_for_filtering
         
@@ -221,7 +221,7 @@ class SpatialFilterExecutor:
         valid_fn = is_valid_layer_fn or is_layer_valid
         sip_fn = is_sip_deleted_fn or is_sip_deleted
         
-        # Delegate to LayerOrganizer service
+        # Delegate to LayerOrganizer service and return full result
         result = organize_layers_for_filtering(
             task_action=task_action,
             task_parameters=task_parameters,
@@ -232,7 +232,7 @@ class SpatialFilterExecutor:
             is_sip_deleted_fn=sip_fn
         )
         
-        return result.layers_by_provider
+        return result
     
     def prepare_source_geometry_via_executor(
         self,

@@ -491,20 +491,24 @@ class ExpressionBuilder:
         # Detect PK field type
         pk_is_uuid = False
         pk_is_text = False
+        pk_is_numeric = True
         
         if self.source_layer:
             pk_idx = self.source_layer.fields().indexOf(pk_field)
             if pk_idx >= 0:
-                field_type = self.source_layer.fields()[pk_idx].typeName().lower()
+                field = self.source_layer.fields()[pk_idx]
+                field_type = field.typeName().lower()
                 pk_is_uuid = 'uuid' in field_type
                 pk_is_text = 'char' in field_type or 'text' in field_type or 'string' in field_type
+                pk_is_numeric = field.isNumeric()
         
         # Format values based on type
+        # UUID FIX v4.0: Ensure all non-numeric values are properly quoted
         if pk_is_uuid:
-            # UUID - cast to uuid type
+            # UUID - cast to uuid type (PostgreSQL specific)
             formatted = ["'" + str(fid).replace("'", "''") + "'::uuid" for fid in fids]
-        elif pk_is_text:
-            # Text - quote strings
+        elif pk_is_text or not pk_is_numeric:
+            # Text/UUID/other non-numeric - quote strings and escape quotes
             formatted = ["'" + str(fid).replace("'", "''") + "'" for fid in fids]
         else:
             # Numeric - no quotes

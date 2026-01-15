@@ -1,0 +1,68 @@
+debug(exploring): add diagnostic logs for selection sync IS_SELECTING button v10
+
+🐛 **Problem:**
+- User reports that canvas → pickers synchronization not working when IS_SELECTING button checked
+- No logs appearing in console, indicating signal not triggering
+
+🔍 **Diagnostic Added (v10):**
+
+Added comprehensive logging to trace complete selection flow:
+
+1. **Signal Connection** (_ensure_selection_changed_connected)
+   - 🔌 Connection attempt logged with layer name + connection flag
+   - ✅/ℹ️ Success/already connected confirmation
+   - ⚠️ Error logging if connection fails
+
+2. **Signal Triggering** (on_layer_selection_changed)
+   - 🔔 Entry point with selected/deselected counts
+   - 🔀 Delegation to controller confirmation
+   - ✅/⚠️ Controller handling result
+
+3. **Controller Entry** (handle_layer_selection_changed)
+   - 🎯 Entry point confirmation in ExploringController
+   - Shows selected/deselected feature counts
+
+**Expected Log Flow:**
+```
+🔌 _ensure_selection_changed_connected CALLED: current_layer=my_layer, connection_flag=False
+✅ Connected selectionChanged signal for layer 'my_layer'
+🔔 on_layer_selection_changed TRIGGERED: selected=3, deselected=0, clearAndSelect=False
+🔀 Delegating to ExploringController.handle_layer_selection_changed
+🎯 ExploringController.handle_layer_selection_changed ENTERED: selected=3, deselected=0
+```
+
+**If No Logs Appear:**
+- Signal connection failed → Check `_connect_exploring_buttons_directly()` execution
+- `selectionChanged` not firing → Check layer validity or read-only status
+- Delegation failing → Check controller integration initialization
+
+📁 **Files Modified:**
+
+- `filter_mate_dockwidget.py`
+  - L3324-3347: Enhanced `_ensure_selection_changed_connected()` logging
+  - L3349-3382: Enhanced `on_layer_selection_changed()` logging with delegation tracking
+
+- `ui/controllers/exploring_controller.py`
+  - L2496-2510: Added entry point log in `handle_layer_selection_changed()`
+
+📝 **Documentation:**
+
+- Created `DEBUG_SELECTION_SYNC_20260115.md` with:
+  - Complete testing procedure (4 progressive tests)
+  - Expected log outputs for each test
+  - Troubleshooting guide for common issues
+  - Manual verification commands for Python console
+
+**Next Steps:**
+1. User runs tests from DEBUG doc
+2. Provides complete log output
+3. We identify exact point of failure
+4. Apply targeted fix
+
+**Impact:**
+- Enables precise diagnosis of selection sync issues
+- No functional changes (logs only)
+- Can be removed once issue resolved (or downgraded to debug level)
+
+**Version:** v4.0-alpha (diagnostic v10)
+**Related:** IS_SELECTING button, canvas ↔ pickers bidirectional sync

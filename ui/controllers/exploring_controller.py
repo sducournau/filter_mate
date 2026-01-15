@@ -1604,11 +1604,14 @@ class ExploringController(BaseController, LayerSelectionMixin):
                     
                     # CRITICAL FIX: Field names must be quoted for QgsExpression to work
                     # This applies to ALL providers (PostgreSQL, OGR, Spatialite)
+                    # UUID FIX v4.0: Convert pk_value to string explicitly for non-numeric types
                     # Note: filter_task.py handles qualified names for PostgreSQL subsetString separately
                     if pk_is_numeric is True: 
                         expression = f'"{pk_name}" = {pk_value}'
                     else:
-                        expression = f'"{pk_name}" = \'{pk_value}\''
+                        # Convert to string and escape single quotes for UUID, text, etc.
+                        pk_value_str = str(pk_value).replace("'", "''")
+                        expression = f'"{pk_name}" = \'{pk_value_str}\''
                     logger.debug(f"Generated expression for {provider_type}: {expression}")
                     
                     # CRITICAL: Also reload feature to ensure geometry is available for zoom
@@ -1723,10 +1726,13 @@ class ExploringController(BaseController, LayerSelectionMixin):
                             logger.warning("get_exploring_features: No valid IDs extracted from input list")
                             return [], None
                             
+                        # UUID FIX v4.0: Ensure proper string conversion and quote escaping
                         if pk_is_numeric:
                             expression = f'"{pk_name}" IN ({", ".join(input_ids)})'
                         else:
-                            quoted_ids = "', '".join(input_ids)
+                            # Escape single quotes in UUID/text values
+                            escaped_ids = [id_val.replace("'", "''") for id_val in input_ids]
+                            quoted_ids = "', '".join(escaped_ids)
                             expression = f'"{pk_name}" IN (\'{quoted_ids}\')'
                         logger.debug(f"Generated list expression for {provider_type}: {expression}")
                     except Exception as e:
@@ -2135,7 +2141,18 @@ class ExploringController(BaseController, LayerSelectionMixin):
                     if current_expression == expression:
                         logger.debug("single_selection: Expression unchanged, skipping setDisplayExpression")
                     else:
+                        # v4.0 UUID FIX: Save user-selected field for this layer (persisted to SQLite)
                         self._dockwidget.PROJECT_LAYERS[self._dockwidget.current_layer.id()]["exploring"]["single_selection_expression"] = expression
+                        
+                        # Persist to SQLite if this is a user-initiated change (not auto-init)
+                        if change_source and 'field' in change_source.lower():
+                            logger.debug(f"Persisting single_selection field '{expression}' to SQLite for layer {self._dockwidget.current_layer.name()}")
+                            from ...infrastructure.utils import is_valid_layer as is_layer_valid
+                            if is_layer_valid(self._dockwidget.current_layer):
+                                self._dockwidget.settingLayerVariable.emit(
+                                    self._dockwidget.current_layer,
+                                    [("exploring", "single_selection_expression")]
+                                )
                         
                         try:
                             picker_widget = self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
@@ -2174,7 +2191,18 @@ class ExploringController(BaseController, LayerSelectionMixin):
                     if current_expression == expression:
                         logger.debug("multiple_selection: Expression unchanged, skipping setDisplayExpression")
                     else:
+                        # v4.0 UUID FIX: Save user-selected field for this layer (persisted to SQLite)
                         self._dockwidget.PROJECT_LAYERS[self._dockwidget.current_layer.id()]["exploring"]["multiple_selection_expression"] = expression
+                        
+                        # Persist to SQLite if this is a user-initiated change (not auto-init)
+                        if change_source and 'field' in change_source.lower():
+                            logger.debug(f"Persisting multiple_selection field '{expression}' to SQLite for layer {self._dockwidget.current_layer.name()}")
+                            from ...infrastructure.utils import is_valid_layer as is_layer_valid
+                            if is_layer_valid(self._dockwidget.current_layer):
+                                self._dockwidget.settingLayerVariable.emit(
+                                    self._dockwidget.current_layer,
+                                    [("exploring", "multiple_selection_expression")]
+                                )
                         logger.debug(f"Calling setDisplayExpression with: {expression}")
                         
                         try:
@@ -2259,46 +2287,91 @@ class ExploringController(BaseController, LayerSelectionMixin):
             # self._dockwidget.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'disconnect')
             # self._dockwidget.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'disconnect')
             
-            # Auto-initialize empty expressions with best available field
+            # v4.0 SMART FIELD SELECTION: Upgrade primary-key-only expressions to better fields
+            # Priority: 1) User's custom field (if set), 2) Best available field, 3) Primary key
             expressions_updated = False
             single_expr = layer_props["exploring"]["single_selection_expression"]
             multiple_expr = layer_props["exploring"]["multiple_selection_expression"]
             custom_expr = layer_props["exploring"]["custom_selection_expression"]
             
-            if not single_expr or not multiple_expr or not custom_expr:
+            # Get primary key to detect default (unset) expressions
+            primary_key = layer_props.get("infos", {}).get("primary_key_name", "")
+            logger.debug(f"Layer '{layer.name()}' expressions: single={single_expr}, multiple={multiple_expr}, custom={custom_expr}, pk={primary_key}")
+            
+            # Check if expressions are just the primary key (default from layer_management_task)
+            # If so, try to upgrade to a better descriptive field
+            should_upgrade_single = (single_expr == primary_key or not single_expr)
+            should_upgrade_multiple = (multiple_expr == primary_key or not multiple_expr)
+            should_upgrade_custom = (custom_expr == primary_key or not custom_expr)
+            
+            if should_upgrade_single or should_upgrade_multiple or should_upgrade_custom:
+                # Get best available field (name, label, etc.)
                 best_field = get_best_display_field(layer)
-                if best_field:
-                    if not single_expr:
+                logger.debug(f"Best field detected for layer '{layer.name()}': '{best_field}'")
+                
+                # FIX v4.0: If get_best_display_field returns empty or primary key, use fallback
+                # Comboboxes CANNOT be empty - must always have a value
+                if not best_field or best_field == primary_key:
+                    fields = layer.fields()
+                    # Try to find first non-PK field
+                    best_field = None
+                    for field in fields:
+                        if field.name() != primary_key:
+                            best_field = field.name()
+                            break
+                    
+                    if not best_field:
+                        # All fields tried, use first field or primary key
+                        if fields.count() > 0:
+                            best_field = fields[0].name()
+                        else:
+                            best_field = primary_key or "$id"
+                    
+                    logger.info(f"Using fallback field '{best_field}' for layer '{layer.name()}'")
+                
+                # Only upgrade if best_field is different from primary key
+                if best_field and best_field != primary_key:
+                    if should_upgrade_single:
                         layer_props["exploring"]["single_selection_expression"] = best_field
                         self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["single_selection_expression"] = best_field
                         expressions_updated = True
-                    if not multiple_expr:
+                        logger.info(f"✨ Upgraded single_selection from PK '{primary_key}' to '{best_field}' for layer '{layer.name()}'")
+                    if should_upgrade_multiple:
                         layer_props["exploring"]["multiple_selection_expression"] = best_field
                         self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["multiple_selection_expression"] = best_field
                         expressions_updated = True
-                    if not custom_expr:
+                        logger.info(f"✨ Upgraded multiple_selection from PK '{primary_key}' to '{best_field}' for layer '{layer.name()}'")
+                    if should_upgrade_custom:
                         layer_props["exploring"]["custom_selection_expression"] = best_field
                         self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["custom_selection_expression"] = best_field
                         expressions_updated = True
+                        logger.info(f"✨ Upgraded custom_selection from PK '{primary_key}' to '{best_field}' for layer '{layer.name()}'")
                     
+                    # Persist upgraded field to SQLite for future sessions
                     if expressions_updated:
-                        logger.debug(f"Auto-initialized exploring expressions with field '{best_field}' for layer {layer.name()}")
+                        logger.debug(f"Persisting upgraded field '{best_field}' to SQLite for layer {layer.name()}")
                         if is_valid_layer(layer):
                             properties_to_save = []
-                            if not single_expr:
+                            if should_upgrade_single:
                                 properties_to_save.append(("exploring", "single_selection_expression"))
-                            if not multiple_expr:
+                            if should_upgrade_multiple:
                                 properties_to_save.append(("exploring", "multiple_selection_expression"))
-                            if not custom_expr:
+                            if should_upgrade_custom:
                                 properties_to_save.append(("exploring", "custom_selection_expression"))
                             self._dockwidget.settingLayerVariable.emit(layer, properties_to_save)
                         else:
                             logger.debug(f"_reload_exploration_widgets: layer became invalid, skipping signal emit")
+                else:
+                    logger.debug(f"No better field than primary key '{primary_key}' found, keeping defaults")
+            else:
+                # Expressions already customized (not equal to primary key)
+                logger.debug(f"Using user-customized expressions for layer '{layer.name()}': single={single_expr}, multiple={multiple_expr}")
             
             # Update expressions after potential auto-initialization
             single_expr = layer_props["exploring"]["single_selection_expression"]
             multiple_expr = layer_props["exploring"]["multiple_selection_expression"]
             custom_expr = layer_props["exploring"]["custom_selection_expression"]
+            logger.info(f"FINAL expressions for layer '{layer.name()}': single={single_expr}, multiple={multiple_expr}, custom={custom_expr}")
             
             # Single selection widget
             if "SINGLE_SELECTION_FEATURES" in self._dockwidget.widgets.get("EXPLORING", {}):
@@ -2383,16 +2456,23 @@ class ExploringController(BaseController, LayerSelectionMixin):
             
             # Field expression widgets
             if "SINGLE_SELECTION_EXPRESSION" in self._dockwidget.widgets.get("EXPLORING", {}):
+                logger.info(f"Setting SINGLE_SELECTION_EXPRESSION widget: layer={layer.name()}, expression='{single_expr}'")
                 self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(layer)
                 self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(single_expr)
+                logger.info(f"Widget expression after setExpression: '{self._dockwidget.widgets['EXPLORING']['SINGLE_SELECTION_EXPRESSION']['WIDGET'].expression()}'")
             
             if "MULTIPLE_SELECTION_EXPRESSION" in self._dockwidget.widgets.get("EXPLORING", {}):
+                logger.info(f"Setting MULTIPLE_SELECTION_EXPRESSION widget: layer={layer.name()}, expression='{multiple_expr}'")
                 self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(layer)
                 self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(multiple_expr)
+                logger.info(f"Widget expression after setExpression: '{self._dockwidget.widgets['EXPLORING']['MULTIPLE_SELECTION_EXPRESSION']['WIDGET'].expression()}'")
             
             if "CUSTOM_SELECTION_EXPRESSION" in self._dockwidget.widgets.get("EXPLORING", {}):
+                logger.info(f"Setting CUSTOM_SELECTION_EXPRESSION widget: layer={layer.name()}, expression='{custom_expr}'")
                 self._dockwidget.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setLayer(layer)
                 self._dockwidget.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setExpression(custom_expr)
+                logger.info(f"Widget expression after setExpression: '{self._dockwidget.widgets['EXPLORING']['CUSTOM_SELECTION_EXPRESSION']['WIDGET'].expression()}'")
+
             
             # Reconnect signals
             self._dockwidget.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'connect', 'featureChanged')
@@ -2470,6 +2550,9 @@ class ExploringController(BaseController, LayerSelectionMixin):
         Returns:
             True if handled successfully, False otherwise
         """
+        # FIX v10: DEBUG - Entry point confirmation
+        logger.info(f"🎯 ExploringController.handle_layer_selection_changed ENTERED: selected={len(selected)}, deselected={len(deselected)}")
+        
         try:
             # FIX v5: Self-healing - ensure signal stays connected
             if self._dockwidget.current_layer and not self._dockwidget.current_layer_selection_connection:

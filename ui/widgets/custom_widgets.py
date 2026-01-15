@@ -894,7 +894,10 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                     # Simple field access
                     display_value = str(feature[expression]) if expression else str(fid)
                 
-                features_data.append((display_value, fid))
+                # UUID FIX v4.0: Ensure fid is converted to string for UUID/text PKs
+                # This ensures proper handling when building SQL expressions later
+                fid_value = str(fid) if not isinstance(fid, (int, float)) else fid
+                features_data.append((display_value, fid_value))
             except Exception as e:
                 logger.debug(f"Error processing feature: {e}")
                 continue

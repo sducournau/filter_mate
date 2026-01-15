@@ -434,6 +434,63 @@ class HistoryService:
             logger.debug(f"Created LayerHistory wrapper for layer {layer_id}")
         return self._layer_histories[layer_id]
 
+    def push_global_state(
+        self,
+        source_layer_id: str,
+        source_expression: str,
+        source_feature_count: int,
+        remote_layers: Dict[str, tuple],
+        description: str = "",
+        metadata: Optional[Dict] = None
+    ) -> None:
+        """
+        Push a global state that captures multiple layers.
+        
+        This method creates a HistoryEntry that includes the source layer
+        and all associated remote layers, allowing undo/redo across the
+        entire filter operation.
+        
+        Args:
+            source_layer_id: ID of the source layer
+            source_expression: Filter expression for source layer
+            source_feature_count: Feature count for source layer
+            remote_layers: Dict of {layer_id: (expression, feature_count)}
+            description: Optional description
+            metadata: Optional metadata
+        """
+        # Build list of all affected layer IDs
+        all_layer_ids = [source_layer_id] + list(remote_layers.keys())
+        
+        # Build previous_filters list with current state of all layers
+        previous_filters = [(source_layer_id, source_expression)]
+        for layer_id, (expression, _) in remote_layers.items():
+            previous_filters.append((layer_id, expression))
+        
+        # Build metadata with feature counts
+        full_metadata = metadata or {}
+        full_metadata['source_feature_count'] = source_feature_count
+        full_metadata['remote_layers'] = {
+            lid: {'expression': expr, 'feature_count': count}
+            for lid, (expr, count) in remote_layers.items()
+        }
+        
+        # Create history entry
+        entry = HistoryEntry.create(
+            expression=source_expression,
+            layer_ids=all_layer_ids,
+            previous_filters=previous_filters,
+            description=description or f"Global filter ({len(all_layer_ids)} layers)",
+            metadata=full_metadata
+        )
+        
+        # Push to history
+        self.push(entry)
+        
+        logger.debug(
+            f"HistoryService: Pushed global state for {len(all_layer_ids)} layers "
+            f"(source: {source_layer_id})"
+        )
+
     def clear(self) -> int:
         """
         Clear all history.

@@ -160,12 +160,17 @@ class TestSpatialFilterExecutor(unittest.TestCase):
                 'postgresql': [(Mock(), {})],
                 'spatialite': [(Mock(), {})]
             }
+            mock_result.layers_count = 2
+            mock_result.provider_list = ['postgresql', 'spatialite']
             mock_organize.return_value = mock_result
             
             result = self.executor.organize_layers_to_filter(task_action, task_parameters)
         
-        self.assertIn('postgresql', result)
-        self.assertIn('spatialite', result)
+        # Result is now OrganizedLayers object
+        self.assertIn('postgresql', result.layers_by_provider)
+        self.assertIn('spatialite', result.layers_by_provider)
+        self.assertEqual(result.layers_count, 2)
+        self.assertEqual(result.provider_list, ['postgresql', 'spatialite'])
         mock_organize.assert_called_once()
     
     def test_prepare_source_geometry_no_registry(self):

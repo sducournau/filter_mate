@@ -8,8 +8,7 @@ This module handles post-task operations like subset application and canvas refr
 import logging
 from typing import List, Tuple, Optional, Any, Callable
 
-from ..ports.qgis_port import get_qgis_factory
-from qgis.core import QgsMessageLog, Qgis
+from qgis.core import QgsMessageLog, Qgis, QgsProject
 from qgis.utils import iface
 from qgis.PyQt.QtCore import QTimer
 
@@ -323,9 +322,10 @@ def schedule_canvas_refresh(
     try:
         # Check if any filter is complex
         has_complex_filter = False
-        factory = get_qgis_factory()
-        project = factory.get_project()
-        for layer_id, layer in project.map_layers().items():
+        # FIX 2026-01-15: Use QgsProject.instance() directly instead of factory.get_project()
+        # The QGISFactory doesn't have a get_project() method
+        project = QgsProject.instance()
+        for layer_id, layer in project.mapLayers().items():
             if layer.type() == 0:  # Vector layer
                 subset = layer.subsetString() or ''
                 if subset and is_complex_filter_fn(subset, layer.providerType()):

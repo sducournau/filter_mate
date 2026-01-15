@@ -1,0 +1,209 @@
+feat: Smart field selection with per-layer persistence in Exploring tab
+
+v4.0 FEATURE: Automatic field selection with user preference persistence
+
+When changing layers in the Exploring tab, FilterMate now:
+1. Auto-selects the "best" display field intelligently
+2. Saves user's field choice to SQLite (per-project, per-layer)
+3. Restores saved field when returning to a layer
+
+Implementation Details:
+-----------------------
+
+**1. Smart Auto-Selection (_reload_exploration_widgets)**
+
+Priority order for field selection:
+```
+1. User's saved preference (from SQLite) → highest priority
+2. Best available field (auto-detected via get_best_display_field())
+3. Primary key (fallback)
+```
+
+When a layer has no saved preference, `get_best_display_field()` analyzes:
+- Layer's configured display expression (QGIS layer properties)
+- ValueRelation fields with represent_value() for human-readable display
+- Common descriptive field patterns (name, nom, label, title, etc.)
+- Text fields (excluding ID fields)
+- Primary key (last resort)
+
+Example:
+```python
+# Layer: "cities" with fields: [id, name, population, geom]
+# Auto-selected: "name" (descriptive text field, not ID)
+
+# Layer: "roads" with fields: [fid, road_type_id (ValueRelation), length, geom]
+# Auto-selected: represent_value("road_type_id") (shows "Highway" not ID 5)
+```
+
+**2. User Preference Persistence (exploring_source_params_changed)**
+
+When user changes field in single_selection or multiple_selection:
+- Saves to PROJECT_LAYERS (in-memory)
+- Emits `settingLayerVariable` signal for SQLite persistence
+- Persisted as: `exploring.{mode}_selection_expression`
+
+Trigger detection:
+```python
+if change_source and 'field' in change_source.lower():
+    # User-initiated change (from field combobox)
+    self._dockwidget.settingLayerVariable.emit(
+        layer,
+        [("exploring", "single_selection_expression")]
+    )
+```
+
+**3. Restoration on Layer Change**
+
+When switching to a layer:
+```python
+# Step 1: Load layer_props from SQLite (done by filter_mate_app.py)
+# Step 2: Check for saved expression
+single_expr = layer_props["exploring"]["single_selection_expression"]
+
+if single_expr:
+    # Restore user's saved field
+    logger.debug(f"Restored saved field: {single_expr}")
+else:
+    # Auto-select best field
+    best_field = get_best_display_field(layer)
+    layer_props["exploring"]["single_selection_expression"] = best_field
+    # Save for next time
+    settingLayerVariable.emit(layer, [("exploring", "single_selection_expression")])
+```
+
+Storage Structure:
+------------------
+
+**SQLite Table: layer_variables**
+```sql
+project_path | layer_id | category   | property                       | value
+-------------|----------|------------|--------------------------------|--------
+project.qgs  | layer123 | exploring  | single_selection_expression   | "name"
+project.qgs  | layer123 | exploring  | multiple_selection_expression | "name"
+project.qgs  | layer456 | exploring  | single_selection_expression   | "represent_value(\"type_id\")"
+```
+
+**In-Memory (PROJECT_LAYERS)**
+```python
+PROJECT_LAYERS = {
+    "layer123": {
+        "exploring": {
+            "single_selection_expression": "name",
+            "multiple_selection_expression": "name",
+            "custom_selection_expression": "name"
+        }
+    }
+}
+```
+
+User Workflow:
+--------------
+
+**Scenario 1: First-time layer access**
+```
+User: Selects layer "cities"
+FilterMate: 
+  → No saved preference found
+  → Analyzes fields
+  → Auto-selects "name" (best field)
+  → Saves "name" to SQLite
+  → Widget displays features with "name" field
+```
+
+**Scenario 2: User changes field**
+```
+User: Changes field from "name" to "population" in single_selection
+FilterMate:
+  → Detects user-initiated change
+  → Saves "population" to SQLite
+  → Updates PROJECT_LAYERS["layer123"]["exploring"]["single_selection_expression"]
+  → Rebuilds feature picker with "population"
+```
+
+**Scenario 3: Return to layer**
+```
+User: Switches away from "cities", then back
+FilterMate:
+  → Loads layer_props from SQLite
+  → Finds saved preference: "population"
+  → Restores "population" in single_selection
+  → User sees their previously selected field
+```
+
+**Scenario 4: Different projects**
+```
+Project A: "cities" layer → user selected "name"
+Project B: "cities" layer → user selected "population"
+
+Each project maintains its own preferences via SQLite storage.
+```
+
+Benefits:
+---------
+
+✅ **Smart Defaults**: Automatically selects meaningful fields (names, labels)
+✅ **User Respect**: Remembers user's field choices per-layer
+✅ **Per-Project**: Different preferences for same layer in different projects
+✅ **Persistence**: Survives QGIS restarts
+✅ **No User Action Required**: Works transparently
+
+Technical Details:
+------------------
+
+**Modified Files:**
+- ui/controllers/exploring_controller.py
+  - `_reload_exploration_widgets()`: Smart auto-selection logic
+  - `exploring_source_params_changed()`: User preference persistence
+
+**Dependencies:**
+- infrastructure/utils/layer_utils.py: `get_best_display_field()`
+- filter_mate_app.py: `save_variables_from_layer()` (SQLite persistence)
+- config/config.py: SQLite database path configuration
+
+**Signal Flow:**
+```
+User changes field
+  → QgsFieldExpressionWidget.fieldChanged
+  → exploring_source_params_changed(change_source="field_changed")
+  → settingLayerVariable.emit(layer, [("exploring", "single_selection_expression")])
+  → FilterMateApp.save_variables_from_layer()
+  → SQLite UPDATE layer_variables SET value='new_field'
+```
+
+**Cache Invalidation:**
+When field changes, feature picker cache is cleared and rebuilt with new field.
+
+Backward Compatibility:
+-----------------------
+
+✅ **Existing Projects**: Layers without saved preferences get auto-selected fields
+✅ **Old SQLite Databases**: Missing columns handled gracefully
+✅ **Migration**: No user action needed, transparent upgrade
+
+Edge Cases Handled:
+-------------------
+
+1. **Field deleted from layer**: Fallback to best field
+2. **Layer without fields**: Uses primary key or first field
+3. **Invalid saved expression**: Resets to best field
+4. **Layer becomes invalid**: Skips persistence (prevents errors)
+5. **Multiple users, same project file**: Each user's local SQLite maintains their preferences
+
+Limitations:
+------------
+
+- Preferences stored in local SQLite (not in .qgs project file)
+- Shared projects: Each user has their own field preferences
+- Network layers: Preferences may not transfer between machines
+
+Future Enhancements (v5.0):
+---------------------------
+
+- [ ] Option to sync preferences to .qgs project file
+- [ ] Import/export field preferences between projects
+- [ ] Per-user preference profiles
+- [ ] Field preference suggestions based on layer schema
+
+Version: v4.0-alpha
+Date: 2026-01-15
+Relates-to: UUID FIX v4.0 (non-numeric PK support)

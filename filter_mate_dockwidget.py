@@ -1727,14 +1727,45 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             multiple_expr = exploring.get("multiple_selection_expression", "")
             custom_expr = exploring.get("custom_selection_expression", "")
             
-            # Auto-initialize empty expressions with best field
-            if not single_expr or not multiple_expr or not custom_expr:
+            # v4.0 SMART FIELD SELECTION: Upgrade PK-only expressions to better fields
+            # Get primary key to detect default (unset) expressions
+            primary_key = layer_props.get("infos", {}).get("primary_key_name", "")
+            logger.debug(f"Expressions: single={single_expr}, multiple={multiple_expr}, pk={primary_key}")
+            
+            # Check if expressions are just the primary key (default) - upgrade if better field exists
+            should_upgrade_single = (single_expr == primary_key or not single_expr)
+            should_upgrade_multiple = (multiple_expr == primary_key or not multiple_expr)
+            should_upgrade_custom = (custom_expr == primary_key or not custom_expr)
+            
+            if should_upgrade_single or should_upgrade_multiple or should_upgrade_custom:
                 from .infrastructure.utils import get_best_display_field
                 best_field = get_best_display_field(layer)
-                if best_field:
-                    if not single_expr: single_expr = best_field
-                    if not multiple_expr: multiple_expr = best_field
-                    if not custom_expr: custom_expr = best_field
+                
+                # Fallback if no descriptive field found
+                if not best_field or best_field == primary_key:
+                    fields = layer.fields()
+                    for field in fields:
+                        if field.name() != primary_key:
+                            best_field = field.name()
+                            break
+                    if not best_field:
+                        best_field = fields[0].name() if fields.count() > 0 else (primary_key or "$id")
+                
+                # Only upgrade if different from PK
+                if best_field and best_field != primary_key:
+                    if should_upgrade_single:
+                        single_expr = best_field
+                        exploring["single_selection_expression"] = best_field
+                        logger.info(f"✨ Upgraded single_selection from PK to '{best_field}'")
+                    if should_upgrade_multiple:
+                        multiple_expr = best_field
+                        exploring["multiple_selection_expression"] = best_field
+                        logger.info(f"✨ Upgraded multiple_selection from PK to '{best_field}'")
+                    if should_upgrade_custom:
+                        custom_expr = best_field
+                        exploring["custom_selection_expression"] = best_field
+                        logger.info(f"✨ Upgraded custom_selection from PK to '{best_field}'")
+
             
             # Update single selection widget (QgsFeaturePickerWidget)
             if "SINGLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
@@ -2375,6 +2406,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # FIX 2026-01-15 v9: Connect fieldChanged signals for expression widgets (display expression sync)
             # This was present in before_migration but missing in the migrated code
             self._setup_expression_widget_direct_connections()
+            # FIX 2026-01-15 v10: CRITICAL - Force reconnect ACTION button signals (FILTER, UNFILTER, etc.)
+            # Without this, clicking filter button won't trigger launchTaskEvent
+            logger.info("🔌 Force reconnecting ACTION button signals...")
+            self.force_reconnect_action_signals()
+            logger.info("✓ ACTION button signals reconnected")
         else:
             self.set_widgets_enabled_state(False)
             for sp in [["DOCK", "SINGLE_SELECTION"], ["DOCK", "MULTIPLE_SELECTION"], ["DOCK", "CUSTOM_SELECTION"]]:
@@ -3144,7 +3180,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             if pk_is_numeric:
                                 expr_str = f'"{pk_name}" IN ({",".join(str(v) for v in feature_ids_to_fetch)})'
                             else:
-                                expr_str = f'"{pk_name}" IN ({",".join(f"''{v}''" for v in feature_ids_to_fetch)})'
+                                # Fix: Use proper string quoting for non-numeric primary keys
+                                quoted_values = ",".join(f"'{v}'" for v in feature_ids_to_fetch)
+                                expr_str = f'"{pk_name}" IN ({quoted_values})'
                             request = QgsFeatureRequest(QgsExpression(expr_str))
                             features = list(self.current_layer.getFeatures(request))
                             if features:
@@ -3321,7 +3359,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         This is called when IS_TRACKING or IS_SELECTING are activated to ensure
         the signal remains connected for auto-zoom/sync functionality.
         """
+        logger.info(f"🔌 _ensure_selection_changed_connected CALLED: current_layer={self.current_layer.name() if self.current_layer else 'None'}, connection_flag={self.current_layer_selection_connection}")
+        
         if not self.current_layer:
+            logger.warning("⚠️ _ensure_selection_changed_connected: No current layer")
             return
         
         try:
@@ -3329,10 +3370,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if not self.current_layer_selection_connection:
                 self.current_layer.selectionChanged.connect(self.on_layer_selection_changed)
                 self.current_layer_selection_connection = True
-                logger.info("_ensure_selection_changed_connected: Connected selectionChanged signal")
+                logger.info(f"✅ _ensure_selection_changed_connected: Connected selectionChanged signal for layer '{self.current_layer.name()}'")
+            else:
+                logger.info(f"ℹ️ _ensure_selection_changed_connected: Signal already connected for layer '{self.current_layer.name()}'")
         except (TypeError, RuntimeError) as e:
             # Signal might already be connected, or layer deleted
-            logger.debug(f"_ensure_selection_changed_connected: {e}")
+            logger.warning(f"⚠️ _ensure_selection_changed_connected error: {e}")
 
     def on_layer_selection_changed(self, selected, deselected, clearAndSelect):
         """
@@ -3342,6 +3385,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         The signal can be disconnected during layer changes and not always reconnected,
         causing tracking to only work for the first feature change.
         """
+        # FIX v10: DEBUG - Confirm signal is triggered
+        logger.info(f"🔔 on_layer_selection_changed TRIGGERED: selected={len(selected)}, deselected={len(deselected)}, clearAndSelect={clearAndSelect}")
+        
         # FIX v5: Ensure signal stays connected (self-healing)
         if self.current_layer and not self.current_layer_selection_connection:
             try:
@@ -3351,10 +3397,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             except (TypeError, RuntimeError):
                 pass
         
-        if self._controller_integration and self._controller_integration.delegate_handle_layer_selection_changed(selected, deselected, clearAndSelect):
-            return
+        # FIX v10: DEBUG - Check delegation
+        if self._controller_integration:
+            logger.info("🔀 Delegating to ExploringController.handle_layer_selection_changed")
+            if self._controller_integration.delegate_handle_layer_selection_changed(selected, deselected, clearAndSelect):
+                logger.info("✅ Controller handled selection change")
+                return
+            else:
+                logger.warning("⚠️ Controller delegation returned False")
+        else:
+            logger.warning("⚠️ No controller integration available")
         
         # FIX 2026-01-14: Fallback when controller not available
+        logger.info("🔧 Using fallback handler")
         self._fallback_handle_layer_selection_changed()
     
     def _fallback_handle_layer_selection_changed(self):
@@ -3948,19 +4003,48 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'disconnect')
             
             # Get expressions from layer_props
-            single_expr = layer_props.get("exploring", {}).get("single_selection_expression", "")
-            multiple_expr = layer_props.get("exploring", {}).get("multiple_selection_expression", "")
-            custom_expr = layer_props.get("exploring", {}).get("custom_selection_expression", "")
-            logger.debug(f"Expressions: single={single_expr}, multiple={multiple_expr}, custom={custom_expr}")
+            exploring = layer_props.get("exploring", {})
+            single_expr = exploring.get("single_selection_expression", "")
+            multiple_expr = exploring.get("multiple_selection_expression", "")
+            custom_expr = exploring.get("custom_selection_expression", "")
             
-            # Auto-initialize empty expressions with best field
-            if not single_expr or not multiple_expr or not custom_expr:
+            # v4.0 SMART FIELD SELECTION: Upgrade PK-only expressions to better fields
+            primary_key = layer_props.get("infos", {}).get("primary_key_name", "")
+            logger.debug(f"Expressions: single={single_expr}, multiple={multiple_expr}, custom={custom_expr}, pk={primary_key}")
+            
+            # Check if expressions are just the primary key (default) - upgrade if better field exists
+            should_upgrade_single = (single_expr == primary_key or not single_expr)
+            should_upgrade_multiple = (multiple_expr == primary_key or not multiple_expr)
+            should_upgrade_custom = (custom_expr == primary_key or not custom_expr)
+            
+            if should_upgrade_single or should_upgrade_multiple or should_upgrade_custom:
                 from .infrastructure.utils import get_best_display_field
                 best_field = get_best_display_field(layer)
-                if best_field:
-                    if not single_expr: single_expr = best_field
-                    if not multiple_expr: multiple_expr = best_field
-                    if not custom_expr: custom_expr = best_field
+                
+                # Fallback if no descriptive field found
+                if not best_field or best_field == primary_key:
+                    fields = layer.fields()
+                    for field in fields:
+                        if field.name() != primary_key:
+                            best_field = field.name()
+                            break
+                    if not best_field:
+                        best_field = fields[0].name() if fields.count() > 0 else (primary_key or "$id")
+                
+                # Only upgrade if different from PK
+                if best_field and best_field != primary_key:
+                    if should_upgrade_single:
+                        single_expr = best_field
+                        exploring["single_selection_expression"] = best_field
+                        logger.info(f"✨ FALLBACK: Upgraded single_selection to '{best_field}'")
+                    if should_upgrade_multiple:
+                        multiple_expr = best_field
+                        exploring["multiple_selection_expression"] = best_field
+                        logger.info(f"✨ FALLBACK: Upgraded multiple_selection to '{best_field}'")
+                    if should_upgrade_custom:
+                        custom_expr = best_field
+                        exploring["custom_selection_expression"] = best_field
+                        logger.info(f"✨ FALLBACK: Upgraded custom_selection to '{best_field}'")
             
             # Update single selection widget (QgsFeaturePickerWidget)
             if "SINGLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
@@ -5094,9 +5178,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def launchTaskEvent(self, state, task_name):
         """v4.0 S18: Emit signal to launch a task."""
-        if not self.widgets_initialized or not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS: return
+        # FIX 2026-01-15 v10: CRITICAL - Add extensive logging to debug filter button issue
+        logger.info(f"🎯 launchTaskEvent CALLED: state={state}, task_name={task_name}")
+        logger.info(f"   widgets_initialized={self.widgets_initialized}, has_current_layer={self.current_layer is not None}")
+        if self.current_layer:
+            logger.info(f"   current_layer.id={self.current_layer.id()}, in_PROJECT_LAYERS={self.current_layer.id() in self.PROJECT_LAYERS}")
+        
+        if not self.widgets_initialized or not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS:
+            logger.warning(f"❌ launchTaskEvent BLOCKED: widgets_initialized={self.widgets_initialized}, current_layer={self.current_layer}, in_PROJECT_LAYERS={self.current_layer.id() in self.PROJECT_LAYERS if self.current_layer else False}")
+            return
+        
         self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = self.get_layers_to_filter()
-        self.setLayerVariableEvent(self.current_layer, [("filtering", "layers_to_filter")]); self.launchingTask.emit(task_name)
+        self.setLayerVariableEvent(self.current_layer, [("filtering", "layers_to_filter")])
+        logger.info(f"📡 Emitting launchingTask signal: {task_name}")
+        self.launchingTask.emit(task_name)
     
     def _setup_truncation_tooltips(self):
         """v4.0 Sprint 17: Setup tooltips for widgets with truncated text."""
