@@ -16,10 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Import centralized validation (v4.0.4 - eliminate duplication)
 try:
-    from ...infrastructure.utils import is_layer_valid
+    from ...infrastructure.utils import is_layer_valid as is_valid_layer
 except ImportError:
     # Fallback for testing or import issues
-    def is_layer_valid(layer: Any) -> bool:
+    def is_valid_layer(layer: Any) -> bool:
         """Check if layer is valid and accessible (fallback)."""
         if layer is None:
             return False

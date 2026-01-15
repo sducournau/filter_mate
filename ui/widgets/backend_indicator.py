@@ -249,6 +249,8 @@ class BackendIndicatorWidget(QLabel if HAS_QGIS else object):
                 current_backend = self._current_backend
                 if self._detect_backend:
                     current_backend = self._detect_backend(current_layer)
+                # Update indicator display to show the forced backend
+                self.update_for_backend(current_backend)
                 self.backendForAllChanged.emit(current_backend)
     
     def set_waiting_state(self):

@@ -270,6 +270,14 @@ class BackendController(BaseController):
         if hasattr(self.dockwidget, 'forced_backends'):
             self.dockwidget.forced_backends = self._forced_backends.copy()
 
+        # Update indicator display if this is the current layer
+        current_layer = self.dockwidget.current_layer
+        if current_layer and current_layer.id() == layer_id:
+            display_backend = backend_type if backend_type else self._detect_backend_for_layer(
+                current_layer, self._current_postgresql_available
+            )
+            self._update_indicator_display(display_backend, is_forced=(backend_type is not None), layer=current_layer)
+
         self.backend_changed.emit(layer_id, backend_type or 'auto')
 
     def force_backend_for_all_layers(self, backend_type: str) -> int:

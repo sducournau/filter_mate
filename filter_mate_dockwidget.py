@@ -1343,7 +1343,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _refresh_feature_pickers_for_field_change(self, groupbox: str, field_or_expression: str):
         """
-        FIX 2026-01-15 v3: Refresh feature pickers when field changes.
+        FIX 2026-01-15 v4: Refresh feature pickers when field changes.
         
         When the user changes the field in a QgsFieldExpressionWidget, we need to:
         1. Update the display expression for the corresponding feature picker
@@ -1355,6 +1355,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         For QgsCheckableComboBoxFeaturesListPickerWidget, we need to call setLayer() 
         with layer_props to trigger a full rebuild with the new expression.
+        
+        FIX v4: Ensure expression is ALWAYS saved to PROJECT_LAYERS, even if key doesn't exist.
+        Also properly update layer_props before calling setLayer().
         
         Args:
             groupbox: 'single_selection', 'multiple_selection', or 'custom_selection'
@@ -1370,11 +1373,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             layer_props = self.PROJECT_LAYERS[layer_id]
             
-            # Update PROJECT_LAYERS with new expression (critical for persistence)
+            # FIX v4: ALWAYS update PROJECT_LAYERS with new expression (create if missing)
             expression_key = f"{groupbox}_expression"
-            if expression_key in layer_props.get("exploring", {}):
-                layer_props["exploring"][expression_key] = field_or_expression
-                logger.debug(f"  → Updated PROJECT_LAYERS[{expression_key}] = {field_or_expression}")
+            if "exploring" not in layer_props:
+                layer_props["exploring"] = {}
+            layer_props["exploring"][expression_key] = field_or_expression
+            logger.info(f"  → Updated PROJECT_LAYERS[exploring][{expression_key}] = {field_or_expression}")
             
             # Update single selection picker (QgsFeaturePickerWidget)
             if groupbox == "single_selection":
@@ -2878,24 +2882,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _fallback_get_current_features(self):
         """
-        FIX 2026-01-15 v9: Fallback for get_current_features when controller unavailable.
+        FIX 2026-01-15 v10: Fallback for get_current_features when controller unavailable.
+        
+        Pattern from before_migration (lines 7385-7480):
+        - single_selection: get feature from QgsFeaturePickerWidget, ALWAYS reload to get geometry
+        - multiple_selection: get checked items, ALWAYS fetch full features with geometry
+        - custom_selection: delegate to exploring_custom_selection()
+        
+        CRITICAL: The widget may return features WITHOUT geometry loaded.
+        We MUST reload each feature from the layer to ensure geometry is available.
         
         User requirement: "si pas de selection QGIS, et single selection alors 
         feature active est la feature active du feature picker single selection 
         (meme si pushButton_checkable_exploring_selecting est unchecked)"
-        
-        For single_selection mode:
-        - Widget feature picker IS the primary source
-        - Do NOT fallback to QGIS canvas - the picker IS the source of truth
-        - Only use saved FID for recovery
-        
-        For multiple_selection mode:
-        - Widget checked items are primary
-        - Can fallback to QGIS canvas selection
-        
-        CRITICAL: Always reload features to ensure geometry is loaded.
-        
-        FIX v9: Enhanced feature retrieval with multiple strategies.
         """
         if not self.widgets_initialized or not self.current_layer:
             return [], ''
@@ -2961,26 +2960,65 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     
             elif groupbox_type == "multiple_selection":
                 picker = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
-                checked = None
+                feature_ids_to_fetch = []
                 
-                # Try checkedItemsData first
+                # FIX v10: Use multiple strategies to get checked feature IDs
+                # Strategy 1: Try checkedItemsData first (returns FIDs directly)
                 if hasattr(picker, 'checkedItemsData'):
                     checked = picker.checkedItemsData()
+                    if checked:
+                        feature_ids_to_fetch = list(checked)
+                        logger.debug(f"  → Got {len(feature_ids_to_fetch)} FIDs from checkedItemsData")
                     
-                # Fallback to checkedItems
-                if not checked and hasattr(picker, 'checkedItems'):
+                # Strategy 2: Fallback to checkedItems (returns [display, pk, ...] tuples)
+                if not feature_ids_to_fetch and hasattr(picker, 'checkedItems'):
                     items = picker.checkedItems()
                     if items:
-                        # Extract feature IDs from items (format: [display, pk, ...])
-                        checked = [item[1] for item in items if len(item) > 1]
+                        # Extract PK values (index 1) from items
+                        for item in items:
+                            if isinstance(item, (list, tuple)) and len(item) > 1:
+                                feature_ids_to_fetch.append(item[1])
+                        logger.debug(f"  → Got {len(feature_ids_to_fetch)} PKs from checkedItems")
                 
-                if checked:
-                    request = QgsFeatureRequest().setFilterFids(checked)
-                    features = list(self.current_layer.getFeatures(request))
-                    logger.debug(f"  → Got {len(features)} features from multiple selection")
-                    return features, ""
+                # Strategy 3: Try saved FIDs from _last_multiple_selection_fids
+                if not feature_ids_to_fetch:
+                    if (hasattr(self, '_last_multiple_selection_fids') 
+                        and self._last_multiple_selection_fids
+                        and self.current_layer.id() == getattr(self, '_last_multiple_selection_layer_id', None)):
+                        feature_ids_to_fetch = self._last_multiple_selection_fids
+                        logger.info(f"  → Recovered {len(feature_ids_to_fetch)} FIDs from saved state")
                 
-                # Fallback: Try QGIS canvas selection (allowed for multiple_selection)
+                # Now fetch features WITH geometry
+                if feature_ids_to_fetch:
+                    try:
+                        request = QgsFeatureRequest().setFilterFids(feature_ids_to_fetch)
+                        features = list(self.current_layer.getFeatures(request))
+                        if features:
+                            logger.debug(f"  → Got {len(features)} features from multiple selection")
+                            return features, ""
+                    except Exception as e:
+                        logger.debug(f"  → setFilterFids failed: {e}, trying expression")
+                    
+                    # Fallback: Build expression if setFilterFids didn't work (PK might not be FID)
+                    try:
+                        layer_props = self.PROJECT_LAYERS.get(self.current_layer.id(), {})
+                        pk_name = layer_props.get("infos", {}).get("primary_key_name")
+                        pk_is_numeric = layer_props.get("infos", {}).get("primary_key_is_numeric", True)
+                        
+                        if pk_name and feature_ids_to_fetch:
+                            if pk_is_numeric:
+                                expr_str = f'"{pk_name}" IN ({",".join(str(v) for v in feature_ids_to_fetch)})'
+                            else:
+                                expr_str = f'"{pk_name}" IN ({",".join(f"''{v}''" for v in feature_ids_to_fetch)})'
+                            request = QgsFeatureRequest(QgsExpression(expr_str))
+                            features = list(self.current_layer.getFeatures(request))
+                            if features:
+                                logger.debug(f"  → Got {len(features)} features via expression")
+                                return features, ""
+                    except Exception as e:
+                        logger.debug(f"  → Expression fallback failed: {e}")
+                
+                # Last resort: Try QGIS canvas selection (allowed for multiple_selection)
                 qgis_selected = self.current_layer.selectedFeatures()
                 if len(qgis_selected) > 0:
                     logger.info(f"  → Using QGIS canvas selection ({len(qgis_selected)} features)")

@@ -34,48 +34,52 @@ from .index_manager import RTreeIndexManager, create_index_manager
 
 logger = logging.getLogger('FilterMate.Backend.Spatialite')
 
+# v4.0.4: Import centralized spatialite_connect to eliminate duplication
+try:
+    from ....infrastructure.utils.task_utils import spatialite_connect
+except ImportError:
+    # Fallback for testing or import issues
+    def spatialite_connect(db_path: str) -> sqlite3.Connection:
+        """
+        Create Spatialite connection with extensions loaded (fallback).
 
-def spatialite_connect(db_path: str) -> sqlite3.Connection:
-    """
-    Create Spatialite connection with extensions loaded.
+        Args:
+            db_path: Path to Spatialite/GeoPackage database
 
-    Args:
-        db_path: Path to Spatialite/GeoPackage database
+        Returns:
+            Connection with mod_spatialite loaded
 
-    Returns:
-        Connection with mod_spatialite loaded
+        Raises:
+            RuntimeError: If extension cannot be loaded
+        """
+        conn = sqlite3.connect(db_path)
+        conn.enable_load_extension(True)
 
-    Raises:
-        RuntimeError: If extension cannot be loaded
-    """
-    conn = sqlite3.connect(db_path)
-    conn.enable_load_extension(True)
+        # Try different extension names based on platform
+        extensions = [
+            'mod_spatialite',
+            'mod_spatialite.dll',
+            'mod_spatialite.so',
+            'mod_spatialite.dylib',
+            '/usr/lib/mod_spatialite.so',
+            '/usr/lib/x86_64-linux-gnu/mod_spatialite.so',
+            '/usr/local/lib/mod_spatialite.dylib'
+        ]
 
-    # Try different extension names based on platform
-    extensions = [
-        'mod_spatialite',
-        'mod_spatialite.dll',
-        'mod_spatialite.so',
-        'mod_spatialite.dylib',
-        '/usr/lib/mod_spatialite.so',
-        '/usr/lib/x86_64-linux-gnu/mod_spatialite.so',
-        '/usr/local/lib/mod_spatialite.dylib'
-    ]
+        loaded = False
+        for ext in extensions:
+            try:
+                conn.load_extension(ext)
+                logger.debug(f"Loaded Spatialite extension: {ext}")
+                loaded = True
+                break
+            except Exception:
+                continue
 
-    loaded = False
-    for ext in extensions:
-        try:
-            conn.load_extension(ext)
-            logger.debug(f"Loaded Spatialite extension: {ext}")
-            loaded = True
-            break
-        except Exception:
-            continue
+        if not loaded:
+            logger.warning("mod_spatialite not loaded - spatial functions may be limited")
 
-    if not loaded:
-        logger.warning("mod_spatialite not loaded - spatial functions may be limited")
-
-    return conn
+        return conn
 
 
 class SpatialiteBackend(BackendPort):

@@ -548,10 +548,12 @@ class ControllerIntegration:
     def _on_backend_changed(self, layer_id: str, backend_name: str) -> None:
         """Handle backend change event from BackendController."""
         logger.info(f"Backend changed for layer {layer_id}: {backend_name}")
-        # Update backend indicator display if needed
-        if self._dockwidget and hasattr(self._dockwidget, 'backend_indicator_label'):
-            # The BackendController should already update the indicator
-            pass
+        # Update backend indicator display for current layer
+        if self._dockwidget and self._backend_controller:
+            current_layer = self._dockwidget.current_layer
+            if current_layer and current_layer.id() == layer_id:
+                # Ensure indicator is updated for the current layer
+                self._backend_controller.update_for_layer(current_layer, actual_backend=backend_name if backend_name != 'auto' else None)
     
     def _on_reload_requested(self) -> None:
         """Handle reload request event from BackendController."""
