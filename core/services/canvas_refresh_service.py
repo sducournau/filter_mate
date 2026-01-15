@@ -39,6 +39,8 @@ def is_complex_filter(subset: str, provider_type: str) -> bool:
     """
     Check if a filter expression is complex (requires longer refresh delay).
     
+    CONSOLIDATED v4.1: Delegates to core.optimization.query_analyzer for DRY compliance.
+    
     Args:
         subset: Filter expression
         provider_type: Provider type (postgres, spatialite, ogr)
@@ -46,32 +48,9 @@ def is_complex_filter(subset: str, provider_type: str) -> bool:
     Returns:
         bool: True if filter is complex
     """
-    if not subset:
-        return False
-    
-    subset_upper = subset.upper()
-    
-    if provider_type == 'postgres':
-        return (
-            'EXISTS' in subset_upper or
-            'ST_BUFFER' in subset_upper or
-            'ST_INTERSECTS' in subset_upper or
-            'ST_CONTAINS' in subset_upper or
-            'ST_WITHIN' in subset_upper or
-            '__source' in subset.lower() or
-            (subset_upper.count(',') > 100 and ' IN (' in subset_upper)
-        )
-    elif provider_type == 'spatialite':
-        return (
-            'ST_' in subset_upper or
-            'INTERSECTS' in subset_upper or
-            'CONTAINS' in subset_upper or
-            'WITHIN' in subset_upper
-        )
-    elif provider_type == 'ogr':
-        return subset_upper.count(',') > 100 and ' IN (' in subset_upper
-    
-    return False
+    # Delegate to the canonical, more detailed implementation
+    from ..optimization.query_analyzer import is_complex_filter as core_is_complex
+    return core_is_complex(subset, provider_type)
 
 
 # =============================================================================

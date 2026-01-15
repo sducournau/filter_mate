@@ -815,12 +815,8 @@ def format_pk_values_for_sql(
     """
     Format primary key values for SQL IN clause.
     
-    EPIC-1 Phase E4-S4: Extracted from filter_task.py line 2295 (45 lines)
-    
-    CRITICAL: UUID fields must be quoted with single quotes in SQL.
-    Example: 
-        - Numeric: IN (1, 2, 3)
-        - UUID/Text: IN ('7b2e1a3e-b812-4d51-bf33-7f0cd0271ef3', ...)
+    CONSOLIDATED v4.1: Delegates to core.filter.pk_formatter for DRY compliance.
+    Wrapper maintained for backward compatibility.
     
     Args:
         values: List of primary key values
@@ -831,24 +827,14 @@ def format_pk_values_for_sql(
     Returns:
         str: Comma-separated values formatted for SQL IN clause
     """
-    if not values:
-        return ''
-    
-    # Auto-detect if not specified
-    if is_numeric is None:
-        is_numeric = _is_pk_numeric(layer, pk_field)
-    
-    if is_numeric:
-        # Numeric: simple conversion to string
-        return ', '.join(str(v) for v in values)
-    else:
-        # Text/UUID: quote with single quotes, escape existing quotes
-        formatted = []
-        for v in values:
-            # Convert to string and escape single quotes
-            str_val = str(v).replace("'", "''")
-            formatted.append(f"'{str_val}'")
-        return ', '.join(formatted)
+    # Delegate to the canonical implementation
+    from ....core.filter.pk_formatter import format_pk_values_for_sql as core_format
+    return core_format(
+        values=values,
+        is_numeric=is_numeric,
+        layer=layer,
+        pk_field=pk_field
+    )
 
 
 def _is_pk_numeric(layer, pk_field: str) -> bool:

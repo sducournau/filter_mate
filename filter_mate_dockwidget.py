@@ -1390,15 +1390,39 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     current_feature = picker.feature()
                     current_fid = current_feature.id() if (current_feature and current_feature.isValid()) else None
                     
-                    # FIX 2026-01-15 v6: For QgsFeaturePickerWidget, ORDER MATTERS!
-                    # 1. First call setLayer() to reset the widget's feature list
-                    # 2. Then call setDisplayExpression() to set how features are displayed
-                    # 3. Force refresh with setFetchGeometry(True) and ShowBrowserButtons
-                    # This order ensures the widget rebuilds its list with the correct expression.
+                    # FIX 2026-01-15 v7: For QgsFeaturePickerWidget, we need to:
+                    # 1. Disconnect signal to prevent spurious emissions during refresh
+                    # 2. Clear filter to reset widget state
+                    # 3. Set layer to reload features
+                    # 4. Set display expression AFTER setLayer
+                    # 5. Force widget to rebuild its internal model
+                    # 6. Reconnect signal
+                    try:
+                        picker.featureChanged.disconnect(self.exploring_features_changed)
+                    except (TypeError, RuntimeError):
+                        pass
+                    
+                    # Clear any existing filter and reset
+                    if hasattr(picker, 'setFilterExpression'):
+                        picker.setFilterExpression(None)
+                    
+                    # Set layer to reload the feature model
                     picker.setLayer(self.current_layer)
+                    
+                    # Set display expression - this controls how features are displayed in dropdown
                     picker.setDisplayExpression(field_or_expression)
+                    
+                    # Enable geometry fetching and browser buttons
                     picker.setFetchGeometry(True)
                     picker.setShowBrowserButtons(True)
+                    picker.setAllowNull(True)
+                    
+                    # Force model to reload by clearing filter expression
+                    if hasattr(picker, 'setFilterExpression'):
+                        picker.setFilterExpression("")
+                    
+                    # Reconnect signal
+                    picker.featureChanged.connect(self.exploring_features_changed)
                     
                     # Force visual update
                     picker.update()
@@ -1412,7 +1436,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         except:
                             pass
                     
-                    logger.info(f"  ✓ Single picker refreshed")
+                    logger.info(f"  ✓ Single picker refreshed with new expression")
             
             # Update multiple selection picker (QgsCheckableComboBoxFeaturesListPickerWidget)
             elif groupbox == "multiple_selection":
@@ -2874,11 +2898,32 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def get_current_features(self, use_cache: bool = True):
-        """v4.0 Sprint 18: Get selected features based on active groupbox - delegates to ExploringController."""
+        """
+        v4.0 Sprint 18: Get selected features based on active groupbox.
+        
+        FIX 2026-01-15 v8: Always try fallback if controller returns empty.
+        User requirement: Feature picker is THE source for single_selection mode.
+        """
+        features, expression = [], ''
+        
+        # Try controller delegation first
         if self._controller_integration:
-            return self._controller_integration.delegate_get_current_features(use_cache)
-        # FIX 2026-01-14: Fallback when controller unavailable
-        return self._fallback_get_current_features()
+            try:
+                features, expression = self._controller_integration.delegate_get_current_features(use_cache)
+            except Exception as e:
+                logger.debug(f"Controller delegation failed: {e}")
+        
+        # FIX 2026-01-15: ALWAYS try fallback if controller returns empty
+        # This ensures feature picker is used as primary source
+        if not features:
+            fallback_features, fallback_expr = self._fallback_get_current_features()
+            if fallback_features:
+                features = fallback_features
+                if fallback_expr:
+                    expression = fallback_expr
+                logger.debug(f"get_current_features: Used fallback, got {len(features)} features")
+        
+        return features, expression
     
     def _fallback_get_current_features(self):
         """

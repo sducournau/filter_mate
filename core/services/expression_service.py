@@ -726,125 +726,16 @@ def sanitize_subset_string(subset_string: str, logger=None) -> str:
     """
     Remove non-boolean display expressions and fix type casting issues in subset string.
     
-    v4.7 E6-S2: Extracted from filter_task.py for reusability.
-    
-    Display expressions like 'coalesce("field",'<NULL>')' or CASE expressions that
-    return true/false are valid QGIS expressions but cause issues in SQL WHERE clauses.
-    This function removes such expressions and fixes common type casting issues.
+    CONSOLIDATED v4.1: Delegates to core.filter.expression_sanitizer for DRY compliance.
+    Wrapper maintained for backward compatibility with logger parameter.
     
     Args:
         subset_string: The original subset string
-        logger: Optional logger for diagnostics (if None, prints to stdout)
+        logger: Optional logger for diagnostics (deprecated, ignored)
         
     Returns:
         Sanitized subset string with non-boolean expressions removed
     """
-    if not subset_string:
-        return subset_string
-    
-    def log_info(msg):
-        if logger:
-            logger.info(msg)
-    
-    sanitized = subset_string
-    
-    # ========================================================================
-    # PHASE 0: Normalize French SQL operators to English
-    # ========================================================================
-    french_operators = [
-        (r'\)\s+ET\s+\(', ') AND ('),      # ) ET ( -> ) AND (
-        (r'\)\s+OU\s+\(', ') OR ('),       # ) OU ( -> ) OR (
-        (r'\s+ET\s+', ' AND '),            # ... ET ... -> ... AND ...
-        (r'\s+OU\s+', ' OR '),             # ... OU ... -> ... OR ...
-        (r'\s+ET\s+NON\s+', ' AND NOT '),  # ET NON -> AND NOT
-        (r'\s+NON\s+', ' NOT '),           # NON ... -> NOT ...
-    ]
-    
-    for pattern, replacement in french_operators:
-        if re.search(pattern, sanitized, re.IGNORECASE):
-            log_info(f"FilterMate: Normalizing French operator '{pattern}' to '{replacement}'")
-            sanitized = re.sub(pattern, replacement, sanitized, flags=re.IGNORECASE)
-    
-    # ========================================================================
-    # PHASE 1: Remove non-boolean display expressions
-    # ========================================================================
-    
-    coalesce_patterns = [
-        r'(?:^|\s+)AND\s+\(coalesce\("[^"]+"\s*,\s*\'[^\']*\'\s*\)\)',
-        r'(?:^|\s+)OR\s+\(coalesce\("[^"]+"\s*,\s*\'[^\']*\'\s*\)\)',
-        r'(?:^|\s+)AND\s+\(coalesce\([^)]*(?:\([^)]*\)[^)]*)*\)\)',
-        r'(?:^|\s+)OR\s+\(coalesce\([^)]*(?:\([^)]*\)[^)]*)*\)\)',
-        r'(?:^|\s+)AND\s+\(coalesce\([^)]+\)\)',
-        r'(?:^|\s+)OR\s+\(coalesce\([^)]+\)\)',
-        r'(?:^|\s+)AND\s+\(coalesce\("[^"]+"\s*\.\s*"[^"]+"\s*,\s*\'[^\']*\'\s*\)\)',
-        r'(?:^|\s+)OR\s+\(coalesce\("[^"]+"\s*\.\s*"[^"]+"\s*,\s*\'[^\']*\'\s*\)\)',
-    ]
-    
-    for pattern in coalesce_patterns:
-        match = re.search(pattern, sanitized, re.IGNORECASE)
-        if match:
-            log_info(f"FilterMate: Removing invalid coalesce expression: '{match.group()[:60]}...'")
-            sanitized = re.sub(pattern, '', sanitized, flags=re.IGNORECASE)
-    
-    # SELECT CASE patterns
-    select_case_pattern = r'\s*AND\s+\(\s*SELECT\s+CASE\s+(?:WHEN\s+.+?THEN\s+(?:true|false)\s*)+\s*(?:ELSE\s+.+?)?\s*end\s*\)'
-    
-    match = re.search(select_case_pattern, sanitized, re.IGNORECASE | re.DOTALL)
-    if match:
-        log_info(f"FilterMate: Removing SELECT CASE style expression: '{match.group()[:80]}...'")
-        sanitized = re.sub(select_case_pattern, '', sanitized, flags=re.IGNORECASE | re.DOTALL)
-    
-    case_patterns = [
-        r'\s*AND\s+\(\s*CASE\s+(?:WHEN\s+.+?THEN\s+(?:true|false)\s*)+(?:ELSE\s+.+?)?\s*END\s*\)+',
-        r'\s*OR\s+\(\s*CASE\s+(?:WHEN\s+.+?THEN\s+(?:true|false)\s*)+(?:ELSE\s+.+?)?\s*END\s*\)+',
-        r'\s*AND\s+\(\s*SELECT\s+CASE\s+.+?\s+END\s*\)+',
-        r'\s*OR\s+\(\s*SELECT\s+CASE\s+.+?\s+END\s*\)+',
-    ]
-    
-    for pattern in case_patterns:
-        match = re.search(pattern, sanitized, re.IGNORECASE | re.DOTALL)
-        if match:
-            matched_text = match.group()
-            if re.search(r'\bTHEN\s+(true|false)\b', matched_text, re.IGNORECASE):
-                log_info(f"FilterMate: Removing invalid CASE/style expression: '{matched_text[:60]}...'")
-                sanitized = re.sub(pattern, '', sanitized, flags=re.IGNORECASE | re.DOTALL)
-    
-    # Remove standalone coalesce expressions at start
-    standalone_coalesce = r'^\s*\(coalesce\([^)]*(?:\([^)]*\)[^)]*)*\)\)\s*(?:AND|OR)?'
-    if re.match(standalone_coalesce, sanitized, re.IGNORECASE):
-        match = re.match(standalone_coalesce, sanitized, re.IGNORECASE)
-        log_info(f"FilterMate: Removing standalone coalesce: '{match.group()[:60]}...'")
-        sanitized = re.sub(standalone_coalesce, '', sanitized, flags=re.IGNORECASE)
-    
-    # ========================================================================
-    # PHASE 2: Fix unbalanced parentheses
-    # ========================================================================
-    
-    open_count = sanitized.count('(')
-    close_count = sanitized.count(')')
-    
-    if close_count > open_count:
-        excess = close_count - open_count
-        trailing_parens = re.search(r'\)+\s*$', sanitized)
-        if trailing_parens:
-            parens_at_end = len(trailing_parens.group().strip())
-            if parens_at_end >= excess:
-                sanitized = re.sub(r'\){' + str(excess) + r'}\s*$', '', sanitized)
-                log_info(f"FilterMate: Removed {excess} excess closing parentheses")
-    
-    # ========================================================================
-    # PHASE 3: Clean up whitespace and orphaned operators
-    # ========================================================================
-    
-    sanitized = re.sub(r'\s+', ' ', sanitized).strip()
-    sanitized = re.sub(r'\s+(AND|OR)\s*$', '', sanitized, flags=re.IGNORECASE)
-    sanitized = re.sub(r'^\s*(AND|OR)\s+', '', sanitized, flags=re.IGNORECASE)
-    
-    # Remove duplicate AND/OR operators
-    sanitized = re.sub(r'\s+AND\s+AND\s+', ' AND ', sanitized, flags=re.IGNORECASE)
-    sanitized = re.sub(r'\s+OR\s+OR\s+', ' OR ', sanitized, flags=re.IGNORECASE)
-    
-    if sanitized != subset_string:
-        log_info(f"FilterMate: Subset sanitized from '{subset_string[:80]}...' to '{sanitized[:80]}...'")
-    
-    return sanitized
+    # Delegate to the canonical implementation
+    from ..filter.expression_sanitizer import sanitize_subset_string as core_sanitize
+    return core_sanitize(subset_string)
