@@ -414,16 +414,25 @@ def prepare_geometries_by_provider(
             logger.info("  → Will use EXISTS subquery with table reference (no WKT simplification)")
     
     # Check if any OGR layer needs Spatialite geometry
+    # FIX 2026-01-15: Use new backend architecture instead of legacy SpatialiteGeometricFilter
     ogr_needs_spatialite_geom = False
     if 'ogr' in provider_list and layers_dict and 'ogr' in layers_dict:
-        from ...adapters.backends.spatialite_backend import SpatialiteGeometricFilter
-        spatialite_backend = SpatialiteGeometricFilter(task_parameters)
-        for layer, layer_props in layers_dict['ogr']:
-            if spatialite_backend.supports_layer(layer):
-                ogr_needs_spatialite_geom = True
-                if logger:
-                    logger.info(f"  OGR layer '{layer.name()}' will use Spatialite backend - need WKT geometry")
-                break
+        try:
+            from ...adapters.backends.spatialite import SpatialiteBackend
+            # Check if any OGR layer could benefit from Spatialite backend
+            # by checking if it's a GeoPackage or SQLite file
+            for layer, layer_props in layers_dict['ogr']:
+                layer_source = layer.source() if hasattr(layer, 'source') else ''
+                # GeoPackage and SQLite files can use Spatialite backend
+                if any(ext in layer_source.lower() for ext in ['.gpkg', '.sqlite', '.db']):
+                    ogr_needs_spatialite_geom = True
+                    if logger:
+                        logger.info(f"  OGR layer '{layer.name()}' is GeoPackage/SQLite - will prepare WKT geometry")
+                    break
+        except ImportError as e:
+            if logger:
+                logger.warning(f"Spatialite backend not available: {e}")
+            # Continue without Spatialite optimization
     
     # Prepare PostgreSQL source geometry
     has_postgresql_fallback_layers = False

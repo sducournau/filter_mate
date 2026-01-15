@@ -856,6 +856,19 @@ def create_geos_safe_layer(layer, layer_name_suffix: str = "_geos_safe") -> Opti
             logger.error(f"create_geos_safe_layer: Layer GC'd before return: {final_err}")
             return layer  # Fallback to original
         
+        # FIX v2.9.44: CRITICAL - Add layer to project registry BEFORE returning
+        # The layer can be garbage collected by Qt's C++ GC during the return from this function.
+        # Adding it to the project registry (with addToLegend=False) creates a strong C++ reference
+        # that survives the return. The caller is responsible for removing it when done.
+        # This is the ONLY reliable way to prevent Qt GC from deleting memory layers.
+        try:
+            from qgis.core import QgsProject
+            QgsProject.instance().addMapLayer(safe_layer, False)  # addToLegend=False
+            logger.debug(f"create_geos_safe_layer: Added '{safe_layer.name()}' to project registry for GC protection")
+        except Exception as add_err:
+            logger.warning(f"create_geos_safe_layer: Failed to add layer to project: {add_err}")
+            # Continue anyway - the layer might still survive
+        
         return safe_layer
         
     except Exception as e:

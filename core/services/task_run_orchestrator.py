@@ -112,11 +112,11 @@ class TaskRunOrchestrator:
         
         try:
             # Step 1: Clear Spatialite support cache for fresh detection
-            logger.debug("  Step 1: Clearing Spatialite cache...")
+            logger.info("  Step 1: Clearing Spatialite cache...")
             self._clear_spatialite_cache(context)
             
             # Step 2: Initialize source layer
-            logger.debug("  Step 2: Initializing source layer...")
+            logger.info("  Step 2: Initializing source layer...")
             if not self._initialize_source_layer(context):
                 logger.error("  ❌ Step 2 FAILED: Source layer initialization failed")
                 return TaskRunResult(
@@ -125,43 +125,43 @@ class TaskRunOrchestrator:
                     warning_messages=warning_messages,
                     context=context  # v4.0.1 FIX: Pass context back
                 )
-            logger.debug("  ✓ Step 2 completed")
+            logger.info("  ✓ Step 2 completed: Source layer initialized")
             
             # Step 3: Configure metric CRS if needed
-            logger.debug("  Step 3: Configuring metric CRS...")
+            logger.info("  Step 3: Configuring metric CRS...")
             self._configure_metric_crs(context)
-            logger.debug("  ✓ Step 3 completed")
+            logger.info("  ✓ Step 3 completed: CRS configured")
             
             # Step 4: Organize layers to filter by provider
-            logger.debug("  Step 4: Organizing layers...")
+            logger.info("  Step 4: Organizing layers by provider...")
             self._organize_layers(context)
-            logger.debug("  ✓ Step 4 completed")
+            logger.info("  ✓ Step 4 completed: Layers organized")
             
             # Step 5: Initialize orchestration modules (EPIC-1 Phase E12)
-            logger.debug("  Step 5: Initializing orchestration modules...")
+            logger.info("  Step 5: Initializing orchestration modules...")
             self._initialize_orchestration_modules(context)
-            logger.debug("  ✓ Step 5 completed")
+            logger.info("  ✓ Step 5 completed: Modules initialized")
             
             # Step 6: Extract database and project configuration
-            logger.debug("  Step 6: Extracting configuration...")
+            logger.info("  Step 6: Extracting db_file_path, project_uuid, session_id...")
             self._extract_configuration(context)
-            logger.debug("  ✓ Step 6 completed")
+            logger.info(f"  ✓ Step 6 completed: db={context.db_file_path is not None}, uuid={context.project_uuid is not None}")
             
             # Step 7: Initialize progress and logging
-            logger.debug("  Step 7: Initializing progress...")
+            logger.info("  Step 7: Initializing progress...")
             self._initialize_progress(context)
-            logger.debug("  ✓ Step 7 completed")
+            logger.info("  ✓ Step 7 completed: Progress set to 0%")
             
             # Step 8: Log backend info
-            logger.debug("  Step 8: Logging backend info...")
+            logger.info("  Step 8: Logging backend info...")
             self._log_backend_info(context)
-            logger.debug("  ✓ Step 8 completed")
+            logger.info("  ✓ Step 8 completed")
             
             # Step 9: Execute the appropriate action
-            logger.debug(f"  Step 9: Executing action '{context.task_action}'...")
+            logger.info(f"  Step 9: Executing action '{context.task_action}'...")
             result = self._execute_action(context)
             if self._is_canceled(context):
-                logger.warning("  ⚠️ Step 9: Task was canceled")
+                logger.warning("  ⚠️ Step 9: Task was canceled by user")
                 return TaskRunResult(
                     success=False,
                     elapsed_time=time.time() - run_start_time,
@@ -169,14 +169,17 @@ class TaskRunOrchestrator:
                     context=context  # v4.0.1 FIX: Pass context back
                 )
             if result is False:
-                logger.error(f"  ❌ Step 9 FAILED: Action '{context.task_action}' returned False")
+                elapsed = time.time() - run_start_time
+                logger.error(f"  ❌ Step 9 FAILED: Action '{context.task_action}' returned False after {elapsed:.1f}s")
+                logger.error(f"     Check Python console for detailed error messages.")
+                logger.error(f"     Common causes: no features selected, empty filter expression, database connection issue.")
                 return TaskRunResult(
                     success=False,
-                    elapsed_time=time.time() - run_start_time,
+                    elapsed_time=elapsed,
                     warning_messages=warning_messages,
                     context=context  # v4.0.1 FIX: Pass context back
                 )
-            logger.debug("  ✓ Step 9 completed")
+            logger.info(f"  ✓ Step 9 completed: Action '{context.task_action}' succeeded")
             
             # Step 10: Task completed successfully
             self._set_progress(context, 100)

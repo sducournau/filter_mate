@@ -67,19 +67,24 @@ class GeometryCache:
         self._underlying_cache = SourceGeometryCache(max_size=max_size)
         self._max_size = max_size
         
-        # Register in global CacheManager
+        # Register in global CacheManager (only if not already registered)
         cache_manager = CacheManager.get_instance()
-        cache_config = CacheConfig(
-            policy=CachePolicy.FIFO,  # FIFO policy for geometries
-            max_size=max_size,
-            ttl_seconds=None  # No TTL for geometries
-        )
-        cache_manager.register_cache("geometry_task", cache_config)
-        
-        logger.debug(
-            f"GeometryCache initialized (max_size={max_size}) "
-            f"and registered in CacheManager"
-        )
+        if cache_manager.get_cache("geometry_task") is None:
+            cache_config = CacheConfig(
+                policy=CachePolicy.FIFO,  # FIFO policy for geometries
+                max_size=max_size,
+                ttl_seconds=None  # No TTL for geometries
+            )
+            cache_manager.register_cache("geometry_task", cache_config)
+            logger.debug(
+                f"GeometryCache initialized (max_size={max_size}) "
+                f"and registered in CacheManager"
+            )
+        else:
+            logger.debug(
+                f"GeometryCache initialized (max_size={max_size}), "
+                f"using existing CacheManager registration"
+            )
     
     def get(
         self,

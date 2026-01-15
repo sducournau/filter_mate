@@ -43,10 +43,9 @@ def create_mock_dockwidget():
     dw.pushButton_checkable_filtering_geometric_predicates = Mock()
     dw.pushButton_checkable_filtering_geometric_predicates.isChecked.return_value = True
     
-    mock_item = Mock()
-    mock_item.text.return_value = "intersects"
-    dw.listWidget_filtering_geometric_predicate = Mock()
-    dw.listWidget_filtering_geometric_predicate.selectedItems.return_value = [mock_item]
+    # FIX: Use comboBox_filtering_geometric_predicates with checkedItems() (QgsCheckableComboBox)
+    dw.comboBox_filtering_geometric_predicates = Mock()
+    dw.comboBox_filtering_geometric_predicates.checkedItems.return_value = ["intersects"]
     
     # Layers to filter
     dw.pushButton_checkable_filtering_layers_to_filter = Mock()

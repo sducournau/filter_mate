@@ -204,8 +204,9 @@ def task_parameter_builder():
     dw.comboBox_filtering_buffer_type.currentText.return_value = "Round"
     dw.pushButton_checkable_filtering_geometric_predicates = Mock()
     dw.pushButton_checkable_filtering_geometric_predicates.isChecked.return_value = False
-    dw.listWidget_filtering_geometric_predicate = Mock()
-    dw.listWidget_filtering_geometric_predicate.selectedItems.return_value = []
+    # FIX: Use comboBox_filtering_geometric_predicates with checkedItems() (QgsCheckableComboBox)
+    dw.comboBox_filtering_geometric_predicates = Mock()
+    dw.comboBox_filtering_geometric_predicates.checkedItems.return_value = []
     dw.pushButton_checkable_filtering_layers_to_filter = Mock()
     dw.pushButton_checkable_filtering_layers_to_filter.isChecked.return_value = False
     dw.get_layers_to_filter = Mock(return_value=[])

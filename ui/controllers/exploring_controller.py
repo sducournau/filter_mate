@@ -2455,23 +2455,40 @@ class ExploringController(BaseController, LayerSelectionMixin):
                             logger.warning(f"_reload_exploration_widgets: Failed to restore checked items: {e}")
             
             # Field expression widgets
+            # FIX 2026-01-15: Use setField() for simple field names to properly select in combobox
+            # Use setExpression() only for complex expressions. This fixes empty combobox issue.
             if "SINGLE_SELECTION_EXPRESSION" in self._dockwidget.widgets.get("EXPLORING", {}):
                 logger.info(f"Setting SINGLE_SELECTION_EXPRESSION widget: layer={layer.name()}, expression='{single_expr}'")
-                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(layer)
-                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(single_expr)
-                logger.info(f"Widget expression after setExpression: '{self._dockwidget.widgets['EXPLORING']['SINGLE_SELECTION_EXPRESSION']['WIDGET'].expression()}'")
+                widget = self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"]
+                widget.setLayer(layer)
+                # Use setField for simple field names, setExpression for complex expressions
+                if single_expr and not QgsExpression(single_expr).isField():
+                    widget.setExpression(single_expr)
+                else:
+                    widget.setField(single_expr if single_expr else "")
+                logger.info(f"Widget expression after set: '{widget.expression()}'")
             
             if "MULTIPLE_SELECTION_EXPRESSION" in self._dockwidget.widgets.get("EXPLORING", {}):
                 logger.info(f"Setting MULTIPLE_SELECTION_EXPRESSION widget: layer={layer.name()}, expression='{multiple_expr}'")
-                self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(layer)
-                self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(multiple_expr)
-                logger.info(f"Widget expression after setExpression: '{self._dockwidget.widgets['EXPLORING']['MULTIPLE_SELECTION_EXPRESSION']['WIDGET'].expression()}'")
+                widget = self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"]
+                widget.setLayer(layer)
+                # Use setField for simple field names, setExpression for complex expressions
+                if multiple_expr and not QgsExpression(multiple_expr).isField():
+                    widget.setExpression(multiple_expr)
+                else:
+                    widget.setField(multiple_expr if multiple_expr else "")
+                logger.info(f"Widget expression after set: '{widget.expression()}'")
             
             if "CUSTOM_SELECTION_EXPRESSION" in self._dockwidget.widgets.get("EXPLORING", {}):
                 logger.info(f"Setting CUSTOM_SELECTION_EXPRESSION widget: layer={layer.name()}, expression='{custom_expr}'")
-                self._dockwidget.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setLayer(layer)
-                self._dockwidget.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setExpression(custom_expr)
-                logger.info(f"Widget expression after setExpression: '{self._dockwidget.widgets['EXPLORING']['CUSTOM_SELECTION_EXPRESSION']['WIDGET'].expression()}'")
+                widget = self._dockwidget.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"]
+                widget.setLayer(layer)
+                # Use setField for simple field names, setExpression for complex expressions
+                if custom_expr and not QgsExpression(custom_expr).isField():
+                    widget.setExpression(custom_expr)
+                else:
+                    widget.setField(custom_expr if custom_expr else "")
+                logger.info(f"Widget expression after set: '{widget.expression()}'")
 
             
             # Reconnect signals

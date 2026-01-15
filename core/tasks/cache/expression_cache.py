@@ -72,20 +72,26 @@ class ExpressionCache:
         self._max_size = max_size
         self._ttl = ttl_seconds
         
-        # Register in global CacheManager
+        # Register in global CacheManager (only if not already registered)
         cache_manager = CacheManager.get_instance()
-        cache_config = CacheConfig(
-            policy=CachePolicy.LRU,  # LRU with TTL for expressions
-            max_size=max_size,
-            ttl_seconds=ttl_seconds
-        )
-        cache_manager.register_cache("expression_task", cache_config)
-        
-        logger.debug(
-            f"ExpressionCache initialized "
-            f"(max_size={max_size}, ttl={ttl_seconds}s) "
-            f"and registered in CacheManager"
-        )
+        if cache_manager.get_cache("expression_task") is None:
+            cache_config = CacheConfig(
+                policy=CachePolicy.LRU,  # LRU with TTL for expressions
+                max_size=max_size,
+                ttl_seconds=ttl_seconds
+            )
+            cache_manager.register_cache("expression_task", cache_config)
+            logger.debug(
+                f"ExpressionCache initialized "
+                f"(max_size={max_size}, ttl={ttl_seconds}s) "
+                f"and registered in CacheManager"
+            )
+        else:
+            logger.debug(
+                f"ExpressionCache initialized "
+                f"(max_size={max_size}, ttl={ttl_seconds}s), "
+                f"using existing CacheManager registration"
+            )
     
     def get(
         self,

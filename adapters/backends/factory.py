@@ -173,6 +173,96 @@ class BackendFactory:
         result = backend.execute(expression, layer_info)
     """
     
+    # Singleton instance for static method compatibility
+    _instance = None
+    
+    @staticmethod
+    def get_backend(provider_type_or_layer_info, layer=None, task_params=None, force_ogr=False):
+        """
+        Static method for backward compatibility with legacy code.
+        
+        Supports both old signature (provider_type, layer, task_params) and
+        new signature (layer_info, forced_backend).
+        
+        Args (old signature):
+            provider_type_or_layer_info: Provider type string ('postgresql', 'spatialite', 'ogr')
+            layer: QgsVectorLayer instance
+            task_params: Task parameters dictionary
+            force_ogr: If True, return OGR backend directly
+        
+        Args (new signature):
+            provider_type_or_layer_info: LayerInfo instance
+            layer: Optional forced_backend string
+            
+        Returns:
+            Backend instance with apply_filter() and build_expression() methods
+        """
+        # v4.1.0: Try to use legacy adapters with feature flag for progressive migration
+        try:
+            from .legacy_adapter import get_legacy_adapter, is_new_backend_enabled, ENABLE_NEW_BACKENDS
+            USE_LEGACY_ADAPTERS = True
+        except ImportError:
+            USE_LEGACY_ADAPTERS = False
+        
+        # Import legacy geometric filter backends from before_migration
+        # These provide apply_filter() and build_expression() methods
+        from ...before_migration.modules.backends.ogr_backend import OGRGeometricFilter
+        from ...before_migration.modules.backends.spatialite_backend import SpatialiteGeometricFilter
+        
+        # Detect signature type
+        if isinstance(provider_type_or_layer_info, str):
+            # OLD SIGNATURE: (provider_type, layer, task_params)
+            provider_type = provider_type_or_layer_info
+            
+            if force_ogr:
+                logger.info(f"🔄 Force OGR mode: Returning OGR backend for '{layer.name() if layer else 'unknown'}' (bypassing auto-selection)")
+                return OGRGeometricFilter(task_params or {})
+            
+            # Check for forced backend in task_params
+            forced_backends = (task_params or {}).get('forced_backends', {})
+            forced_backend = forced_backends.get(layer.id()) if layer and forced_backends else None
+            
+            if forced_backend:
+                logger.info(f"🔒 Using forced backend '{forced_backend.upper()}' for layer '{layer.name() if layer else 'unknown'}'")
+                provider_type = forced_backend
+            
+            logger.info(f"🔧 BackendFactory.get_backend() called for '{layer.name() if layer else 'unknown'}'")
+            logger.info(f"   → provider_type (effective): '{provider_type}'")
+            
+            # v4.1.0: Use legacy adapters if feature flag is set (for progressive migration testing)
+            if USE_LEGACY_ADAPTERS and is_new_backend_enabled(provider_type):
+                logger.info(f"   → Using v4.1 LegacyAdapter (new backend enabled via feature flag)")
+                try:
+                    return get_legacy_adapter(provider_type, task_params or {})
+                except Exception as e:
+                    logger.warning(f"LegacyAdapter failed: {e}, falling back to direct legacy backend")
+            
+            # Return appropriate legacy geometric filter backend
+            if provider_type in ('postgresql', 'postgres'):
+                try:
+                    from ...before_migration.modules.backends.postgresql_backend import PostgreSQLGeometricFilter
+                    return PostgreSQLGeometricFilter(task_params or {})
+                except ImportError:
+                    logger.warning("PostgreSQL backend not available, falling back to OGR")
+                    return OGRGeometricFilter(task_params or {})
+            
+            elif provider_type == 'spatialite':
+                return SpatialiteGeometricFilter(task_params or {})
+            
+            else:  # 'ogr' or unknown
+                return OGRGeometricFilter(task_params or {})
+        
+        else:
+            # NEW SIGNATURE: (layer_info, forced_backend)
+            # Delegate to instance method via singleton
+            if BackendFactory._instance is None:
+                BackendFactory._instance = BackendFactory()
+            
+            return BackendFactory._instance.get_backend_instance(
+                provider_type_or_layer_info,
+                forced_backend=layer
+            )
+    
     def __init__(
         self,
         container: Optional['Container'] = None,
@@ -188,6 +278,10 @@ class BackendFactory:
         self._container = container
         self._config = config or {}
         self._backends: Dict[ProviderType, BackendPort] = {}
+        
+        # Set singleton instance
+        if BackendFactory._instance is None:
+            BackendFactory._instance = self
         
         # Check PostgreSQL availability
         self._postgresql_available = self._check_postgresql_available()
@@ -216,13 +310,13 @@ class BackendFactory:
             except ImportError:
                 return False
     
-    def get_backend(
+    def get_backend_instance(
         self,
         layer_info: LayerInfo,
         forced_backend: Optional[str] = None
     ) -> BackendPort:
         """
-        Get appropriate backend for a layer.
+        Get appropriate backend for a layer (instance method).
         
         Args:
             layer_info: Layer information

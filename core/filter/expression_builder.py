@@ -98,22 +98,35 @@ class ExpressionBuilder:
         try:
             backend_name = backend.get_backend_name()
             
+            # DIAGNOSTIC LOGS 2026-01-15: Trace expression building
+            logger.info(f"📝 build_backend_expression called:")
+            logger.info(f"   backend_name: {backend_name}")
+            logger.info(f"   current_predicates: {self.current_predicates}")
+            logger.info(f"   source_geom type: {type(source_geom).__name__}")
+            if hasattr(source_geom, 'name'):
+                logger.info(f"   source_geom name: {source_geom.name()}")
+            logger.info(f"   layer_props: {layer_props}")
+            
             # ==========================================
             # 1. PREPARE SOURCE FILTER
             # ==========================================
             source_filter = self._prepare_source_filter(backend_name)
+            logger.info(f"   source_filter: {source_filter}")
             
             # ==========================================
             # 2. BUILD EXPRESSION VIA BACKEND
             # ==========================================
             # Delegate to backend-specific build_expression()
             # Each backend knows how to construct expressions in its SQL dialect
+            logger.info(f"🔧 Calling backend.build_expression()...")
             expression = backend.build_expression(
                 predicates=self.current_predicates,
                 source_geom=source_geom,
                 layer_props=layer_props,
                 source_filter=source_filter
             )
+            
+            logger.info(f"✅ Backend returned expression: {expression[:200] if expression else 'None'}...")
             
             if not expression:
                 logger.warning(f"Backend {backend_name} returned empty expression")

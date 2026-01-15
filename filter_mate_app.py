@@ -1224,12 +1224,99 @@ class FilterMateApp:
             pass
 
     def manage_task(self, task_name, data=None):
-        """Orchestrate FilterMate tasks via TaskOrchestrator."""
-        # FIX 2026-01-15 v10: CRITICAL - Add extensive logging to debug filter button issue
+        """
+        Orchestrate FilterMate tasks via TaskOrchestrator.
+        
+        v4.1.0: Restored from before_migration with full guards and protections.
+        """
+        # FIX 2026-01-15: CRITICAL - Extensive logging for debugging
         logger.info(f"🚀 manage_task RECEIVED: task_name={task_name}, data={data is not None}")
         
-        assert task_name in list(self.tasks_descriptions.keys())
+        assert task_name in list(self.tasks_descriptions.keys()), f"Unknown task: {task_name}"
         
+        # v4.1.0: STABILITY FIX - Check and reset stale flags before processing
+        self._check_and_reset_stale_flags()
+        
+        # v4.1.0: CRITICAL - Skip layersAdded signals during project initialization
+        if task_name == 'add_layers' and self._initializing_project:
+            logger.debug("Skipping add_layers - project initialization in progress")
+            return
+        
+        # v4.1.0: STABILITY FIX - Queue concurrent add_layers tasks
+        if task_name == 'add_layers':
+            max_queue_size = STABILITY_CONSTANTS.get('MAX_ADD_LAYERS_QUEUE', 5)
+            if self._pending_add_layers_tasks > 0:
+                if len(self._add_layers_queue) >= max_queue_size:
+                    logger.warning(f"⚠️ STABILITY: add_layers queue full ({max_queue_size}), dropping oldest")
+                    self._add_layers_queue.pop(0)
+                logger.info(f"Queueing add_layers - {self._pending_add_layers_tasks} task(s) in progress")
+                self._add_layers_queue.append(data)
+                return
+            self._pending_add_layers_tasks += 1
+            logger.debug(f"Starting add_layers (pending: {self._pending_add_layers_tasks})")
+        
+        # v4.1.0: Guard - Ensure dockwidget is initialized for most tasks
+        if task_name not in ('remove_all_layers', 'project_read', 'new_project', 'add_layers'):
+            if self.dockwidget is None or not hasattr(self.dockwidget, 'widgets_initialized') or not self.dockwidget.widgets_initialized:
+                logger.warning(f"Task '{task_name}' called before dockwidget initialization, deferring by 500ms...")
+                weak_self = weakref.ref(self)
+                captured_task_name, captured_data = task_name, data
+                def safe_deferred_task():
+                    strong_self = weak_self()
+                    if strong_self is not None:
+                        strong_self.manage_task(captured_task_name, captured_data)
+                QTimer.singleShot(500, safe_deferred_task)
+                return
+        
+        # v4.1.0: CRITICAL - For filtering tasks, ensure widgets are ready with retry logic
+        if task_name in ('filter', 'unfilter', 'reset'):
+            if not hasattr(self, '_filter_retry_count'):
+                self._filter_retry_count = {}
+            
+            retry_key = f"{task_name}_{id(data)}"
+            retry_count = self._filter_retry_count.get(retry_key, 0)
+            
+            if not self._is_dockwidget_ready_for_filtering():
+                if retry_count >= 10:  # Max 10 retries = 5 seconds
+                    logger.error(f"❌ GIVING UP: Task '{task_name}' not ready after {retry_count} retries")
+                    iface.messageBar().pushCritical(
+                        "FilterMate ERROR",
+                        f"Impossible d'exécuter {task_name}: initialisation des widgets échouée."
+                    )
+                    self._filter_retry_count[retry_key] = 0
+                    # EMERGENCY FALLBACK
+                    if hasattr(self.dockwidget, 'widgets_initialized') and self.dockwidget.widgets_initialized:
+                        logger.warning("⚠️ EMERGENCY: Forcing _widgets_ready = True")
+                        self._widgets_ready = True
+                        weak_self = weakref.ref(self)
+                        captured_tn, captured_d = task_name, data
+                        def safe_emergency_retry():
+                            strong_self = weak_self()
+                            if strong_self is not None:
+                                strong_self.manage_task(captured_tn, captured_d)
+                        QTimer.singleShot(100, safe_emergency_retry)
+                    return
+                
+                self._filter_retry_count[retry_key] = retry_count + 1
+                logger.warning(f"Task '{task_name}' deferring 500ms (attempt {retry_count + 1}/10)")
+                weak_self = weakref.ref(self)
+                captured_tn, captured_d = task_name, data
+                def safe_filter_retry():
+                    strong_self = weak_self()
+                    if strong_self is not None:
+                        strong_self.manage_task(captured_tn, captured_d)
+                QTimer.singleShot(500, safe_filter_retry)
+                return
+            else:
+                # Success! Reset counter
+                self._filter_retry_count[retry_key] = 0
+        
+        # Sync PROJECT_LAYERS from dockwidget
+        if self.dockwidget is not None:
+            self.PROJECT_LAYERS = self.dockwidget.PROJECT_LAYERS
+            self.CONFIG_DATA = self.dockwidget.CONFIG_DATA
+        
+        # Dispatch via TaskOrchestrator or fallback
         if self._task_orchestrator:
             try:
                 logger.info(f"   Using TaskOrchestrator to dispatch {task_name}")
@@ -1524,6 +1611,43 @@ class FilterMateApp:
                     layers_to_filter.append(self.PROJECT_LAYERS[key]["infos"].copy())
         return layers_to_filter
     
+    def _build_all_filtered_layers(self, current_layer):
+        """
+        Build list of ALL layers that have an active subsetString filter.
+        
+        v4.8 FIX: Used for unfilter/reset operations when no layers are checked
+        in the combobox. This ensures all previously filtered layers get unfiltered.
+        
+        Args:
+            current_layer: Current source layer (excluded from result)
+            
+        Returns:
+            List of layer info dicts for layers with active filters
+        """
+        filtered_layers = []
+        current_layer_id = current_layer.id() if current_layer else None
+        
+        for layer_id, layer_props in self.PROJECT_LAYERS.items():
+            # Skip current layer (handled separately)
+            if layer_id == current_layer_id:
+                continue
+            
+            # Get the actual layer object
+            layer = layer_props.get("layer")
+            if not layer or not is_valid_layer(layer):
+                continue
+            
+            # Check if layer has an active filter
+            subset_string = layer.subsetString()
+            if subset_string and subset_string.strip():
+                # Layer has active filter - include it for unfiltering
+                layer_info = layer_props.get("infos", {}).copy()
+                if layer_info:
+                    filtered_layers.append(layer_info)
+                    logger.debug(f"v4.8: Including filtered layer for unfilter: {layer.name()}")
+        
+        return filtered_layers
+
     def _initialize_filter_history(self, current_layer, layers_to_filter, task_parameters):
         """Initialize filter history for source and associated layers.
         
@@ -1603,6 +1727,12 @@ class FilterMateApp:
             if task_name in ('filter', 'unfilter', 'reset'):
                 # Build validated list of layers to filter
                 layers_to_filter = self._build_layers_to_filter(current_layer)
+                
+                # v4.8 FIX: For unfilter/reset, include ALL layers with active subsetString
+                # This ensures layers that were filtered are unfiltered even if unchecked
+                if task_name in ('unfilter', 'reset') and len(layers_to_filter) == 0:
+                    layers_to_filter = self._build_all_filtered_layers(current_layer)
+                    logger.info(f"v4.8: unfilter/reset - found {len(layers_to_filter)} layers with active filters")
                 
                 # v4.7: Delegate diagnostic logging
                 if builder:
@@ -1691,24 +1821,120 @@ class FilterMateApp:
             undo_btn.setEnabled(False); redo_btn.setEnabled(False)
     
     def _handle_undo_redo(self, is_undo: bool):
-        """Handle undo/redo operation (delegates to UndoRedoHandler)."""
+        """Handle undo/redo operation (delegates to UndoRedoHandler, with legacy fallback)."""
         action_name = "undo" if is_undo else "redo"
         if not self.dockwidget or not self.dockwidget.current_layer:
             logger.warning(f"FilterMate: No current layer for {action_name}")
             return
-        if not self._undo_redo_handler:
-            show_warning(f"{action_name.capitalize()} non disponible - handler manquant")
-            return
+        
         source_layer = self.dockwidget.current_layer
+        
+        # Guard: ensure layer is usable
+        if not is_layer_source_available(source_layer):
+            logger.warning(f"handle_{action_name}: source layer invalid or source missing; aborting.")
+            show_warning(f"Impossible de {action_name}: couche invalide ou source introuvable.")
+            return
+        
+        # STABILITY FIX: Verify layer exists in PROJECT_LAYERS before access
+        if source_layer.id() not in self.dockwidget.PROJECT_LAYERS:
+            logger.warning(f"handle_{action_name}: layer {source_layer.name()} not in PROJECT_LAYERS; aborting.")
+            return
+        
         layers_to_filter = self.dockwidget.PROJECT_LAYERS.get(source_layer.id(), {}).get("filtering", {}).get("layers_to_filter", [])
         button_is_checked = self.dockwidget.pushButton_checkable_filtering_layers_to_filter.isChecked()
+        
+        # v4.1: Set filtering protection to prevent layer change signals
         self.dockwidget._filtering_in_progress = True
+        logger.info(f"v4.1: 🔒 handle_{action_name} - Filtering protection enabled")
+        
         try:
-            handler_method = self._undo_redo_handler.handle_undo if is_undo else self._undo_redo_handler.handle_redo
-            result = handler_method(source_layer=source_layer, layers_to_filter=layers_to_filter, use_global=button_is_checked, dockwidget=self.dockwidget)
-            if result: self.update_undo_redo_buttons()
+            # Try UndoRedoHandler first (v4.0 hexagonal architecture)
+            if self._undo_redo_handler:
+                handler_method = self._undo_redo_handler.handle_undo if is_undo else self._undo_redo_handler.handle_redo
+                result = handler_method(source_layer=source_layer, layers_to_filter=layers_to_filter, use_global=button_is_checked, dockwidget=self.dockwidget)
+                if result: self.update_undo_redo_buttons()
+            else:
+                # LEGACY FALLBACK: Direct history_manager access (v2.x behavior)
+                logger.warning(f"UndoRedoHandler unavailable - using legacy {action_name}")
+                self._legacy_handle_undo_redo(is_undo, source_layer, layers_to_filter, button_is_checked)
         finally:
-            self.dockwidget._filtering_in_progress = False
+            if self.dockwidget:
+                self.dockwidget._filtering_in_progress = False
+                logger.info(f"v4.1: 🔓 handle_{action_name} - Filtering protection disabled")
+    
+    def _legacy_handle_undo_redo(self, is_undo: bool, source_layer, layers_to_filter: list, button_is_checked: bool):
+        """
+        Legacy undo/redo fallback when UndoRedoHandler is unavailable.
+        
+        Extracted from before_migration/filter_mate_app.py v2.9.29 for stability.
+        """
+        action_name = "undo" if is_undo else "redo"
+        has_remote_layers = bool(layers_to_filter)
+        use_global = button_is_checked and has_remote_layers
+        
+        if use_global:
+            # Global undo/redo
+            logger.info(f"FilterMate: Performing global {action_name} (legacy fallback)")
+            global_state = self.history_manager.undo_global() if is_undo else self.history_manager.redo_global()
+            
+            if global_state:
+                # Apply state to source layer
+                safe_set_subset_string(source_layer, global_state.source_expression)
+                self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = bool(global_state.source_expression)
+                logger.info(f"FilterMate: Restored source layer: {global_state.source_expression[:60] if global_state.source_expression else 'no filter'}")
+                
+                # Apply state to ALL remote layers from the saved state
+                restored_count = 0
+                restored_layers = []
+                for remote_id, (expression, _) in global_state.remote_layers.items():
+                    if remote_id not in self.PROJECT_LAYERS:
+                        logger.warning(f"FilterMate: Remote layer {remote_id} no longer exists, skipping")
+                        continue
+                    
+                    remote_layers = [l for l in self.PROJECT.mapLayers().values() if l.id() == remote_id]
+                    if remote_layers:
+                        remote_layer = remote_layers[0]
+                        if not is_layer_source_available(remote_layer):
+                            logger.warning(f"Global {action_name}: skipping remote layer '{remote_layer.name()}' (invalid or missing source)")
+                            continue
+                        safe_set_subset_string(remote_layer, expression)
+                        self.PROJECT_LAYERS[remote_id]["infos"]["is_already_subset"] = bool(expression)
+                        logger.info(f"FilterMate: Restored remote layer {remote_layer.name()}: {expression[:60] if expression else 'no filter'}")
+                        restored_count += 1
+                        restored_layers.append(remote_layer)
+                    else:
+                        logger.warning(f"FilterMate: Remote layer {remote_id} not found in project")
+                
+                # Refresh ALL affected layers
+                source_layer.updateExtents()
+                source_layer.triggerRepaint()
+                for remote_layer in restored_layers:
+                    remote_layer.updateExtents()
+                    remote_layer.triggerRepaint()
+                self.iface.mapCanvas().refreshAllLayers()
+                self.iface.mapCanvas().refresh()
+                
+                logger.info(f"FilterMate: Global {action_name} completed - restored {restored_count + 1} layers (legacy)")
+            else:
+                logger.info(f"FilterMate: No global {action_name} history available")
+        else:
+            # Source layer only undo/redo
+            logger.info(f"FilterMate: Performing source layer {action_name} only (legacy fallback)")
+            history = self.history_manager.get_history(source_layer.id())
+            
+            can_action = history.can_undo() if is_undo else history.can_redo() if history else False
+            if history and can_action:
+                state = history.undo() if is_undo else history.redo()
+                if state:
+                    safe_set_subset_string(source_layer, state.expression)
+                    self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = bool(state.expression)
+                    logger.info(f"FilterMate: {action_name.capitalize()} source layer to: {state.description}")
+                    self._refresh_layers_and_canvas(source_layer)
+            else:
+                logger.info(f"FilterMate: No {action_name} history for source layer")
+        
+        # Update button states
+        self.update_undo_redo_buttons()
     
     def handle_undo(self):
         """Handle undo (delegates to UndoRedoHandler, global mode if checkbox checked)."""

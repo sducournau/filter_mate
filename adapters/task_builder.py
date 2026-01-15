@@ -225,9 +225,9 @@ class TaskParameterBuilder:
                 dw.pushButton_checkable_filtering_geometric_predicates.isChecked()
             )
         
-        if hasattr(dw, 'listWidget_filtering_geometric_predicate'):
-            selected_items = dw.listWidget_filtering_geometric_predicate.selectedItems()
-            config.geometric_predicates = [item.text() for item in selected_items]
+        # FIX: Use comboBox_filtering_geometric_predicates (QgsCheckableComboBox) with checkedItems()
+        if hasattr(dw, 'comboBox_filtering_geometric_predicates'):
+            config.geometric_predicates = dw.comboBox_filtering_geometric_predicates.checkedItems()
         
         # Layers to filter
         if hasattr(dw, 'pushButton_checkable_filtering_layers_to_filter'):
@@ -582,9 +582,9 @@ class TaskParameterBuilder:
                 self._project_layers[layer_id]["filtering"]["has_geometric_predicates"] = current_val
         
         # SYNC geometric_predicates list
-        if hasattr(dw, 'listWidget_filtering_geometric_predicate'):
-            selected_items = dw.listWidget_filtering_geometric_predicate.selectedItems()
-            current_val = [item.text() for item in selected_items]
+        # FIX: Use comboBox_filtering_geometric_predicates (QgsCheckableComboBox) with checkedItems()
+        if hasattr(dw, 'comboBox_filtering_geometric_predicates'):
+            current_val = dw.comboBox_filtering_geometric_predicates.checkedItems()
             stored_val = task_parameters["filtering"].get("geometric_predicates", [])
             if set(current_val) != set(stored_val):
                 logger.info(f"SYNC geometric_predicates: {len(stored_val)} → {len(current_val)} items")

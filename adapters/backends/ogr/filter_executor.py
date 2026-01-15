@@ -499,7 +499,7 @@ def validate_ogr_result_layer(layer: Any) -> tuple:
     invalid_reason = "unknown"
     
     try:
-        from ....core.geometry.geometry_utils import validate_geometry
+        from ....core.geometry.geometry_safety import validate_geometry
     except ImportError:
         # Fallback validation
         def validate_geometry(geom):
@@ -744,9 +744,9 @@ def execute_ogr_spatial_selection(
     )
     from qgis import processing
     
-    # Import geometry validation
+    # Import geometry validation from geometry_safety module
     try:
-        from ....core.geometry.geometry_utils import validate_geometry, create_geos_safe_layer
+        from ....core.geometry.geometry_safety import validate_geometry, create_geos_safe_layer
     except ImportError:
         def validate_geometry(geom):
             return geom is not None and not geom.isNull() and not geom.isEmpty()
@@ -829,7 +829,39 @@ def execute_ogr_spatial_selection(
             use_safe_current = True
             logger.info(f"✓ Safe target layer: {safe_current_layer.featureCount()} features")
     
-    predicate_list = [int(p) for p in context.current_predicates.keys()]
+    # FIX 2026-01-15: Extract numeric QGIS predicate codes from current_predicates
+    # current_predicates peut contenir:
+    #   - Des noms SQL comme clés: {'ST_Intersects': 'ST_Intersects'}
+    #   - Des codes numériques comme clés: {0: 'ST_Intersects'}
+    # Pour processing.run("qgis:selectbylocation"), on a besoin des codes numériques
+    
+    predicate_list = []
+    for key in context.current_predicates.keys():
+        if isinstance(key, int):
+            # C'est déjà un code numérique QGIS
+            predicate_list.append(key)
+        elif isinstance(key, str) and key.isdigit():
+            # C'est un string numérique
+            predicate_list.append(int(key))
+    
+    # Si aucun code numérique trouvé, default à intersects (0)
+    if not predicate_list:
+        logger.warning(f"No numeric QGIS predicate codes found in current_predicates: {context.current_predicates}")
+        logger.warning("Defaulting to 'intersects' (code 0)")
+        predicate_list = [0]
+    
+    # DIAGNOSTIC LOGS 2026-01-15: Trace OGR spatial selection execution
+    logger.info("=" * 70)
+    logger.info(f"🚀 execute_ogr_spatial_selection STARTING")
+    logger.info(f"   Layer: {current_layer.name() if hasattr(current_layer, 'name') else 'unknown'}")
+    logger.info(f"   Source geom: {ogr_source_geom.name() if hasattr(ogr_source_geom, 'name') else 'unknown'}")
+    logger.info(f"   Source features: {ogr_source_geom.featureCount() if hasattr(ogr_source_geom, 'featureCount') else 'unknown'}")
+    logger.info(f"   Predicate list (numeric): {predicate_list}")
+    logger.info(f"   Predicate names: {list(context.current_predicates.keys())}")
+    logger.info(f"   Has combine operator: {context.has_combine_operator}")
+    logger.info(f"   Combine operator: {context.param_other_layers_combine_operator}")
+    logger.info(f"   Old subset: {param_old_subset[:100] if param_old_subset else 'None'}...")
+    logger.info("=" * 70)
     
     def map_selection_to_original():
         """Map selection back to original layer if we used safe layer."""

@@ -496,6 +496,40 @@ class FilterEngineTask(QgsTask):
             logger.debug("ActionDispatcher initialized for FilterEngineTask")
         return self._action_dispatcher
 
+    def _get_filter_orchestrator(self):
+        """
+        Get or create FilterOrchestrator (lazy initialization).
+        
+        FIX 2026-01-15: When filtering distant layers, the context from
+        TaskRunOrchestrator may not be available (e.g., OGR sequential filtering).
+        This lazy initialization ensures FilterOrchestrator is always available.
+        """
+        if self._filter_orchestrator is None:
+            self._filter_orchestrator = FilterOrchestrator(
+                task_parameters=self.task_parameters,
+                subset_queue_callback=self.queue_subset_request,
+                parent_task=self,
+                current_predicates=getattr(self, 'current_predicates', [])
+            )
+            logger.debug("FilterOrchestrator lazy-initialized for distant layer filtering")
+        return self._filter_orchestrator
+
+    def _get_expression_builder(self):
+        """
+        Get or create ExpressionBuilder (lazy initialization).
+        
+        FIX 2026-01-15: ExpressionBuilder may not be set from context.
+        This lazy initialization ensures it's always available.
+        """
+        if self._expression_builder is None:
+            self._expression_builder = ExpressionBuilder(
+                task_parameters=self.task_parameters,
+                source_layer=getattr(self, 'source_layer', None),
+                current_predicates=getattr(self, 'current_predicates', [])
+            )
+            logger.debug("ExpressionBuilder lazy-initialized for distant layer filtering")
+        return self._expression_builder
+
     # ========================================================================
     # v4.0.1: Hexagonal Architecture - Backend Access Methods
     # ========================================================================
@@ -837,8 +871,19 @@ class FilterEngineTask(QgsTask):
         """
         Queue a subset string request for thread-safe application in finished().
         
-        Phase E13 Step 4: Delegates to SubsetStringBuilder.
+        Phase E13 Step 4: Delegates to SubsetStringBuilder AND adds to task's
+        _pending_subset_requests for backward compatibility with finished().
+        
+        CRITICAL FIX 2026-01-15: finished() reads self._pending_subset_requests,
+        but SubsetStringBuilder stores in its own _pending_requests list.
+        We must add to BOTH to ensure proper application.
         """
+        # Add to task's _pending_subset_requests (used by finished())
+        if layer and expression is not None:
+            self._pending_subset_requests.append((layer, expression))
+            logger.debug(f"📥 _queue_subset_string: Queued for {layer.name()}: {len(expression)} chars")
+        
+        # Also delegate to builder for consistency
         builder = self._get_subset_builder()
         return builder.queue_subset_request(layer, expression)
     
@@ -904,23 +949,45 @@ class FilterEngineTask(QgsTask):
         Legacy action routing (pre-Phase E13).
         
         Kept as fallback during Strangler Fig migration.
+        v4.1.0: Enhanced logging for debugging.
         """
-        if self.task_action == 'filter':
-            return self.execute_filtering()
+        logger.info(f"📋 _execute_task_action_legacy: action={self.task_action}")
         
-        elif self.task_action == 'unfilter':
-            return self.execute_unfiltering()
-        
-        elif self.task_action == 'reset':
-            return self.execute_reseting()
-        
-        elif self.task_action == 'export':
-            if self.task_parameters["task"]["EXPORTING"]["HAS_LAYERS_TO_EXPORT"]:
-                return self.execute_exporting()
-            else:
-                return False
-        
-        return False
+        try:
+            if self.task_action == 'filter':
+                logger.info("  → Executing filtering...")
+                result = self.execute_filtering()
+                logger.info(f"  ✓ execute_filtering returned: {result}")
+                return result
+            
+            elif self.task_action == 'unfilter':
+                logger.info("  → Executing unfiltering...")
+                result = self.execute_unfiltering()
+                logger.info(f"  ✓ execute_unfiltering returned: {result}")
+                return result
+            
+            elif self.task_action == 'reset':
+                logger.info("  → Executing reset...")
+                result = self.execute_reseting()
+                logger.info(f"  ✓ execute_reseting returned: {result}")
+                return result
+            
+            elif self.task_action == 'export':
+                if self.task_parameters["task"]["EXPORTING"]["HAS_LAYERS_TO_EXPORT"]:
+                    logger.info("  → Executing export...")
+                    result = self.execute_exporting()
+                    logger.info(f"  ✓ execute_exporting returned: {result}")
+                    return result
+                else:
+                    logger.warning("  ⚠️ Export requested but no layers to export")
+                    return False
+            
+            logger.warning(f"  ⚠️ Unknown task_action: {self.task_action}")
+            return False
+        except Exception as e:
+            logger.error(f"  ❌ _execute_task_action_legacy FAILED: {e}", exc_info=True)
+            self.exception = e
+            return False
 
     def run(self):
         """
@@ -930,77 +997,116 @@ class FilterEngineTask(QgsTask):
         Delegates to execute_task_run() for main orchestration flow.
         
         Extracted 129 lines to core/services/task_run_orchestrator.py (v5.0-alpha).
+        v4.1.0: Enhanced logging for debugging.
         
         Returns:
             bool: True if task completed successfully, False otherwise
         """
-        logger.info(f"🏃 FilterEngineTask.run() STARTED: action={self.task_action}")
+        import time
+        import traceback
+        run_start_time = time.time()
         
-        # PHASE 14.7: Delegate to TaskRunOrchestrator service
-        from ..services.task_run_orchestrator import execute_task_run
+        logger.info(f"{'=' * 60}")
+        logger.info(f"🏃 FilterEngineTask.run() STARTED")
+        logger.info(f"   action={self.task_action}")
+        logger.info(f"   layers_count={self.layers_count}")
+        source_layer = getattr(self, 'source_layer', None)
+        logger.info(f"   source_layer={source_layer.name() if source_layer else 'None (will be initialized)'}")
+        logger.info(f"{'=' * 60}")
         
-        # Execute main orchestration
-        result = execute_task_run(
-            task_action=self.task_action,
-            task_parameters=self.task_parameters,
-            layers_count=self.layers_count,
-            source_layer=getattr(self, 'source_layer', None),
-            initialize_source_layer_callback=self._initialize_source_layer,
-            configure_metric_crs_callback=self._configure_metric_crs,
-            organize_layers_to_filter_callback=self._organize_layers_to_filter,
-            log_backend_info_callback=self._log_backend_info,
-            execute_task_action_callback=self._execute_task_action,
-            get_contextual_performance_warning_callback=self._get_contextual_performance_warning,
-            is_canceled_callback=self.isCanceled,
-            set_progress_callback=self.setProgress
-        )
-        
-        # Apply orchestration modules to task instance
-        if result.success and hasattr(result, 'context'):
-            if hasattr(result.context, 'result_processor'):
-                self._result_processor = result.context.result_processor
-                # v4.0.2 FIX: Merge pending subset requests instead of overwriting
-                # For 'unfilter' and 'reset' actions, requests are added directly to
-                # self._pending_subset_requests in execute_unfiltering()/execute_reseting().
-                # We must extend the existing list, not replace it.
-                if result.context.result_processor._pending_subset_requests:
-                    self._pending_subset_requests.extend(
-                        result.context.result_processor._pending_subset_requests
-                    )
-                self.warning_messages = result.context.result_processor.warning_messages
+        try:
+            # PHASE 14.7: Delegate to TaskRunOrchestrator service
+            from ..services.task_run_orchestrator import execute_task_run
             
-            if hasattr(result.context, 'expression_builder'):
-                self._expression_builder = result.context.expression_builder
+            # Execute main orchestration
+            result = execute_task_run(
+                task_action=self.task_action,
+                task_parameters=self.task_parameters,
+                layers_count=self.layers_count,
+                source_layer=getattr(self, 'source_layer', None),
+                initialize_source_layer_callback=self._initialize_source_layer,
+                configure_metric_crs_callback=self._configure_metric_crs,
+                organize_layers_to_filter_callback=self._organize_layers_to_filter,
+                log_backend_info_callback=self._log_backend_info,
+                execute_task_action_callback=self._execute_task_action,
+                get_contextual_performance_warning_callback=self._get_contextual_performance_warning,
+                is_canceled_callback=self.isCanceled,
+                set_progress_callback=self.setProgress
+            )
+        
+            # Apply orchestration modules to task instance
+            if result.success and hasattr(result, 'context'):
+                if hasattr(result.context, 'result_processor'):
+                    self._result_processor = result.context.result_processor
+                    # v4.0.2 FIX: Merge pending subset requests instead of overwriting
+                    # For 'unfilter' and 'reset' actions, requests are added directly to
+                    # self._pending_subset_requests in execute_unfiltering()/execute_reseting().
+                    # We must extend the existing list, not replace it.
+                    if result.context.result_processor._pending_subset_requests:
+                        self._pending_subset_requests.extend(
+                            result.context.result_processor._pending_subset_requests
+                        )
+                    self.warning_messages = result.context.result_processor.warning_messages
+                
+                if hasattr(result.context, 'expression_builder'):
+                    self._expression_builder = result.context.expression_builder
+                
+                if hasattr(result.context, 'filter_orchestrator'):
+                    self._filter_orchestrator = result.context.filter_orchestrator
             
-            if hasattr(result.context, 'filter_orchestrator'):
-                self._filter_orchestrator = result.context.filter_orchestrator
+            # v4.0.1 FIX: Retrieve critical configuration values from context
+            # These are REQUIRED for Spatialite connections and filter history
+            if hasattr(result, 'context') and result.context:
+                if result.context.db_file_path is not None:
+                    self.db_file_path = result.context.db_file_path
+                if result.context.project_uuid is not None:
+                    self.project_uuid = result.context.project_uuid
+                if result.context.session_id is not None:
+                    self.session_id = result.context.session_id
+            
+            # Store exception if any
+            if result.exception:
+                self.exception = result.exception
+                logger.error(f"❌ FilterEngineTask.run() EXCEPTION: {result.exception}")
+                logger.error(f"   Traceback: {traceback.format_exc()}")
+            
+            # Merge warning messages
+            if result.warning_messages:
+                if not hasattr(self, 'warning_messages'):
+                    self.warning_messages = []
+                self.warning_messages.extend(result.warning_messages)
+            
+            # v4.1.0: Enhanced completion logging
+            run_elapsed = time.time() - run_start_time
+            logger.info(f"{'=' * 60}")
+            logger.info(f"🏁 FilterEngineTask.run() FINISHED")
+            logger.info(f"   success={result.success}")
+            logger.info(f"   elapsed={run_elapsed:.2f}s")
+            logger.info(f"   exception={result.exception is not None}")
+            logger.info(f"   warnings={len(result.warning_messages) if result.warning_messages else 0}")
+            logger.info(f"{'=' * 60}")
+            
+            if not result.success and not result.exception:
+                logger.warning(f"⚠️ Task returned False without exception - check task logic")
+                # v4.1.1 FIX: If self.exception was set by a callback but not propagated to result,
+                # convert it to a message for user display
+                if self.exception and not self.message:
+                    self.message = f"Initialization error: {self.exception}"
+                    logger.error(f"   Propagating callback exception to message: {self.exception}")
+            
+            return result.success
         
-        # v4.0.1 FIX: Retrieve critical configuration values from context
-        # These are REQUIRED for Spatialite connections and filter history
-        if hasattr(result, 'context') and result.context:
-            if result.context.db_file_path is not None:
-                self.db_file_path = result.context.db_file_path
-            if result.context.project_uuid is not None:
-                self.project_uuid = result.context.project_uuid
-            if result.context.session_id is not None:
-                self.session_id = result.context.session_id
-        
-        # Store exception if any
-        if result.exception:
-            self.exception = result.exception
-            logger.error(f"❌ FilterEngineTask.run() EXCEPTION: {result.exception}")
-        
-        # Merge warning messages
-        if result.warning_messages:
-            if not hasattr(self, 'warning_messages'):
-                self.warning_messages = []
-            self.warning_messages.extend(result.warning_messages)
-        
-        logger.info(f"🏁 FilterEngineTask.run() FINISHED: success={result.success}, exception={result.exception is not None}")
-        if not result.success and not result.exception:
-            logger.warning(f"⚠️ Task returned False without exception - check task logic")
-        
-        return result.success
+        except Exception as e:
+            # v4.1.0: Catch-all exception handler with full traceback
+            run_elapsed = time.time() - run_start_time
+            self.exception = e
+            logger.error(f"{'=' * 60}")
+            logger.error(f"❌ FilterEngineTask.run() CRASHED after {run_elapsed:.2f}s")
+            logger.error(f"   action={self.task_action}")
+            logger.error(f"   exception={type(e).__name__}: {e}")
+            logger.error(f"   traceback:\n{traceback.format_exc()}")
+            logger.error(f"{'=' * 60}")
+            return False
 
     # ========================================================================
     # V3 TaskBridge Delegation Methods (Strangler Fig Pattern)
@@ -2541,6 +2647,15 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if filtering succeeded, False otherwise
         """
+        # DIAGNOSTIC LOGS 2026-01-15: Trace geometric filter execution
+        logger.info("=" * 70)
+        logger.info(f"🎯 execute_geometric_filtering CALLED")
+        logger.info(f"   Layer: {layer.name()}")
+        logger.info(f"   Provider type: {layer_provider_type}")
+        logger.info(f"   Layer props keys: {list(layer_props.keys())}")
+        logger.info(f"   Current predicates: {getattr(self, 'current_predicates', 'NOT SET')}")
+        logger.info("=" * 70)
+        
         # Prepare source geometries dict for orchestrator
         source_geometries = {
             'postgresql': getattr(self, 'postgresql_source_geom', None),
@@ -2548,14 +2663,55 @@ class FilterEngineTask(QgsTask):
             'ogr': getattr(self, 'ogr_source_geom', None)
         }
         
-        # Delegate to FilterOrchestrator
-        return self._filter_orchestrator.orchestrate_geometric_filter(
-            layer=layer,
-            layer_provider_type=layer_provider_type,
-            layer_props=layer_props,
-            source_geometries=source_geometries,
-            expression_builder=self._expression_builder
-        )
+        # DIAGNOSTIC: Log source geometries availability
+        logger.info("📦 Source geometries prepared:")
+        for provider, geom in source_geometries.items():
+            if geom is not None:
+                geom_type = type(geom).__name__
+                if hasattr(geom, 'name'):
+                    logger.info(f"   {provider}: {geom_type} - {geom.name()}")
+                elif hasattr(geom, '__len__'):
+                    logger.info(f"   {provider}: {geom_type} - len={len(geom)}")
+                else:
+                    logger.info(f"   {provider}: {geom_type}")
+            else:
+                logger.info(f"   {provider}: None (not prepared)")
+        
+        # FIX 2026-01-15: Capture ALL exceptions pour diagnostic
+        try:
+            # FIX 2026-01-15: Use lazy initialization to ensure orchestrator is always available
+            # When filtering distant layers via ParallelFilterExecutor._filter_sequential,
+            # the context from TaskRunOrchestrator may not have been processed.
+            filter_orchestrator = self._get_filter_orchestrator()
+            expression_builder = self._get_expression_builder()
+            
+            # Delegate to FilterOrchestrator
+            result = filter_orchestrator.orchestrate_geometric_filter(
+                layer=layer,
+                layer_provider_type=layer_provider_type,
+                layer_props=layer_props,
+                source_geometries=source_geometries,
+                expression_builder=expression_builder
+            )
+            logger.info(f"✅ orchestrate_geometric_filter returned: {result}")
+            return result
+        except Exception as e:
+            logger.error("=" * 70)
+            logger.error(f"❌ EXCEPTION in execute_geometric_filtering:")
+            logger.error(f"   Layer: {layer.name()}")
+            logger.error(f"   Provider: {layer_provider_type}")
+            logger.error(f"   Exception type: {type(e).__name__}")
+            logger.error(f"   Exception message: {str(e)}")
+            logger.error("=" * 70)
+            import traceback
+            logger.error(f"Full traceback:\n{traceback.format_exc()}")
+            # Afficher AUSSI dans la console QGIS
+            from qgis.core import QgsMessageLog, Qgis as QgisLevel
+            QgsMessageLog.logMessage(
+                f"FilterMate ERROR: {type(e).__name__}: {str(e)}",
+                "FilterMate", QgisLevel.Critical
+            )
+            raise  # Re-raise pour que finished() puisse le capturer
     def _get_source_combine_operator(self):
         """
         Get logical operator for combining with source layer's existing filter.
@@ -2891,10 +3047,36 @@ class FilterEngineTask(QgsTask):
                 # (0, 2, 4, 6...) because the predicates dict has both capitalized and lowercase
                 # entries (16 total). This caused Spatialite backend's index_to_name mapping to fail.
                 # Now we use the SQL function name directly as the key, which both backends handle correctly.
+                
+                # FIX 2026-01-15: Pour OGR, on doit AUSSI stocker les indices numériques QGIS
+                # car execute_ogr_spatial_selection() utilise processing.run("qgis:selectbylocation")
+                # qui attend des codes numériques (0=Intersects, 1=Contains, etc.)
+                
+                # Mapping SQL function → QGIS predicate code (pour OGR/processing)
+                sql_to_qgis_code = {
+                    'ST_Intersects': 0,
+                    'ST_Contains': 1,
+                    'ST_Disjoint': 2,
+                    'ST_Equals': 3,
+                    'ST_Touches': 4,
+                    'ST_Overlaps': 5,
+                    'ST_Within': 6,
+                    'ST_Crosses': 7,
+                    'ST_Covers': 1,     # maps to Contains
+                    'ST_CoveredBy': 6,  # maps to Within
+                }
+                
                 for key in source_predicates:
                     if key in self.predicates:
                         func_name = self.predicates[key]
+                        # Store both SQL name AND numeric code
                         self.current_predicates[func_name] = func_name
+                        # Store numeric code for OGR (used by execute_ogr_spatial_selection)
+                        qgis_code = sql_to_qgis_code.get(func_name)
+                        if qgis_code is not None:
+                            # Also store with numeric key for OGR compatibility
+                            self.current_predicates[qgis_code] = func_name
+                            logger.debug(f"  Mapped predicate: {key} → {func_name} → QGIS code {qgis_code}")
 
                 logger.info(f"  → Current predicates configured: {self.current_predicates}")
                 logger.info(f"\n🚀 Calling manage_distant_layers_geometric_filtering()...")
@@ -2988,46 +3170,73 @@ class FilterEngineTask(QgsTask):
         
         THREAD SAFETY: All subset string operations are queued for application
         in finished() which runs on the main Qt thread.
+        
+        v4.1.0: Enhanced logging for debugging.
         """
-        logger.info("FilterMate: Clearing all filters on source and selected layers")
+        logger.info("=" * 60)
+        logger.info("FilterMate: UNFILTERING - Clearing all filters")
+        logger.info("=" * 60)
         
         # Queue filter clear on source layer (will be applied in finished())
         self._queue_subset_string(self.source_layer, '')
-        logger.info(f"FilterMate: Queued filter clear on source layer {self.source_layer.name()}")
+        logger.info(f"  → Queued clear on source: {self.source_layer.name()}")
         
         # Queue filter clear on all selected associated layers
+        # FIX 2026-01-15: Protect against division by zero when no layers selected
         i = 1
-        self.setProgress((i/self.layers_count)*100)
+        if self.layers_count > 0:
+            self.setProgress((i/self.layers_count)*100)
         
         for layer_provider_type in self.layers:
+            logger.info(f"  → Processing {len(self.layers[layer_provider_type])} {layer_provider_type} layer(s)")
             for layer, layer_props in self.layers[layer_provider_type]:
                 self._queue_subset_string(layer, '')
-                logger.info(f"FilterMate: Queued filter clear on layer {layer.name()}")
+                logger.info(f"    → Queued clear on: {layer.name()}")
                 i += 1
-                self.setProgress((i/self.layers_count)*100)
+                if self.layers_count > 0:
+                    self.setProgress((i/self.layers_count)*100)
                 if self.isCanceled():
+                    logger.warning("FilterMate: Unfilter canceled by user")
                     return False
         
-        logger.info(f"FilterMate: Successfully cleared filters on {self.layers_count} layer(s)")
+        logger.info("=" * 60)
+        logger.info(f"✓ FilterMate: Unfilter queued for {i} layer(s)")
+        logger.info("=" * 60)
         return True
     
     def execute_reseting(self):
+        """
+        Reset all layers to their original/saved subset state.
+        
+        v4.1.0: Enhanced logging for debugging.
+        """
+        logger.info("=" * 60)
+        logger.info("FilterMate: RESETTING all layers to saved state")
+        logger.info("=" * 60)
 
         i = 1
 
+        logger.info(f"  → Resetting source layer: {self.source_layer.name()}")
         self.manage_layer_subset_strings(self.source_layer)
-        self.setProgress((i/self.layers_count)*100)
+        # FIX 2026-01-15: Protect against division by zero when no layers selected
+        if self.layers_count > 0:
+            self.setProgress((i/self.layers_count)*100)
 
         
         for layer_provider_type in self.layers:
+            logger.info(f"  → Processing {len(self.layers[layer_provider_type])} {layer_provider_type} layer(s)")
             for layer, layer_props in self.layers[layer_provider_type]:
+                logger.info(f"    → Resetting: {layer.name()}")
                 self.manage_layer_subset_strings(layer)
                 i += 1
                 self.setProgress((i/self.layers_count)*100)
                 if self.isCanceled():
+                    logger.warning("FilterMate: Reset canceled by user")
                     return False
 
-
+        logger.info("=" * 60)
+        logger.info(f"✓ FilterMate: Reset completed for {i} layer(s)")
+        logger.info("=" * 60)
         return True
 
 
@@ -4501,8 +4710,18 @@ class FilterEngineTask(QgsTask):
                     logger.info('Task was canceled - no error message displayed')
                 else:
                     # Task really failed - display error message
+                    # v4.1.1 FIX: Enhanced error message with more context
                     error_msg = self.message if hasattr(self, 'message') and self.message else 'Task failed'
                     logger.error(f"Task finished with failure: {error_msg}")
+                    logger.error(f"   Task action: {self.task_action}")
+                    logger.error(f"   Source layer: {self.source_layer.name() if self.source_layer else 'None'}")
+                    logger.error(f"   Layers count: {getattr(self, 'layers_count', 'N/A')}")
+                    
+                    # Log additional diagnostic info to Python console
+                    if error_msg == 'Task failed':
+                        logger.error("   💡 TIP: Check the Python console for detailed error messages")
+                        logger.error("   💡 Common causes: no features selected, invalid layer, database connection issue")
+                    
                     iface.messageBar().pushMessage(
                         message_category,
                         error_msg,

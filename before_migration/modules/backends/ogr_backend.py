@@ -1851,7 +1851,7 @@ class OGRGeometricFilter(GeometricFilterBackend):
         Returns:
             True if selection completed successfully, False on error
         """
-        from qgis.core import QgsMessageLog, Qgis
+        from qgis.core import QgsMessageLog, Qgis, QgsProject
         
         try:
             # Validate both layers before processing
@@ -1989,13 +1989,14 @@ class OGRGeometricFilter(GeometricFilterBackend):
                         _ = safe_intersect.isValid()
                         _ = safe_intersect.featureCount()
                         
-                        # FIX v2.9.43: ULTIMATE PROTECTION - Add to QGIS project temporarily
-                        # Even with all the above protections, Qt can still GC the layer after the delay
-                        # but BEFORE processing.run(). Adding to project gives it a C++ reference in the
-                        # QgsProject registry, which Qt respects and won't GC.
-                        # We'll remove it after processing.run() completes.
-                        QgsProject.instance().addMapLayer(safe_intersect, False)  # addToLegend=False
-                        self.log_debug(f"🔒 Added '{layer_name}' to project registry for GC protection")
+                        # FIX v2.9.44: create_geos_safe_layer now adds layer to project registry
+                        # Check if layer is already in project before adding again
+                        # (addMapLayer with same layer ID is a no-op, but we log for clarity)
+                        if QgsProject.instance().mapLayer(safe_intersect.id()) is None:
+                            QgsProject.instance().addMapLayer(safe_intersect, False)  # addToLegend=False
+                            self.log_debug(f"🔒 Added '{layer_name}' to project registry for GC protection")
+                        else:
+                            self.log_debug(f"🔒 Layer '{layer_name}' already in project registry (added by create_geos_safe_layer)")
                     except RuntimeError as name_err:
                         # If even basic access fails after adding to list, the layer is already dead
                         QgsMessageLog.logMessage(

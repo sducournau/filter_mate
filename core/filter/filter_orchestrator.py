@@ -123,6 +123,13 @@ class FilterOrchestrator:
             effective_provider_type = layer_props.get("_effective_provider_type", layer_provider_type)
             is_postgresql_fallback = layer_props.get("_postgresql_fallback", False)
             
+            # DIAGNOSTIC LOGS 2026-01-15: Trace predicates et backend selection
+            logger.info(f"🔍 orchestrate_geometric_filter: {layer.name()}")
+            logger.info(f"   effective_provider_type: {effective_provider_type}")
+            logger.info(f"   is_postgresql_fallback: {is_postgresql_fallback}")
+            logger.info(f"   current_predicates (from orchestrator): {self.current_predicates}")
+            logger.info(f"   source_geometries keys: {list(source_geometries.keys())}")
+            
             if is_postgresql_fallback:
                 logger.info(f"Executing geometric filtering for {layer.name()} (PostgreSQL → OGR fallback)")
             else:
