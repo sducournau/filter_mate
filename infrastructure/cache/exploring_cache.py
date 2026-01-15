@@ -15,8 +15,7 @@ Features:
 Performance: 2-3× speedup when repeatedly accessing feature data.
 
 Usage:
-    from infrastructure.cache import ExploringFeaturesCache
-    
+    from ...infrastructure.cache import ExploringFeaturesCache    
     cache = ExploringFeaturesCache(max_layers=50, max_age_seconds=300.0)
     
     # Try to get cached features

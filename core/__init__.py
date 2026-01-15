@@ -9,9 +9,9 @@ This layer follows the Hexagonal Architecture pattern:
 - services/: Business logic orchestration
 
 Usage:
-    from core.domain import FilterExpression, FilterResult, LayerInfo
-    from core.ports import BackendPort, CachePort
-    from core.services import FilterService, ExpressionService
+    from ..core.domain import FilterExpression, FilterResult, LayerInfo
+    from ..core.ports import BackendPort, CachePort
+    from ..core.services import FilterService, ExpressionService
 """
 
 # Re-export commonly used types for convenience

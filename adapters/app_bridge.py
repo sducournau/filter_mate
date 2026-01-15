@@ -11,8 +11,7 @@ This module:
 - Handles backward compatibility
 
 Usage in filter_mate_app.py:
-    from adapters.app_bridge import (
-        get_filter_service,
+    from ..adapters.app_bridge import (        get_filter_service,
         get_history_service,
         get_backend_factory,
         initialize_services,

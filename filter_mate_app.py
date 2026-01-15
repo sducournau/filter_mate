@@ -281,7 +281,7 @@ class FilterMateApp:
             ...     print(f"{cache_name}: {cache_stats.hits} hits, {cache_stats.misses} misses")
         """
         try:
-            from infrastructure.cache.cache_manager import CacheManager
+            from .infrastructure.cache.cache_manager import CacheManager
             
             manager = CacheManager.get_instance()
             all_stats = manager.get_stats()
@@ -308,7 +308,7 @@ class FilterMateApp:
             >>> print(f"Cleared {cleared_count} caches")
         """
         try:
-            from infrastructure.cache.cache_manager import CacheManager
+            from .infrastructure.cache.cache_manager import CacheManager
             
             manager = CacheManager.get_instance()
             cleared_count = manager.clear_all_caches()

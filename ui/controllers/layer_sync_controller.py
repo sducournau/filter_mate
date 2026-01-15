@@ -639,6 +639,18 @@ class LayerSyncController(BaseController):
         # This ensures the current layer never appears in the remote layers list
         self._sync_layers_to_filter_combobox(layer)
         
+        # FIX 2026-01-15 (BUGFIX-COMBOBOX-20260115): Safety reconnection of CURRENT_LAYER signal
+        # Ensures signal is active even if _sync_current_layer_combobox() exited early
+        if not skip_combobox_sync and hasattr(dw, 'manageSignal'):
+            try:
+                current_widget = dw.widgets.get("FILTERING", {}).get("CURRENT_LAYER", {}).get("WIDGET")
+                if current_widget and hasattr(current_widget, 'layerChanged'):
+                    # Idempotent reconnection (won't double-connect)
+                    dw.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
+                    logger.debug("✓ CURRENT_LAYER.layerChanged signal reconnected (safety check)")
+            except Exception as e:
+                logger.warning(f"Could not reconnect CURRENT_LAYER signal: {e}")
+        
         # Synchronize state-dependent widgets
         self._sync_state_dependent_widgets()
         
@@ -792,34 +804,43 @@ class LayerSyncController(BaseController):
         return False
 
     def _sync_current_layer_combobox(self, layer: QgsVectorLayer) -> None:
-        """
-        Sync the current layer combobox with the layer.
+        """Update current layer combobox widget without triggering signals.
+        
+        FIX 2026-01-15 (BUGFIX-COMBOBOX-20260115): Always reconnect signal, even if layer unchanged.
+        Reason: Signal may have been disconnected elsewhere, must ensure it's always active.
         
         Args:
-            layer: Layer to set in combobox
+            layer: Layer to set as current
         """
         dw = self.dockwidget
-        widgets = getattr(dw, 'widgets', {})
         
-        if "FILTERING" not in widgets or "CURRENT_LAYER" not in widgets.get("FILTERING", {}):
+        # Get current layer widget
+        current_layer_widget = dw.widgets.get("FILTERING", {}).get("CURRENT_LAYER", {}).get("WIDGET")
+        if not current_layer_widget:
             return
         
-        current_layer_widget = widgets["FILTERING"]["CURRENT_LAYER"].get("WIDGET")
-        if current_layer_widget is None:
-            return
+        # Get currently displayed layer
+        displayed_layer = current_layer_widget.currentLayer()
         
-        last_layer = current_layer_widget.currentLayer()
-        current_layer = getattr(dw, 'current_layer', None)
+        # FIX 2026-01-15: Removed early return - always reconnect signal for reliability
+        logger.debug(
+            f"_sync_current_layer_combobox: Updating combo | "
+            f"{displayed_layer.name() if displayed_layer else 'None'} → {layer.name()}"
+        )
         
-        if last_layer is None or current_layer is None:
-            return
+        # Disconnect, update, reconnect (ALWAYS)
+        if hasattr(dw, 'manageSignal'):
+            dw.manageSignal(["FILTERING", "CURRENT_LAYER"], 'disconnect')
         
-        if last_layer.id() != current_layer.id():
-            if hasattr(dw, 'manageSignal'):
-                dw.manageSignal(["FILTERING", "CURRENT_LAYER"], 'disconnect')
-            current_layer_widget.setLayer(current_layer)
-            if hasattr(dw, 'manageSignal'):
-                dw.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
+        # Force update even if same layer (ensures refresh)
+        current_layer_widget.blockSignals(True)
+        current_layer_widget.setLayer(layer)
+        current_layer_widget.blockSignals(False)
+        
+        # ALWAYS reconnect signal
+        if hasattr(dw, 'manageSignal'):
+            dw.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
+            logger.debug("✓ CURRENT_LAYER.layerChanged signal reconnected")
 
     def _update_backend_indicator(
         self,

@@ -15,8 +15,7 @@ Example:
     - With cache: 1 × 2s + 4 × 0.01s = 2.04s total
 
 Usage:
-    from infrastructure.cache import SourceGeometryCache
-    
+    from ...infrastructure.cache import SourceGeometryCache    
     cache = SourceGeometryCache()
     
     # Try to get from cache

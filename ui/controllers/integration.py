@@ -30,8 +30,8 @@ from .ui_layout_controller import UILayoutController
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
-    from adapters.qgis.signals.signal_manager import SignalManager
-    from core.services.filter_service import FilterService
+    from ...adapters.qgis.signals.signal_manager import SignalManager
+    from ...core.services.filter_service import FilterService
 
 logger = logging.getLogger(__name__)
 

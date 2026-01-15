@@ -6,8 +6,7 @@ Provides automatic migration of configuration files between versions.
 Ensures backward compatibility when upgrading FilterMate.
 
 Usage:
-    from infrastructure.config.config_migration import ConfigMigration
-    
+    from ...infrastructure.config.config_migration import ConfigMigration    
     migrator = ConfigMigration()
     success, warnings = migrator.auto_migrate_if_needed(confirm_reset_callback=callback)
 

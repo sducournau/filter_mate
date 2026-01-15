@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Import TaskParameterBuilder for clean parameter construction (v3.0 MIG-024)
 try:
-    from adapters.task_builder import TaskParameterBuilder, TaskParameters
+    from ...adapters.task_builder import TaskParameterBuilder, TaskParameters
     TASK_BUILDER_AVAILABLE = True
 except ImportError:
     TASK_BUILDER_AVAILABLE = False
@@ -28,8 +28,8 @@ except ImportError:
 if TYPE_CHECKING:
     from qgis.core import QgsVectorLayer
     from filter_mate_dockwidget import FilterMateDockWidget
-    from core.services.filter_service import FilterService
-    from adapters.qgis.signals.signal_manager import SignalManager
+    from ...core.services.filter_service import FilterService
+    from ...adapters.qgis.signals.signal_manager import SignalManager
 
 
 class PredicateType(Enum):

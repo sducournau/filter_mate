@@ -67,7 +67,7 @@ class ExpressionCache:
         """
         self._underlying_cache = QueryExpressionCache(
             max_size=max_size,
-            ttl_seconds=ttl_seconds
+            default_ttl_seconds=ttl_seconds
         )
         self._max_size = max_size
         self._ttl = ttl_seconds

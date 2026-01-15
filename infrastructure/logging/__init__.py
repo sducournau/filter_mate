@@ -9,8 +9,7 @@ This module provides centralized logging for FilterMate with:
 - Pre-configured loggers for common modules
 
 Usage:
-    from infrastructure.logging import get_logger, setup_logger, get_app_logger
-    
+    from ...infrastructure.logging import get_logger, setup_logger, get_app_logger    
     logger = get_logger('FilterMate.MyModule')
     logger.info("Something happened")
 """

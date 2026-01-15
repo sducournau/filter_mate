@@ -11,8 +11,7 @@ Provides coordinate reference system utilities for:
 - Optimal metric CRS selection
 
 Usage:
-    from core.geometry.crs_utils import (
-        is_geographic_crs,
+    from ...core.geometry.crs_utils import (        is_geographic_crs,
         is_metric_crs,
         get_optimal_metric_crs
     )

@@ -35,8 +35,7 @@ except ImportError:
     )
 
 if TYPE_CHECKING:
-    from core.services.postgres_session_manager import PostgresSessionManager
-
+    from ...core.services.postgres_session_manager import PostgresSessionManager
 logger = logging.getLogger(__name__)
 
 

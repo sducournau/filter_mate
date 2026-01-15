@@ -5,8 +5,7 @@ Controls the verbosity level of user feedback messages to reduce notification fa
 Users can choose between minimal, normal, and verbose feedback modes.
 
 Usage:
-    from config.feedback_config import should_show_message, get_feedback_level
-    
+    from ..config.feedback_config import should_show_message, get_feedback_level    
     if should_show_message('filter_count'):
         iface.messageBar().pushInfo("FilterMate", message)
 """

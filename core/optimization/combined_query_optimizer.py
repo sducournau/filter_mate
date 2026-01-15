@@ -37,8 +37,7 @@ Performance Benefits:
 - Reduced memory usage (smaller intermediate result sets)
 
 Usage:
-    from core.optimization import CombinedQueryOptimizer
-    
+    from ...core.optimization import CombinedQueryOptimizer    
     optimizer = CombinedQueryOptimizer()
     optimized = optimizer.optimize_combined_expression(
         old_subset='"fid" IN (SELECT "pk" FROM "public"."filtermate_mv_xxx")',

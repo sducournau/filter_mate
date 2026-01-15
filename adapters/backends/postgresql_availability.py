@@ -6,8 +6,7 @@ Centralized module for psycopg2 import and availability checking.
 All modules needing psycopg2 should import from here to avoid duplication.
 
 Usage:
-    from adapters.backends.postgresql_availability import (
-        psycopg2,
+    from ...adapters.backends.postgresql_availability import (        psycopg2,
         PSYCOPG2_AVAILABLE,
         POSTGRESQL_AVAILABLE
     )

@@ -21,8 +21,7 @@ Performance Impact Guide:
 - Very high complexity (> 500): Progressive streaming
 
 Usage:
-    from infrastructure.utils import (
-        QueryComplexityEstimator,
+    from ...infrastructure.utils import (        QueryComplexityEstimator,
         estimate_query_complexity
     )
     

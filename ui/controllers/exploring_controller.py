@@ -1108,9 +1108,9 @@ class ExploringController(BaseController, LayerSelectionMixin):
             QgsCoordinateReferenceSystem, QgsProject,
             QgsExpression, QgsFeatureRequest
         )
-        from infrastructure.utils import CRS_UTILS_AVAILABLE, DEFAULT_METRIC_CRS
+        from ...infrastructure.utils import CRS_UTILS_AVAILABLE, DEFAULT_METRIC_CRS
         if CRS_UTILS_AVAILABLE:
-            from adapters.qgis.crs_utils import is_geographic_crs, get_optimal_metric_crs
+            from ...adapters.qgis.crs_utils import is_geographic_crs, get_optimal_metric_crs
 
         # DIAGNOSTIC: Log incoming features
         logger.info(f"🔍 zooming_to_features DIAGNOSTIC:")
@@ -2075,7 +2075,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
         logger.info(f"=== _reload_exploration_widgets called for layer: {layer.name() if layer else 'None'} ===")
         
         from qgis.core import QgsExpression
-        from infrastructure.utils import get_best_display_field, is_layer_valid
+        from ...infrastructure.utils import get_best_display_field, is_layer_valid
         
         try:
             # Disconnect ALL exploration signals before updating widgets
@@ -2143,12 +2143,16 @@ class ExploringController(BaseController, LayerSelectionMixin):
                     saved_layer_id = getattr(self._dockwidget, '_last_single_selection_layer_id', None)
                     logger.debug(f"_reload_exploration_widgets: Using saved _last_single_selection_fid={saved_fid}")
                 
-                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(None)
-                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(layer)
-                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(single_expr)
-                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFetchGeometry(True)
-                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setShowBrowserButtons(True)
-                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setAllowNull(True)
+                picker_widget = self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+                picker_widget.setLayer(None)
+                picker_widget.setLayer(layer)
+                picker_widget.setDisplayExpression(single_expr)
+                picker_widget.setFetchGeometry(True)
+                picker_widget.setShowBrowserButtons(True)
+                picker_widget.setAllowNull(True)
+                # FIX 2026-01-15: Force visual refresh to display features
+                picker_widget.update()
+                picker_widget.repaint()
                 
                 if saved_fid is not None and layer is not None:
                     if saved_layer_id is None or saved_layer_id == layer.id():
@@ -2225,8 +2229,20 @@ class ExploringController(BaseController, LayerSelectionMixin):
             self._dockwidget.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
             self._dockwidget.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
             self._dockwidget.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
-            self._dockwidget.manageSignal(["EXPLORING","IDENTIFY"], 'connect', 'clicked')
-            self._dockwidget.manageSignal(["EXPLORING","ZOOM"], 'connect', 'clicked')
+            
+            # FIX 2026-01-15: manageSignal doesn't work for IDENTIFY/ZOOM/RESET - connect them directly
+            # Reconnect after widget layer updates to ensure they remain functional
+            for btn_name, btn_widget, handler in [
+                ("IDENTIFY", self._dockwidget.pushButton_exploring_identify, self._dockwidget.exploring_identify_clicked),
+                ("ZOOM", self._dockwidget.pushButton_exploring_zoom, self._dockwidget.exploring_zoom_clicked),
+                ("RESET", self._dockwidget.pushButton_exploring_reset_layer_properties, lambda: self._dockwidget.resetLayerVariableEvent())
+            ]:
+                try:
+                    btn_widget.clicked.disconnect(handler)
+                except TypeError:
+                    pass  # Not connected
+                btn_widget.clicked.connect(handler)
+                logger.debug(f"✓ Reconnected {btn_name} button")
             
             # DEBUG logging
             picker_widget = self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
@@ -2422,6 +2438,9 @@ class ExploringController(BaseController, LayerSelectionMixin):
             self._dockwidget._syncing_from_qgis = True
             try:
                 feature_picker.setFeature(feature_id)
+                # FIX 2026-01-15: Force visual refresh
+                feature_picker.update()
+                feature_picker.repaint()
             finally:
                 self._dockwidget._syncing_from_qgis = False
                 

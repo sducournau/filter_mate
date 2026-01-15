@@ -13,8 +13,7 @@ PROBLEM SOLVED:
 - This task moves expression evaluation to a background thread
 
 USAGE:
-    from core.tasks import ExpressionEvaluationTask
-    
+    from ...core.tasks import ExpressionEvaluationTask    
     task = ExpressionEvaluationTask(
         description="Evaluating expression",
         layer=my_layer,

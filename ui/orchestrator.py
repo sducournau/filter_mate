@@ -185,8 +185,7 @@ class DockWidgetOrchestrator:
     
     def _init_signal_management(self) -> None:
         """Initialize signal manager and handlers."""
-        from adapters.qgis.signals import SignalManager, LayerSignalHandler
-        
+        from ..adapters.qgis.signals import SignalManager, LayerSignalHandler        
         self._signal_manager = SignalManager(self._dockwidget)
         self._layer_signal_handler = LayerSignalHandler(
             self._dockwidget,

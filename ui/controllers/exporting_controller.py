@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
-    from core.services.filter_service import FilterService
-    from adapters.qgis.signals.signal_manager import SignalManager
+    from ...core.services.filter_service import FilterService
+    from ...adapters.qgis.signals.signal_manager import SignalManager
 
 
 class ExportFormat(Enum):
@@ -239,7 +239,8 @@ class ExportingController(BaseController):
             # Import required modules
             from qgis.core import QgsVectorLayer, QgsProject
             from qgis.PyQt.QtCore import Qt
-            from ...infrastructure.constants import REMOTE_PROVIDERS, get_geometry_type_string
+            from ...infrastructure.constants import REMOTE_PROVIDERS
+            from ...infrastructure.utils import geometry_type_to_string
             from ...infrastructure.utils.validation_utils import is_layer_source_available
             
             try:
@@ -302,7 +303,7 @@ class ExportingController(BaseController):
             for pg_layer in missing_postgres:
                 if pg_layer.isValid() and is_layer_source_available(pg_layer, require_psycopg2=False):
                     display_name = f"{pg_layer.name()} [{pg_layer.crs().authid()}]"
-                    geom_type_str = get_geometry_type_string(pg_layer.geometryType(), legacy_format=True)
+                    geom_type_str = geometry_type_to_string(pg_layer)
                     layer_icon = dockwidget.icon_per_geometry_type(geom_type_str)
                     logger.debug(f"populate_export_combobox [PostgreSQL]: layer='{pg_layer.name()}', geom_type='{geom_type_str}', icon_isNull={layer_icon.isNull() if layer_icon else 'None'}")
                     item_data = {"layer_id": pg_layer.id(), "layer_geometry_type": geom_type_str}
@@ -316,7 +317,7 @@ class ExportingController(BaseController):
             for remote_layer in missing_remote:
                 if remote_layer.isValid() and is_layer_source_available(remote_layer, require_psycopg2=False):
                     display_name = f"{remote_layer.name()} [{remote_layer.crs().authid()}]"
-                    geom_type_str = get_geometry_type_string(remote_layer.geometryType(), legacy_format=True)
+                    geom_type_str = geometry_type_to_string(remote_layer)
                     layer_icon = dockwidget.icon_per_geometry_type(geom_type_str)
                     logger.debug(f"populate_export_combobox [Remote]: layer='{remote_layer.name()}', geom_type='{geom_type_str}', icon_isNull={layer_icon.isNull() if layer_icon else 'None'}")
                     item_data = {"layer_id": remote_layer.id(), "layer_geometry_type": geom_type_str}

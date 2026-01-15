@@ -1484,7 +1484,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # Auto-initialize empty expressions with best field
             if not single_expr or not multiple_expr or not custom_expr:
-                from infrastructure.utils import get_best_display_field
+                from .infrastructure.utils import get_best_display_field
                 best_field = get_best_display_field(layer)
                 if best_field:
                     if not single_expr: single_expr = best_field
@@ -1713,11 +1713,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         icon_func = icon_map.get(geometry_type, QgsLayerItem.iconDefault)
         icon = icon_func()
         
+        # CRITICAL FIX 2026-01-15 (BUGFIX-COMBOBOX-ICONS): Cache AND return the icon!
+        # Missing cache storage and return statement caused NULL icons in combobox
+        self._icon_cache[geometry_type] = icon
+        
         # DIAGNOSTIC: Verify icon is valid
         if icon.isNull():
             logger.warning(f"icon_per_geometry_type: Generated NULL icon for geometry_type='{geometry_type}'")
         else:
-            logger.debug(f"icon_per_geometry_type: Valid icon for geometry_type='{geometry_type}'")
+            logger.debug(f"icon_per_geometry_type: Valid icon for geometry_type='{geometry_type}', cached")
+        
+        return icon
         
         self._icon_cache[geometry_type] = icon
         return icon
@@ -1744,6 +1750,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 widget = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
                 if widget:
                     widget.update()
+                    widget.repaint()
                     logger.debug("layers_to_filter combobox visually refreshed")
 
     def exporting_populate_combobox(self):
@@ -2057,6 +2064,24 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.connect_widgets_signals()
             # FIX 2026-01-14: Force reconnect exploring button signals (IS_SELECTING, IS_TRACKING, IS_LINKING)
             self.force_reconnect_exploring_signals()
+            # FIX 2026-01-15: Connect IDENTIFY, ZOOM, and RESET buttons explicitly (manageSignal doesn't work for them)
+            try:
+                self.pushButton_exploring_identify.clicked.connect(self.exploring_identify_clicked)
+                logger.info("✓ Connected pushButton_exploring_identify.clicked")
+            except Exception as e:
+                logger.debug(f"Could not connect IDENTIFY button: {e}")
+            try:
+                self.pushButton_exploring_zoom.clicked.connect(self.exploring_zoom_clicked)
+                logger.info("✓ Connected pushButton_exploring_zoom.clicked")
+            except Exception as e:
+                logger.debug(f"Could not connect ZOOM button: {e}")
+            try:
+                self.pushButton_exploring_reset_layer_properties.clicked.connect(
+                    lambda: self.resetLayerVariableEvent()
+                )
+                logger.info("✓ Connected pushButton_exploring_reset_layer_properties.clicked")
+            except Exception as e:
+                logger.debug(f"Could not connect RESET button: {e}")
         else:
             self.set_widgets_enabled_state(False)
             for sp in [["DOCK", "SINGLE_SELECTION"], ["DOCK", "MULTIPLE_SELECTION"], ["DOCK", "CUSTOM_SELECTION"]]:
@@ -2320,7 +2345,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if not self._syncing_from_qgis:
             f = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
             if f and f.isValid(): self.exploring_features_changed(f)
-        self._update_exploring_buttons_state(); return True
+        self._update_exploring_buttons_state()
+        # FIX 2026-01-15: Force visual refresh of single selection widget
+        if "EXPLORING" in self.widgets and "SINGLE_SELECTION_FEATURES" in self.widgets["EXPLORING"]:
+            widget = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+            if widget:
+                widget.update()
+                widget.repaint()
+        return True
 
     def _configure_multiple_selection_groupbox(self):
         """v4.0 Sprint 17: Configure multiple selection groupbox."""
@@ -2331,7 +2363,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if not self._syncing_from_qgis:
             features = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures()
             if features: self.exploring_features_changed(features, True)
-        self._update_exploring_buttons_state(); return True
+        self._update_exploring_buttons_state()
+        # FIX 2026-01-15: Force visual refresh of multiple selection widget
+        if "EXPLORING" in self.widgets and "MULTIPLE_SELECTION_FEATURES" in self.widgets["EXPLORING"]:
+            widget = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
+            if widget:
+                widget.update()
+                widget.repaint()
+        return True
 
     def _configure_custom_selection_groupbox(self):
         """v4.0 Sprint 17: Configure custom selection groupbox."""
@@ -2540,6 +2579,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     self._syncing_from_qgis = True
                     try:
                         feature_picker.setFeature(feature_id)
+                        # FIX 2026-01-15: Force visual refresh
+                        feature_picker.update()
+                        feature_picker.repaint()
                     finally:
                         self._syncing_from_qgis = False
         except Exception as e:
@@ -2746,9 +2788,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self._exploring_ctrl: self._controller_integration.delegate_reset_layer_expressions(layer_props)
     
     def _disconnect_layer_signals(self):
-        """v3.1 Sprint 17: Disconnect all layer-related widget signals before updating."""
+        """v3.1 Sprint 17: Disconnect all layer-related widget signals before updating.
+        
+        FIX 2026-01-15 (BUGFIX-COMBOBOX-20260115): CURRENT_LAYER signal NOT disconnected.
+        Reason: User can change layer during update. Lock _updating_current_layer prevents reentrancy.
+        """
         exploring = ["SINGLE_SELECTION_FEATURES", "SINGLE_SELECTION_EXPRESSION", "MULTIPLE_SELECTION_FEATURES", "MULTIPLE_SELECTION_EXPRESSION", "CUSTOM_SELECTION_EXPRESSION", "IDENTIFY", "ZOOM", "IS_SELECTING", "IS_TRACKING", "IS_LINKING", "RESET_ALL_LAYER_PROPERTIES"]
-        filtering = ["CURRENT_LAYER", "HAS_LAYERS_TO_FILTER", "LAYERS_TO_FILTER", "HAS_COMBINE_OPERATOR", "SOURCE_LAYER_COMBINE_OPERATOR", "OTHER_LAYERS_COMBINE_OPERATOR", "HAS_GEOMETRIC_PREDICATES", "GEOMETRIC_PREDICATES", "HAS_BUFFER_VALUE", "BUFFER_VALUE", "BUFFER_VALUE_PROPERTY", "HAS_BUFFER_TYPE", "BUFFER_TYPE"]
+        # FIX 2026-01-15: CURRENT_LAYER removed - must stay connected for user interaction
+        filtering = ["HAS_LAYERS_TO_FILTER", "LAYERS_TO_FILTER", "HAS_COMBINE_OPERATOR", "SOURCE_LAYER_COMBINE_OPERATOR", "OTHER_LAYERS_COMBINE_OPERATOR", "HAS_GEOMETRIC_PREDICATES", "GEOMETRIC_PREDICATES", "HAS_BUFFER_VALUE", "BUFFER_VALUE", "BUFFER_VALUE_PROPERTY", "HAS_BUFFER_TYPE", "BUFFER_TYPE"]
         widgets_to_stop = [["EXPLORING", w] for w in exploring] + [["FILTERING", w] for w in filtering]
         
         for wp in widgets_to_stop: self.manageSignal(wp, 'disconnect')
@@ -2876,6 +2923,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
         self.filtering_populate_layers_chekableCombobox(layer)
         self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
+        # Force visual refresh
+        if "FILTERING" in self.widgets and "LAYERS_TO_FILTER" in self.widgets["FILTERING"]:
+            widget = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
+            if widget:
+                widget.update()
+                widget.repaint()
         
         # Synchronize checkable button associated widgets enabled state
         self.filtering_layers_to_filter_state_changed()
@@ -2908,7 +2961,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # Auto-initialize empty expressions with best field
             if not single_expr or not multiple_expr or not custom_expr:
-                from infrastructure.utils import get_best_display_field
+                from .infrastructure.utils import get_best_display_field
                 best_field = get_best_display_field(layer)
                 if best_field:
                     if not single_expr: single_expr = best_field
@@ -2926,6 +2979,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     widget.setFetchGeometry(True)
                     widget.setShowBrowserButtons(True)
                     widget.setAllowNull(True)
+                    # FIX 2026-01-15: Force visual refresh to display features
+                    widget.update()
+                    widget.repaint()
                     logger.info(f"✓ SINGLE_SELECTION_FEATURES updated: layer={widget.layer().name() if widget.layer() else 'None'}, expr={widget.displayExpression()}")
                 else:
                     logger.warning("SINGLE_SELECTION_FEATURES widget is None!")
@@ -3153,6 +3209,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             self._reload_exploration_widgets(validated_layer, layer_props)
             logger.info("✓ Step 3: Exploration widgets reloaded")
+            
+            # Force visual update of exploration widgets
+            if "EXPLORING" in self.widgets:
+                for key, widget_info in self.widgets["EXPLORING"].items():
+                    if "WIDGET" in widget_info and widget_info["WIDGET"]:
+                        try:
+                            widget_info["WIDGET"].update()
+                            widget_info["WIDGET"].repaint()
+                        except Exception:
+                            pass
+                logger.debug("Exploring widgets visually refreshed")
             
             # CRITICAL: Initialize exploring groupbox for ALL layers, not just existing ones
             # This ensures widgets are updated even when switching to a new layer

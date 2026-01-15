@@ -8,8 +8,7 @@ Supports PostgreSQL (named prepared statements) and Spatialite (parameterized qu
 Location: infrastructure/database/prepared_statements.py (Hexagonal Architecture)
 
 Usage:
-    from infrastructure.database import create_prepared_statements
-    
+    from ...infrastructure.database import create_prepared_statements    
     ps_manager = create_prepared_statements(connection, 'postgresql')
     ps_manager.insert_subset_history(...)
 

@@ -249,7 +249,7 @@ class BaseController(QObject, metaclass=QObjectABCMeta):
             Configuration value or default
         """
         try:
-            from config.config import ENV_VARS
+            from ...config.config import ENV_VARS
             return ENV_VARS.get(key, default)
         except ImportError:
             return default

@@ -5,8 +5,7 @@ User feedback utilities (message bar, dialogs, etc.) with backend awareness
 and consistent formatting for QGIS message bar notifications.
 
 Usage:
-    from infrastructure.feedback import show_info, show_success, show_warning, show_error
-    
+    from ...infrastructure.feedback import show_info, show_success, show_warning, show_error    
     show_info("Operation completed")
     show_success("Filter applied successfully")
     show_warning("Large dataset detected")
@@ -16,7 +15,7 @@ Usage:
 from qgis.core import Qgis
 
 try:
-    from config.feedback_config import should_show_message
+    from ...config.feedback_config import should_show_message
 except ImportError:
     def should_show_message(category):
         return True

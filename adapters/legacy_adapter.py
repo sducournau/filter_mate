@@ -14,8 +14,8 @@ Part of FilterMate Hexagonal Architecture v3.0 Migration
 
 Usage:
     # Wrap a legacy backend for use with v3 code
-    from adapters.legacy_adapter import LegacyBackendAdapter
-    from adapters.backends.postgresql import PostgreSQLBackend as LegacyPgBackend
+    from ..adapters.legacy_adapter import LegacyBackendAdapter
+    from ..adapters.backends.postgresql import PostgreSQLBackend as LegacyPgBackend
     
     legacy = LegacyPgBackend(task_params)
     adapted = LegacyBackendAdapter(legacy, ProviderType.POSTGRESQL)

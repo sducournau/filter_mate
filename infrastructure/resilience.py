@@ -16,8 +16,7 @@ Performance Benefits:
     - Automatic recovery detection
 
 Usage:
-    from infrastructure.resilience import CircuitBreaker, circuit_protected
-    
+    from ..infrastructure.resilience import CircuitBreaker, circuit_protected    
     # Get or create breaker for a specific service
     breaker = circuit_breakers.get_breaker("postgresql_main")
     

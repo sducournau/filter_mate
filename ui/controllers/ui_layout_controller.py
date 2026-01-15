@@ -180,26 +180,23 @@ class UILayoutController(BaseController):
                         item.setCheckState(Qt.Checked)
                         checked_count += 1
                 else:
-                    # UNCHECK features NOT selected in QGIS
-                    if item.checkState() == Qt.Checked:
+                    # UNCHECK features not selected in QGIS
+                    if item.checkState() != Qt.Unchecked:
                         item.setCheckState(Qt.Unchecked)
                         unchecked_count += 1
             
-            logger.info(f"sync_multiple_selection_from_qgis: checked={checked_count}, unchecked={unchecked_count}")
+            logger.debug(f"sync_multiple_selection_from_qgis: checked={checked_count}, unchecked={unchecked_count}")
             
-            # Update widget display if changes were made
-            if checked_count > 0 or unchecked_count > 0:
-                if hasattr(multi_widget, 'updateCheckedItemsLabel'):
-                    multi_widget.updateCheckedItemsLabel()
+            # Force visual refresh
+            multi_widget.update()
+            multi_widget.repaint()
             
             return True
             
         except Exception as e:
-            logger.warning(f"sync_multiple_selection_from_qgis failed: {e}")
+            logger.warning(f"sync_multiple_selection_from_qgis error: {e}")
             return False
-            
         finally:
-            # Always restore sync flag
             dw._syncing_from_qgis = False
     
     def align_key_layouts(self) -> bool:

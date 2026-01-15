@@ -16,8 +16,7 @@ Migrated from: before_migration/modules/config_metadata.py (375 lines)
 Location: config/config_metadata.py
 
 Usage:
-    from config.config_metadata import get_config_metadata, ConfigMetadata
-    
+    from ..config.config_metadata import get_config_metadata, ConfigMetadata    
     metadata = get_config_metadata()
     widget_type = metadata.get_widget_type('app.ui.profile')
     description = metadata.get_description('app.ui.profile')

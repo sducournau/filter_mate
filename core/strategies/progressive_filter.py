@@ -18,8 +18,7 @@ Performance Benefits:
 - Better PostgreSQL query plan utilization
 
 Usage:
-    from core.strategies import (
-        ProgressiveFilterExecutor,
+    from ...core.strategies import (        ProgressiveFilterExecutor,
         TwoPhaseFilter,
         LazyResultIterator
     )

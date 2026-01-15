@@ -18,8 +18,8 @@ from .base_controller import BaseController
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
-    from core.services.filter_service import FilterService
-    from adapters.qgis.signals.signal_manager import SignalManager
+    from ...core.services.filter_service import FilterService
+    from ...adapters.qgis.signals.signal_manager import SignalManager
 
 logger = logging.getLogger(__name__)
 
@@ -610,8 +610,8 @@ class ConfigController(BaseController):
             True if reload successful, False otherwise
         """
         try:
-            from config.config import ENV_VARS
-            from ui.widgets.tree_view import JsonModel
+            from ...config.config import ENV_VARS
+            from ..widgets.tree_view import JsonModel
 
             config_json_path = ENV_VARS.get(
                 'CONFIG_JSON_PATH',
@@ -694,7 +694,7 @@ class ConfigController(BaseController):
             message: Error message to display
         """
         try:
-            from config.feedback_config import show_error
+            from ...config.feedback_config import show_error
             show_error("FilterMate", message)
         except ImportError:
             logger.error(f"UI Error: {message}")

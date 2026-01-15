@@ -12,8 +12,7 @@ The TaskBridge:
 - Tracks metrics for migration validation
 
 Usage in modules/tasks/filter_task.py:
-    from adapters.task_bridge import TaskBridge, get_task_bridge
-    
+    from ..adapters.task_bridge import TaskBridge, get_task_bridge    
     class FilterEngineTask(QgsTask):
         def __init__(self, ...):
             # Get bridge if available

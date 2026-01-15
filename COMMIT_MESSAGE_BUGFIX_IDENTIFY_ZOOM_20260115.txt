@@ -1,0 +1,69 @@
+fix(exploring): Fix IDENTIFY, ZOOM, and RESET buttons not responding to clicks
+
+PROBLEM
+-------
+pushButton_exploring_identify, pushButton_exploring_zoom, and 
+pushButton_exploring_reset_layer_properties were not triggering their actions
+when clicked. The buttons appeared in UI but clicking had no effect.
+
+ROOT CAUSE
+----------
+Signal connection failure: The buttons were defined in widgets dict with their
+signal handlers, but manageSignal() was NOT successfully connecting these signals,
+even though connect_widgets_signals() was being called.
+
+The reason is unclear but likely related to the order of widget initialization or
+a Qt-specific issue with these particular standard QPushButton widgets (vs QGIS
+custom widgets which all work fine via manageSignal).
+
+SOLUTION
+--------
+Direct signal connection instead of relying on manageSignal() for ALL three
+standard QPushButton widgets in EXPLORING tab.
+
+CHANGES
+-------
+1. filter_mate_dockwidget.py - manage_interactions()
+   - Added explicit .clicked.connect() for IDENTIFY, ZOOM, and RESET
+   - Added logging to confirm connection success
+
+2. ui/controllers/exploring_controller.py - _reload_exploration_widgets()
+   - Added reconnection after widget layer updates for all 3 buttons
+   - Disconnect before connect to prevent duplicate connections
+   - TypeError catch for graceful handling when not connected
+   - Loop pattern for cleaner code
+
+FUNCTIONALITY
+-------------
+- pushButton_exploring_identify: Opens QGIS Identify Results panel showing
+  attributes for selected feature(s)
+
+- pushButton_exploring_zoom: Zooms map canvas to extent of selected feature(s)
+
+- pushButton_exploring_reset_layer_properties: Resets all layer properties
+  to their default values
+
+TESTING
+-------
+✅ Click IDENTIFY → opens identify panel with feature attributes
+✅ Click ZOOM → map zooms to selected features
+✅ Click RESET → resets layer properties to defaults
+✅ Works in single selection mode
+✅ Works in multiple selection mode
+✅ Works after layer change
+✅ No duplicate connections after widget reload
+
+PATTERN
+-------
+For standard Qt widgets (QPushButton), prefer direct connection:
+  self.button.clicked.connect(self.handler)
+
+For QGIS custom widgets, manageSignal() works perfectly.
+
+This completes the EXPLORING tab fixes series:
+- BUGFIX-EXPLORING-SYNC-20260115.md: Widget refresh issues
+- BUGFIX-IDENTIFY-ZOOM-BUTTONS-20260115.md: This fix (extended to RESET)
+- EXPLORING-BUTTONS-ANALYSIS-20260115.md: Complete button inventory
+- EXPLORING-TAB-FIX-SUMMARY-20260115.md: Complete summary
+
+IMPACT: ALL EXPLORING tab pushbuttons now fully functional

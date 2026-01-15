@@ -23,7 +23,7 @@ from .base_controller import BaseController
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
-    from core.services.favorites_service import FavoritesService, FilterFavorite
+    from ...core.services.favorites_service import FavoritesService, FilterFavorite
 
 logger = logging.getLogger(__name__)
 
@@ -436,7 +436,7 @@ class FavoritesController(BaseController):
                 scope = QgsExpressionContextUtils.projectScope(project)
                 project_uuid = scope.variable('filterMate_db_project_uuid')
                 if project_uuid:
-                    from config.config import ENV_VARS
+                    from ...config.config import ENV_VARS
                     import os
                     db_path = os.path.normpath(
                         ENV_VARS.get("PLUGIN_CONFIG_DIRECTORY", "") + os.sep + 'filterMate_db.sqlite'

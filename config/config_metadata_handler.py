@@ -10,8 +10,7 @@ Migrated from: before_migration/modules/config_metadata_handler.py (313 lines)
 Location: config/config_metadata_handler.py
 
 Usage:
-    from config.config_metadata_handler import (
-        ConfigMetadataHandler,
+    from ..config.config_metadata_handler import (        ConfigMetadataHandler,
         MetadataAwareConfigModel,
         enhance_config_editor_with_metadata
     )
@@ -265,8 +264,8 @@ def enhance_config_editor_with_metadata(editor_widget, metadata) -> None:
         metadata: ConfigMetadata instance
         
     Usage:
-        from config.config_metadata import get_config_metadata
-        from config.config_metadata_handler import enhance_config_editor_with_metadata
+        from ..config.config_metadata import get_config_metadata
+        from ..config.config_metadata_handler import enhance_config_editor_with_metadata
         
         metadata = get_config_metadata()
         editor = ConfigEditorWidget(config_data)

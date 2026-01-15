@@ -14,8 +14,7 @@ Provides GEOS-safe geometry operations to prevent crashes from:
 All functions validate input and provide safe fallbacks.
 
 Usage:
-    from core.geometry.geometry_safety import (
-        validate_geometry,
+    from ...core.geometry.geometry_safety import (        validate_geometry,
         safe_buffer,
         safe_unary_union,
         safe_collect_geometry

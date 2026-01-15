@@ -18,8 +18,7 @@ Performance Benefits:
 - Memory-efficient progressive reduction for very large datasets
 
 Usage:
-    from core.strategies import (
-        MultiStepFilterOptimizer,
+    from ...core.strategies import (        MultiStepFilterOptimizer,
         FilterPlan,
         get_optimal_filter_plan
     )

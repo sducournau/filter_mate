@@ -14,8 +14,7 @@ Performance Benefits:
 - Thread-safe: one pool per datasource URI
 
 Usage:
-    from infrastructure.database.connection_pool import (
-        get_pool_manager,
+    from ...infrastructure.database.connection_pool import (        get_pool_manager,
         pooled_connection_from_layer
     )
     

@@ -19,8 +19,7 @@ Performance Benefits:
 - Memory-efficient with LRU eviction
 
 Usage:
-    from infrastructure.cache.query_cache import QueryExpressionCache
-    
+    from ...infrastructure.cache.query_cache import QueryExpressionCache    
     cache = QueryExpressionCache()
     
     # Try to get cached expression
