@@ -109,6 +109,20 @@ class FilterMate:
 
         #print "** INITIALIZING FilterMate"
 
+        # v4.4: Initialize QGIS factory BEFORE creating app (required by hexagonal architecture)
+        # This must happen in __init__ so AppInitializer can use it
+        logger.debug("FilterMate.__init__: Initializing QGIS factory")
+        try:
+            from .core.ports.qgis_port import set_qgis_factory
+            from .adapters.qgis.factory import QGISFactory
+            
+            factory = QGISFactory()
+            set_qgis_factory(factory)
+            logger.info("FilterMate: QGIS factory initialized in __init__")
+        except Exception as factory_error:
+            logger.error(f"FilterMate: CRITICAL - Could not initialize QGIS factory: {factory_error}")
+            # This is critical - without factory, hexagonal services won't work
+
         self.pluginIsActive = False
         self.app = None
         self._auto_activation_signals_connected = False
@@ -210,6 +224,25 @@ class FilterMate:
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
         
         try:
+            # v4.4: QGIS factory already initialized in __init__ (required by AppInitializer)
+            # This section kept for backward compatibility verification only
+            logger.debug("FilterMate.initGui: Verifying QGIS factory initialization")
+            try:
+                from .core.ports.qgis_port import get_qgis_factory
+                factory = get_qgis_factory()
+                logger.info("FilterMate: QGIS factory verified in initGui")
+            except Exception as verify_error:
+                logger.warning(f"FilterMate: QGIS factory not initialized: {verify_error}")
+                # Try to initialize as fallback
+                try:
+                    from .core.ports.qgis_port import set_qgis_factory
+                    from .adapters.qgis.factory import QGISFactory
+                    factory = QGISFactory()
+                    set_qgis_factory(factory)
+                    logger.info("FilterMate: QGIS factory initialized as fallback in initGui")
+                except Exception as fallback_error:
+                    logger.error(f"FilterMate: Could not initialize QGIS factory: {fallback_error}")
+            
             # Install message log filter to suppress known QGIS warnings about missing form dependencies
             logger.debug("FilterMate.initGui: Starting _install_message_filter")
             self._install_message_filter()

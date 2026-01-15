@@ -2249,12 +2249,15 @@ class ExploringController(BaseController, LayerSelectionMixin):
         from ...infrastructure.utils import get_best_display_field, is_layer_valid
         
         try:
-            # Disconnect ALL exploration signals before updating widgets
+            # Disconnect feature picker signals before updating widgets
+            # NOTE 2026-01-15: Do NOT disconnect EXPRESSION signals here - they are managed
+            # by _setup_expression_widget_direct_connections() which handles idempotent reconnection
             self._dockwidget.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
             self._dockwidget.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
-            self._dockwidget.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'disconnect')
-            self._dockwidget.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'disconnect')
-            self._dockwidget.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'disconnect')
+            # REMOVED: Expression widget signals - managed separately (FIX-005)
+            # self._dockwidget.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'disconnect')
+            # self._dockwidget.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'disconnect')
+            # self._dockwidget.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'disconnect')
             
             # Auto-initialize empty expressions with best available field
             expressions_updated = False
@@ -2422,6 +2425,22 @@ class ExploringController(BaseController, LayerSelectionMixin):
             logger.debug(f"  single_expr: {single_expr}")
             logger.debug(f"  picker layer: {picker_widget.layer().name() if picker_widget.layer() else 'None'}")
             logger.info(f"✓ Exploration widgets reloaded for layer {layer.name()}")
+            
+            # FIX 2026-01-15 (FIX-003b): CRITICAL - Ensure layer signals reconnected after reload
+            # Widgets reload breaks selectionChanged connection - self-heal it
+            if hasattr(self._dockwidget, '_ensure_layer_signals_connected'):
+                self._dockwidget._ensure_layer_signals_connected(layer)
+            else:
+                logger.warning("_ensure_layer_signals_connected not available - signal may be lost!")
+            
+            # FIX 2026-01-15 (FIX-004): CRITICAL - Reconnect expression widget signals after reload
+            # fieldChanged signals are lost during widget reload - reconnect them
+            if hasattr(self._dockwidget, '_setup_expression_widget_direct_connections'):
+                self._dockwidget._setup_expression_widget_direct_connections()
+                logger.info("✓ Reconnected expression widget fieldChanged signals")
+            else:
+                logger.warning("_setup_expression_widget_direct_connections not available!")
+                
         except (AttributeError, KeyError, RuntimeError) as e:
             error_type = type(e).__name__
             error_details = str(e)

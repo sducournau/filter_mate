@@ -16,7 +16,7 @@ import hashlib
 import logging
 from typing import Optional, Dict, Any, List, Tuple, Callable
 
-from qgis.core import QgsDataSourceUri, QgsMessageLog, Qgis, QgsVectorLayer
+from qgis.core import QgsMessageLog, Qgis
 
 from ...infrastructure.logging import setup_logger
 from ...config.config import ENV_VARS
@@ -67,7 +67,7 @@ class BackendExpressionBuilder:
     
     def __init__(
         self,
-        source_layer: Optional[QgsVectorLayer],
+        source_layer: Optional[Any],  # QgsVectorLayer
         task_parameters: Dict[str, Any],
         expr_cache: Optional[Any] = None,
         format_pk_values_callback: Optional[Callable] = None,
@@ -232,8 +232,14 @@ class BackendExpressionBuilder:
         source_geom_field = self.param_source_geom
         if not source_geom_field and self.source_layer:
             try:
-                uri = QgsDataSourceUri(self.source_layer.source())
-                source_geom_field = uri.geometryColumn() or 'geom'
+                # Extract geometry column from layer source (duck typing)
+                source_uri = self.source_layer.source()
+                # Try to extract geometryColumn if available
+                if hasattr(self.source_layer.dataProvider(), 'uri'):
+                    uri_obj = self.source_layer.dataProvider().uri()
+                    source_geom_field = uri_obj.geometryColumn() or 'geom'
+                else:
+                    source_geom_field = 'geom'
             except Exception:
                 source_geom_field = 'geom'
         
@@ -554,7 +560,7 @@ class BackendExpressionBuilder:
 
 
 def create_expression_builder(
-    source_layer: Optional[QgsVectorLayer],
+    source_layer: Optional[Any],  # QgsVectorLayer
     task_parameters: Dict[str, Any],
     expr_cache: Optional[Any] = None,
     format_pk_values_callback: Optional[Callable] = None,

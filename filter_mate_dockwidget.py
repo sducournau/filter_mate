@@ -216,6 +216,35 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return False
         return True
     
+    def _ensure_layer_signals_connected(self, layer) -> bool:
+        """
+        FIX 2026-01-15 (FIX-003): Ensure layer signals are connected.
+        
+        CRITICAL: Layer signals (selectionChanged) get lost after reload/filter/widget rebuild.
+        This provides self-healing - call AFTER any operation touching the layer.
+        
+        Returns: True if connected successfully
+        """
+        if not layer or not layer.isValid():
+            return False
+        try:
+            # Disconnect first (idempotent)
+            try:
+                layer.selectionChanged.disconnect(self.on_layer_selection_changed)
+                was_connected = True
+            except TypeError:
+                was_connected = False
+            # Always reconnect
+            layer.selectionChanged.connect(self.on_layer_selection_changed)
+            self.current_layer_selection_connection = True
+            if not was_connected:
+                logger.warning(f"⚠️ selectionChanged NOT connected for {layer.name()} - reconnected")
+            return True
+        except Exception as e:
+            logger.error(f"❌ _ensure_layer_signals_connected failed: {e}")
+            self.current_layer_selection_connection = False
+            return False
+    
     def _initialize_layer_state(self):
         """v4.0 Sprint 15: Initialize layers, managers, controllers, and UI."""
         self.init_layer, self.has_loaded_layers = None, False
@@ -259,8 +288,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.setupUi(self)
         self.setupUiCustom()
         self.manage_ui_style()
-        try: self.manage_interactions()
-        except Exception as e: logger.error(f"Error in manage_interactions: {e}")
+        try: 
+            self.manage_interactions()
+        except Exception as e: 
+            logger.error(f"Error in manage_interactions: {e}", exc_info=True)
+            from qgis.utils import iface
+            iface.messageBar().pushCritical("FilterMate ERROR", f"manage_interactions failed: {e}")
 
     def getSignal(self, oObject: QObject, strSignalName: str):
         """v4.0 S16: Get signal from QObject by name with caching."""
@@ -1258,9 +1291,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         PERFORMANCE: Uses debounced handlers to prevent excessive recomputation
         when the user types quickly or makes rapid changes to complex expressions.
         """
+        logger.debug("🔧 _setup_expression_widget_direct_connections CALLED")
+        
+        # Check if widgets exist
+        if not hasattr(self, 'mFieldExpressionWidget_exploring_single_selection'):
+            logger.error("❌ mFieldExpressionWidget_exploring_single_selection does NOT exist!")
+            return
+        
         # SINGLE SELECTION: mFieldExpressionWidget -> mFeaturePickerWidget
         def on_single_field_changed(field_name):
-            logger.info(f"🔄 Single field changed: {field_name}")
+            logger.debug(f"🔄 Single field changed: {field_name}")
             self._refresh_feature_pickers_for_field_change("single_selection", field_name)
             self._schedule_expression_change("single_selection", field_name)
         
@@ -2137,6 +2177,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # FIX 2026-01-14: CRITICAL - Connect exploring buttons DIRECTLY with explicit handlers
         # This bypasses the complex lambda/custom_functions mechanism that may fail silently
         self._connect_exploring_buttons_directly()
+        
+        # FIX 2026-01-15 (FIX-006): CRITICAL - Also reconnect expression widget signals
+        # These must be connected whenever exploring signals are reconnected
+        self._setup_expression_widget_direct_connections()
     
     def _connect_exploring_buttons_directly(self):
         """
@@ -2154,8 +2198,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         v3: Also synchronizes initial button state with PROJECT_LAYERS to prevent
         desynchronization between visual state and stored state.
         """
-        if not self.widgets_initialized:
-            logger.debug("_connect_exploring_buttons_directly: Skipping (widgets not initialized)")
+        logger.info(f"🔌 _connect_exploring_buttons_directly CALLED")
+        
+        # FIX 2026-01-15 (FIX-008): REMOVED widgets_initialized check
+        # Buttons exist after setupUi() even if widgets dict isn't initialized yet
+        # Original check prevented buttons from being connected during manage_interactions()
+        
+        # Check if buttons exist (they should after setupUi)
+        if not hasattr(self, 'pushButton_exploring_identify'):
+            logger.error("❌ pushButton_exploring_identify does NOT exist!")
             return
         
         # FIX 2026-01-15: Connect IDENTIFY and ZOOM buttons FIRST
@@ -2292,13 +2343,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def manage_interactions(self):
         """v4.0 Sprint 8: Optimized - initialize widget interactions and default values."""
+        from qgis.utils import iface
+        logger.info("🚀 manage_interactions CALLED - Starting widget configuration")
+        iface.messageBar().pushInfo("FilterMate DEBUG", "manage_interactions starting...")
+        
         self.coordinateReferenceSystem = QgsCoordinateReferenceSystem()
         
-        self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setExpressionsEnabled(True)
-        self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setClearValue(0.0)
+        # FIX 2026-01-15 (FIX-009): CRITICAL - Connect exploring buttons FIRST before accessing widgets dict
+        # self.widgets may not exist yet, so connect buttons first (they exist after setupUi)
+        logger.info("🔌 Calling _connect_exploring_buttons_directly BEFORE widgets access...")
+        self._connect_exploring_buttons_directly()
+        logger.info("✅ _connect_exploring_buttons_directly completed")
         
-        if self.PROJECT:
+        # Now safe to access self.widgets (may still fail if not initialized, but buttons are connected)
+        if hasattr(self, 'widgets') and 'FILTERING' in self.widgets:
+            self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setExpressionsEnabled(True)
+            self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setClearValue(0.0)
+        
+        if self.PROJECT and hasattr(self, 'widgets') and 'EXPORTING' in self.widgets:
             self.widgets["EXPORTING"]["PROJECTION_TO_EXPORT"]["WIDGET"].setCrs(self.PROJECT.crs())
+        
+        # REMOVED duplicate call - already called above (FIX-009)
+        # self._connect_exploring_buttons_directly()
         
         if self.has_loaded_layers and self.PROJECT_LAYERS:
             self.set_widgets_enabled_state(True)
@@ -2878,21 +2944,41 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # Step 3: Flash features if any
             if features and len(features) > 0:
-                feature_ids = [f.id() for f in features if f and hasattr(f, 'id') and f.isValid()]
-                if feature_ids:
-                    self.iface.mapCanvas().flashFeatureIds(
-                        self.current_layer, 
-                        feature_ids, 
-                        startColor=QColor(235, 49, 42, 255), 
-                        endColor=QColor(237, 97, 62, 25), 
-                        flashes=6, 
-                        duration=400
+                # FIX 2026-01-15: Validate geometry before flashing
+                feature_ids = []
+                for f in features:
+                    if f and f.isValid():
+                        if f.hasGeometry() and not f.geometry().isEmpty():
+                            feature_ids.append(f.id())
+                        else:
+                            logger.warning(f"IDENTIFY: Feature {f.id()} has no geometry - skipping")
+                
+                if not feature_ids:
+                    logger.error("IDENTIFY: No features with valid geometry to flash")
+                    from qgis.utils import iface
+                    iface.messageBar().pushWarning(
+                        "FilterMate - Identify",
+                        "Les features sélectionnées n'ont pas de géométrie."
                     )
-                    logger.info(f"IDENTIFY: ✓ Flashed {len(feature_ids)} features")
-                else:
-                    logger.warning("IDENTIFY: No valid feature IDs to flash")
+                    return
+                
+                logger.info(f"IDENTIFY: Flashing {len(feature_ids)} features")
+                self.iface.mapCanvas().flashFeatureIds(
+                    self.current_layer, 
+                    feature_ids, 
+                    startColor=QColor(235, 49, 42, 255), 
+                    endColor=QColor(237, 97, 62, 25), 
+                    flashes=6, 
+                    duration=400
+                )
+                logger.info(f"IDENTIFY: ✓ Flashed {len(feature_ids)} features")
             else:
                 logger.warning("IDENTIFY: No features to flash")
+                from qgis.utils import iface
+                iface.messageBar().pushWarning(
+                    "FilterMate - Identify",
+                    "Aucune feature sélectionnée. Sélectionnez une feature dans la liste déroulante."
+                )
         except Exception as e:
             logger.error(f"exploring_identify_clicked error: {e}", exc_info=True)
 
@@ -2952,28 +3038,32 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 picker = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
                 feature = picker.feature()
                 
-                # Strategy 1: Widget has a valid feature (PRIMARY SOURCE)
+                # Strategy 1: Widget has a valid feature (PRIMARY SOURCE - user requirement)
                 if feature and feature.isValid():
                     fid = feature.id()
                     # Always save the FID for recovery
                     self._last_single_selection_fid = fid
                     self._last_single_selection_layer_id = self.current_layer.id()
                     
-                    # Check if feature has geometry, if not reload
-                    if feature.hasGeometry() and not feature.geometry().isEmpty():
-                        logger.debug(f"  → Using feature {fid} directly (has geometry)")
-                        return [feature], ""
-                    else:
-                        # Reload feature to get geometry
-                        try:
-                            reloaded = self.current_layer.getFeature(fid)
-                            if reloaded.isValid() and reloaded.hasGeometry():
-                                logger.debug(f"  → Reloaded feature {fid} with geometry")
+                    # FIX 2026-01-15: ALWAYS reload from layer to get complete feature with geometry
+                    # QgsFeaturePickerWidget may return features WITHOUT geometry loaded
+                    try:
+                        reloaded = self.current_layer.getFeature(fid)
+                        if reloaded.isValid():
+                            if reloaded.hasGeometry() and not reloaded.geometry().isEmpty():
+                                logger.info(f"  ✓ Using feature {fid} from picker (with geometry)")
                                 return [reloaded], ""
-                        except Exception as e:
-                            logger.debug(f"  → Could not reload feature: {e}")
-                        # Return original feature even without geometry for non-spatial operations
-                        return [feature], ""
+                            else:
+                                # Feature exists but no geometry (e.g., non-spatial table)
+                                logger.warning(f"  ⚠️ Feature {fid} has NO geometry - flash/zoom will fail")
+                                # Still return it for attribute-based operations
+                                return [reloaded], ""
+                        else:
+                            logger.error(f"  ❌ Feature {fid} from picker is INVALID after reload")
+                            # Fall through to Strategy 2
+                    except Exception as e:
+                        logger.error(f"  ❌ Could not reload feature {fid}: {e}")
+                        # Fall through to Strategy 2
                 
                 # Strategy 2: Try saved FID recovery
                 if (hasattr(self, '_last_single_selection_fid') 

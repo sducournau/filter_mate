@@ -435,7 +435,11 @@ class FilterEngineTask(QgsTask):
         if self._spatial_executor is None:
             self._spatial_executor = SpatialFilterExecutor(
                 source_layer=self.source_layer,
-                task_parameters=self.task_parameters
+                project=self.project,
+                backend_registry=None,  # Not used in current implementation
+                task_bridge=self._task_bridge,
+                postgresql_available=POSTGRESQL_AVAILABLE,
+                geometry_cache=self.geom_cache
             )
         return self._spatial_executor
     

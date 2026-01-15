@@ -79,6 +79,20 @@ def initialize_services(config: Optional[Dict[str, Any]] = None) -> None:
     config = config or {}
     
     try:
+        # CRITICAL v4.0: Use existing QGIS factory (already initialized in filter_mate.py)
+        from ..core.ports.qgis_port import get_qgis_factory
+        
+        try:
+            qgis_factory = get_qgis_factory()
+            logger.info("Using existing QGIS factory")
+        except RuntimeError:
+            # Fallback: initialize factory if not already done
+            from .qgis.factory import QGISFactory
+            from ..core.ports.qgis_port import set_qgis_factory
+            qgis_factory = QGISFactory()
+            set_qgis_factory(qgis_factory)
+            logger.warning("QGIS factory was not initialized - fallback initialization done")
+        
         # Initialize backend factory
         _backend_factory = create_backend_factory(config.get('backends', {}))
         
@@ -130,6 +144,11 @@ def cleanup_services() -> None:
     global _backend_factory, _initialized
     
     try:
+        # CRITICAL v4.0: Reset QGIS factory
+        from ..core.ports.qgis_port import set_qgis_factory
+        set_qgis_factory(None)
+        logger.info("QGIS factory reset")
+        
         if _backend_factory:
             _backend_factory.cleanup()
         
@@ -597,13 +616,16 @@ def get_available_backends() -> list:
     """
     Get list of available backends.
     
+    CONSOLIDATED v4.1: Delegates to infrastructure.utils.provider_utils.
+    
     Returns:
         List of backend provider type names
     """
-    if not _initialized:
-        initialize_services()
+    from ..infrastructure.utils.provider_utils import get_available_backends as canonical_get
     
-    return [p.value for p in _backend_factory.available_backends]
+    available = canonical_get()
+    # Convert ProviderType enums to string values for compatibility
+    return [p.value if hasattr(p, 'value') else str(p) for p in available]
 
 
 # ============================================================================

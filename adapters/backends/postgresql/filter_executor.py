@@ -482,7 +482,7 @@ def apply_combine_operator(
     """
     Apply SQL set operator to combine with existing subset.
     
-    EPIC-1 Phase E4-S3b: Extracted from filter_task.py line 6735 (20 lines)
+    CONSOLIDATED v4.1: Delegates to core.filter.expression_combiner.apply_combine_operator
     
     Wraps the subquery in an IN clause and optionally combines with
     existing subset using UNION, INTERSECT, or EXCEPT.
@@ -496,13 +496,13 @@ def apply_combine_operator(
     Returns:
         str: Complete IN expression with optional combine operator
     """
-    if param_old_subset and param_combine_operator:
-        return (
-            f'"{primary_key_name}" IN ( {param_old_subset} '
-            f'{param_combine_operator} {param_expression} )'
-        )
-    else:
-        return f'"{primary_key_name}" IN {param_expression}'
+    from ....core.filter.expression_combiner import apply_combine_operator as core_apply
+    return core_apply(
+        primary_key_name=primary_key_name,
+        param_expression=param_expression,
+        param_old_subset=param_old_subset,
+        param_combine_operator=param_combine_operator
+    )
 
 
 def cleanup_session_materialized_views(
@@ -513,10 +513,8 @@ def cleanup_session_materialized_views(
     """
     Clean up all materialized views for a specific session.
     
-    EPIC-1 Phase E4-S4: Extracted from filter_task.py line 11004 (~45 lines)
-    
-    Drops all materialized views and indexes prefixed with the session_id.
-    Should be called when closing the plugin or resetting.
+    CONSOLIDATED v4.1: Delegates to schema_manager.cleanup_session_materialized_views
+    Wrapper maintained for backward compatibility.
     
     Args:
         connexion: psycopg2 connection
@@ -526,37 +524,8 @@ def cleanup_session_materialized_views(
     Returns:
         int: Number of views cleaned up
     """
-    if not session_id:
-        return 0
-    
-    try:
-        with connexion.cursor() as cursor:
-            # Find all materialized views for this session
-            cursor.execute("""
-                SELECT matviewname FROM pg_matviews 
-                WHERE schemaname = %s AND matviewname LIKE %s
-            """, (schema_name, f"mv_{session_id}_%"))
-            views = cursor.fetchall()
-            
-            count = 0
-            for (view_name,) in views:
-                try:
-                    # Drop associated index first
-                    index_name = view_name.replace('mv_', f'{schema_name}_').replace('_dump', '') + '_cluster'
-                    cursor.execute(f'DROP INDEX IF EXISTS "{schema_name}"."{index_name}" CASCADE;')
-                    # Drop the view
-                    cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema_name}"."{view_name}" CASCADE;')
-                    count += 1
-                except Exception as e:
-                    logger.warning(f"Error dropping view {view_name}: {e}")
-            
-            connexion.commit()
-            if count > 0:
-                logger.info(f"Cleaned up {count} materialized view(s) for session {session_id}")
-            return count
-    except Exception as e:
-        logger.error(f"Error cleaning up session views: {e}")
-        return 0
+    from .schema_manager import cleanup_session_materialized_views as schema_cleanup
+    return schema_cleanup(connexion, schema_name, session_id)
 
 
 def execute_postgresql_commands(
@@ -852,7 +821,7 @@ def _is_pk_numeric(layer, pk_field: str) -> bool:
         return True  # Default to numeric assumption
     
     try:
-        from qgis.core import QVariant
+        from qgis.PyQt.QtCore import QVariant
         field_idx = layer.fields().indexOf(pk_field)
         if field_idx >= 0:
             field_type = layer.fields().at(field_idx).type()

@@ -21,10 +21,11 @@ import weakref
 from typing import Optional, Callable, List, Any, Dict
 from qgis.PyQt.QtCore import QTimer
 from qgis.PyQt.QtWidgets import QApplication
-from qgis.core import QgsProject, QgsVectorLayer
+from qgis.core import QgsVectorLayer, QgsProject
 from qgis.utils import iface
 import sip
 
+from ..ports.qgis_port import get_qgis_factory
 from ...infrastructure.logging import get_app_logger
 from ...infrastructure.feedback import show_warning, show_info
 from ...ui.config import UIConfig, DisplayProfile
@@ -168,7 +169,8 @@ class AppInitializer:
             bool: True if initialization succeeded
         """
         # Get project reference
-        project = self._get_project() if self._get_project else QgsProject.instance()
+        factory = get_qgis_factory()
+        project = self._get_project() if self._get_project else factory.get_project()
         
         # Cleanup corrupted filters
         if self._cleanup_corrupted_layer_filters:
@@ -251,7 +253,8 @@ class AppInitializer:
         # Update project reference
         from ...config.config import init_env_vars, ENV_VARS
         init_env_vars()
-        project = ENV_VARS.get("PROJECT") or QgsProject.instance()
+        factory = get_qgis_factory()
+        project = ENV_VARS.get("PROJECT") or factory.get_project()
         map_layer_store = project.layerStore()
         if self._set_map_layer_store:
             self._set_map_layer_store(map_layer_store)

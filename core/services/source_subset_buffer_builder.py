@@ -223,8 +223,13 @@ class SourceSubsetBufferBuilder:
         else:
             # Standard mode: Check if expression is a field
             try:
-                from qgis.core import QgsExpression
-                if QgsExpression(context.expression).isField() is False:
+                # HEXAGONAL MIGRATION v4.1: Use adapter instead of QgsExpression
+                from ..ports.qgis_port import get_qgis_factory
+                
+                factory = get_qgis_factory()
+                expr_adapter = factory.create_expression(context.expression)
+                
+                if expr_adapter.is_field() is False:
                     return context.expression
                 else:
                     return context.old_subset

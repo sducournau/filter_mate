@@ -35,7 +35,7 @@ from typing import List, Dict, Optional, Callable, Any
 from dataclasses import dataclass, field
 from enum import Enum
 
-from qgis.core import QgsVectorLayer, QgsProject
+from ..ports.qgis_port import get_qgis_factory, IProject
 
 logger = logging.getLogger('FilterMate.Services.Export')
 
@@ -121,7 +121,8 @@ class ExportService:
     to provide unified export interface.
     
     Usage:
-        service = ExportService(project=QgsProject.instance())
+        factory = get_qgis_factory()
+        service = ExportService(project=factory.get_project())
         
         # Single layer export
         result = service.export_layer(
@@ -140,7 +141,7 @@ class ExportService:
     
     def __init__(
         self,
-        project: Optional[QgsProject] = None,
+        project: Optional[IProject] = None,
         progress_callback: Optional[Callable[[int], None]] = None,
         cancel_callback: Optional[Callable[[], bool]] = None
     ):
@@ -148,11 +149,12 @@ class ExportService:
         Initialize export service.
         
         Args:
-            project: QGIS project instance
+            project: QGIS project instance (via adapter)
             progress_callback: Optional callback for progress (0-100)
             cancel_callback: Optional callback to check for cancellation
         """
-        self.project = project or QgsProject.instance()
+        factory = get_qgis_factory()
+        self.project = project or factory.get_project()
         self.progress_callback = progress_callback
         self.cancel_callback = cancel_callback
         

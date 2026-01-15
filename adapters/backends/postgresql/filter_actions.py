@@ -54,7 +54,7 @@ def has_expensive_spatial_expression(sql_string: str) -> bool:
     """
     Check if SQL contains complex spatial predicates that are expensive to re-execute.
     
-    These patterns require materialization to cache results and avoid slow canvas rendering.
+    DELEGATION: This function delegates to core.optimization.query_analyzer.
     
     Args:
         sql_string: SQL expression to check
@@ -62,18 +62,8 @@ def has_expensive_spatial_expression(sql_string: str) -> bool:
     Returns:
         bool: True if expression contains expensive spatial operations
     """
-    if not sql_string:
-        return False
-    
-    sql_upper = sql_string.upper()
-    
-    # Check for EXISTS with spatial predicates
-    has_exists = 'EXISTS (' in sql_upper or 'EXISTS(' in sql_upper
-    has_spatial = any(pred in sql_upper for pred in SPATIAL_PREDICATES)
-    has_buffer = 'ST_BUFFER' in sql_upper
-    
-    # Complex expression = EXISTS + (spatial predicate OR buffer)
-    return has_exists and (has_spatial or has_buffer)
+    from ....core.optimization.query_analyzer import has_expensive_spatial_expression as canonical_check
+    return canonical_check(sql_string)
 
 
 def should_combine_filters(old_subset: str) -> Tuple[bool, str]:

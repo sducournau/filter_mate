@@ -17,15 +17,13 @@ import logging
 from typing import Optional, List, Dict, Tuple, Any, Callable
 from dataclasses import dataclass, field
 
-from qgis.core import QgsVectorLayer
-
 logger = logging.getLogger('FilterMate.Tasks.SubsetStringBuilder')
 
 
 @dataclass
 class SubsetRequest:
     """Pending subset string request for thread-safe application."""
-    layer: QgsVectorLayer
+    layer: Any  # QgsVectorLayer (not imported to avoid QGIS dependency)
     expression: str
     layer_name: str = ""
     
@@ -102,7 +100,7 @@ class SubsetStringBuilder:
     
     def queue_subset_request(
         self,
-        layer: QgsVectorLayer,
+        layer: Any,  # QgsVectorLayer
         expression: str
     ) -> bool:
         """
@@ -135,7 +133,7 @@ class SubsetStringBuilder:
         
         return True
     
-    def get_pending_requests(self) -> List[Tuple[QgsVectorLayer, str]]:
+    def get_pending_requests(self) -> List[Tuple[Any, str]]:  # List[Tuple[QgsVectorLayer, str]]
         """
         Get pending subset requests for main thread processing.
         
@@ -284,7 +282,7 @@ class SubsetStringBuilder:
             return self._sanitize_fn(subset_string)
         return subset_string
     
-    def validate(self, expression: str, layer: Optional[QgsVectorLayer] = None) -> Tuple[bool, Optional[str]]:
+    def validate(self, expression: str, layer: Optional[Any] = None) -> Tuple[bool, Optional[str]]:  # layer: Optional[QgsVectorLayer]
         """
         Validate a subset expression.
         

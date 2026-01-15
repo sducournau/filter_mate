@@ -349,7 +349,7 @@ class LayerService(QObject):
                     return field.name()
             
             # First integer field
-            from qgis.core import QVariant
+            from qgis.PyQt.QtCore import QVariant
             for field in fields:
                 if field.type() in (QVariant.Int, QVariant.LongLong):
                     return field.name()
@@ -519,11 +519,14 @@ class LayerService(QObject):
                 return True, None
             
             # Try to validate as QGIS expression
-            from qgis.core import QgsExpression
-            expr = QgsExpression(expression)
+            # HEXAGONAL MIGRATION v4.1: Use adapter instead of QgsExpression
+            from ..ports.qgis_port import get_qgis_factory
             
-            if expr.hasParserError():
-                return False, expr.parserErrorString()
+            factory = get_qgis_factory()
+            expr = factory.create_expression(expression)
+            
+            if expr.has_parse_error():
+                return False, expr.parse_error()
             
             return True, None
             

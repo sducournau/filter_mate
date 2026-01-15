@@ -19,7 +19,7 @@ Created: January 2026 (EPIC-1 Phase 14.8)
 import logging
 from typing import Dict, Optional
 from qgis.utils import iface
-from qgis.core import QgsProject
+from ..ports.qgis_port import get_qgis_factory
 
 logger = logging.getLogger('FilterMate.Core.Services.CanvasRefreshService')
 
@@ -151,7 +151,9 @@ class CanvasRefreshService:
             }
             
             # Refresh filtered layers
-            for layer_id, layer in QgsProject.instance().mapLayers().items():
+            factory = get_qgis_factory()
+            project = factory.get_project()
+            for layer_id, layer in project.map_layers().items():
                 try:
                     if layer.type() != 0:  # Not a vector layer
                         continue
@@ -229,7 +231,9 @@ class CanvasRefreshService:
         try:
             # Final refresh for all vector layers with filters
             layers_repainted = 0
-            for layer_id, layer in QgsProject.instance().mapLayers().items():
+            factory = get_qgis_factory()
+            project = factory.get_project()
+            for layer_id, layer in project.map_layers().items():
                 try:
                     if layer.type() == 0:  # Vector layer
                         subset = layer.subsetString()
@@ -256,7 +260,9 @@ class CanvasRefreshService:
     
     def _has_postgres_filtered_layers(self) -> bool:
         """Check if any PostgreSQL layer has a filter applied."""
-        for layer_id, layer in QgsProject.instance().mapLayers().items():
+        factory = get_qgis_factory()
+        project = factory.get_project()
+        for layer_id, layer in project.map_layers().items():
             try:
                 if layer.type() == 0 and layer.providerType() == 'postgres':
                     subset = layer.subsetString() or ''
@@ -276,7 +282,9 @@ class CanvasRefreshService:
         layers_reloaded = 0
         layers_repainted = 0
         
-        for layer_id, layer in QgsProject.instance().mapLayers().items():
+        factory = get_qgis_factory()
+        project = factory.get_project()
+        for layer_id, layer in project.map_layers().items():
             try:
                 if layer.type() != 0:  # Not a vector layer
                     continue

@@ -16,8 +16,6 @@ Location: core/tasks/connectors/backend_connector.py
 import logging
 from typing import Optional, Any, Dict
 
-from qgis.core import QgsVectorLayer
-
 # Import constants
 from ....infrastructure.constants import (
     PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
@@ -77,7 +75,7 @@ class BackendConnector:
     
     def __init__(
         self,
-        layer: Optional[QgsVectorLayer] = None,
+        layer: Optional[Any] = None,  # QgsVectorLayer
         backend_registry: Optional[Any] = None
     ):
         """
@@ -291,7 +289,7 @@ class BackendConnector:
             except Exception as e:
                 logger.debug(f"Registry cleanup failed: {e}")
     
-    def detect_provider_type(self, layer: Optional[QgsVectorLayer] = None) -> str:
+    def detect_provider_type(self, layer: Optional[Any] = None) -> str:  # layer: Optional[QgsVectorLayer]
         """
         Detect provider type for layer.
         

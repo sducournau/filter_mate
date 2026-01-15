@@ -171,10 +171,12 @@ class SourceLayerFilterExecutor:
         # Check if expression is just a field name (no comparison operators)
         is_simple_field = False
         if task_expression:
-            qgs_expr = QgsExpression(task_expression)
+            # HEXAGONAL MIGRATION v4.1: Use adapter instead of QgsExpression
+            factory = get_qgis_factory()
+            expr_adapter = factory.create_expression(task_expression)
             # FIX v2.3.9: Use case-insensitive check for operators
             task_expr_upper = task_expression.upper()
-            is_simple_field = qgs_expr.isField() and not any(
+            is_simple_field = expr_adapter.is_field() and not any(
                 op in task_expr_upper for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']
             )
         

@@ -8,7 +8,8 @@ This module handles post-task operations like subset application and canvas refr
 import logging
 from typing import List, Tuple, Optional, Any, Callable
 
-from qgis.core import QgsVectorLayer, QgsProject, QgsMessageLog, Qgis
+from ..ports.qgis_port import get_qgis_factory
+from qgis.core import QgsMessageLog, Qgis
 from qgis.utils import iface
 from qgis.PyQt.QtCore import QTimer
 
@@ -80,8 +81,8 @@ def should_skip_subset_application(
 
 
 def apply_pending_subset_requests(
-    pending_requests: List[Tuple[QgsVectorLayer, str]],
-    safe_set_subset_fn: Callable[[QgsVectorLayer, str], bool]
+    pending_requests: List[Tuple[Any, str]],  # List[Tuple[QgsVectorLayer, str]]
+    safe_set_subset_fn: Callable[[Any, str], bool]  # Callable[[QgsVectorLayer, str], bool]
 ) -> int:
     """
     Apply pending subset string requests on main thread.
@@ -258,8 +259,8 @@ def apply_pending_subset_requests(
 
 
 def _schedule_deferred_filter_application(
-    large_expressions: List[Tuple[QgsVectorLayer, str]],
-    safe_set_subset_fn: Callable[[QgsVectorLayer, str], bool]
+    large_expressions: List[Tuple[Any, str]],  # List[Tuple[QgsVectorLayer, str]]
+    safe_set_subset_fn: Callable[[Any, str], bool]  # Callable[[QgsVectorLayer, str], bool]
 ) -> None:
     """
     Schedule deferred application of large filter expressions.
@@ -322,7 +323,9 @@ def schedule_canvas_refresh(
     try:
         # Check if any filter is complex
         has_complex_filter = False
-        for layer_id, layer in QgsProject.instance().mapLayers().items():
+        factory = get_qgis_factory()
+        project = factory.get_project()
+        for layer_id, layer in project.map_layers().items():
             if layer.type() == 0:  # Vector layer
                 subset = layer.subsetString() or ''
                 if subset and is_complex_filter_fn(subset, layer.providerType()):
@@ -345,7 +348,7 @@ def schedule_canvas_refresh(
             pass
 
 
-def cleanup_memory_layer(ogr_source_geom: Optional[QgsVectorLayer]) -> None:
+def cleanup_memory_layer(ogr_source_geom: Optional[Any]) -> None:  # Optional[QgsVectorLayer]
     """
     Cleanup memory layer added to project to prevent garbage collection issues.
     
@@ -358,8 +361,10 @@ def cleanup_memory_layer(ogr_source_geom: Optional[QgsVectorLayer]) -> None:
     try:
         if ogr_source_geom.isValid() and ogr_source_geom.providerType() == 'memory':
             # Check if layer is in project
-            if QgsProject.instance().mapLayer(ogr_source_geom.id()):
+            factory = get_qgis_factory()
+            project = factory.get_project()
+            if project.map_layer(ogr_source_geom.id()):
                 logger.debug("finished(): Removing OGR source memory layer from project")
-                QgsProject.instance().removeMapLayer(ogr_source_geom.id())
+                project.remove_map_layer(ogr_source_geom.id())
     except Exception as e:
         logger.debug(f"Could not cleanup memory layer: {e}")
