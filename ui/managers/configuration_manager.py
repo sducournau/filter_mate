@@ -320,12 +320,11 @@ class ConfigurationManager(QObject):
                 "WIDGET": d.mFeaturePickerWidget_exploring_single_selection,
                 "SIGNALS": [("featureChanged", d.exploring_features_changed)]
             },
-            # v4.5: fieldChanged now uses fallback handler (was None in v4.0.1)
-            # ExploringController handles debouncing if available, otherwise direct call
+            # NOTE: fieldChanged signal handled by _setup_expression_widget_direct_connections() with debounce
             "SINGLE_SELECTION_EXPRESSION": {
                 "TYPE": "QgsFieldExpressionWidget",
                 "WIDGET": d.mFieldExpressionWidget_exploring_single_selection,
-                "SIGNALS": [("fieldChanged", lambda f: d._on_expression_field_changed('single_selection', f))]
+                "SIGNALS": [("fieldChanged", None)]
             },
             "MULTIPLE_SELECTION_FEATURES": {
                 "TYPE": "CustomCheckableFeatureComboBox",
@@ -335,17 +334,17 @@ class ConfigurationManager(QObject):
                     ("filteringCheckedItemList", lambda: d.exploring_source_params_changed(groupbox_override="multiple_selection"))
                 ]
             },
-            # v4.5: fieldChanged now uses fallback handler (was None in v4.0.1)
+            # NOTE: fieldChanged signal handled by _setup_expression_widget_direct_connections() with debounce
             "MULTIPLE_SELECTION_EXPRESSION": {
                 "TYPE": "QgsFieldExpressionWidget",
                 "WIDGET": d.mFieldExpressionWidget_exploring_multiple_selection,
-                "SIGNALS": [("fieldChanged", lambda f: d._on_expression_field_changed('multiple_selection', f))]
+                "SIGNALS": [("fieldChanged", None)]
             },
-            # v4.5: fieldChanged now uses fallback handler (was None in v4.0.1)
+            # NOTE: fieldChanged signal handled by _setup_expression_widget_direct_connections() with debounce
             "CUSTOM_SELECTION_EXPRESSION": {
                 "TYPE": "QgsFieldExpressionWidget",
                 "WIDGET": d.mFieldExpressionWidget_exploring_custom_selection,
-                "SIGNALS": [("fieldChanged", lambda f: d._on_expression_field_changed('custom_selection', f))]
+                "SIGNALS": [("fieldChanged", None)]
             }
         }
         

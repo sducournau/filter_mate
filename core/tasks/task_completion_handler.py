@@ -14,19 +14,19 @@ from qgis.PyQt.QtCore import QTimer
 
 logger = logging.getLogger(__name__)
 
-
-def is_valid_layer(layer: Any) -> bool:
-    """Check if layer is valid and accessible."""
-    if layer is None:
-        return False
-    try:
-        return (
-            hasattr(layer, 'isValid') and 
-            layer.isValid() and 
-            hasattr(layer, 'id')
-        )
-    except RuntimeError:
-        return False
+# Import centralized validation (v4.0.4 - eliminate duplication)
+try:
+    from ...infrastructure.utils import is_layer_valid
+except ImportError:
+    # Fallback for testing or import issues
+    def is_layer_valid(layer: Any) -> bool:
+        """Check if layer is valid and accessible (fallback)."""
+        if layer is None:
+            return False
+        try:
+            return hasattr(layer, 'isValid') and layer.isValid() and hasattr(layer, 'id')
+        except RuntimeError:
+            return False
 
 
 def display_warning_messages(warning_messages: List[str]) -> None:

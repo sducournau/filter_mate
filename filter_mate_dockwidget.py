@@ -1240,18 +1240,62 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 Sprint 16: Delegate to ConfigurationManager."""
         if self._configuration_manager:
             self._configuration_manager.setup_exploring_tab_widgets()
-
-    def _setup_expression_widget_direct_connections(self):
-        """v4.0 Sprint 16: Delegate to ConfigurationManager."""
-        # v4.0.1 CLEAN #1: Disabled to prevent duplicate signal connections
-        # ExploringController handles fieldChanged via SignalManager
-        # if self._configuration_manager:
-        #     self._configuration_manager.setup_expression_widget_direct_connections()
-        pass  # Method kept for backward compatibility but does nothing
     
     def _schedule_expression_change(self, groupbox: str, expression: str):
         """v4.0 Sprint 16: Schedule debounced expression change."""
         self._pending_expression_change = (groupbox, expression); self._set_expression_loading_state(True, groupbox); self._expression_debounce_timer.start()
+
+    def _setup_expression_widget_direct_connections(self):
+        """
+        FIX 2026-01-15: Setup direct signal connections for all QgsFieldExpressionWidget widgets.
+        
+        Migrated from before_migration. This method establishes direct connections between
+        fieldChanged signals and the display expression update for associated FeaturePicker widgets.
+        
+        We bypass the manageSignal/isSignalConnected system because isSignalConnected()
+        is unreliable for tracking specific handler connections.
+        
+        PERFORMANCE: Uses debounced handlers to prevent excessive recomputation
+        when the user types quickly or makes rapid changes to complex expressions.
+        """
+        # SINGLE SELECTION: mFieldExpressionWidget -> mFeaturePickerWidget
+        def on_single_field_changed(field_name):
+            logger.info(f"🔄 Single field changed: {field_name}")
+            self._refresh_feature_pickers_for_field_change("single_selection", field_name)
+            self._schedule_expression_change("single_selection", field_name)
+        
+        try:
+            self.mFieldExpressionWidget_exploring_single_selection.fieldChanged.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+        self.mFieldExpressionWidget_exploring_single_selection.fieldChanged.connect(on_single_field_changed)
+        logger.info("✓ Connected mFieldExpressionWidget_exploring_single_selection.fieldChanged DIRECTLY")
+        
+        # MULTIPLE SELECTION: mFieldExpressionWidget -> checkableComboBoxFeaturesListPickerWidget
+        def on_multiple_field_changed(field_name):
+            logger.info(f"🔄 Multiple field changed: {field_name}")
+            self._refresh_feature_pickers_for_field_change("multiple_selection", field_name)
+            self._schedule_expression_change("multiple_selection", field_name)
+        
+        try:
+            self.mFieldExpressionWidget_exploring_multiple_selection.fieldChanged.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+        self.mFieldExpressionWidget_exploring_multiple_selection.fieldChanged.connect(on_multiple_field_changed)
+        logger.info("✓ Connected mFieldExpressionWidget_exploring_multiple_selection.fieldChanged DIRECTLY")
+        
+        # CUSTOM SELECTION: mFieldExpressionWidget (no FeaturePicker to update, but may have other uses)
+        def on_custom_field_changed(field_name):
+            logger.info(f"🔄 Custom field changed: {field_name}")
+            self._refresh_feature_pickers_for_field_change("custom_selection", field_name)
+            self._schedule_expression_change("custom_selection", field_name)
+        
+        try:
+            self.mFieldExpressionWidget_exploring_custom_selection.fieldChanged.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+        self.mFieldExpressionWidget_exploring_custom_selection.fieldChanged.connect(on_custom_field_changed)
+        logger.info("✓ Connected mFieldExpressionWidget_exploring_custom_selection.fieldChanged DIRECTLY")
 
     def _on_expression_field_changed(self, groupbox: str, field_or_expression: str):
         """
@@ -1259,6 +1303,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         This method provides a fallback when ExploringController is not available.
         It schedules a debounced expression change to avoid rapid-fire updates.
+        
+        FIX 2026-01-15: Refresh feature pickers when field changes.
         
         Args:
             groupbox: 'single_selection', 'multiple_selection', or 'custom_selection'
@@ -1279,6 +1325,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # Fallback: Use debounced expression change system
         logger.debug(f"_on_expression_field_changed: {groupbox} -> '{field_or_expression}'")
+        
+        # FIX 2026-01-15: Update feature pickers immediately when field changes
+        self._refresh_feature_pickers_for_field_change(groupbox, field_or_expression)
+        
         self._schedule_expression_change(groupbox, field_or_expression)
     
     def _execute_debounced_expression_change(self):
@@ -1290,6 +1340,122 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.layer_property_changed(f"{groupbox}_expression", expression, {"ON_CHANGE": lambda x: self._execute_expression_params_change(groupbox)})
         except Exception:
             self._set_expression_loading_state(False)
+    
+    def _refresh_feature_pickers_for_field_change(self, groupbox: str, field_or_expression: str):
+        """
+        FIX 2026-01-15 v3: Refresh feature pickers when field changes.
+        
+        When the user changes the field in a QgsFieldExpressionWidget, we need to:
+        1. Update the display expression for the corresponding feature picker
+        2. Force the picker to rebuild its features list with the new expression
+        3. Update PROJECT_LAYERS to persist the expression change
+        
+        CRITICAL: For QgsFeaturePickerWidget, setDisplayExpression() alone doesn't work.
+        We must call setLayer() again to force the widget to rebuild its feature list.
+        
+        For QgsCheckableComboBoxFeaturesListPickerWidget, we need to call setLayer() 
+        with layer_props to trigger a full rebuild with the new expression.
+        
+        Args:
+            groupbox: 'single_selection', 'multiple_selection', or 'custom_selection'
+            field_or_expression: The new field name or expression
+        """
+        if not self.widgets_initialized or not self.current_layer:
+            return
+        
+        try:
+            layer_id = self.current_layer.id()
+            if layer_id not in self.PROJECT_LAYERS:
+                return
+            
+            layer_props = self.PROJECT_LAYERS[layer_id]
+            
+            # Update PROJECT_LAYERS with new expression (critical for persistence)
+            expression_key = f"{groupbox}_expression"
+            if expression_key in layer_props.get("exploring", {}):
+                layer_props["exploring"][expression_key] = field_or_expression
+                logger.debug(f"  → Updated PROJECT_LAYERS[{expression_key}] = {field_or_expression}")
+            
+            # Update single selection picker (QgsFeaturePickerWidget)
+            if groupbox == "single_selection":
+                picker = self.widgets.get("EXPLORING", {}).get("SINGLE_SELECTION_FEATURES", {}).get("WIDGET")
+                if picker:
+                    logger.info(f"🔄 Refreshing SINGLE picker with field: {field_or_expression}")
+                    
+                    # Save current feature ID to restore after refresh
+                    current_feature = picker.feature()
+                    current_fid = current_feature.id() if (current_feature and current_feature.isValid()) else None
+                    
+                    # FIX 2026-01-15 v6: For QgsFeaturePickerWidget, ORDER MATTERS!
+                    # 1. First call setLayer() to reset the widget's feature list
+                    # 2. Then call setDisplayExpression() to set how features are displayed
+                    # 3. Force refresh with setFetchGeometry(True) and ShowBrowserButtons
+                    # This order ensures the widget rebuilds its list with the correct expression.
+                    picker.setLayer(self.current_layer)
+                    picker.setDisplayExpression(field_or_expression)
+                    picker.setFetchGeometry(True)
+                    picker.setShowBrowserButtons(True)
+                    
+                    # Force visual update
+                    picker.update()
+                    picker.repaint()
+                    
+                    # Try to restore the same feature
+                    if current_fid is not None:
+                        try:
+                            picker.setFeature(current_fid)
+                            logger.debug(f"  → Restored feature {current_fid}")
+                        except:
+                            pass
+                    
+                    logger.info(f"  ✓ Single picker refreshed")
+            
+            # Update multiple selection picker (QgsCheckableComboBoxFeaturesListPickerWidget)
+            elif groupbox == "multiple_selection":
+                picker = self.widgets.get("EXPLORING", {}).get("MULTIPLE_SELECTION_FEATURES", {}).get("WIDGET")
+                if picker:
+                    logger.info(f"🔄 Refreshing MULTIPLE picker with field: {field_or_expression}")
+                    
+                    # FIX v3: Save currently checked items BEFORE refresh
+                    saved_checked_fids = None
+                    if hasattr(picker, 'list_widgets') and layer_id in picker.list_widgets:
+                        try:
+                            list_widget = picker.list_widgets[layer_id]
+                            saved_checked_fids = list_widget.getSelectedFeaturesList()
+                            logger.debug(f"  → Saved {len(saved_checked_fids) if saved_checked_fids else 0} checked items")
+                        except Exception as e:
+                            logger.debug(f"  → Could not save checked items: {e}")
+                    
+                    # FIX v3: For multiple picker, setLayer() with layer_props triggers full rebuild
+                    # This is more reliable than just setDisplayExpression()
+                    try:
+                        picker.setDisplayExpression(field_or_expression)
+                        picker.setLayer(self.current_layer, layer_props, skip_task=True)
+                        logger.debug(f"  → Called setLayer with layer_props for full rebuild")
+                    except Exception as e:
+                        logger.warning(f"  → setLayer failed, using setDisplayExpression only: {e}")
+                        if hasattr(picker, 'setDisplayExpression'):
+                            picker.setDisplayExpression(field_or_expression)
+                    
+                    # FIX v3: Try to restore checked items AFTER refresh
+                    if saved_checked_fids and hasattr(picker, 'list_widgets') and layer_id in picker.list_widgets:
+                        try:
+                            list_widget = picker.list_widgets[layer_id]
+                            list_widget.setSelectedFeaturesList(saved_checked_fids)
+                            logger.debug(f"  → Restored {len(saved_checked_fids)} checked items")
+                        except Exception as e:
+                            logger.debug(f"  → Could not restore checked items: {e}")
+                    
+                    # Force visual update
+                    if hasattr(picker, 'list_widgets') and layer_id in picker.list_widgets:
+                        picker.list_widgets[layer_id].viewport().update()
+                    picker.update()
+                    picker.repaint()
+                    
+                    logger.info(f"  ✓ Multiple picker refreshed")
+                    
+        except Exception as e:
+            logger.warning(f"_refresh_feature_pickers_for_field_change error: {e}")
     
     def _execute_expression_params_change(self, groupbox: str):
         """v4.0 Sprint 16: Execute expression params change with caching."""
@@ -1469,6 +1635,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         FIX 2026-01-14: Force update all exploring widgets with new layer.
         Called directly when combo changes to ensure widgets are updated.
+        
+        FIX 2026-01-15 v7: Added signal disconnect/reconnect pattern to prevent
+        spurious signal emissions during widget updates.
         """
         if not self.widgets_initialized or not layer:
             return
@@ -1476,6 +1645,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         logger.info(f"=== _force_update_exploring_widgets === layer: {layer.name()}")
         
         try:
+            # FIX 2026-01-15 v7: Disconnect signals BEFORE updating widgets
+            # Pattern from before_migration _reload_exploration_widgets
+            self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+            self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'disconnect')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'disconnect')
+            self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'disconnect')
+            
             # Get expressions from layer_props
             exploring = layer_props.get("exploring", {})
             single_expr = exploring.get("single_selection_expression", "")
@@ -1917,8 +2094,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 S18: Force reconnect EXPLORING signals bypassing cache."""
         if 'EXPLORING' not in self.widgets: return
         # REGRESSION FIX 2026-01-13: IS_SELECTING, IS_TRACKING, IS_LINKING use 'toggled' not 'clicked'
+        # FIX 2026-01-15: IDENTIFY and ZOOM removed from here - connected directly in _connect_exploring_buttons_directly
         ws = {'SINGLE_SELECTION_FEATURES': ['featureChanged'], 'SINGLE_SELECTION_EXPRESSION': ['fieldChanged'], 'MULTIPLE_SELECTION_FEATURES': ['updatingCheckedItemList', 'filteringCheckedItemList'],
-              'MULTIPLE_SELECTION_EXPRESSION': ['fieldChanged'], 'CUSTOM_SELECTION_EXPRESSION': ['fieldChanged'], 'IDENTIFY': ['clicked'], 'ZOOM': ['clicked'],
+              'MULTIPLE_SELECTION_EXPRESSION': ['fieldChanged'], 'CUSTOM_SELECTION_EXPRESSION': ['fieldChanged'],
               'IS_SELECTING': ['toggled'], 'IS_TRACKING': ['toggled'], 'IS_LINKING': ['toggled'], 'RESET_ALL_LAYER_PROPERTIES': ['clicked']}
         for w, signals in ws.items():
             if w not in self.widgets['EXPLORING']: continue
@@ -1934,18 +2112,49 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _connect_exploring_buttons_directly(self):
         """
-        FIX 2026-01-14 v2: Connect IS_SELECTING, IS_TRACKING, IS_LINKING buttons directly with state sync.
+        FIX 2026-01-15 v3: Connect ALL exploring buttons directly (IS_SELECTING, IS_TRACKING, IS_LINKING, IDENTIFY, ZOOM, RESET).
         
         This method bypasses the manageSignal/custom_functions mechanism and connects
-        the button toggled signals directly to their handlers. This ensures the handlers
-        are ALWAYS called when the buttons are toggled, fixing the regression where:
+        the button signals directly to their handlers. This ensures the handlers
+        are ALWAYS called when the buttons are clicked/toggled, fixing the regression where:
         - IS_SELECTING toggle didn't activate the QGIS selection tool
         - IS_TRACKING toggle didn't enable auto-zoom
         - IS_LINKING toggle didn't synchronize expression widgets
+        - IDENTIFY button didn't flash features
+        - ZOOM button didn't zoom to features
         
-        FIX v2: Also synchronizes initial button state with PROJECT_LAYERS to prevent
+        v3: Also synchronizes initial button state with PROJECT_LAYERS to prevent
         desynchronization between visual state and stored state.
         """
+        if not self.widgets_initialized:
+            logger.debug("_connect_exploring_buttons_directly: Skipping (widgets not initialized)")
+            return
+        
+        # FIX 2026-01-15: Connect IDENTIFY and ZOOM buttons FIRST
+        # These must be connected directly, NOT via changeSignalState which can break them
+        try:
+            self.pushButton_exploring_identify.clicked.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+        self.pushButton_exploring_identify.clicked.connect(self.exploring_identify_clicked)
+        logger.info("✓ Connected pushButton_exploring_identify.clicked DIRECTLY")
+        
+        try:
+            self.pushButton_exploring_zoom.clicked.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+        self.pushButton_exploring_zoom.clicked.connect(self.exploring_zoom_clicked)
+        logger.info("✓ Connected pushButton_exploring_zoom.clicked DIRECTLY")
+        
+        try:
+            self.pushButton_exploring_reset_layer_properties.clicked.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+        self.pushButton_exploring_reset_layer_properties.clicked.connect(
+            lambda: self.resetLayerVariableEvent()
+        )
+        logger.info("✓ Connected pushButton_exploring_reset_layer_properties.clicked DIRECTLY")
+        
         # IS_SELECTING: Activate selection tool on canvas + sync features
         btn_selecting = self.pushButton_checkable_exploring_selecting
         try:
@@ -1976,6 +2185,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.info(f"IS_SELECTING state updated in PROJECT_LAYERS: {checked}")
             if checked:
                 logger.info("IS_SELECTING ON: Calling exploring_select_features()")
+                # FIX 2026-01-15 v9: Ensure selectionChanged stays connected for bidirectional sync
+                self._ensure_selection_changed_connected()
                 self.exploring_select_features()
             else:
                 logger.info("IS_SELECTING OFF: Calling exploring_deselect_features()")
@@ -2012,6 +2223,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.info(f"IS_TRACKING state updated in PROJECT_LAYERS: {checked}")
             if checked:
                 logger.info("IS_TRACKING ON: Triggering zoom to current selection")
+                # FIX 2026-01-15 v9: Ensure selectionChanged stays connected for tracking
+                self._ensure_selection_changed_connected()
                 self.exploring_zoom_clicked()
         
         btn_tracking.toggled.connect(_on_tracking_toggled)
@@ -2063,25 +2276,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.set_widgets_enabled_state(True)
             self.connect_widgets_signals()
             # FIX 2026-01-14: Force reconnect exploring button signals (IS_SELECTING, IS_TRACKING, IS_LINKING)
+            # FIX 2026-01-15: This also connects IDENTIFY, ZOOM, and RESET buttons
             self.force_reconnect_exploring_signals()
-            # FIX 2026-01-15: Connect IDENTIFY, ZOOM, and RESET buttons explicitly (manageSignal doesn't work for them)
-            try:
-                self.pushButton_exploring_identify.clicked.connect(self.exploring_identify_clicked)
-                logger.info("✓ Connected pushButton_exploring_identify.clicked")
-            except Exception as e:
-                logger.debug(f"Could not connect IDENTIFY button: {e}")
-            try:
-                self.pushButton_exploring_zoom.clicked.connect(self.exploring_zoom_clicked)
-                logger.info("✓ Connected pushButton_exploring_zoom.clicked")
-            except Exception as e:
-                logger.debug(f"Could not connect ZOOM button: {e}")
-            try:
-                self.pushButton_exploring_reset_layer_properties.clicked.connect(
-                    lambda: self.resetLayerVariableEvent()
-                )
-                logger.info("✓ Connected pushButton_exploring_reset_layer_properties.clicked")
-            except Exception as e:
-                logger.debug(f"Could not connect RESET button: {e}")
+            # FIX 2026-01-15 v9: Connect fieldChanged signals for expression widgets (display expression sync)
+            # This was present in before_migration but missing in the migrated code
+            self._setup_expression_widget_direct_connections()
         else:
             self.set_widgets_enabled_state(False)
             for sp in [["DOCK", "SINGLE_SELECTION"], ["DOCK", "MULTIPLE_SELECTION"], ["DOCK", "CUSTOM_SELECTION"]]:
@@ -2203,10 +2402,70 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # (they are toggle-only functions: selecting, tracking, linking)
         # So we skip them
         
+        # v4.0.6: Setup buffer buttons dependency on geometric_predicates
+        self._setup_buffer_buttons_dependency()
+        
         # v4.0.5: Ensure certain widgets are ALWAYS enabled
         self._ensure_always_enabled_widgets()
         
         logger.info(f"_setup_conditional_widget_states: Configured {len(widget_mappings)} pushbutton→widget mappings")
+    
+    def _setup_buffer_buttons_dependency(self):
+        """
+        Setup dependency: buffer buttons are disabled unless geometric_predicates is checked.
+        
+        Buffer filtering only makes sense when geometric predicates are active.
+        This ensures users can't enable buffer options without first enabling geometric predicates.
+        
+        v4.0.6 UX Enhancement - Added January 2026
+        v4.0.6.1: Only controls pushbuttons, not widgets. Widgets are controlled by their pushbuttons.
+        """
+        if not hasattr(self, 'pushButton_checkable_filtering_geometric_predicates'):
+            logger.warning("_setup_buffer_buttons_dependency: geometric_predicates button not found")
+            return
+        
+        predicates_btn = self.pushButton_checkable_filtering_geometric_predicates
+        
+        # Only collect buffer BUTTONS (not their associated widgets)
+        buffer_buttons = []
+        buffer_button_names = [
+            'pushButton_checkable_filtering_buffer_value',
+            'pushButton_checkable_filtering_buffer_type'
+        ]
+        
+        for name in buffer_button_names:
+            if hasattr(self, name):
+                buffer_buttons.append(getattr(self, name))
+            else:
+                logger.warning(f"_setup_buffer_buttons_dependency: Button {name} not found")
+        
+        if not buffer_buttons:
+            logger.warning("_setup_buffer_buttons_dependency: No buffer buttons found")
+            return
+        
+        # Connect to geometric_predicates toggle
+        def _on_predicates_toggled(checked):
+            """
+            Enable buffer BUTTONS only when geometric predicates is checked.
+            
+            When disabled, also uncheck the buttons to prevent inconsistent state.
+            The widgets are controlled by their respective buttons via _toggle_associated_widgets().
+            """
+            for btn in buffer_buttons:
+                btn.setEnabled(checked)
+                # Force uncheck when disabling to maintain consistency
+                if not checked and btn.isChecked():
+                    btn.setChecked(False)
+            
+            logger.debug(f"Buffer buttons {'enabled' if checked else 'disabled'} (geometric_predicates={checked})")
+        
+        predicates_btn.toggled.connect(_on_predicates_toggled)
+        
+        # Set initial state
+        initial_state = predicates_btn.isChecked()
+        _on_predicates_toggled(initial_state)
+        
+        logger.info(f"✓ Buffer buttons dependency configured ({len(buffer_buttons)} buttons)")
     
     def _toggle_associated_widgets(self, enabled, widgets):
         """
@@ -2307,20 +2566,64 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.exploring_groupbox_changed(groupbox)
 
     def _update_exploring_buttons_state(self):
-        """v4.0 S18: Update identify/zoom buttons based on selection."""
+        """
+        v4.0 S18: Update identify/zoom buttons based on selection.
+        
+        FIX 2026-01-15: Improved detection and fallback to canvas selection.
+        """
         if not self.widgets_initialized or not self.current_layer:
-            self.pushButton_exploring_identify.setEnabled(False); self.pushButton_exploring_zoom.setEnabled(False); return
+            self.pushButton_exploring_identify.setEnabled(False)
+            self.pushButton_exploring_zoom.setEnabled(False)
+            logger.debug("_update_exploring_buttons_state: Disabled (no layer)")
+            return
+        
         has_features = False
+        detection_source = "none"
+        
         try:
             w = self.widgets.get("EXPLORING", {})
-            if self.current_exploring_groupbox == "single_selection" and (picker := w.get("SINGLE_SELECTION_FEATURES", {}).get("WIDGET")):
-                f = picker.feature(); has_features = f is not None and (not hasattr(f, 'isValid') or f.isValid())
-            elif self.current_exploring_groupbox == "multiple_selection" and (combo := w.get("MULTIPLE_SELECTION_FEATURES", {}).get("WIDGET")):
-                has_features = bool(combo.checkedItems())
-            elif self.current_exploring_groupbox == "custom_selection" and (expr := w.get("CUSTOM_SELECTION_EXPRESSION", {}).get("WIDGET")):
-                has_features = bool(expr.expression() and expr.expression().strip())
-        except: pass
-        self.pushButton_exploring_identify.setEnabled(has_features); self.pushButton_exploring_zoom.setEnabled(has_features)
+            
+            # Check widget-specific features
+            if self.current_exploring_groupbox == "single_selection":
+                picker = w.get("SINGLE_SELECTION_FEATURES", {}).get("WIDGET")
+                if picker:
+                    f = picker.feature()
+                    has_features = f is not None and (not hasattr(f, 'isValid') or f.isValid())
+                    detection_source = "single_picker" if has_features else "single_picker_empty"
+                    
+            elif self.current_exploring_groupbox == "multiple_selection":
+                combo = w.get("MULTIPLE_SELECTION_FEATURES", {}).get("WIDGET")
+                if combo:
+                    has_features = bool(combo.checkedItems())
+                    detection_source = "multiple_combo" if has_features else "multiple_combo_empty"
+                    
+            elif self.current_exploring_groupbox == "custom_selection":
+                expr = w.get("CUSTOM_SELECTION_EXPRESSION", {}).get("WIDGET")
+                if expr:
+                    has_features = bool(expr.expression() and expr.expression().strip())
+                    detection_source = "custom_expr" if has_features else "custom_expr_empty"
+            
+            # FIX 2026-01-15: Fallback to canvas selection if widgets don't show features
+            if not has_features and self.current_layer:
+                canvas_selection_count = len(self.current_layer.selectedFeatureIds())
+                if canvas_selection_count > 0:
+                    has_features = True
+                    detection_source = f"canvas_selection_{canvas_selection_count}"
+                    logger.debug(f"_update_exploring_buttons_state: Using canvas selection ({canvas_selection_count} features)")
+                    
+        except Exception as e:
+            logger.debug(f"_update_exploring_buttons_state error: {e}")
+            # Last resort: check canvas selection
+            try:
+                if self.current_layer and len(self.current_layer.selectedFeatureIds()) > 0:
+                    has_features = True
+                    detection_source = "canvas_fallback"
+            except:
+                pass
+        
+        self.pushButton_exploring_identify.setEnabled(has_features)
+        self.pushButton_exploring_zoom.setEnabled(has_features)
+        logger.debug(f"_update_exploring_buttons_state: {has_features} (source: {detection_source})")
 
     def _configure_groupbox_common(self, groupbox_name):
         """v4.0 Sprint 17: Common groupbox configuration logic."""
@@ -2331,14 +2634,95 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._update_exploring_buttons_state(); return None
         self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = groupbox_name
         layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+        
+        # Try controller first
+        controller_success = False
         if self._controller_integration:
-            self._controller_integration.delegate_exploring_configure_groupbox(groupbox_name, self.current_layer, layer_props)
+            try:
+                controller_success = self._controller_integration.delegate_exploring_configure_groupbox(groupbox_name, self.current_layer, layer_props)
+            except Exception as e:
+                logger.debug(f"_configure_groupbox_common: Controller delegation failed: {e}")
+                controller_success = False
+        
+        # FIX 2026-01-15 v5: FALLBACK - Configure widgets directly if controller unavailable
+        # Pattern from before_migration: setEnabled(True) and setLayer(current_layer)
+        if not controller_success:
+            logger.debug(f"_configure_groupbox_common: Using fallback for {groupbox_name}")
+            try:
+                # Map groupbox to widget keys
+                widget_configs = {
+                    'single_selection': [
+                        ('SINGLE_SELECTION_FEATURES', True),
+                        ('SINGLE_SELECTION_EXPRESSION', True)
+                    ],
+                    'multiple_selection': [
+                        ('MULTIPLE_SELECTION_FEATURES', True),
+                        ('MULTIPLE_SELECTION_EXPRESSION', True)
+                    ],
+                    'custom_selection': [
+                        ('CUSTOM_SELECTION_EXPRESSION', True)
+                    ]
+                }
+                
+                for widget_key, should_set_layer in widget_configs.get(groupbox_name, []):
+                    widget_info = self.widgets.get("EXPLORING", {}).get(widget_key, {})
+                    widget = widget_info.get("WIDGET")
+                    if widget:
+                        widget.setEnabled(True)
+                        if should_set_layer and hasattr(widget, 'setLayer'):
+                            try:
+                                if widget_key == 'MULTIPLE_SELECTION_FEATURES':
+                                    widget.setLayer(self.current_layer, layer_props)
+                                else:
+                                    widget.setLayer(self.current_layer)
+                            except Exception as e:
+                                logger.debug(f"Could not setLayer on {widget_key}: {e}")
+                        
+                        # Set display expression for feature widgets
+                        if widget_key in ('SINGLE_SELECTION_FEATURES', 'MULTIPLE_SELECTION_FEATURES'):
+                            expr_key = {
+                                'SINGLE_SELECTION_FEATURES': 'single_selection_expression',
+                                'MULTIPLE_SELECTION_FEATURES': 'multiple_selection_expression'
+                            }.get(widget_key)
+                            if expr_key and hasattr(widget, 'setDisplayExpression'):
+                                expr = layer_props.get("exploring", {}).get(expr_key, "")
+                                if expr:
+                                    try:
+                                        widget.setDisplayExpression(expr)
+                                    except Exception as e:
+                                        logger.debug(f"Could not setDisplayExpression on {widget_key}: {e}")
+                        
+                        # Special handling for single selection picker
+                        if widget_key == 'SINGLE_SELECTION_FEATURES' and hasattr(widget, 'setAllowNull'):
+                            widget.setAllowNull(True)
+            except Exception as e:
+                logger.debug(f"_configure_groupbox_common: Fallback failed: {e}")
+        
         return layer_props
 
     def _configure_single_selection_groupbox(self):
         """v4.0 Sprint 17: Configure single selection groupbox."""
         layer_props = self._configure_groupbox_common("single_selection")
         if layer_props is None: return True
+        
+        # FIX 2026-01-15 v5: CRITICAL - Reconnect featureChanged signal AFTER _configure_groupbox_common disconnected it!
+        # before_migration pattern: direct connection of featureChanged signal to exploring_features_changed
+        # This was missing in the migrated code, causing the feature picker to not update when feature changes.
+        if "EXPLORING" in self.widgets and "SINGLE_SELECTION_FEATURES" in self.widgets["EXPLORING"]:
+            picker_widget = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+            if picker_widget:
+                # First try to disconnect any existing connection (ignore errors)
+                try:
+                    picker_widget.featureChanged.disconnect(self.exploring_features_changed)
+                except TypeError:
+                    pass  # Not connected
+                # Now connect directly (same as before_migration line 7085)
+                picker_widget.featureChanged.connect(self.exploring_features_changed)
+                logger.debug(f"_configure_single_selection_groupbox: Connected featureChanged signal")
+        
+        # FIX 2026-01-15 v9: Ensure selectionChanged stays connected for IS_TRACKING/IS_SELECTING
+        self._ensure_selection_changed_connected()
+        
         self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
         self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
         self.exploring_link_widgets()
@@ -2358,6 +2742,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 Sprint 17: Configure multiple selection groupbox."""
         layer_props = self._configure_groupbox_common("multiple_selection")
         if layer_props is None: return True
+        
+        # FIX 2026-01-15 v9: Ensure selectionChanged stays connected for IS_TRACKING/IS_SELECTING
+        self._ensure_selection_changed_connected()
+        
         self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect')
         self.exploring_link_widgets()
         if not self._syncing_from_qgis:
@@ -2396,28 +2784,89 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def exploring_identify_clicked(self):
-        """v4.0 Sprint 18: Flash selected features on map - delegates to ExploringController."""
-        if not self._is_layer_valid(): return
-        if self._controller_integration:
-            features, _ = self.get_current_features()
-            if features: self._controller_integration.delegate_flash_features([f.id() for f in features], self.current_layer)
+        """
+        v4.0 Sprint 18: Flash selected features on map.
+        
+        FIX 2026-01-15 v5: Complete rewrite based on before_migration pattern.
+        Uses cache first for optimal performance, then fallback to widget retrieval.
+        
+        Key pattern from before_migration (lines 7312-7378):
+        1. Check cache for feature_ids (fast path)
+        2. Validate cache for custom_selection (expression match)
+        3. Flash cached IDs if available
+        4. Fallback: get features from widgets
+        """
+        logger.info("🔍 IDENTIFY button clicked!")
+        if not self._is_layer_valid():
+            logger.warning("IDENTIFY: Invalid layer")
             return
         
-        # FIX 2026-01-14: Fallback when controller unavailable
         try:
             from qgis.PyQt.QtGui import QColor
-            features, _ = self._fallback_get_current_features()
-            if features:
-                self.iface.mapCanvas().flashFeatureIds(
-                    self.current_layer, 
-                    [f.id() for f in features], 
-                    startColor=QColor(235, 49, 42, 255), 
-                    endColor=QColor(237, 97, 62, 25), 
-                    flashes=6, 
-                    duration=400
-                )
+            
+            layer_id = self.current_layer.id()
+            groupbox_type = self.current_exploring_groupbox
+            
+            # OPTIMIZATION (from before_migration): Try cached feature_ids first
+            if hasattr(self, '_exploring_cache') and groupbox_type:
+                # FIX v2.3.9: For custom_selection, verify cached expression matches widget
+                use_cached_ids = True
+                if groupbox_type == "custom_selection":
+                    cached = self._exploring_cache.get(layer_id, groupbox_type)
+                    if cached:
+                        current_widget_expr = self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].expression()
+                        cached_expr = cached.get('expression', '')
+                        if current_widget_expr != cached_expr:
+                            logger.debug(f"IDENTIFY: CACHE STALE for custom_selection - invalidating")
+                            self._exploring_cache.invalidate(layer_id, groupbox_type)
+                            use_cached_ids = False
+                
+                if use_cached_ids:
+                    feature_ids = self._exploring_cache.get_feature_ids(layer_id, groupbox_type)
+                    if feature_ids and len(feature_ids) > 0:
+                        logger.info(f"IDENTIFY: Using cached feature_ids ({len(feature_ids)} features)")
+                        self.iface.mapCanvas().flashFeatureIds(
+                            self.current_layer, 
+                            feature_ids, 
+                            startColor=QColor(235, 49, 42, 255), 
+                            endColor=QColor(237, 97, 62, 25), 
+                            flashes=6, 
+                            duration=400
+                        )
+                        return
+            
+            # Fallback: Get features from widgets (will also populate cache)
+            features = []
+            try:
+                features, _ = self.get_current_features(use_cache=False)  # Force refresh
+            except Exception as e:
+                logger.debug(f"get_current_features failed: {e}")
+            
+            # Step 2: Fallback if no features from controller
+            if not features:
+                features, _ = self._fallback_get_current_features()
+            
+            logger.info(f"IDENTIFY: Got {len(features) if features else 0} features")
+            
+            # Step 3: Flash features if any
+            if features and len(features) > 0:
+                feature_ids = [f.id() for f in features if f and hasattr(f, 'id') and f.isValid()]
+                if feature_ids:
+                    self.iface.mapCanvas().flashFeatureIds(
+                        self.current_layer, 
+                        feature_ids, 
+                        startColor=QColor(235, 49, 42, 255), 
+                        endColor=QColor(237, 97, 62, 25), 
+                        flashes=6, 
+                        duration=400
+                    )
+                    logger.info(f"IDENTIFY: ✓ Flashed {len(feature_ids)} features")
+                else:
+                    logger.warning("IDENTIFY: No valid feature IDs to flash")
+            else:
+                logger.warning("IDENTIFY: No features to flash")
         except Exception as e:
-            logger.debug(f"exploring_identify_clicked fallback error: {e}")
+            logger.error(f"exploring_identify_clicked error: {e}", exc_info=True)
 
 
     def get_current_features(self, use_cache: bool = True):
@@ -2428,35 +2877,200 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return self._fallback_get_current_features()
     
     def _fallback_get_current_features(self):
-        """FIX 2026-01-14: Fallback for get_current_features when controller unavailable."""
+        """
+        FIX 2026-01-15 v9: Fallback for get_current_features when controller unavailable.
+        
+        User requirement: "si pas de selection QGIS, et single selection alors 
+        feature active est la feature active du feature picker single selection 
+        (meme si pushButton_checkable_exploring_selecting est unchecked)"
+        
+        For single_selection mode:
+        - Widget feature picker IS the primary source
+        - Do NOT fallback to QGIS canvas - the picker IS the source of truth
+        - Only use saved FID for recovery
+        
+        For multiple_selection mode:
+        - Widget checked items are primary
+        - Can fallback to QGIS canvas selection
+        
+        CRITICAL: Always reload features to ensure geometry is loaded.
+        
+        FIX v9: Enhanced feature retrieval with multiple strategies.
+        """
         if not self.widgets_initialized or not self.current_layer:
             return [], ''
         try:
+            from qgis.core import QgsFeatureRequest
             groupbox_type = self.current_exploring_groupbox
+            logger.debug(f"_fallback_get_current_features: groupbox={groupbox_type}")
+            
             if groupbox_type == "single_selection":
                 picker = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
                 feature = picker.feature()
+                
+                # Strategy 1: Widget has a valid feature (PRIMARY SOURCE)
                 if feature and feature.isValid():
-                    return [feature], ""
+                    fid = feature.id()
+                    # Always save the FID for recovery
+                    self._last_single_selection_fid = fid
+                    self._last_single_selection_layer_id = self.current_layer.id()
+                    
+                    # Check if feature has geometry, if not reload
+                    if feature.hasGeometry() and not feature.geometry().isEmpty():
+                        logger.debug(f"  → Using feature {fid} directly (has geometry)")
+                        return [feature], ""
+                    else:
+                        # Reload feature to get geometry
+                        try:
+                            reloaded = self.current_layer.getFeature(fid)
+                            if reloaded.isValid() and reloaded.hasGeometry():
+                                logger.debug(f"  → Reloaded feature {fid} with geometry")
+                                return [reloaded], ""
+                        except Exception as e:
+                            logger.debug(f"  → Could not reload feature: {e}")
+                        # Return original feature even without geometry for non-spatial operations
+                        return [feature], ""
+                
+                # Strategy 2: Try saved FID recovery
+                if (hasattr(self, '_last_single_selection_fid') 
+                    and self._last_single_selection_fid is not None
+                    and self.current_layer.id() == getattr(self, '_last_single_selection_layer_id', None)):
+                    try:
+                        recovered = self.current_layer.getFeature(self._last_single_selection_fid)
+                        if recovered.isValid():
+                            logger.info(f"  → Recovered feature {self._last_single_selection_fid} from saved FID")
+                            return [recovered], ""
+                    except Exception as e:
+                        logger.debug(f"  → Recovery failed: {e}")
+                
+                # Strategy 3 (FIX v9): Try QGIS selection if is_selecting is active
+                # This handles the case where user selected on canvas but picker wasn't updated
+                if self.pushButton_checkable_exploring_selecting.isChecked():
+                    selected_fids = self.current_layer.selectedFeatureIds()
+                    if len(selected_fids) == 1:
+                        try:
+                            selected_feature = self.current_layer.getFeature(selected_fids[0])
+                            if selected_feature.isValid():
+                                logger.info(f"  → Using QGIS single selection {selected_fids[0]} (is_selecting active)")
+                                return [selected_feature], ""
+                        except Exception as e:
+                            logger.debug(f"  → Could not get QGIS selection: {e}")
+                
+                logger.debug(f"  → No feature in single_selection picker")
+                return [], ''
+                    
             elif groupbox_type == "multiple_selection":
                 picker = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
+                checked = None
+                
+                # Try checkedItemsData first
                 if hasattr(picker, 'checkedItemsData'):
                     checked = picker.checkedItemsData()
-                    if checked:
-                        from qgis.core import QgsFeatureRequest
-                        request = QgsFeatureRequest().setFilterFids(checked)
-                        return list(self.current_layer.getFeatures(request)), ""
+                    
+                # Fallback to checkedItems
+                if not checked and hasattr(picker, 'checkedItems'):
+                    items = picker.checkedItems()
+                    if items:
+                        # Extract feature IDs from items (format: [display, pk, ...])
+                        checked = [item[1] for item in items if len(item) > 1]
+                
+                if checked:
+                    request = QgsFeatureRequest().setFilterFids(checked)
+                    features = list(self.current_layer.getFeatures(request))
+                    logger.debug(f"  → Got {len(features)} features from multiple selection")
+                    return features, ""
+                
+                # Fallback: Try QGIS canvas selection (allowed for multiple_selection)
+                qgis_selected = self.current_layer.selectedFeatures()
+                if len(qgis_selected) > 0:
+                    logger.info(f"  → Using QGIS canvas selection ({len(qgis_selected)} features)")
+                    return qgis_selected, ""
+                    
             elif groupbox_type == "custom_selection":
                 return self.exploring_custom_selection()
+                
         except Exception as e:
             logger.debug(f"_fallback_get_current_features error: {e}")
         return [], ''
 
     def exploring_zoom_clicked(self, features=[], expression=None):
-        """v4.0 Sprint 18: Zoom to selected features - delegates to ExploringController."""
-        if not self._is_layer_valid(): return
-        if not features: features, expression = self.get_current_features()
-        self.zooming_to_features(features, expression)
+        """
+        v4.0 Sprint 18: Zoom to selected features.
+        
+        FIX 2026-01-15 v5: Complete rewrite based on before_migration pattern.
+        Uses cached bbox for instant zoom when available.
+        
+        Key pattern from before_migration (lines 7625-7640):
+        1. Check cache for bbox (instant zoom path)
+        2. Validate cache for custom_selection
+        3. Apply padding and CRS transform
+        4. Fallback: get features and zoom
+        """
+        logger.info("🔎 ZOOM button clicked!")
+        if not self._is_layer_valid(): 
+            logger.warning("ZOOM: Invalid layer")
+            return
+        
+        layer_id = self.current_layer.id()
+        groupbox_type = self.current_exploring_groupbox
+        
+        # OPTIMIZATION (from before_migration): Try cached bbox for instant zoom
+        if hasattr(self, '_exploring_cache') and groupbox_type and not features:
+            # Validate cache for custom_selection
+            use_cached_bbox = True
+            if groupbox_type == "custom_selection":
+                cached = self._exploring_cache.get(layer_id, groupbox_type)
+                if cached:
+                    current_widget_expr = self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].expression()
+                    cached_expr = cached.get('expression', '')
+                    if current_widget_expr != cached_expr:
+                        logger.debug(f"ZOOM: CACHE STALE for custom_selection - invalidating")
+                        self._exploring_cache.invalidate(layer_id, groupbox_type)
+                        use_cached_bbox = False
+            
+            if use_cached_bbox:
+                cached_bbox = self._exploring_cache.get_bbox(layer_id, groupbox_type)
+                if cached_bbox and not cached_bbox.isEmpty():
+                    logger.info(f"ZOOM: Using cached bbox for instant zoom")
+                    try:
+                        from qgis.core import QgsRectangle, QgsCoordinateTransform, QgsProject
+                        # Apply padding (10% or minimum 5 units)
+                        width_padding = max(cached_bbox.width() * 0.1, 5)
+                        height_padding = max(cached_bbox.height() * 0.1, 5)
+                        padded_bbox = QgsRectangle(cached_bbox)
+                        padded_bbox.grow(max(width_padding, height_padding))
+                        
+                        # Transform to canvas CRS if needed
+                        layer_crs = self.current_layer.crs()
+                        canvas_crs = self.iface.mapCanvas().mapSettings().destinationCrs()
+                        if layer_crs != canvas_crs:
+                            transform = QgsCoordinateTransform(layer_crs, canvas_crs, QgsProject.instance())
+                            padded_bbox = transform.transformBoundingBox(padded_bbox)
+                        
+                        self.iface.mapCanvas().zoomToFeatureExtent(padded_bbox)
+                        self.iface.mapCanvas().refresh()
+                        return
+                    except Exception as e:
+                        logger.debug(f"ZOOM: Cache bbox failed: {e}")
+        
+        # Step 1: Get features if not provided
+        if not features:
+            try:
+                features, expression = self.get_current_features(use_cache=False)  # Force refresh
+            except Exception as e:
+                logger.debug(f"get_current_features failed: {e}")
+            
+            # Fallback if controller fails
+            if not features:
+                features, expression = self._fallback_get_current_features()
+        
+        logger.info(f"ZOOM: Got {len(features) if features else 0} features")
+        
+        # Step 2: Zoom to features
+        if features and len(features) > 0:
+            self.zooming_to_features(features, expression)
+        else:
+            logger.warning("ZOOM: No features to zoom to")
 
 
     def get_filtered_layer_extent(self, layer):
@@ -2481,15 +3095,89 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return self._exploring_ctrl._compute_zoom_extent_for_mode() if self._exploring_ctrl else self.get_filtered_layer_extent(self.current_layer) if self.current_layer else None
 
     def zooming_to_features(self, features, expression=None):
-        """v4.0 Sprint 18: Zoom to features - delegates to ExploringController."""
-        if not self._is_layer_valid(): return
+        """
+        v4.0 Sprint 18: Zoom to features.
+        
+        FIX 2026-01-15 v4: Enhanced fallback with geometry validation.
+        """
+        if not self._is_layer_valid(): 
+            return
+        
+        if not features or len(features) == 0:
+            logger.warning("zooming_to_features: No features provided")
+            return
+        
+        # Try controller first
         if self._exploring_ctrl:
-            self._exploring_ctrl.zooming_to_features(features, expression)
-        elif features: self.iface.mapCanvas().zoomToFeatureIds(self.current_layer, [f.id() for f in features]); self.iface.mapCanvas().refresh()
+            try:
+                self._exploring_ctrl.zooming_to_features(features, expression)
+                return
+            except Exception as e:
+                logger.debug(f"Controller zooming_to_features failed: {e}")
+        
+        # FIX v4: Enhanced fallback with geometry validation and reload
+        try:
+            feature_ids = []
+            for f in features:
+                if f and hasattr(f, 'id'):
+                    # Reload feature if no geometry
+                    if not f.hasGeometry() or f.geometry().isEmpty():
+                        try:
+                            reloaded = self.current_layer.getFeature(f.id())
+                            if reloaded.isValid() and reloaded.hasGeometry():
+                                feature_ids.append(reloaded.id())
+                                continue
+                        except:
+                            pass
+                    feature_ids.append(f.id())
+            
+            if feature_ids:
+                self.iface.mapCanvas().zoomToFeatureIds(self.current_layer, feature_ids)
+                self.iface.mapCanvas().refresh()
+                logger.info(f"zooming_to_features: Zoomed to {len(feature_ids)} features")
+            else:
+                logger.warning("zooming_to_features: No valid feature IDs")
+        except Exception as e:
+            logger.warning(f"zooming_to_features fallback error: {e}")
 
+
+    def _ensure_selection_changed_connected(self):
+        """
+        FIX 2026-01-15 v9: Ensure the selectionChanged signal is connected to on_layer_selection_changed.
+        
+        This is called when IS_TRACKING or IS_SELECTING are activated to ensure
+        the signal remains connected for auto-zoom/sync functionality.
+        """
+        if not self.current_layer:
+            return
+        
+        try:
+            # Check if signal needs to be connected
+            if not self.current_layer_selection_connection:
+                self.current_layer.selectionChanged.connect(self.on_layer_selection_changed)
+                self.current_layer_selection_connection = True
+                logger.info("_ensure_selection_changed_connected: Connected selectionChanged signal")
+        except (TypeError, RuntimeError) as e:
+            # Signal might already be connected, or layer deleted
+            logger.debug(f"_ensure_selection_changed_connected: {e}")
 
     def on_layer_selection_changed(self, selected, deselected, clearAndSelect):
-        """v4.0 Sprint 18: Handle layer selection change - delegates to ExploringController."""
+        """
+        v4.0 Sprint 18: Handle layer selection change - delegates to ExploringController.
+        
+        FIX 2026-01-15 v5: Ensure selectionChanged signal stays connected for IS_TRACKING.
+        The signal can be disconnected during layer changes and not always reconnected,
+        causing tracking to only work for the first feature change.
+        """
+        # FIX v5: Ensure signal stays connected (self-healing)
+        if self.current_layer and not self.current_layer_selection_connection:
+            try:
+                self.current_layer.selectionChanged.connect(self.on_layer_selection_changed)
+                self.current_layer_selection_connection = True
+                logger.info("on_layer_selection_changed: Re-connected selectionChanged signal (self-healing)")
+            except (TypeError, RuntimeError):
+                pass
+        
         if self._controller_integration and self._controller_integration.delegate_handle_layer_selection_changed(selected, deselected, clearAndSelect):
             return
         
@@ -2497,7 +3185,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._fallback_handle_layer_selection_changed()
     
     def _fallback_handle_layer_selection_changed(self):
-        """FIX 2026-01-14 v3: Fallback for on_layer_selection_changed when controller unavailable."""
+        """FIX 2026-01-15 v4: Fallback for on_layer_selection_changed when controller unavailable."""
         try:
             if getattr(self, '_syncing_from_qgis', False):
                 return
@@ -2510,34 +3198,46 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             is_selecting = layer_props.get("exploring", {}).get("is_selecting", False)
             is_tracking = layer_props.get("exploring", {}).get("is_tracking", False)
             
-            # FIX v3: Check actual button state and trust it over PROJECT_LAYERS
+            # FIX v4: Check actual button states and trust them over PROJECT_LAYERS
             btn_selecting = self.pushButton_checkable_exploring_selecting
-            button_checked = btn_selecting.isChecked()
+            btn_tracking = self.pushButton_checkable_exploring_tracking
+            selecting_button_checked = btn_selecting.isChecked()
+            tracking_button_checked = btn_tracking.isChecked()
             
-            if button_checked != is_selecting:
-                logger.warning(f"Fallback: State mismatch! Button={button_checked}, stored={is_selecting}")
-                # Correct PROJECT_LAYERS
+            # Correct mismatch for is_selecting
+            if selecting_button_checked != is_selecting:
+                logger.warning(f"Fallback: IS_SELECTING mismatch! Button={selecting_button_checked}, stored={is_selecting}")
                 layer_id = self.current_layer.id()
                 if layer_id in self.PROJECT_LAYERS:
-                    self.PROJECT_LAYERS[layer_id]["exploring"]["is_selecting"] = button_checked
-                    is_selecting = button_checked
-                    logger.info(f"Fallback: Corrected is_selecting to {button_checked}")
+                    self.PROJECT_LAYERS[layer_id]["exploring"]["is_selecting"] = selecting_button_checked
+                    is_selecting = selecting_button_checked
+                    logger.info(f"Fallback: Corrected is_selecting to {selecting_button_checked}")
+            
+            # FIX v4: Correct mismatch for is_tracking
+            if tracking_button_checked != is_tracking:
+                logger.warning(f"Fallback: IS_TRACKING mismatch! Button={tracking_button_checked}, stored={is_tracking}")
+                layer_id = self.current_layer.id()
+                if layer_id in self.PROJECT_LAYERS:
+                    self.PROJECT_LAYERS[layer_id]["exploring"]["is_tracking"] = tracking_button_checked
+                    is_tracking = tracking_button_checked
+                    logger.info(f"Fallback: Corrected is_tracking to {tracking_button_checked}")
             
             # Sync widgets when button is checked OR is_selecting is active
-            should_sync = button_checked or is_selecting
+            should_sync = selecting_button_checked or is_selecting
             if should_sync:
                 logger.info("Fallback: Syncing widgets from QGIS selection")
                 self._fallback_sync_widgets_from_qgis_selection()
             else:
-                logger.debug(f"Fallback: Skipping sync (button={button_checked}, is_selecting={is_selecting})")
+                logger.debug(f"Fallback: Skipping sync (button={selecting_button_checked}, is_selecting={is_selecting})")
             
-            # Zoom to selection when is_tracking is active
-            if is_tracking:
+            # FIX v4: Zoom to selection when tracking is active (trust button state)
+            if is_tracking or tracking_button_checked:
                 from qgis.core import QgsFeatureRequest
                 selected_ids = self.current_layer.selectedFeatureIds()
                 if len(selected_ids) > 0:
                     request = QgsFeatureRequest().setFilterFids(selected_ids)
                     features = list(self.current_layer.getFeatures(request))
+                    logger.info(f"Fallback: TRACKING zoom to {len(features)} features")
                     self.zooming_to_features(features)
         except Exception as e:
             logger.debug(f"_fallback_handle_layer_selection_changed error: {e}")
@@ -2570,6 +3270,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 finally:
                     self._syncing_from_qgis = False
             
+            # FIX 2026-01-15: Update button states before syncing widgets
+            # This ensures buttons are enabled ASAP when there's a selection
+            if selected_count > 0:
+                logger.debug(f"_fallback_sync: Pre-updating button states (selection={selected_count})")
+                self._update_exploring_buttons_state()
+            
             # Sync single selection widget
             if selected_count >= 1:
                 feature_picker = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
@@ -2584,6 +3290,50 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         feature_picker.repaint()
                     finally:
                         self._syncing_from_qgis = False
+            
+            # FIX 2026-01-15 v3: Sync multiple selection widget
+            if selected_count >= 1:
+                try:
+                    multi_widget = self.widgets.get("EXPLORING", {}).get("MULTIPLE_SELECTION_FEATURES", {}).get("WIDGET")
+                    if multi_widget and hasattr(multi_widget, 'list_widgets'):
+                        layer_id = self.current_layer.id()
+                        if layer_id in multi_widget.list_widgets:
+                            list_widget = multi_widget.list_widgets[layer_id]
+                            layer_props = self.PROJECT_LAYERS.get(layer_id, {})
+                            pk_name = layer_props.get("infos", {}).get("primary_key_name")
+                            
+                            # Get selected PK values from QGIS selection
+                            selected_pk_values = set()
+                            for f in selected_features:
+                                try:
+                                    pk_value = f[pk_name] if pk_name else f.id()
+                                    selected_pk_values.add(str(pk_value) if pk_value is not None else str(f.id()))
+                                except:
+                                    selected_pk_values.add(str(f.id()))
+                            
+                            # Sync check states in list widget
+                            self._syncing_from_qgis = True
+                            try:
+                                from qgis.PyQt.QtCore import Qt
+                                for i in range(list_widget.count()):
+                                    item = list_widget.item(i)
+                                    item_pk = str(item.data(3)) if item.data(3) is not None else ""
+                                    should_check = item_pk in selected_pk_values
+                                    current_state = item.checkState() == Qt.Checked
+                                    if should_check != current_state:
+                                        item.setCheckState(Qt.Checked if should_check else Qt.Unchecked)
+                                logger.debug(f"_fallback_sync: Synced {len(selected_pk_values)} items in multiple picker")
+                            finally:
+                                self._syncing_from_qgis = False
+                except Exception as e:
+                    logger.debug(f"_fallback_sync: Error syncing multiple picker: {e}")
+            
+            # FIX 2026-01-15: Force button state update after sync
+            # This ensures IDENTIFY and ZOOM buttons are enabled after successful sync
+            if selected_count > 0:
+                logger.debug(f"_fallback_sync: Post-updating button states after sync")
+                self._update_exploring_buttons_state()
+                
         except Exception as e:
             logger.debug(f"_fallback_sync_widgets_from_qgis_selection error: {e}")
     
@@ -2619,39 +3369,102 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return features, expression
 
     def exploring_deselect_features(self):
-        """v4.0 Sprint 18: Deselect all features - delegates to ExploringController."""
-        if not self._is_layer_valid(): return
-        if not (self._controller_integration and self._controller_integration.delegate_exploring_clear_selection()): self.current_layer.removeSelection()
+        """
+        v4.0 Sprint 18: Deselect all features and switch to pan tool.
+        
+        FIX 2026-01-15: Switch to pan tool when IS_SELECTING is unchecked.
+        """
+        if not self._is_layer_valid(): 
+            return
+        
+        # Clear selection
+        if not (self._controller_integration and self._controller_integration.delegate_exploring_clear_selection()):
+            self.current_layer.removeSelection()
+        
+        # FIX 2026-01-15: Switch to pan tool when deselecting
+        try:
+            self.iface.actionPan().trigger()
+            logger.info("exploring_deselect_features: Switched to pan tool")
+        except Exception as e:
+            logger.warning(f"exploring_deselect_features: Failed to activate pan tool: {e}")
+        
+        # Disable the active groupbox when IS_SELECTING is inactive
+        self._sync_groupbox_state_with_selecting(False)
 
     def exploring_select_features(self):
         """
         v4.0 Sprint 18: Activate QGIS selection tool and select features from active groupbox.
         
-        FIX 2026-01-14: ALWAYS activate selection tool first, then sync features.
-        This ensures the selection tool is active on the canvas even if delegation fails.
+        FIX 2026-01-15: 
+        - Activate selection tool on canvas
+        - Synchronize canvas selection with current groupbox features
+        - Enable the active groupbox for interaction
+        - Update button states after selection
         """
         if not self._is_layer_valid(): 
             return
+        
+        logger.info(f"🔍 exploring_select_features: START (groupbox={self.current_exploring_groupbox})")
         
         # STEP 1: ALWAYS activate QGIS selection tool on canvas (CRITICAL)
         # This must happen FIRST and ALWAYS, regardless of controller delegation
         try:
             self.iface.actionSelectRectangle().trigger()
             self.iface.setActiveLayer(self.current_layer)
-            logger.info(f"exploring_select_features: Selection tool activated for '{self.current_layer.name()}'")
+            logger.info(f"exploring_select_features: ✓ Selection tool activated for '{self.current_layer.name()}'")
         except Exception as e:
-            logger.warning(f"exploring_select_features: Failed to activate selection tool: {e}")
+            logger.warning(f"exploring_select_features: ✗ Failed to activate selection tool: {e}")
         
         # STEP 2: Get features from active groupbox and select them on the layer
         features, _ = self.get_current_features()
+        logger.info(f"exploring_select_features: Got {len(features) if features else 0} features from groupbox")
+        
         if features:
             try:
                 self.current_layer.removeSelection()
                 self.current_layer.select([f.id() for f in features])
-                logger.debug(f"exploring_select_features: Selected {len(features)} features on layer")
+                logger.info(f"exploring_select_features: ✓ Selected {len(features)} features on canvas")
             except Exception as e:
-                logger.warning(f"exploring_select_features: Failed to select features: {e}")
+                logger.warning(f"exploring_select_features: ✗ Failed to select features: {e}")
+        
+        # STEP 3: Enable the active groupbox for interaction
+        # FIX 2026-01-15: Make sure groupbox is enabled when IS_SELECTING is active
+        self._sync_groupbox_state_with_selecting(True)
+        
+        # STEP 4: Force update button states
+        # FIX 2026-01-15: Ensure IDENTIFY and ZOOM buttons are enabled after selection
+        self._update_exploring_buttons_state()
+        logger.info(f"exploring_select_features: DONE")
 
+    def _sync_groupbox_state_with_selecting(self, is_selecting: bool):
+        """
+        FIX 2026-01-15: Synchronize groupbox enabled state with IS_SELECTING button.
+        
+        When IS_SELECTING is active, enable the current groupbox for interaction.
+        When inactive, the groupbox state depends on other conditions.
+        
+        Args:
+            is_selecting: True if IS_SELECTING button is checked, False otherwise
+        """
+        if not self.widgets_initialized or not self.current_exploring_groupbox:
+            return
+        
+        try:
+            # Get the active groupbox widget
+            groupbox_map = {
+                "single_selection": self.mGroupBox_exploring_single_selection,
+                "multiple_selection": self.mGroupBox_exploring_multiple_selection,
+                "custom_selection": self.mGroupBox_exploring_custom_selection
+            }
+            
+            current_groupbox_widget = groupbox_map.get(self.current_exploring_groupbox)
+            if current_groupbox_widget:
+                # Enable groupbox when selecting is active
+                current_groupbox_widget.setEnabled(True)
+                logger.debug(f"_sync_groupbox_state_with_selecting: {self.current_exploring_groupbox} enabled={is_selecting}")
+        except Exception as e:
+            logger.debug(f"_sync_groupbox_state_with_selecting error: {e}")
+    
     def exploring_features_changed(self, input=[], identify_by_primary_key_name=False, custom_expression=None, preserve_filter_if_empty=False):
         """
         WRAPPER: Delegates to ExploringController.
@@ -2953,6 +3766,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return
         logger.info(f"=== FALLBACK _reload_exploration_widgets === layer: {layer.name()}")
         try:
+            # FIX 2026-01-15 v6: CRITICAL - Disconnect ALL exploration signals BEFORE updating widgets
+            # Pattern from before_migration (lines 9721-9725) prevents spurious signal emissions
+            self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+            self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'disconnect')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'disconnect')
+            self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'disconnect')
+            
             # Get expressions from layer_props
             single_expr = layer_props.get("exploring", {}).get("single_selection_expression", "")
             multiple_expr = layer_props.get("exploring", {}).get("multiple_selection_expression", "")
@@ -3012,6 +3833,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         logger.info(f"✓ {expr_key} updated: {old_layer} → {new_layer}, expr={expr_value}")
                     else:
                         logger.warning(f"{expr_key} widget is None or has no setLayer!")
+            
+            # FIX 2026-01-15 v5: CRITICAL - Reconnect signals AFTER all widgets are updated
+            # Pattern from before_migration (lines 9898-9904): manageSignal approach
+            # This was completely missing in the fallback!
+            self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'connect', 'featureChanged')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
+            self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
+            self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
+            
+            # ALSO: Direct connection for featureChanged (more reliable than manageSignal)
+            # Pattern from before_migration property change handler
+            if "SINGLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
+                picker_widget = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+                if picker_widget:
+                    try:
+                        picker_widget.featureChanged.disconnect(self.exploring_features_changed)
+                    except TypeError:
+                        pass
+                    picker_widget.featureChanged.connect(self.exploring_features_changed)
+                    logger.debug("✓ featureChanged signal directly reconnected")
             
             logger.debug(f"Fallback: Exploration widgets updated for layer {layer.name()}")
         except Exception as e:
@@ -3337,6 +4180,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             custom_functions["ON_TRUE"](0)
         elif not input_data and "ON_FALSE" in custom_functions:
             custom_functions["ON_FALSE"](0)
+        
+        # FIX 2026-01-15 v5: CRITICAL - Reconnect widgets using direct connection for featureChanged signal
+        # Pattern from before_migration (lines 10670-10681): manageSignal approach using isSignalConnected 
+        # is unreliable, so we use direct connection for featureChanged.
+        if "EXPLORING" in self.widgets and "SINGLE_SELECTION_FEATURES" in self.widgets["EXPLORING"]:
+            picker_widget = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+            if picker_widget:
+                try:
+                    picker_widget.featureChanged.disconnect(self.exploring_features_changed)
+                except TypeError:
+                    pass
+                picker_widget.featureChanged.connect(self.exploring_features_changed)
+                
+        # Reconnect other widgets via manageSignal (same as before_migration lines 10678-10682)
+        try:
+            self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'connect')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'connect')
+            self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect')
+        except Exception as e:
+            logger.debug(f"layer_property_changed fallback: Could not reconnect signals: {e}")
 
     def layer_property_changed_with_buffer_style(self, input_property, input_data=None):
         """v4.0 S18: → PropertyController."""

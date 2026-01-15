@@ -18,7 +18,12 @@ except ImportError:
     # Mock types for testing
     QgsVectorLayer = Any
     QgsProject = Any
-
+# Import centralized provider detection (v4.0.4 - eliminate duplication)
+try:
+    from ....infrastructure.utils import detect_provider_type, ProviderType
+    _HAS_PROVIDER_UTILS = True
+except ImportError:
+    _HAS_PROVIDER_UTILS = False
 
 class LayerSelectionMixin:
     """
@@ -114,6 +119,12 @@ class LayerSelectionMixin:
             Normalized provider type string ('postgresql', 'spatialite', 'ogr', etc.)
             Returns 'unknown' if provider not recognized
         """
+        # v4.0.4: Delegate to centralized provider detection
+        if _HAS_PROVIDER_UTILS:
+            provider_type = detect_provider_type(layer)
+            return str(provider_type) if provider_type else 'unknown'
+        
+        # Fallback to local mapping
         if layer is None:
             return 'unknown'
         

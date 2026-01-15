@@ -38,6 +38,14 @@ from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
 from collections import OrderedDict
 
+try:
+    from qgis.core import QgsRectangle, QgsFeature
+    QGIS_AVAILABLE = True
+except ImportError:
+    QGIS_AVAILABLE = False
+    QgsRectangle = None
+    QgsFeature = None
+
 from ..logging import get_logger
 
 logger = get_logger(__name__)
@@ -48,6 +56,8 @@ class CacheEntryExploring:
     """Single cache entry for exploring features."""
     features: List[Any]
     expression: str
+    feature_ids: List[int] = field(default_factory=list)
+    bbox: Any = None  # QgsRectangle or None
     timestamp: float = field(default_factory=time.time)
     hits: int = 0
     
@@ -59,6 +69,10 @@ class CacheEntryExploring:
         """Update access time and hit count."""
         self.timestamp = time.time()
         self.hits += 1
+    
+    def is_valid(self) -> bool:
+        """Check if cache entry contains valid data."""
+        return len(self.features) > 0
 
 
 class ExploringFeaturesCache:
@@ -122,7 +136,9 @@ class ExploringFeaturesCache:
         
         return {
             'features': entry.features,
-            'expression': entry.expression
+            'expression': entry.expression,
+            'feature_ids': entry.feature_ids,
+            'bbox': entry.bbox
         }
     
     def put(self, layer_id: str, groupbox_type: str, features: List[Any], expression: str) -> None:
@@ -144,11 +160,21 @@ class ExploringFeaturesCache:
                 del self._cache[oldest_layer]
                 logger.debug(f"ExploringFeaturesCache: Evicted oldest layer {oldest_layer[:8]}")
         
+        # Compute feature_ids and bbox
+        feature_ids = self._compute_feature_ids(features)
+        bbox = self._compute_bbox(features)
+        
         # Store entry
-        entry = CacheEntryExploring(features=features, expression=expression)
+        entry = CacheEntryExploring(
+            features=features, 
+            expression=expression,
+            feature_ids=feature_ids,
+            bbox=bbox
+        )
         self._cache[layer_id][groupbox_type] = entry
         self._update_stats()
-        logger.debug(f"ExploringFeaturesCache: Cached {len(features)} features for {layer_id[:8]}/{groupbox_type}")
+        bbox_info = f"bbox={bbox.toString() if bbox else 'None'}"
+        logger.debug(f"ExploringFeaturesCache: Cached {len(features)} features for {layer_id[:8]}/{groupbox_type} ({bbox_info})")
     
     def invalidate(self, layer_id: str, groupbox_type: str) -> None:
         """
@@ -186,6 +212,103 @@ class ExploringFeaturesCache:
         self._stats['invalidations'] += count
         logger.debug("ExploringFeaturesCache: Cleared all entries")
         self._update_stats()
+    
+    def has_cached_data(self, layer_id: str, groupbox_type: str) -> bool:
+        """
+        Check if valid data is cached (without retrieving it).
+        
+        Args:
+            layer_id: Layer identifier
+            groupbox_type: Type of groupbox
+            
+        Returns:
+            bool: True if valid data is cached
+        """
+        if layer_id not in self._cache:
+            return False
+        
+        groupbox_cache = self._cache[layer_id]
+        if groupbox_type not in groupbox_cache:
+            return False
+        
+        entry = groupbox_cache[groupbox_type]
+        return entry.is_valid() and not entry.is_expired(self.max_age_seconds)
+    
+    def get_bbox(self, layer_id: str, groupbox_type: str) -> Optional[Any]:
+        """
+        Get only the bounding box from cache (fast access for zoom).
+        
+        Args:
+            layer_id: Layer identifier
+            groupbox_type: Type of groupbox
+            
+        Returns:
+            QgsRectangle or None: Pre-computed bounding box
+        """
+        cached = self.get(layer_id, groupbox_type)
+        return cached['bbox'] if cached else None
+    
+    def get_feature_ids(self, layer_id: str, groupbox_type: str) -> List[int]:
+        """
+        Get only the feature IDs from cache (fast access for flash).
+        
+        Args:
+            layer_id: Layer identifier
+            groupbox_type: Type of groupbox
+            
+        Returns:
+            list: List of feature IDs, or empty list
+        """
+        cached = self.get(layer_id, groupbox_type)
+        return cached['feature_ids'] if cached else []
+    
+    def _compute_feature_ids(self, features: List[Any]) -> List[int]:
+        """
+        Extract feature IDs from feature list.
+        
+        Args:
+            features: List of features
+            
+        Returns:
+            list: List of feature IDs
+        """
+        result = []
+        for f in features:
+            if f and hasattr(f, 'id'):
+                try:
+                    result.append(f.id())
+                except Exception:
+                    pass
+        return result
+    
+    def _compute_bbox(self, features: List[Any]) -> Optional[Any]:
+        """
+        Compute combined bounding box of all features.
+        
+        Args:
+            features: List of features
+            
+        Returns:
+            QgsRectangle or None: Combined bounding box
+        """
+        if not features or not QGIS_AVAILABLE:
+            return None
+        
+        bbox = QgsRectangle()
+        
+        for feature in features:
+            if feature and hasattr(feature, 'hasGeometry') and feature.hasGeometry():
+                try:
+                    geom = feature.geometry()
+                    if not geom.isEmpty():
+                        if bbox.isEmpty():
+                            bbox = geom.boundingBox()
+                        else:
+                            bbox.combineExtentWith(geom.boundingBox())
+                except Exception:
+                    pass
+        
+        return bbox if not bbox.isEmpty() else None
     
     def get_stats(self) -> Dict[str, Any]:
         """

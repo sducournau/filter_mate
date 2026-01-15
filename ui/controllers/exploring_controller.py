@@ -70,18 +70,10 @@ class ExploringController(BaseController, LayerSelectionMixin):
         self._selected_features: List[str] = []
         self._current_groupbox_mode: str = "single_selection"  # v3.1 STORY-2.3
         
-        # Cache for feature values
-        self._features_cache = features_cache
-        if self._features_cache is None:
-            try:
-                from ...infrastructure.cache import ExploringFeaturesCache
-                self._features_cache = ExploringFeaturesCache(
-                    max_layers=50,
-                    max_age_seconds=300.0
-                )
-            except ImportError:
-                self._features_cache = None
-                logger.warning("ExploringFeaturesCache not available")
+        # Cache for feature values - use dockwidget's cache to avoid desync
+        # FIX 2026-01-15: Unified cache - always use dw._exploring_cache
+        # The controller does NOT maintain its own cache to prevent regression bugs
+        self._features_cache = features_cache  # Optional override for testing only
 
     # === BaseController Implementation ===
 
@@ -165,9 +157,24 @@ class ExploringController(BaseController, LayerSelectionMixin):
 
         Args:
             layer: Layer to set as current
+            
+        FIX 2026-01-15 v7: Invalidate previous layer cache when switching layers.
+        This prevents stale data from being used when switching back to a layer.
         """
         if not self.is_layer_valid(layer):
             layer = None
+        
+        # FIX 2026-01-15 v7: Invalidate cache for OLD layer when switching
+        # This ensures fresh data is loaded when returning to this layer
+        old_layer = self._current_layer
+        if old_layer and old_layer != layer:
+            dw = getattr(self, '_dockwidget', None) or getattr(self, 'dockwidget', None)
+            if dw and hasattr(dw, '_exploring_cache'):
+                try:
+                    dw._exploring_cache.invalidate_layer(old_layer.id())
+                    logger.debug(f"set_layer: Invalidated cache for old layer {old_layer.name()}")
+                except Exception as e:
+                    logger.debug(f"set_layer: Could not invalidate old layer cache: {e}")
         
         self._current_layer = layer
         self._current_field = None
@@ -1110,7 +1117,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
         )
         from ...infrastructure.utils import CRS_UTILS_AVAILABLE, DEFAULT_METRIC_CRS
         if CRS_UTILS_AVAILABLE:
-            from ...adapters.qgis.crs_utils import is_geographic_crs, get_optimal_metric_crs
+            from ...core.geometry.crs_utils import is_geographic_crs, get_optimal_metric_crs
 
         # DIAGNOSTIC: Log incoming features
         logger.info(f"🔍 zooming_to_features DIAGNOSTIC:")
@@ -1319,18 +1326,40 @@ class ExploringController(BaseController, LayerSelectionMixin):
         return features, expression
     
     def _get_single_selection_features(self):
-        """Handle single selection feature retrieval with recovery logic."""
+        """
+        Handle single selection feature retrieval with recovery logic.
+        
+        FIX 2026-01-15 v8: ALWAYS use widget feature picker as primary source.
+        User requirement: "si pas de selection QGIS, et single selection alors 
+        feature active est la feature active du feature picker single selection 
+        (meme si pushButton_checkable_exploring_selecting est unchecked)"
+        
+        Strategy order:
+        1. ALWAYS try widget.feature() first (primary source)
+        2. If widget feature invalid, try saved FID recovery
+        3. Only if still invalid AND groupbox != single_selection, try QGIS canvas
+        4. Return empty only if no feature available
+        
+        CRITICAL: Always reload feature from layer to ensure geometry is present.
+        QgsFeaturePickerWidget.feature() often returns features without geometry.
+        """
         dw = self._dockwidget
         widget = dw.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
         input_feature = widget.feature()
         
         logger.debug(f"_get_single_selection_features: widget.feature() = {input_feature}")
         logger.debug(f"  widget.layer() = {widget.layer().name() if widget.layer() else 'None'}")
+        logger.debug(f"  current_exploring_groupbox = {dw.current_exploring_groupbox}")
+        
+        # FIX v8: For single_selection mode, widget feature picker is THE source
+        # Don't fall back to QGIS canvas - the picker IS the source
+        is_single_selection_mode = (dw.current_exploring_groupbox == "single_selection")
         
         # Check if feature is valid
         if input_feature is None or (hasattr(input_feature, 'isValid') and not input_feature.isValid()):
             logger.debug(f"  Feature is None or invalid, trying recovery...")
-            # Try recovery from saved FID
+            
+            # Strategy 1: Try recovery from saved FID (always try this first)
             if (hasattr(dw, '_last_single_selection_fid') 
                 and dw._last_single_selection_fid is not None
                 and dw.current_layer.id() == getattr(dw, '_last_single_selection_layer_id', None)):
@@ -1339,13 +1368,12 @@ class ExploringController(BaseController, LayerSelectionMixin):
                     if recovered.isValid() and recovered.hasGeometry():
                         logger.info(f"SINGLE_SELECTION: Recovered feature id={dw._last_single_selection_fid}")
                         input_feature = recovered
-                    else:
-                        return [], ''
                 except Exception as e:
-                    logger.warning(f"SINGLE_SELECTION: Recovery failed: {e}")
-                    return [], ''
-            else:
-                # Try QGIS canvas selection
+                    logger.warning(f"SINGLE_SELECTION: Recovery from saved FID failed: {e}")
+            
+            # Strategy 2: Try QGIS canvas selection ONLY if NOT in single_selection mode
+            # FIX v8: In single_selection mode, the feature picker IS the source of truth
+            if (input_feature is None or not input_feature.isValid()) and not is_single_selection_mode:
                 qgis_selected = dw.current_layer.selectedFeatures()
                 if len(qgis_selected) == 1:
                     input_feature = qgis_selected[0]
@@ -1358,18 +1386,55 @@ class ExploringController(BaseController, LayerSelectionMixin):
                     dw._last_multiple_selection_fids = [f.id() for f in qgis_selected]
                     dw._last_multiple_selection_layer_id = dw.current_layer.id()
                     return features, expression
-                else:
-                    logger.debug("SINGLE_SELECTION: No feature selected")
-                    return [], ''
+            
+            # FIX v8: If still no feature and in single_selection mode, return empty
+            # This is intentional - user needs to select a feature in the picker
+            if input_feature is None or not input_feature.isValid():
+                logger.debug(f"SINGLE_SELECTION: No feature available (single_mode={is_single_selection_mode})")
+                return [], ''
         
-        logger.info(f"SINGLE_SELECTION valid feature: id={input_feature.id()}")
+        # CRITICAL FIX v6: Always reload feature from layer to ensure geometry
+        if input_feature and input_feature.isValid():
+            try:
+                fid = input_feature.id()
+                reloaded = dw.current_layer.getFeature(fid)
+                if reloaded.isValid() and reloaded.hasGeometry():
+                    logger.info(f"SINGLE_SELECTION: Reloaded feature id={fid} with geometry")
+                    # Save FID for future recovery
+                    dw._last_single_selection_fid = fid
+                    dw._last_single_selection_layer_id = dw.current_layer.id()
+                    return [reloaded], ""
+                else:
+                    logger.warning(f"SINGLE_SELECTION: Reloaded feature {fid} has no geometry")
+                    # FIX 2026-01-15 v7: Still return feature even without geometry (for expression)
+                    dw._last_single_selection_fid = fid
+                    dw._last_single_selection_layer_id = dw.current_layer.id()
+                    return self.get_exploring_features(reloaded, True)
+            except Exception as e:
+                logger.warning(f"SINGLE_SELECTION: Could not reload feature: {e}")
+        
+        # FIX 2026-01-15 v7: If we reach here, input_feature is invalid - return empty
+        # This aligns with before_migration behavior that returned [], '' on invalid input
+        if input_feature is None or not input_feature.isValid():
+            logger.warning(f"SINGLE_SELECTION: No valid feature available - returning empty")
+            return [], ''
+        
+        logger.info(f"SINGLE_SELECTION valid feature: id={input_feature.id() if input_feature else 'None'}")
         return self.get_exploring_features(input_feature, True)
     
     def _get_multiple_selection_features(self):
-        """Handle multiple selection feature retrieval with recovery logic."""
+        """
+        Handle multiple selection feature retrieval with recovery logic.
+        
+        FIX 2026-01-15 v7: Aligned with before_migration behavior:
+        - Returns [], '' if no items found after all recovery attempts
+        - Saves FIDs for future recovery
+        """
         dw = self._dockwidget
         widget = dw.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
         input_items = widget.checkedItems()
+        
+        logger.debug(f"MULTIPLE_SELECTION: widget.checkedItems() = {len(input_items) if input_items else 0}")
         
         # Try recovery if no items
         if not input_items or len(input_items) == 0:
@@ -1392,6 +1457,20 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 dw._last_multiple_selection_fids = [f.id() for f in qgis_selected]
                 dw._last_multiple_selection_layer_id = dw.current_layer.id()
                 return features, expression
+            else:
+                # FIX 2026-01-15 v7: Return empty if no items after all recovery attempts
+                logger.debug("MULTIPLE_SELECTION: No items selected anywhere - returning empty")
+                return [], ''
+        
+        # Save FIDs for future recovery (from before_migration pattern)
+        if input_items and len(input_items) > 0:
+            try:
+                checked_fids = [item[1] for item in input_items if len(item) > 1]
+                if checked_fids:
+                    dw._last_multiple_selection_fids = checked_fids
+                    dw._last_multiple_selection_layer_id = dw.current_layer.id()
+            except (IndexError, TypeError):
+                pass
         
         logger.debug(f"MULTIPLE_SELECTION: {len(input_items) if input_items else 0} checked items")
         return self.get_exploring_features(input_items, True)
@@ -1624,14 +1703,39 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 else:
                     # CRITICAL FIX: Field names must be quoted for QgsExpression to work
                     # This applies to ALL providers (PostgreSQL, OGR, Spatialite)
-                    if pk_is_numeric is True:
-                        input_ids = [str(feat[1]) for feat in input]  
-                        expression = f'"{pk_name}" IN ({", ".join(input_ids)})'
-                    else:
-                        input_ids = [str(feat[1]) for feat in input]
-                        quoted_ids = "', '".join(input_ids)
-                        expression = f'"{pk_name}" IN (\'{quoted_ids}\')'
-                    logger.debug(f"Generated list expression for {provider_type}: {expression}")
+                    # FIX 2026-01-15 v7: Handle both tuple format and QgsFeature format
+                    try:
+                        input_ids = []
+                        for feat in input:
+                            if isinstance(feat, QgsFeature):
+                                # QgsFeature - get primary key value
+                                try:
+                                    pk_value = feat.attribute(pk_name)
+                                    if pk_value is not None:
+                                        input_ids.append(str(pk_value))
+                                except:
+                                    input_ids.append(str(feat.id()))
+                            elif isinstance(feat, (list, tuple)) and len(feat) > 1:
+                                # Tuple format: (display, pk_value, ...)
+                                input_ids.append(str(feat[1]))
+                        
+                        if not input_ids:
+                            logger.warning("get_exploring_features: No valid IDs extracted from input list")
+                            return [], None
+                            
+                        if pk_is_numeric:
+                            expression = f'"{pk_name}" IN ({", ".join(input_ids)})'
+                        else:
+                            quoted_ids = "', '".join(input_ids)
+                            expression = f'"{pk_name}" IN (\'{quoted_ids}\')'
+                        logger.debug(f"Generated list expression for {provider_type}: {expression}")
+                    except Exception as e:
+                        logger.warning(f"get_exploring_features: Error building list expression: {e}")
+                        # Fallback: return features directly if they are QgsFeature objects
+                        for feat in input:
+                            if isinstance(feat, QgsFeature):
+                                features.append(feat)
+                        return features, None
             
         if custom_expression is not None:
                 expression = custom_expression
@@ -1791,6 +1895,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
         Handle the result of get_exploring_features (sync or async).
         
         v3.1 Sprint 8: Migrated from dockwidget._handle_exploring_features_result.
+        FIX 2026-01-15 v5: Added auto-switch groupbox based on feature count.
         
         This method processes the features and expression returned by get_exploring_features,
         handling selection, tracking, and expression storage.
@@ -1808,6 +1913,29 @@ class ExploringController(BaseController, LayerSelectionMixin):
         
         if not dw.widgets_initialized or dw.current_layer is None:
             return []
+        
+        # FIX 2026-01-15 v5: Auto-switch groupbox based on feature count when is_selecting is active
+        # This ensures the correct groupbox is shown when user selects from widgets
+        feature_count = len(features)
+        current_groupbox = dw.current_exploring_groupbox
+        is_selecting_from_button = dw.pushButton_checkable_exploring_selecting.isChecked() if hasattr(dw, 'pushButton_checkable_exploring_selecting') else False
+        
+        if is_selecting_from_button and not getattr(dw, '_syncing_from_qgis', False):
+            # Auto-switch only if not syncing from QGIS (to prevent infinite loops)
+            if feature_count == 1 and current_groupbox == "multiple_selection":
+                logger.info(f"handle_exploring_features_result: Auto-switching to single_selection (1 feature from widget)")
+                try:
+                    dw._force_exploring_groupbox_exclusive("single_selection")
+                    dw._configure_single_selection_groupbox()
+                except Exception as e:
+                    logger.warning(f"Auto-switch to single_selection failed: {e}")
+            elif feature_count > 1 and current_groupbox == "single_selection":
+                logger.info(f"handle_exploring_features_result: Auto-switching to multiple_selection ({feature_count} features from widget)")
+                try:
+                    dw._force_exploring_groupbox_exclusive("multiple_selection")
+                    dw._configure_multiple_selection_groupbox()
+                except Exception as e:
+                    logger.warning(f"Auto-switch to multiple_selection failed: {e}")
         
         # Link widgets if is_linking is enabled
         if layer_props.get("exploring", {}).get("is_linking", False):
@@ -1837,15 +1965,23 @@ class ExploringController(BaseController, LayerSelectionMixin):
             return []
         
         # Sync QGIS selection when is_selecting is active
-        if layer_props.get("exploring", {}).get("is_selecting", False):
+        # FIX v4: Trust BUTTON state over PROJECT_LAYERS to handle desync
+        is_selecting_from_props = layer_props.get("exploring", {}).get("is_selecting", False)
+        is_selecting = is_selecting_from_props or is_selecting_from_button
+        
+        if is_selecting:
             if not getattr(dw, '_syncing_from_qgis', False):
                 dw.current_layer.removeSelection()
                 dw.current_layer.select([f.id() for f in features])
                 logger.debug(f"handle_exploring_features_result: Synced QGIS selection ({len(features)} features)")
         
-        # Zoom if is_tracking is active
-        if layer_props.get("exploring", {}).get("is_tracking", False):
-            logger.debug(f"handle_exploring_features_result: Tracking {len(features)} features")
+        # FIX v4: Zoom if is_tracking is active - trust BUTTON state over PROJECT_LAYERS
+        is_tracking_from_props = layer_props.get("exploring", {}).get("is_tracking", False)
+        is_tracking_from_button = dw.pushButton_checkable_exploring_tracking.isChecked() if hasattr(dw, 'pushButton_checkable_exploring_tracking') else False
+        is_tracking = is_tracking_from_props or is_tracking_from_button
+        
+        if is_tracking:
+            logger.info(f"handle_exploring_features_result: TRACKING {len(features)} features (props={is_tracking_from_props}, btn={is_tracking_from_button})")
             self.zooming_to_features(features)
         
         # Update button states
@@ -2003,9 +2139,24 @@ class ExploringController(BaseController, LayerSelectionMixin):
                         
                         try:
                             picker_widget = self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+                            # FIX 2026-01-15 v4: Save current feature to restore after rebuild
+                            current_feature = picker_widget.feature()
+                            current_fid = current_feature.id() if (current_feature and current_feature.isValid()) else None
+                            
+                            # Set display expression
                             picker_widget.setDisplayExpression(expression)
+                            # CRITICAL: For QgsFeaturePickerWidget, must call setLayer() to force rebuild
+                            picker_widget.setLayer(self._dockwidget.current_layer)
+                            
+                            # Restore feature if possible
+                            if current_fid is not None:
+                                try:
+                                    picker_widget.setFeature(current_fid)
+                                except:
+                                    pass
+                            
                             picker_widget.update()
-                            logger.debug("single_selection: Updated display expression and forced widget refresh")
+                            logger.debug("single_selection: Updated display expression with layer rebuild")
                         except Exception as e:
                             logger.warning(f"single_selection: Could not force widget refresh: {e}")
                         
@@ -2028,9 +2179,29 @@ class ExploringController(BaseController, LayerSelectionMixin):
                         
                         try:
                             picker_widget = self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
+                            
+                            # FIX 2026-01-15 v4: Save checked items before rebuild
+                            saved_checked_fids = None
+                            layer_id = self._dockwidget.current_layer.id()
+                            if hasattr(picker_widget, 'list_widgets') and layer_id in picker_widget.list_widgets:
+                                try:
+                                    saved_checked_fids = picker_widget.list_widgets[layer_id].getSelectedFeaturesList()
+                                except:
+                                    pass
+                            
                             picker_widget.setDisplayExpression(expression)
+                            # FIX v4: Call setLayer with layer_props to force full rebuild
+                            picker_widget.setLayer(self._dockwidget.current_layer, layer_props, skip_task=True)
+                            
+                            # Restore checked items
+                            if saved_checked_fids and hasattr(picker_widget, 'list_widgets') and layer_id in picker_widget.list_widgets:
+                                try:
+                                    picker_widget.list_widgets[layer_id].setSelectedFeaturesList(saved_checked_fids)
+                                except:
+                                    pass
+                            
                             picker_widget.update()
-                            logger.debug("multiple_selection: Updated display expression and forced widget refresh")
+                            logger.debug("multiple_selection: Updated display expression with layer rebuild")
                         except Exception as e:
                             logger.warning(f"multiple_selection: Could not force widget refresh: {e}")
                         
@@ -2270,6 +2441,8 @@ class ExploringController(BaseController, LayerSelectionMixin):
         Synchronizes QGIS selection with FilterMate widgets when is_selecting is active.
         If is_tracking is active, zooms to selected features.
         
+        FIX 2026-01-15 v5: Ensure selectionChanged signal stays connected for IS_TRACKING.
+        
         Args:
             selected: List of added feature IDs
             deselected: List of removed feature IDs
@@ -2279,6 +2452,14 @@ class ExploringController(BaseController, LayerSelectionMixin):
             True if handled successfully, False otherwise
         """
         try:
+            # FIX v5: Self-healing - ensure signal stays connected
+            if self._dockwidget.current_layer and not self._dockwidget.current_layer_selection_connection:
+                try:
+                    self._dockwidget.current_layer.selectionChanged.connect(self._dockwidget.on_layer_selection_changed)
+                    self._dockwidget.current_layer_selection_connection = True
+                    logger.info("handle_layer_selection_changed: Re-connected selectionChanged (self-healing)")
+                except (TypeError, RuntimeError):
+                    pass
             # Check recursion prevention flag
             if getattr(self._dockwidget, '_syncing_from_qgis', False):
                 logger.debug("handle_layer_selection_changed: Skipping (sync in progress)")
@@ -2300,45 +2481,53 @@ class ExploringController(BaseController, LayerSelectionMixin):
             is_selecting = layer_props.get("exploring", {}).get("is_selecting", False)
             is_tracking = layer_props.get("exploring", {}).get("is_tracking", False)
             
-            # Check button state vs stored state (CRITICAL for debugging desync)
+            # Check button states vs stored state (CRITICAL for debugging desync)
             btn_selecting = self._dockwidget.pushButton_checkable_exploring_selecting
-            button_checked = btn_selecting.isChecked()
+            btn_tracking = self._dockwidget.pushButton_checkable_exploring_tracking
+            selecting_button_checked = btn_selecting.isChecked()
+            tracking_button_checked = btn_tracking.isChecked()
             
-            # DIAGNOSTIC LOGGING v3
+            # DIAGNOSTIC LOGGING v4
             logger.info("=" * 60)
             logger.info("handle_layer_selection_changed TRIGGERED")
             logger.info(f"  Layer: {self._dockwidget.current_layer.name()}")
             logger.info(f"  Selected IDs: {len(selected)}, Deselected: {len(deselected)}")
-            logger.info(f"  is_selecting (from PROJECT_LAYERS): {is_selecting}")
-            logger.info(f"  is_tracking (from PROJECT_LAYERS): {is_tracking}")
+            logger.info(f"  is_selecting (PROJECT_LAYERS): {is_selecting}, Button: {selecting_button_checked}")
+            logger.info(f"  is_tracking (PROJECT_LAYERS): {is_tracking}, Button: {tracking_button_checked}")
             logger.info(f"  Current groupbox: {self._dockwidget.current_exploring_groupbox}")
-            logger.info(f"  Button IS_SELECTING.isChecked(): {button_checked}")
             
-            # FIX v3: Detect and CORRECT mismatch immediately
-            if button_checked != is_selecting:
-                logger.error(f"  ❌ STATE MISMATCH DETECTED! Button={button_checked} but PROJECT_LAYERS={is_selecting}")
-                logger.error(f"  🔧 CORRECTING NOW: Setting is_selecting={button_checked} in PROJECT_LAYERS")
-                
-                # Force correction in PROJECT_LAYERS
+            # FIX v4: Detect and CORRECT mismatch for is_selecting
+            if selecting_button_checked != is_selecting:
+                logger.warning(f"  ⚠️ IS_SELECTING mismatch! Button={selecting_button_checked} PROJECT_LAYERS={is_selecting}")
                 layer_id = self._dockwidget.current_layer.id()
                 if layer_id in self._dockwidget.PROJECT_LAYERS:
-                    self._dockwidget.PROJECT_LAYERS[layer_id]["exploring"]["is_selecting"] = button_checked
-                    is_selecting = button_checked  # Update local variable
-                    logger.info(f"  ✅ Corrected: is_selecting now = {is_selecting}")
+                    self._dockwidget.PROJECT_LAYERS[layer_id]["exploring"]["is_selecting"] = selecting_button_checked
+                    is_selecting = selecting_button_checked
+                    logger.info(f"  ✅ Corrected is_selecting to {is_selecting}")
+            
+            # FIX v4: Detect and CORRECT mismatch for is_tracking  
+            if tracking_button_checked != is_tracking:
+                logger.warning(f"  ⚠️ IS_TRACKING mismatch! Button={tracking_button_checked} PROJECT_LAYERS={is_tracking}")
+                layer_id = self._dockwidget.current_layer.id()
+                if layer_id in self._dockwidget.PROJECT_LAYERS:
+                    self._dockwidget.PROJECT_LAYERS[layer_id]["exploring"]["is_tracking"] = tracking_button_checked
+                    is_tracking = tracking_button_checked
+                    logger.info(f"  ✅ Corrected is_tracking to {is_tracking}")
             
             logger.info("=" * 60)
             
-            # FIX v3: Sync widgets if BUTTON is checked (trust button state over PROJECT_LAYERS)
-            should_sync = button_checked or is_selecting
+            # FIX v4: Sync widgets if BUTTON is checked (trust button state over PROJECT_LAYERS)
+            should_sync = selecting_button_checked or is_selecting
             
             if should_sync:
-                logger.info(f"📍 Syncing widgets (button_checked={button_checked}, is_selecting={is_selecting})")
+                logger.info(f"📍 Syncing widgets (button={selecting_button_checked}, stored={is_selecting})")
                 self._sync_widgets_from_qgis_selection()
             else:
-                logger.debug(f"Skipping sync: button_checked={button_checked}, is_selecting={is_selecting}")
+                logger.debug(f"Skipping sync: button={selecting_button_checked}, stored={is_selecting}")
             
-            # Zoom to selection when is_tracking is active
-            if is_tracking:
+            # FIX v4: Zoom to selection when is_tracking is active (trust BUTTON state)
+            # This ensures tracking works even when PROJECT_LAYERS is desynchronized
+            if is_tracking or tracking_button_checked:
                 selected_ids = self._dockwidget.current_layer.selectedFeatureIds()
                 if len(selected_ids) > 0:
                     from qgis.core import QgsFeatureRequest
@@ -2418,6 +2607,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
         Sync single selection widget with QGIS selection.
         
         v3.1 Sprint 7: Migrated from dockwidget._sync_single_selection_from_qgis.
+        FIX 2026-01-15 v6: Also save FID for recovery and update button states.
         """
         try:
             if selected_count < 1:
@@ -2431,6 +2621,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
             
             # Skip if already showing this feature
             if current_feature and current_feature.isValid() and current_feature.id() == feature_id:
+                logger.debug(f"_sync_single: Already showing feature {feature_id}")
                 return
             
             logger.info(f"Syncing single selection to feature ID {feature_id}")
@@ -2438,9 +2629,19 @@ class ExploringController(BaseController, LayerSelectionMixin):
             self._dockwidget._syncing_from_qgis = True
             try:
                 feature_picker.setFeature(feature_id)
+                
+                # FIX 2026-01-15 v6: Save FID for recovery
+                self._dockwidget._last_single_selection_fid = feature_id
+                self._dockwidget._last_single_selection_layer_id = self._dockwidget.current_layer.id()
+                
                 # FIX 2026-01-15: Force visual refresh
                 feature_picker.update()
                 feature_picker.repaint()
+                
+                # FIX 2026-01-15 v6: Update button states after sync
+                self._dockwidget._update_exploring_buttons_state()
+                
+                logger.info(f"  ✓ Single selection synced to feature {feature_id}")
             finally:
                 self._dockwidget._syncing_from_qgis = False
                 
@@ -2451,15 +2652,57 @@ class ExploringController(BaseController, LayerSelectionMixin):
         """
         Sync multiple selection widget with QGIS selection.
         
-        v3.1 Sprint 7: Delegates to UILayoutController if available.
+        FIX 2026-01-15 v4: Implement fallback when UILayoutController unavailable.
         """
-        # Delegate to UILayoutController via dockwidget
+        # Try delegation first
         if hasattr(self._dockwidget, '_controller_integration'):
             ci = self._dockwidget._controller_integration
             if ci and ci.delegate_sync_multiple_selection_from_qgis():
                 return
         
-        logger.debug("_sync_multiple_selection_from_qgis: No UILayoutController available")
+        # FIX v4: Implement fallback synchronization
+        # FIX v6: Also update button states after sync
+        logger.info(f"_sync_multiple_selection_from_qgis: Syncing {selected_count} features to widget")
+        try:
+            if selected_count == 0:
+                return
+            
+            # Get the multiple selection widget
+            multi_widget = self._dockwidget.widgets.get("EXPLORING", {}).get("MULTIPLE_SELECTION_FEATURES", {}).get("WIDGET")
+            if not multi_widget:
+                logger.warning("_sync_multiple_selection_from_qgis: Multiple selection widget not found")
+                return
+            
+            # Build the selection list from selected features
+            feature_ids = [f.id() for f in selected_features if f and f.isValid()]
+            if not feature_ids:
+                return
+            
+            # Store FIDs for recovery
+            self._dockwidget._last_multiple_selection_fids = feature_ids
+            self._dockwidget._last_multiple_selection_layer_id = self._dockwidget.current_layer.id()
+            
+            # Update the widget's checked items
+            self._dockwidget._syncing_from_qgis = True
+            try:
+                if hasattr(multi_widget, 'setCheckedFeatureIds'):
+                    multi_widget.setCheckedFeatureIds(feature_ids)
+                    logger.info(f"  ✓ Synced {len(feature_ids)} features to multiple selection widget")
+                elif hasattr(multi_widget, 'list_widgets') and self._dockwidget.current_layer.id() in multi_widget.list_widgets:
+                    # Alternative: use list_widgets
+                    list_widget = multi_widget.list_widgets[self._dockwidget.current_layer.id()]
+                    if hasattr(list_widget, 'setSelectedFeaturesList'):
+                        selection_data = [[str(fid), fid, True] for fid in feature_ids]
+                        list_widget.setSelectedFeaturesList(selection_data)
+                        logger.info(f"  ✓ Synced {len(feature_ids)} features via list_widget")
+                
+                # FIX 2026-01-15 v6: Update button states after sync
+                self._dockwidget._update_exploring_buttons_state()
+            finally:
+                self._dockwidget._syncing_from_qgis = False
+                
+        except Exception as e:
+            logger.warning(f"_sync_multiple_selection_from_qgis error: {type(e).__name__}: {e}")
 
     # === Utility ===
 
