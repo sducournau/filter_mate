@@ -15,6 +15,11 @@ from typing import Optional, Any
 
 # Import infrastructure cache
 from ....infrastructure.cache import QueryExpressionCache, get_query_cache
+from ....infrastructure.cache.cache_manager import (
+    CacheManager,
+    CacheConfig,
+    CachePolicy
+)
 
 logger = logging.getLogger('FilterMate.Tasks.ExpressionCache')
 
@@ -67,9 +72,19 @@ class ExpressionCache:
         self._max_size = max_size
         self._ttl = ttl_seconds
         
+        # Register in global CacheManager
+        cache_manager = CacheManager.get_instance()
+        cache_config = CacheConfig(
+            policy=CachePolicy.LRU,  # LRU with TTL for expressions
+            max_size=max_size,
+            ttl_seconds=ttl_seconds
+        )
+        cache_manager.register_cache("expression_task", cache_config)
+        
         logger.debug(
             f"ExpressionCache initialized "
-            f"(max_size={max_size}, ttl={ttl_seconds}s)"
+            f"(max_size={max_size}, ttl={ttl_seconds}s) "
+            f"and registered in CacheManager"
         )
     
     def get(

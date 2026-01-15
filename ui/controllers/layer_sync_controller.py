@@ -134,11 +134,11 @@ class LayerSyncController(BaseController):
         and synchronizing widgets.
 
         CRITICAL: This method implements CRIT-005 fix to prevent layer loss.
-        FIX 2026-01-14: Manual changes bypass protection windows.
+        FIX 2026-01-14: Manual changes bypass ALL protection windows.
 
         Args:
             layer: New current layer (can be None)
-            manual_change: True if user manually selected layer (bypasses protection)
+            manual_change: True if user manually selected layer (bypasses ALL protection)
 
         Returns:
             True if layer change was accepted, False if blocked
@@ -159,8 +159,8 @@ class LayerSyncController(BaseController):
         elif self._filtering_in_progress and manual_change:
             logger.info("✓ Manual layer change during filtering - allowing (user override)")
 
-        # CRITICAL: Check post-filter protection window
-        if self._is_within_post_filter_protection():
+        # CRITICAL: Check post-filter protection window - SKIP for manual changes
+        if self._is_within_post_filter_protection() and not manual_change:
             elapsed = time.time() - self._filter_completed_time
             
             # Case 1: layer=None - BLOCK to prevent auto-selection of wrong layer
@@ -189,6 +189,8 @@ class LayerSyncController(BaseController):
                 f"✓ on_current_layer_changed ALLOWED - same layer during "
                 f"protection (elapsed={elapsed:.3f}s)"
             )
+        elif self._is_within_post_filter_protection() and manual_change:
+            logger.info("✓ Manual layer change during protection window - bypassing protection")
 
         # Validate layer
         layer = self._ensure_valid_current_layer(layer)

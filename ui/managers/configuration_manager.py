@@ -647,13 +647,17 @@ class ConfigurationManager(QObject):
         }
         
         # QGIS widgets - QGIS interface integration
-        # Note: LAYER_TREE_VIEW passes manual_change=False since it's an automatic change
-        # from QGIS layer tree, not a manual user selection in FilterMate combobox
+        # FIX 2026-01-14: When AUTO_CURRENT_LAYER is enabled (user explicitly wants sync),
+        # treat LAYER_TREE_VIEW changes as "manual" to bypass protection windows.
+        # This ensures the user can switch layers via QGIS panel when auto-sync is enabled.
         widgets["QGIS"] = {
             "LAYER_TREE_VIEW": {
                 "TYPE": "LayerTreeView",
                 "WIDGET": d.iface.layerTreeView(),
-                "SIGNALS": [("currentLayerChanged", lambda layer: d.current_layer_changed(layer, manual_change=False))]
+                "SIGNALS": [("currentLayerChanged", lambda layer: d.current_layer_changed(
+                    layer, 
+                    manual_change=d.project_props.get("OPTIONS", {}).get("LAYERS", {}).get("LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG", False)
+                ))]
             }
         }
         

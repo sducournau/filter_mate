@@ -5,14 +5,322 @@ This module handles geometry preparation logic for different provider backends
 (PostgreSQL, Spatialite, OGR) during spatial filtering operations.
 
 Extracted from FilterTask as part of God Class refactoring (Phase E6-S3).
+
+Enhanced January 2026 (BMAD Optimization Priority 1):
+- Added geometry simplification and validation methods
+- Added WKT conversion utilities
+- Added buffer-aware tolerance calculations
+- Extracted from filter_task.py to reduce complexity
 """
 
+import logging
+from typing import Optional, Union, List, Tuple
+
 from qgis.core import (
-    QgsMessageLog, Qgis, QgsVectorLayer, QgsGeometry, QgsWkbTypes
+    QgsMessageLog, Qgis, QgsVectorLayer, QgsGeometry, QgsWkbTypes,
+    QgsCoordinateReferenceSystem, QgsFeature, QgsRectangle
 )
+
+logger = logging.getLogger('FilterMate.Services.GeometryPreparer')
 
 # Provider constants
 PROVIDER_POSTGRES = 'postgresql'
+
+
+# ==============================================================================
+# GEOMETRY CONVERSION UTILITIES (Extracted from filter_task.py)
+# ==============================================================================
+
+def geometry_to_wkt(geometry: QgsGeometry, crs_authid: Optional[str] = None) -> str:
+    """
+    Convert geometry to WKT with optimized precision based on CRS.
+    
+    Args:
+        geometry: QGIS geometry to convert
+        crs_authid: CRS authority ID (e.g., 'EPSG:4326')
+        
+    Returns:
+        WKT string representation
+    """
+    if geometry is None or geometry.isEmpty():
+        return ""
+    
+    precision = get_wkt_precision(crs_authid)
+    wkt = geometry.asWkt(precision)
+    logger.debug(f"WKT precision: {precision} decimals (CRS: {crs_authid})")
+    return wkt
+
+
+def get_wkt_precision(crs_authid: Optional[str]) -> int:
+    """
+    Get optimal WKT precision based on CRS type.
+    
+    Args:
+        crs_authid: CRS authority ID
+        
+    Returns:
+        Number of decimal places for WKT coordinates
+    """
+    if not crs_authid:
+        return 6  # Default precision
+    
+    # Geographic CRS: 8 decimal places (~1.1mm precision)
+    if 'EPSG:4326' in crs_authid or 'EPSG:4269' in crs_authid:
+        return 8
+    
+    # Projected CRS: 2 decimal places (cm precision)
+    return 2
+
+
+def get_buffer_aware_tolerance(
+    buffer_value: Optional[float],
+    buffer_segments: int,
+    buffer_type: int,
+    extent_size: float,
+    is_geographic: bool = False
+) -> float:
+    """
+    Calculate optimal simplification tolerance considering buffer parameters.
+    
+    Args:
+        buffer_value: Buffer distance
+        buffer_segments: Number of buffer segments
+        buffer_type: Buffer end cap style (0=round, 1=flat, 2=square)
+        extent_size: Size of geometry extent
+        is_geographic: Whether CRS is geographic
+        
+    Returns:
+        Tolerance value for simplification
+    """
+    try:
+        from .buffer_service import BufferService, BufferConfig, BufferEndCapStyle
+        config = BufferConfig(
+            distance=buffer_value or 0,
+            segments=buffer_segments,
+            end_cap_style=BufferEndCapStyle(buffer_type)
+        )
+        return BufferService().calculate_buffer_aware_tolerance(config, extent_size, is_geographic)
+    except ImportError:
+        logger.warning("BufferService not available, using basic tolerance calculation")
+        # Fallback: 0.1% of extent or 1/1000 of buffer distance
+        if buffer_value:
+            return buffer_value / 1000
+        return extent_size / 1000 if extent_size > 0 else 0.001
+
+
+def simplify_geometry_adaptive(
+    geometry: QgsGeometry,
+    max_wkt_length: Optional[int] = None,
+    crs_authid: Optional[str] = None,
+    buffer_value: Optional[float] = None,
+    buffer_segments: int = 5,
+    buffer_type: int = 0
+) -> QgsGeometry:
+    """
+    Simplify geometry adaptively to reduce WKT size while preserving shape.
+    
+    Args:
+        geometry: Geometry to simplify
+        max_wkt_length: Maximum acceptable WKT length
+        crs_authid: CRS authority ID
+        buffer_value: Buffer distance (if applicable)
+        buffer_segments: Number of buffer segments
+        buffer_type: Buffer end cap style
+        
+    Returns:
+        Simplified geometry
+    """
+    if not geometry or geometry.isEmpty():
+        return geometry
+    
+    try:
+        from ...adapters.qgis.geometry_preparation import GeometryPreparationAdapter
+        adapter = GeometryPreparationAdapter()
+        
+        result = adapter.simplify_geometry_adaptive(
+            geometry=geometry,
+            max_wkt_length=max_wkt_length,
+            crs_authid=crs_authid,
+            buffer_value=buffer_value,
+            buffer_segments=buffer_segments,
+            buffer_type=buffer_type
+        )
+        
+        if result.success and result.geometry:
+            return result.geometry
+        
+        logger.warning(f"Adaptive simplification failed: {result.message}")
+        return geometry
+        
+    except ImportError as e:
+        logger.error(f"GeometryPreparationAdapter not available: {e}")
+        return geometry
+    except Exception as e:
+        logger.error(f"Adaptive simplification error: {e}")
+        return geometry
+
+
+# ==============================================================================
+# GEOMETRY VALIDATION & REPAIR (Extracted from filter_task.py)
+# ==============================================================================
+
+def aggressive_geometry_repair(geometry: QgsGeometry) -> QgsGeometry:
+    """
+    Aggressively repair invalid geometry using multiple strategies.
+    
+    Args:
+        geometry: Geometry to repair
+        
+    Returns:
+        Repaired geometry
+    """
+    try:
+        from ..geometry import aggressive_geometry_repair as core_repair
+        return core_repair(geometry)
+    except ImportError:
+        logger.warning("core.geometry.aggressive_geometry_repair not available, using basic repair")
+        # Fallback: basic buffer(0) repair
+        if geometry and not geometry.isEmpty():
+            if not geometry.isGeosValid():
+                repaired = geometry.buffer(0, 5)
+                if repaired and not repaired.isEmpty():
+                    return repaired
+        return geometry
+
+
+def repair_invalid_geometries(
+    layer: QgsVectorLayer,
+    verify_spatial_index_fn=None
+) -> QgsVectorLayer:
+    """
+    Validate and repair all invalid geometries in layer.
+    
+    Args:
+        layer: Layer to repair
+        verify_spatial_index_fn: Optional function to verify spatial index
+        
+    Returns:
+        Layer with repaired geometries
+    """
+    try:
+        from ..geometry import repair_invalid_geometries as core_repair
+        return core_repair(
+            layer=layer,
+            verify_spatial_index_fn=verify_spatial_index_fn
+        )
+    except ImportError:
+        logger.warning("core.geometry.repair_invalid_geometries not available")
+        return layer
+
+
+# ==============================================================================
+# LAYER CONVERSION UTILITIES (Extracted from filter_task.py)
+# ==============================================================================
+
+def copy_filtered_layer_to_memory(
+    layer: QgsVectorLayer,
+    layer_name: str = "filtered_copy"
+) -> QgsVectorLayer:
+    """
+    Copy filtered layer to memory layer.
+    
+    Args:
+        layer: Source layer (with possible subset filter)
+        layer_name: Name for memory layer
+        
+    Returns:
+        Memory layer with filtered features
+    """
+    try:
+        from ...adapters.qgis.geometry_preparation import GeometryPreparationAdapter
+        result = GeometryPreparationAdapter().copy_filtered_to_memory(layer, layer_name)
+        if result.success and result.layer:
+            return result.layer
+        raise Exception(f"Failed to copy filtered layer: {result.error_message or 'Unknown'}")
+    except ImportError as e:
+        logger.error(f"GeometryPreparationAdapter not available: {e}")
+        raise
+
+
+def copy_selected_features_to_memory(
+    layer: QgsVectorLayer,
+    layer_name: str = "selected_copy"
+) -> QgsVectorLayer:
+    """
+    Copy selected features to memory layer.
+    
+    Args:
+        layer: Source layer with selection
+        layer_name: Name for memory layer
+        
+    Returns:
+        Memory layer with selected features
+    """
+    try:
+        from ...adapters.qgis.geometry_preparation import GeometryPreparationAdapter
+        result = GeometryPreparationAdapter().copy_selected_to_memory(layer, layer_name)
+        if result.success and result.layer:
+            return result.layer
+        raise Exception(f"Failed to copy selected features: {result.error_message or 'Unknown'}")
+    except ImportError as e:
+        logger.error(f"GeometryPreparationAdapter not available: {e}")
+        raise
+
+
+def create_memory_layer_from_features(
+    features: List[QgsFeature],
+    crs: QgsCoordinateReferenceSystem,
+    layer_name: str = "from_features"
+) -> Optional[QgsVectorLayer]:
+    """
+    Create memory layer from feature list.
+    
+    Args:
+        features: List of QgsFeature objects
+        crs: Coordinate reference system
+        layer_name: Name for memory layer
+        
+    Returns:
+        Memory layer or None on failure
+    """
+    try:
+        from ...adapters.qgis.geometry_preparation import GeometryPreparationAdapter
+        result = GeometryPreparationAdapter().create_memory_from_features(features, crs, layer_name)
+        if result.success and result.layer:
+            return result.layer
+        logger.error(f"Failed to create memory layer: {result.error_message or 'Unknown'}")
+        return None
+    except ImportError as e:
+        logger.error(f"GeometryPreparationAdapter not available: {e}")
+        return None
+
+
+def convert_layer_to_centroids(layer: QgsVectorLayer) -> Optional[QgsVectorLayer]:
+    """
+    Convert layer geometries to centroids.
+    
+    Args:
+        layer: Source layer
+        
+    Returns:
+        Layer with centroid geometries or None on failure
+    """
+    try:
+        from ...adapters.qgis.geometry_preparation import GeometryPreparationAdapter
+        result = GeometryPreparationAdapter().convert_to_centroids(layer)
+        if result.success and result.layer:
+            return result.layer
+        logger.error(f"Failed to convert to centroids: {result.error_message or 'Unknown'}")
+        return None
+    except ImportError as e:
+        logger.error(f"GeometryPreparationAdapter not available: {e}")
+        return None
+
+
+# ==============================================================================
+# MAIN PREPARATION FUNCTION (Original from filter_task.py)
+# ==============================================================================
+
 
 
 def prepare_geometries_by_provider(

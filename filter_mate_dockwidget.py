@@ -871,24 +871,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 S16: Create header with indicators."""
         self.frame_header = QtWidgets.QFrame(self.dockWidgetContents)
         self.frame_header.setObjectName("frame_header"); self.frame_header.setFrameShape(QtWidgets.QFrame.NoFrame)
-        self.frame_header.setFixedHeight(14)  # Reduced from 16px for more compact layout
+        self.frame_header.setFixedHeight(13)  # v4.0: Compact layout, closer to frame_exploring
         hl = QtWidgets.QHBoxLayout(self.frame_header)
-        hl.setContentsMargins(2,0,2,0); hl.setSpacing(2)
-        hl.addSpacerItem(QtWidgets.QSpacerItem(40,8,QtWidgets.QSizePolicy.Expanding,QtWidgets.QSizePolicy.Minimum))
+        hl.setContentsMargins(2,0,2,0); hl.setSpacing(3)  # v4.0: Slight spacing increase for better visual
+        hl.addSpacerItem(QtWidgets.QSpacerItem(40,6,QtWidgets.QSizePolicy.Expanding,QtWidgets.QSizePolicy.Minimum))
         self.plugin_title_label = None
-        bb = "color:white;font-size:8pt;font-weight:600;padding:1px 6px;border-radius:8px;border:none;"
-        self.favorites_indicator_label = self._create_indicator_label("label_favorites_indicator","★",bb+"background-color:#f39c12;",bb+"background-color:#d68910;","★ Favorites\nClick to manage",self._on_favorite_indicator_clicked,35)
+        # v4.0: Softer "mousse" style with rounded corners
+        bb = "color:white;font-size:8pt;font-weight:500;padding:2px 8px;border-radius:10px;border:none;"
+        # v4.0: Softer colors with better hover transitions
+        self.favorites_indicator_label = self._create_indicator_label("label_favorites_indicator","★",bb+"background-color:#f5b041;",bb+"background-color:#f39c12;","★ Favorites\nClick to manage",self._on_favorite_indicator_clicked,32)
         hl.addWidget(self.favorites_indicator_label)
-        self.backend_indicator_label = self._create_indicator_label("label_backend_indicator","OGR" if self.has_loaded_layers else "...",bb+"background-color:#3498db;",bb+"background-color:#2980b9;","Click to change backend",self._on_backend_indicator_clicked,40)
+        self.backend_indicator_label = self._create_indicator_label("label_backend_indicator","OGR" if self.has_loaded_layers else "...",bb+"background-color:#5dade2;",bb+"background-color:#3498db;","Click to change backend",self._on_backend_indicator_clicked,38)
         hl.addWidget(self.backend_indicator_label)
         self.forced_backends = {}
         if hasattr(self,'verticalLayout_8'): self.verticalLayout_8.insertWidget(0,self.frame_header)
     
     def _create_indicator_label(self, name, text, style, hover_style, tooltip, click_handler, min_width):
-        """v4.0 S16: Create indicator label."""
+        """v4.0 S16: Create indicator label with soft "mousse" style."""
         lbl = QtWidgets.QLabel(self.frame_header)
         lbl.setObjectName(name); lbl.setText(text); lbl.setStyleSheet(f"QLabel#{name}{{{style}}}QLabel#{name}:hover{{{hover_style}}}")
-        lbl.setAlignment(Qt.AlignCenter); lbl.setMinimumWidth(min_width); lbl.setFixedHeight(12)
+        lbl.setAlignment(Qt.AlignCenter); lbl.setMinimumWidth(min_width); lbl.setFixedHeight(13)  # v4.0: Slightly taller for padding
         lbl.setCursor(Qt.PointingHandCursor); lbl.setToolTip(tooltip); lbl.mousePressEvent = click_handler
         return lbl
     
@@ -1403,35 +1405,51 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         CRITICAL: These signals must be connected at startup for proper widget synchronization:
         - FILTERING.CURRENT_LAYER.layerChanged: Updates exploring widgets when current layer changes
-        - QGIS.LAYER_TREE_VIEW.currentLayerChanged: Updates when layer is selected in tree
+        
+        NOTE: QGIS.LAYER_TREE_VIEW.currentLayerChanged is NOT connected here.
+        It is managed by filtering_auto_current_layer_changed() based on AUTO_CURRENT_LAYER state.
+        
+        Signal goes through manageSignal which connects to current_layer_changed(layer, manual_change=True).
+        This triggers the full update chain:
+        - _synchronize_layer_widgets → _sync_layers_to_filter_combobox (layers_to_filter list)
+        - _reload_exploration_widgets (exploring widgets)
+        - exploring_groupbox_init (groupbox state)
         """
         if not self.widgets_initialized:
             return
         
         try:
+            # FIX 2026-01-14: Force connection by clearing cache first
+            # The signal cache can become stale and block reconnection
+            cache_key = "FILTERING.CURRENT_LAYER.layerChanged"
+            if cache_key in self._signal_connection_states:
+                logger.debug(f"Clearing stale cache for {cache_key} (was: {self._signal_connection_states[cache_key]})")
+                del self._signal_connection_states[cache_key]
+            
             # Connect comboBox_filtering_current_layer.layerChanged signal
             # This is CRITICAL for exploring widgets to update when current layer changes
             self.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
             logger.info("✓ Connected FILTERING.CURRENT_LAYER.layerChanged signal via manageSignal")
-            
-            # FIX 2026-01-14: ALSO connect directly as backup to ensure signal is definitely connected
-            # This bypasses the manageSignal caching that might skip connection
-            try:
-                combo = self.comboBox_filtering_current_layer
-                combo.layerChanged.connect(lambda layer: self._on_combo_layer_changed(layer))
-                logger.info("✓ Connected FILTERING.CURRENT_LAYER.layerChanged signal DIRECTLY (backup)")
-            except Exception as e2:
-                logger.debug(f"Direct connection failed (may already be connected): {e2}")
-                
         except Exception as e:
             logger.warning(f"Could not connect CURRENT_LAYER signal: {e}")
         
+        # FIX 2026-01-14: Connect LAYER_TREE_VIEW only if AUTO_CURRENT_LAYER is enabled
+        # This is also handled by filtering_auto_current_layer_changed() but we need to
+        # restore the state at startup based on saved project settings
         try:
-            # Connect QGIS layer tree view signal
-            self.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect', 'currentLayerChanged')
-            logger.info("✓ Connected QGIS.LAYER_TREE_VIEW.currentLayerChanged signal")
+            auto_current_layer_enabled = self.project_props.get("OPTIONS", {}).get("LAYERS", {}).get("LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG", False)
+            if auto_current_layer_enabled:
+                # Clear cache for LAYER_TREE_VIEW as well
+                cache_key = "QGIS.LAYER_TREE_VIEW.currentLayerChanged"
+                if cache_key in self._signal_connection_states:
+                    del self._signal_connection_states[cache_key]
+                
+                self.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect', 'currentLayerChanged')
+                logger.info("✓ Connected QGIS.LAYER_TREE_VIEW.currentLayerChanged signal (AUTO_CURRENT_LAYER enabled)")
+            else:
+                logger.debug("QGIS.LAYER_TREE_VIEW signal not connected (AUTO_CURRENT_LAYER disabled)")
         except Exception as e:
-            logger.warning(f"Could not connect LAYER_TREE_VIEW signal: {e}")
+            logger.warning(f"Could not check/connect LAYER_TREE_VIEW signal: {e}")
 
     def _on_combo_layer_changed(self, layer):
         """
@@ -1902,6 +1920,127 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 key = f"EXPLORING.{w}.{s_tuple[0]}"; self._signal_connection_states.pop(key, None)
                 try: self._signal_connection_states[key] = self.changeSignalState(['EXPLORING', w], s_tuple[0], s_tuple[-1], 'connect')
                 except: pass
+        
+        # FIX 2026-01-14: CRITICAL - Connect exploring buttons DIRECTLY with explicit handlers
+        # This bypasses the complex lambda/custom_functions mechanism that may fail silently
+        self._connect_exploring_buttons_directly()
+    
+    def _connect_exploring_buttons_directly(self):
+        """
+        FIX 2026-01-14 v2: Connect IS_SELECTING, IS_TRACKING, IS_LINKING buttons directly with state sync.
+        
+        This method bypasses the manageSignal/custom_functions mechanism and connects
+        the button toggled signals directly to their handlers. This ensures the handlers
+        are ALWAYS called when the buttons are toggled, fixing the regression where:
+        - IS_SELECTING toggle didn't activate the QGIS selection tool
+        - IS_TRACKING toggle didn't enable auto-zoom
+        - IS_LINKING toggle didn't synchronize expression widgets
+        
+        FIX v2: Also synchronizes initial button state with PROJECT_LAYERS to prevent
+        desynchronization between visual state and stored state.
+        """
+        # IS_SELECTING: Activate selection tool on canvas + sync features
+        btn_selecting = self.pushButton_checkable_exploring_selecting
+        try:
+            btn_selecting.toggled.disconnect()
+        except (TypeError, RuntimeError):
+            pass  # No connection to disconnect
+        
+        # FIX v2: Sync initial state from button to PROJECT_LAYERS on reconnection
+        if self.current_layer and self.widgets_initialized:
+            layer_id = self.current_layer.id()
+            if layer_id in self.PROJECT_LAYERS:
+                current_button_state = btn_selecting.isChecked()
+                stored_state = self.PROJECT_LAYERS[layer_id]["exploring"].get("is_selecting", False)
+                
+                # If mismatch detected, log warning and sync PROJECT_LAYERS to button state
+                if current_button_state != stored_state:
+                    logger.warning(f"IS_SELECTING state mismatch! Button={current_button_state}, Stored={stored_state}")
+                    self.PROJECT_LAYERS[layer_id]["exploring"]["is_selecting"] = current_button_state
+                    logger.info(f"  → Synced is_selecting to button state: {current_button_state}")
+        
+        def _on_selecting_toggled(checked):
+            """Handle IS_SELECTING toggle - activate selection tool + sync features."""
+            if not self.widgets_initialized or not self.current_layer:
+                return
+            layer_id = self.current_layer.id()
+            if layer_id in self.PROJECT_LAYERS:
+                self.PROJECT_LAYERS[layer_id]["exploring"]["is_selecting"] = checked
+                logger.info(f"IS_SELECTING state updated in PROJECT_LAYERS: {checked}")
+            if checked:
+                logger.info("IS_SELECTING ON: Calling exploring_select_features()")
+                self.exploring_select_features()
+            else:
+                logger.info("IS_SELECTING OFF: Calling exploring_deselect_features()")
+                self.exploring_deselect_features()
+        
+        btn_selecting.toggled.connect(_on_selecting_toggled)
+        logger.info("✓ Connected IS_SELECTING.toggled DIRECTLY to _on_selecting_toggled()")
+        
+        # IS_TRACKING: Enable auto-zoom on selection change
+        btn_tracking = self.pushButton_checkable_exploring_tracking
+        try:
+            btn_tracking.toggled.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+        
+        # FIX v2: Sync initial state from button to PROJECT_LAYERS
+        if self.current_layer and self.widgets_initialized:
+            layer_id = self.current_layer.id()
+            if layer_id in self.PROJECT_LAYERS:
+                current_button_state = btn_tracking.isChecked()
+                stored_state = self.PROJECT_LAYERS[layer_id]["exploring"].get("is_tracking", False)
+                if current_button_state != stored_state:
+                    logger.warning(f"IS_TRACKING state mismatch! Button={current_button_state}, Stored={stored_state}")
+                    self.PROJECT_LAYERS[layer_id]["exploring"]["is_tracking"] = current_button_state
+                    logger.info(f"  → Synced is_tracking to button state: {current_button_state}")
+        
+        def _on_tracking_toggled(checked):
+            """Handle IS_TRACKING toggle - enable auto-zoom on selection."""
+            if not self.widgets_initialized or not self.current_layer:
+                return
+            layer_id = self.current_layer.id()
+            if layer_id in self.PROJECT_LAYERS:
+                self.PROJECT_LAYERS[layer_id]["exploring"]["is_tracking"] = checked
+                logger.info(f"IS_TRACKING state updated in PROJECT_LAYERS: {checked}")
+            if checked:
+                logger.info("IS_TRACKING ON: Triggering zoom to current selection")
+                self.exploring_zoom_clicked()
+        
+        btn_tracking.toggled.connect(_on_tracking_toggled)
+        logger.info("✓ Connected IS_TRACKING.toggled DIRECTLY to _on_tracking_toggled()")
+        
+        # IS_LINKING: Synchronize single/multiple selection expressions
+        btn_linking = self.pushButton_checkable_exploring_linking_widgets
+        try:
+            btn_linking.toggled.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+        
+        # FIX v2: Sync initial state from button to PROJECT_LAYERS
+        if self.current_layer and self.widgets_initialized:
+            layer_id = self.current_layer.id()
+            if layer_id in self.PROJECT_LAYERS:
+                current_button_state = btn_linking.isChecked()
+                stored_state = self.PROJECT_LAYERS[layer_id]["exploring"].get("is_linking", False)
+                if current_button_state != stored_state:
+                    logger.warning(f"IS_LINKING state mismatch! Button={current_button_state}, Stored={stored_state}")
+                    self.PROJECT_LAYERS[layer_id]["exploring"]["is_linking"] = current_button_state
+                    logger.info(f"  → Synced is_linking to button state: {current_button_state}")
+        
+        def _on_linking_toggled(checked):
+            """Handle IS_LINKING toggle - sync single/multiple selection widgets."""
+            if not self.widgets_initialized or not self.current_layer:
+                return
+            layer_id = self.current_layer.id()
+            if layer_id in self.PROJECT_LAYERS:
+                self.PROJECT_LAYERS[layer_id]["exploring"]["is_linking"] = checked
+                logger.info(f"IS_LINKING state updated in PROJECT_LAYERS: {checked}")
+            logger.info(f"IS_LINKING {'ON' if checked else 'OFF'}: Calling exploring_link_widgets()")
+            self.exploring_link_widgets()
+        
+        btn_linking.toggled.connect(_on_linking_toggled)
+        logger.info("✓ Connected IS_LINKING.toggled DIRECTLY to _on_linking_toggled()")
 
     def manage_interactions(self):
         """v4.0 Sprint 8: Optimized - initialize widget interactions and default values."""
@@ -2319,7 +2458,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._fallback_handle_layer_selection_changed()
     
     def _fallback_handle_layer_selection_changed(self):
-        """FIX 2026-01-14: Fallback for on_layer_selection_changed when controller unavailable."""
+        """FIX 2026-01-14 v3: Fallback for on_layer_selection_changed when controller unavailable."""
         try:
             if getattr(self, '_syncing_from_qgis', False):
                 return
@@ -2332,9 +2471,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             is_selecting = layer_props.get("exploring", {}).get("is_selecting", False)
             is_tracking = layer_props.get("exploring", {}).get("is_tracking", False)
             
-            # Sync widgets when is_selecting is active
-            if is_selecting:
+            # FIX v3: Check actual button state and trust it over PROJECT_LAYERS
+            btn_selecting = self.pushButton_checkable_exploring_selecting
+            button_checked = btn_selecting.isChecked()
+            
+            if button_checked != is_selecting:
+                logger.warning(f"Fallback: State mismatch! Button={button_checked}, stored={is_selecting}")
+                # Correct PROJECT_LAYERS
+                layer_id = self.current_layer.id()
+                if layer_id in self.PROJECT_LAYERS:
+                    self.PROJECT_LAYERS[layer_id]["exploring"]["is_selecting"] = button_checked
+                    is_selecting = button_checked
+                    logger.info(f"Fallback: Corrected is_selecting to {button_checked}")
+            
+            # Sync widgets when button is checked OR is_selecting is active
+            should_sync = button_checked or is_selecting
+            if should_sync:
+                logger.info("Fallback: Syncing widgets from QGIS selection")
                 self._fallback_sync_widgets_from_qgis_selection()
+            else:
+                logger.debug(f"Fallback: Skipping sync (button={button_checked}, is_selecting={is_selecting})")
             
             # Zoom to selection when is_tracking is active
             if is_tracking:
@@ -2426,16 +2582,33 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if not (self._controller_integration and self._controller_integration.delegate_exploring_clear_selection()): self.current_layer.removeSelection()
 
     def exploring_select_features(self):
-        """v4.0 Sprint 18: Select features from active groupbox - delegates to ExploringController."""
-        if not self._is_layer_valid(): return
-        if self._controller_integration:
-            if self._controller_integration.delegate_exploring_activate_selection_tool(self.current_layer):
-                features, _ = self.get_current_features()
-                if features and self._controller_integration.delegate_exploring_select_layer_features([f.id() for f in features], self.current_layer): return
-        try: self.iface.actionSelectRectangle().trigger(); self.iface.setActiveLayer(self.current_layer)
-        except: pass
+        """
+        v4.0 Sprint 18: Activate QGIS selection tool and select features from active groupbox.
+        
+        FIX 2026-01-14: ALWAYS activate selection tool first, then sync features.
+        This ensures the selection tool is active on the canvas even if delegation fails.
+        """
+        if not self._is_layer_valid(): 
+            return
+        
+        # STEP 1: ALWAYS activate QGIS selection tool on canvas (CRITICAL)
+        # This must happen FIRST and ALWAYS, regardless of controller delegation
+        try:
+            self.iface.actionSelectRectangle().trigger()
+            self.iface.setActiveLayer(self.current_layer)
+            logger.info(f"exploring_select_features: Selection tool activated for '{self.current_layer.name()}'")
+        except Exception as e:
+            logger.warning(f"exploring_select_features: Failed to activate selection tool: {e}")
+        
+        # STEP 2: Get features from active groupbox and select them on the layer
         features, _ = self.get_current_features()
-        if features: self.current_layer.removeSelection(); self.current_layer.select([f.id() for f in features])
+        if features:
+            try:
+                self.current_layer.removeSelection()
+                self.current_layer.select([f.id() for f in features])
+                logger.debug(f"exploring_select_features: Selected {len(features)} features on layer")
+            except Exception as e:
+                logger.warning(f"exploring_select_features: Failed to select features: {e}")
 
     def exploring_features_changed(self, input=[], identify_by_primary_key_name=False, custom_expression=None, preserve_filter_if_empty=False):
         """
@@ -2711,21 +2884,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _reload_exploration_widgets(self, layer, layer_props):
         """v4.0 S18: → ExploringController with fallback."""
+        logger.info(f"_reload_exploration_widgets called for layer: {layer.name() if layer else 'None'}")
         if self._exploring_ctrl:
+            logger.debug("Delegating to ExploringController")
             self._exploring_ctrl._reload_exploration_widgets(layer, layer_props)
         else:
+            logger.warning("ExploringController NOT available - using fallback")
             # Fallback: Update exploring widgets layer when controller unavailable
             self._fallback_reload_exploration_widgets(layer, layer_props)
     
     def _fallback_reload_exploration_widgets(self, layer, layer_props):
         """FIX 2026-01-14: Fallback to update exploring widgets when controller unavailable."""
         if not self.widgets_initialized or not layer:
+            logger.warning(f"Fallback skipped: widgets_initialized={self.widgets_initialized}, layer={layer}")
             return
+        logger.info(f"=== FALLBACK _reload_exploration_widgets === layer: {layer.name()}")
         try:
             # Get expressions from layer_props
             single_expr = layer_props.get("exploring", {}).get("single_selection_expression", "")
             multiple_expr = layer_props.get("exploring", {}).get("multiple_selection_expression", "")
             custom_expr = layer_props.get("exploring", {}).get("custom_selection_expression", "")
+            logger.debug(f"Expressions: single={single_expr}, multiple={multiple_expr}, custom={custom_expr}")
             
             # Auto-initialize empty expressions with best field
             if not single_expr or not multiple_expr or not custom_expr:
@@ -2740,12 +2919,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if "SINGLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
                 widget = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
                 if widget:
+                    logger.debug(f"Updating SINGLE_SELECTION_FEATURES: old_layer={widget.layer().name() if widget.layer() else 'None'} → new_layer={layer.name()}")
                     widget.setLayer(None)  # Force refresh
                     widget.setLayer(layer)
                     widget.setDisplayExpression(single_expr)
                     widget.setFetchGeometry(True)
                     widget.setShowBrowserButtons(True)
                     widget.setAllowNull(True)
+                    logger.info(f"✓ SINGLE_SELECTION_FEATURES updated: layer={widget.layer().name() if widget.layer() else 'None'}, expr={widget.displayExpression()}")
+                else:
+                    logger.warning("SINGLE_SELECTION_FEATURES widget is None!")
             
             # Update multiple selection widget (CheckableFeatureComboBox)
             if "MULTIPLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
@@ -2765,9 +2948,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if expr_key in self.widgets.get("EXPLORING", {}):
                     widget = self.widgets["EXPLORING"][expr_key]["WIDGET"]
                     if widget and hasattr(widget, 'setLayer'):
+                        old_layer = widget.layer().name() if widget.layer() else 'None'
                         widget.setLayer(layer)
                         if hasattr(widget, 'setExpression') and expr_value:
                             widget.setExpression(expr_value)
+                        new_layer = widget.layer().name() if widget.layer() else 'None'
+                        logger.info(f"✓ {expr_key} updated: {old_layer} → {new_layer}, expr={expr_value}")
+                    else:
+                        logger.warning(f"{expr_key} widget is None or has no setLayer!")
             
             logger.debug(f"Fallback: Exploration widgets updated for layer {layer.name()}")
         except Exception as e:
@@ -2843,6 +3031,51 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if is_selecting:
             logger.debug("Fallback: is_selecting=True, initializing selection sync")
             self.exploring_select_features()
+        
+        # FIX 2026-01-14 v2: Force sync button states with PROJECT_LAYERS after reconnection
+        self._force_sync_exploring_button_states(layer_props)
+    
+    def _force_sync_exploring_button_states(self, layer_props):
+        """
+        FIX 2026-01-14 v2: Ensure button states match PROJECT_LAYERS.
+        
+        This prevents desynchronization where a button appears checked but
+        PROJECT_LAYERS["exploring"]["is_selecting"] is False (or vice versa).
+        
+        Called after reconnecting layer signals to ensure consistency.
+        """
+        if not self.current_layer or not layer_props or not self.widgets_initialized:
+            return
+        
+        exploring = layer_props.get("exploring", {})
+        layer_id = self.current_layer.id()
+        
+        # Sync IS_SELECTING button with stored state
+        btn_selecting = self.pushButton_checkable_exploring_selecting
+        stored_is_selecting = exploring.get("is_selecting", False)
+        if btn_selecting.isChecked() != stored_is_selecting:
+            logger.info(f"Force sync IS_SELECTING button: {btn_selecting.isChecked()} → {stored_is_selecting}")
+            btn_selecting.blockSignals(True)
+            btn_selecting.setChecked(stored_is_selecting)
+            btn_selecting.blockSignals(False)
+        
+        # Sync IS_TRACKING button with stored state
+        btn_tracking = self.pushButton_checkable_exploring_tracking
+        stored_is_tracking = exploring.get("is_tracking", False)
+        if btn_tracking.isChecked() != stored_is_tracking:
+            logger.info(f"Force sync IS_TRACKING button: {btn_tracking.isChecked()} → {stored_is_tracking}")
+            btn_tracking.blockSignals(True)
+            btn_tracking.setChecked(stored_is_tracking)
+            btn_tracking.blockSignals(False)
+        
+        # Sync IS_LINKING button with stored state
+        btn_linking = self.pushButton_checkable_exploring_linking_widgets
+        stored_is_linking = exploring.get("is_linking", False)
+        if btn_linking.isChecked() != stored_is_linking:
+            logger.info(f"Force sync IS_LINKING button: {btn_linking.isChecked()} → {stored_is_linking}")
+            btn_linking.blockSignals(True)
+            btn_linking.setChecked(stored_is_linking)
+            btn_linking.blockSignals(False)
     
     def _ensure_valid_current_layer(self, requested_layer):
         """v4.0 Sprint 18: Ensure valid layer - delegates to LayerSyncController."""
@@ -2884,15 +3117,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # CRITICAL FIX (2026-01-14): Delegate to controller with manual_change flag
         # Manual changes should bypass protection windows and always update widgets
-        controller_blocked = False
         if self._controller_integration:
             validation_result = self._controller_integration.delegate_current_layer_changed(layer, manual_change=manual_change)
             if validation_result is False:
-                controller_blocked = True
                 if manual_change:
+                    # Manual change bypasses protection - continue with update
                     logger.info("⚠️ Controller blocked but continuing anyway (manual user change)")
                 else:
-                    logger.info("⚠️ Controller blocked automatic layer change (protection active)")
+                    # Automatic change blocked by controller - STOP here
+                    logger.info("⚠️ Controller blocked automatic layer change (protection active) - STOPPING")
+                    return
         layer = self._ensure_valid_current_layer(layer)
         if layer is None:
             logger.debug("current_layer_changed: Layer is None after validation")
@@ -3440,6 +3674,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         v3.1 Sprint 12: Simplified - handle auto current layer toggle.
         v4.0.5: When checked, synchronizes comboBox_filtering_current_layer with iface.activeLayer()
+        FIX 2026-01-14: Clear signal cache to ensure connection/disconnection works properly.
         """
         if not self._is_ui_ready(): return
         if state is None:
@@ -3453,6 +3688,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if active_layer and isinstance(active_layer, QgsVectorLayer):
                 logger.debug(f"Auto-sync enabled: Setting current layer to {active_layer.name()}")
                 self.comboBox_filtering_current_layer.setLayer(active_layer)
+        
+        # FIX 2026-01-14: Clear signal cache before connect/disconnect to avoid stale state
+        cache_key = "QGIS.LAYER_TREE_VIEW.currentLayerChanged"
+        if cache_key in self._signal_connection_states:
+            logger.debug(f"Clearing cache for {cache_key} before {'connect' if state else 'disconnect'}")
+            del self._signal_connection_states[cache_key]
         
         self.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect' if state else 'disconnect')
         self.setProjectVariablesEvent()
@@ -3576,7 +3817,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.set_widgets_enabled_state(False)
             if self.backend_indicator_label:
                 self.backend_indicator_label.setText("...")
-                self.backend_indicator_label.setStyleSheet("QLabel#label_backend_indicator { color: #7f8c8d; font-size: 9pt; font-weight: 600; padding: 3px 10px; border-radius: 12px; border: none; background-color: #ecf0f1; }")
+                # v4.0: Soft "mousse" style for waiting state
+                self.backend_indicator_label.setStyleSheet("QLabel#label_backend_indicator { color: #7f8c8d; font-size: 8pt; font-weight: 500; padding: 2px 8px; border-radius: 10px; border: none; background-color: #f4f6f6; }")
         finally:
             self._updating_layers, self._plugin_busy = False, False
 
@@ -3683,30 +3925,31 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if backend_type == 'postgres':
             backend_type = 'postgresql'
         
-        # Backend styling configuration (same as BackendController.BACKEND_STYLES)
+        # Backend styling configuration - v4.0: Softer "mousse" colors (same as BackendController.BACKEND_STYLES)
         BACKEND_STYLES = {
-            'postgresql': {'text': 'PostgreSQL', 'color': 'white', 'background': '#27ae60'},
-            'spatialite': {'text': 'Spatialite', 'color': 'white', 'background': '#9b59b6'},
-            'ogr': {'text': 'OGR', 'color': 'white', 'background': '#3498db'},
-            'ogr_fallback': {'text': 'OGR*', 'color': 'white', 'background': '#e67e22'},
-            'unknown': {'text': '...', 'color': '#7f8c8d', 'background': '#ecf0f1'}
+            'postgresql': {'text': 'PostgreSQL', 'color': 'white', 'background': '#58d68d'},
+            'spatialite': {'text': 'Spatialite', 'color': 'white', 'background': '#bb8fce'},
+            'ogr': {'text': 'OGR', 'color': 'white', 'background': '#5dade2'},
+            'ogr_fallback': {'text': 'OGR*', 'color': 'white', 'background': '#f0b27a'},
+            'unknown': {'text': '...', 'color': '#7f8c8d', 'background': '#f4f6f6'}
         }
         
         style = BACKEND_STYLES.get(backend_type, BACKEND_STYLES['unknown'])
         self.backend_indicator_label.setText(style['text'])
         
+        # v4.0: Soft "mousse" style with smoother colors
         base_style = f"""
             QLabel#label_backend_indicator {{
                 color: {style['color']};
                 background-color: {style['background']};
-                font-size: 9pt;
-                font-weight: 600;
-                padding: 3px 10px;
-                border-radius: 12px;
+                font-size: 8pt;
+                font-weight: 500;
+                padding: 2px 8px;
+                border-radius: 10px;
                 border: none;
             }}
             QLabel#label_backend_indicator:hover {{
-                opacity: 0.85;
+                filter: brightness(1.1);
             }}
         """
         self.backend_indicator_label.setStyleSheet(base_style)

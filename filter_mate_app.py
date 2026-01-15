@@ -264,6 +264,70 @@ class FilterMateApp:
         if HEXAGONAL_AVAILABLE:
             try: _cleanup_hexagonal_services()
             except: pass
+    
+    def get_all_cache_stats(self):
+        """
+        Get statistics for all registered caches.
+        
+        Returns dictionary mapping cache names to their statistics.
+        Useful for monitoring cache performance and debugging.
+        
+        Returns:
+            dict: Cache name -> CacheStats mapping
+            
+        Example:
+            >>> stats = app.get_all_cache_stats()
+            >>> for cache_name, cache_stats in stats.items():
+            ...     print(f"{cache_name}: {cache_stats.hits} hits, {cache_stats.misses} misses")
+        """
+        try:
+            from infrastructure.cache.cache_manager import CacheManager
+            
+            manager = CacheManager.get_instance()
+            all_stats = manager.get_stats()
+            
+            logger.debug(f"Retrieved stats for {len(all_stats)} caches")
+            return all_stats
+            
+        except Exception as e:
+            logger.warning(f"Failed to get cache stats: {e}")
+            return {}
+    
+    def clear_all_caches(self):
+        """
+        Clear all registered caches.
+        
+        Useful for debugging or when memory needs to be freed.
+        All caches registered in CacheManager will be cleared.
+        
+        Returns:
+            int: Number of caches cleared
+            
+        Example:
+            >>> cleared_count = app.clear_all_caches()
+            >>> print(f"Cleared {cleared_count} caches")
+        """
+        try:
+            from infrastructure.cache.cache_manager import CacheManager
+            
+            manager = CacheManager.get_instance()
+            cleared_count = manager.clear_all_caches()
+            
+            logger.info(f"✅ Cleared {cleared_count} caches via CacheManager")
+            
+            # Also push feedback to user
+            from qgis.utils import iface
+            if iface:
+                iface.messageBar().pushSuccess(
+                    "FilterMate",
+                    f"Cleared {cleared_count} caches"
+                )
+            
+            return cleared_count
+            
+        except Exception as e:
+            logger.error(f"Failed to clear caches: {e}")
+            return 0
 
     def _cleanup_postgresql_session_views(self):
         """Clean up all PostgreSQL materialized views created by this session."""

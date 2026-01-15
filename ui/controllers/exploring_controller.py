@@ -2067,8 +2067,9 @@ class ExploringController(BaseController, LayerSelectionMixin):
             layer: The validated layer to use for widget updates
             layer_props: Layer properties dictionary
         """
+        logger.info(f"=== ExploringController._reload_exploration_widgets ENTRY === layer: {layer.name() if layer else 'None'}, widgets_initialized: {self._dockwidget.widgets_initialized}")
         if not self._dockwidget.widgets_initialized:
-            logger.debug("_reload_exploration_widgets: widgets not initialized, skipping")
+            logger.warning("_reload_exploration_widgets: widgets not initialized, skipping")
             return
         
         logger.info(f"=== _reload_exploration_widgets called for layer: {layer.name() if layer else 'None'} ===")
@@ -2219,11 +2220,11 @@ class ExploringController(BaseController, LayerSelectionMixin):
             self._dockwidget.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'connect', 'featureChanged')
             self._dockwidget.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
             self._dockwidget.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
-            # v4.0.1 CLEAN #1: Removed fieldChanged manageSignal calls to avoid duplicate connections
-            # fieldChanged signals are handled by _connect_signals() via SignalManager only
-            # self._dockwidget.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
-            # self._dockwidget.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
-            # self._dockwidget.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
+            # FIX 2026-01-14: MUST reconnect fieldChanged signals after widget layer update
+            # These signals are CRITICAL for expression widget synchronization when layer changes
+            self._dockwidget.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
+            self._dockwidget.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
+            self._dockwidget.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
             self._dockwidget.manageSignal(["EXPLORING","IDENTIFY"], 'connect', 'clicked')
             self._dockwidget.manageSignal(["EXPLORING","ZOOM"], 'connect', 'clicked')
             
@@ -2277,17 +2278,48 @@ class ExploringController(BaseController, LayerSelectionMixin):
             
             layer_props = self._dockwidget.PROJECT_LAYERS.get(self._dockwidget.current_layer.id())
             if not layer_props:
-                logger.warning(f"handle_layer_selection_changed: No layer_props for layer")
+                logger.error(f"handle_layer_selection_changed: No layer_props for layer!")
                 return False
             
             is_selecting = layer_props.get("exploring", {}).get("is_selecting", False)
             is_tracking = layer_props.get("exploring", {}).get("is_tracking", False)
             
-            logger.info(f"handle_layer_selection_changed: is_selecting={is_selecting}, is_tracking={is_tracking}")
+            # Check button state vs stored state (CRITICAL for debugging desync)
+            btn_selecting = self._dockwidget.pushButton_checkable_exploring_selecting
+            button_checked = btn_selecting.isChecked()
             
-            # Sync widgets when is_selecting is active
-            if is_selecting:
+            # DIAGNOSTIC LOGGING v3
+            logger.info("=" * 60)
+            logger.info("handle_layer_selection_changed TRIGGERED")
+            logger.info(f"  Layer: {self._dockwidget.current_layer.name()}")
+            logger.info(f"  Selected IDs: {len(selected)}, Deselected: {len(deselected)}")
+            logger.info(f"  is_selecting (from PROJECT_LAYERS): {is_selecting}")
+            logger.info(f"  is_tracking (from PROJECT_LAYERS): {is_tracking}")
+            logger.info(f"  Current groupbox: {self._dockwidget.current_exploring_groupbox}")
+            logger.info(f"  Button IS_SELECTING.isChecked(): {button_checked}")
+            
+            # FIX v3: Detect and CORRECT mismatch immediately
+            if button_checked != is_selecting:
+                logger.error(f"  ❌ STATE MISMATCH DETECTED! Button={button_checked} but PROJECT_LAYERS={is_selecting}")
+                logger.error(f"  🔧 CORRECTING NOW: Setting is_selecting={button_checked} in PROJECT_LAYERS")
+                
+                # Force correction in PROJECT_LAYERS
+                layer_id = self._dockwidget.current_layer.id()
+                if layer_id in self._dockwidget.PROJECT_LAYERS:
+                    self._dockwidget.PROJECT_LAYERS[layer_id]["exploring"]["is_selecting"] = button_checked
+                    is_selecting = button_checked  # Update local variable
+                    logger.info(f"  ✅ Corrected: is_selecting now = {is_selecting}")
+            
+            logger.info("=" * 60)
+            
+            # FIX v3: Sync widgets if BUTTON is checked (trust button state over PROJECT_LAYERS)
+            should_sync = button_checked or is_selecting
+            
+            if should_sync:
+                logger.info(f"📍 Syncing widgets (button_checked={button_checked}, is_selecting={is_selecting})")
                 self._sync_widgets_from_qgis_selection()
+            else:
+                logger.debug(f"Skipping sync: button_checked={button_checked}, is_selecting={is_selecting}")
             
             # Zoom to selection when is_tracking is active
             if is_tracking:
@@ -2313,40 +2345,54 @@ class ExploringController(BaseController, LayerSelectionMixin):
         Auto-switches groupbox based on selection count.
         """
         try:
+            logger.info("🔄 _sync_widgets_from_qgis_selection CALLED")
+            
             if not self._dockwidget.current_layer or not self._dockwidget.widgets_initialized:
+                logger.warning("  ⚠️ Aborting: layer or widgets not initialized")
                 return
             
             selected_features = self._dockwidget.current_layer.selectedFeatures()
             selected_count = len(selected_features)
+            logger.info(f"  📊 Selected features count: {selected_count}")
             
             layer_props = self._dockwidget.PROJECT_LAYERS.get(self._dockwidget.current_layer.id())
             if not layer_props:
+                logger.warning("  ⚠️ Aborting: No layer_props found")
                 return
             
             current_groupbox = self._dockwidget.current_exploring_groupbox
+            logger.info(f"  📦 Current groupbox: {current_groupbox}")
             
             # Auto-switch groupbox based on selection count
             if selected_count == 1 and current_groupbox == "multiple_selection":
-                logger.info("Auto-switching to single_selection groupbox (1 feature)")
+                logger.info("  🔀 Auto-switching to single_selection groupbox (1 feature)")
                 self._dockwidget._syncing_from_qgis = True
                 try:
                     self._dockwidget._force_exploring_groupbox_exclusive("single_selection")
                     self._dockwidget._configure_single_selection_groupbox()
+                    logger.info("  ✅ Switched to single_selection")
                 finally:
                     self._dockwidget._syncing_from_qgis = False
                     
             elif selected_count > 1 and current_groupbox == "single_selection":
-                logger.info(f"Auto-switching to multiple_selection groupbox ({selected_count} features)")
+                logger.info(f"  🔀 Auto-switching to multiple_selection groupbox ({selected_count} features)")
                 self._dockwidget._syncing_from_qgis = True
                 try:
                     self._dockwidget._force_exploring_groupbox_exclusive("multiple_selection")
                     self._dockwidget._configure_multiple_selection_groupbox()
+                    logger.info("  ✅ Switched to multiple_selection")
                 finally:
                     self._dockwidget._syncing_from_qgis = False
+            else:
+                logger.info(f"  ℹ️ No groupbox switch needed (count={selected_count}, current={current_groupbox})")
             
             # Sync both widgets
+            logger.info("  🔧 Syncing single selection widget...")
             self._sync_single_selection_from_qgis(selected_features, selected_count)
+            logger.info("  🔧 Syncing multiple selection widget...")
             self._sync_multiple_selection_from_qgis(selected_features, selected_count)
+            
+            logger.info("  ✅ _sync_widgets_from_qgis_selection COMPLETED")
             
         except Exception as e:
             logger.warning(f"Error in _sync_widgets_from_qgis_selection: {type(e).__name__}: {e}")

@@ -22,37 +22,37 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-# Backend display configuration
+# Backend display configuration - v4.0: Softer "mousse" colors
 BACKEND_CONFIG = {
     'postgresql': {
         'name': 'PostgreSQL',
         'icon': '🐘',
-        'color': '#27ae60',
-        'hover_color': '#1e8449',
+        'color': '#58d68d',  # Softer green
+        'hover_color': '#27ae60',
     },
     'spatialite': {
         'name': 'Spatialite',
         'icon': '💾',
-        'color': '#9b59b6',
-        'hover_color': '#7d3c98',
+        'color': '#bb8fce',  # Softer purple
+        'hover_color': '#9b59b6',
     },
     'ogr': {
         'name': 'OGR',
         'icon': '📁',
-        'color': '#3498db',
-        'hover_color': '#2980b9',
+        'color': '#5dade2',  # Softer blue
+        'hover_color': '#3498db',
     },
     'memory': {
         'name': 'Memory',
         'icon': '💭',
-        'color': '#e67e22',
-        'hover_color': '#d35400',
+        'color': '#f0b27a',  # Softer orange
+        'hover_color': '#e67e22',
     },
     'unknown': {
         'name': 'Unknown',
         'icon': '❓',
-        'color': '#95a5a6',
-        'hover_color': '#7f8c8d',
+        'color': '#aab7b8',  # Softer gray
+        'hover_color': '#95a5a6',
     },
 }
 
@@ -257,18 +257,19 @@ class BackendIndicatorWidget(QLabel if HAS_QGIS else object):
         self.setText("...")
         self.setToolTip("Click to reload layers")
         
+        # v4.0: Soft "mousse" style with rounded corners
         style = """
             QLabel#label_backend_indicator {
                 color: white;
-                font-size: 9pt;
-                font-weight: 600;
-                padding: 3px 10px;
-                border-radius: 12px;
+                font-size: 8pt;
+                font-weight: 500;
+                padding: 2px 8px;
+                border-radius: 10px;
                 border: none;
-                background-color: #95a5a6;
+                background-color: #aab7b8;
             }
             QLabel#label_backend_indicator:hover {
-                background-color: #7f8c8d;
+                background-color: #95a5a6;
             }
         """
         self.setStyleSheet(style)
@@ -294,13 +295,14 @@ class BackendIndicatorWidget(QLabel if HAS_QGIS else object):
             f"Click to change backend"
         )
         
+        # v4.0: Soft "mousse" style with smoother appearance
         style = f"""
             QLabel#label_backend_indicator {{
                 color: white;
-                font-size: 9pt;
-                font-weight: 600;
-                padding: 3px 10px;
-                border-radius: 12px;
+                font-size: 8pt;
+                font-weight: 500;
+                padding: 2px 8px;
+                border-radius: 10px;
                 border: none;
                 background-color: {config['color']};
             }}

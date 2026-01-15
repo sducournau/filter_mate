@@ -93,9 +93,10 @@ class UILayoutController(BaseController):
         Migrated from filter_mate_dockwidget._sync_multiple_selection_from_qgis.
         
         v4.0 Sprint 4: Full migration from dockwidget.
+        FIX 2026-01-14: Complete rewrite to match before_migration implementation.
         
         When QGIS layer selection changes, update the FilterMate multiple
-        selection widget to reflect the same selection.
+        selection widget to reflect the same selection (CHECK/UNCHECK items).
         
         Returns:
             True if sync completed, False otherwise
@@ -111,12 +112,6 @@ class UILayoutController(BaseController):
         if current_layer is None:
             return False
         
-        # Guard: check if we're in multiple_selection mode
-        current_groupbox = getattr(dw, 'current_exploring_groupbox', None)
-        if current_groupbox != 'multiple_selection':
-            logger.debug("sync_multiple_selection_from_qgis: not in multiple_selection mode")
-            return False
-        
         # Get the multiple selection widget
         widgets = getattr(dw, 'widgets', {})
         multi_widget = widgets.get("EXPLORING", {}).get(
@@ -127,28 +122,76 @@ class UILayoutController(BaseController):
             logger.warning("sync_multiple_selection_from_qgis: widget not found")
             return False
         
+        # FIX 2026-01-14: Use list_widgets API like before_migration
+        if not hasattr(multi_widget, 'list_widgets'):
+            logger.debug("sync_multiple_selection_from_qgis: No list_widgets attribute")
+            return False
+        
+        layer_id = current_layer.id()
+        if layer_id not in multi_widget.list_widgets:
+            logger.debug(f"sync_multiple_selection_from_qgis: Layer {layer_id} not in list_widgets")
+            return False
+        
+        list_widget = multi_widget.list_widgets[layer_id]
+        
+        # Get layer properties to find primary key field
+        project_layers = getattr(dw, 'PROJECT_LAYERS', {})
+        layer_props = project_layers.get(layer_id, {})
+        pk_field_name = layer_props.get("infos", {}).get("primary_key_name", None)
+        
+        if not pk_field_name:
+            logger.warning("sync_multiple_selection_from_qgis: No primary_key_name found")
+            return False
+        
+        # Get widget's identifier field for comparison
+        widget_identifier_field = list_widget.getIdentifierFieldName() if hasattr(list_widget, 'getIdentifierFieldName') else None
+        effective_pk_field = widget_identifier_field if widget_identifier_field else pk_field_name
+        
         # Get selected features from QGIS
         selected_features = current_layer.selectedFeatures()
         
-        if not selected_features:
-            logger.debug("sync_multiple_selection_from_qgis: no features selected")
-            return False
+        # Extract PRIMARY KEY VALUES (not feature IDs!) from selected features
+        selected_pk_values = set()
+        for f in selected_features:
+            try:
+                pk_value = f[effective_pk_field]
+                selected_pk_values.add(str(pk_value) if pk_value is not None else pk_value)
+            except (KeyError, IndexError) as e:
+                logger.debug(f"Could not get field '{effective_pk_field}' from feature: {e}")
+                selected_pk_values.add(str(f.id()))
         
-        # Extract feature IDs
-        selected_fids = [f.id() for f in selected_features]
+        logger.debug(f"sync_multiple_selection_from_qgis: {len(selected_pk_values)} pk values to sync")
         
-        # Block signals to prevent circular updates
-        multi_widget.blockSignals(True)
+        # Set sync flag to prevent infinite recursion
+        dw._syncing_from_qgis = True
         
         try:
-            # Set selected features in widget
-            if hasattr(multi_widget, 'setSelectedFeatures'):
-                multi_widget.setSelectedFeatures(selected_fids)
-            elif hasattr(multi_widget, 'setCheckedItems'):
-                # Alternative: set checked items
-                multi_widget.setCheckedItems(selected_fids)
+            checked_count = 0
+            unchecked_count = 0
             
-            logger.debug(f"sync_multiple_selection_from_qgis: synced {len(selected_fids)} features")
+            for i in range(list_widget.count()):
+                item = list_widget.item(i)
+                item_pk_value = item.data(3)  # data(3) = PRIMARY KEY value
+                item_pk_str = str(item_pk_value) if item_pk_value is not None else item_pk_value
+                
+                if item_pk_str in selected_pk_values:
+                    # CHECK features selected in QGIS
+                    if item.checkState() != Qt.Checked:
+                        item.setCheckState(Qt.Checked)
+                        checked_count += 1
+                else:
+                    # UNCHECK features NOT selected in QGIS
+                    if item.checkState() == Qt.Checked:
+                        item.setCheckState(Qt.Unchecked)
+                        unchecked_count += 1
+            
+            logger.info(f"sync_multiple_selection_from_qgis: checked={checked_count}, unchecked={unchecked_count}")
+            
+            # Update widget display if changes were made
+            if checked_count > 0 or unchecked_count > 0:
+                if hasattr(multi_widget, 'updateCheckedItemsLabel'):
+                    multi_widget.updateCheckedItemsLabel()
+            
             return True
             
         except Exception as e:
@@ -156,8 +199,8 @@ class UILayoutController(BaseController):
             return False
             
         finally:
-            # Always restore signals
-            multi_widget.blockSignals(False)
+            # Always restore sync flag
+            dw._syncing_from_qgis = False
     
     def align_key_layouts(self) -> bool:
         """

@@ -24,54 +24,54 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# Backend display configuration
+# Backend display configuration - v4.0: Softer "mousse" colors
 BACKEND_STYLES = {
     'postgresql': {
         'text': 'PostgreSQL',
         'color': 'white',
-        'background': '#27ae60',  # Green
+        'background': '#58d68d',  # Softer green
         'icon': '🐘',
         'tooltip': 'Backend: PostgreSQL (High Performance)'
     },
     'spatialite': {
         'text': 'Spatialite',
         'color': 'white',
-        'background': '#9b59b6',  # Purple
+        'background': '#bb8fce',  # Softer purple
         'icon': '💾',
         'tooltip': 'Backend: Spatialite (Good Performance)'
     },
     'spatialite_fallback': {
         'text': 'Spatialite*',
         'color': 'white',
-        'background': '#8e44ad',  # Dark purple
+        'background': '#a569bd',  # Softer dark purple
         'icon': '💾',
         'tooltip': 'Backend: Spatialite → OGR fallback\n(Complex geometry handled by OGR)'
     },
     'ogr': {
         'text': 'OGR',
         'color': 'white',
-        'background': '#3498db',  # Blue
+        'background': '#5dade2',  # Softer blue
         'icon': '📁',
         'tooltip': 'Backend: OGR (Universal)'
     },
     'ogr_fallback': {
         'text': 'OGR*',
         'color': 'white',
-        'background': '#e67e22',  # Orange
+        'background': '#f0b27a',  # Softer orange
         'icon': '📁',
         'tooltip': 'Backend: OGR (Fallback - Connection unavailable)'
     },
     'postgresql_fallback': {
         'text': 'PostgreSQL*',
         'color': 'white',
-        'background': '#1e8449',  # Dark green
+        'background': '#45b39d',  # Softer teal green
         'icon': '🐘',
         'tooltip': 'Backend: PostgreSQL → OGR fallback'
     },
     'unknown': {
         'text': '...',
         'color': '#7f8c8d',
-        'background': '#ecf0f1',
+        'background': '#f4f6f6',  # Softer light gray
         'icon': '❓',
         'tooltip': 'Backend: Unknown'
     }
@@ -585,19 +585,19 @@ class BackendController(BaseController):
 
         self._indicator_label.setText(text)
 
-        # Build stylesheet
+        # Build stylesheet - v4.0: Soft "mousse" style with smoother appearance
         stylesheet = f"""
             QLabel#label_backend_indicator {{
                 color: {style['color']};
                 background-color: {style['background']};
-                font-size: 9pt;
-                font-weight: 600;
-                padding: 3px 10px;
-                border-radius: 12px;
+                font-size: 8pt;
+                font-weight: 500;
+                padding: 2px 8px;
+                border-radius: 10px;
                 border: none;
             }}
             QLabel#label_backend_indicator:hover {{
-                opacity: 0.85;
+                filter: brightness(1.1);
             }}
         """
         self._indicator_label.setStyleSheet(stylesheet)
