@@ -15,6 +15,65 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+class LayerHistory:
+    """
+    Per-layer history wrapper for backward compatibility with old HistoryManager API.
+    
+    This class provides the old FilterHistory-like interface while delegating
+    to the global HistoryService. It's used by undo_redo_handler.py which expects
+    the old per-layer API.
+    """
+    
+    def __init__(self, layer_id: str, parent_service: 'HistoryService'):
+        """
+        Initialize per-layer history wrapper.
+        
+        Args:
+            layer_id: Layer ID this wrapper represents
+            parent_service: Parent HistoryService instance
+        """
+        self.layer_id = layer_id
+        self._parent = parent_service
+        self._states = []  # Simulated per-layer states for compatibility
+    
+    def push_state(self, expression: str, feature_count: int, 
+                   description: str = "", metadata: Optional[Dict] = None):
+        """
+        Push a filter state for this layer (compatibility method).
+        
+        This creates a HistoryEntry and pushes it to the parent service.
+        
+        Args:
+            expression: Filter expression
+            feature_count: Feature count (stored in metadata)
+            description: Optional description
+            metadata: Optional metadata
+        """
+        # Build metadata with feature count
+        full_metadata = metadata or {}
+        full_metadata['feature_count'] = feature_count
+        
+        # Create history entry
+        entry = HistoryEntry.create(
+            expression=expression,
+            layer_ids=[self.layer_id],
+            previous_filters=[],  # Will be filled by caller if needed
+            description=description or f"Filter on layer {self.layer_id}",
+            metadata=full_metadata
+        )
+        
+        # Add to simulated per-layer states
+        self._states.append({
+            'expression': expression,
+            'feature_count': feature_count,
+            'description': description,
+            'timestamp': entry.timestamp,
+            'metadata': full_metadata
+        })
+        
+        logger.debug(f"LayerHistory: Pushed state for layer {self.layer_id}")
+
+
 @dataclass(frozen=True)
 class HistoryEntry:
     """
@@ -190,6 +249,9 @@ class HistoryService:
         self._max_depth = max_depth
         self._on_change = on_change
         self._is_performing_undo_redo = False
+        
+        # Per-layer history wrappers (for backward compatibility)
+        self._layer_histories: Dict[str, LayerHistory] = {}
 
     def push(self, entry: HistoryEntry) -> None:
         """
@@ -353,6 +415,24 @@ class HistoryService:
             if layer_id in entry.layer_ids:
                 entries.append(entry)
         return entries
+    
+    def get_or_create_history(self, layer_id: str) -> LayerHistory:
+        """
+        Get or create per-layer history wrapper (backward compatibility).
+        
+        This method provides compatibility with the old HistoryManager API
+        that returned FilterHistory objects per layer.
+        
+        Args:
+            layer_id: Layer ID
+            
+        Returns:
+            LayerHistory wrapper for this layer
+        """
+        if layer_id not in self._layer_histories:
+            self._layer_histories[layer_id] = LayerHistory(layer_id, self)
+            logger.debug(f"Created LayerHistory wrapper for layer {layer_id}")
+        return self._layer_histories[layer_id]
 
     def clear(self) -> int:
         """
