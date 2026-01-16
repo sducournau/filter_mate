@@ -1,6 +1,6 @@
 # FilterMate - Coding Standard: Error Handling and Silent Failures
 
-**Version:** 4.0.6  
+**Version:** 4.0.7  
 **Date:** 2026-01-16  
 **Status:** ✅ ENFORCED
 
@@ -38,6 +38,64 @@ except:
 - ✗ Silent data corruption
 - ✗ UI appears normal but is broken
 - ✗ Violates "fail fast" principle
+
+---
+
+## ✅ ACCEPTABLE: Signal Disconnect Patterns
+
+**Certain patterns are ACCEPTABLE because the failure is EXPECTED and harmless.**
+
+### ✅ Signal Disconnections (P4 Documented Patterns)
+
+```python
+# ✅ ACCEPTABLE - Signal may not be connected yet
+try:
+    signal.disconnect()
+except TypeError:  # Signal not connected yet - expected on first setup
+    pass
+
+# ✅ ACCEPTABLE - Widget/object may be deleted
+try:
+    signal.disconnect()
+except RuntimeError:  # Object may be deleted - expected during cleanup
+    pass
+
+# ✅ ACCEPTABLE - Cleanup during shutdown
+try:
+    self._controller_integration.teardown()
+except Exception:  # Controller may already be torn down - expected
+    pass
+
+# ✅ ACCEPTABLE - Cosmetic tooltip updates
+try:
+    widget.setToolTip(compute_tooltip())
+except Exception:  # Tooltip update is cosmetic - non-critical
+    pass
+
+# ✅ ACCEPTABLE - Widget may be deleted during close
+try:
+    widget.setLayer(None)
+except RuntimeError:  # Widget may already be deleted - expected during shutdown
+    pass
+```
+
+**Why these are acceptable:**
+- ✓ Failure is EXPECTED (not a bug)
+- ✓ Comment explains WHY it's acceptable
+- ✓ No data corruption risk
+- ✓ UI continues to function correctly
+
+### ⚠️ RULE: Always Add Explanatory Comment
+
+```python
+# ✅ GOOD - Comment explains why pass is acceptable
+except TypeError:  # Signal not connected yet - expected on first setup
+    pass
+
+# ❌ BAD - No explanation
+except TypeError:
+    pass
+```
 
 ---
 

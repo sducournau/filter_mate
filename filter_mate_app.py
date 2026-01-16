@@ -263,7 +263,7 @@ class FilterMateApp:
         self.PROJECT_LAYERS.clear(); self.project_datasources.clear()
         if HEXAGONAL_AVAILABLE:
             try: _cleanup_hexagonal_services()
-            except: pass
+            except Exception as e: logger.debug(f"Hexagonal services cleanup (expected during shutdown): {e}")
     
     def get_all_cache_stats(self):
         """
@@ -1185,7 +1185,8 @@ class FilterMateApp:
             self.dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'disconnect')
             self.dockwidget.comboBox_filtering_current_layer.blockSignals(True)
             self.dockwidget.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'disconnect')
-        except: pass
+        except Exception:  # Signal may already be disconnected - expected during filtering protection
+            pass
     
     def _show_filter_start_message(self, task_name, task_parameters, layers_props, layers, current_layer):
         """Show informational message about filtering operation starting."""
@@ -1424,7 +1425,7 @@ class FilterMateApp:
             if layers_info:
                 warmed = warm_cache_for_project(layers_info, ['equals', 'intersects', 'contains', 'within'])
                 if warmed > 0: logger.debug(f"Pre-warmed {warmed} cache entries for {len(layers_info)} layers")
-        except: pass
+        except Exception as e: logger.debug(f"Cache warmup skipped (optional): {e}")
 
     def _is_dockwidget_ready_for_filtering(self):
         """Check if dockwidget is fully ready for filtering."""
@@ -2192,7 +2193,8 @@ class FilterMateApp:
         if validate_postgres:
             try:
                 try: self.PROJECT.fileNameChanged.disconnect()
-                except: pass
+                except TypeError:  # Signal not connected - expected on first project load
+                    pass
                 self.PROJECT.fileNameChanged.connect(lambda: self.save_project_variables())
                 logger.info("PROJECT signals reconnected")
             except Exception as e: logger.warning(f"Error reconnecting signals: {e}")
@@ -2204,7 +2206,7 @@ class FilterMateApp:
         try:
             if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
                 self.dockwidget.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
-        except: pass
+        except Exception as e: logger.debug(f"ComboBox filter setup (non-critical): {e}")
         
         # Trigger layer change with active or first layer
         active = self.iface.activeLayer()

@@ -126,20 +126,33 @@ class ExpressionBuilder:
         try:
             backend_name = backend.get_backend_name()
             
-            # DIAGNOSTIC LOGS 2026-01-15: Trace expression building
-            logger.info(f"📝 build_backend_expression called:")
+            # DIAGNOSTIC LOGS 2026-01-16: ULTRA-DETAILED TRACE for source_filter debugging
+            logger.info("=" * 80)
+            logger.info("📝 ExpressionBuilder.build_backend_expression CALLED")
+            logger.info("=" * 80)
             logger.info(f"   backend_name: {backend_name}")
             logger.info(f"   current_predicates: {self.current_predicates}")
             logger.info(f"   source_geom type: {type(source_geom).__name__}")
             if hasattr(source_geom, 'name'):
                 logger.info(f"   source_geom name: {source_geom.name()}")
-            logger.info(f"   layer_props: {layer_props}")
+            logger.info(f"   layer_props keys: {list(layer_props.keys())}")
+            logger.info(f"   task_parameters['task'].get('features'): {len(self.task_parameters.get('task', {}).get('features', []))} features")
             
             # ==========================================
             # 1. PREPARE SOURCE FILTER
             # ==========================================
+            logger.info("=" * 80)
+            logger.info("🔍 STEP 1: Calling _prepare_source_filter()...")
+            logger.info("=" * 80)
             source_filter = self._prepare_source_filter(backend_name)
-            logger.info(f"   source_filter: {source_filter}")
+            logger.info("=" * 80)
+            logger.info(f"✅ source_filter RESULT: {source_filter}")
+            if source_filter:
+                logger.info(f"   Length: {len(source_filter)} chars")
+                logger.info(f"   Preview: {source_filter[:200]}...")
+            else:
+                logger.warning("   ⚠️ source_filter is NULL/EMPTY - EXISTS will query entire source table!")
+            logger.info("=" * 80)
             
             # ==========================================
             # 2. BUILD EXPRESSION VIA BACKEND
@@ -228,14 +241,21 @@ class ExpressionBuilder:
         Returns:
             Optional[str]: Source filter SQL or None
         """
+        logger.info("   🔍 _prepare_source_filter() ENTERED")
+        logger.info(f"      backend_name: {backend_name}")
+        
         source_filter = None
         
         # PostgreSQL EXISTS mode needs source filter
         if backend_name != 'PostgreSQL':
+            logger.info(f"      ↩️ Returning None - backend '{backend_name}' doesn't need source_filter")
             return None
+        
+        logger.info("      ✓ PostgreSQL backend detected - preparing source_filter...")
         
         # Get source layer's existing subset string
         source_subset = self.source_layer.subsetString() if self.source_layer else None
+        logger.info(f"      Source layer subset: {source_subset[:100] if source_subset else 'None'}...")
         
         # Check if source_subset contains patterns that would be skipped
         skip_source_subset = False
@@ -261,6 +281,15 @@ class ExpressionBuilder:
         
         # Check for task_features (user's selection) FIRST
         task_features = self.task_parameters.get("task", {}).get("features", [])
+        logger.info(f"      📋 task_features check:")
+        logger.info(f"         Count: {len(task_features)} features")
+        if task_features:
+            if hasattr(task_features[0], 'id'):
+                logger.info(f"         First feature ID: {task_features[0].id()}")
+            logger.info(f"         ✓ User has SELECTED features - will use for source_filter")
+        else:
+            logger.info(f"         ⚠️ No task_features - will try source_subset instead")
+        
         use_task_features = task_features and len(task_features) > 0
         
         if use_task_features:

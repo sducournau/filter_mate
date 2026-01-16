@@ -77,12 +77,16 @@ class StylerBase(ABC):
         """
     
     @abstractmethod
-    def apply(self) -> None:
+    def apply(self) -> bool:
         """
         Apply current styling.
         
         Called to (re)apply styling to managed widgets.
         Should be idempotent.
+        
+        Returns:
+            bool: True if styling applied successfully, False otherwise.
+                  Implementations MUST log errors before returning False.
         """
     
     @abstractmethod

@@ -315,11 +315,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             for name, cls in [('_splitter_manager', SplitterManager), ('_dimensions_manager', DimensionsManager),
                               ('_spacing_manager', SpacingManager), ('_action_bar_manager', ActionBarManager)]:
                 try: setattr(self, name, cls(self) if cls else None)
-                except: pass
+                except Exception as e: logger.debug(f"Layout manager {name} init skipped: {e}")
         self._theme_manager = self._icon_manager = self._button_styler = None
         if STYLE_MANAGERS_AVAILABLE:
             try: self._theme_manager, self._icon_manager, self._button_styler = ThemeManager(self), IconManager(self), ButtonStyler(self)
-            except: pass
+            except Exception as e: logger.warning(f"Style managers init failed: {e}")
         
         # Controllers - v4.0 Sprint 16: MVC Controllers via ControllerIntegration
         logger.debug("_initialize_layer_state: Initializing controllers")
@@ -363,7 +363,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.pending_config_changes, self.config_changes_pending = [], False
         if ICON_THEME_AVAILABLE:
             try: IconThemeManager.set_theme(StyleLoader.detect_qgis_theme())
-            except: pass
+            except Exception as e: logger.debug(f"IconThemeManager init (non-critical): {e}")
         self.setupUi(self)
         self.setupUiCustom()
         self.manage_ui_style()
@@ -460,14 +460,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 layout.removeWidget(item.widget()); item.widget().deleteLater()
             if hasattr(self, 'checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection') and self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection:
                 try: self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.reset(); self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.close(); self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.deleteLater()
-                except (RuntimeError, AttributeError): pass
+                except (RuntimeError, AttributeError):  # Widget may already be deleted - expected during cleanup
+                    pass
             # Recreate the widget
             self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self.CONFIG_DATA, self)
             if self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection:
                 layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, 1); layout.update()
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"] = {"TYPE": "CustomCheckableFeatureComboBox", "WIDGET": self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection,
                     "SIGNALS": [("updatingCheckedItemList", self.exploring_features_changed), ("filteringCheckedItemList", self.exploring_source_params_changed)]}
-        except Exception: pass
+        except Exception as e: logger.warning(f"reset_multiple_checkable_combobox failed: {e}")
 
     def _fix_toolbox_icons(self):
         """v4.0 S18: Fix toolBox_tabTools icons with absolute paths."""
@@ -1667,13 +1668,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if groupbox in ("single_selection", "multiple_selection"): self._last_expression_change_source = groupbox
             if groupbox == "single_selection":
                 try: self.mFeaturePickerWidget_exploring_single_selection.update()
-                except Exception: pass
+                except Exception:  # Widget may not be ready - expected during initialization
+                    pass
             elif groupbox == "multiple_selection":
                 try:
                     w = self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection
                     if w and hasattr(w, 'list_widgets') and self.current_layer and self.current_layer.id() in w.list_widgets:
                         w.list_widgets[self.current_layer.id()].viewport().update()
-                except Exception: pass
+                except Exception:  # Widget may not be ready - expected during initialization
+                    pass
             self.exploring_source_params_changed(groupbox_override=groupbox, change_source=groupbox)
         finally:
             self._set_expression_loading_state(False, groupbox)
@@ -1688,7 +1691,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if groupbox in ("custom_selection", None): widgets.append(self.mFieldExpressionWidget_exploring_custom_selection)
             for w in widgets:
                 if w and hasattr(w, 'setCursor'): w.setCursor(cursor)
-        except Exception: pass
+        except Exception:  # Cursor change is cosmetic - non-critical
+            pass
     
     def _get_cached_expression_result(self, layer_id: str, expression: str):
         """v4.0 Sprint 16: Get cached expression result (includes subsetString for multi-step filtering)."""
@@ -1793,7 +1797,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         if self.current_layer and not self.current_layer_selection_connection:
             try: self.current_layer.selectionChanged.connect(self.on_layer_selection_changed); self.current_layer_selection_connection = True
-            except: pass
+            except Exception:  # Signal may already be connected - expected
+                pass
         self.widgetsInitialized.emit(); self._setup_keyboard_shortcuts()
         if self._pending_layers_update:
             self._pending_layers_update = False; pl, pr, weak_self = self.PROJECT_LAYERS, self.PROJECT, weakref.ref(self)
@@ -2668,7 +2673,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     wi = self.widgets[wg][wn]
                     if wi.get("TYPE") != "PushButton": continue
                     if (ip := wi.get("ICON") or wi.get("ICON_ON_FALSE")) and os.path.exists(ip): wi.get("WIDGET").setIcon(get_themed_icon(ip)); wi.get("WIDGET").setProperty('icon_path', ip)
-        except: pass
+        except Exception as e: logger.debug(f"refresh_button_icons cosmetic update: {e}")
 
     def set_widgets_enabled_state(self, state):
         """
@@ -2711,7 +2716,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         for grp in [g for g in self.widgets if g != 'QGIS']:
             for w in self.widgets[grp]:
                 try: self.manageSignal([grp, w], 'connect')
-                except: pass
+                except Exception:  # Signal may already be connected - expected
+                    pass
 
     def disconnect_widgets_signals(self):
         """v4.0 Sprint 7: Ultra-simplified - safely disconnect all widget signals."""
@@ -2719,7 +2725,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         for grp in [g for g in self.widgets if g != 'QGIS']:
             for w in self.widgets[grp]:
                 try: self.manageSignal([grp, w], 'disconnect')
-                except: pass
+                except Exception:  # Signal may already be disconnected - expected
+                    pass
 
     def force_reconnect_action_signals(self):
         """v4.0 Sprint 8: Ultra-simplified - force reconnect ACTION signals bypassing cache."""
@@ -2734,7 +2741,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 try:
                     state = self.changeSignalState(['ACTION', w], s_tuple[0], s_tuple[-1], 'connect')
                     self._signal_connection_states[key] = state
-                except: pass
+                except Exception:  # Signal connection may fail if widget deleted - expected during cleanup
+                    pass
 
     def force_reconnect_exploring_signals(self):
         """v4.0 S18: Force reconnect EXPLORING signals bypassing cache."""
@@ -2750,7 +2758,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if not s_tuple[-1] or s_tuple[0] not in signals: continue
                 key = f"EXPLORING.{w}.{s_tuple[0]}"; self._signal_connection_states.pop(key, None)
                 try: self._signal_connection_states[key] = self.changeSignalState(['EXPLORING', w], s_tuple[0], s_tuple[-1], 'connect')
-                except: pass
+                except Exception:  # Signal connection may fail if widget deleted - expected during cleanup
+                    pass
         
         # FIX 2026-01-14: CRITICAL - Connect exploring buttons DIRECTLY with explicit handlers
         # This bypasses the complex lambda/custom_functions mechanism that may fail silently
@@ -2962,7 +2971,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.set_widgets_enabled_state(False)
             for sp in [["DOCK", "SINGLE_SELECTION"], ["DOCK", "MULTIPLE_SELECTION"], ["DOCK", "CUSTOM_SELECTION"]]:
                 try: self.manageSignal(sp, 'connect')
-                except: pass
+                except Exception:  # Signal may already be connected - expected
+                    pass
         
         self._connect_groupbox_signals_directly()
         self.filtering_populate_predicates_chekableCombobox()
@@ -3200,10 +3210,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             for gb, _ in gbs:
                 gb.blockSignals(True)
                 try: gb.toggled.disconnect(); gb.collapsedStateChanged.disconnect()
-                except: pass
+                except TypeError:  # Signals not connected yet - expected on first setup
+                    pass
                 gb.blockSignals(False)
             for gb, name in gbs: gb.toggled.connect(lambda c, n=name: self._on_groupbox_clicked(n, c)); gb.collapsedStateChanged.connect(lambda col, n=name: self._on_groupbox_collapse_changed(n, col))
-        except: pass
+        except Exception as e: logger.debug(f"_connect_groupbox_signals_directly: {e}")
 
     def _force_exploring_groupbox_exclusive(self, active_groupbox):
         """v4.0 S18: Force exclusive state for exploring groupboxes."""
@@ -3624,19 +3635,34 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         FIX 2026-01-15 v8: Always try fallback if controller returns empty.
         User requirement: Feature picker is THE source for single_selection mode.
         """
+        # DIAGNOSTIC 2026-01-16: ULTRA-DETAILED TRACE
+        logger.info("=" * 80)
+        logger.info("🔍 get_current_features() CALLED")
+        logger.info("=" * 80)
+        logger.info(f"   use_cache: {use_cache}")
+        logger.info(f"   current_exploring_groupbox: {self.current_exploring_groupbox}")
+        logger.info(f"   _controller_integration: {self._controller_integration is not None}")
+        
         features, expression = [], ''
         
         # Try controller delegation first
         if self._controller_integration:
             try:
+                logger.info("   → Calling _controller_integration.delegate_get_current_features()...")
                 features, expression = self._controller_integration.delegate_get_current_features(use_cache)
+                logger.info(f"   → Controller returned: {len(features)} features, expression='{expression}'")
             except Exception as e:
-                logger.debug(f"Controller delegation failed: {e}")
+                logger.warning(f"   → Controller delegation FAILED: {e}")
+        else:
+            logger.warning("   → No _controller_integration available!")
         
         # FIX 2026-01-15: ALWAYS try fallback if controller returns empty
         # This ensures feature picker is used as primary source
+        logger.info(f"   → features after controller: {len(features)}")
         if not features:
+            logger.info("   → features EMPTY - calling _fallback_get_current_features()...")
             fallback_features, fallback_expr = self._fallback_get_current_features()
+            logger.info(f"   → Fallback returned: {len(fallback_features)} features")
             if fallback_features:
                 features = fallback_features
                 if fallback_expr:
@@ -3664,19 +3690,29 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         FIX 2026-01-16: Use _is_layer_valid() for safe layer checking.
         """
         if not self._is_layer_valid():
+            logger.warning("   🔴 _fallback_get_current_features: Layer is INVALID!")
             return [], ''
         try:
             from qgis.core import QgsFeatureRequest
             groupbox_type = self.current_exploring_groupbox
-            logger.debug(f"_fallback_get_current_features: groupbox={groupbox_type}")
+            logger.info("=" * 80)
+            logger.info("🔍 _fallback_get_current_features CALLED")
+            logger.info("=" * 80)
+            logger.info(f"   groupbox_type: {groupbox_type}")
+            logger.info(f"   current_layer: {self.current_layer.name() if self.current_layer else 'None'}")
             
             if groupbox_type == "single_selection":
                 picker = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+                logger.info(f"   picker widget: {type(picker).__name__}")
                 feature = picker.feature()
+                logger.info(f"   picker.feature(): {feature}")
+                logger.info(f"   feature.isValid(): {feature.isValid() if feature else 'N/A'}")
+                logger.info(f"   feature.id(): {feature.id() if feature and feature.isValid() else 'N/A'}")
                 
                 # Strategy 1: Widget has a valid feature (PRIMARY SOURCE - user requirement)
                 if feature and feature.isValid():
                     fid = feature.id()
+                    logger.info(f"   ✅ Feature {fid} is VALID - proceeding to reload")
                     # Always save the FID for recovery
                     self._last_single_selection_fid = fid
                     self._last_single_selection_layer_id = self.current_layer.id()
@@ -4449,7 +4485,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         for expr_key in ["SINGLE_SELECTION_EXPRESSION", "MULTIPLE_SELECTION_EXPRESSION", "CUSTOM_SELECTION_EXPRESSION"]:
             try: self.widgets.get("EXPLORING", {}).get(expr_key, {}).get("WIDGET", type('', (), {'setExpression': lambda s, x: None})()).setExpression("")
-            except: pass
+            except Exception:  # Widget may not be ready - expected during initialization
+                pass
         
         if self.project_props.get("OPTIONS", {}).get("LAYERS", {}).get("LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"):
             self.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'disconnect')
@@ -4851,10 +4888,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             try: 
                 result = self._controller_integration.delegate_ensure_valid_current_layer(requested_layer)
                 if result is not None: return result
-            except: pass
+            except Exception:  # Delegation may fail if controller not ready - expected
+                pass
         if requested_layer:
             try: _ = requested_layer.id(); return requested_layer
-            except: pass
+            except Exception:  # Layer may be deleted - expected during cleanup
+                pass
         return None
 
     def _is_layer_truly_deleted(self, layer):
@@ -5090,7 +5129,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """Update buffer spinbox validation - delegates to PropertyController."""
         if self._property_ctrl:
             try: self._controller_integration.delegate_update_buffer_validation(); return
-            except: pass
+            except Exception as e: logger.debug(f"Buffer validation delegation failed (using fallback): {e}")
         logger.warning("_update_buffer_validation: Controller delegation failed")
 
     def set_exporting_properties(self):
@@ -5651,7 +5690,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         layer = layer or self.current_layer
         if not self._is_layer_truly_deleted(layer):
             try: self.resettingLayerVariableOnError.emit(layer, properties if isinstance(properties, list) else [])
-            except: pass
+            except RuntimeError:  # Layer or widget may be deleted - expected during cleanup
+                pass
 
 
     def resetLayerVariableEvent(self, layer=None, properties=None):
@@ -5698,7 +5738,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             for widget_key, val, method in [("BUFFER_VALUE", 0.0, "setValue"), ("GEOMETRIC_PREDICATES", [], "setCheckedItems"), ("LAYERS_TO_FILTER", [], "setCheckedItems")]:
                 w = self.widgets["FILTERING"][widget_key]["WIDGET"]
                 w.blockSignals(True); getattr(w, method)(val); w.blockSignals(False)
-        except: pass
+        except Exception as e: logger.debug(f"_reset_filtering_button_states cosmetic update: {e}")
 
     def setProjectVariablesEvent(self):
         """v4.0 S18: Emit project variables signal."""
@@ -5766,15 +5806,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return
         
         try: self.comboBox_filtering_current_layer.setLayer(None) if hasattr(self, 'comboBox_filtering_current_layer') else None
-        except: pass
+        except RuntimeError:  # Widget may already be deleted - expected during shutdown
+            pass
         try: self.mFeaturePickerWidget_exploring_single_selection.setLayer(None) if hasattr(self, 'mFeaturePickerWidget_exploring_single_selection') else None
-        except: pass
+        except RuntimeError:  # Widget may already be deleted - expected during shutdown
+            pass
         try: self._exploring_cache.invalidate_all() if hasattr(self, '_exploring_cache') else None
-        except: pass
+        except Exception:  # Cache may be None - expected
+            pass
         try: self._theme_watcher.remove_callback(self._on_qgis_theme_changed) if self._theme_watcher else None
-        except: pass
+        except Exception:  # Callback may not be registered - expected
+            pass
         try: self._controller_integration.teardown() if self._controller_integration else None
-        except: pass
+        except Exception:  # Controller may already be torn down - expected
+            pass
         
         self.closingPlugin.emit()
         event.accept()
@@ -5819,7 +5864,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         for w, sig, slot in widgets:
             if w and hasattr(w, sig):
                 try: getattr(w, sig).connect(slot); slot()
-                except: pass
+                except Exception:  # Signal may already be connected - expected
+                    pass
     
     def _update_combo_tooltip(self, combo):
         """v4.0 Sprint 17: Update tooltip for combo widget."""
@@ -5827,7 +5873,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try:
             t = combo.currentText()
             combo.setToolTip(t if t and len(t) > 30 else QCoreApplication.translate("FilterMate", "Current layer: {0}").format(t) if t else QCoreApplication.translate("FilterMate", "No layer selected"))
-        except: pass
+        except Exception:  # Tooltip update is cosmetic - non-critical
+            pass
     
     def _update_checkable_combo_tooltip(self, combo):
         """v4.0 Sprint 17: Update tooltip for checkable combo showing selected items."""
@@ -5836,7 +5883,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             items = combo.checkedItems()
             t = "\n".join([i.text() for i in items if hasattr(i, 'text')]) if items else ""
             combo.setToolTip(QCoreApplication.translate("FilterMate", "Selected layers:\n{0}").format(t) if t else QCoreApplication.translate("FilterMate", "No layers selected"))
-        except: pass
+        except Exception:  # Tooltip update is cosmetic - non-critical
+            pass
     
     def _update_export_buttons_state(self):
         """
@@ -5857,7 +5905,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             e = expr_widget.expression()
             if e and len(e) > 40: e = e.replace(' AND ', '\nAND ').replace(' OR ', '\nOR ')
             expr_widget.setToolTip(QCoreApplication.translate("FilterMate", "Expression:\n{0}" if e and len(e) > 40 else "Expression: {0}").format(e) if e else QCoreApplication.translate("FilterMate", "No expression defined"))
-        except: pass
+        except Exception:  # Tooltip update is cosmetic - non-critical
+            pass
     
     def _update_feature_picker_tooltip(self, picker):
         """v4.0 Sprint 17: Update tooltip for feature picker widget."""
@@ -5870,7 +5919,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 f = picker.feature()
                 if f and f.isValid() and f.attributes():
                     picker.setToolTip(QCoreApplication.translate("FilterMate", "Feature ID: {0}\nFirst attribute: {1}").format(f.id(), f.attributes()[0]))
-        except: pass
+        except Exception:  # Tooltip update is cosmetic - non-critical
+            pass
 
     def retranslate_dynamic_tooltips(self):
         """Refresh all dynamic tooltips after a locale change."""

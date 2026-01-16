@@ -204,11 +204,23 @@ class FilterOrchestrator:
             # ==========================================
             # 5. EXPRESSION BUILDING
             # ==========================================
+            logger.info("=" * 80)
+            logger.info("🏗️ STEP 5: EXPRESSION BUILDING")
+            logger.info("=" * 80)
+            logger.info(f"   Calling expression_builder.build_backend_expression()...")
+            logger.info(f"   Backend: {backend_name}")
+            logger.info(f"   Layer: {layer.name()}")
+            logger.info(f"   Source geom type: {type(source_geom).__name__}")
+            
             expression = expression_builder.build_backend_expression(
                 backend=backend,
                 layer_props=layer_props,
                 source_geom=source_geom
             )
+            
+            logger.info("=" * 80)
+            logger.info("✅ EXPRESSION BUILDING COMPLETE")
+            logger.info("=" * 80)
             
             if not expression:
                 # Try OGR fallback if primary backend failed

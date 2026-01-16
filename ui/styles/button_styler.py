@@ -121,16 +121,21 @@ class ButtonStyler(StylerBase):
         Called during dockwidget initialization.
         """
         self._detect_theme()
-        self.apply()
+        success = self.apply()
+        if not success:
+            logger.warning("ButtonStyler: Initial setup failed - some buttons may be unstyled")
         self._initialized = True
-        logger.debug("ButtonStyler setup complete")
+        logger.debug(f"ButtonStyler setup complete (success={success})")
     
-    def apply(self) -> None:
+    def apply(self) -> bool:
         """
         Apply button styling to all buttons.
         
         Main entry point for button styling.
         Orchestrates all styling operations.
+        
+        Returns:
+            bool: True if all styling applied successfully, False otherwise
         """
         try:
             self._configure_pushbuttons()
@@ -138,8 +143,10 @@ class ButtonStyler(StylerBase):
             self._apply_button_styles()
             self._update_button_states()
             logger.debug("ButtonStyler: Applied all button styles")
+            return True
         except Exception as e:
-            logger.error(f"ButtonStyler: Error applying styles: {e}")
+            logger.error(f"ButtonStyler: Error applying styles: {e}", exc_info=True)
+            return False
     
     def on_theme_changed(self, theme: str) -> None:
         """
@@ -149,8 +156,11 @@ class ButtonStyler(StylerBase):
             theme: New theme name ('default', 'dark', 'light')
         """
         self._current_theme = theme
-        self.apply()
-        logger.info(f"ButtonStyler: Theme changed to '{theme}'")
+        success = self.apply()
+        if success:
+            logger.info(f"ButtonStyler: Theme changed to '{theme}'")
+        else:
+            logger.warning(f"ButtonStyler: Theme change to '{theme}' had errors")
     
     def is_dark_theme(self) -> bool:
         """Check if current theme is dark."""

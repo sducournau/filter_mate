@@ -110,17 +110,26 @@ class IconManager(StylerBase):
         self._initialized = True
         logger.info(f"IconManager initialized with theme: {self._current_theme}")
     
-    def apply(self) -> None:
+    def apply(self) -> bool:
         """
         Apply icons to all widgets for current theme.
         
         Refreshes all registered button icons.
+        
+        Returns:
+            bool: True if icons applied successfully, False otherwise
         """
         if not self._initialized:
-            return
+            logger.warning("IconManager: apply() called before initialization")
+            return False
         
-        self.refresh_all_icons()
-        logger.debug(f"Applied icons for theme '{self._current_theme}'")
+        try:
+            updated = self.refresh_all_icons()
+            logger.debug(f"Applied icons for theme '{self._current_theme}' ({updated} icons updated)")
+            return True
+        except Exception as e:
+            logger.error(f"IconManager: Error applying icons for theme '{self._current_theme}': {e}", exc_info=True)
+            return False
     
     def get_icon(self, icon_name: str, force_invert: bool = False) -> QIcon:
         """
@@ -230,7 +239,9 @@ class IconManager(StylerBase):
         if theme != self._current_theme:
             self._current_theme = theme
             self.clear_cache()
-            self.apply()
+            success = self.apply()
+            if not success:
+                logger.warning(f"IconManager: Failed to apply icons for theme '{theme}'")
     
     def clear_cache(self) -> None:
         """Clear icon cache."""

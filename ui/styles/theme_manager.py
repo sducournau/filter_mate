@@ -171,16 +171,31 @@ class ThemeManager(StylerBase):
             detected = self.detect_system_theme()
             self._current_theme = detected
         
-        self.apply()
+        success = self.apply()
+        if not success:
+            logger.warning("ThemeManager: Initial theme application failed")
         self._initialized = True
-        logger.info(f"ThemeManager initialized with theme: {self._current_theme}")
+        logger.info(f"ThemeManager initialized with theme: {self._current_theme} (success={success})")
     
-    def apply(self) -> None:
-        """Apply current theme to dockwidget."""
-        stylesheet = self._load_stylesheet(self._current_theme)
-        if stylesheet:
-            self.dockwidget.setStyleSheet(stylesheet)
-            logger.debug(f"Applied theme '{self._current_theme}' to dockwidget")
+    def apply(self) -> bool:
+        """
+        Apply current theme to dockwidget.
+        
+        Returns:
+            bool: True if theme applied successfully, False otherwise
+        """
+        try:
+            stylesheet = self._load_stylesheet(self._current_theme)
+            if stylesheet:
+                self.dockwidget.setStyleSheet(stylesheet)
+                logger.debug(f"Applied theme '{self._current_theme}' to dockwidget")
+                return True
+            else:
+                logger.warning(f"ThemeManager: No stylesheet loaded for theme '{self._current_theme}'")
+                return False
+        except Exception as e:
+            logger.error(f"ThemeManager: Error applying theme '{self._current_theme}': {e}", exc_info=True)
+            return False
     
     def set_theme(self, theme: str) -> None:
         """
@@ -199,9 +214,13 @@ class ThemeManager(StylerBase):
         if theme != self._current_theme:
             old_theme = self._current_theme
             self._current_theme = theme
-            self.apply()
-            self._emit_theme_changed(theme)
-            logger.info(f"Theme changed from '{old_theme}' to '{theme}'")
+            success = self.apply()
+            if success:
+                self._emit_theme_changed(theme)
+                logger.info(f"Theme changed from '{old_theme}' to '{theme}'")
+            else:
+                logger.error(f"Theme change from '{old_theme}' to '{theme}' FAILED - reverting")
+                self._current_theme = old_theme  # Revert on failure
     
     def detect_system_theme(self) -> str:
         """
