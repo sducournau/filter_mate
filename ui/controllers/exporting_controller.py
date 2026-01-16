@@ -217,15 +217,18 @@ class ExportingController(BaseController):
             if not dockwidget:
                 return False
             
-            # Check preconditions
-            if not dockwidget.widgets_initialized or not dockwidget.has_loaded_layers:
+            # Check preconditions - v4.0.5: Relaxed check since _on_project_layers_ready sets has_loaded_layers
+            if not dockwidget.widgets_initialized:
+                logger.warning("populate_export_combobox: widgets not initialized")
                 return False
             
-            # v4.0.4: Early return if PROJECT_LAYERS not populated yet
-            # This prevents race condition during initialization
+            # v4.0.5: Check PROJECT_LAYERS instead of has_loaded_layers
+            # The signal may fire before has_loaded_layers is set by filter_mate_app.py
             if not dockwidget.PROJECT_LAYERS:
                 logger.info("populate_export_combobox: PROJECT_LAYERS empty, deferring until projectLayersReady signal")
                 return False
+            
+            logger.info(f"populate_export_combobox: Starting with {len(dockwidget.PROJECT_LAYERS)} layers in PROJECT_LAYERS")
             
             # Get saved preferences
             layers_to_export = []
@@ -247,8 +250,10 @@ class ExportingController(BaseController):
             try:
                 from osgeo import ogr
                 ogr_available = True
-            except ImportError:
+                logger.debug(f"OGR available: {ogr.GetDriverCount()} drivers")
+            except ImportError as e:
                 ogr_available = False
+                logger.warning(f"OGR not available: {e}. Export formats list will be empty.")
             
             project = QgsProject.instance()
             
@@ -380,12 +385,15 @@ class ExportingController(BaseController):
                 datatype_widget.clear()
                 ogr_driver_list = sorted([ogr.GetDriver(i).GetDescription() for i in range(ogr.GetDriverCount())])
                 datatype_widget.addItems(ogr_driver_list)
+                logger.info(f"populate_export_combobox: Added {len(ogr_driver_list)} export formats")
                 
                 if datatype_to_export:
                     idx = datatype_widget.findText(datatype_to_export)
                     datatype_widget.setCurrentIndex(idx if idx >= 0 else datatype_widget.findText('GPKG'))
                 else:
                     datatype_widget.setCurrentIndex(datatype_widget.findText('GPKG'))
+            else:
+                logger.warning("populate_export_combobox: OGR not available, cannot populate export formats")
             
             return True
             

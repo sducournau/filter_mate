@@ -372,9 +372,15 @@ class FilteringController(BaseController, LayerSelectionMixin):
         logger.info(f"=== populate_layers_checkable_combobox START (layer={layer.name() if layer else 'None'}) ===")
         try:
             dockwidget = self._dockwidget
-            if not dockwidget or not dockwidget.widgets_initialized:
+            if not dockwidget:
+                logger.warning("populate_layers_checkable_combobox: dockwidget not available")
+                return False
+            if not dockwidget.widgets_initialized:
                 logger.warning("populate_layers_checkable_combobox: widgets not initialized")
                 return False
+            
+            # v4.0.5: Log diagnostic info
+            logger.info(f"populate_layers_checkable_combobox: has_loaded_layers={getattr(dockwidget, 'has_loaded_layers', False)}, PROJECT_LAYERS count={len(dockwidget.PROJECT_LAYERS) if dockwidget.PROJECT_LAYERS else 0}")
             
             # Imports
             from qgis.core import QgsVectorLayer, QgsProject
@@ -396,6 +402,10 @@ class FilteringController(BaseController, LayerSelectionMixin):
             
             layer_props = dockwidget.PROJECT_LAYERS[layer.id()]
             project = QgsProject.instance()
+            
+            # DIAGNOSTIC v4.0.5: Log PROJECT_LAYERS state
+            logger.info(f"🔍 DIAGNOSTIC: PROJECT_LAYERS has {len(dockwidget.PROJECT_LAYERS)} entries")
+            logger.info(f"🔍 DIAGNOSTIC: PROJECT_LAYERS keys: {list(dockwidget.PROJECT_LAYERS.keys())}")
             
             # Clear widget
             layers_widget = dockwidget.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
@@ -452,18 +462,23 @@ class FilteringController(BaseController, LayerSelectionMixin):
             
             # Populate widget
             item_index = 0
+            skipped_reasons = []  # DIAGNOSTIC v4.0.5
             for key in list(dockwidget.PROJECT_LAYERS.keys()):
                 # Skip source layer
                 if key == layer.id():
+                    skipped_reasons.append(f"{key}: is source layer")
                     continue
                 
                 # Validate layer info
                 if key not in dockwidget.PROJECT_LAYERS or "infos" not in dockwidget.PROJECT_LAYERS[key]:
+                    skipped_reasons.append(f"{key}: missing infos")
                     continue
                 
                 layer_info = dockwidget.PROJECT_LAYERS[key]["infos"]
                 required_keys = ["layer_id", "layer_name", "layer_crs_authid", "layer_geometry_type"]
-                if any(k not in layer_info or layer_info[k] is None for k in required_keys):
+                missing_keys = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
+                if missing_keys:
+                    skipped_reasons.append(f"{key}: missing keys {missing_keys}")
                     continue
                 
                 # Reset subset history if needed
@@ -481,17 +496,33 @@ class FilteringController(BaseController, LayerSelectionMixin):
                 
                 # Validate layer is usable
                 layer_obj = project.mapLayer(layer_id)
-                if layer_obj and isinstance(layer_obj, QgsVectorLayer) and is_layer_source_available(layer_obj, require_psycopg2=False):
-                    display_name = f"{layer_name} [{layer_crs}]"
-                    item_data = {"layer_id": key, "layer_geometry_type": layer_info["layer_geometry_type"]}
-                    layers_widget.addItem(layer_icon, display_name, item_data)
-                    
-                    item = layers_widget.model().item(item_index)
-                    if has_layers and layer_id in layers_to_filter:
-                        item.setCheckState(Qt.Checked)
-                    else:
-                        item.setCheckState(Qt.Unchecked)
-                    item_index += 1
+                if not layer_obj:
+                    skipped_reasons.append(f"{layer_name}: layer_obj is None (not in project)")
+                    continue
+                if not isinstance(layer_obj, QgsVectorLayer):
+                    skipped_reasons.append(f"{layer_name}: not QgsVectorLayer")
+                    continue
+                if not is_layer_source_available(layer_obj, require_psycopg2=False):
+                    skipped_reasons.append(f"{layer_name}: source not available")
+                    continue
+                
+                # Layer is valid - add to combobox
+                display_name = f"{layer_name} [{layer_crs}]"
+                item_data = {"layer_id": key, "layer_geometry_type": layer_info["layer_geometry_type"]}
+                layers_widget.addItem(layer_icon, display_name, item_data)
+                
+                item = layers_widget.model().item(item_index)
+                if has_layers and layer_id in layers_to_filter:
+                    item.setCheckState(Qt.Checked)
+                else:
+                    item.setCheckState(Qt.Unchecked)
+                item_index += 1
+            
+            # DIAGNOSTIC v4.0.5: Log skipped layers
+            if skipped_reasons:
+                logger.warning(f"🔍 DIAGNOSTIC: Skipped {len(skipped_reasons)} layers:")
+                for reason in skipped_reasons:
+                    logger.warning(f"   - {reason}")
             
             logger.info(f"✓ populate_layers_checkable_combobox: Added {item_index} layers (source layer '{layer.name()}' excluded)")
             logger.info(f"=== populate_layers_checkable_combobox END ===")

@@ -2041,8 +2041,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         This method is called via projectLayersReady signal after add_layers task completes.
         It ensures comboboxes are populated only when PROJECT_LAYERS contains all layers.
+        
+        FIX v4.0.5: Set has_loaded_layers=True here since signal may fire before
+        filter_mate_app.py sets it, causing populate_export_combobox() to skip.
         """
         logger.info("_on_project_layers_ready: Populating comboboxes with synchronized layer data")
+        
+        # FIX v4.0.5: Ensure has_loaded_layers is True before populating
+        # (signal may fire before filter_mate_app.py sets this flag)
+        self.has_loaded_layers = True
         
         # Populate export layers combobox
         try:
@@ -2053,8 +2060,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except Exception as e:
             logger.error(f"Failed to populate export combobox: {e}")
         
-        # Note: filtering_populate_layers_chekableCombobox is called per-layer in current_layer_changed
-        # and already has protection for missing layers in PROJECT_LAYERS
+        # FIX v4.0.5: Also populate layers_to_filter combobox for current layer
+        try:
+            if self.current_layer:
+                self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
+                self.filtering_populate_layers_chekableCombobox(self.current_layer)
+                self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
+                logger.info("✓ Filtering layers combobox populated successfully")
+        except Exception as e:
+            logger.error(f"Failed to populate filtering layers combobox: {e}")
 
     def _apply_auto_configuration(self):
         """Apply auto-configuration from environment."""
