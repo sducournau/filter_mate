@@ -26,7 +26,10 @@ from ...infrastructure.utils.layer_utils import (
 from ...infrastructure.utils.task_utils import spatialite_connect
 from ...infrastructure.database.sql_utils import sanitize_sql_identifier
 from ...infrastructure.utils.validation_utils import is_layer_source_available
-from ...adapters.backends import POSTGRESQL_AVAILABLE
+from ..ports import get_backend_services
+
+_backend_services = get_backend_services()
+POSTGRESQL_AVAILABLE = _backend_services.get_postgresql_availability().postgresql_available
 
 logger = get_logger(__name__)
 

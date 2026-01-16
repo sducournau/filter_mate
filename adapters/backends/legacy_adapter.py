@@ -127,9 +127,19 @@ class BaseLegacyAdapter(GeometricFilterBackend):
                 buffer_expression, source_filter, use_centroids, **kwargs
             )
         elif self._legacy_backend:
+            # FIX v4.0.3 (2026-01-16): Pass ALL arguments as KEYWORD arguments
+            # to avoid positional mismatch between adapter and legacy backend signatures.
+            # PostgreSQLGeometricFilter.build_expression() has source_wkt/source_srid/source_feature_count
+            # BEFORE use_centroids, but this adapter had use_centroids in different position.
             return self._legacy_backend.build_expression(
-                layer_props, predicates, source_geom, buffer_value,
-                buffer_expression, source_filter, use_centroids, **kwargs
+                layer_props=layer_props,
+                predicates=predicates,
+                source_geom=source_geom,
+                buffer_value=buffer_value,
+                buffer_expression=buffer_expression,
+                source_filter=source_filter,
+                use_centroids=use_centroids,
+                **kwargs
             )
         else:
             raise RuntimeError(f"No backend available for {self.provider_type}")
@@ -245,9 +255,11 @@ class BaseLegacyAdapter(GeometricFilterBackend):
         return False
     
     def get_backend_name(self) -> str:
-        """Get backend display name."""
-        suffix = "(v4)" if self._use_new_backend else "(legacy)"
-        return f"{self.provider_type.upper()} {suffix}"
+        """Get backend display name for logging (internal name must be plain 'PostgreSQL')."""
+        suffix = "(v4)" if self._use_new_backend else "(Legacy)"
+        # Return plain provider name for TaskBridge compatibility
+        # Display suffix is added only in user messages via infrastructure/feedback
+        return self.provider_type.capitalize()
 
 
 class LegacyPostgreSQLAdapter(BaseLegacyAdapter):
@@ -272,8 +284,8 @@ class LegacyPostgreSQLAdapter(BaseLegacyAdapter):
         return PostgreSQLGeometricFilter(self.task_params)
     
     def _should_use_new_backend(self) -> bool:
-        """Use legacy for PostgreSQL (more tested, MV support)."""
-        return False  # PostgreSQL legacy is well-tested
+        """Use modern PostgreSQL backend v4.0 (hexagonal architecture)."""
+        return True  # v4.0: Modern backend with improved MV management
 
 
 class LegacySpatialiteAdapter(BaseLegacyAdapter):

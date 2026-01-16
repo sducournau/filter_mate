@@ -27,7 +27,10 @@ from qgis.core import (
 from qgis.utils import iface
 
 from ...infrastructure.database.sql_utils import safe_set_subset_string
-from ...adapters.layer_validator import is_valid_layer
+from ..ports import get_backend_services
+
+_backend_services = get_backend_services()
+is_valid_layer = _backend_services.is_valid_layer
 
 logger = logging.getLogger('filter_mate')
 

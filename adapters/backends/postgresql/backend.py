@@ -96,6 +96,11 @@ class PostgreSQLBackend(BackendPort):
         logger.info(f"PostgreSQL backend initialized: session={self._session_id[:8]}")
 
     @property
+    def name(self) -> str:
+        """Get backend name for internal use (must be 'PostgreSQL' for TaskBridge compatibility)."""
+        return "PostgreSQL"
+
+    @property
     def session_id(self) -> str:
         """Get current session ID."""
         return self._session_id
@@ -153,27 +158,44 @@ class PostgreSQLBackend(BackendPort):
         start_time = time.time()
         self._metrics['executions'] += 1
 
+        # DEBUG: Log execution details
+        logger.debug(f"[PostgreSQL v4.0] EXECUTE START:")
+        logger.debug(f"  Layer: {layer_info.layer_id}")
+        logger.debug(f"  Table: {layer_info.table_name} (schema: {layer_info.schema_name})")
+        logger.debug(f"  PK: {layer_info.pk_attr}")
+        logger.debug(f"  Geometry: {layer_info.geometry_column}")
+        logger.debug(f"  Features: {layer_info.feature_count}")
+        logger.debug(f"  Expression SQL: {expression.sql[:200]}...")
+
         try:
             # Get connection
             conn = self._get_connection()
             if conn is None:
+                logger.error(f"[PostgreSQL v4.0] No connection available for {layer_info.layer_id}")
                 return FilterResult.error(
                     layer_id=layer_info.layer_id,
                     expression_raw=expression.raw,
                     error_message="No database connection available",
                     backend_name=self.name
                 )
+            logger.debug(f"[PostgreSQL v4.0] Connection obtained: {type(conn).__name__}")
 
             # Analyze query
             analysis = self._optimizer.analyze(expression.sql)
+            logger.debug(f"[PostgreSQL v4.0] Query complexity: {analysis.estimated_complexity}")
 
             # Determine execution strategy
-            if self._should_use_mv(layer_info, analysis):
+            use_mv = self._should_use_mv(layer_info, analysis)
+            logger.debug(f"[PostgreSQL v4.0] Strategy: {'MV' if use_mv else 'DIRECT'}")
+            
+            if use_mv:
                 feature_ids = self._execute_with_mv(expression, layer_info, conn)
                 self._metrics['mv_executions'] += 1
             else:
                 feature_ids = self._execute_direct(expression, layer_info, conn)
                 self._metrics['direct_executions'] += 1
+            
+            logger.debug(f"[PostgreSQL v4.0] Execution successful: {len(feature_ids)} features matched")
 
             execution_time = (time.time() - start_time) * 1000
             self._metrics['total_time_ms'] += execution_time
@@ -425,12 +447,18 @@ class PostgreSQLBackend(BackendPort):
 
     def _get_geometry_column(self, layer_info: LayerInfo) -> str:
         """Get geometry column name."""
-        # Default geometry column names
+        # Use LayerInfo geometry_column attribute (fallback to common names)
+        if layer_info.geometry_column:
+            return layer_info.geometry_column
+        # Common PostGIS geometry column names
         return "geom"
 
     def _get_pk_column(self, layer_info: LayerInfo) -> str:
         """Get primary key column name."""
-        # Common PK column names
+        # Use LayerInfo pk_attr attribute (fallback to common names)
+        if layer_info.pk_attr:
+            return layer_info.pk_attr
+        # Common PostgreSQL PK column names
         return "id"
 
 

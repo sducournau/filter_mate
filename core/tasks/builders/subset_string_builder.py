@@ -263,7 +263,11 @@ class SubsetStringBuilder:
         # Build combined expression
         if index_where_clause > -1:
             # Has WHERE clause - combine with existing structure
-            return f'{param_source_old_subset} {param_old_subset_where_clause} {combine_operator} {new_expression}'
+            # Fix: Strip leading "WHERE " from new_expression to prevent "WHERE WHERE" syntax error
+            clean_new_expression = new_expression.lstrip()
+            if clean_new_expression.upper().startswith('WHERE '):
+                clean_new_expression = clean_new_expression[6:].lstrip()
+            return f'{param_source_old_subset} {param_old_subset_where_clause} {combine_operator} {clean_new_expression}'
         else:
             # No WHERE clause - wrap both in parentheses for safety
             return f'( {old_subset} ) {combine_operator} ( {new_expression} )'

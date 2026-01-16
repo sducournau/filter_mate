@@ -245,7 +245,10 @@ class BackendExpressionBuilder:
         
         # Create MV using backend method
         try:
-            from ...adapters.backends.postgresql_backend import PostgreSQLGeometricFilter
+            from ..ports import get_backend_services
+            PostgreSQLGeometricFilter = get_backend_services().get_postgresql_geometric_filter()
+            if not PostgreSQLGeometricFilter:
+                raise ImportError("PostgreSQLGeometricFilter not available")
             pg_backend = PostgreSQLGeometricFilter(self.task_parameters)
             
             mv_ref = pg_backend.create_source_selection_mv(
@@ -432,12 +435,14 @@ class BackendExpressionBuilder:
         # Auto-detection fallback
         if not use_centroids and self.auto_apply_optimizations:
             try:
-                from ...adapters.backends.factory import get_optimization_plan, AUTO_OPTIMIZER_AVAILABLE
+                from ..ports import get_backend_services
+                _services = get_backend_services()
+                AUTO_OPTIMIZER_AVAILABLE = _services.is_auto_optimizer_available()
                 if AUTO_OPTIMIZER_AVAILABLE and layer:
                     source_wkt_len = len(source_wkt) if source_wkt else 0
                     has_buffer = self.param_buffer_value is not None and self.param_buffer_value != 0
                     
-                    optimization_plan = get_optimization_plan(
+                    optimization_plan = _services.get_optimization_plan(
                         target_layer=layer,
                         source_layer=self.source_layer,
                         source_wkt_length=source_wkt_len,

@@ -24,6 +24,8 @@ except ImportError:
 # Backend display names and icons
 BACKEND_INFO = {
     'postgresql': {'name': 'PostgreSQL', 'icon': '🐘', 'color': '#336791'},
+    'postgresql (v4)': {'name': 'PostgreSQL v4', 'icon': '🐘✨', 'color': '#336791'},
+    'postgresql (legacy)': {'name': 'PostgreSQL (Legacy)', 'icon': '🐘⚙️', 'color': '#336791'},
     'spatialite': {'name': 'Spatialite', 'icon': '💾', 'color': '#4A90E2'},
     'ogr': {'name': 'OGR', 'icon': '📁', 'color': '#7CB342'},
     'memory': {'name': 'Memory', 'icon': '⚡', 'color': '#FFA000'}

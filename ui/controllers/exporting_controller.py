@@ -11,6 +11,7 @@ from enum import Enum
 from pathlib import Path
 import logging
 
+from qgis.PyQt.QtCore import QTimer
 from .base_controller import BaseController
 
 # Module logger
@@ -262,8 +263,52 @@ class ExportingController(BaseController):
             
             if missing_postgres:
                 logger.warning(f"populate_export_combobox: {len(missing_postgres)} PostgreSQL layer(s) missing from PROJECT_LAYERS")
+                logger.warning(f"Layers in QGIS but NOT in PROJECT_LAYERS: {[l.name() for l in missing_postgres]}")
+                
+                # FIX 2026-01-16 v2: Robust automatic addition with retry
+                # BYPASS queue system for critical sync + retry after 1s
+                if hasattr(dockwidget, 'app') and dockwidget.app:
+                    logger.info("🔄 Triggering automatic add_layers for missing PostgreSQL layers...")
+                    try:
+                        # Reset counter to bypass queue
+                        dockwidget.app._pending_add_layers_tasks = 0
+                        dockwidget.app.manage_task('add_layers', missing_postgres)
+                        
+                        # Retry after 1s to ensure completion
+                        def retry_add_postgres():
+                            still_missing = [l for l in missing_postgres 
+                                           if l.id() not in dockwidget.PROJECT_LAYERS]
+                            if still_missing:
+                                logger.warning(f"⚠️ Retrying add_layers for {len(still_missing)} PostgreSQL layers")
+                                dockwidget.app._pending_add_layers_tasks = 0
+                                dockwidget.app.manage_task('add_layers', still_missing)
+                        QTimer.singleShot(1000, retry_add_postgres)
+                    except Exception as e:
+                        logger.error(f"Failed to auto-add missing layers: {e}")
+                
             if missing_remote:
                 logger.warning(f"populate_export_combobox: {len(missing_remote)} remote layer(s) missing from PROJECT_LAYERS")
+                logger.warning(f"Remote layers in QGIS but NOT in PROJECT_LAYERS: {[l.name() for l in missing_remote]}")
+                
+                # FIX 2026-01-16 v2: Robust automatic addition with retry
+                if hasattr(dockwidget, 'app') and dockwidget.app:
+                    logger.info("🔄 Triggering automatic add_layers for missing remote layers...")
+                    try:
+                        # Reset counter to bypass queue
+                        dockwidget.app._pending_add_layers_tasks = 0
+                        dockwidget.app.manage_task('add_layers', missing_remote)
+                        
+                        # Retry after 1s to ensure completion
+                        def retry_add_remote():
+                            still_missing = [l for l in missing_remote 
+                                           if l.id() not in dockwidget.PROJECT_LAYERS]
+                            if still_missing:
+                                logger.warning(f"⚠️ Retrying add_layers for {len(still_missing)} remote layers")
+                                dockwidget.app._pending_add_layers_tasks = 0
+                                dockwidget.app.manage_task('add_layers', still_missing)
+                        QTimer.singleShot(1000, retry_add_remote)
+                    except Exception as e:
+                        logger.error(f"Failed to auto-add missing remote layers: {e}")
             
             # Clear and populate layers widget
             layers_widget = dockwidget.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"]

@@ -396,11 +396,19 @@ def execute_filter_action_postgresql_direct(
         where_clause = extract_where_fn(sql_subset_string)
         
         if where_clause:
+            # FIX 2026-01-16: Strip leading "WHERE " from where_clause
+            # extract_where_fn returns "WHERE expression" but setSubsetString
+            # expects just the expression without "WHERE" keyword
+            # QGIS internally builds "SELECT * FROM table WHERE <subset_string>"
+            clean_where_clause = where_clause.lstrip()
+            if clean_where_clause.upper().startswith('WHERE '):
+                clean_where_clause = clean_where_clause[6:].lstrip()
+            
             # Get existing subset to preserve filter chain
             old_subset = layer.subsetString()
             
             # Build final expression (combine or replace)
-            final_expression = build_combined_expression(old_subset, where_clause)
+            final_expression = build_combined_expression(old_subset, clean_where_clause)
             
             logger.debug(f"Direct filter expression: {final_expression[:200]}...")
             

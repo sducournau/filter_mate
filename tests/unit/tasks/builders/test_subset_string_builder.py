@@ -206,6 +206,26 @@ class TestManualCombine(unittest.TestCase):
         self.assertIn("WHERE", result)
         self.assertIn("AND", result)
         self.assertIn("c = 3", result)
+    
+    def test_manual_combine_no_double_where(self):
+        """Test that WHERE prefix is stripped from new_expression to prevent 'WHERE WHERE' bug.
+        
+        FIX 2026-01-16: When combining expressions, if old_subset has a WHERE clause
+        and new_expression also starts with WHERE, we should strip the WHERE prefix
+        from new_expression to avoid 'WHERE WHERE' syntax error.
+        """
+        # This simulates the bug case reported: new_expression starts with WHERE
+        result = self.builder._manual_combine(
+            new_expression='WHERE "zone_pop"."id" IN (\'1fc90f5b-804c-40ea-a0f3-cae9ae604332\')',
+            old_subset='SELECT * FROM "ref"."zone_pop" WHERE a = 1',
+            combine_operator="AND"
+        )
+        
+        # Should NOT have double WHERE
+        self.assertNotIn("WHERE WHERE", result)
+        # Should have the expression correctly combined
+        self.assertIn("AND", result)
+        self.assertIn("zone_pop", result)
 
 
 class TestValidation(unittest.TestCase):

@@ -205,6 +205,36 @@ class LayerOrganizer:
             result.not_found_layers.append(layer_name)
             return None
         
+        # FIX v4.0.3 (2026-01-16): Add layer instance to layer_props for auto-detection of geometry column
+        # The backend needs access to the QgsVectorLayer to detect the actual geometry column name
+        # when the stored value is invalid (e.g., "NULL")
+        layer_props["layer"] = layer
+        
+        # FIX v4.0.3 (2026-01-16): Auto-detect geometry column if stored value is invalid
+        stored_geom_field = layer_props.get("layer_geometry_field")
+        if not stored_geom_field or stored_geom_field in ('NULL', 'None', '', None):
+            try:
+                # Try to get geometry column from QGIS layer
+                detected_geom = layer.dataProvider().geometryColumn()
+                if detected_geom:
+                    layer_props["layer_geometry_field"] = detected_geom
+                    logger.info(f"  ✓ Auto-detected geometry column for {layer_name}: '{detected_geom}'")
+                else:
+                    # Try from URI
+                    from qgis.core import QgsDataSourceUri
+                    uri = QgsDataSourceUri(layer.source())
+                    detected_geom = uri.geometryColumn()
+                    if detected_geom:
+                        layer_props["layer_geometry_field"] = detected_geom
+                        logger.info(f"  ✓ Auto-detected geometry column from URI for {layer_name}: '{detected_geom}'")
+                    else:
+                        # Final fallback
+                        layer_props["layer_geometry_field"] = 'geom'
+                        logger.warning(f"  ⚠️ Using fallback geometry column 'geom' for {layer_name}")
+            except Exception as e:
+                layer_props["layer_geometry_field"] = 'geom'
+                logger.warning(f"  ⚠️ Could not auto-detect geometry column for {layer_name}: {e}, using 'geom'")
+        
         return provider_type, layer, layer_props
     
     def _determine_effective_provider(
@@ -232,15 +262,21 @@ class LayerOrganizer:
         # flag may be stale from old data - IGNORE IT and always use native backend.
         # psycopg2 is only needed for ADVANCED features (materialized views, indexes).
         if provider_type == PROVIDER_POSTGRES:
+            # FIX 2026-01-16: Log diagnostic
+            logger.info(f"  🔍 PostgreSQL layer check: '{layer_name}'")
+            logger.info(f"     - context.postgresql_available = {context.postgresql_available}")
+            
             # Only check context.postgresql_available (module-level flag), NOT the stored value
             if not context.postgresql_available:
-                logger.warning(f"  PostgreSQL layer '{layer_name}' - using OGR fallback (POSTGRESQL_AVAILABLE=False)")
+                logger.warning(f"  ⚠️ PostgreSQL layer '{layer_name}' - CONVERTED TO OGR (postgresql_available=False)")
+                logger.warning(f"     → This will prevent PostgreSQL geometry from being prepared!")
                 layer_props["_effective_provider_type"] = PROVIDER_OGR
                 layer_props["_postgresql_fallback"] = True
                 return PROVIDER_OGR
             else:
                 # Force postgresql_connection_available to True for runtime consistency
                 layer_props["postgresql_connection_available"] = True
+                logger.info(f"  ✓ PostgreSQL layer '{layer_name}': using native backend (QGIS API)")
                 logger.debug(f"  PostgreSQL layer '{layer_name}': using native backend (QGIS API)")
         
         # PRIORITY 3: Detect provider from actual layer

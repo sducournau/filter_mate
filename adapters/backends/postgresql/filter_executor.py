@@ -285,7 +285,34 @@ def build_postgis_predicates(
     logger = logging.getLogger('FilterMate.Adapters.Backends.PostgreSQL.FilterExecutor')
     
     param_distant_table = layer_props["layer_name"]
-    param_distant_geometry_field = layer_props["layer_geometry_field"]
+    param_distant_geometry_field = layer_props.get("layer_geometry_field")
+    
+    # FIX v4.0.3 (2026-01-16): Auto-detect geometry column if stored value is invalid
+    # The stored value may be "NULL" (string literal) from stale config
+    if not param_distant_geometry_field or param_distant_geometry_field in ('NULL', 'None', ''):
+        layer = layer_props.get("layer")
+        if layer:
+            try:
+                # Try to get geometry column from QGIS layer
+                detected_geom = layer.dataProvider().geometryColumn()
+                if detected_geom:
+                    param_distant_geometry_field = detected_geom
+                    logger.info(f"✓ Auto-detected geometry column for {param_distant_table}: '{detected_geom}'")
+                else:
+                    # Try from URI
+                    from qgis.core import QgsDataSourceUri
+                    uri = QgsDataSourceUri(layer.source())
+                    detected_geom = uri.geometryColumn()
+                    if detected_geom:
+                        param_distant_geometry_field = detected_geom
+                        logger.info(f"✓ Auto-detected geometry column from URI for {param_distant_table}: '{detected_geom}'")
+            except Exception as e:
+                logger.warning(f"Could not auto-detect geometry column: {e}")
+        
+        # Final fallback to 'geom' (PostgreSQL default)
+        if not param_distant_geometry_field or param_distant_geometry_field in ('NULL', 'None', ''):
+            param_distant_geometry_field = 'geom'
+            logger.warning(f"⚠️ Using fallback geometry column 'geom' for {param_distant_table}")
     
     postgis_sub_expression_array = []
     param_distant_geom_expression = (

@@ -202,9 +202,15 @@ def combine_with_old_subset(
         if param_old_subset_where.endswith('))'):
             param_old_subset_where = param_old_subset_where[:-1]
         
+        # FIX 2026-01-16: Strip leading "WHERE " from new_expression to prevent "WHERE WHERE" syntax error
+        clean_new_expression = new_expression.lstrip()
+        if clean_new_expression.upper().startswith('WHERE '):
+            clean_new_expression = clean_new_expression[6:].lstrip()
+            logger.debug(f"Stripped WHERE prefix from new_expression: '{clean_new_expression[:50]}...'")
+        
         combined = (
             f'{param_source_old_subset} {param_old_subset_where} '
-            f'{combine_operator} ( {new_expression} )'
+            f'{combine_operator} ( {clean_new_expression} )'
         )
     
     # Optimize duplicate IN clauses if callback provided

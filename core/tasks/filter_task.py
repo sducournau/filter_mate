@@ -33,6 +33,7 @@ import zipfile
 from collections import OrderedDict
 from pathlib import Path
 from functools import partial
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from qgis.core import (
     Qgis,
@@ -92,8 +93,15 @@ logger = setup_logger(
     level=logging.INFO
 )
 
-# PostgreSQL availability check (migrated to adapters.backends.postgresql_availability)
-from ...adapters.backends.postgresql_availability import psycopg2, PSYCOPG2_AVAILABLE, POSTGRESQL_AVAILABLE
+# PostgreSQL availability check - EPIC-1 E13: Use BackendServices facade
+from ..ports.backend_services import get_backend_services, get_postgresql_available
+
+# Lazy load psycopg2 and availability flags via facade
+_backend_services = get_backend_services()
+_pg_availability = _backend_services.get_postgresql_availability()
+psycopg2 = _pg_availability.psycopg2
+PSYCOPG2_AVAILABLE = _pg_availability.psycopg2_available
+POSTGRESQL_AVAILABLE = _pg_availability.postgresql_available
 
 # Import constants (migrated to infrastructure)
 from ...infrastructure.constants import (
@@ -205,54 +213,42 @@ from .task_completion_handler import (
     cleanup_memory_layer
 )
 
-# v3.0 MIG-023: Import TaskBridge for Strangler Fig migration
-# TaskBridge allows using new v3 backends while keeping legacy code as fallback
-try:
-    from ...adapters.task_bridge import get_task_bridge, BridgeStatus
-    TASK_BRIDGE_AVAILABLE = True
-except ImportError:
-    get_task_bridge = None
-    BridgeStatus = None
-    TASK_BRIDGE_AVAILABLE = False
-    logger.debug("TaskBridge not available - using legacy backends only")
+# EPIC-1 E13: Use BackendServices facade for all adapter imports
+# This maintains hexagonal architecture by routing through core/ports
 
-# PostgreSQL filter executor
-try:
-    from ...adapters.backends.postgresql import filter_executor as pg_executor
-    from ...adapters.backends.postgresql.filter_actions import (
-        execute_filter_action_postgresql as pg_execute_filter,
-        execute_filter_action_postgresql_direct as pg_execute_direct,
-        execute_filter_action_postgresql_materialized as pg_execute_materialized,
-        has_expensive_spatial_expression as pg_has_expensive_expr,
-        execute_reset_action_postgresql as pg_execute_reset,
-        execute_unfilter_action_postgresql as pg_execute_unfilter,
-    )
-    PG_EXECUTOR_AVAILABLE = True
-except ImportError:
-    pg_executor = None
+# v3.0 MIG-023: TaskBridge for Strangler Fig migration
+get_task_bridge, BridgeStatus = _backend_services.get_task_bridge()
+TASK_BRIDGE_AVAILABLE = get_task_bridge is not None
+
+# PostgreSQL filter executor - lazy loaded via facade
+pg_executor = _backend_services.get_postgresql_executor()
+PG_EXECUTOR_AVAILABLE = pg_executor is not None
+
+# Get individual PostgreSQL actions via facade
+_pg_actions = _backend_services.get_postgresql_filter_actions()
+if _pg_actions:
+    pg_execute_filter = _pg_actions.get('filter')
+    pg_execute_reset = _pg_actions.get('reset')
+    pg_execute_unfilter = _pg_actions.get('unfilter')
+    # These functions are not in the facade yet - use None for now
+    pg_execute_direct = None
+    pg_execute_materialized = None
+    pg_has_expensive_expr = None
+else:
     pg_execute_filter = None
     pg_execute_direct = None
     pg_execute_materialized = None
     pg_has_expensive_expr = None
     pg_execute_reset = None
     pg_execute_unfilter = None
-    PG_EXECUTOR_AVAILABLE = False
 
-# Spatialite filter executor
-try:
-    from ...adapters.backends.spatialite import filter_executor as sl_executor
-    SL_EXECUTOR_AVAILABLE = True
-except ImportError:
-    sl_executor = None
-    SL_EXECUTOR_AVAILABLE = False
+# Spatialite filter executor - lazy loaded via facade
+sl_executor = _backend_services.get_spatialite_executor()
+SL_EXECUTOR_AVAILABLE = sl_executor is not None
 
-# OGR filter executor
-try:
-    from ...adapters.backends.ogr import filter_executor as ogr_executor
-    OGR_EXECUTOR_AVAILABLE = True
-except ImportError:
-    ogr_executor = None
-    OGR_EXECUTOR_AVAILABLE = False
+# OGR filter executor - lazy loaded via facade
+ogr_executor = _backend_services.get_ogr_executor()
+OGR_EXECUTOR_AVAILABLE = ogr_executor is not None
 
 class FilterEngineTask(QgsTask):
     """Main QgsTask class which filter and unfilter data"""
@@ -276,7 +272,13 @@ class FilterEngineTask(QgsTask):
             cls._geometry_cache = SourceGeometryCache()
         return cls._geometry_cache
 
-    def __init__(self, description, task_action, task_parameters, backend_registry=None):
+    def __init__(
+        self,
+        description: str,
+        task_action: str,
+        task_parameters: Dict[str, Any],
+        backend_registry: Optional[Any] = None
+    ) -> None:
         """
         Initialize FilterEngineTask.
         
@@ -418,6 +420,111 @@ class FilterEngineTask(QgsTask):
         self._action_dispatcher = None
 
     # ========================================================================
+    # FIX 2026-01-16: Early Predicate Initialization
+    # ========================================================================
+    
+    def _initialize_current_predicates(self):
+        """
+        Initialize current_predicates from task parameters EARLY in the filtering process.
+        
+        FIX 2026-01-16: This method MUST be called at the start of execute_filtering(),
+        BEFORE execute_source_layer_filtering(). Previously, predicates were only
+        initialized in STEP 2/2 (distant layers), but ExpressionBuilder and
+        FilterOrchestrator are lazy-initialized during STEP 1/2 and need predicates.
+        
+        Without early initialization:
+        - ExpressionBuilder received EMPTY predicates
+        - FilterOrchestrator received EMPTY predicates
+        - Geometric filtering failed silently
+        
+        With early initialization:
+        - All components receive correct predicates from the start
+        - OGR backend gets both SQL names AND numeric QGIS codes
+        """
+        # Get geometric predicates from filtering parameters
+        filtering_params = self.task_parameters.get("filtering", {})
+        geom_predicates = filtering_params.get("geometric_predicates", [])
+        
+        # FIX v4.1.2: Log FULL filtering params for diagnosis
+        from qgis.core import QgsMessageLog, Qgis as QgisLevel
+        
+        logger.info("=" * 70)
+        logger.info("🔍 FILTERING PARAMETERS RECEIVED:")
+        logger.info(f"   has_geometric_predicates: {filtering_params.get('has_geometric_predicates', 'NOT SET')}")
+        logger.info(f"   geometric_predicates: {geom_predicates}")
+        logger.info(f"   has_layers_to_filter: {filtering_params.get('has_layers_to_filter', 'NOT SET')}")
+        logger.info(f"   layers_to_filter count: {len(filtering_params.get('layers_to_filter', []))}")
+        logger.info("=" * 70)
+        
+        if not geom_predicates:
+            # CRITICAL: Log to QGIS panel - this explains why distant layers won't be filtered!
+            logger.warning("⚠️ No geometric predicates in task_parameters - distant layers will NOT be filtered!")
+            QgsMessageLog.logMessage(
+                "⚠️ No geometric predicates configured - check 'Intersect' checkbox in Filtering panel",
+                "FilterMate", QgisLevel.Warning
+            )
+            self.current_predicates = {}
+            return
+        
+        logger.info("🔧 EARLY PREDICATE INITIALIZATION")
+        logger.info(f"   Input geometric_predicates: {geom_predicates}")
+        QgsMessageLog.logMessage(
+            f"🔧 Predicates: {geom_predicates}",
+            "FilterMate", QgisLevel.Info
+        )
+        
+        # Mapping SQL function → QGIS predicate code (pour OGR/processing)
+        sql_to_qgis_code = {
+            'ST_Intersects': 0,
+            'ST_Contains': 1,
+            'ST_Disjoint': 2,
+            'ST_Equals': 3,
+            'ST_Touches': 4,
+            'ST_Overlaps': 5,
+            'ST_Within': 6,
+            'ST_Crosses': 7,
+            'ST_Covers': 1,     # maps to Contains
+            'ST_CoveredBy': 6,  # maps to Within
+        }
+        
+        # Reset current_predicates
+        self.current_predicates = {}
+        
+        for key in geom_predicates:
+            if key in self.predicates:
+                func_name = self.predicates[key]
+                # Store SQL name (for PostgreSQL/Spatialite)
+                self.current_predicates[func_name] = func_name
+                # Store numeric code (for OGR/processing)
+                qgis_code = sql_to_qgis_code.get(func_name)
+                if qgis_code is not None:
+                    self.current_predicates[qgis_code] = func_name
+                    logger.debug(f"   Mapped: {key} → {func_name} → QGIS code {qgis_code}")
+                else:
+                    logger.warning(f"   ⚠️ No QGIS code for: {key} → {func_name}")
+            else:
+                logger.warning(f"   ⚠️ Unknown predicate key: {key}")
+        
+        # Log final state
+        numeric_keys = [k for k in self.current_predicates.keys() if isinstance(k, int)]
+        string_keys = [k for k in self.current_predicates.keys() if isinstance(k, str)]
+        logger.info(f"   Result: {self.current_predicates}")
+        logger.info(f"   Numeric keys (OGR): {numeric_keys}")
+        logger.info(f"   String keys (SQL): {string_keys}")
+        logger.info("=" * 70)
+        
+        # FIX 2026-01-16: Propagate predicates to EXISTING instances
+        # TaskRunOrchestrator may have already created expression_builder and filter_orchestrator
+        # with current_predicates=[], so we must update them here.
+        if self._expression_builder is not None:
+            self._expression_builder.current_predicates = self.current_predicates
+            logger.debug("Propagated predicates to existing ExpressionBuilder")
+        
+        if self._filter_orchestrator is not None:
+            self._filter_orchestrator.current_predicates = self.current_predicates
+            logger.debug("Propagated predicates to existing FilterOrchestrator")
+
+    # ========================================================================
     # Phase E13: Lazy Initialization for Extracted Classes
     # ========================================================================
     
@@ -503,15 +610,41 @@ class FilterEngineTask(QgsTask):
         FIX 2026-01-15: When filtering distant layers, the context from
         TaskRunOrchestrator may not be available (e.g., OGR sequential filtering).
         This lazy initialization ensures FilterOrchestrator is always available.
+        
+        FIX 2026-01-16: current_predicates is now initialized early in execute_filtering()
+        via _initialize_current_predicates(), so predicates should never be empty here.
+        Always update predicates on existing instances in case they were created with empty ones.
+        
+        CRITICAL FIX 2026-01-16: Race condition - TaskRunOrchestrator creates FilterOrchestrator
+        with empty predicates BEFORE _initialize_current_predicates() runs. We MUST always
+        propagate fresh predicates to avoid geometric filtering with empty predicates.
         """
+        predicates_to_pass = getattr(self, 'current_predicates', None) or {}
+        
+        # Validate predicates are populated
+        if not predicates_to_pass:
+            logger.error("❌ _get_filter_orchestrator called with EMPTY current_predicates!")
+            logger.error("   This will cause geometric filtering to FAIL silently.")
+            logger.error("   Check if _initialize_current_predicates() was called BEFORE filtering.")
+            logger.error("   Check task_parameters['filtering']['geometric_predicates'] is populated.")
+        
         if self._filter_orchestrator is None:
+            logger.debug(f"FilterOrchestrator: Creating new instance with predicates: {list(predicates_to_pass.keys()) if predicates_to_pass else 'EMPTY'}")
+            
             self._filter_orchestrator = FilterOrchestrator(
                 task_parameters=self.task_parameters,
                 subset_queue_callback=self.queue_subset_request,
                 parent_task=self,
-                current_predicates=getattr(self, 'current_predicates', [])
+                current_predicates=predicates_to_pass
             )
             logger.debug("FilterOrchestrator lazy-initialized for distant layer filtering")
+        else:
+            # CRITICAL: ALWAYS update predicates to fix race condition
+            # TaskRunOrchestrator may have created instance with predicates=[] before
+            # _initialize_current_predicates() populated self.current_predicates
+            self._filter_orchestrator.current_predicates = predicates_to_pass
+            logger.debug(f"FilterOrchestrator: ALWAYS propagating predicates: {list(predicates_to_pass.keys()) if predicates_to_pass else 'EMPTY'}")
+        
         return self._filter_orchestrator
 
     def _get_expression_builder(self):
@@ -548,11 +681,21 @@ class FilterEngineTask(QgsTask):
         elif hasattr(self, 'source_layer') and self.source_layer:
             source_feature_count = self.source_layer.featureCount()
         
+        # CRITICAL FIX 2026-01-16: ALWAYS get fresh predicates (race condition fix)
+        predicates_to_pass = getattr(self, 'current_predicates', None) or {}
+        
+        # Validate predicates are populated
+        if not predicates_to_pass:
+            logger.error("❌ _get_expression_builder called with EMPTY current_predicates!")
+            logger.error("   Expression building may fail or produce incorrect filters.")
+        
         if self._expression_builder is None:
+            logger.debug(f"ExpressionBuilder: Creating new instance with predicates: {list(predicates_to_pass.keys()) if predicates_to_pass else 'EMPTY'}")
+            
             self._expression_builder = ExpressionBuilder(
                 task_parameters=self.task_parameters,
                 source_layer=getattr(self, 'source_layer', None),
-                current_predicates=getattr(self, 'current_predicates', []),
+                current_predicates=predicates_to_pass,
                 source_wkt=source_wkt,
                 source_srid=source_srid,
                 source_feature_count=source_feature_count,
@@ -562,16 +705,16 @@ class FilterEngineTask(QgsTask):
             )
             logger.debug("ExpressionBuilder lazy-initialized with PostgreSQL parameters")
         else:
-            # FIX 2026-01-16: Update parameters in case they were not set initially
-            # (e.g., if ExpressionBuilder was created by task_run_orchestrator before source geom prep)
+            # CRITICAL: ALWAYS update parameters AND predicates to fix race condition
+            # TaskRunOrchestrator may have created instance before source geom prep or predicate init
             self._expression_builder.source_wkt = source_wkt
             self._expression_builder.source_srid = source_srid
             self._expression_builder.source_feature_count = source_feature_count
             self._expression_builder.buffer_value = getattr(self, 'param_buffer_value', None)
             self._expression_builder.buffer_expression = getattr(self, 'param_buffer_expression', None)
             self._expression_builder.use_centroids_distant = getattr(self, 'param_use_centroids_distant_layers', False)
-            self._expression_builder.current_predicates = getattr(self, 'current_predicates', [])
-            logger.debug("ExpressionBuilder parameters updated from task state")
+            self._expression_builder.current_predicates = predicates_to_pass
+            logger.debug(f"ExpressionBuilder: ALWAYS propagating predicates: {list(predicates_to_pass.keys()) if predicates_to_pass else 'EMPTY'}")
         
         logger.debug(f"   source_wkt available: {source_wkt is not None}")
         logger.debug(f"   source_srid: {source_srid}")
@@ -686,16 +829,10 @@ class FilterEngineTask(QgsTask):
         connector = self._get_backend_connector()
         connector.cleanup_backend_resources()
         
-        # FIX v4.1.1: Cleanup temporary OGR layers that were registered during filtering
-        try:
-            from ...adapters.backends.ogr.filter_executor import cleanup_ogr_temp_layers
-            cleanup_ogr_temp_layers()
-        except ImportError:
-            pass
-        except Exception as e:
-            logger.warning(f"Failed to cleanup OGR temp layers: {e}")
+        # FIX v4.1.1: Cleanup temporary OGR layers via BackendServices facade
+        _backend_services.cleanup_ogr_temp_layers()
 
-    def queue_subset_request(self, layer, expression):
+    def queue_subset_request(self, layer: QgsVectorLayer, expression: str) -> None:
         """Queue subset string to be applied on main thread (thread safety v2.3.21)."""
         if layer and expression is not None:
             self._pending_subset_requests.append((layer, expression))
@@ -722,8 +859,22 @@ class FilterEngineTask(QgsTask):
     
     
     def _safe_spatialite_connect(self):
-        """Delegates to safe_spatialite_connect() in task_utils.py."""
-        return safe_spatialite_connect(self.db_file_path)
+        """
+        Get a Spatialite connection for the current task.
+        
+        FIX 2026-01-16: Previously delegated to safe_spatialite_connect() which is a
+        @contextmanager, causing "'_GeneratorContextManager' object has no attribute 'cursor'"
+        error. Now uses spatialite_connect() directly which returns a connection object.
+        
+        Ensures the database directory exists before connecting.
+        
+        Returns:
+            sqlite3.Connection: Spatialite database connection
+        """
+        # Ensure directory exists first
+        ensure_db_directory_exists(self.db_file_path)
+        # Use spatialite_connect directly (NOT the context manager version)
+        return spatialite_connect(self.db_file_path)
 
     def _get_valid_postgresql_connection(self):
         """
@@ -1048,7 +1199,7 @@ class FilterEngineTask(QgsTask):
             self.exception = e
             return False
 
-    def run(self):
+    def run(self) -> bool:
         """
         Main task orchestration method (v2).
         
@@ -1065,13 +1216,54 @@ class FilterEngineTask(QgsTask):
         import traceback
         run_start_time = time.time()
         
+        # FIX 2026-01-16: Log PostgreSQL availability at task start
+        from qgis.core import QgsMessageLog, Qgis as QgisLevel
+        
+        # CRITICAL: Use print() to force output to Python Console
+        print("=" * 80)
+        print(f"🔍 DIAGNOSTIC FilterMate - FilterEngineTask.run() STARTED")
+        print(f"   POSTGRESQL_AVAILABLE = {POSTGRESQL_AVAILABLE}")
+        print(f"   PSYCOPG2_AVAILABLE = {PSYCOPG2_AVAILABLE}")
+        print(f"   action = {self.task_action}")
+        print("=" * 80)
+        
         logger.info(f"{'=' * 60}")
+        logger.info(f"🔍 POSTGRESQL_AVAILABLE = {POSTGRESQL_AVAILABLE}")
+        logger.info(f"🔍 PSYCOPG2_AVAILABLE = {PSYCOPG2_AVAILABLE}")
+        logger.info(f"{'=' * 60}")
+        
+        # Also log to QGIS message panel for visibility
+        QgsMessageLog.logMessage(
+            f"🔍 FilterMate PostgreSQL Status:\n"
+            f"   POSTGRESQL_AVAILABLE = {POSTGRESQL_AVAILABLE}\n"
+            f"   PSYCOPG2_AVAILABLE = {PSYCOPG2_AVAILABLE}",
+            "FilterMate", QgisLevel.Info
+        )
+        
         logger.info(f"🏃 FilterEngineTask.run() STARTED")
         logger.info(f"   action={self.task_action}")
         logger.info(f"   layers_count={self.layers_count}")
         source_layer = getattr(self, 'source_layer', None)
         logger.info(f"   source_layer={source_layer.name() if source_layer else 'None (will be initialized)'}")
         logger.info(f"{'=' * 60}")
+        
+        # FIX 2026-01-16: Extract critical configuration values IMMEDIATELY
+        # These must be available BEFORE execute_task_run() because they are used
+        # during source layer filtering (e.g., _safe_spatialite_connect needs db_file_path)
+        task_params = self.task_parameters.get("task", {})
+        if task_params.get("db_file_path"):
+            self.db_file_path = task_params["db_file_path"]
+            logger.info(f"   db_file_path extracted: {self.db_file_path}")
+        else:
+            logger.warning("   ⚠️ db_file_path NOT in task_parameters['task'] - Spatialite operations may fail!")
+        
+        if task_params.get("project_uuid"):
+            self.project_uuid = task_params["project_uuid"]
+            logger.debug(f"   project_uuid extracted: {self.project_uuid}")
+        
+        if task_params.get("session_id"):
+            self.session_id = task_params["session_id"]
+            logger.debug(f"   session_id extracted: {self.session_id}")
         
         try:
             # PHASE 14.7: Delegate to TaskRunOrchestrator service
@@ -1255,14 +1447,36 @@ class FilterEngineTask(QgsTask):
                     # Get predicates from layer_props or default to intersects
                     predicates = layer_props.get('predicates', ['intersects'])
                     
+                    # Build spatial expression from predicates
+                    # Format: SPATIAL_FILTER(predicate1, predicate2, ...)
+                    predicate_str = ', '.join(predicates) if predicates else 'intersects'
+                    spatial_expression = f"SPATIAL_FILTER({predicate_str})"
+                    
                     step_config = {
+                        'expression': spatial_expression,  # Required by TaskBridge
                         'target_layer_ids': [layer.id()],
                         'predicates': predicates,
                         'step_name': f"Filter {layer.name()}",
                         'use_previous_result': False  # Each layer filtered independently
                     }
                     steps.append(step_config)
-                    logger.debug(f"   Step for {layer.name()}: predicates={predicates}")
+                    logger.debug(f"   Step for {layer.name()}: predicates={predicates}, expression={spatial_expression}")
+            
+            # FIX 2026-01-16: Log source geometry diagnostic
+            logger.info("=" * 70)
+            logger.info("🔍 MULTI-STEP SOURCE GEOMETRY DIAGNOSTIC")
+            logger.info(f"   Source layer: {self.source_layer.name()} (provider: {param_source_provider_type})")
+            logger.info(f"   Source feature count: {self.source_layer.featureCount()}")
+            logger.info(f"   Source CRS: {self.source_layer.crs().authid() if self.source_layer.crs() else 'UNKNOWN'}")
+            logger.info(f"   Target layers: {len(steps)}")
+            for idx, (provider_type, layer_list) in enumerate(layers_dict.items(), 1):
+                for layer, layer_props in layer_list:
+                    logger.info(f"   {idx}. {layer.name()}:")
+                    logger.info(f"      - Provider: {layer.providerType()}")
+                    logger.info(f"      - CRS: {layer.crs().authid() if layer.crs() else 'UNKNOWN'}")
+                    logger.info(f"      - Geometry column: {layer_props.get('layer_geometry_field', 'UNKNOWN')}")
+                    logger.info(f"      - Primary key: {layer_props.get('layer_key_column_name', 'UNKNOWN')}")
+            logger.info("=" * 70)
             
             # Define progress callback adapter
             def bridge_progress(step_num, total_steps, step_name):
@@ -1496,10 +1710,17 @@ class FilterEngineTask(QgsTask):
         """
         executor = self._get_attribute_executor()
         
-        return executor.build_feature_id_expression(
+        result = executor.build_feature_id_expression(
             features_list=features_list,
             is_numeric=self.task_parameters["infos"]["primary_key_is_numeric"]
         )
+        
+        # FIX 2026-01-16: Log expression to diagnose WHERE prefix
+        logger.info(f"🔍 _build_feature_id_expression result: '{result[:100] if result else None}...'")
+        if result and result.strip().startswith('WHERE'):
+            logger.error(f"❌ BUG: Expression starts with WHERE! Should NOT have WHERE prefix for setSubsetString")
+        
+        return result
     
     def _is_pk_numeric(self, layer=None, pk_field=None):
         """Check if the primary key field is numeric. Delegated to pg_executor."""
@@ -1558,12 +1779,18 @@ class FilterEngineTask(QgsTask):
         # CRITICAL FIX v2.5.12: Use param_source_provider_type instead of providerType()
         # providerType() returns 'postgres' even when using OGR fallback
         if self.param_source_provider_type == PROVIDER_POSTGRES:
+            # FIX 2026-01-16: Strip leading "WHERE " from expression to prevent "WHERE WHERE" syntax error
+            clean_expression = expression.lstrip()
+            if clean_expression.upper().startswith('WHERE '):
+                clean_expression = clean_expression[6:].lstrip()
+                logger.debug(f"Stripped WHERE prefix from expression in _apply_filter_and_update_subset")
+            
             # Build full SELECT expression for subset management (PostgreSQL only)
             full_expression = (
                 f'SELECT "{self.param_source_table}"."{self.primary_key_name}", '
                 f'"{self.param_source_table}"."{self.param_source_geom}" '
                 f'FROM "{self.param_source_schema}"."{self.param_source_table}" '
-                f'WHERE {expression}'
+                f'WHERE {clean_expression}'
             )
             self.manage_layer_subset_strings(
                 self.source_layer,
@@ -1576,7 +1803,7 @@ class FilterEngineTask(QgsTask):
         # Return True to indicate expression was queued successfully
         return True
 
-    def execute_source_layer_filtering(self):
+    def execute_source_layer_filtering(self) -> bool:
         """
         Manage the creation of the origin filtering expression (v2).
         
@@ -1827,6 +2054,10 @@ class FilterEngineTask(QgsTask):
         # Store failed layer names for error message in finished()
         if failed_filters > 0:
             self._failed_layer_names = failed_layer_names
+            # FIX v4.1.2: Set self.message for proper error display in finished()
+            layer_list = ', '.join(failed_layer_names[:3])
+            suffix = f' (+{len(failed_layer_names) - 3} more)' if len(failed_layer_names) > 3 else ''
+            self.message = f"{failed_filters} layer(s) failed to filter: {layer_list}{suffix}"
             logger.warning(f"⚠️ {failed_filters} layer(s) failed to filter (parallel mode) - returning False")
             logger.warning(f"   Failed layers: {', '.join(failed_layer_names[:5])}{'...' if len(failed_layer_names) > 5 else ''}")
             return False
@@ -1876,8 +2107,9 @@ class FilterEngineTask(QgsTask):
                 
                 result = self.execute_geometric_filtering(layer_provider_type, layer, layer_props)
                 
-                # DIAGNOSTIC: Log result for debugging
-                logger.debug(f"_filter_all_layers_sequential: {layer_name} → result={result}")
+                # FIX v4.1.2: Log result VISIBLY for debugging
+                from qgis.core import QgsMessageLog, Qgis as QgisLevel
+                logger.info(f"   → execute_geometric_filtering RESULT: {result}")
                 
                 if result:
                     successful_filters += 1
@@ -1906,6 +2138,10 @@ class FilterEngineTask(QgsTask):
         # Store failed layer names for error message in finished()
         if failed_filters > 0:
             self._failed_layer_names = failed_layer_names
+            # FIX v4.1.2: Set self.message for proper error display in finished()
+            layer_list = ', '.join(failed_layer_names[:3])
+            suffix = f' (+{len(failed_layer_names) - 3} more)' if len(failed_layer_names) > 3 else ''
+            self.message = f"{failed_filters} layer(s) failed to filter: {layer_list}{suffix}"
             logger.warning(f"⚠️ {failed_filters} layer(s) failed to filter - returning False")
             logger.warning(f"   Failed layers: {', '.join(failed_layer_names[:5])}{'...' if len(failed_layer_names) > 5 else ''}")
             return False
@@ -1979,11 +2215,24 @@ class FilterEngineTask(QgsTask):
         return ExpressionService().to_sql(expression, ProviderType.SPATIALITE, geom_col)
 
 
-    def prepare_postgresql_source_geom(self):
-        """Prepare PostgreSQL source geometry with buffer/centroid. Delegated to adapters.backends.postgresql."""
-        # DEPRECATED v4.0.1: Use self._prepare_source_geometry() with BackendRegistry instead
-        from ...adapters.backends.postgresql import prepare_postgresql_source_geom as pg_prepare_source_geom
-        result_geom, mv_name = pg_prepare_source_geom(
+    def prepare_postgresql_source_geom(self) -> str:
+        """Prepare PostgreSQL source geometry with buffer/centroid. Delegated to BackendServices facade.
+        
+        Returns:
+            str: PostgreSQL geometry expression (e.g., '"schema"."table"."geom"' or buffered variant)
+        """
+        # FIX v4.1.2: Add diagnostic logging to trace PostgreSQL geometry preparation
+        logger.info("=" * 60)
+        logger.info("🐘 PREPARING PostgreSQL SOURCE GEOMETRY")
+        logger.info("=" * 60)
+        logger.info(f"   source_schema: {self.param_source_schema}")
+        logger.info(f"   source_table: {self.param_source_table}")
+        logger.info(f"   source_geom: {self.param_source_geom}")
+        logger.info(f"   buffer_value: {getattr(self, 'param_buffer_value', None)}")
+        logger.info(f"   buffer_expression: {getattr(self, 'param_buffer_expression', None)}")
+        logger.info(f"   use_centroids: {getattr(self, 'param_use_centroids_source_layer', False)}")
+        
+        result_geom, mv_name = _backend_services.prepare_postgresql_source_geom(
             source_table=self.param_source_table, source_schema=self.param_source_schema,
             source_geom=self.param_source_geom, buffer_value=getattr(self, 'param_buffer_value', None),
             buffer_expression=getattr(self, 'param_buffer_expression', None),
@@ -1995,7 +2244,14 @@ class FilterEngineTask(QgsTask):
         self.postgresql_source_geom = result_geom
         if mv_name:
             self.current_materialized_view_name = mv_name
-        logger.debug(f"prepare_postgresql_source_geom: {self.postgresql_source_geom}")
+        
+        # FIX v4.1.2: Log result for debugging
+        logger.info(f"   ✓ postgresql_source_geom = '{str(result_geom)[:100]}...'")
+        logger.info("=" * 60)
+        
+        # FIX v4.0.3 (2026-01-16): CRITICAL - Return the geometry expression!
+        # The callback in geometry_preparer.py expects a return value.
+        return result_geom
 
 
     def _get_optimization_thresholds(self):
@@ -2030,16 +2286,18 @@ class FilterEngineTask(QgsTask):
         config = BufferConfig(distance=buffer_value or 0, segments=buffer_segments, end_cap_style=BufferEndCapStyle(buffer_type))
         return BufferService().calculate_buffer_aware_tolerance(config, extent_size, is_geographic)
 
-    def _simplify_geometry_adaptive(self, geometry, max_wkt_length=None, crs_authid=None):
-        """Simplify geometry adaptively. Delegated to GeometryPreparationAdapter."""
+    def _simplify_geometry_adaptive(self, geometry: Any, max_wkt_length: Optional[int] = None, crs_authid: Optional[str] = None) -> Any:
+        """Simplify geometry adaptively. Delegated to BackendServices facade."""
         from qgis.core import QgsGeometry
         
         if not geometry or geometry.isEmpty():
             return geometry
         
         try:
-            from ...adapters.qgis.geometry_preparation import GeometryPreparationAdapter
-            adapter = GeometryPreparationAdapter()
+            adapter = _backend_services.get_geometry_preparation_adapter()
+            if adapter is None:
+                logger.warning("GeometryPreparationAdapter not available, returning original geometry")
+                return geometry
             
             # Get buffer parameters for tolerance calculation
             buffer_value = getattr(self, 'param_buffer_value', None)
@@ -2066,13 +2324,15 @@ class FilterEngineTask(QgsTask):
             logger.error(f"GeometryPreparationAdapter simplify error: {e}")
             return geometry
 
-    def prepare_spatialite_source_geom(self):
-        """Prepare source geometry for Spatialite filtering. Delegated to spatialite backend."""
-        # DEPRECATED v4.0.1: Use self._prepare_source_geometry() with BackendRegistry instead
-        from ...adapters.backends.spatialite import (
-            SpatialiteSourceContext,
-            prepare_spatialite_source_geom as spatialite_prepare_source_geom
-        )
+    def prepare_spatialite_source_geom(self) -> Optional[str]:
+        """Prepare source geometry for Spatialite filtering. Delegated to BackendServices facade.
+        
+        Returns:
+            str: WKT geometry string, or None if preparation failed
+        """
+        SpatialiteSourceContext = _backend_services.get_spatialite_source_context_class()
+        if SpatialiteSourceContext is None:
+            raise ImportError("SpatialiteSourceContext not available")
         
         context = SpatialiteSourceContext(
             source_layer=self.source_layer,
@@ -2092,7 +2352,7 @@ class FilterEngineTask(QgsTask):
             get_optimization_thresholds=self._get_optimization_thresholds,
         )
         
-        result = spatialite_prepare_source_geom(context)
+        result = _backend_services.prepare_spatialite_source_geom(context)
         if result.success:
             self.spatialite_source_geom = result.wkt
             if hasattr(self, 'task_parameters') and self.task_parameters:
@@ -2101,31 +2361,51 @@ class FilterEngineTask(QgsTask):
                 self.task_parameters['infos']['source_geom_wkt'] = result.wkt
                 self.task_parameters['infos']['buffer_state'] = result.buffer_state
             logger.debug(f"prepare_spatialite_source_geom: WKT length = {len(result.wkt) if result.wkt else 0}")
+            logger.info(f"✓ Spatialite source geom prepared: {len(result.wkt)} chars")
+            return result.wkt  # FIX: Return WKT string for lambda callback
         else:
-            logger.error(f"prepare_spatialite_source_geom failed: {result.error_message}")
+            error_msg = result.error_message or "Unknown error"
+            logger.error(f"prepare_spatialite_source_geom failed: {error_msg}")
+            # FIX 2026-01-16: Also log to QGIS message panel for visibility
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(
+                f"❌ Spatialite geometry preparation FAILED: {error_msg}",
+                "FilterMate", Qgis.Critical
+            )
+            logger.error(f"  → This will cause distant layer filtering to fail!")
+            logger.error(f"  → Check if source layer has valid geometry")
+            logger.error(f"  → Check if source layer has features selected or filtered")
             self.spatialite_source_geom = None
+            return None  # FIX: Return None to signal failure
 
-    def _copy_filtered_layer_to_memory(self, layer, layer_name="filtered_copy"):
+    def _copy_filtered_layer_to_memory(self, layer: QgsVectorLayer, layer_name: str = "filtered_copy") -> QgsVectorLayer:
         """Copy filtered layer to memory layer. Delegated to GeometryPreparationAdapter."""
-        from ...adapters.qgis.geometry_preparation import GeometryPreparationAdapter
+        GeometryPreparationAdapter = _backend_services.get_geometry_preparation_adapter()
+        if GeometryPreparationAdapter is None:
+            raise Exception("GeometryPreparationAdapter not available")
         result = GeometryPreparationAdapter().copy_filtered_to_memory(layer, layer_name)
         if result.success and result.layer:
             self._verify_and_create_spatial_index(result.layer, layer_name)
             return result.layer
         raise Exception(f"Failed to copy filtered layer: {result.error_message or 'Unknown'}")
 
-    def _copy_selected_features_to_memory(self, layer, layer_name="selected_copy"):
+    def _copy_selected_features_to_memory(self, layer: QgsVectorLayer, layer_name: str = "selected_copy") -> QgsVectorLayer:
         """Copy selected features to memory layer. Delegated to GeometryPreparationAdapter."""
-        from ...adapters.qgis.geometry_preparation import GeometryPreparationAdapter
+        GeometryPreparationAdapter = _backend_services.get_geometry_preparation_adapter()
+        if GeometryPreparationAdapter is None:
+            raise Exception("GeometryPreparationAdapter not available")
         result = GeometryPreparationAdapter().copy_selected_to_memory(layer, layer_name)
         if result.success and result.layer:
             self._verify_and_create_spatial_index(result.layer, layer_name)
             return result.layer
         raise Exception(f"Failed to copy selected features: {result.error_message or 'Unknown'}")
 
-    def _create_memory_layer_from_features(self, features, crs, layer_name="from_features"):
+    def _create_memory_layer_from_features(self, features: List[QgsFeature], crs: QgsCoordinateReferenceSystem, layer_name: str = "from_features") -> Optional[QgsVectorLayer]:
         """Create memory layer from QgsFeature objects. Delegated to GeometryPreparationAdapter."""
-        from ...adapters.qgis.geometry_preparation import GeometryPreparationAdapter
+        GeometryPreparationAdapter = _backend_services.get_geometry_preparation_adapter()
+        if GeometryPreparationAdapter is None:
+            logger.error("GeometryPreparationAdapter not available")
+            return None
         result = GeometryPreparationAdapter().create_memory_from_features(features, crs, layer_name)
         if result.success and result.layer:
             self._verify_and_create_spatial_index(result.layer, layer_name)
@@ -2133,9 +2413,12 @@ class FilterEngineTask(QgsTask):
         logger.error(f"_create_memory_layer_from_features failed: {result.error_message or 'Unknown'}")
         return None
 
-    def _convert_layer_to_centroids(self, layer):
+    def _convert_layer_to_centroids(self, layer: QgsVectorLayer) -> Optional[QgsVectorLayer]:
         """Convert layer geometries to centroids. Delegated to GeometryPreparationAdapter."""
-        from ...adapters.qgis.geometry_preparation import GeometryPreparationAdapter
+        GeometryPreparationAdapter = _backend_services.get_geometry_preparation_adapter()
+        if GeometryPreparationAdapter is None:
+            logger.error("GeometryPreparationAdapter not available")
+            return None
         result = GeometryPreparationAdapter().convert_to_centroids(layer)
         if result.success and result.layer:
             return result.layer
@@ -2870,7 +3153,7 @@ class FilterEngineTask(QgsTask):
         """
         v4.7 E6-S2: Simplify complex source geometries for OGR fallback.
         
-        Pure delegation to adapters.backends.ogr.geometry_optimizer.simplify_source_for_ogr_fallback
+        Delegated to BackendServices facade.
         
         Args:
             source_layer: QgsVectorLayer containing source geometry
@@ -2878,9 +3161,7 @@ class FilterEngineTask(QgsTask):
         Returns:
             QgsVectorLayer: Simplified source layer (may be new memory layer)
         """
-        # DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
-        from ...adapters.backends.ogr.geometry_optimizer import simplify_source_for_ogr_fallback
-        return simplify_source_for_ogr_fallback(source_layer, logger=logger)
+        return _backend_services.simplify_source_for_ogr_fallback(source_layer, logger=logger)
     
     def _prepare_source_geometry(self, layer_provider_type):
         """Prepare source geometry expression based on provider type (PostgreSQL→SQL/WKT, Spatialite→WKT, OGR→QgsVectorLayer)."""
@@ -2967,8 +3248,21 @@ class FilterEngineTask(QgsTask):
         logger.error(f"No source geometry available for provider '{layer_provider_type}'")
         return None
 
-    def execute_filtering(self):
-        """Filter source layer first, then distant layers if successful."""
+    def execute_filtering(self) -> bool:
+        """
+        Filter source layer first, then distant layers if successful.
+        
+        Returns:
+            bool: True if filtering succeeded, False otherwise
+        """
+        
+        # FIX 2026-01-16: Initialize current_predicates EARLY
+        # current_predicates must be populated BEFORE execute_source_layer_filtering()
+        # because ExpressionBuilder and FilterOrchestrator need them during lazy init.
+        # Previously, predicates were only set in STEP 2/2 (distant layers), causing
+        # EMPTY predicates warnings during source layer filtering.
+        self._initialize_current_predicates()
+        
         # STEP 1/2: Filtering SOURCE LAYER
         
         logger.info("=" * 60)
@@ -3097,47 +3391,10 @@ class FilterEngineTask(QgsTask):
                 logger.info("=" * 60)
                 logger.info(f"  → {len(self.task_parameters['task']['layers'])} layer(s) to filter")
                 
-                source_predicates = self.task_parameters["filtering"]["geometric_predicates"]
-                # source_predicates is a list, not a dict
-                logger.info(f"  → Geometric predicates: {source_predicates}")
+                # FIX 2026-01-16: current_predicates is already initialized at start of execute_filtering()
+                # Just log for confirmation
+                logger.info(f"  → Using pre-initialized predicates: {self.current_predicates}")
                 
-                # FIX v2.7.1: Use function name as key instead of indices
-                # Previously, using list(self.predicates).index(key) produced incorrect indices
-                # (0, 2, 4, 6...) because the predicates dict has both capitalized and lowercase
-                # entries (16 total). This caused Spatialite backend's index_to_name mapping to fail.
-                # Now we use the SQL function name directly as the key, which both backends handle correctly.
-                
-                # FIX 2026-01-15: Pour OGR, on doit AUSSI stocker les indices numériques QGIS
-                # car execute_ogr_spatial_selection() utilise processing.run("qgis:selectbylocation")
-                # qui attend des codes numériques (0=Intersects, 1=Contains, etc.)
-                
-                # Mapping SQL function → QGIS predicate code (pour OGR/processing)
-                sql_to_qgis_code = {
-                    'ST_Intersects': 0,
-                    'ST_Contains': 1,
-                    'ST_Disjoint': 2,
-                    'ST_Equals': 3,
-                    'ST_Touches': 4,
-                    'ST_Overlaps': 5,
-                    'ST_Within': 6,
-                    'ST_Crosses': 7,
-                    'ST_Covers': 1,     # maps to Contains
-                    'ST_CoveredBy': 6,  # maps to Within
-                }
-                
-                for key in source_predicates:
-                    if key in self.predicates:
-                        func_name = self.predicates[key]
-                        # Store both SQL name AND numeric code
-                        self.current_predicates[func_name] = func_name
-                        # Store numeric code for OGR (used by execute_ogr_spatial_selection)
-                        qgis_code = sql_to_qgis_code.get(func_name)
-                        if qgis_code is not None:
-                            # Also store with numeric key for OGR compatibility
-                            self.current_predicates[qgis_code] = func_name
-                            logger.debug(f"  Mapped predicate: {key} → {func_name} → QGIS code {qgis_code}")
-
-                logger.info(f"  → Current predicates configured: {self.current_predicates}")
                 logger.info(f"\n🚀 Calling manage_distant_layers_geometric_filtering()...")
                 
                 result = self.manage_distant_layers_geometric_filtering()
@@ -3216,7 +3473,7 @@ class FilterEngineTask(QgsTask):
         return result 
      
 
-    def execute_unfiltering(self):
+    def execute_unfiltering(self) -> bool:
         """
         Remove all filters from source layer and selected remote layers.
         
@@ -3263,7 +3520,7 @@ class FilterEngineTask(QgsTask):
         logger.info("=" * 60)
         return True
     
-    def execute_reseting(self):
+    def execute_reseting(self) -> bool:
         """
         Reset all layers to their original/saved subset state.
         
@@ -3377,7 +3634,7 @@ class FilterEngineTask(QgsTask):
     # See execute_exporting() below for proper delegation to core.export module.
     # =========================================================================
 
-    def execute_exporting(self):
+    def execute_exporting(self) -> bool:
         """
         Export selected layers. Supports standard/batch/ZIP/streaming modes.
         
@@ -3796,10 +4053,7 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if successful
         """
-        # DEPRECATED v4.0.1: Use self._apply_subset_via_executor() with BackendRegistry instead
-        from ...adapters.backends.spatialite import apply_spatialite_subset
-        
-        return apply_spatialite_subset(
+        return _backend_services.apply_spatialite_subset(
             layer=layer,
             name=name,
             primary_key_name=primary_key_name,
@@ -3836,10 +4090,7 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if successful
         """
-        # DEPRECATED v4.0.1: Use self._apply_subset_via_executor() with BackendRegistry instead
-        from ...adapters.backends.spatialite import manage_spatialite_subset
-        
-        return manage_spatialite_subset(
+        return _backend_services.manage_spatialite_subset(
             layer=layer,
             sql_subset_string=sql_subset_string,
             primary_key_name=primary_key_name,
@@ -3871,10 +4122,7 @@ class FilterEngineTask(QgsTask):
         Returns:
             tuple: (last_subset_id, last_seq_order, layer_name, name)
         """
-        # DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
-        from ...adapters.backends.spatialite import get_last_subset_info
-        
-        return get_last_subset_info(cur, layer, self.project_uuid)
+        return _backend_services.get_last_subset_info(cur, layer, self.project_uuid)
 
 
     def _determine_backend(self, layer):
@@ -3912,18 +4160,14 @@ class FilterEngineTask(QgsTask):
             )
 
 
-    def _create_simple_materialized_view_sql(self, schema, name, sql_subset_string):
-        """Delegated to adapters.backends.postgresql.schema_manager."""
-        # DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
-        from ...adapters.backends.postgresql.schema_manager import create_simple_materialized_view_sql
-        return create_simple_materialized_view_sql(schema, name, sql_subset_string)
+    def _create_simple_materialized_view_sql(self, schema: str, name: str, sql_subset_string: str) -> str:
+        """Delegated to BackendServices facade."""
+        return _backend_services.create_simple_materialized_view_sql(schema, name, sql_subset_string)
 
 
-    def _parse_where_clauses(self):
-        """Delegated to adapters.backends.postgresql.schema_manager."""
-        # DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
-        from ...adapters.backends.postgresql.schema_manager import parse_case_to_where_clauses
-        return parse_case_to_where_clauses(self.where_clause)
+    def _parse_where_clauses(self) -> Any:
+        """Delegated to BackendServices facade."""
+        return _backend_services.parse_case_to_where_clauses(self.where_clause)
 
 
     def _create_custom_buffer_view_sql(self, schema, name, geom_key_name, where_clause_fields_arr, last_subset_id, sql_subset_string):
@@ -3996,10 +4240,7 @@ class FilterEngineTask(QgsTask):
         Returns:
             str: Name of the schema to use (schema_name if created, 'public' as fallback)
         """
-        # DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
-        from ...adapters.backends.postgresql.schema_manager import ensure_temp_schema_exists
-        
-        result = ensure_temp_schema_exists(connexion, schema_name)
+        result = _backend_services.ensure_temp_schema_exists(connexion, schema_name)
         
         # Track schema error for instance state if fallback occurred
         if result == 'public' and schema_name != 'public':
@@ -4008,54 +4249,45 @@ class FilterEngineTask(QgsTask):
         return result
 
 
-    def _get_session_prefixed_name(self, base_name):
+    def _get_session_prefixed_name(self, base_name: str) -> str:
         """
         Generate a session-unique materialized view name.
         
-        Delegated to adapters.backends.postgresql.schema_manager.get_session_prefixed_name().
+        Delegated to BackendServices facade.
         """
-        # DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
-        from ...adapters.backends.postgresql.schema_manager import get_session_prefixed_name
-        
-        return get_session_prefixed_name(base_name, self.session_id)
+        return _backend_services.get_session_prefixed_name(base_name, self.session_id)
 
 
-    def _cleanup_session_materialized_views(self, connexion, schema_name):
+    def _cleanup_session_materialized_views(self, connexion: Any, schema_name: str) -> Any:
         """
         Clean up all materialized views for the current session.
         
-        Delegated to adapters.backends.postgresql.schema_manager.cleanup_session_materialized_views().
+        Delegated to BackendServices facade.
         """
-        # Strangler Fig: Delegate to extracted module (pg_executor or schema_manager)
-        if PG_EXECUTOR_AVAILABLE:
+        # Strangler Fig: Delegate to extracted module (pg_executor or facade)
+        if PG_EXECUTOR_AVAILABLE and pg_executor:
             return pg_executor.cleanup_session_materialized_views(
                 connexion, schema_name, self.session_id
             )
         
-        # Fallback to schema_manager
-        # DEPRECATED v4.0.1: Use self._cleanup_backend_resources() with BackendRegistry instead
-        from ...adapters.backends.postgresql.schema_manager import cleanup_session_materialized_views
-        
-        return cleanup_session_materialized_views(connexion, schema_name, self.session_id)
+        # Fallback to facade
+        return _backend_services.cleanup_session_materialized_views(connexion, schema_name, self.session_id)
 
 
-    def _cleanup_orphaned_materialized_views(self, connexion, schema_name, max_age_hours=24):
+    def _cleanup_orphaned_materialized_views(self, connexion: Any, schema_name: str, max_age_hours: int = 24) -> Any:
         """
         Clean up orphaned materialized views older than max_age_hours.
         
-        Delegated to adapters.backends.postgresql.schema_manager.cleanup_orphaned_materialized_views().
+        Delegated to BackendServices facade.
         """
-        # DEPRECATED v4.0.1: Use self._cleanup_backend_resources() with BackendRegistry instead
-        from ...adapters.backends.postgresql.schema_manager import cleanup_orphaned_materialized_views
-        
-        return cleanup_orphaned_materialized_views(connexion, schema_name, self.session_id, max_age_hours)
+        return _backend_services.cleanup_orphaned_materialized_views(connexion, schema_name, self.session_id, max_age_hours)
 
 
-    def _execute_postgresql_commands(self, connexion, commands):
+    def _execute_postgresql_commands(self, connexion: Any, commands: List[str]) -> bool:
         """
         Execute PostgreSQL commands with automatic reconnection on failure.
         
-        Delegated to adapters.backends.postgresql.schema_manager.execute_commands().
+        Delegated to BackendServices facade.
         
         Args:
             connexion: psycopg2 connection
@@ -4064,9 +4296,6 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if all commands succeeded
         """
-        # DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
-        from ...adapters.backends.postgresql.schema_manager import execute_commands
-        
         # Test connection and reconnect if needed
         try:
             with connexion.cursor() as cursor:
@@ -4075,20 +4304,25 @@ class FilterEngineTask(QgsTask):
             logger.debug(f"PostgreSQL connection test failed, reconnecting: {e}")
             connexion, _ = get_datasource_connexion_from_layer(self.source_layer)
         
-        # DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
-        return execute_commands(connexion, commands)
+        return _backend_services.execute_commands(connexion, commands)
 
 
-    def _ensure_source_table_stats(self, connexion, schema, table, geom_field):
+    def _ensure_source_table_stats(self, connexion: Any, schema: str, table: str, geom_field: str) -> bool:
         """
         Ensure PostgreSQL statistics exist for source table geometry column.
         
-        Delegated to adapters.backends.postgresql.schema_manager.ensure_table_stats().
-        """
-        # DEPRECATED v4.0.1: Use self._get_backend_executor() with BackendRegistry instead
-        from ...adapters.backends.postgresql.schema_manager import ensure_table_stats
+        Delegated to BackendServices facade.
         
-        return ensure_table_stats(connexion, schema, table, geom_field)
+        Args:
+            connexion: psycopg2 connection
+            schema: Schema name
+            table: Table name
+            geom_field: Geometry column name
+            
+        Returns:
+            bool: True if stats were verified/created
+        """
+        return _backend_services.ensure_table_stats(connexion, schema, table, geom_field)
 
 
     def _insert_subset_history(self, cur, conn, layer, sql_subset_string, seq_order):
@@ -4214,11 +4448,13 @@ class FilterEngineTask(QgsTask):
         """
         Extract WHERE clause from a SQL SELECT statement.
         
-        Delegated to core.filter.expression_builder.extract_where_clause_from_select().
+        Delegated to core.tasks.builders.subset_string_builder.SubsetStringBuilder.extract_where_clause().
         """
-        from ..filter.expression_builder import extract_where_clause_from_select
+        from .builders.subset_string_builder import SubsetStringBuilder
         
-        return extract_where_clause_from_select(sql_select)
+        # extract_where_clause is a static method that returns (sql_before_where, where_clause)
+        _, where_clause = SubsetStringBuilder.extract_where_clause(sql_select)
+        return where_clause
     
     
     # NOTE: _filter_action_postgresql_materialized REMOVED in Phase 14.2 (113 lines)
@@ -4699,8 +4935,17 @@ class FilterEngineTask(QgsTask):
             collector.restore_layer_selection(feature_fids)
             logger.info(f"✓ Restored source layer selection via FeatureCollector: {len(feature_fids)} feature(s)")
 
-    def finished(self, result):
-        result_action = None
+    def finished(self, result: Optional[bool]) -> None:
+        """
+        Handle task completion - cleanup and result messaging.
+        
+        Called by QGIS task manager when task completes (success, failure, or cancel).
+        Handles subset application, MV cleanup, and user notifications.
+        
+        Args:
+            result: True if task succeeded, False if failed, None if canceled
+        """
+        result_action: Optional[str] = None
         message_category = MESSAGE_TASKS_CATEGORIES[self.task_action]
         
         # E6: Delegate warning display to task_completion_handler
@@ -4769,12 +5014,27 @@ class FilterEngineTask(QgsTask):
                     logger.info('Task was canceled - no error message displayed')
                 else:
                     # Task really failed - display error message
-                    # v4.1.1 FIX: Enhanced error message with more context
+                    # v4.1.2 FIX: Enhanced error message with failed layer names
                     error_msg = self.message if hasattr(self, 'message') and self.message else 'Task failed'
+                    
+                    # FIX v4.1.2: Include failed layer names if available
+                    failed_layers = getattr(self, '_failed_layer_names', [])
+                    if failed_layers and error_msg == 'Task failed':
+                        error_msg = f"Filter failed for: {', '.join(failed_layers[:3])}"
+                        if len(failed_layers) > 3:
+                            error_msg += f" (+{len(failed_layers) - 3} more)"
+                    
                     logger.error(f"Task finished with failure: {error_msg}")
                     logger.error(f"   Task action: {self.task_action}")
                     logger.error(f"   Source layer: {self.source_layer.name() if self.source_layer else 'None'}")
                     logger.error(f"   Layers count: {getattr(self, 'layers_count', 'N/A')}")
+                    
+                    # FIX v4.1.2: Log to QGIS message log for visibility
+                    from qgis.core import QgsMessageLog
+                    QgsMessageLog.logMessage(
+                        f"❌ Task failed: {error_msg}",
+                        "FilterMate", Qgis.Critical
+                    )
                     
                     # Log additional diagnostic info to Python console
                     if error_msg == 'Task failed':

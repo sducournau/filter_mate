@@ -134,8 +134,11 @@ def simplify_geometry_adaptive(
         return geometry
     
     try:
-        from ...adapters.qgis.geometry_preparation import GeometryPreparationAdapter
-        adapter = GeometryPreparationAdapter()
+        from ..ports import get_backend_services
+        adapter = get_backend_services().get_geometry_preparation_adapter()
+        if not adapter:
+            logger.warning("GeometryPreparationAdapter not available")
+            return geometry
         
         result = adapter.simplify_geometry_adaptive(
             geometry=geometry,
@@ -232,8 +235,11 @@ def copy_filtered_layer_to_memory(
         Memory layer with filtered features
     """
     try:
-        from ...adapters.qgis.geometry_preparation import GeometryPreparationAdapter
-        result = GeometryPreparationAdapter().copy_filtered_to_memory(layer, layer_name)
+        from ..ports import get_backend_services
+        adapter = get_backend_services().get_geometry_preparation_adapter()
+        if not adapter:
+            raise ImportError("GeometryPreparationAdapter not available")
+        result = adapter.copy_filtered_to_memory(layer, layer_name)
         if result.success and result.layer:
             return result.layer
         raise Exception(f"Failed to copy filtered layer: {result.error_message or 'Unknown'}")
@@ -257,8 +263,11 @@ def copy_selected_features_to_memory(
         Memory layer with selected features
     """
     try:
-        from ...adapters.qgis.geometry_preparation import GeometryPreparationAdapter
-        result = GeometryPreparationAdapter().copy_selected_to_memory(layer, layer_name)
+        from ..ports import get_backend_services
+        adapter = get_backend_services().get_geometry_preparation_adapter()
+        if not adapter:
+            raise ImportError("GeometryPreparationAdapter not available")
+        result = adapter.copy_selected_to_memory(layer, layer_name)
         if result.success and result.layer:
             return result.layer
         raise Exception(f"Failed to copy selected features: {result.error_message or 'Unknown'}")
@@ -284,8 +293,12 @@ def create_memory_layer_from_features(
         Memory layer or None on failure
     """
     try:
-        from ...adapters.qgis.geometry_preparation import GeometryPreparationAdapter
-        result = GeometryPreparationAdapter().create_memory_from_features(features, crs, layer_name)
+        from ..ports import get_backend_services
+        adapter = get_backend_services().get_geometry_preparation_adapter()
+        if not adapter:
+            logger.error("GeometryPreparationAdapter not available")
+            return None
+        result = adapter.create_memory_from_features(features, crs, layer_name)
         if result.success and result.layer:
             return result.layer
         logger.error(f"Failed to create memory layer: {result.error_message or 'Unknown'}")
@@ -306,8 +319,12 @@ def convert_layer_to_centroids(layer: QgsVectorLayer) -> Optional[QgsVectorLayer
         Layer with centroid geometries or None on failure
     """
     try:
-        from ...adapters.qgis.geometry_preparation import GeometryPreparationAdapter
-        result = GeometryPreparationAdapter().convert_to_centroids(layer)
+        from ..ports import get_backend_services
+        adapter = get_backend_services().get_geometry_preparation_adapter()
+        if not adapter:
+            logger.error("GeometryPreparationAdapter not available")
+            return None
+        result = adapter.convert_to_centroids(layer)
         if result.success and result.layer:
             return result.layer
         logger.error(f"Failed to convert to centroids: {result.error_message or 'Unknown'}")
@@ -366,6 +383,25 @@ def prepare_geometries_by_provider(
             - 'ogr_source_geom': QgsVectorLayer or None
             - 'spatialite_fallback_mode': bool flag
     """
+    # FIX 2026-01-16: CRITICAL - Use print() to force console output
+    print("=" * 80)
+    print("🚀 prepare_geometries_by_provider CALLED")
+    print(f"   provider_list: {provider_list}")
+    print(f"   param_source_provider_type: {param_source_provider_type}")
+    print(f"   postgresql_available: {postgresql_available}")
+    print(f"   layers_dict keys: {list(layers_dict.keys()) if layers_dict else 'None'}")
+    print("=" * 80)
+    
+    # Also log normally
+    if logger:
+        logger.info(f"🚀 prepare_geometries_by_provider CALLED")
+        logger.info(f"  → provider_list: {provider_list}")
+        logger.info(f"  → param_source_provider_type: {param_source_provider_type}")
+        logger.info(f"  → postgresql_available: {postgresql_available}")
+        logger.info(f"  → layers_dict keys: {list(layers_dict.keys()) if layers_dict else 'None'}")
+    
+    from qgis.core import QgsMessageLog, Qgis
+    
     result = {
         'success': True,
         'postgresql_source_geom': None,
@@ -388,10 +424,12 @@ def prepare_geometries_by_provider(
         if logger:
             logger.info(f"Using source_layer featureCount for WKT decision: {source_feature_count} total features")
     
-    # CRITICAL FIX v2.7.15: Check if source is PostgreSQL with connection
+    # CRITICAL FIX v2.7.15 + v4.0.3 (2026-01-16): Check if source is PostgreSQL with connection
+    # CRITICAL: IGNORE the stored postgresql_connection_available flag - it may be stale from old config
+    # Instead, trust the module-level postgresql_available flag which reflects actual psycopg2 availability
     source_is_postgresql = (
         param_source_provider_type == PROVIDER_POSTGRES and
-        task_parameters.get("infos", {}).get("postgresql_connection_available", True)
+        postgresql_available  # Use module-level flag, NOT stored config value
     )
     
     postgresql_needs_wkt = (
@@ -418,7 +456,11 @@ def prepare_geometries_by_provider(
     ogr_needs_spatialite_geom = False
     if 'ogr' in provider_list and layers_dict and 'ogr' in layers_dict:
         try:
-            from ...adapters.backends.spatialite import SpatialiteBackend
+            from ..ports import get_backend_services
+            SpatialiteBackend = get_backend_services().get_spatialite_backend()
+            if not SpatialiteBackend:
+                # Backend not available, skip Spatialite geometry preparation
+                pass  # Fixed: was 'continue' outside loop
             # Check if any OGR layer could benefit from Spatialite backend
             # by checking if it's a GeoPackage or SQLite file
             for layer, layer_props in layers_dict['ogr']:
@@ -437,41 +479,54 @@ def prepare_geometries_by_provider(
     # Prepare PostgreSQL source geometry
     has_postgresql_fallback_layers = False
     
+    # FIX 2026-01-16: Log diagnostic for PostgreSQL geometry preparation
+    print(f"🔍 PostgreSQL geometry preparation check:")
+    print(f"  - 'postgresql' in provider_list: {'postgresql' in provider_list}")
+    print(f"  - postgresql_available (module-level): {postgresql_available}")
+    
     if 'postgresql' in provider_list and postgresql_available:
+        print(f"  ✓ PostgreSQL block ENTERED")
+        
+        # CRITICAL FIX v4.0.3 (2026-01-16): IGNORE stored postgresql_connection_available - may be stale!
+        # The module-level postgresql_available flag is the source of truth (psycopg2 actually importable)
+        stored_pg_conn = task_parameters.get('infos', {}).get('postgresql_connection_available', 'NOT_SET')
+        print(f"  - stored postgresql_connection_available: {stored_pg_conn} (IGNORED - may be stale)")
+        
+        # Trust module-level flag, not stored config
         source_is_postgresql_with_connection = (
             param_source_provider_type == PROVIDER_POSTGRES and
-            task_parameters.get("infos", {}).get("postgresql_connection_available", True)
+            postgresql_available  # Module-level flag, NOT stored config
         )
+        print(f"  - source_is_postgresql_with_connection: {source_is_postgresql_with_connection}")
+        print(f"  - param_source_provider_type: {param_source_provider_type}")
+        print(f"  - PROVIDER_POSTGRES constant: {PROVIDER_POSTGRES}")
         
         has_distant_postgresql_with_connection = False
         if layers_dict and 'postgresql' in layers_dict:
             for layer, layer_props in layers_dict['postgresql']:
-                if layer_props.get('postgresql_connection_available', True):
+                # ALSO ignore stored flag for distant layers
+                if postgresql_available:
                     has_distant_postgresql_with_connection = True
                 if layer_props.get('_postgresql_fallback', False):
                     has_postgresql_fallback_layers = True
-                    if logger:
-                        logger.info(f"  → Layer '{layer.name()}' is PostgreSQL with OGR fallback")
+                    print(f"  → Layer '{layer.name()}' is PostgreSQL with OGR fallback")
+        
+        print(f"  - has_distant_postgresql_with_connection: {has_distant_postgresql_with_connection}")
         
         # CRITICAL FIX v2.7.2: ONLY prepare postgresql_source_geom if SOURCE is PostgreSQL
         if source_is_postgresql_with_connection:
-            if logger:
-                logger.info("Preparing PostgreSQL source geometry...")
-                logger.info("  → Source layer is PostgreSQL with connection")
+            print(f"  ✓ PREPARING PostgreSQL source geometry...")
             result['postgresql_source_geom'] = prepare_postgresql_geom_callback()
+            print(f"  ✓ PostgreSQL source geometry result: {result['postgresql_source_geom'] is not None}")
         elif has_distant_postgresql_with_connection:
-            if logger:
-                logger.info("PostgreSQL distant layers detected but source is NOT PostgreSQL")
-                logger.info("  → Source layer provider: %s", param_source_provider_type)
-                logger.info("  → Will use WKT mode (ST_GeomFromText) for PostgreSQL filtering")
-                logger.info("  → Skipping prepare_postgresql_source_geom() to avoid invalid table references")
+            print(f"  ⚠️ PostgreSQL distant layers detected but source is NOT PostgreSQL")
+            print(f"  → Will use WKT mode (ST_GeomFromText) for PostgreSQL filtering")
         else:
-            if logger:
-                logger.warning("PostgreSQL in provider list but no layers have connection - will use OGR fallback")
+            print(f"  ❌ PostgreSQL in provider list but no layers have connection - will use OGR fallback")
             if 'ogr' not in provider_list:
-                if logger:
-                    logger.info("Adding OGR to provider list for PostgreSQL fallback...")
                 provider_list.append('ogr')
+    else:
+        print(f"  ❌ PostgreSQL block NOT entered")
     
     # CRITICAL FIX: If any PostgreSQL layer uses OGR fallback, we MUST prepare ogr_source_geom
     if has_postgresql_fallback_layers and 'ogr' not in provider_list:

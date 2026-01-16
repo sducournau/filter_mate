@@ -898,20 +898,53 @@ def execute_ogr_spatial_selection(
     #   - Des codes numériques comme clés: {0: 'ST_Intersects'}
     # Pour processing.run("qgis:selectbylocation"), on a besoin des codes numériques
     
+    # DIAGNOSTIC 2026-01-16: Trace predicates received in OGR executor
+    logger.info("=" * 70)
+    logger.info("🔍 DIAGNOSTIC: execute_ogr_spatial_selection - PREDICATE ANALYSIS")
+    logger.info(f"   context.current_predicates = {context.current_predicates}")
+    logger.info(f"   predicates type = {type(context.current_predicates).__name__}")
+    if context.current_predicates:
+        logger.info(f"   predicates keys = {list(context.current_predicates.keys())}")
+        for k, v in context.current_predicates.items():
+            logger.info(f"      key={k!r} (type={type(k).__name__}), value={v!r}")
+    else:
+        logger.warning("   ⚠️ context.current_predicates is EMPTY!")
+    logger.info("=" * 70)
+    
     predicate_list = []
     for key in context.current_predicates.keys():
         if isinstance(key, int):
             # C'est déjà un code numérique QGIS
             predicate_list.append(key)
+            logger.debug(f"   Found numeric key: {key}")
         elif isinstance(key, str) and key.isdigit():
             # C'est un string numérique
             predicate_list.append(int(key))
+            logger.debug(f"   Found string-numeric key: {key} -> {int(key)}")
     
-    # Si aucun code numérique trouvé, default à intersects (0)
+    # Si aucun code numérique trouvé, tenter de convertir les noms SQL en codes
     if not predicate_list:
         logger.warning(f"No numeric QGIS predicate codes found in current_predicates: {context.current_predicates}")
-        logger.warning("Defaulting to 'intersects' (code 0)")
-        predicate_list = [0]
+        # DIAGNOSTIC 2026-01-16: Try to recover from SQL names
+        sql_name_to_code = {
+            'ST_Intersects': 0, 'intersects': 0,
+            'ST_Contains': 1, 'contains': 1,
+            'ST_Disjoint': 2, 'disjoint': 2,
+            'ST_Equals': 3, 'equals': 3,
+            'ST_Touches': 4, 'touches': 4,
+            'ST_Overlaps': 5, 'overlaps': 5,
+            'ST_Within': 6, 'within': 6,
+            'ST_Crosses': 7, 'crosses': 7,
+        }
+        for key in context.current_predicates.keys():
+            if isinstance(key, str) and key in sql_name_to_code:
+                code = sql_name_to_code[key]
+                predicate_list.append(code)
+                logger.info(f"   ✓ Converted SQL name '{key}' to QGIS code {code}")
+        
+        if not predicate_list:
+            logger.warning("   ⚠️ Could not convert any predicates - Defaulting to 'intersects' (code 0)")
+            predicate_list = [0]
     
     # DIAGNOSTIC LOGS 2026-01-15: Trace OGR spatial selection execution
     logger.info("=" * 70)

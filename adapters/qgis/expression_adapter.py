@@ -100,6 +100,34 @@ class QGISExpressionAdapter(IExpression):
         """Check if expression has parser error."""
         return self._expression.hasParserError()
     
+    def is_field(self) -> bool:
+        """
+        Check if expression represents a single field reference.
+        
+        Returns:
+            True if expression is just a field name (e.g., "name", "population")
+            False if expression is complex (e.g., "population > 1000")
+        """
+        # Simple heuristic: expression is a field if it matches a single column reference
+        # and doesn't contain operators or functions
+        expr_str = self._expression.expression().strip()
+        
+        # Remove surrounding quotes if present
+        if (expr_str.startswith('"') and expr_str.endswith('"')) or \
+           (expr_str.startswith("'") and expr_str.endswith("'")):
+            expr_str = expr_str[1:-1]
+        
+        # Check if it's a single referenced column
+        referenced = self.referenced_columns()
+        if len(referenced) == 1:
+            # Check if expression string matches the column name (with or without quotes)
+            column_name = referenced[0]
+            return expr_str == column_name or \
+                   self._expression.expression().strip() == f'"{column_name}"' or \
+                   self._expression.expression().strip() == f"'{column_name}'"
+        
+        return False
+    
     def __repr__(self) -> str:
         """String representation for debugging."""
         expr_str = self.expression_string()

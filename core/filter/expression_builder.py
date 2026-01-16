@@ -76,6 +76,14 @@ class ExpressionBuilder:
         self.source_layer = source_layer
         self.current_predicates = current_predicates
         
+        # Note: current_predicates may be empty during initial creation by TaskRunOrchestrator.
+        # FilterEngineTask._initialize_current_predicates() will populate them later and
+        # propagate to this instance. Only log at debug level.
+        if current_predicates:
+            logger.debug(f"ExpressionBuilder: initialized with predicates: {list(current_predicates.keys()) if isinstance(current_predicates, dict) else current_predicates}")
+        else:
+            logger.debug("ExpressionBuilder: initialized with empty predicates (will be set later)")
+        
         # PostgreSQL spatial expression parameters
         self.source_wkt = source_wkt
         self.source_srid = source_srid
@@ -442,7 +450,11 @@ class ExpressionBuilder:
         source_geom_field = self._get_source_geom_field()
         
         # Create MV using backend method
-        from ...adapters.backends.postgresql.filter_executor import PostgreSQLGeometricFilter
+        from ..ports import get_backend_services
+        _backend_services = get_backend_services()
+        PostgreSQLGeometricFilter = _backend_services.get_postgresql_geometric_filter()
+        if not PostgreSQLGeometricFilter:
+            raise ImportError("PostgreSQL backend not available")
         pg_backend = PostgreSQLGeometricFilter(self.task_parameters)
         
         mv_ref = pg_backend.create_source_selection_mv(
@@ -673,9 +685,13 @@ def build_combined_filter_expression(
     # Combine expressions
     if index_where_clause > -1:
         # Has WHERE clause - combine with existing structure
+        # FIX 2026-01-16: Strip leading "WHERE " from new_expression to prevent "WHERE WHERE" syntax error
+        clean_new_expression = new_expression.lstrip()
+        if clean_new_expression.upper().startswith('WHERE '):
+            clean_new_expression = clean_new_expression[6:].lstrip()
         return (
             f'{param_source_old_subset} {param_old_subset_where_clause} '
-            f'{combine_operator} {new_expression}'
+            f'{combine_operator} ( {clean_new_expression} )'
         )
     else:
         # No WHERE clause - wrap both in parentheses for safety

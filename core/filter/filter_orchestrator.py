@@ -26,9 +26,12 @@ from qgis.core import (
     Qgis
 )
 
-from ...adapters.backends.factory import BackendFactory
+from ..ports import get_backend_services
 from ...infrastructure.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
 from ..domain.exceptions import BackendNotAvailableError, LayerInvalidError
+
+_backend_services = get_backend_services()
+BackendFactory = _backend_services.get_backend_factory()
 
 logger = logging.getLogger('filter_mate')
 
@@ -68,6 +71,14 @@ class FilterOrchestrator:
         self.subset_queue_callback = subset_queue_callback
         self.parent_task = parent_task
         self.current_predicates = current_predicates
+        
+        # Note: current_predicates may be empty during initial creation by TaskRunOrchestrator.
+        # FilterEngineTask._initialize_current_predicates() will populate them later and
+        # propagate to this instance. Only log at debug level.
+        if current_predicates:
+            logger.debug(f"FilterOrchestrator: initialized with predicates: {list(current_predicates.keys()) if isinstance(current_predicates, dict) else current_predicates}")
+        else:
+            logger.debug("FilterOrchestrator: initialized with empty predicates (will be set later)")
         
         # Inject callbacks into task_parameters for backends to use
         self.task_parameters['_subset_queue_callback'] = subset_queue_callback
@@ -130,6 +141,13 @@ class FilterOrchestrator:
             logger.info(f"   current_predicates (from orchestrator): {self.current_predicates}")
             logger.info(f"   source_geometries keys: {list(source_geometries.keys())}")
             
+            # FIX 2026-01-16: Validate predicates are populated BEFORE using them
+            if not self.current_predicates:
+                logger.error("❌ current_predicates is EMPTY during geometric filtering!")
+                logger.error("   This should not happen - _initialize_current_predicates() should have populated them.")
+                logger.error("   Aborting geometric filtering for this layer.")
+                return False
+            
             if is_postgresql_fallback:
                 logger.info(f"Executing geometric filtering for {layer.name()} (PostgreSQL → OGR fallback)")
             else:
@@ -144,11 +162,32 @@ class FilterOrchestrator:
             # ==========================================
             # 3. SOURCE GEOMETRY PREPARATION
             # ==========================================
+            # FIX v4.1.2: Enhanced logging to diagnose geometry availability issues
+            logger.info(f"📦 SOURCE GEOMETRY CHECK for geometry_provider='{geometry_provider}':")
+            for provider_key, geom_value in source_geometries.items():
+                status = "✓ AVAILABLE" if geom_value else "✗ None"
+                geom_info = ""
+                if geom_value:
+                    if hasattr(geom_value, 'name'):
+                        geom_info = f" ({type(geom_value).__name__}: {geom_value.name()})"
+                    elif isinstance(geom_value, str):
+                        geom_info = f" (str, len={len(geom_value)}, preview='{geom_value[:50]}...')"
+                    else:
+                        geom_info = f" ({type(geom_value).__name__})"
+                logger.info(f"   {provider_key}: {status}{geom_info}")
+            
             source_geom = source_geometries.get(geometry_provider)
             if not source_geom:
                 logger.error(
-                    f"Failed to get source geometry for provider '{geometry_provider}' "
+                    f"❌ Failed to get source geometry for provider '{geometry_provider}' "
                     f"(backend: {backend_name}, layer: {layer.name()})"
+                )
+                logger.error(f"   Available providers: {[k for k, v in source_geometries.items() if v]}")
+                logger.error(f"   💡 Check if prepare_*_source_geom() was called for this provider type")
+                # FIX v4.1.2: Log to QGIS message panel for visibility
+                QgsMessageLog.logMessage(
+                    f"FilterMate: No source geometry for {geometry_provider} backend (layer: {layer.name()})",
+                    "FilterMate", Qgis.Critical
                 )
                 return False
             

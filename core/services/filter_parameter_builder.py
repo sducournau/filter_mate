@@ -176,17 +176,26 @@ class FilterParameterBuilder:
                 infos["layer_provider_type"] = 'unknown'
         
         # Auto-fill layer_geometry_field
-        if "layer_geometry_field" not in infos or infos["layer_geometry_field"] is None:
+        # FIX v4.0.3 (2026-01-16): Also check for string "NULL" which may be stored from stale config
+        stored_geom_field = infos.get("layer_geometry_field")
+        if not stored_geom_field or stored_geom_field in ('NULL', 'None', ''):
             try:
                 geom_col = context.source_layer.dataProvider().geometryColumn()
                 if geom_col:
                     infos["layer_geometry_field"] = geom_col
                 else:
-                    # Default based on provider
-                    if infos.get("layer_provider_type") == PROVIDER_POSTGRES:
-                        infos["layer_geometry_field"] = 'geom'
+                    # Try from URI
+                    from qgis.core import QgsDataSourceUri
+                    uri = QgsDataSourceUri(context.source_layer.source())
+                    geom_col = uri.geometryColumn()
+                    if geom_col:
+                        infos["layer_geometry_field"] = geom_col
                     else:
-                        infos["layer_geometry_field"] = 'geometry'
+                        # Default based on provider
+                        if infos.get("layer_provider_type") == PROVIDER_POSTGRES:
+                            infos["layer_geometry_field"] = 'geom'
+                        else:
+                            infos["layer_geometry_field"] = 'geometry'
                 logger.info(f"Auto-filled layer_geometry_field='{infos['layer_geometry_field']}'")
             except Exception as e:
                 infos["layer_geometry_field"] = 'geom'

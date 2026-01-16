@@ -21,10 +21,13 @@ from ....infrastructure.constants import (
     PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
 )
 
-# Import PostgreSQL availability
-from ....adapters.backends.postgresql_availability import (
-    psycopg2, POSTGRESQL_AVAILABLE
-)
+# Import PostgreSQL availability via facade
+from ...ports import get_backend_services
+
+_backend_services = get_backend_services()
+_pg_avail = _backend_services.get_postgresql_availability()
+psycopg2 = _pg_avail.psycopg2
+POSTGRESQL_AVAILABLE = _pg_avail.postgresql_available
 
 # Import utilities
 from ....infrastructure.utils import (

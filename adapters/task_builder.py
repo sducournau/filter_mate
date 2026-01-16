@@ -576,6 +576,8 @@ class TaskParameterBuilder:
         if hasattr(dw, 'pushButton_checkable_filtering_geometric_predicates'):
             current_val = dw.pushButton_checkable_filtering_geometric_predicates.isChecked()
             stored_val = task_parameters["filtering"].get("has_geometric_predicates", False)
+            # FIX 2026-01-16: ALWAYS log this critical value
+            logger.info(f"📌 has_geometric_predicates: button.isChecked()={current_val}, stored={stored_val}")
             if current_val != stored_val:
                 logger.info(f"SYNC has_geometric_predicates: {stored_val} → {current_val}")
                 task_parameters["filtering"]["has_geometric_predicates"] = current_val
@@ -586,6 +588,8 @@ class TaskParameterBuilder:
         if hasattr(dw, 'comboBox_filtering_geometric_predicates'):
             current_val = dw.comboBox_filtering_geometric_predicates.checkedItems()
             stored_val = task_parameters["filtering"].get("geometric_predicates", [])
+            # FIX 2026-01-16: ALWAYS log this critical value
+            logger.info(f"📌 geometric_predicates: comboBox.checkedItems()={current_val}, stored={stored_val}")
             if set(current_val) != set(stored_val):
                 logger.info(f"SYNC geometric_predicates: {len(stored_val)} → {len(current_val)} items")
                 task_parameters["filtering"]["geometric_predicates"] = current_val
@@ -595,6 +599,8 @@ class TaskParameterBuilder:
         if hasattr(dw, 'pushButton_checkable_filtering_layers_to_filter'):
             current_val = dw.pushButton_checkable_filtering_layers_to_filter.isChecked()
             stored_val = task_parameters["filtering"].get("has_layers_to_filter", False)
+            # FIX 2026-01-16: ALWAYS log this critical value
+            logger.info(f"📌 has_layers_to_filter: button.isChecked()={current_val}, stored={stored_val}")
             if current_val != stored_val:
                 logger.info(f"SYNC has_layers_to_filter: {stored_val} → {current_val}")
                 task_parameters["filtering"]["has_layers_to_filter"] = current_val
@@ -604,6 +610,8 @@ class TaskParameterBuilder:
         if hasattr(dw, 'get_layers_to_filter'):
             current_val = dw.get_layers_to_filter()
             stored_val = task_parameters["filtering"].get("layers_to_filter", [])
+            # FIX 2026-01-16: ALWAYS log this critical value
+            logger.info(f"📌 layers_to_filter: get_layers_to_filter()={len(current_val)} layers, stored={len(stored_val)} layers")
             if set(current_val) != set(stored_val):
                 logger.info(f"SYNC layers_to_filter: {len(stored_val)} → {len(current_val)} layers")
                 task_parameters["filtering"]["layers_to_filter"] = current_val
@@ -614,6 +622,21 @@ class TaskParameterBuilder:
             self._project_layers[layer_id]["infos"]["is_already_subset"] = True
         else:
             self._project_layers[layer_id]["infos"]["is_already_subset"] = False
+        
+        # FIX 2026-01-16: DIAGNOSTIC - Log ALL filtering params before returning
+        from qgis.core import QgsMessageLog, Qgis
+        filtering = task_parameters.get("filtering", {})
+        QgsMessageLog.logMessage(
+            f"=== sync_ui_to_project_layers FINAL STATE ===\n"
+            f"  has_geometric_predicates: {filtering.get('has_geometric_predicates', False)}\n"
+            f"  geometric_predicates: {filtering.get('geometric_predicates', [])}\n"
+            f"  has_layers_to_filter: {filtering.get('has_layers_to_filter', False)}\n"
+            f"  layers_to_filter: {len(filtering.get('layers_to_filter', []))} layers\n"
+            f"  buffer_value: {filtering.get('buffer_value', 0.0)}\n"
+            f"  use_centroids_source: {filtering.get('use_centroids_source_layer', False)}\n"
+            f"  use_centroids_distant: {filtering.get('use_centroids_distant_layers', False)}",
+            "FilterMate", Qgis.Info
+        )
         
         return task_parameters
     

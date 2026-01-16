@@ -212,9 +212,11 @@ class TaskRunOrchestrator:
         if context.task_action == 'filter':
             try:
                 # Import is done here to avoid circular dependencies
-                from ...adapters.backends.spatialite import SpatialiteBackend as SpatialiteGeometricFilter
-                SpatialiteGeometricFilter.clear_support_cache()
-                logger.debug("Spatialite support cache cleared for fresh detection")
+                from ..ports import get_backend_services
+                SpatialiteGeometricFilter = get_backend_services().get_spatialite_geometric_filter()
+                if SpatialiteGeometricFilter and hasattr(SpatialiteGeometricFilter, 'clear_support_cache'):
+                    SpatialiteGeometricFilter.clear_support_cache()
+                    logger.debug("Spatialite support cache cleared for fresh detection")
             except Exception as e:
                 logger.debug(f"Could not clear Spatialite cache: {e}")
     
@@ -242,6 +244,12 @@ class TaskRunOrchestrator:
         - ResultProcessor: Handles results and subset requests
         - ExpressionBuilder: Builds filter expressions
         - FilterOrchestrator: Orchestrates filtering operations
+        
+        CRITICAL NOTE 2026-01-16: These modules are created with current_predicates=[]
+        BEFORE execute_filtering() calls _initialize_current_predicates(). This is OK
+        because FilterEngineTask._get_filter_orchestrator() and _get_expression_builder()
+        ALWAYS propagate fresh predicates from self.current_predicates on every access.
+        This ensures the race condition doesn't cause empty predicates during filtering.
         """
         # Import modules (avoiding circular imports)
         from ..filter.result_processor import ResultProcessor

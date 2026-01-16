@@ -494,8 +494,9 @@ def create_geos_safe_layer(
             
             # Register for cleanup after filtering completes
             try:
-                from ...adapters.backends.ogr.filter_executor import register_temp_layer
-                register_temp_layer(safe_layer.id())
+                from ..ports import get_backend_services
+                _backend_services = get_backend_services()
+                _backend_services.register_ogr_temp_layer(safe_layer.id())
             except ImportError:
                 logger.debug("Could not import register_temp_layer - cleanup must be manual")
         except Exception as add_err:

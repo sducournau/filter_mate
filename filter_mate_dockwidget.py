@@ -2764,24 +2764,45 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.current_exploring_groupbox = groupbox_name
         self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
         self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
-        if not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS:
-            self._update_exploring_buttons_state(); return None
-        self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = groupbox_name
-        layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
         
-        # Try controller first
+        # FIX 2026-01-16: Configure widgets even if layer not in PROJECT_LAYERS
+        # Use first field as fallback - this fixes empty combobox on layer change
+        if not self.current_layer:
+            self._update_exploring_buttons_state()
+            return None
+        
+        layer_props = None
+        layer_in_project = self.current_layer.id() in self.PROJECT_LAYERS
+        
+        if layer_in_project:
+            self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = groupbox_name
+            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+            logger.debug(f"_configure_groupbox_common: Layer IN PROJECT_LAYERS")
+        else:
+            # FIX 2026-01-16 v3: Layer not in PROJECT_LAYERS yet - MUST use fallback
+            logger.info(f"⚠️ _configure_groupbox_common: Layer {self.current_layer.name()} NOT in PROJECT_LAYERS - fallback REQUIRED")
+        
+        # Try controller first (only if layer_props available)
         controller_success = False
-        if self._controller_integration:
+        if self._controller_integration and layer_in_project and layer_props:
             try:
                 controller_success = self._controller_integration.delegate_exploring_configure_groupbox(groupbox_name, self.current_layer, layer_props)
+                logger.debug(f"_configure_groupbox_common: Controller delegation = {controller_success}")
             except Exception as e:
                 logger.debug(f"_configure_groupbox_common: Controller delegation failed: {e}")
                 controller_success = False
         
-        # FIX 2026-01-15 v5: FALLBACK - Configure widgets directly if controller unavailable
+        # FIX 2026-01-16 v3: CRITICAL - Force fallback when layer not in PROJECT_LAYERS
+        # Even if controller returns True, we MUST configure widgets with first field
+        if not layer_in_project:
+            controller_success = False
+            logger.info(f"🔧 FORCING fallback configuration (layer not in PROJECT_LAYERS)")
+        
+        # FIX 2026-01-15 v5 + 2026-01-16 v2: FALLBACK - ALWAYS configure expression widgets
+        # This prevents empty comboboxes when layer not in PROJECT_LAYERS yet
         # Pattern from before_migration: setEnabled(True) and setLayer(current_layer)
         if not controller_success:
-            logger.debug(f"_configure_groupbox_common: Using fallback for {groupbox_name}")
+            logger.debug(f"_configure_groupbox_common: Using fallback for {groupbox_name} (layer_props={'available' if layer_props else 'NULL'})")
             try:
                 # Map groupbox to widget keys
                 widget_configs = {
@@ -2806,7 +2827,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         if should_set_layer and hasattr(widget, 'setLayer'):
                             try:
                                 if widget_key == 'MULTIPLE_SELECTION_FEATURES':
-                                    widget.setLayer(self.current_layer, layer_props)
+                                    widget.setLayer(self.current_layer, layer_props if layer_props else {})
                                 else:
                                     widget.setLayer(self.current_layer)
                             except Exception as e:
@@ -2819,18 +2840,47 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                 'MULTIPLE_SELECTION_FEATURES': 'multiple_selection_expression'
                             }.get(widget_key)
                             if expr_key and hasattr(widget, 'setDisplayExpression'):
-                                expr = layer_props.get("exploring", {}).get(expr_key, "")
+                                expr = layer_props.get("exploring", {}).get(expr_key, "") if layer_props else ""
                                 if expr:
                                     try:
                                         widget.setDisplayExpression(expr)
                                     except Exception as e:
                                         logger.debug(f"Could not setDisplayExpression on {widget_key}: {e}")
                         
+                        # FIX 2026-01-16 v2: CRITICAL - ALWAYS set default field for expression widgets
+                        # This fixes empty combobox when layer not in PROJECT_LAYERS
+                        if widget_key in ('SINGLE_SELECTION_EXPRESSION', 'MULTIPLE_SELECTION_EXPRESSION', 'CUSTOM_SELECTION_EXPRESSION'):
+                            expr_key = {
+                                'SINGLE_SELECTION_EXPRESSION': 'single_selection_expression',
+                                'MULTIPLE_SELECTION_EXPRESSION': 'multiple_selection_expression',
+                                'CUSTOM_SELECTION_EXPRESSION': 'custom_selection_expression'
+                            }.get(widget_key)
+                            expr = layer_props.get("exploring", {}).get(expr_key, "") if layer_props else ""
+                            
+                            # FIX 2026-01-16 v2: If no saved expression, ALWAYS fallback to first field
+                            if not expr and self.current_layer:
+                                fields = self.current_layer.fields()
+                                if fields.count() > 0:
+                                    expr = fields[0].name()
+                                    logger.info(f"Using FIRST field '{expr}' for {widget_key} (layer not in PROJECT_LAYERS)")
+                            
+                            if expr:
+                                try:
+                                    from qgis.core import QgsExpression
+                                    if QgsExpression(expr).isField():
+                                        widget.setField(expr)
+                                        logger.info(f"✓ Set {widget_key} field to '{expr}'")
+                                    else:
+                                        widget.setExpression(expr)
+                                        logger.info(f"✓ Set {widget_key} expression to '{expr}'")
+                                except Exception as e:
+                                    logger.error(f"Could not setField on {widget_key}: {e}")
+                        
                         # Special handling for single selection picker
                         if widget_key == 'SINGLE_SELECTION_FEATURES' and hasattr(widget, 'setAllowNull'):
                             widget.setAllowNull(True)
             except Exception as e:
-                logger.debug(f"_configure_groupbox_common: Fallback failed: {e}")
+                logger.error(f"_configure_groupbox_common: Fallback failed: {e}")
         
         return layer_props
 
@@ -4090,14 +4140,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 ("MULTIPLE_SELECTION_EXPRESSION", multiple_expr),
                 ("CUSTOM_SELECTION_EXPRESSION", custom_expr)
             ]
+            from qgis.core import QgsExpression
             for expr_key, expr_value in expr_mappings:
                 if expr_key in self.widgets.get("EXPLORING", {}):
                     widget = self.widgets["EXPLORING"][expr_key]["WIDGET"]
                     if widget and hasattr(widget, 'setLayer'):
                         old_layer = widget.layer().name() if widget.layer() else 'None'
                         widget.setLayer(layer)
-                        if hasattr(widget, 'setExpression') and expr_value:
-                            widget.setExpression(expr_value)
+                        # FIX 2026-01-16: Use setField for simple field names, setExpression for complex expressions
+                        # This ensures the combobox properly selects the field
+                        if expr_value:
+                            if QgsExpression(expr_value).isField():
+                                widget.setField(expr_value)
+                            else:
+                                widget.setExpression(expr_value)
                         new_layer = widget.layer().name() if widget.layer() else 'None'
                         logger.info(f"✓ {expr_key} updated: {old_layer} → {new_layer}, expr={expr_value}")
                     else:

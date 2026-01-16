@@ -753,6 +753,25 @@ class ExploringController(BaseController, LayerSelectionMixin):
                     expr_widget.setEnabled(True)
                     try:
                         expr_widget.setLayer(target_layer)
+                        # FIX 2026-01-16: Set default field after setLayer to avoid empty combobox
+                        # Get saved expression from layer_props or fallback to first field
+                        expr_prop_key = config['expression_key']
+                        saved_expr = ""
+                        if layer_props:
+                            saved_expr = layer_props.get("exploring", {}).get(expr_prop_key, "")
+                        if not saved_expr:
+                            # Fallback: use first field of layer
+                            fields = target_layer.fields()
+                            if fields.count() > 0:
+                                saved_expr = fields[0].name()
+                        if saved_expr:
+                            # Use setField for simple field names, setExpression for complex expressions
+                            from qgis.core import QgsExpression
+                            if QgsExpression(saved_expr).isField():
+                                expr_widget.setField(saved_expr)
+                            else:
+                                expr_widget.setExpression(saved_expr)
+                            logger.debug(f"Set {expr_key} widget field to '{saved_expr}'")
                     except (AttributeError, RuntimeError) as e:
                         logger.warning(f"Could not set layer on {expr_key}: {e}")
             
@@ -1405,11 +1424,33 @@ class ExploringController(BaseController, LayerSelectionMixin):
                     dw._last_single_selection_layer_id = dw.current_layer.id()
                     return [reloaded], ""
                 else:
-                    logger.warning(f"SINGLE_SELECTION: Reloaded feature {fid} has no geometry")
-                    # FIX 2026-01-15 v7: Still return feature even without geometry (for expression)
+                    # FIX 2026-01-16: Feature has no geometry - construct ID-based expression directly
+                    logger.warning(f"SINGLE_SELECTION: Reloaded feature {fid} has no geometry - using ID expression")
                     dw._last_single_selection_fid = fid
                     dw._last_single_selection_layer_id = dw.current_layer.id()
-                    return self.get_exploring_features(reloaded, True)
+                    
+                    # Get layer properties to find primary key
+                    layer_props = dw.PROJECT_LAYERS.get(dw.current_layer.id(), {})
+                    pk_name = layer_props.get("infos", {}).get("primary_key_name")
+                    
+                    if pk_name:
+                        # Try to get primary key value from feature
+                        try:
+                            pk_value = reloaded.attribute(pk_name)
+                            # Quote string values
+                            if isinstance(pk_value, str):
+                                expression = f'"{pk_name}" = \'{pk_value}\''
+                            else:
+                                expression = f'"{pk_name}" = {pk_value}'
+                            logger.info(f"SINGLE_SELECTION: Using PK expression: {expression}")
+                            return [reloaded], expression
+                        except Exception as e:
+                            logger.warning(f"Could not get PK value: {e}")
+                    
+                    # Fallback to $id
+                    expression = f'$id = {fid}'
+                    logger.info(f"SINGLE_SELECTION: Using $id fallback: {expression}")
+                    return [reloaded], expression
             except Exception as e:
                 logger.warning(f"SINGLE_SELECTION: Could not reload feature: {e}")
         

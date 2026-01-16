@@ -116,8 +116,8 @@ class BackendService(QObject):
         """Check if PostgreSQL backend is available (psycopg2 installed)."""
         if self._postgresql_available is None:
             try:
-                from ...adapters.backends import POSTGRESQL_AVAILABLE
-                self._postgresql_available = POSTGRESQL_AVAILABLE
+                from ..ports import get_backend_services
+                self._postgresql_available = get_backend_services().get_postgresql_availability().postgresql_available
             except ImportError:
                 self._postgresql_available = False
         return self._postgresql_available
@@ -470,18 +470,27 @@ class BackendService(QObject):
         try:
             task_params = {}  # Minimal params for testing
             
+            from ..ports import get_backend_services
+            _services = get_backend_services()
+            
             if backend_type == BackendType.POSTGRESQL:
                 if not self.is_postgresql_available:
                     return None
-                from ...adapters.backends.postgresql import PostgreSQLGeometricFilter
+                PostgreSQLGeometricFilter = _services.get_postgresql_geometric_filter()
+                if not PostgreSQLGeometricFilter:
+                    return None
                 backend = PostgreSQLGeometricFilter(task_params)
                 
             elif backend_type == BackendType.SPATIALITE:
-                from ...adapters.backends.spatialite import SpatialiteGeometricFilter
+                SpatialiteGeometricFilter = _services.get_spatialite_geometric_filter()
+                if not SpatialiteGeometricFilter:
+                    return None
                 backend = SpatialiteGeometricFilter(task_params)
                 
             elif backend_type == BackendType.OGR:
-                from ...adapters.backends.ogr import OGRGeometricFilter
+                OGRGeometricFilter = _services.get_ogr_geometric_filter()
+                if not OGRGeometricFilter:
+                    return None
                 backend = OGRGeometricFilter(task_params)
                 
             else:

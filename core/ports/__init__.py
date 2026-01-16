@@ -45,6 +45,14 @@ from .filter_executor_port import (
     ProgressCallback,
 )
 
+# Backend Services Facade (EPIC-1 Phase E13)
+from .backend_services import (
+    BackendServices,
+    get_backend_services,
+    get_postgresql_available,
+    PostgreSQLAvailability,
+)
+
 __all__ = [
     # Backend
     'BackendPort',
@@ -69,4 +77,9 @@ __all__ = [
     'BackendRegistryPort',
     'CancellationCallback',
     'ProgressCallback',
+    # Backend Services Facade (EPIC-1 E13)
+    'BackendServices',
+    'get_backend_services',
+    'get_postgresql_available',
+    'PostgreSQLAvailability',
 ]
