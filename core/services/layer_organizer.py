@@ -214,18 +214,33 @@ class LayerOrganizer:
         # Use QgsDataSourceUri directly (more reliable than dataProvider().geometryColumn())
         stored_geom_field = layer_props.get("layer_geometry_field")
         if not stored_geom_field or stored_geom_field in ('NULL', 'None', '', None):
+            # FIX v4.0.8 (2026-01-16): Check if this is a memory layer (no URI-based detection)
+            # Memory layers use "memory" provider and don't have geometry columns in URI
+            is_memory_layer = layer.providerType() == 'memory'
+            
             try:
-                # Directly use QgsDataSourceUri (more reliable)
-                from qgis.core import QgsDataSourceUri
-                uri = QgsDataSourceUri(layer.source())
-                detected_geom = uri.geometryColumn()
-                if detected_geom:
-                    layer_props["layer_geometry_field"] = detected_geom
-                    logger.info(f"  ✓ Auto-detected geometry column for {layer_name}: '{detected_geom}'")
+                if is_memory_layer:
+                    # For memory layers, use layer.geometryColumn() directly
+                    geom_col = layer.geometryColumn()
+                    if geom_col and geom_col.strip():
+                        layer_props["layer_geometry_field"] = geom_col
+                        logger.debug(f"  ✓ Memory layer geometry column: '{geom_col}'")
+                    else:
+                        # Memory layers typically don't need explicit geometry column
+                        layer_props["layer_geometry_field"] = 'geometry'
+                        logger.debug(f"  ℹ️ Memory layer {layer_name}: using default 'geometry'")
                 else:
-                    # Final fallback
-                    layer_props["layer_geometry_field"] = 'geom'
-                    logger.warning(f"  ⚠️ Using fallback geometry column 'geom' for {layer_name}")
+                    # Directly use QgsDataSourceUri (more reliable for file-based layers)
+                    from qgis.core import QgsDataSourceUri
+                    uri = QgsDataSourceUri(layer.source())
+                    detected_geom = uri.geometryColumn()
+                    if detected_geom:
+                        layer_props["layer_geometry_field"] = detected_geom
+                        logger.info(f"  ✓ Auto-detected geometry column for {layer_name}: '{detected_geom}'")
+                    else:
+                        # Final fallback
+                        layer_props["layer_geometry_field"] = 'geom'
+                        logger.warning(f"  ⚠️ Using fallback geometry column 'geom' for {layer_name}")
             except Exception as e:
                 layer_props["layer_geometry_field"] = 'geom'
                 logger.warning(f"  ⚠️ Could not auto-detect geometry column for {layer_name}: {e}, using 'geom'")

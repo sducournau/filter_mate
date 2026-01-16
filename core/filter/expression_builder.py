@@ -255,7 +255,11 @@ class ExpressionBuilder:
         
         # Get source layer's existing subset string
         source_subset = self.source_layer.subsetString() if self.source_layer else None
-        logger.info(f"      Source layer subset: {source_subset[:100] if source_subset else 'None'}...")
+        logger.info("=" * 80)
+        logger.info("🔍 _prepare_source_filter: ANALYZING source_subset")
+        logger.info("=" * 80)
+        logger.info(f"   self.source_layer: {self.source_layer.name() if self.source_layer else 'None'}")
+        logger.info(f"   source_subset: '{source_subset}'" if source_subset else "   source_subset: None (EMPTY!)")
         
         # Check if source_subset contains patterns that would be skipped
         skip_source_subset = False
@@ -266,6 +270,7 @@ class ExpressionBuilder:
                 'EXISTS(',
                 'EXISTS ('
             ])
+            logger.info(f"   Contains __SOURCE/EXISTS patterns: {skip_source_subset}")
             if not skip_source_subset:
                 # Also check for MV references (except source selection MVs)
                 skip_source_subset = bool(re.search(
@@ -273,11 +278,16 @@ class ExpressionBuilder:
                     source_subset,
                     re.IGNORECASE | re.DOTALL
                 ))
+                logger.info(f"   Contains MV reference pattern: {skip_source_subset}")
             
             if skip_source_subset:
                 logger.info("⚠️ PostgreSQL EXISTS: Source subset contains patterns that would be skipped")
                 logger.info(f"   Subset preview: '{source_subset[:100]}...'")
                 logger.info("   → Falling through to generate filter from task_features instead")
+        else:
+            logger.warning("   ⚠️ source_subset is NULL - source layer has NO filter applied!")
+            logger.warning("   → Neither task_features nor source_subset available for source_filter!")
+        logger.info("=" * 80)
         
         # Check for task_features (user's selection) FIRST
         task_features = self.task_parameters.get("task", {}).get("features", [])

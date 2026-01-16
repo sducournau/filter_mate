@@ -663,6 +663,23 @@ class LayersManagementEngineTask(QgsTask):
                 geometry_field = 'geom' if layer_provider_type == PROVIDER_OGR else 'geometry'
                 logger.debug(f"Using default geometry field: '{geometry_field}'")
         
+        # FIX v4.0.8 (2026-01-16): FINAL FALLBACK - never return 'NULL' as geometry_field
+        # This ensures all layers have a valid geometry column from initialization
+        # (avoids fallback detection during filtering task)
+        if geometry_field == 'NULL' or not geometry_field:
+            # Try to detect from layer directly
+            try:
+                geom_col = layer.geometryColumn()
+                if geom_col and geom_col.strip():
+                    geometry_field = geom_col
+                    logger.info(f"Final fallback: detected geometry column '{geometry_field}' from layer.geometryColumn()")
+                else:
+                    geometry_field = 'geom'  # Ultimate fallback
+                    logger.info(f"Final fallback: using default geometry column 'geom'")
+            except Exception:
+                geometry_field = 'geom'
+                logger.info(f"Final fallback: using default geometry column 'geom' (detection failed)")
+        
         return source_schema, geometry_field
 
     def _build_new_layer_properties(self, layer, primary_key_result):

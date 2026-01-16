@@ -293,16 +293,33 @@ def build_postgis_predicates(
     if not param_distant_geometry_field or param_distant_geometry_field in ('NULL', 'None', ''):
         layer = layer_props.get("layer")
         if layer:
-            try:
-                # Directly use QgsDataSourceUri (more reliable)
-                from qgis.core import QgsDataSourceUri
-                uri = QgsDataSourceUri(layer.source())
-                detected_geom = uri.geometryColumn()
-                if detected_geom:
-                    param_distant_geometry_field = detected_geom
-                    logger.info(f"✓ Auto-detected geometry column for {param_distant_table}: '{detected_geom}'")
-            except Exception as e:
-                logger.warning(f"Could not auto-detect geometry column: {e}")
+            # FIX v4.0.8 (2026-01-16): Check if this is a memory layer
+            is_memory_layer = layer.providerType() == 'memory'
+            
+            if is_memory_layer:
+                # Memory layers don't have URI-based geometry columns
+                # Use layer.geometryColumn() directly
+                try:
+                    geom_col = layer.geometryColumn()
+                    if geom_col and geom_col.strip():
+                        param_distant_geometry_field = geom_col
+                        logger.debug(f"Memory layer geometry column: '{geom_col}'")
+                    else:
+                        param_distant_geometry_field = 'geometry'
+                        logger.debug(f"Memory layer {param_distant_table}: using default 'geometry'")
+                except Exception:
+                    param_distant_geometry_field = 'geometry'
+            else:
+                try:
+                    # Directly use QgsDataSourceUri (more reliable for file-based layers)
+                    from qgis.core import QgsDataSourceUri
+                    uri = QgsDataSourceUri(layer.source())
+                    detected_geom = uri.geometryColumn()
+                    if detected_geom:
+                        param_distant_geometry_field = detected_geom
+                        logger.info(f"✓ Auto-detected geometry column for {param_distant_table}: '{detected_geom}'")
+                except Exception as e:
+                    logger.warning(f"Could not auto-detect geometry column: {e}")
         
         # Final fallback to 'geom' (PostgreSQL default)
         if not param_distant_geometry_field or param_distant_geometry_field in ('NULL', 'None', ''):

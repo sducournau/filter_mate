@@ -1705,18 +1705,28 @@ class FilterMateApp:
 
     def get_task_parameters(self, task_name, data=None):
         """Build parameter dictionary for task execution (filter/layer management)."""
+        # DIAGNOSTIC 2026-01-16: ULTRA-DETAILED TRACE
+        logger.info("=" * 80)
+        logger.info("🔧 get_task_parameters() CALLED")
+        logger.info("=" * 80)
+        logger.info(f"   task_name: {task_name}")
+        logger.info(f"   data: {data}")
 
         if task_name in [name for name in self.tasks_descriptions.keys() if "layer" not in name]:
             if self.dockwidget is None or self.dockwidget.current_layer is None:
+                logger.warning("   → Returning None (dockwidget or current_layer is None)")
                 return None
             
             current_layer = self.dockwidget.current_layer
+            logger.info(f"   current_layer: {current_layer.name()}")
             builder = self._get_task_builder()
+            logger.info(f"   builder: {builder is not None}")
             
             # v4.7: Delegate layer validation
             if builder:
                 error = builder.validate_current_layer_for_task(current_layer, self.PROJECT_LAYERS)
                 if error:
+                    logger.warning(f"   → Returning None (layer validation error: {error})")
                     return None
             else:
                 # Minimal fallback validation
@@ -1735,14 +1745,17 @@ class FilterMateApp:
                 task_parameters = self.PROJECT_LAYERS[current_layer.id()]
 
             # v4.7: Delegate feature extraction and validation
+            logger.info("   → Calling builder.get_and_validate_features()...")
             try:
                 if builder:
                     features, expression = builder.get_and_validate_features(task_name)
+                    logger.info(f"   → get_and_validate_features returned: {len(features)} features, expression='{expression}'")
                 else:
                     features, expression = [], ""
+                    logger.warning("   → No builder - using empty features!")
             except ValueError:
+                logger.warning("   → ValueError from get_and_validate_features - returning None")
                 return None  # single_selection mode with no features
-
             if task_name in ('filter', 'unfilter', 'reset'):
                 # Build validated list of layers to filter
                 layers_to_filter = self._build_layers_to_filter(current_layer)
