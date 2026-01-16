@@ -227,15 +227,21 @@ class LayerOrganizer:
             return forced_backend
         
         # PRIORITY 2: Check PostgreSQL availability
+        # CRITICAL FIX v4.0.2 (2026-01-16): PostgreSQL layers are ALWAYS filterable via QGIS native API
+        # (setSubsetString works without psycopg2). The stored postgresql_connection_available
+        # flag may be stale from old data - IGNORE IT and always use native backend.
+        # psycopg2 is only needed for ADVANCED features (materialized views, indexes).
         if provider_type == PROVIDER_POSTGRES:
-            pg_available = layer_props.get("postgresql_connection_available", True)
-            if not pg_available or not context.postgresql_available:
-                logger.warning(f"  PostgreSQL layer '{layer_name}' - using OGR fallback")
+            # Only check context.postgresql_available (module-level flag), NOT the stored value
+            if not context.postgresql_available:
+                logger.warning(f"  PostgreSQL layer '{layer_name}' - using OGR fallback (POSTGRESQL_AVAILABLE=False)")
                 layer_props["_effective_provider_type"] = PROVIDER_OGR
                 layer_props["_postgresql_fallback"] = True
                 return PROVIDER_OGR
             else:
-                logger.debug(f"  PostgreSQL layer '{layer_name}': using native backend")
+                # Force postgresql_connection_available to True for runtime consistency
+                layer_props["postgresql_connection_available"] = True
+                logger.debug(f"  PostgreSQL layer '{layer_name}': using native backend (QGIS API)")
         
         # PRIORITY 3: Detect provider from actual layer
         if context.detect_provider_fn and context.is_valid_layer_fn:
