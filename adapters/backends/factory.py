@@ -229,15 +229,18 @@ class BackendFactory:
             logger.info(f"🔧 BackendFactory.get_backend() called for '{layer.name() if layer else 'unknown'}'")
             logger.info(f"   → provider_type (effective): '{provider_type}'")
             
-            # v4.1.0: Use legacy adapters if feature flag is set (for progressive migration testing)
-            if USE_LEGACY_ADAPTERS and is_new_backend_enabled(provider_type):
-                logger.info(f"   → Using v4.1 LegacyAdapter (new backend enabled via feature flag)")
+            # v4.2.0: ALWAYS use LegacyAdapters for hexagonal architecture support
+            # The adapters delegate to legacy backends by default (ENABLE_NEW_BACKENDS = False)
+            # This enables progressive migration via set_new_backend_enabled()
+            if USE_LEGACY_ADAPTERS:
+                new_backend_active = is_new_backend_enabled(provider_type)
+                logger.info(f"   → Using LegacyAdapter (hexagonal: {'enabled' if new_backend_active else 'delegating to legacy'})")
                 try:
                     return get_legacy_adapter(provider_type, task_params or {})
                 except Exception as e:
                     logger.warning(f"LegacyAdapter failed: {e}, falling back to direct legacy backend")
             
-            # Return appropriate legacy geometric filter backend
+            # Fallback: Return legacy geometric filter backend directly (if adapters unavailable)
             if provider_type in ('postgresql', 'postgres'):
                 try:
                     from ...before_migration.modules.backends.postgresql_backend import PostgreSQLGeometricFilter

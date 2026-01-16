@@ -1399,11 +1399,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         FIX v4: Ensure expression is ALWAYS saved to PROJECT_LAYERS, even if key doesn't exist.
         Also properly update layer_props before calling setLayer().
         
+        FIX 2026-01-16: Use _is_layer_valid() to safely check layer validity and prevent
+        RuntimeError when C++ object has been deleted.
+        
         Args:
             groupbox: 'single_selection', 'multiple_selection', or 'custom_selection'
             field_or_expression: The new field name or expression
         """
-        if not self.widgets_initialized or not self.current_layer:
+        if not self._is_layer_valid():
             return
         
         try:
@@ -2287,7 +2290,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         def _on_selecting_toggled(checked):
             """Handle IS_SELECTING toggle - activate selection tool + sync features."""
-            if not self.widgets_initialized or not self.current_layer:
+            if not self._is_layer_valid():
                 return
             layer_id = self.current_layer.id()
             if layer_id in self.PROJECT_LAYERS:
@@ -2325,7 +2328,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         def _on_tracking_toggled(checked):
             """Handle IS_TRACKING toggle - enable auto-zoom on selection."""
-            if not self.widgets_initialized or not self.current_layer:
+            if not self._is_layer_valid():
                 return
             layer_id = self.current_layer.id()
             if layer_id in self.PROJECT_LAYERS:
@@ -2360,7 +2363,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         def _on_linking_toggled(checked):
             """Handle IS_LINKING toggle - sync single/multiple selection widgets."""
-            if not self.widgets_initialized or not self.current_layer:
+            if not self._is_layer_valid():
                 return
             layer_id = self.current_layer.id()
             if layer_id in self.PROJECT_LAYERS:
@@ -2700,8 +2703,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         v4.0 S18: Update identify/zoom buttons based on selection.
         
         FIX 2026-01-15: Improved detection and fallback to canvas selection.
+        FIX 2026-01-16: Use _is_layer_valid() for safe layer checking.
         """
-        if not self.widgets_initialized or not self.current_layer:
+        if not self._is_layer_valid():
             self.pushButton_exploring_identify.setEnabled(False)
             self.pushButton_exploring_zoom.setEnabled(False)
             logger.debug("_update_exploring_buttons_state: Disabled (no layer)")
@@ -3062,8 +3066,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         User requirement: "si pas de selection QGIS, et single selection alors 
         feature active est la feature active du feature picker single selection 
         (meme si pushButton_checkable_exploring_selecting est unchecked)"
+        
+        FIX 2026-01-16: Use _is_layer_valid() for safe layer checking.
         """
-        if not self.widgets_initialized or not self.current_layer:
+        if not self._is_layer_valid():
             return [], ''
         try:
             from qgis.core import QgsFeatureRequest
@@ -3413,11 +3419,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._fallback_handle_layer_selection_changed()
     
     def _fallback_handle_layer_selection_changed(self):
-        """FIX 2026-01-15 v4: Fallback for on_layer_selection_changed when controller unavailable."""
+        """FIX 2026-01-15 v4: Fallback for on_layer_selection_changed when controller unavailable.
+        FIX 2026-01-16: Use _is_layer_valid() for safe layer checking.
+        """
         try:
             if getattr(self, '_syncing_from_qgis', False):
                 return
-            if not self.widgets_initialized or not self.current_layer:
+            if not self._is_layer_valid():
                 return
             layer_props = self.PROJECT_LAYERS.get(self.current_layer.id())
             if not layer_props:
@@ -3770,8 +3778,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self._exploring_ctrl: self._exploring_ctrl.exploring_link_widgets(expression, change_source)
 
     def get_layers_to_filter(self):
-        """v4.0 S18: Get checked layer IDs from filtering combobox."""
-        if not self.widgets_initialized or not self.current_layer: return []
+        """v4.0 S18: Get checked layer IDs from filtering combobox.
+        FIX 2026-01-16: Use _is_layer_valid() for safe layer checking.
+        """
+        if not self._is_layer_valid(): return []
         checked = []
         w = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
         for i in range(w.count()):
@@ -3784,8 +3794,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def get_layers_to_export(self):
-        """v4.0 S18: Get checked layer IDs for export."""
-        if not self.widgets_initialized or not self.current_layer: return None
+        """v4.0 S18: Get checked layer IDs for export.
+        FIX 2026-01-16: Use _is_layer_valid() for safe layer checking.
+        """
+        if not self._is_layer_valid(): return None
         w, checked = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"], []
         for i in range(w.count()):
             if w.itemCheckState(i) == Qt.Checked:
@@ -4393,7 +4405,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 return
         
         # Fallback: Minimal inline logic when controller is unavailable (v4.0 Migration Fix)
-        if not self.widgets_initialized or not self.current_layer:
+        # FIX 2026-01-16: Use _is_layer_valid() for safe layer checking
+        if not self._is_layer_valid():
             return
         if self.current_layer.id() not in self.PROJECT_LAYERS:
             return

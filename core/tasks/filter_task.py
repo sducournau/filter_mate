@@ -681,9 +681,19 @@ class FilterEngineTask(QgsTask):
         
         v4.0.1: Delegates to BackendRegistry.cleanup_all() if available.
         Phase E13: Delegates to BackendConnector.
+        v4.1.1: Also cleans up temporary OGR layers.
         """
         connector = self._get_backend_connector()
         connector.cleanup_backend_resources()
+        
+        # FIX v4.1.1: Cleanup temporary OGR layers that were registered during filtering
+        try:
+            from ...adapters.backends.ogr.filter_executor import cleanup_ogr_temp_layers
+            cleanup_ogr_temp_layers()
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.warning(f"Failed to cleanup OGR temp layers: {e}")
 
     def queue_subset_request(self, layer, expression):
         """Queue subset string to be applied on main thread (thread safety v2.3.21)."""

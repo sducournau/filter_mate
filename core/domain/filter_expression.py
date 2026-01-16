@@ -8,7 +8,7 @@ This is a PURE PYTHON module with NO QGIS dependencies,
 enabling true unit testing and clear separation of concerns.
 """
 from dataclasses import dataclass, field
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 from enum import Enum
 
 
@@ -166,6 +166,70 @@ class FilterExpression:
             buffer_segments=buffer_segments
         )
 
+    @classmethod
+    def from_spatial_filter(
+        cls,
+        predicates: Dict,
+        source_geometry_wkt: Optional[str] = None,
+        buffer_distance: Optional[float] = None,
+        use_centroids: bool = False,
+        provider: ProviderType = ProviderType.OGR,
+        source_layer_id: str = ""
+    ) -> 'FilterExpression':
+        """
+        Create FilterExpression from legacy spatial filter parameters.
+        
+        v4.2.0: Bridge method for hexagonal architecture activation.
+        Converts legacy build_expression() parameters to FilterExpression.
+        
+        Args:
+            predicates: Dict of spatial predicates (e.g., {'0': 'ST_Intersects'})
+            source_geometry_wkt: WKT geometry string for source
+            buffer_distance: Buffer distance in meters
+            use_centroids: Use centroids for filtering
+            provider: Target provider type
+            source_layer_id: Source layer QGIS ID
+            
+        Returns:
+            FilterExpression for use with new backends
+        """
+        # Build raw expression from predicates
+        predicate_names = []
+        for key, value in predicates.items():
+            if isinstance(value, str):
+                # Extract predicate name (e.g., 'ST_Intersects' -> 'intersects')
+                pred_name = value.lower().replace('st_', '')
+                predicate_names.append(pred_name)
+        
+        # Create placeholder expression
+        raw = f"SPATIAL_FILTER({', '.join(predicate_names)})"
+        if source_geometry_wkt:
+            raw += f" WITH GEOMETRY({len(source_geometry_wkt)} chars)"
+        if buffer_distance:
+            raw += f" BUFFER({buffer_distance}m)"
+        if use_centroids:
+            raw += " [CENTROIDS]"
+        
+        # Detect spatial predicates
+        spatial_predicates = []
+        for pred_name in predicate_names:
+            try:
+                spatial_predicates.append(SpatialPredicate(pred_name))
+            except ValueError:
+                pass  # Unknown predicate, skip
+        
+        return cls(
+            raw=raw,
+            sql=raw,  # Will be converted by backend
+            provider=provider,
+            is_spatial=True,
+            spatial_predicates=tuple(spatial_predicates),
+            source_layer_id=source_layer_id,
+            target_layer_ids=(),
+            buffer_value=buffer_distance if buffer_distance and buffer_distance > 0 else None,
+            buffer_segments=8
+        )
+
     @staticmethod
     def _detect_spatial_predicates(expression: str) -> List[SpatialPredicate]:
         """
@@ -265,6 +329,25 @@ class FilterExpression:
     def predicate_names(self) -> List[str]:
         """Get list of predicate names as strings."""
         return [p.value for p in self.spatial_predicates]
+
+    def to_sql(self, provider: Optional['ProviderType'] = None) -> str:
+        """
+        Get SQL representation for the given provider.
+        
+        v4.2.0: Returns the stored SQL expression.
+        For full SQL conversion, use ExpressionService.convert_to_sql().
+        
+        Args:
+            provider: Target provider (optional, defaults to self.provider)
+            
+        Returns:
+            SQL expression string
+        """
+        # If provider specified and different, note it in logs
+        target_provider = provider or self.provider
+        
+        # Return stored SQL (may need conversion by caller)
+        return self.sql
 
     def __str__(self) -> str:
         """Human-readable representation."""

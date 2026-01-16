@@ -18,8 +18,69 @@ Created: January 2026 (EPIC-1 Phase E4)
 
 import logging
 import re
+import threading
 
 logger = logging.getLogger('FilterMate.Adapters.Backends.OGR.FilterExecutor')
+
+# =============================================================================
+# TEMPORARY LAYER REGISTRY
+# Tracks temporary layers created for garbage collection prevention.
+# These layers are added to QgsProject with addToLegend=False and must be
+# explicitly removed when filtering is complete.
+# =============================================================================
+
+_temp_layer_registry_lock = threading.Lock()
+_temp_layer_registry = []  # List of layer IDs to clean up
+
+
+def register_temp_layer(layer_id: str) -> None:
+    """
+    Register a temporary layer for later cleanup.
+    
+    Args:
+        layer_id: The QgsMapLayer.id() of the temp layer
+    """
+    with _temp_layer_registry_lock:
+        if layer_id not in _temp_layer_registry:
+            _temp_layer_registry.append(layer_id)
+            logger.debug(f"Registered temp layer for cleanup: {layer_id}")
+
+
+def cleanup_ogr_temp_layers() -> int:
+    """
+    Clean up all registered temporary OGR layers.
+    
+    This removes layers from the QgsProject that were added with
+    addToLegend=False for garbage collection prevention.
+    
+    Returns:
+        int: Number of layers removed
+    """
+    from qgis.core import QgsProject
+    
+    with _temp_layer_registry_lock:
+        if not _temp_layer_registry:
+            return 0
+        
+        layer_ids = _temp_layer_registry.copy()
+        _temp_layer_registry.clear()
+    
+    removed_count = 0
+    project = QgsProject.instance()
+    
+    for layer_id in layer_ids:
+        try:
+            if project.mapLayer(layer_id) is not None:
+                project.removeMapLayer(layer_id)
+                removed_count += 1
+                logger.debug(f"Cleaned up temp layer: {layer_id}")
+        except Exception as e:
+            logger.warning(f"Failed to cleanup temp layer {layer_id}: {e}")
+    
+    if removed_count > 0:
+        logger.info(f"Cleaned up {removed_count} temporary OGR layers")
+    
+    return removed_count
 
 
 def build_ogr_filter_from_selection(
@@ -680,9 +741,11 @@ def prepare_ogr_source_geom(
             logger.info(f"  ✓ Converted to centroids: {layer.featureCount()} points")
     
     # Step 5: Prevent garbage collection for memory layers
+    # FIX v4.1.1: Register layer for cleanup after filtering completes
     if layer and layer.isValid() and layer.providerType() == 'memory':
         logger.debug("  Adding memory layer to project (prevent GC)")
         QgsProject.instance().addMapLayer(layer, addToLegend=False)
+        register_temp_layer(layer.id())  # Register for cleanup
     
     return layer
 
