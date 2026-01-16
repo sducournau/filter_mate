@@ -160,32 +160,19 @@ class BaseLegacyAdapter(GeometricFilterBackend):
         
         Translates legacy parameters to new FilterExpression domain model.
         Override in subclasses for backend-specific logic.
+        
+        FIX v4.0.3 (2026-01-16): Don't use FilterExpression.from_spatial_filter()
+        as it no longer generates SQL (returns empty string). Instead, always 
+        use the legacy backend's build_expression() method.
         """
-        # Default implementation: try to use new backend's expression building
-        # This is a placeholder - subclasses should override with proper translation
-        try:
-            from ...core.domain.filter_expression import FilterExpression, ProviderType
-            from ...core.domain.layer_info import LayerInfo
-            
-            # Build FilterExpression from legacy params
-            expr = FilterExpression.from_spatial_filter(
-                predicates=predicates,
-                source_geometry_wkt=source_geom,
-                buffer_distance=buffer_value,
-                use_centroids=use_centroids
+        # ALWAYS use legacy backend for spatial filter expression building
+        # The new FilterExpression domain model is not yet fully integrated
+        if self._legacy_backend:
+            return self._legacy_backend.build_expression(
+                layer_props, predicates, source_geom, buffer_value,
+                buffer_expression, source_filter, use_centroids, **kwargs
             )
-            
-            # Get SQL representation
-            return expr.to_sql(self._get_provider_type_enum())
-            
-        except Exception as e:
-            logger.warning(f"New backend expression building failed: {e}, falling back to legacy")
-            if self._legacy_backend:
-                return self._legacy_backend.build_expression(
-                    layer_props, predicates, source_geom, buffer_value,
-                    buffer_expression, source_filter, use_centroids, **kwargs
-                )
-            raise
+        raise RuntimeError(f"No backend available for {self.provider_type}")
     
     def _get_provider_type_enum(self):
         """Get ProviderType enum for this backend."""

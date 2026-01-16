@@ -413,12 +413,17 @@ class PostgreSQLBackend(BackendPort):
             WHERE {expression.sql}
         """
 
+        logger.debug(f"[PostgreSQL v4.0] DIRECT Query: {query[:500]}...")
+
         try:
             cursor = connection.cursor()
             cursor.execute(query)
-            return [row[0] for row in cursor.fetchall()]
+            results = cursor.fetchall()
+            logger.debug(f"[PostgreSQL v4.0] DIRECT Results: {len(results)} rows")
+            return [row[0] for row in results]
         except Exception as e:
-            logger.error(f"Direct query failed: {e}")
+            logger.error(f"[PostgreSQL v4.0] Direct query FAILED: {e}")
+            logger.error(f"[PostgreSQL v4.0] Failed query: {query[:1000]}")
             raise
 
     def _get_table_name(self, layer_info: LayerInfo) -> str:
@@ -427,22 +432,32 @@ class PostgreSQLBackend(BackendPort):
         # Format: "dbname=x user=y table=schema.table" or "table=\"schema\".\"table\""
         source = layer_info.source_path
 
+        logger.debug(f"[PostgreSQL v4.0] Extracting table from source: {source[:200]}...")
+
         # Try to extract table from source
         match = re.search(r'table=["\']?([^"\'"\s]+)["\']?', source)
         if match:
-            return match.group(1)
+            table = match.group(1)
+            logger.debug(f"[PostgreSQL v4.0] Table extracted (method 1): {table}")
+            return table
 
         # Try schema.table format
         match = re.search(r'table="([^"]+)"\.?"([^"]+)"', source)
         if match:
-            return f'"{match.group(1)}"."{match.group(2)}"'
+            table = f'"{match.group(1)}"."{match.group(2)}"'
+            logger.debug(f"[PostgreSQL v4.0] Table extracted (method 2): {table}")
+            return table
 
         # Fallback to layer table_name
         if layer_info.table_name:
             if layer_info.schema_name:
-                return f'"{layer_info.schema_name}"."{layer_info.table_name}"'
-            return f'"{layer_info.table_name}"'
+                table = f'"{layer_info.schema_name}"."{layer_info.table_name}"'
+            else:
+                table = f'"{layer_info.table_name}"'
+            logger.debug(f"[PostgreSQL v4.0] Table from LayerInfo: {table}")
+            return table
 
+        logger.warning(f"[PostgreSQL v4.0] Could not extract table name - using 'unknown_table'")
         return "unknown_table"
 
     def _get_geometry_column(self, layer_info: LayerInfo) -> str:
