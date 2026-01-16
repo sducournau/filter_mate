@@ -93,6 +93,13 @@ from .complexity_estimator import (
     get_complexity_estimator,
     estimate_query_complexity,
 )
+from .signal_utils import (
+    is_layer_in_project,
+    safe_disconnect,
+    safe_emit,
+    safe_set_layer_variable,
+    safe_set_layer_variables,
+)
 
 # Import SQL utilities (from infrastructure.database)
 from ..database.sql_utils import (
@@ -438,6 +445,12 @@ __all__ = [
     # QGIS safety utilities
     'is_qgis_alive',
     'GdalErrorHandler',
+    # Signal and layer variable utilities (EPIC-1 migration)
+    'is_layer_in_project',
+    'safe_disconnect',
+    'safe_emit',
+    'safe_set_layer_variable',
+    'safe_set_layer_variables',
     # Feature iteration utilities (EPIC-1 migration from widgets.py)
     'safe_iterate_features',
     'get_feature_attribute',

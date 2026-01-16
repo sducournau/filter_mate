@@ -89,52 +89,14 @@ from ...infrastructure.utils import (
     is_sip_deleted, 
     is_layer_valid as is_valid_layer,
     is_layer_source_available,
-    safe_layer_access
+    safe_layer_access,
+    is_layer_in_project,
+    safe_disconnect,
+    safe_emit,
+    safe_set_layer_variable,
+    safe_set_layer_variables,
+    is_qgis_alive
 )
-
-# Additional object safety utilities from infrastructure
-try:
-    from ...infrastructure.utils.object_safety import (
-        is_layer_in_project, safe_disconnect, safe_emit,
-        safe_set_layer_variable, safe_set_layer_variables, is_qgis_alive
-    )
-except ImportError:
-    def is_layer_in_project(layer):
-        try:
-            from qgis.core import QgsProject
-            return layer.id() in QgsProject.instance().mapLayers()
-        except:
-            return False
-    
-    def safe_disconnect(signal, slot):
-        try:
-            signal.disconnect(slot)
-        except:
-            pass
-    
-    def safe_emit(signal, *args):
-        try:
-            signal.emit(*args)
-        except:
-            pass
-    
-    def safe_set_layer_variable(layer, key, value):
-        try:
-            from qgis.core import QgsExpressionContextUtils
-            QgsExpressionContextUtils.setLayerVariable(layer, key, value)
-        except:
-            pass
-    
-    def safe_set_layer_variables(layer, variables):
-        for key, value in variables.items():
-            safe_set_layer_variable(layer, key, value)
-    
-    def is_qgis_alive():
-        try:
-            from qgis.utils import iface
-            return iface is not None
-        except:
-            return False
 
 # Import sip for direct C++ object deletion check (v2.3.11 - crash fix)
 try:
@@ -625,15 +587,8 @@ class LayersManagementEngineTask(QgsTask):
                 if geom_col:
                     geometry_field = geom_col
                 else:
-                    # Try from data provider
-                    try:
-                        geom_col = layer.dataProvider().geometryColumn()
-                        if geom_col:
-                            geometry_field = geom_col
-                        else:
-                            geometry_field = 'geom'
-                    except AttributeError:
-                        geometry_field = 'geom'
+                    # Fallback to default
+                    geometry_field = 'geom'
                 
                 logger.debug(f"PostgreSQL layer metadata: schema={source_schema}, geometry_field={geometry_field}")
                 
@@ -662,17 +617,7 @@ class LayersManagementEngineTask(QgsTask):
             except Exception:
                 pass
             
-            # METHOD 1: From data provider (fallback)
-            if not detected_geom_field:
-                try:
-                    geom_col = layer.dataProvider().geometryColumn()
-                    if geom_col and geom_col.strip():
-                        detected_geom_field = geom_col
-                        logger.debug(f"Geometry column from dataProvider(): '{detected_geom_field}'")
-                except (AttributeError, RuntimeError):
-                    pass
-            
-            # METHOD 2: Query GeoPackage metadata (for .gpkg files)
+            # METHOD 1: Query GeoPackage metadata (for .gpkg files)
             if not detected_geom_field:
                 try:
                     source = layer.source()

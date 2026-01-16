@@ -29,7 +29,7 @@ except ImportError:
 from .base_controller import BaseController
 from .mixins.layer_selection_mixin import LayerSelectionMixin
 from ...adapters.layer_validator import LayerValidator
-from ...infrastructure.utils.object_safety import is_valid_layer
+from ...adapters.layer_validator import is_valid_layer
 
 logger = logging.getLogger(__name__)
 
@@ -2190,7 +2190,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
                         # Persist to SQLite if this is a user-initiated change (not auto-init)
                         if change_source and 'field' in change_source.lower():
                             logger.debug(f"Persisting single_selection field '{expression}' to SQLite for layer {self._dockwidget.current_layer.name()}")
-                            from ...infrastructure.utils import is_valid_layer as is_layer_valid
+                            from ...infrastructure.utils import is_layer_valid
                             if is_layer_valid(self._dockwidget.current_layer):
                                 self._dockwidget.settingLayerVariable.emit(
                                     self._dockwidget.current_layer,
@@ -2240,7 +2240,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
                         # Persist to SQLite if this is a user-initiated change (not auto-init)
                         if change_source and 'field' in change_source.lower():
                             logger.debug(f"Persisting multiple_selection field '{expression}' to SQLite for layer {self._dockwidget.current_layer.name()}")
-                            from ...infrastructure.utils import is_valid_layer as is_layer_valid
+                            from ...infrastructure.utils import is_layer_valid
                             if is_layer_valid(self._dockwidget.current_layer):
                                 self._dockwidget.settingLayerVariable.emit(
                                     self._dockwidget.current_layer,
