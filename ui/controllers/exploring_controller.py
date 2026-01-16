@@ -2309,47 +2309,50 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 best_field = get_best_display_field(layer)
                 logger.debug(f"Best field detected for layer '{layer.name()}': '{best_field}'")
                 
-                # FIX v4.0: If get_best_display_field returns empty or primary key, use fallback
-                # Comboboxes CANNOT be empty - must always have a value
-                if not best_field or best_field == primary_key:
+                # FIX v4.0 + v4.1 Simon 2026-01-16: Comboboxes CANNOT be empty - must ALWAYS have a value
+                # Garantir qu'il y a toujours un champ par défaut, même si get_best_display_field retourne vide
+                if not best_field:
                     fields = layer.fields()
-                    # Try to find first non-PK field
+                    # Essayer de trouver le premier champ non-PK
                     best_field = None
                     for field in fields:
                         if field.name() != primary_key:
                             best_field = field.name()
                             break
                     
+                    # Si tous les champs sont PK ou aucun champ, utiliser le premier champ ou PK
                     if not best_field:
-                        # All fields tried, use first field or primary key
                         if fields.count() > 0:
                             best_field = fields[0].name()
+                        elif primary_key:
+                            best_field = primary_key
                         else:
-                            best_field = primary_key or "$id"
+                            best_field = "$id"  # Fallback absolu
                     
-                    logger.info(f"Using fallback field '{best_field}' for layer '{layer.name()}'")
+                    logger.info(f"Forced fallback field '{best_field}' for layer '{layer.name()}' (get_best_display_field returned empty)")
                 
-                # Only upgrade if best_field is different from primary key
-                if best_field and best_field != primary_key:
+                # TOUJOURS mettre à jour les expressions, même si best_field == primary_key
+                # Ceci garantit que les combobox ne soient JAMAIS vides
+                if best_field:
                     if should_upgrade_single:
                         layer_props["exploring"]["single_selection_expression"] = best_field
                         self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["single_selection_expression"] = best_field
                         expressions_updated = True
-                        logger.info(f"✨ Upgraded single_selection from PK '{primary_key}' to '{best_field}' for layer '{layer.name()}'")
+                        logger.info(f"✨ Set single_selection to '{best_field}' for layer '{layer.name()}'")
                     if should_upgrade_multiple:
                         layer_props["exploring"]["multiple_selection_expression"] = best_field
                         self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["multiple_selection_expression"] = best_field
                         expressions_updated = True
-                        logger.info(f"✨ Upgraded multiple_selection from PK '{primary_key}' to '{best_field}' for layer '{layer.name()}'")
+                        logger.info(f"✨ Set multiple_selection to '{best_field}' for layer '{layer.name()}'")
                     if should_upgrade_custom:
                         layer_props["exploring"]["custom_selection_expression"] = best_field
                         self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["custom_selection_expression"] = best_field
                         expressions_updated = True
-                        logger.info(f"✨ Upgraded custom_selection from PK '{primary_key}' to '{best_field}' for layer '{layer.name()}'")
+                        logger.info(f"✨ Set custom_selection to '{best_field}' for layer '{layer.name()}'")
                     
                     # Persist upgraded field to SQLite for future sessions
                     if expressions_updated:
-                        logger.debug(f"Persisting upgraded field '{best_field}' to SQLite for layer {layer.name()}")
+                        logger.debug(f"Persisting field '{best_field}' to SQLite for layer {layer.name()}")
                         if is_valid_layer(layer):
                             properties_to_save = []
                             if should_upgrade_single:
@@ -2362,7 +2365,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
                         else:
                             logger.debug(f"_reload_exploration_widgets: layer became invalid, skipping signal emit")
                 else:
-                    logger.debug(f"No better field than primary key '{primary_key}' found, keeping defaults")
+                    logger.error(f"CRITICAL: No field could be determined for layer '{layer.name()}' - comboboxes may be empty!")
             else:
                 # Expressions already customized (not equal to primary key)
                 logger.debug(f"Using user-customized expressions for layer '{layer.name()}': single={single_expr}, multiple={multiple_expr}")
@@ -2371,6 +2374,42 @@ class ExploringController(BaseController, LayerSelectionMixin):
             single_expr = layer_props["exploring"]["single_selection_expression"]
             multiple_expr = layer_props["exploring"]["multiple_selection_expression"]
             custom_expr = layer_props["exploring"]["custom_selection_expression"]
+            
+            # FIX v4.1 Simon 2026-01-16: GARANTIR que les expressions ne sont JAMAIS vides
+            # Fallback absolu si une expression est vide (dernier rempart avant les widgets)
+            if not single_expr:
+                fields = layer.fields()
+                if fields.count() > 0:
+                    single_expr = fields[0].name()
+                    layer_props["exploring"]["single_selection_expression"] = single_expr
+                    self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["single_selection_expression"] = single_expr
+                    logger.warning(f"Emergency fallback: Set single_selection to first field '{single_expr}'")
+                else:
+                    single_expr = "$id"
+                    logger.error(f"CRITICAL: Layer '{layer.name()}' has no fields, using $id")
+            
+            if not multiple_expr:
+                fields = layer.fields()
+                if fields.count() > 0:
+                    multiple_expr = fields[0].name()
+                    layer_props["exploring"]["multiple_selection_expression"] = multiple_expr
+                    self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["multiple_selection_expression"] = multiple_expr
+                    logger.warning(f"Emergency fallback: Set multiple_selection to first field '{multiple_expr}'")
+                else:
+                    multiple_expr = "$id"
+                    logger.error(f"CRITICAL: Layer '{layer.name()}' has no fields, using $id")
+            
+            if not custom_expr:
+                fields = layer.fields()
+                if fields.count() > 0:
+                    custom_expr = fields[0].name()
+                    layer_props["exploring"]["custom_selection_expression"] = custom_expr
+                    self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["custom_selection_expression"] = custom_expr
+                    logger.warning(f"Emergency fallback: Set custom_selection to first field '{custom_expr}'")
+                else:
+                    custom_expr = "$id"
+                    logger.error(f"CRITICAL: Layer '{layer.name()}' has no fields, using $id")
+            
             logger.info(f"FINAL expressions for layer '{layer.name()}': single={single_expr}, multiple={multiple_expr}, custom={custom_expr}")
             
             # Single selection widget
@@ -2455,8 +2494,9 @@ class ExploringController(BaseController, LayerSelectionMixin):
                             logger.warning(f"_reload_exploration_widgets: Failed to restore checked items: {e}")
             
             # Field expression widgets
-            # FIX 2026-01-15: Use setField() for simple field names to properly select in combobox
+            # FIX 2026-01-15 + 2026-01-16: Use setField() for simple field names to properly select in combobox
             # Use setExpression() only for complex expressions. This fixes empty combobox issue.
+            # FIX v4.1 Simon: Never pass empty string to setField() - always use first field as fallback
             if "SINGLE_SELECTION_EXPRESSION" in self._dockwidget.widgets.get("EXPLORING", {}):
                 logger.info(f"Setting SINGLE_SELECTION_EXPRESSION widget: layer={layer.name()}, expression='{single_expr}'")
                 widget = self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"]
@@ -2465,7 +2505,8 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 if single_expr and not QgsExpression(single_expr).isField():
                     widget.setExpression(single_expr)
                 else:
-                    widget.setField(single_expr if single_expr else "")
+                    # Ne JAMAIS passer une chaîne vide à setField - la sécurité ci-dessus garantit que single_expr n'est jamais vide
+                    widget.setField(single_expr)
                 logger.info(f"Widget expression after set: '{widget.expression()}'")
             
             if "MULTIPLE_SELECTION_EXPRESSION" in self._dockwidget.widgets.get("EXPLORING", {}):
@@ -2476,7 +2517,8 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 if multiple_expr and not QgsExpression(multiple_expr).isField():
                     widget.setExpression(multiple_expr)
                 else:
-                    widget.setField(multiple_expr if multiple_expr else "")
+                    # Ne JAMAIS passer une chaîne vide à setField
+                    widget.setField(multiple_expr)
                 logger.info(f"Widget expression after set: '{widget.expression()}'")
             
             if "CUSTOM_SELECTION_EXPRESSION" in self._dockwidget.widgets.get("EXPLORING", {}):
@@ -2487,7 +2529,8 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 if custom_expr and not QgsExpression(custom_expr).isField():
                     widget.setExpression(custom_expr)
                 else:
-                    widget.setField(custom_expr if custom_expr else "")
+                    # Ne JAMAIS passer une chaîne vide à setField
+                    widget.setField(custom_expr)
                 logger.info(f"Widget expression after set: '{widget.expression()}'")
 
             

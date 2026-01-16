@@ -50,7 +50,13 @@ class ExpressionBuilder:
         self,
         task_parameters: Dict[str, Any],
         source_layer: Optional[QgsVectorLayer],
-        current_predicates: List[str]
+        current_predicates: List[str],
+        source_wkt: Optional[str] = None,
+        source_srid: Optional[int] = None,
+        source_feature_count: Optional[int] = None,
+        buffer_value: Optional[float] = None,
+        buffer_expression: Optional[str] = None,
+        use_centroids_distant: bool = False
     ):
         """
         Initialize the expression builder.
@@ -59,10 +65,24 @@ class ExpressionBuilder:
             task_parameters: Task configuration dict
             source_layer: Source layer for geometric filtering (contains selection)
             current_predicates: Spatial predicates to apply (e.g., ['intersects'])
+            source_wkt: WKT geometry string for simple PostgreSQL expressions
+            source_srid: SRID of source geometry for ST_GeomFromText()
+            source_feature_count: Number of source features (determines WKT vs EXISTS strategy)
+            buffer_value: Buffer distance in meters (positive=expand, negative=shrink)
+            buffer_expression: Dynamic buffer expression (attribute-based buffer)
+            use_centroids_distant: Use ST_Centroid/PointOnSurface for distant layer geometries
         """
         self.task_parameters = task_parameters
         self.source_layer = source_layer
         self.current_predicates = current_predicates
+        
+        # PostgreSQL spatial expression parameters
+        self.source_wkt = source_wkt
+        self.source_srid = source_srid
+        self.source_feature_count = source_feature_count
+        self.buffer_value = buffer_value
+        self.buffer_expression = buffer_expression
+        self.use_centroids_distant = use_centroids_distant
         
         # Cache for expressions (performance optimization)
         self._expression_cache = {}
@@ -119,11 +139,27 @@ class ExpressionBuilder:
             # Delegate to backend-specific build_expression()
             # Each backend knows how to construct expressions in its SQL dialect
             logger.info(f"🔧 Calling backend.build_expression()...")
+            logger.info(f"   source_wkt available: {self.source_wkt is not None}")
+            logger.info(f"   source_srid: {self.source_srid}")
+            logger.info(f"   source_feature_count: {self.source_feature_count}")
+            logger.info(f"   buffer_value: {self.buffer_value}")
+            logger.info(f"   use_centroids_distant: {self.use_centroids_distant}")
+            
+            # CRITICAL FIX 2026-01-16: Pass all required parameters to backend
+            # PostgreSQLGeometricFilter.build_expression() requires these for
+            # generating proper EXISTS subqueries with ST_Intersects instead of
+            # falling back to simple "id" IN (...) expressions
             expression = backend.build_expression(
+                layer_props=layer_props,
                 predicates=self.current_predicates,
                 source_geom=source_geom,
-                layer_props=layer_props,
-                source_filter=source_filter
+                buffer_value=self.buffer_value,
+                buffer_expression=self.buffer_expression,
+                source_filter=source_filter,
+                source_wkt=self.source_wkt,
+                source_srid=self.source_srid,
+                source_feature_count=self.source_feature_count,
+                use_centroids=self.use_centroids_distant
             )
             
             logger.info(f"✅ Backend returned expression: {expression[:200] if expression else 'None'}...")

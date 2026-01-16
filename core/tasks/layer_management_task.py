@@ -478,15 +478,35 @@ class LayersManagementEngineTask(QgsTask):
             logger.info(f"Added missing 'current_exploring_groupbox' property for layer {layer.id()}")
         
         # Ensure all expression properties exist with primary key as default
+        # FIX v4.1 Simon 2026-01-16: Garantir un fallback robuste si primary_key est vide
         expression_properties = [
             "single_selection_expression",
             "multiple_selection_expression",
             "custom_selection_expression"
         ]
+        
+        # Déterminer le fallback field à utiliser
+        fallback_field = None
+        if primary_key:
+            fallback_field = str(primary_key)
+        else:
+            # Essayer d'obtenir le premier champ du layer
+            try:
+                fields = layer.fields()
+                if fields.count() > 0:
+                    fallback_field = fields[0].name()
+                    logger.info(f"No primary key, using first field '{fallback_field}' for layer {layer.id()}")
+                else:
+                    fallback_field = "$id"
+                    logger.warning(f"Layer {layer.id()} has no fields, using $id as fallback")
+            except Exception as e:
+                fallback_field = "$id"
+                logger.error(f"Error getting fields for layer {layer.id()}: {e}, using $id")
+        
         for prop_name in expression_properties:
             if prop_name not in exploring:
-                exploring[prop_name] = str(primary_key)
-                logger.info(f"Added missing '{prop_name}' property for layer {layer.id()}")
+                exploring[prop_name] = fallback_field
+                logger.info(f"Added missing '{prop_name}' = '{fallback_field}' for layer {layer.id()}")
             
             # Update database with new key name
             try:
@@ -808,7 +828,24 @@ class LayersManagementEngineTask(QgsTask):
         # Determine the best display field for exploring expressions
         # Use descriptive text fields when available instead of just primary key
         best_display_field = get_best_display_field(layer)
-        display_expression = best_display_field if best_display_field else (primary_key_name if primary_key_name else "")
+        
+        # FIX v4.1 Simon 2026-01-16: GARANTIR que display_expression n'est JAMAIS vide
+        # Les combobox field ne doivent JAMAIS être vides au chargement d'un layer
+        if best_display_field:
+            display_expression = best_display_field
+        elif primary_key_name:
+            display_expression = primary_key_name
+        else:
+            # Dernier recours : utiliser le premier champ disponible ou "$id"
+            fields = layer.fields()
+            if fields.count() > 0:
+                display_expression = fields[0].name()
+                logger.warning(f"No best field or PK found for layer '{layer.name()}', using first field '{display_expression}'")
+            else:
+                display_expression = "$id"
+                logger.warning(f"Layer '{layer.name()}' has no fields, using $id as fallback")
+        
+        logger.info(f"🎯 Display expression for new layer '{layer.name()}': '{display_expression}'")
         
         new_layer_variables["exploring"] = json.loads(
             self.json_template_layer_exploring % (

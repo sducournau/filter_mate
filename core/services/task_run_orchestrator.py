@@ -255,10 +255,13 @@ class TaskRunOrchestrator:
         )
         
         # Create ExpressionBuilder
+        # Note: source_wkt, source_srid, etc. will be set later after source geometry preparation
+        # The lazy initialization in FilterEngineTask._get_expression_builder() will handle this
         context.expression_builder = ExpressionBuilder(
             task_parameters=context.task_parameters,
             source_layer=context.source_layer,
             current_predicates=[]  # Will be set by parent task
+            # Other PostgreSQL parameters will be set via lazy init or updated later
         )
         
         # Create FilterOrchestrator

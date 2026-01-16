@@ -815,6 +815,11 @@ class ConfigurationManager(QObject):
                        d.mFieldExpressionWidget_exploring_multiple_selection,
                        d.mFieldExpressionWidget_exploring_custom_selection]:
             widget.setFilters(field_filters)
+            # FIX v4.1 Simon 2026-01-16: INTERDIRE les valeurs NULL dans les combobox field
+            # Les QgsFieldExpressionWidget autorisent par défaut la sélection d'une valeur vide
+            # qui s'affiche comme "NULL". On doit désactiver cette option pour garantir qu'un
+            # champ est TOUJOURS sélectionné.
+            widget.setAllowEmptyFieldName(False)
         # v4.0.1 CLEAN #1: Removed direct fieldChanged connections to avoid triple-connection
         # fieldChanged signals now handled ONLY by ExploringController via SignalManager
         # setup_expression_widget_direct_connections() REMOVED in v4.0.1 Phase 1 cleanup

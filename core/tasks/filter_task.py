@@ -376,8 +376,8 @@ class FilterEngineTask(QgsTask):
             "covers": "ST_Covers",
             "coveredby": "ST_CoveredBy"
         }
-        global ENV_VARS
-        self.PROJECT = ENV_VARS["PROJECT"]
+        # Use QgsProject.instance() directly - always available in QGIS
+        self.PROJECT = QgsProject.instance()
         self.current_materialized_view_schema = 'filter_mate_temp'
         
         # Session ID for multi-client materialized view isolation
@@ -520,14 +520,63 @@ class FilterEngineTask(QgsTask):
         
         FIX 2026-01-15: ExpressionBuilder may not be set from context.
         This lazy initialization ensures it's always available.
+        
+        FIX 2026-01-16: Pass critical PostgreSQL parameters for EXISTS/ST_Intersects
+        expressions. Without these, backend falls back to "id" IN (...) expressions.
+        Always update parameters in case source geometries were prepared after initial creation.
         """
+        # Get source WKT and SRID from prepared Spatialite geometry
+        source_wkt = getattr(self, 'spatialite_source_geom', None)
+        source_srid = None
+        if hasattr(self, 'source_layer_crs_authid') and self.source_layer_crs_authid:
+            try:
+                source_srid = int(self.source_layer_crs_authid.split(':')[1])
+            except (ValueError, IndexError):
+                source_srid = 4326  # Default to WGS84
+        
+        # Get source feature count (priority: task_features > ogr_source_geom > source_layer)
+        source_feature_count = None
+        task_features = self.task_parameters.get("task", {}).get("features", [])
+        if task_features and len(task_features) > 0:
+            source_feature_count = len(task_features)
+        elif hasattr(self, 'ogr_source_geom') and self.ogr_source_geom:
+            from qgis.core import QgsVectorLayer
+            if isinstance(self.ogr_source_geom, QgsVectorLayer):
+                source_feature_count = self.ogr_source_geom.featureCount()
+            else:
+                source_feature_count = 1
+        elif hasattr(self, 'source_layer') and self.source_layer:
+            source_feature_count = self.source_layer.featureCount()
+        
         if self._expression_builder is None:
             self._expression_builder = ExpressionBuilder(
                 task_parameters=self.task_parameters,
                 source_layer=getattr(self, 'source_layer', None),
-                current_predicates=getattr(self, 'current_predicates', [])
+                current_predicates=getattr(self, 'current_predicates', []),
+                source_wkt=source_wkt,
+                source_srid=source_srid,
+                source_feature_count=source_feature_count,
+                buffer_value=getattr(self, 'param_buffer_value', None),
+                buffer_expression=getattr(self, 'param_buffer_expression', None),
+                use_centroids_distant=getattr(self, 'param_use_centroids_distant_layers', False)
             )
-            logger.debug("ExpressionBuilder lazy-initialized for distant layer filtering")
+            logger.debug("ExpressionBuilder lazy-initialized with PostgreSQL parameters")
+        else:
+            # FIX 2026-01-16: Update parameters in case they were not set initially
+            # (e.g., if ExpressionBuilder was created by task_run_orchestrator before source geom prep)
+            self._expression_builder.source_wkt = source_wkt
+            self._expression_builder.source_srid = source_srid
+            self._expression_builder.source_feature_count = source_feature_count
+            self._expression_builder.buffer_value = getattr(self, 'param_buffer_value', None)
+            self._expression_builder.buffer_expression = getattr(self, 'param_buffer_expression', None)
+            self._expression_builder.use_centroids_distant = getattr(self, 'param_use_centroids_distant_layers', False)
+            self._expression_builder.current_predicates = getattr(self, 'current_predicates', [])
+            logger.debug("ExpressionBuilder parameters updated from task state")
+        
+        logger.debug(f"   source_wkt available: {source_wkt is not None}")
+        logger.debug(f"   source_srid: {source_srid}")
+        logger.debug(f"   source_feature_count: {source_feature_count}")
+        logger.debug(f"   buffer_value: {getattr(self, 'param_buffer_value', None)}")
         return self._expression_builder
 
     # ========================================================================
