@@ -87,7 +87,7 @@ class PostgreSQLPreparedStatements(PreparedStatementManager):
             # Prepare insert statement
             cursor.execute("""
                 PREPARE insert_subset_history_stmt (text, text, text, text, int, text) AS
-                INSERT INTO subset_history (
+                INSERT INTO fm_subset_history (
                     history_id, project_uuid, layer_id, source_layer_id, seq_order, subset_string
                 ) VALUES ($1, $2, $3, $4, $5, $6)
             """)
@@ -167,7 +167,7 @@ class SpatialitePreparedStatements(PreparedStatementManager):
         try:
             # Spatialite/SQLite uses ? placeholders
             self._insert_sql = """
-                INSERT INTO subset_history (
+                INSERT INTO fm_subset_history (
                     history_id, project_uuid, layer_id, source_layer_id, seq_order, subset_string
                 ) VALUES (?, ?, ?, ?, ?, ?)
             """

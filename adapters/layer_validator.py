@@ -31,8 +31,8 @@ except ImportError:
         return logging.getLogger(name)
 
 try:
-    from ..infrastructure.utils.object_safety import (
-        is_valid_layer,
+    from ..infrastructure.utils.validation_utils import (
+        is_layer_valid as is_valid_layer,
         is_sip_deleted,
         is_layer_source_available
     )

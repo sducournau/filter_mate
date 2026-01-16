@@ -33,10 +33,8 @@ except ImportError:
         return logging.getLogger(name)
 
 try:
-    from ..infrastructure.utils.object_safety import (
-        safe_set_subset_string,
-        is_layer_source_available
-    )
+    from ..infrastructure.database.sql_utils import safe_set_subset_string
+    from ..infrastructure.utils.validation_utils import is_layer_source_available
 except ImportError:
     # Mocks for testing
     def safe_set_subset_string(layer, expr):

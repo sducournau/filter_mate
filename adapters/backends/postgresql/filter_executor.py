@@ -287,25 +287,20 @@ def build_postgis_predicates(
     param_distant_table = layer_props["layer_name"]
     param_distant_geometry_field = layer_props.get("layer_geometry_field")
     
-    # FIX v4.0.3 (2026-01-16): Auto-detect geometry column if stored value is invalid
+    # FIX v4.0.7 (2026-01-16): Auto-detect geometry column if stored value is invalid
     # The stored value may be "NULL" (string literal) from stale config
+    # Use QgsDataSourceUri directly (more reliable than dataProvider().geometryColumn())
     if not param_distant_geometry_field or param_distant_geometry_field in ('NULL', 'None', ''):
         layer = layer_props.get("layer")
         if layer:
             try:
-                # Try to get geometry column from QGIS layer
-                detected_geom = layer.dataProvider().geometryColumn()
+                # Directly use QgsDataSourceUri (more reliable)
+                from qgis.core import QgsDataSourceUri
+                uri = QgsDataSourceUri(layer.source())
+                detected_geom = uri.geometryColumn()
                 if detected_geom:
                     param_distant_geometry_field = detected_geom
                     logger.info(f"✓ Auto-detected geometry column for {param_distant_table}: '{detected_geom}'")
-                else:
-                    # Try from URI
-                    from qgis.core import QgsDataSourceUri
-                    uri = QgsDataSourceUri(layer.source())
-                    detected_geom = uri.geometryColumn()
-                    if detected_geom:
-                        param_distant_geometry_field = detected_geom
-                        logger.info(f"✓ Auto-detected geometry column from URI for {param_distant_table}: '{detected_geom}'")
             except Exception as e:
                 logger.warning(f"Could not auto-detect geometry column: {e}")
         

@@ -763,6 +763,14 @@ class TaskParameterBuilder:
                     }
                     geom_type_str = geom_type_map.get(layer.geometryType(), 'GeometryType.Unknown')
                     
+                    # FIX v4.0.7: Use QgsDataSourceUri for reliable geometry column detection
+                    try:
+                        from qgis.core import QgsDataSourceUri
+                        uri = QgsDataSourceUri(layer.source())
+                        geom_field = uri.geometryColumn() or "geometry"
+                    except:
+                        geom_field = "geometry"
+                    
                     layer_info = {
                         "layer_id": layer.id(),
                         "layer_name": layer.name(),
@@ -771,8 +779,7 @@ class TaskParameterBuilder:
                         "layer_provider_type": detect_layer_provider_type(layer),
                         "layer_table_name": layer.name(),
                         "layer_schema": "",
-                        "layer_geometry_field": layer.dataProvider().geometryColumn() 
-                            if hasattr(layer.dataProvider(), 'geometryColumn') else "geometry"
+                        "layer_geometry_field": geom_field
                     }
                     layers_to_export.append(layer_info)
                     logger.info(f"Export: Added layer '{layer.name()}' not in PROJECT_LAYERS")
@@ -789,23 +796,24 @@ class TaskParameterBuilder:
         Get and validate source features for filtering task.
         
         v4.7: Extracted from FilterMateApp.get_task_parameters() for God Class reduction.
+        v4.0.9: Export task doesn't require selection - exports all features (with subset if active).
         
         Args:
-            task_name: Type of task ('filter', 'unfilter', 'reset')
+            task_name: Type of task ('filter', 'unfilter', 'reset', 'export')
             
         Returns:
-            tuple: (features, expression) or ([], "") for unfilter/reset
+            tuple: (features, expression) or ([], "") for unfilter/reset/export
             
         Raises:
-            ValueError: If single_selection mode has no features
+            ValueError: If single_selection mode has no features (for 'filter' task only)
         """
         from qgis.core import QgsMessageLog, Qgis
         from qgis.utils import iface
         
         dw = self._dockwidget
         
-        # v2.9.28: reset and unfilter don't need features
-        if task_name in ('unfilter', 'reset'):
+        # v2.9.28: reset, unfilter, and export don't need features validation
+        if task_name in ('unfilter', 'reset', 'export'):
             logger.info(f"get_and_validate_features: task_name='{task_name}' - no features needed")
             return [], ""
         
@@ -824,7 +832,7 @@ class TaskParameterBuilder:
                 "FilterMate", Qgis.Warning
             )
             
-            # v2.9.21: ABORT in single_selection mode
+            # v2.9.21: ABORT in single_selection mode (FILTER ONLY)
             if dw.current_exploring_groupbox == "single_selection":
                 QgsMessageLog.logMessage(
                     "   Aborting filter - single_selection mode requires a selected feature!",

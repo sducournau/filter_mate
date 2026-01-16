@@ -210,27 +210,22 @@ class LayerOrganizer:
         # when the stored value is invalid (e.g., "NULL")
         layer_props["layer"] = layer
         
-        # FIX v4.0.3 (2026-01-16): Auto-detect geometry column if stored value is invalid
+        # FIX v4.0.7 (2026-01-16): Auto-detect geometry column if stored value is invalid
+        # Use QgsDataSourceUri directly (more reliable than dataProvider().geometryColumn())
         stored_geom_field = layer_props.get("layer_geometry_field")
         if not stored_geom_field or stored_geom_field in ('NULL', 'None', '', None):
             try:
-                # Try to get geometry column from QGIS layer
-                detected_geom = layer.dataProvider().geometryColumn()
+                # Directly use QgsDataSourceUri (more reliable)
+                from qgis.core import QgsDataSourceUri
+                uri = QgsDataSourceUri(layer.source())
+                detected_geom = uri.geometryColumn()
                 if detected_geom:
                     layer_props["layer_geometry_field"] = detected_geom
                     logger.info(f"  ✓ Auto-detected geometry column for {layer_name}: '{detected_geom}'")
                 else:
-                    # Try from URI
-                    from qgis.core import QgsDataSourceUri
-                    uri = QgsDataSourceUri(layer.source())
-                    detected_geom = uri.geometryColumn()
-                    if detected_geom:
-                        layer_props["layer_geometry_field"] = detected_geom
-                        logger.info(f"  ✓ Auto-detected geometry column from URI for {layer_name}: '{detected_geom}'")
-                    else:
-                        # Final fallback
-                        layer_props["layer_geometry_field"] = 'geom'
-                        logger.warning(f"  ⚠️ Using fallback geometry column 'geom' for {layer_name}")
+                    # Final fallback
+                    layer_props["layer_geometry_field"] = 'geom'
+                    logger.warning(f"  ⚠️ Using fallback geometry column 'geom' for {layer_name}")
             except Exception as e:
                 layer_props["layer_geometry_field"] = 'geom'
                 logger.warning(f"  ⚠️ Could not auto-detect geometry column for {layer_name}: {e}, using 'geom'")

@@ -36,8 +36,8 @@ except ImportError:
         return logging.getLogger(name)
 
 try:
-    from ..infrastructure.utils.object_safety import (
-        is_valid_layer,
+    from ..infrastructure.utils import (
+        is_layer_valid as is_valid_layer,
         is_qgis_alive,
         safe_set_layer_variable
     )
