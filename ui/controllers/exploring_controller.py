@@ -28,6 +28,8 @@ except ImportError:
 
 from .base_controller import BaseController
 from .mixins.layer_selection_mixin import LayerSelectionMixin
+from ...adapters.layer_validator import LayerValidator
+from ...infrastructure.utils.object_safety import is_valid_layer
 
 logger = logging.getLogger(__name__)
 

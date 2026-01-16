@@ -59,6 +59,25 @@ class LayerValidator:
     - Handles PostgreSQL layers specially
     """
     
+    # FIX v4.0.4: Add static method for backwards compatibility
+    # Some code may call LayerValidator.is_valid_layer() as a class method
+    @staticmethod
+    def is_valid_layer(layer) -> bool:
+        """
+        Static method wrapper for is_valid_layer function.
+        
+        Provides backwards compatibility for code that calls
+        LayerValidator.is_valid_layer() instead of using the
+        function from object_safety module.
+        
+        Args:
+            layer: Layer to validate
+            
+        Returns:
+            True if layer is valid
+        """
+        return is_valid_layer(layer)
+    
     def __init__(self, postgresql_available: bool = True):
         """
         Initialize LayerValidator.

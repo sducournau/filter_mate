@@ -2097,7 +2097,9 @@ class FilterMateApp:
                 )
                 return
             except Exception as e:
+                import traceback
                 logger.warning(f"v4.7: LayerTaskCompletionHandler failed: {e}")
+                logger.debug(f"v4.7: Traceback: {traceback.format_exc()}")
         
         # v4.7: Minimal fallback
         logger.debug("Layer task completion skipped (handler unavailable)")

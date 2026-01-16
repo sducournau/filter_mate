@@ -77,12 +77,14 @@ class BaseLegacyAdapter(GeometricFilterBackend):
         except Exception as e:
             logger.debug(f"{self.provider_type}: New backend unavailable: {e}")
         
-        # Initialize legacy backend as fallback
-        if not self._use_new_backend:
-            try:
-                self._legacy_backend = self._create_legacy_backend()
-            except Exception as e:
-                logger.warning(f"{self.provider_type}: Legacy backend also unavailable: {e}")
+        # FIX v4.0.4 (2026-01-16): ALWAYS initialize legacy backend as fallback
+        # The _build_expression_new() method delegates to legacy backend for SQL generation
+        # so we need it available regardless of _use_new_backend flag
+        try:
+            self._legacy_backend = self._create_legacy_backend()
+            logger.debug(f"{self.provider_type}: Legacy backend initialized as fallback")
+        except Exception as e:
+            logger.warning(f"{self.provider_type}: Legacy backend unavailable: {e}")
     
     @property
     @abstractmethod
@@ -164,13 +166,25 @@ class BaseLegacyAdapter(GeometricFilterBackend):
         FIX v4.0.3 (2026-01-16): Don't use FilterExpression.from_spatial_filter()
         as it no longer generates SQL (returns empty string). Instead, always 
         use the legacy backend's build_expression() method.
+        
+        FIX v4.0.4 (2026-01-16): Pass ALL arguments as KEYWORD arguments
+        to avoid "got multiple values for argument 'source_wkt'" error.
+        The kwargs may contain source_wkt/source_srid/source_feature_count
+        which must not conflict with positional arguments.
         """
         # ALWAYS use legacy backend for spatial filter expression building
         # The new FilterExpression domain model is not yet fully integrated
         if self._legacy_backend:
+            # FIX v4.0.4: Use keyword arguments to avoid positional conflicts
             return self._legacy_backend.build_expression(
-                layer_props, predicates, source_geom, buffer_value,
-                buffer_expression, source_filter, use_centroids, **kwargs
+                layer_props=layer_props,
+                predicates=predicates,
+                source_geom=source_geom,
+                buffer_value=buffer_value,
+                buffer_expression=buffer_expression,
+                source_filter=source_filter,
+                use_centroids=use_centroids,
+                **kwargs
             )
         raise RuntimeError(f"No backend available for {self.provider_type}")
     
