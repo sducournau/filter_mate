@@ -489,16 +489,22 @@ class FilterEngineTask(QgsTask):
         
         # Reset current_predicates
         self.current_predicates = {}
+        # v2.10.0: Separate numeric predicates for OGR (prevent duplicates in PostgreSQL)
+        self.numeric_predicates = {}
         
         for key in geom_predicates:
             if key in self.predicates:
                 func_name = self.predicates[key]
                 # Store SQL name (for PostgreSQL/Spatialite)
+                # v2.10.0 FIX: Only store string key to prevent duplicate EXISTS generation
+                # Previously, storing BOTH string and numeric keys caused build_expression()
+                # to iterate twice with same predicate → duplicate EXISTS clauses
                 self.current_predicates[func_name] = func_name
-                # Store numeric code (for OGR/processing)
+                
+                # Store numeric code separately for OGR/processing
                 qgis_code = sql_to_qgis_code.get(func_name)
                 if qgis_code is not None:
-                    self.current_predicates[qgis_code] = func_name
+                    self.numeric_predicates[qgis_code] = func_name
                     logger.debug(f"   Mapped: {key} → {func_name} → QGIS code {qgis_code}")
                 else:
                     logger.warning(f"   ⚠️ No QGIS code for: {key} → {func_name}")
@@ -506,11 +512,10 @@ class FilterEngineTask(QgsTask):
                 logger.warning(f"   ⚠️ Unknown predicate key: {key}")
         
         # Log final state
-        numeric_keys = [k for k in self.current_predicates.keys() if isinstance(k, int)]
-        string_keys = [k for k in self.current_predicates.keys() if isinstance(k, str)]
-        logger.info(f"   Result: {self.current_predicates}")
-        logger.info(f"   Numeric keys (OGR): {numeric_keys}")
-        logger.info(f"   String keys (SQL): {string_keys}")
+        # v2.10.0: current_predicates only has string keys, numeric_predicates has numeric keys
+        logger.info(f"   current_predicates (SQL): {self.current_predicates}")
+        logger.info(f"   numeric_predicates (OGR): {self.numeric_predicates}")
+        logger.info(f"   v2.10.0: Predicates now stored separately to prevent duplicate EXISTS")
         logger.info("=" * 70)
         
         # FIX 2026-01-16: Propagate predicates to EXISTING instances

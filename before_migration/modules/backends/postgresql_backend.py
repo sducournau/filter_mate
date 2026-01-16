@@ -1406,20 +1406,32 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                     # CRITICAL FIX v2.5.6: Initialize where_clauses with the spatial predicate
                     # The spatial predicate MUST be the first clause in the WHERE clause
                     # 
-                    # CRITICAL FIX v2.7.16: Qualify target geometry column with table name for EXISTS
-                    # When EXISTS expression is used in TwoPhaseFilter Phase 2, PostgreSQL executes:
-                    #   SELECT pk FROM target WHERE pk IN (candidates) AND (EXISTS (...))
-                    # Without table qualification, "geometrie" in ST_Intersects("geometrie", __source."geometrie")
-                    # could refer to __source."geometrie" instead of target."geometrie" due to PostgreSQL's
-                    # identifier resolution order (inner scope first).
+                    # CRITICAL FIX v2.10.0: DO NOT qualify target geometry in EXISTS for setSubsetString
                     # 
-                    # For setSubsetString (DIRECT mode), unqualified is OK because there's only one FROM clause.
-                    # But for TwoPhaseFilter (Phase 2 query with explicit FROM), we MUST qualify.
-                    # Solution: Use table-qualified geometry column in EXISTS context.
-                    qualified_geom_expr = f'"{table}"."{geom_field}"'
-                    self.log_info(f"  ✓ v2.7.16: Qualified geom for EXISTS: {qualified_geom_expr}")
+                    # v2.7.16 BUG IDENTIFIED: Previous code qualified geometry as "table"."geom" for EXISTS,
+                    # which was INCORRECT for setSubsetString context. This caused "missing FROM-clause entry" errors.
+                    # 
+                    # CONTEXT ANALYSIS:
+                    # 1. setSubsetString (DIRECT mode - THIS context):
+                    #    PostgreSQL executes: SELECT * FROM target WHERE <expression>
+                    #    Target table is IMPLICIT in FROM clause
+                    #    → Geometry MUST be unqualified: "geom"
+                    #    → Using "target"."geom" causes "missing FROM-clause entry" error
+                    # 
+                    # 2. TwoPhaseFilter Phase 2 (DIFFERENT context - NOT this code path):
+                    #    PostgreSQL executes: SELECT pk FROM target WHERE pk IN (...) AND <expression>
+                    #    Target table is EXPLICIT in FROM clause
+                    #    → Geometry CAN be qualified: "target"."geom"
+                    #    → But TwoPhaseFilter doesn't use build_expression() for Phase 2
+                    #    → It builds its own SQL with qualified columns
+                    # 
+                    # SOLUTION: Always use unqualified geometry (geom_expr) for EXISTS in build_expression()
+                    # This function is called for setSubsetString context, not TwoPhaseFilter Phase 2
+                    # 
+                    # v2.10.0: Use geom_expr (already correctly set as unqualified at line 1188)
+                    self.log_info(f"  ✓ v2.10.0: Using unqualified geom for EXISTS/setSubsetString: {geom_expr}")
                     
-                    spatial_predicate = f"{predicate_func}({qualified_geom_expr}, {source_geom_in_subquery})"
+                    spatial_predicate = f"{predicate_func}({geom_expr}, {source_geom_in_subquery})"
                     where_clauses = [spatial_predicate]
                     self.log_debug(f"  ✓ Spatial predicate: {spatial_predicate[:100]}...")
                     
@@ -1683,7 +1695,19 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         
         # Combine predicates with OR
         if predicate_expressions:
-            combined = " OR ".join(predicate_expressions)
+            # CRITICAL FIX v2.10.0: Deduplicate identical expressions
+            # Bug: filter_task.py stores BOTH string and numeric keys for same predicate
+            # (e.g., 'ST_Intersects': 'ST_Intersects' AND 0: 'ST_Intersects')
+            # This causes build_expression() to generate duplicate EXISTS clauses
+            # Example: EXISTS(...) OR EXISTS(...) with identical content
+            unique_expressions = list(dict.fromkeys(predicate_expressions))  # Preserve order
+            if len(unique_expressions) < len(predicate_expressions):
+                removed = len(predicate_expressions) - len(unique_expressions)
+                self.log_info(f"🔧 v2.10.0: Removed {removed} duplicate predicate expression(s)")
+                self.log_info(f"   Original: {len(predicate_expressions)} expressions")
+                self.log_info(f"   Deduplicated: {len(unique_expressions)} unique expressions")
+            
+            combined = " OR ".join(unique_expressions)
             self.log_debug(f"PostgreSQL FINAL expression ({len(combined)} chars): {combined[:200]}...")
             return combined
         

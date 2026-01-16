@@ -895,8 +895,12 @@ def execute_ogr_spatial_selection(
     # FIX 2026-01-15: Extract numeric QGIS predicate codes from current_predicates
     # current_predicates peut contenir:
     #   - Des noms SQL comme clés: {'ST_Intersects': 'ST_Intersects'}
-    #   - Des codes numériques comme clés: {0: 'ST_Intersects'}
+    #   - Des codes numériques comme clés: {0: 'ST_Intersects'}  # DEPRECATED v2.10.0
     # Pour processing.run("qgis:selectbylocation"), on a besoin des codes numériques
+    # 
+    # v2.10.0 NOTE: Numeric predicates are now stored separately in filter_task.numeric_predicates
+    # to prevent duplicate EXISTS generation in PostgreSQL backend. This code still supports
+    # both old format (numeric+string keys mixed) and new format (string keys only) via fallback.
     
     # DIAGNOSTIC 2026-01-16: Trace predicates received in OGR executor
     logger.info("=" * 70)
