@@ -252,7 +252,9 @@ class LayerFilterBuilder:
     def _detect_geometry_field(self, layer: 'QgsVectorLayer') -> str:
         """Detect geometry field name from layer."""
         try:
-            geom_col = layer.dataProvider().geometryColumn()
+            from qgis.core import QgsDataSourceUri
+            uri = QgsDataSourceUri(layer.source())
+            geom_col = uri.geometryColumn()
             if geom_col:
                 return geom_col
         except Exception:

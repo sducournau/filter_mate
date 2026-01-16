@@ -272,16 +272,17 @@ class TaskRunOrchestrator:
             # Other PostgreSQL parameters will be set via lazy init or updated later
         )
         
-        # Create FilterOrchestrator
-        # Note: queue_subset_request callback will be set by parent
-        context.filter_orchestrator = FilterOrchestrator(
-            task_parameters=context.task_parameters,
-            subset_queue_callback=None,  # Will be set by parent
-            parent_task=None,  # Will be set by parent
-            current_predicates=[]  # Will be set by parent
-        )
+        # ARCHITECTURE FIX 2026-01-16 (Winston): DO NOT create FilterOrchestrator here!
+        # FilterOrchestrator now requires a callback to fetch predicates dynamically.
+        # Since parent_task doesn't exist yet at this point, we CANNOT create it here.
+        # Instead, FilterEngineTask._get_filter_orchestrator() handles lazy initialization
+        # with proper callback: lambda: self.current_predicates
+        #
+        # This eliminates the race condition where FilterOrchestrator was created with
+        # empty predicates BEFORE _initialize_current_predicates() ran.
+        context.filter_orchestrator = None  # Will be lazy-initialized by FilterEngineTask
         
-        logger.debug("Phase E12 orchestration modules initialized")
+        logger.debug("Phase E12 orchestration modules initialized (FilterOrchestrator lazy-init)")
     
     def _extract_configuration(self, context: TaskRunContext):
         """

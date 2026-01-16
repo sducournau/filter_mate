@@ -116,8 +116,21 @@ try: from .ui.config import UIConfig; from .ui import widget_utils as ui_utils; 
 except ImportError: UI_CONFIG_AVAILABLE = False
 
 # MVC Controllers
-try: from .ui.controllers.integration import ControllerIntegration; from .adapters.app_bridge import get_filter_service, is_initialized as is_hexagonal_initialized; CONTROLLERS_AVAILABLE = True
-except ImportError: CONTROLLERS_AVAILABLE = False; get_filter_service = None; is_hexagonal_initialized = lambda: False
+try: 
+    from .ui.controllers.integration import ControllerIntegration
+    from .adapters.app_bridge import get_filter_service, is_initialized as is_hexagonal_initialized
+    CONTROLLERS_AVAILABLE = True
+    print(f"[IMPORT] Controllers imported successfully: CONTROLLERS_AVAILABLE = True")
+except ImportError as e:
+    CONTROLLERS_AVAILABLE = False
+    get_filter_service = None
+    is_hexagonal_initialized = lambda: False
+    print(f"[IMPORT ERROR] Failed to import controllers: {e}")
+except Exception as e:
+    CONTROLLERS_AVAILABLE = False
+    get_filter_service = None
+    is_hexagonal_initialized = lambda: False
+    print(f"[IMPORT ERROR] Unexpected error importing controllers: {e}")
 
 # Layout Managers
 try: from .ui.layout import SplitterManager, DimensionsManager, SpacingManager, ActionBarManager; LAYOUT_MANAGERS_AVAILABLE = True
@@ -126,6 +139,46 @@ except ImportError: LAYOUT_MANAGERS_AVAILABLE = False; SplitterManager = Dimensi
 # Style Managers
 try: from .ui.styles import ThemeManager, IconManager, ButtonStyler; STYLE_MANAGERS_AVAILABLE = True
 except ImportError: STYLE_MANAGERS_AVAILABLE = False; ThemeManager = IconManager = ButtonStyler = None
+
+
+class ClickableLabel(QtWidgets.QLabel):
+    """QLabel that properly handles mouse clicks for menus."""
+    
+    clicked = pyqtSignal(object)  # Emits the mouse event
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._click_handler = None
+        # Enable mouse tracking to ensure events are received
+        self.setMouseTracking(True)
+    
+    def set_click_handler(self, handler):
+        """Set the click handler function."""
+        self._click_handler = handler
+    
+    def mousePressEvent(self, event):
+        """Handle mouse press events."""
+        # Debug log
+        print(f"ClickableLabel.mousePressEvent triggered! handler={self._click_handler is not None}")
+        
+        if self._click_handler:
+            # Call the handler with the event
+            try:
+                self._click_handler(event)
+            except Exception as e:
+                print(f"Error in click handler: {e}")
+        
+        # Always emit the signal
+        self.clicked.emit(event)
+        
+        # Accept the event to prevent propagation issues
+        event.accept()
+    
+    def mouseReleaseEvent(self, event):
+        """Handle mouse release - some widgets need this."""
+        print(f"ClickableLabel.mouseReleaseEvent triggered!")
+        event.accept()
+
 
 class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
@@ -268,13 +321,39 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             try: self._theme_manager, self._icon_manager, self._button_styler = ThemeManager(self), IconManager(self), ButtonStyler(self)
             except: pass
         
-        # Controllers
+        # Controllers - v4.0 Sprint 16: MVC Controllers via ControllerIntegration
+        logger.debug("_initialize_layer_state: Initializing controllers")
+        logger.debug(f"  CONTROLLERS_AVAILABLE = {CONTROLLERS_AVAILABLE}")
+        
         self._controller_integration = None
         if CONTROLLERS_AVAILABLE:
             try:
-                filter_service = get_filter_service() if is_hexagonal_initialized() and get_filter_service else None
-                self._controller_integration = ControllerIntegration(dockwidget=self, filter_service=filter_service, enabled=True)
-            except: pass
+                logger.debug("Creating ControllerIntegration instance...")
+                logger.debug(f"  is_hexagonal_initialized() = {is_hexagonal_initialized()}")
+                
+                # Get filter service if hexagonal architecture is initialized
+                filter_service = None
+                if is_hexagonal_initialized() and get_filter_service:
+                    try:
+                        filter_service = get_filter_service()
+                        logger.debug(f"  filter_service retrieved: {type(filter_service).__name__}")
+                    except Exception as e:
+                        logger.warning(f"  Failed to get filter_service: {e}")
+                
+                # Create controller integration (will be setup later in manage_interactions)
+                self._controller_integration = ControllerIntegration(
+                    dockwidget=self,
+                    filter_service=filter_service,
+                    enabled=True
+                )
+                logger.info("✓ ControllerIntegration instance created (setup deferred to manage_interactions)")
+                
+            except Exception as e:
+                logger.error(f"Failed to initialize ControllerIntegration: {e}", exc_info=True)
+                self._controller_integration = None
+        else:
+            logger.warning("CONTROLLERS_AVAILABLE is False - controllers will not be initialized")
+            logger.debug(f"  ControllerIntegration importable: {'ControllerIntegration' in globals()}")
         
         self._last_single_selection_fid = self._last_single_selection_layer_id = None
         self._last_multiple_selection_fids = self._last_multiple_selection_layer_id = None
@@ -571,20 +650,51 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         Orchestrates the application of dimensions by calling specialized methods.
         Called from setupUiCustom() during initialization.
+        
+        v4.0.6 FIX: Added proper error handling and logging for manager failures.
         """
         if self._dimensions_manager is not None:
-            try: self._dimensions_manager.apply(); return
-            except Exception: pass
+            try:
+                success = self._dimensions_manager.apply()
+                if not success:
+                    logger.warning("DimensionsManager.apply() returned False - UI may be misconfigured")
+                    iface.messageBar().pushWarning("FilterMate", "UI configuration incomplete - check logs")
+                return
+            except Exception as e:
+                logger.error(f"DimensionsManager.apply() FAILED: {e}", exc_info=True)
+                iface.messageBar().pushWarning("FilterMate", f"UI dimension error: {e}")
+                # Fall through to fallback methods
+        
         try:
-            self._apply_dockwidget_dimensions(); self._apply_widget_dimensions(); self._apply_frame_dimensions(); self._harmonize_checkable_pushbuttons()
+            self._apply_dockwidget_dimensions()
+            self._apply_widget_dimensions()
+            self._apply_frame_dimensions()
+            self._harmonize_checkable_pushbuttons()
+            
             if self._spacing_manager is not None:
-                try: self._spacing_manager.apply()
-                except Exception: self._apply_layout_spacing(); self._harmonize_spacers(); self._adjust_row_spacing()
-            else: self._apply_layout_spacing(); self._harmonize_spacers(); self._adjust_row_spacing()
-            self._apply_qgis_widget_dimensions(); self._align_key_layouts()
+                try:
+                    success = self._spacing_manager.apply()
+                    if not success:
+                        logger.warning("SpacingManager.apply() returned False - using fallback")
+                        self._apply_layout_spacing()
+                        self._harmonize_spacers()
+                        self._adjust_row_spacing()
+                except Exception as e:
+                    logger.error(f"SpacingManager.apply() FAILED: {e}", exc_info=True)
+                    # Fallback to manual methods
+                    self._apply_layout_spacing()
+                    self._harmonize_spacers()
+                    self._adjust_row_spacing()
+            else:
+                self._apply_layout_spacing()
+                self._harmonize_spacers()
+                self._adjust_row_spacing()
+            
+            self._apply_qgis_widget_dimensions()
+            self._align_key_layouts()
             logger.info("Successfully applied dynamic dimensions to all widgets")
         except Exception as e:
-            logger.error(f"Error applying dynamic dimensions: {e}")
+            logger.error(f"Error applying dynamic dimensions: {e}", exc_info=True)
             import traceback
             traceback.print_exc()
     
@@ -921,23 +1031,53 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _create_indicator_label(self, name, text, style, hover_style, tooltip, click_handler, min_width):
         """v4.0 S16: Create indicator label with soft "mousse" style."""
-        lbl = QtWidgets.QLabel(self.frame_header)
+        lbl = ClickableLabel(self.frame_header)
         lbl.setObjectName(name); lbl.setText(text); lbl.setStyleSheet(f"QLabel#{name}{{{style}}}QLabel#{name}:hover{{{hover_style}}}")
         lbl.setAlignment(Qt.AlignCenter); lbl.setMinimumWidth(min_width); lbl.setFixedHeight(13)  # v4.0: Slightly taller for padding
-        lbl.setCursor(Qt.PointingHandCursor); lbl.setToolTip(tooltip); lbl.mousePressEvent = click_handler
+        lbl.setCursor(Qt.PointingHandCursor); lbl.setToolTip(tooltip)
+        # CRITICAL: Enable the widget to receive mouse events
+        lbl.setEnabled(True)
+        lbl.setAttribute(Qt.WA_Hover, True)  # Enable hover events
+        lbl.set_click_handler(click_handler)
+        print(f"Created indicator {name}: enabled={lbl.isEnabled()}, visible={lbl.isVisible()}, handler={click_handler is not None}")
         return lbl
     
     def _on_backend_indicator_clicked(self, event):
         """v4.0 Sprint 19: → BackendController."""
+        print(f"[DEBUG] _on_backend_indicator_clicked called")
+        print(f"[DEBUG]   _controller_integration = {self._controller_integration}")
+        if self._controller_integration:
+            print(f"[DEBUG]   backend_controller = {self._controller_integration.backend_controller}")
+        
         if self._controller_integration and self._controller_integration.backend_controller:
-            self._controller_integration.delegate_handle_backend_click()
+            print(f"[DEBUG]   Calling delegate_handle_backend_click()")
+            try:
+                self._controller_integration.delegate_handle_backend_click()
+                print(f"[DEBUG]   delegate_handle_backend_click() returned successfully")
+            except Exception as e:
+                print(f"[ERROR]   Exception in delegate_handle_backend_click(): {e}")
+                import traceback
+                traceback.print_exc()
         else:
+            print(f"[ERROR]   Backend controller unavailable!")
             logger.warning("Backend controller unavailable")
 
     def _on_favorite_indicator_clicked(self, event):
         """v4.0 S16: → FavoritesController."""
+        print(f"[DEBUG] _on_favorite_indicator_clicked called")
+        print(f"[DEBUG]   _favorites_ctrl = {self._favorites_ctrl}")
+        
         if self._favorites_ctrl:
-            self._favorites_ctrl.handle_indicator_clicked()
+            print(f"[DEBUG]   Calling _favorites_ctrl.handle_indicator_clicked()")
+            try:
+                self._favorites_ctrl.handle_indicator_clicked()
+                print(f"[DEBUG]   handle_indicator_clicked() returned successfully")
+            except Exception as e:
+                print(f"[ERROR]   Exception in handle_indicator_clicked(): {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print(f"[ERROR]   Favorites controller unavailable!")
     
     def _add_current_to_favorites(self):
         """v4.0 S16: → FavoritesController."""
@@ -1355,15 +1495,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             _schedule_expression_change() → debounce timer → 
             _execute_debounced_expression_change() → layer_property_changed()
         """
-        # Try controller delegation first (if available)
-        if self._exploring_ctrl and hasattr(self._exploring_ctrl, 'on_expression_field_changed'):
-            try:
-                if self._exploring_ctrl.on_expression_field_changed(groupbox, field_or_expression):
-                    return  # Controller handled it
-            except Exception as e:
-                logger.debug(f"Controller delegation failed for fieldChanged: {e}")
-        
-        # Fallback: Use debounced expression change system
+        # FIX 2026-01-16: Controller delegation removed (method does not exist)
+        # Directly use debounced expression change system
         logger.debug(f"_on_expression_field_changed: {groupbox} -> '{field_or_expression}'")
         
         # FIX 2026-01-15: Update feature pickers immediately when field changes
@@ -1618,24 +1751,45 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.layer_properties_tuples_dict = self._configuration_manager.get_layer_properties_tuples_dict()
         self.export_properties_tuples_dict = self._configuration_manager.get_export_properties_tuples_dict()
         self.widgets = self._configuration_manager.configure_widgets(); self.widgets_initialized = True
+        logger.info(f"✅ Widgets configured: FILTERING keys = {list(self.widgets.get('FILTERING', {}).keys())}")
         
         # FIX 2026-01-14: Connect initial widget signals after configuration
         # CRITICAL: comboBox_filtering_current_layer.layerChanged must be connected
         # to update exploring widgets when the current layer changes
         self._connect_initial_widget_signals()
         
+        # v4.0 Sprint 16: Setup controller integration (Strangler Fig pattern)
         if self._controller_integration:
             try:
-                logger.info("dockwidget_widgets_configuration: Setting up controller integration...")
-                if self._controller_integration.setup():
-                    logger.info("✓ Controller integration setup succeeded")
+                logger.info("Setting up controller integration...")
+                setup_success = self._controller_integration.setup()
+                
+                if setup_success:
+                    # Validate all controllers are properly initialized
+                    validation = self._controller_integration.validate_controllers()
+                    
+                    if validation['all_valid']:
+                        logger.info(f"✓ Controller integration validated: {validation['registry_count']} controllers operational")
+                        logger.debug(f"  Controllers: {', '.join(validation['controllers'].keys())}")
+                        logger.debug(f"  Signal connections: {validation['connections_count']}")
+                    else:
+                        logger.warning("⚠️ Controller validation detected issues:")
+                        logger.warning(self._controller_integration.get_controller_status())
+                    
+                    # Sync initial state from dockwidget to controllers
                     self._controller_integration.sync_from_dockwidget()
+                    logger.debug("  Initial state synchronized to controllers")
+                    
+                    # Log delegation readiness
+                    logger.info("✓ Strangler Fig pattern active: filter operations will try hexagonal path first")
                 else:
-                    logger.warning("⚠️ Controller integration setup returned False")
+                    logger.warning("⚠️ Controller integration setup returned False - using legacy code paths")
+                    
             except Exception as e:
                 logger.error(f"❌ Controller integration setup failed: {e}", exc_info=True)
+                logger.warning("  Falling back to legacy code paths")
         else:
-            logger.warning("⚠️ _controller_integration is None - controllers will not be available")
+            logger.warning("⚠️ _controller_integration is None - using legacy code paths only")
         
         if self.current_layer and not self.current_layer_selection_connection:
             try: self.current_layer.selectionChanged.connect(self.on_layer_selection_changed); self.current_layer_selection_connection = True
@@ -2022,14 +2176,50 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         return icon
         
-        self._icon_cache[geometry_type] = icon
-        return icon
-        
     def filtering_populate_predicates_chekableCombobox(self):
         """v4.0 S18: Populate geometric predicates combobox."""
-        predicates = self._controller_integration.delegate_filtering_get_available_predicates() if self._controller_integration else None
-        self.predicates = predicates or ["Intersect","Contain","Disjoint","Equal","Touch","Overlap","Are within","Cross"]
-        w = self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"]; w.clear(); w.addItems(self.predicates)
+        try:
+            predicates = self._controller_integration.delegate_filtering_get_available_predicates() if self._controller_integration else None
+            self.predicates = predicates or ["Intersect","Contain","Disjoint","Equal","Touch","Overlap","Are within","Cross"]
+            logger.info(f"🔧 filtering_populate_predicates_chekableCombobox: predicates={self.predicates}")
+            
+            # Get widget from configuration
+            if not hasattr(self, 'widgets') or self.widgets is None:
+                logger.error("❌ self.widgets is None or not initialized!")
+                # Fallback: access widget directly
+                w = self.comboBox_filtering_geometric_predicates
+            elif "FILTERING" not in self.widgets:
+                logger.error("❌ 'FILTERING' not in self.widgets!")
+                w = self.comboBox_filtering_geometric_predicates
+            elif "GEOMETRIC_PREDICATES" not in self.widgets["FILTERING"]:
+                logger.error("❌ 'GEOMETRIC_PREDICATES' not in self.widgets['FILTERING']!")
+                w = self.comboBox_filtering_geometric_predicates
+            else:
+                w = self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"]
+            
+            logger.info(f"🔧 Widget type: {type(w).__name__}, widget={w}")
+            logger.info(f"🔧 Widget count before clear: {w.count()}")
+            
+            w.clear()
+            logger.info(f"🔧 Widget count after clear: {w.count()}")
+            
+            # Add items one by one for better diagnostics
+            for pred in self.predicates:
+                w.addItem(pred)
+            
+            logger.info(f"✅ Widget count after addItems: {w.count()}")
+            logger.info(f"✅ Widget items: {[w.itemText(i) for i in range(w.count())]}")
+            
+        except Exception as e:
+            logger.error(f"❌ filtering_populate_predicates_chekableCombobox FAILED: {e}", exc_info=True)
+            # Fallback: try direct widget access
+            try:
+                w = self.comboBox_filtering_geometric_predicates
+                w.clear()
+                w.addItems(["Intersect","Contain","Disjoint","Equal","Touch","Overlap","Are within","Cross"])
+                logger.info(f"✅ Fallback succeeded, widget count: {w.count()}")
+            except Exception as e2:
+                logger.error(f"❌ Fallback also failed: {e2}", exc_info=True)
 
     def filtering_populate_buffer_type_combobox(self):
         """v4.0 S18: Populate buffer type combobox."""
@@ -2038,21 +2228,90 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if not w.currentText(): w.setCurrentIndex(0)
 
     def filtering_populate_layers_chekableCombobox(self, layer=None):
-        """Populate layers-to-filter combobox."""
-        logger.info(f"filtering_populate_layers_chekableCombobox called for layer: {layer.name() if layer else 'None'}")
+        """Populate layers-to-filter combobox.
+        
+        FIX 2026-01-16: Fallback to direct method if controller delegation fails.
+        This ensures the list is always populated, even if PROJECT_LAYERS is incomplete.
+        """
+        logger.info(f"🔍 filtering_populate_layers_chekableCombobox called for layer: {layer.name() if layer else 'None'}")
+        logger.info(f"🔍   widgets_initialized={self.widgets_initialized}, _controller_integration={self._controller_integration is not None}")
+        logger.info(f"🔍   PROJECT_LAYERS count={len(self.PROJECT_LAYERS) if self.PROJECT_LAYERS else 0}")
+        if self.PROJECT_LAYERS:
+            logger.info(f"🔍   PROJECT_LAYERS keys={list(self.PROJECT_LAYERS.keys())[:5]}...")  # First 5
+        
+        success = False
+        
+        # Try controller delegation first (preferred method - handles PostgreSQL/remote layers)
         if self.widgets_initialized and self._controller_integration:
-            self._controller_integration.delegate_populate_layers_checkable_combobox(layer)
-            # Force visual refresh of the combobox
-            if "FILTERING" in self.widgets and "LAYERS_TO_FILTER" in self.widgets["FILTERING"]:
-                widget = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
-                if widget:
-                    widget.update()
-                    widget.repaint()
-                    logger.debug("layers_to_filter combobox visually refreshed")
+            result = self._controller_integration.delegate_populate_layers_checkable_combobox(layer)
+            logger.info(f"🔍   Controller delegation returned: {result}")
+            if result:
+                success = True
+                # Force visual refresh of the combobox
+                if "FILTERING" in self.widgets and "LAYERS_TO_FILTER" in self.widgets["FILTERING"]:
+                    widget = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
+                    if widget:
+                        logger.info(f"🔍   Widget count after controller population: {widget.count()}")
+                        widget.update()
+                        widget.repaint()
+        
+        # FALLBACK: Use direct method if controller failed
+        if not success:
+            logger.warning(f"⚠️  Controller delegation failed or unavailable - using direct fallback method")
+            try:
+                self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
+                target_layer = layer or self.current_layer
+                if target_layer:
+                    result = self._populate_filtering_layers_direct(target_layer)
+                    logger.info(f"🔍   Direct fallback returned: {result}")
+                    if "FILTERING" in self.widgets and "LAYERS_TO_FILTER" in self.widgets["FILTERING"]:
+                        widget = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
+                        if widget:
+                            logger.info(f"🔍   Widget count after direct population: {widget.count()}")
+                else:
+                    logger.warning(f"❌ No layer available for direct population")
+                self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
+            except Exception as e:
+                logger.error(f"❌ Direct fallback failed: {e}", exc_info=True)
 
     def exporting_populate_combobox(self):
-        """Populate export layers combobox."""
-        if self._controller_integration: self._controller_integration.delegate_populate_export_combobox()
+        """Populate export layers combobox.
+        
+        FIX 2026-01-16: Fallback to direct method if controller delegation fails.
+        This ensures the list is always populated, even if PROJECT_LAYERS is incomplete.
+        """
+        logger.info(f"🔍 exporting_populate_combobox called")
+        logger.info(f"🔍   _controller_integration={self._controller_integration is not None}")
+        logger.info(f"🔍   PROJECT_LAYERS count={len(self.PROJECT_LAYERS) if self.PROJECT_LAYERS else 0}")
+        
+        success = False
+        
+        # Try controller delegation first (preferred method - handles PostgreSQL/remote layers)
+        if self._controller_integration:
+            result = self._controller_integration.delegate_populate_export_combobox()
+            logger.info(f"🔍   Controller delegation returned: {result}")
+            if result:
+                success = True
+                # Check widget count
+                if "EXPORTING" in self.widgets and "LAYERS_TO_EXPORT" in self.widgets["EXPORTING"]:
+                    widget = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"]
+                    if widget:
+                        logger.info(f"🔍   Widget count after controller population: {widget.count()}")
+        
+        # FALLBACK: Use direct method if controller failed
+        if not success:
+            logger.warning(f"⚠️  Controller delegation failed or unavailable - using direct fallback method")
+            try:
+                self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'disconnect')
+                result = self._populate_export_combobox_direct()
+                logger.info(f"🔍   Direct fallback returned: {result}")
+                if "EXPORTING" in self.widgets and "LAYERS_TO_EXPORT" in self.widgets["EXPORTING"]:
+                    widget = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"]
+                    if widget:
+                        logger.info(f"🔍   Widget count after direct population: {widget.count()}")
+                self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
+            except Exception as e:
+                logger.error(f"❌ Direct fallback failed: {e}", exc_info=True)
     
     def _on_project_layers_ready(self):
         """v4.0.4: Callback when PROJECT_LAYERS is fully populated and ready.
@@ -2063,35 +2322,76 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         FIX v4.0.5: Set has_loaded_layers=True here since signal may fire before
         filter_mate_app.py sets it, causing populate_export_combobox() to skip.
         
-        FIX v4.0.6: Use direct population methods that don't depend on controllers,
-        since controllers may not be initialized when signal fires.
+        FIX v4.0.7: Use controller delegation methods for full logic (PostgreSQL/remote layers).
+        REGRESSION FIX: Direct methods bypassed controller logic for missing layers.
         """
-        logger.info(f"_on_project_layers_ready: PROJECT_LAYERS has {len(self.PROJECT_LAYERS) if self.PROJECT_LAYERS else 0} layers")
+        logger.info(f"🔔 _on_project_layers_ready: PROJECT_LAYERS has {len(self.PROJECT_LAYERS) if self.PROJECT_LAYERS else 0} layers")
+        logger.info(f"🔧 widgets_initialized={self.widgets_initialized}, _controller_integration={self._controller_integration is not None}")
         
         # Ensure flags are set
         self.has_loaded_layers = True
         
-        # FIX v4.0.6: Use direct population method for export combobox
-        try:
-            self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'disconnect')
-            success = self._populate_export_combobox_direct()
-            self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
-            if success:
-                logger.info("✓ Export combobox populated successfully (direct method)")
-        except Exception as e:
-            logger.error(f"Failed to populate export combobox: {e}", exc_info=True)
+        # Check if we can use controller delegation (preferred method)
+        can_use_controllers = (
+            self.widgets_initialized and
+            self._controller_integration is not None
+        )
+        logger.info(f"🔧 can_use_controllers={can_use_controllers}")
         
-        # FIX v4.0.6: Use direct population method for filtering layers combobox
-        try:
-            layer = self.current_layer
-            if layer:
-                self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
-                success = self._populate_filtering_layers_direct(layer)
-                self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
+        # FIX v4.0.7: Use controller delegation for FULL logic (handles PostgreSQL/remote layers)
+        if can_use_controllers:
+            logger.info("✅ Using controller delegation (full logic)")
+            
+            # Populate export combobox via controller
+            try:
+                self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'disconnect')
+                success = self._controller_integration.delegate_populate_export_combobox()
+                self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
                 if success:
-                    logger.info("✓ Filtering layers combobox populated successfully (direct method)")
-        except Exception as e:
-            logger.error(f"Failed to populate filtering layers combobox: {e}", exc_info=True)
+                    logger.info("✅ Export combobox populated via controller")
+                else:
+                    logger.warning("⚠️ Controller populate_export_combobox returned False")
+            except Exception as e:
+                logger.error(f"❌ Failed to populate export combobox via controller: {e}", exc_info=True)
+            
+            # Populate filtering layers combobox via controller
+            try:
+                layer = self.current_layer
+                if layer:
+                    self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
+                    success = self._controller_integration.delegate_populate_layers_checkable_combobox(layer)
+                    self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
+                    if success:
+                        logger.info("✅ Filtering layers combobox populated via controller")
+                    else:
+                        logger.warning("⚠️ Controller populate_layers_checkable_combobox returned False")
+                else:
+                    logger.warning("⚠️ No current layer - skipping filtering layers population")
+            except Exception as e:
+                logger.error(f"❌ Failed to populate filtering layers via controller: {e}", exc_info=True)
+        else:
+            # FALLBACK: Use direct methods (simplified logic, no PostgreSQL/remote handling)
+            logger.warning("⚠️ Controllers not available - using fallback direct methods")
+            
+            try:
+                success = self._populate_export_combobox_direct()
+                if success:
+                    logger.info("✅ Export combobox populated (fallback direct method)")
+                else:
+                    logger.warning("⚠️ Fallback direct method returned False")
+            except Exception as e:
+                logger.error(f"❌ Fallback direct method failed: {e}", exc_info=True)
+            
+            try:
+                layer = self.current_layer
+                if layer:
+                    success = self._populate_filtering_layers_direct(layer)
+                    if success:
+                        logger.info("✅ Filtering layers populated (fallback direct method)")
+                    else:
+                        logger.warning("⚠️ Fallback direct method returned False")
+            except Exception as e:
+                logger.error(f"❌ Fallback filtering layers failed: {e}", exc_info=True)
     
     def _populate_export_combobox_direct(self) -> bool:
         """v4.0.6: Direct population of export combobox without controller dependency.
@@ -2107,12 +2407,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             from qgis.PyQt.QtCore import Qt
             
             # Check preconditions
+            logger.info(f"🔍 _populate_export_combobox_direct START: widgets_initialized={self.widgets_initialized}")
             if not self.widgets_initialized:
-                logger.warning("_populate_export_combobox_direct: widgets not initialized")
+                logger.warning("❌ _populate_export_combobox_direct: widgets not initialized")
                 return False
             if not self.PROJECT_LAYERS:
-                logger.warning("_populate_export_combobox_direct: PROJECT_LAYERS empty")
+                logger.warning("❌ _populate_export_combobox_direct: PROJECT_LAYERS empty")
                 return False
+            
+            logger.info(f"🔍 _populate_export_combobox_direct: PROJECT_LAYERS has {len(self.PROJECT_LAYERS)} layers")
             
             # Get saved preferences
             layers_to_export = []
@@ -2132,7 +2435,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             project = QgsProject.instance()
             
             # Clear and populate layers widget
+            logger.info(f"🔍 _populate_export_combobox_direct: Accessing widget via self.widgets['EXPORTING']['LAYERS_TO_EXPORT']['WIDGET']")
+            logger.info(f"🔍 _populate_export_combobox_direct: self.widgets keys = {list(self.widgets.keys()) if self.widgets else 'None'}")
+            if self.widgets and "EXPORTING" in self.widgets:
+                logger.info(f"🔍 _populate_export_combobox_direct: EXPORTING keys = {list(self.widgets['EXPORTING'].keys())}")
+            
             layers_widget = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"]
+            logger.info(f"🔍 _populate_export_combobox_direct: layers_widget = {layers_widget}, type = {type(layers_widget).__name__}")
             layers_widget.clear()
             item_index = 0
             
@@ -2161,7 +2470,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     item.setCheckState(Qt.Checked if key in layers_to_export else Qt.Unchecked)
                     item_index += 1
             
-            logger.info(f"_populate_export_combobox_direct: Added {item_index} layers")
+            logger.info(f"✅ _populate_export_combobox_direct: Added {item_index} layers to combobox")
             
             # Populate datatype/format combobox
             try:
@@ -2200,18 +2509,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             from qgis.PyQt.QtCore import Qt
             
             # Check preconditions
+            logger.info(f"🔍 _populate_filtering_layers_direct START: layer={layer.name() if layer else 'None'}, widgets_initialized={self.widgets_initialized}")
             if not self.widgets_initialized:
-                logger.warning("_populate_filtering_layers_direct: widgets not initialized")
+                logger.warning("❌ _populate_filtering_layers_direct: widgets not initialized")
                 return False
             if not self.PROJECT_LAYERS:
-                logger.warning("_populate_filtering_layers_direct: PROJECT_LAYERS empty")
+                logger.warning("❌ _populate_filtering_layers_direct: PROJECT_LAYERS empty")
                 return False
             if not layer or not isinstance(layer, QgsVectorLayer):
-                logger.warning("_populate_filtering_layers_direct: invalid layer")
+                logger.warning("❌ _populate_filtering_layers_direct: invalid layer")
                 return False
             if layer.id() not in self.PROJECT_LAYERS:
-                logger.warning(f"_populate_filtering_layers_direct: layer {layer.name()} not in PROJECT_LAYERS")
+                logger.warning(f"❌ _populate_filtering_layers_direct: layer {layer.name()} not in PROJECT_LAYERS")
                 return False
+            
+            logger.info(f"🔍 _populate_filtering_layers_direct: PROJECT_LAYERS has {len(self.PROJECT_LAYERS)} layers")
             
             # Import validation
             try:
@@ -2233,7 +2545,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 layers_to_filter = [lid for lid in layers_to_filter if lid != source_layer_id]
             
             # Clear and populate widget
+            logger.info(f"🔍 _populate_filtering_layers_direct: Accessing widget via self.widgets['FILTERING']['LAYERS_TO_FILTER']['WIDGET']")
+            logger.info(f"🔍 _populate_filtering_layers_direct: self.widgets keys = {list(self.widgets.keys()) if self.widgets else 'None'}")
+            if self.widgets and "FILTERING" in self.widgets:
+                logger.info(f"🔍 _populate_filtering_layers_direct: FILTERING keys = {list(self.widgets['FILTERING'].keys())}")
+            
             layers_widget = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
+            logger.info(f"🔍 _populate_filtering_layers_direct: layers_widget = {layers_widget}, type = {type(layers_widget).__name__}")
             layers_widget.clear()
             item_index = 0
             
@@ -2275,7 +2593,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     item.setCheckState(Qt.Unchecked)
                 item_index += 1
             
-            logger.info(f"_populate_filtering_layers_direct: Added {item_index} layers (source '{layer.name()}' excluded)")
+            logger.info(f"✅ _populate_filtering_layers_direct: Added {item_index} layers (source '{layer.name()}' excluded)")
             return item_index > 0
             
         except Exception as e:
@@ -4055,9 +4373,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def get_layers_to_filter(self):
         """v4.0 S18: Get checked layer IDs from filtering combobox.
-        FIX 2026-01-16: Use _is_layer_valid() for safe layer checking.
+        FIX 2026-01-16: Removed incorrect _is_layer_valid() check - this list doesn't depend on current_layer.
         """
-        if not self._is_layer_valid(): return []
+        if not self.widgets_initialized: return []
         checked = []
         w = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
         for i in range(w.count()):
@@ -4071,9 +4389,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def get_layers_to_export(self):
         """v4.0 S18: Get checked layer IDs for export.
-        FIX 2026-01-16: Use _is_layer_valid() for safe layer checking.
+        FIX 2026-01-16: Removed incorrect _is_layer_valid() check - this list doesn't depend on current_layer.
         """
-        if not self._is_layer_valid(): return None
+        if not self.widgets_initialized: return None
         w, checked = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"], []
         for i in range(w.count()):
             if w.itemCheckState(i) == Qt.Checked:

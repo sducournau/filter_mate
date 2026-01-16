@@ -117,25 +117,36 @@ class ActionBarManager(LayoutManagerBase):
         self.dockwidget._side_action_wrapper = None
         
         # Apply the position
-        self.apply()
+        success = self.apply()
+        if not success:
+            logger.warning("ActionBarManager: apply() failed during setup")
         
         self._initialized = True
         logger.debug("ActionBarManager setup complete")
     
-    def apply(self) -> None:
+    def apply(self) -> bool:
         """
         Apply action bar configuration based on current position.
+        
+        Returns:
+            bool: True if configuration was applied successfully, False otherwise
         """
         if not hasattr(self.dockwidget, 'frame_actions'):
-            return
+            logger.warning("ActionBarManager: No frame_actions found")
+            return False
         
-        if self._position in ('left', 'right'):
-            self.apply_position()
-        else:
-            # For top/bottom, use the default horizontal layout
-            self.dockwidget.frame_actions.show()
-            self.dockwidget._current_action_bar_position = self._position
-            logger.info(f"ActionBarManager: Using '{self._position}' position")
+        try:
+            if self._position in ('left', 'right'):
+                self.apply_position()
+            else:
+                # For top/bottom, use the default horizontal layout
+                self.dockwidget.frame_actions.show()
+                self.dockwidget._current_action_bar_position = self._position
+                logger.info(f"ActionBarManager: Using '{self._position}' position")
+            return True
+        except Exception as e:
+            logger.error(f"ActionBarManager: Error applying configuration: {e}", exc_info=True)
+            return False
     
     def get_position(self) -> str:
         """

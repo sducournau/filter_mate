@@ -86,21 +86,26 @@ class SpacingManager(LayoutManagerBase):
         self._initialized = True
         logger.debug("SpacingManager setup complete")
     
-    def apply(self) -> None:
+    def apply(self) -> bool:
         """
         Apply all spacing operations.
         
         Orchestrates the application of spacing by calling specialized methods.
+        
+        Returns:
+            bool: True if all operations succeeded, False otherwise
         """
         try:
             self.apply_layout_spacing()
             self.harmonize_spacers()
             self.adjust_row_spacing()
             logger.info("SpacingManager: Applied all spacing configurations")
+            return True
         except Exception as e:
-            logger.error(f"SpacingManager: Error applying spacing: {e}")
+            logger.error(f"SpacingManager: Error applying spacing: {e}", exc_info=True)
             import traceback
             traceback.print_exc()
+            return False
     
     def apply_layout_spacing(self) -> None:
         """

@@ -125,12 +125,15 @@ class DimensionsManager(LayoutManagerBase):
         self._initialized = True
         logger.debug("DimensionsManager setup complete")
     
-    def apply(self) -> None:
+    def apply(self) -> bool:
         """
         Apply dimensions based on current profile.
         
         Orchestrates the application of dimensions by calling specialized methods.
         Called when profile changes (compact/normal).
+        
+        Returns:
+            bool: True if all operations succeeded, False otherwise
         """
         try:
             # Apply dockwidget minimum size based on profile
@@ -147,11 +150,13 @@ class DimensionsManager(LayoutManagerBase):
             self.adjust_row_spacing()
             
             logger.info("DimensionsManager: Applied dynamic dimensions to all widgets")
+            return True
             
         except Exception as e:
-            logger.error(f"DimensionsManager: Error applying dynamic dimensions: {e}")
+            logger.error(f"DimensionsManager: Error applying dynamic dimensions: {e}", exc_info=True)
             import traceback
             traceback.print_exc()
+            return False
     
     def apply_dockwidget_dimensions(self) -> None:
         """

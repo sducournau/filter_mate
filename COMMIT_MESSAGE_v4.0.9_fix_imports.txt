@@ -1,0 +1,48 @@
+fix(imports): Migrate signal utilities and eliminate obsolete imports
+
+CRITICAL FIX: Resolves ModuleNotFoundError preventing controller initialization.
+
+Root Cause:
+- Controllers imported from non-existent `infrastructure.utils.object_safety`
+- Functions (`safe_emit`, `safe_set_layer_variable`, etc.) were orphaned
+  after EPIC-1 hexagonal migration
+
+Solution:
+1. Created `infrastructure/utils/signal_utils.py` (467 lines)
+   - Migrated 6 critical functions from `before_migration/modules/object_safety.py`
+   - is_qgis_alive(), is_layer_in_project()
+   - safe_disconnect(), safe_emit()
+   - safe_set_layer_variable(), safe_set_layer_variables()
+   
+2. Updated `infrastructure/utils/__init__.py`
+   - Added exports for signal utilities
+   
+3. Fixed imports in 5 files:
+   - ui/controllers/exploring_controller.py (3 imports)
+   - adapters/layer_validator.py → uses validation_utils
+   - adapters/undo_redo_handler.py → uses database.sql_utils + utils
+   - adapters/variables_manager.py → uses infrastructure.utils
+   - core/tasks/layer_management_task.py → removed 53 lines of fallbacks
+
+Impact:
+✅ All imports now use correct hexagonal paths
+✅ 0 references to infrastructure.utils.object_safety (eliminated)
+✅ Removed 53 lines of redundant fallback functions
+✅ Controllers can now initialize properly
+
+Files Changed:
+- NEW: infrastructure/utils/signal_utils.py (+467)
+- MOD: infrastructure/utils/__init__.py (+13)
+- MOD: ui/controllers/exploring_controller.py (-3 obsolete imports)
+- MOD: adapters/layer_validator.py (validation_utils path)
+- MOD: adapters/undo_redo_handler.py (split imports)
+- MOD: adapters/variables_manager.py (infrastructure.utils)
+- MOD: core/tasks/layer_management_task.py (-53 fallbacks)
+
+Testing:
+- No static errors detected
+- Python cache cleaned
+- Ready for QGIS runtime validation
+
+Related: EPIC-1 v4.0 Hexagonal Architecture Migration
+Version: v4.0.9

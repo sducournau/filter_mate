@@ -148,16 +148,19 @@ class SplitterManager(LayoutManagerBase):
             logger.error(traceback.format_exc())
             self._splitter = None
     
-    def apply(self) -> None:
+    def apply(self) -> bool:
         """
         Reapply splitter configuration.
         
         Called when configuration changes (e.g., profile switch).
         Reloads config from UIConfig and reapplies all settings.
+        
+        Returns:
+            bool: True if configuration was applied successfully, False otherwise
         """
         if not self._splitter:
             logger.warning("Cannot apply - splitter not initialized")
-            return
+            return False
         
         UIConfig = None
         try:
@@ -173,12 +176,17 @@ class SplitterManager(LayoutManagerBase):
         else:
             self._config = self._get_default_config()
         
-        self._apply_splitter_properties()
-        self._apply_handle_style()
-        self._apply_frame_policies()
-        self._apply_stretch_factors()
-        
-        logger.debug("SplitterManager configuration reapplied")
+        try:
+            self._apply_splitter_properties()
+            self._apply_handle_style()
+            self._apply_frame_policies()
+            self._apply_stretch_factors()
+            
+            logger.debug("SplitterManager configuration reapplied")
+            return True
+        except Exception as e:
+            logger.error(f"SplitterManager: Error reapplying configuration: {e}", exc_info=True)
+            return False
     
     def _get_default_config(self) -> Dict[str, Any]:
         """

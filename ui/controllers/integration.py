@@ -150,6 +150,14 @@ class ControllerIntegration:
         """
         Setup all controllers and wire up signals.
         
+        This is the main initialization point for the controller integration.
+        It follows these steps:
+        1. Create controller registry
+        2. Instantiate all controller objects
+        3. Register them in the registry
+        4. Wire up signal connections
+        5. Call setup() on each controller
+        
         Returns:
             True if setup succeeded, False otherwise
         """
@@ -158,31 +166,32 @@ class ControllerIntegration:
             return False
         
         if self._is_setup:
-            logger.warning("Controller integration already setup")
+            logger.debug("Controller integration already setup (idempotent call)")
             return True
         
         try:
-            # Create registry
+            logger.debug("Creating controller registry...")
             self._registry = ControllerRegistry()
             
-            # Create controllers
+            logger.debug("Creating controller instances...")
             self._create_controllers()
             
-            # Register controllers
+            logger.debug("Registering controllers...")
             self._register_controllers()
             
-            # Wire up signals
+            logger.debug("Wiring up signals...")
             self._connect_signals()
             
-            # Setup all controllers
-            self._registry.setup_all()
+            logger.debug("Setting up all controllers...")
+            setup_count = self._registry.setup_all()
+            logger.info(f"✓ {setup_count} controllers initialized successfully")
             
             self._is_setup = True
-            logger.info("Controller integration setup complete")
+            logger.info("✓ Controller integration setup complete")
             return True
             
         except Exception as e:
-            logger.error(f"Failed to setup controller integration: {e}")
+            logger.error(f"Failed to setup controller integration: {e}", exc_info=True)
             self._cleanup_on_error()
             return False
     
@@ -597,9 +606,143 @@ class ControllerIntegration:
         self._exploring_controller = None
         self._filtering_controller = None
         self._exporting_controller = None
+        self._backend_controller = None
+        self._layer_sync_controller = None
+        self._config_controller = None
+        self._favorites_controller = None
+        self._property_controller = None
+        self._ui_layout_controller = None
         self._registry = None
         self._connections.clear()
         self._is_setup = False
+    
+    # === Validation Methods ===
+    
+    def validate_controllers(self) -> dict:
+        """
+        Validate that all expected controllers are properly initialized.
+        
+        This method performs comprehensive validation of the controller architecture:
+        - Checks if setup has been completed
+        - Verifies each controller is instantiated
+        - Confirms registry contains all controllers
+        - Reports on connection status
+        
+        Returns:
+            Dictionary with validation results:
+            {
+                'is_setup': bool,
+                'controllers': {name: bool},
+                'registry_count': int,
+                'connections_count': int,
+                'all_valid': bool
+            }
+        
+        Example:
+            >>> integration.validate_controllers()
+            {
+                'is_setup': True,
+                'controllers': {
+                    'exploring': True,
+                    'filtering': True,
+                    ...
+                },
+                'registry_count': 9,
+                'connections_count': 12,
+                'all_valid': True
+            }
+        """
+        result = {
+            'is_setup': self._is_setup,
+            'controllers': {},
+            'registry_count': 0,
+            'connections_count': len(self._connections),
+            'all_valid': False
+        }
+        
+        # Check individual controllers
+        expected_controllers = [
+            ('exploring', self._exploring_controller),
+            ('filtering', self._filtering_controller),
+            ('exporting', self._exporting_controller),
+            ('backend', self._backend_controller),
+            ('layer_sync', self._layer_sync_controller),
+            ('config', self._config_controller),
+            ('favorites', self._favorites_controller),
+            ('property', self._property_controller),
+            ('ui_layout', self._ui_layout_controller),
+        ]
+        
+        for name, controller in expected_controllers:
+            result['controllers'][name] = controller is not None
+        
+        # Check registry
+        if self._registry:
+            result['registry_count'] = len(self._registry)
+        
+        # Determine overall validity
+        all_controllers_valid = all(result['controllers'].values())
+        registry_valid = result['registry_count'] == len(expected_controllers)
+        result['all_valid'] = (
+            result['is_setup'] and 
+            all_controllers_valid and 
+            registry_valid
+        )
+        
+        return result
+    
+    def get_controller_status(self) -> str:
+        """
+        Get a human-readable status summary of all controllers.
+        
+        Returns:
+            Formatted string with controller status
+        
+        Example:
+            >>> print(integration.get_controller_status())
+            Controller Integration Status:
+            ✓ Setup completed
+            ✓ 9/9 controllers initialized
+            ✓ Registry contains 9 controllers
+            ✓ 12 signal connections active
+        """
+        validation = self.validate_controllers()
+        
+        lines = ["Controller Integration Status:"]
+        
+        # Setup status
+        if validation['is_setup']:
+            lines.append("✓ Setup completed")
+        else:
+            lines.append("✗ Setup not completed")
+        
+        # Controllers status
+        controller_count = sum(validation['controllers'].values())
+        total_count = len(validation['controllers'])
+        if controller_count == total_count:
+            lines.append(f"✓ {controller_count}/{total_count} controllers initialized")
+        else:
+            lines.append(f"⚠ {controller_count}/{total_count} controllers initialized")
+            for name, status in validation['controllers'].items():
+                if not status:
+                    lines.append(f"  ✗ {name} controller missing")
+        
+        # Registry status
+        if validation['registry_count'] == total_count:
+            lines.append(f"✓ Registry contains {validation['registry_count']} controllers")
+        else:
+            lines.append(f"⚠ Registry contains {validation['registry_count']} controllers (expected {total_count})")
+        
+        # Connections status
+        lines.append(f"ℹ {validation['connections_count']} signal connections active")
+        
+        # Overall status
+        if validation['all_valid']:
+            lines.append("✓ All systems operational")
+        else:
+            lines.append("⚠ Some issues detected")
+        
+        return "\n".join(lines)
     
     # === Delegation Methods ===
     # These methods allow the dockwidget to delegate to controllers

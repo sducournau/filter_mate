@@ -370,8 +370,8 @@ class BackendController(BaseController):
                 logger.info(f"  - {backend.upper()}: {count} layer(s)")
         logger.info("=" * 60)
         
-        # Emit signal with summary
-        self.backend_changed.emit(f"Optimized {optimized_count} layers")
+        # Emit signal with summary (requires 2 args: layer_id, backend_type)
+        self.backend_changed.emit("batch_optimization", f"Optimized {optimized_count} layers")
         
         return optimized_count
     
@@ -386,8 +386,9 @@ class BackendController(BaseController):
             Optimal backend ('postgresql', 'spatialite', 'ogr') or None for auto
         """
         try:
-            from ...infrastructure.utils import detect_layer_provider_type, POSTGRESQL_AVAILABLE
+            from ...adapters.backends import POSTGRESQL_AVAILABLE
             from ...adapters.backends.factory import should_use_memory_optimization
+            from ...infrastructure.utils import detect_layer_provider_type
         except ImportError:
             logger.warning("Could not import backend detection functions")
             return None

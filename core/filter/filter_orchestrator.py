@@ -56,7 +56,7 @@ class FilterOrchestrator:
         task_parameters: Dict[str, Any],
         subset_queue_callback: callable,
         parent_task: Any,
-        current_predicates: list
+        get_predicates_callback: callable
     ):
         """
         Initialize the filter orchestrator.
@@ -65,26 +65,24 @@ class FilterOrchestrator:
             task_parameters: Task configuration dict (contains forced_backends, etc.)
             subset_queue_callback: Callback to queue subset strings for main thread application
             parent_task: Reference to parent FilterEngineTask (for cancellation checks)
-            current_predicates: List of spatial predicates to apply (e.g., ['intersects', 'within'])
+            get_predicates_callback: Callable returning current predicates dict
+                                     (called lazily during filter execution)
+        
+        ARCHITECTURE FIX 2026-01-16 (Winston):
+        Callback pattern replaces passing current_predicates by value.
+        This ensures predicates are fetched AFTER _initialize_current_predicates()
+        has run, preventing empty predicates bug on distant PostgreSQL layers.
         """
         self.task_parameters = task_parameters
         self.subset_queue_callback = subset_queue_callback
         self.parent_task = parent_task
-        self.current_predicates = current_predicates
-        
-        # Note: current_predicates may be empty during initial creation by TaskRunOrchestrator.
-        # FilterEngineTask._initialize_current_predicates() will populate them later and
-        # propagate to this instance. Only log at debug level.
-        if current_predicates:
-            logger.debug(f"FilterOrchestrator: initialized with predicates: {list(current_predicates.keys()) if isinstance(current_predicates, dict) else current_predicates}")
-        else:
-            logger.debug("FilterOrchestrator: initialized with empty predicates (will be set later)")
+        self._get_predicates_callback = get_predicates_callback
         
         # Inject callbacks into task_parameters for backends to use
         self.task_parameters['_subset_queue_callback'] = subset_queue_callback
         self.task_parameters['_parent_task'] = parent_task
         
-        logger.debug("FilterOrchestrator initialized")
+        logger.debug("FilterOrchestrator initialized with callback pattern (predicates fetched lazily)")
     
     def orchestrate_geometric_filter(
         self,
@@ -138,15 +136,20 @@ class FilterOrchestrator:
             logger.info(f"🔍 orchestrate_geometric_filter: {layer.name()}")
             logger.info(f"   effective_provider_type: {effective_provider_type}")
             logger.info(f"   is_postgresql_fallback: {is_postgresql_fallback}")
-            logger.info(f"   current_predicates (from orchestrator): {self.current_predicates}")
             logger.info(f"   source_geometries keys: {list(source_geometries.keys())}")
             
-            # FIX 2026-01-16: Validate predicates are populated BEFORE using them
-            if not self.current_predicates:
-                logger.error("❌ current_predicates is EMPTY during geometric filtering!")
-                logger.error("   This should not happen - _initialize_current_predicates() should have populated them.")
-                logger.error("   Aborting geometric filtering for this layer.")
+            # ARCHITECTURE FIX 2026-01-16: Récupérer prédicats dynamiquement via callback
+            current_predicates = self._get_predicates_callback()
+            logger.info(f"   current_predicates (fetched via callback): {current_predicates}")
+            
+            # Validation robuste des prédicats
+            if not current_predicates:
+                logger.error("❌ No predicates available for layer: {}".format(layer.name()))
+                logger.error("   Check TaskRunOrchestrator._initialize_current_predicates()")
+                logger.error("   Callback returned empty predicates - aborting geometric filtering.")
                 return False
+            
+            logger.info(f"✓ Predicates loaded dynamically: {list(current_predicates.keys())}")
             
             if is_postgresql_fallback:
                 logger.info(f"Executing geometric filtering for {layer.name()} (PostgreSQL → OGR fallback)")

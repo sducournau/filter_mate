@@ -1231,6 +1231,20 @@ class PropertyController(BaseController):
                     project_props[key_upper][prop_upper] = new_value
                     flag_value_changed = True
                     
+                    # FIX 2026-01-16: Auto-enable HAS_LAYERS_TO_EXPORT when layers are selected
+                    if input_property == 'layers_to_export' and isinstance(new_value, list):
+                        has_layers = len(new_value) > 0
+                        if project_props.get('EXPORTING', {}).get('HAS_LAYERS_TO_EXPORT') != has_layers:
+                            project_props['EXPORTING']['HAS_LAYERS_TO_EXPORT'] = has_layers
+                            logger.info(f"✅ Auto-set HAS_LAYERS_TO_EXPORT = {has_layers} (based on {len(new_value)} selected layers)")
+                            
+                            # Update the button widget state
+                            has_layers_widget = widgets.get('EXPORTING', {}).get('HAS_LAYERS_TO_EXPORT', {}).get('WIDGET')
+                            if has_layers_widget and hasattr(has_layers_widget, 'setChecked'):
+                                has_layers_widget.blockSignals(True)
+                                has_layers_widget.setChecked(has_layers)
+                                has_layers_widget.blockSignals(False)
+                    
                     if new_value and "ON_TRUE" in custom_functions:
                         custom_functions["ON_TRUE"](0)
                     elif not new_value and "ON_FALSE" in custom_functions:

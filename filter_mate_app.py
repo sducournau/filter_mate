@@ -1501,67 +1501,85 @@ class FilterMateApp:
     
     def _try_delegate_to_controller(self, task_name: str, data=None) -> bool:
         """
-        Try to delegate filter task to hexagonal architecture controllers (Strangler Fig pattern).
-        Returns True if delegation succeeded, False to use legacy path.
+        Try to delegate task to hexagonal architecture controllers (Strangler Fig pattern).
+        
+        This method implements the progressive migration strategy:
+        1. Check if hexagonal architecture is available
+        2. Verify controller integration is setup
+        3. Attempt delegation to appropriate controller
+        4. Automatic fallback to legacy code if delegation fails
+        
+        Args:
+            task_name: Name of the task ('filter', 'unfilter', 'reset')
+            data: Optional task-specific data
+            
+        Returns:
+            True if delegation succeeded (use hexagonal path)
+            False to use legacy code path
         """
         # Check prerequisites
         if not HEXAGONAL_AVAILABLE:
-            logger.debug("Controller delegation skipped: hexagonal architecture not available")
+            logger.debug(f"Delegation skipped for '{task_name}': hexagonal architecture not available")
             return False
         
         if self.dockwidget is None:
-            logger.debug("Controller delegation skipped: dockwidget not available")
+            logger.debug(f"Delegation skipped for '{task_name}': dockwidget not available")
             return False
         
         # Get controller integration from dockwidget
         integration = getattr(self.dockwidget, '_controller_integration', None)
-        if integration is None or not integration.enabled:
-            logger.debug("Controller delegation skipped: controller integration not enabled")
+        if integration is None:
+            logger.debug(f"Delegation skipped for '{task_name}': controller integration is None")
+            return False
+            
+        if not integration.enabled:
+            logger.debug(f"Delegation skipped for '{task_name}': controller integration disabled")
+            return False
+        
+        # Verify controllers are setup
+        if not hasattr(integration, '_is_setup') or not integration._is_setup:
+            logger.debug(f"Delegation skipped for '{task_name}': controllers not yet setup")
             return False
         
         try:
+            # Always sync state before delegation
+            integration.sync_from_dockwidget()
+            
             # Delegate based on task type
             if task_name == 'filter':
-                # Sync controller state from current UI before execution
-                integration.sync_from_dockwidget()
-                
-                # Execute through controller
                 success = integration.delegate_execute_filter()
                 if success:
-                    logger.info("v3.0: Filter executed via FilteringController")
+                    logger.info("✓ Filter executed via FilteringController (hexagonal)")
                     return True
                 else:
-                    logger.debug("v3.0: FilteringController.execute_filter() returned False")
+                    logger.debug("FilteringController returned False, falling back to legacy")
                     return False
             
             elif task_name == 'unfilter':
-                # v4.0: Delegate to controller's execute_unfilter()
-                integration.sync_from_dockwidget()
                 success = integration.delegate_execute_unfilter()
                 if success:
-                    logger.info("v4.0: Unfilter executed via FilteringController")
+                    logger.info("✓ Unfilter executed via FilteringController (hexagonal)")
                     return True
                 else:
-                    logger.debug("v4.0: FilteringController.execute_unfilter() returned False, using legacy")
+                    logger.debug("Unfilter delegation returned False, falling back to legacy")
                     return False
             
             elif task_name == 'reset':
-                # v4.0: Delegate to controller's execute_reset_filters()
-                integration.sync_from_dockwidget()
                 success = integration.delegate_execute_reset()
                 if success:
-                    logger.info("v4.0: Reset executed via FilteringController")
+                    logger.info("✓ Reset executed via FilteringController (hexagonal)")
                     return True
                 else:
-                    logger.debug("v4.0: FilteringController.execute_reset_filters() returned False, using legacy")
+                    logger.debug("Reset delegation returned False, falling back to legacy")
                     return False
             
             else:
-                logger.debug(f"Controller delegation not available for task: {task_name}")
+                logger.debug(f"No controller delegation available for task: {task_name}")
                 return False
             
         except Exception as e:
-            logger.warning(f"v3.0: Controller delegation failed, falling back to legacy: {e}")
+            logger.warning(f"Controller delegation failed for '{task_name}': {e}", exc_info=True)
+            logger.info("Falling back to legacy code path")
             return False
     
     # ========================================

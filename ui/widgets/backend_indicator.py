@@ -132,6 +132,7 @@ class BackendIndicatorWidget(QLabel if HAS_QGIS else object):
         if self._is_waiting:
             logger.info("Backend indicator clicked in waiting state - triggering reload")
             self.reloadRequested.emit()
+            event.accept()
             return
         
         # Get current layer
@@ -142,9 +143,11 @@ class BackendIndicatorWidget(QLabel if HAS_QGIS else object):
         if not current_layer:
             logger.info("Backend indicator clicked with no current layer - triggering reload")
             self.reloadRequested.emit()
+            event.accept()
             return
         
         self._show_backend_menu(current_layer)
+        event.accept()
     
     def _show_backend_menu(self, current_layer):
         """Show the backend selection context menu."""

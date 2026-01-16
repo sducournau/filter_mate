@@ -88,6 +88,7 @@ class FavoritesWidget(QLabel if HAS_QGIS else object):
             return
         
         self._show_favorites_menu()
+        event.accept()
     
     def _show_favorites_menu(self):
         """Show the favorites context menu."""

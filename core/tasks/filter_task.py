@@ -612,42 +612,26 @@ class FilterEngineTask(QgsTask):
         """
         Get or create FilterOrchestrator (lazy initialization).
         
-        FIX 2026-01-15: When filtering distant layers, the context from
-        TaskRunOrchestrator may not be available (e.g., OGR sequential filtering).
-        This lazy initialization ensures FilterOrchestrator is always available.
+        ARCHITECTURE FIX 2026-01-16 (Winston): Callback Pattern Implementation
+        Instead of passing current_predicates by value (which may be empty at creation time),
+        we pass a lambda callback that fetches predicates dynamically at execution time.
         
-        FIX 2026-01-16: current_predicates is now initialized early in execute_filtering()
-        via _initialize_current_predicates(), so predicates should never be empty here.
-        Always update predicates on existing instances in case they were created with empty ones.
+        This eliminates the race condition where TaskRunOrchestrator creates
+        FilterOrchestrator BEFORE _initialize_current_predicates() runs.
         
-        CRITICAL FIX 2026-01-16: Race condition - TaskRunOrchestrator creates FilterOrchestrator
-        with empty predicates BEFORE _initialize_current_predicates() runs. We MUST always
-        propagate fresh predicates to avoid geometric filtering with empty predicates.
+        The callback ensures predicates are ALWAYS fresh when orchestrate_geometric_filter()
+        is called, regardless of when FilterOrchestrator was instantiated.
         """
-        predicates_to_pass = getattr(self, 'current_predicates', None) or {}
-        
-        # Validate predicates are populated
-        if not predicates_to_pass:
-            logger.error("❌ _get_filter_orchestrator called with EMPTY current_predicates!")
-            logger.error("   This will cause geometric filtering to FAIL silently.")
-            logger.error("   Check if _initialize_current_predicates() was called BEFORE filtering.")
-            logger.error("   Check task_parameters['filtering']['geometric_predicates'] is populated.")
-        
         if self._filter_orchestrator is None:
-            logger.debug(f"FilterOrchestrator: Creating new instance with predicates: {list(predicates_to_pass.keys()) if predicates_to_pass else 'EMPTY'}")
+            logger.debug("FilterOrchestrator: Creating new instance with callback pattern")
             
             self._filter_orchestrator = FilterOrchestrator(
                 task_parameters=self.task_parameters,
                 subset_queue_callback=self.queue_subset_request,
                 parent_task=self,
-                current_predicates=predicates_to_pass
+                get_predicates_callback=lambda: getattr(self, 'current_predicates', {})
             )
-            logger.debug("FilterOrchestrator lazy-initialized for distant layer filtering")
-        else:
-            # CRITICAL: ALWAYS update predicates to fix race condition
-            # TaskRunOrchestrator may have created instance with predicates=[] before
-            # _initialize_current_predicates() populated self.current_predicates
-            self._filter_orchestrator.current_predicates = predicates_to_pass
+            logger.debug("FilterOrchestrator lazy-initialized with predicate callback")
             logger.debug(f"FilterOrchestrator: ALWAYS propagating predicates: {list(predicates_to_pass.keys()) if predicates_to_pass else 'EMPTY'}")
         
         return self._filter_orchestrator
@@ -1307,8 +1291,11 @@ class FilterEngineTask(QgsTask):
                 if hasattr(result.context, 'expression_builder'):
                     self._expression_builder = result.context.expression_builder
                 
-                if hasattr(result.context, 'filter_orchestrator'):
+                # ARCHITECTURE FIX 2026-01-16 (Winston): filter_orchestrator is now None from context
+                # It will be lazy-initialized by _get_filter_orchestrator() with proper callback pattern
+                if hasattr(result.context, 'filter_orchestrator') and result.context.filter_orchestrator is not None:
                     self._filter_orchestrator = result.context.filter_orchestrator
+                # Else: lazy-init will handle it with callback pattern
             
             # v4.0.1 FIX: Retrieve critical configuration values from context
             # These are REQUIRED for Spatialite connections and filter history
@@ -2166,6 +2153,16 @@ class FilterEngineTask(QgsTask):
         logger.info(f"  is_field_expression: {getattr(self, 'is_field_expression', None)}")
         logger.info("=" * 60)
         
+        # DIAGNOSTIC COMPLET - ARCHITECTURE FIX 2026-01-16
+        logger.info("=" * 80)
+        logger.info("🔍 DIAGNOSTIC manage_distant_layers_geometric_filtering")
+        logger.info(f"  current_predicates available: {bool(getattr(self, 'current_predicates', None))}")
+        if hasattr(self, 'current_predicates') and self.current_predicates:
+            logger.info(f"  Active predicates: {list(self.current_predicates.keys())}")
+        else:
+            logger.warning("  ⚠️ current_predicates NOT yet initialized (may be set later)")
+        logger.info("=" * 80)
+        
         # CRITICAL: Initialize source subset and buffer parameters FIRST
         # This sets self.param_buffer_value which is needed by prepare_*_source_geom()
         self._initialize_source_subset_and_buffer()
@@ -2994,13 +2991,18 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if filtering succeeded, False otherwise
         """
-        # DIAGNOSTIC LOGS 2026-01-15: Trace geometric filter execution
+        # DIAGNOSTIC DÉTAILLÉ - ARCHITECTURE FIX 2026-01-16
         logger.info("=" * 70)
-        logger.info(f"🎯 execute_geometric_filtering CALLED")
-        logger.info(f"   Layer: {layer.name()}")
-        logger.info(f"   Provider type: {layer_provider_type}")
-        logger.info(f"   Layer props keys: {list(layer_props.keys())}")
-        logger.info(f"   Current predicates: {getattr(self, 'current_predicates', 'NOT SET')}")
+        logger.info(f"🎯 execute_geometric_filtering: {layer.name()}")
+        logger.info(f"   Provider: {layer_provider_type}")
+        logger.info(f"   Predicates in task: {bool(getattr(self, 'current_predicates', None))}")
+        
+        if hasattr(self, 'current_predicates') and self.current_predicates:
+            logger.info(f"   Available predicates: {list(self.current_predicates.keys())}")
+        else:
+            logger.error("❌ current_predicates NOT initialized in task!")
+            logger.error("   This should have been set by _initialize_current_predicates()")
+        
         logger.info("=" * 70)
         
         # Prepare source geometries dict for orchestrator
