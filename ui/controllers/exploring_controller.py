@@ -1547,88 +1547,103 @@ class ExploringController(BaseController, LayerSelectionMixin):
 
     def get_exploring_features(self, input, identify_by_primary_key_name=False, custom_expression=None):
         """
-        Get features based on input (QgsFeature, list, or expression).
+        Transform input (QgsFeature, list of tuples, or custom expression) into features and expression.
         
-        Migrated from dockwidget - v4.0 Sprint 2 (controller architecture).
+        CRITICAL v4.1 (Jour 2): Adds feature reload protection to prevent C++ crashes when
+        features are deleted between UI operations (especially for PostgreSQL layers >1000 features).
+        
+        Args:
+            input: QgsFeature, list of tuples [(display_val, pk_val), ...], or None
+            identify_by_primary_key_name: If True, build expression from primary key
+            custom_expression: Optional custom expression string
+            
+        Returns:
+            tuple: (features list, expression string or None)
         """
-        if not self._dockwidget.widgets_initialized or self._dockwidget.current_layer is None:
-            return [], None
-
-        # v3.0.14: CRITICAL - Use centralized deletion check with full protection
-        if self._dockwidget._is_layer_truly_deleted(self._dockwidget.current_layer):
-            logger.debug("get_exploring_features: current_layer C++ object truly deleted")
-            self._dockwidget.current_layer = None
-            return [], None
-
-        if self._dockwidget.current_layer is None:
-            return [], None
-        
-        # Guard: Handle invalid input types (e.g., False from currentSelectedFeatures())
-        if input is False or input is None:
-            logger.debug("get_exploring_features: Input is False or None, returning empty")
-            return [], None
-        
-        # STABILITY FIX: Verify layer exists in PROJECT_LAYERS before access
-        if self._dockwidget.current_layer.id() not in self._dockwidget.PROJECT_LAYERS:
-            logger.warning(f"get_exploring_features: Layer {self._dockwidget.current_layer.name()} not in PROJECT_LAYERS")
-            return [], None
-        
-        from qgis.core import QgsFeature, QgsExpression, QgsFeatureRequest
-        
-        layer_props = self._dockwidget.PROJECT_LAYERS[self._dockwidget.current_layer.id()]
         features = []
         expression = None
-
+        
+        try:
+            # Get layer properties - CRITICAL for all operations
+            layer_props = self._dockwidget.PROJECT_LAYERS[self._dockwidget.current_layer.id()]
+        except (KeyError, AttributeError) as e:
+            logger.error(f"Cannot get layer properties: {e}")
+            return features, expression
+        
+        # CUSTOM EXPRESSION PATH
+        if custom_expression is not None and custom_expression.strip():
+            expression = custom_expression.strip()
+            # Reload all features matching the custom expression
+            try:
+                layer = self._dockwidget.current_layer
+                request = QgsFeatureRequest().setFilterExpression(expression)
+                features = list(layer.getFeatures(request))
+                logger.debug(f"Custom expression matched {len(features)} features")
+            except Exception as e:
+                logger.warning(f"Error evaluating custom expression '{expression}': {e}")
+            return features, expression
+        
+        # SINGLE FEATURE INPUT PATH
         if isinstance(input, QgsFeature):
-            # Check if input feature is valid
-            if not input.isValid():
-                logger.debug("get_exploring_features: Input feature is invalid, returning empty")
-                return [], None
-            
-            # DIAGNOSTIC: Log input feature state
-            logger.debug(f"get_exploring_features: input feature id={input.id()}, hasGeometry={input.hasGeometry()}")
-                
             if identify_by_primary_key_name is True:
-                # CRITICAL FIX: Check if primary_key_name exists in layer properties
                 pk_name = layer_props["infos"].get("primary_key_name")
                 
                 if pk_name is None:
-                    # Primary key not detected - use universal $id fallback
-                    logger.debug(f"No primary_key_name in layer properties, using $id fallback")
-                    provider_type = layer_props["infos"].get("layer_provider_type", "")
+                    # FALLBACK: Use $id when no primary key available
                     feature_id = input.id()
-                    
-                    # UNIVERSAL FALLBACK: Use $id which works for all providers
-                    # $id is QGIS internal feature ID, works regardless of provider
                     expression = f'$id = {feature_id}'
-                    logger.debug(f"Using universal $id fallback expression: {expression}")
+                    logger.debug(f"No primary_key_name, using $id fallback: {expression}")
                     
-                    # For OGR layers, also try "fid" field as alternative
-                    if provider_type == 'ogr':
-                        # Check if fid field exists
-                        fid_idx = self._dockwidget.current_layer.fields().indexFromName('fid')
-                        if fid_idx >= 0:
-                            expression = f'"fid" = {feature_id}'
-                            logger.debug(f"OGR layer: using fid field expression: {expression}")
-                    
-                    # Always reload feature to ensure geometry is available
+                    # Reload feature from layer by ID for geometry
                     try:
-                        reloaded_feature = self._dockwidget.current_layer.getFeature(input.id())
+                        reloaded_feature = self._dockwidget.current_layer.getFeature(feature_id)
                         if reloaded_feature.isValid() and reloaded_feature.hasGeometry():
                             features = [reloaded_feature]
-                            logger.debug(f"Reloaded feature {input.id()} with geometry")
+                            logger.debug(f"Reloaded feature {feature_id} with geometry")
                         else:
                             features = [input]
-                            logger.warning(f"Could not reload feature {input.id()} with geometry")
+                            logger.warning(f"Could not reload feature {feature_id} with geometry")
                     except Exception as e:
                         logger.debug(f"Could not reload feature: {e}")
                         features = [input]
                     return features, expression
                 
+                # === CRITICAL FIX v4.1 (Jour 2): RELOAD FEATURE PROTECTION ===
+                # BEFORE accessing input.attribute(), check if C++ object is still valid
+                # This prevents crashes when features are deleted between UI operations
+                try:
+                    # Try to access feature ID first - will raise if C++ object deleted
+                    _ = input.id()
+                    
+                    # Preemptive reload for PostgreSQL layers with many features (high risk)
+                    layer = self._dockwidget.current_layer
+                    if layer.providerType() == 'postgres' and layer.featureCount() > 1000:
+                        # Always reload from database to get fresh C++ object
+                        logger.debug(f"Proactive reload for PostgreSQL layer with {layer.featureCount()} features")
+                        reloaded = layer.getFeature(input.id())
+                        if reloaded.isValid():
+                            input = reloaded
+                            logger.debug(f"Proactively reloaded feature {input.id()} from PostgreSQL")
+                except (RuntimeError, AttributeError) as e:
+                    # C++ object deleted - must reload from layer
+                    logger.warning(f"Feature C++ object deleted, reloading from layer: {e}")
+                    try:
+                        reloaded = self._dockwidget.current_layer.getFeature(input.id())
+                        if reloaded.isValid():
+                            input = reloaded
+                            logger.info(f"Successfully reloaded deleted feature {input.id()}")
+                        else:
+                            logger.error(f"Could not reload feature {input.id()} - invalid")
+                            return features, None
+                    except Exception as reload_err:
+                        logger.error(f"Fatal: Could not reload deleted feature: {reload_err}")
+                        return features, None
+                # === END RELOAD PROTECTION ===
+                
                 # Try to get the primary key value using multiple methods
                 pk_value = None
                 try:
-                    # First try with attribute() method
+                    # First try with attribute() method - NOW SAFE after reload protection
                     pk_value = input.attribute(pk_name)
                 except (KeyError, IndexError):
                     try:
@@ -1710,6 +1725,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
                     logger.debug(f"Could not reload feature {input.id()}: {e}")
                     features = [input]
 
+        # MULTIPLE FEATURES INPUT PATH (list of tuples)
         elif isinstance(input, list):
             if len(input) == 0 and custom_expression is None:
                 return features, expression
@@ -1748,69 +1764,49 @@ class ExploringController(BaseController, LayerSelectionMixin):
                         return features, None
                 else:
                     # CRITICAL FIX: Field names must be quoted for QgsExpression to work
-                    # This applies to ALL providers (PostgreSQL, OGR, Spatialite)
-                    # FIX 2026-01-15 v7: Handle both tuple format and QgsFeature format
-                    try:
-                        input_ids = []
-                        for feat in input:
-                            if isinstance(feat, QgsFeature):
-                                # QgsFeature - get primary key value
-                                try:
-                                    pk_value = feat.attribute(pk_name)
-                                    if pk_value is not None:
-                                        input_ids.append(str(pk_value))
-                                except:
-                                    input_ids.append(str(feat.id()))
-                            elif isinstance(feat, (list, tuple)) and len(feat) > 1:
-                                # Tuple format: (display, pk_value, ...)
-                                input_ids.append(str(feat[1]))
-                        
-                        if not input_ids:
-                            logger.warning("get_exploring_features: No valid IDs extracted from input list")
-                            return [], None
+                    # Build IN expression for multiple features
+                    pk_values_list = []
+                    for feat in input:
+                        try:
+                            if isinstance(feat, (list, tuple)) and len(feat) > 1:
+                                pk_value = feat[1]  # Extract pk_value from tuple
+                            elif isinstance(feat, QgsFeature):
+                                pk_value = feat.attribute(pk_name)
+                            else:
+                                continue
                             
-                        # UUID FIX v4.0: Ensure proper string conversion and quote escaping
-                        if pk_is_numeric:
-                            expression = f'"{pk_name}" IN ({", ".join(input_ids)})'
-                        else:
-                            # Escape single quotes in UUID/text values
-                            escaped_ids = [id_val.replace("'", "''") for id_val in input_ids]
-                            quoted_ids = "', '".join(escaped_ids)
-                            expression = f'"{pk_name}" IN (\'{quoted_ids}\')'
-                        logger.debug(f"Generated list expression for {provider_type}: {expression}")
-                    except Exception as e:
-                        logger.warning(f"get_exploring_features: Error building list expression: {e}")
-                        # Fallback: return features directly if they are QgsFeature objects
-                        for feat in input:
-                            if isinstance(feat, QgsFeature):
-                                features.append(feat)
+                            # Format value based on numeric type
+                            if pk_is_numeric:
+                                pk_values_list.append(str(pk_value))
+                            else:
+                                pk_value_str = str(pk_value).replace("'", "''")
+                                pk_values_list.append(f"'{pk_value_str}'")
+                        except (KeyError, IndexError, AttributeError) as e:
+                            logger.debug(f"Could not extract pk_value from feature: {e}")
+                            continue
+                    
+                    if pk_values_list:
+                        expression = f'"{pk_name}" IN ({", ".join(pk_values_list)})'
+                        logger.debug(f"Generated IN expression for {len(pk_values_list)} features")
+                    else:
+                        logger.warning("Could not build expression from list - no valid pk_values")
                         return features, None
-            
-        if custom_expression is not None:
-                expression = custom_expression
-
-        if expression and QgsExpression(expression).isValid():
-            # Synchronous evaluation for layers
-            # PERFORMANCE FIX: Add limit to prevent UI freeze on unexpected large result sets
-            MAX_SYNC_FEATURES = 10000  # Limit synchronous iteration
-            features_iterator = self._dockwidget.current_layer.getFeatures(QgsFeatureRequest(QgsExpression(expression)))
-            done_looping = False
-            feature_count_iter = 0
-            
-            while not done_looping:
-                try:
-                    feature = next(features_iterator)
-                    features.append(feature)
-                    feature_count_iter += 1
-                    # Safety limit to prevent UI freeze
-                    if feature_count_iter >= MAX_SYNC_FEATURES:
-                        logger.warning(f"get_exploring_features: Stopped at {MAX_SYNC_FEATURES} features to prevent UI freeze")
-                        done_looping = True
-                except StopIteration:
-                    done_looping = True
-        else:
-            expression = None
-
+                
+                # Reload all matching features from layer
+                if expression:
+                    try:
+                        layer = self._dockwidget.current_layer
+                        request = QgsFeatureRequest().setFilterExpression(expression)
+                        features = list(layer.getFeatures(request))
+                        logger.debug(f"Reloaded {len(features)} features from expression")
+                    except Exception as e:
+                        logger.warning(f"Could not reload features from expression: {e}")
+            else:
+                # Direct feature list without expression
+                for feat in input:
+                    if isinstance(feat, QgsFeature):
+                        features.append(feat)
+        
         return features, expression
 
     def exploring_features_changed(self, input=[], identify_by_primary_key_name=False, custom_expression=None, preserve_filter_if_empty=False):

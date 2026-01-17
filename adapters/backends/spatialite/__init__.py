@@ -7,6 +7,7 @@ Spatialite/GeoPackage specific implementations including:
 - Result caching
 - Temporary table support
 - Source geometry preparation (EPIC-1 Phase E4-S8)
+- Filter actions (reset/unfilter) - Phase 1 v4.1
 
 Part of Phase 4 Backend Refactoring (ARCH-040 through ARCH-043).
 """
@@ -34,6 +35,12 @@ from .filter_executor import (
     get_last_subset_info,
     cleanup_session_temp_tables,
     normalize_column_names_for_spatialite,
+)
+from .filter_actions import (
+    # Phase 1 v4.1: Backend actions (reset/unfilter)
+    execute_reset_action_spatialite,
+    execute_unfilter_action_spatialite,
+    cleanup_spatialite_session_tables,
 )
 
 __all__ = [
@@ -67,4 +74,8 @@ __all__ = [
     'get_last_subset_info',
     'cleanup_session_temp_tables',
     'normalize_column_names_for_spatialite',
+    # Phase 1 v4.1: Backend actions
+    'execute_reset_action_spatialite',
+    'execute_unfilter_action_spatialite',
+    'cleanup_spatialite_session_tables',
 ]

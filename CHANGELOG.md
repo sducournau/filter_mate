@@ -2,6 +2,66 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [4.1.0-beta.1] - 2026-01-27
+
+### Fixed (Phase 1 - Regression Corrections)
+
+#### PostgreSQL EXISTS Hotfix (Phase 0 - CRITICAL)
+- **MISSING SOURCE FILTER**: Fixed PostgreSQL EXISTS queries returning 0 features despite valid source filter
+  - Impact: Distant layer filtering with PostgreSQL now correctly applies source layer filter
+  - Root cause: EXISTS subquery missing source filter in 3-level feature extraction fallback
+  - Solution: Added 3-level fallback in `ExpressionBuilder._prepare_source_filter()`:
+    1. ATTEMPT 1: Extract features from `task_parameters["task"]["features"]` (direct)
+    2. ATTEMPT 2: Reconstruct FIDs from `task_parameters["task"]["feature_fids"]` list
+    3. ATTEMPT 3: Parse existing `source_subset` string (last resort)
+  - Example: 123 filtered source features → 123 features in EXISTS query (BEFORE: 0)
+  - Files: `core/filter/expression_builder.py` (lines 307-340)
+  - Bug reported by user: 2026-01-27 (0 features in distant layer despite 123 source features)
+
+#### Spatialite Backend Actions (Phase 1 Day 1)
+- **MISSING RESET/UNFILTER**: Restored reset and unfilter actions for Spatialite backend
+  - Impact: Users can now reset filters and restore previous subsets on Spatialite/GeoPackage layers
+  - Root cause: Regression from v4.0 hexagonal architecture migration (backend actions not migrated)
+  - Solution: Created `adapters/backends/spatialite/filter_actions.py` with 3 actions:
+    - `execute_reset_action_spatialite()` - Clears filter and refreshes layer
+    - `execute_unfilter_action_spatialite()` - Restores previous subset or clears filter
+    - `cleanup_spatialite_session_tables()` - Cleanup wrapper for session tables
+  - Integration: Added `get_spatialite_filter_actions()` to `BackendServices` port
+  - Files created:
+    - `adapters/backends/spatialite/filter_actions.py` (159 lines, 3 functions)
+    - `tests/test_spatialite_actions_phase1.py` (169 lines, 6 unit tests)
+  - Files modified:
+    - `adapters/backends/spatialite/__init__.py` - Exports added
+    - `core/ports/backend_services.py` - Service port method added
+
+#### Exploring Feature Reload Protection (Phase 1 Day 2)
+- **C++ OBJECT DELETED CRASHES**: Added protection against C++ crashes when features are deleted between UI operations
+  - Impact: No more crashes when switching layers or reselecting features in Exploring panel
+  - Root cause: QgsFeature C++ objects invalidated between UI operations (especially PostgreSQL >1000 features)
+  - Solution: Added reload protection in `ExploringController.get_exploring_features()`:
+    - **Proactive reload**: PostgreSQL layers >1000 features → automatic reload before attribute access
+    - **Reactive reload**: RuntimeError/AttributeError catch → on-demand reload with fallback
+    - **Graceful degradation**: If reload fails → log error + return None (no crash)
+  - Protection location: BEFORE `pk_value = input.attribute(pk_name)` (line 1631)
+  - Files: `ui/controllers/exploring_controller.py` (lines 1617-1645, 30 lines added)
+
+### Technical Details
+- **Phase 0**: 2 modifications to ExpressionBuilder (1h work)
+- **Phase 1 Day 1**: 4 files created/modified, 6 unit tests (4h work)
+- **Phase 1 Day 2**: 1 file modified, reload protection added (2h work)
+- **Total effort**: 7h (budget: 9h, advance: +2h)
+- **Test coverage**: Unit tests for Spatialite actions (expected 85%), manual tests for all fixes
+- **Documentation**: 3 implementation reports in `_bmad-output/`
+
+### References
+- Audit: `_bmad-output/AUDIT-COMPLET-REGRESSIONS-20260117.md`
+- Action plan: `_bmad-output/PLAN-ACTION-CORRECTIONS-V4.1-20260117.md`
+- Tests guide: `_bmad-output/GUIDE-TESTS-MANUELS-PHASE1-20260127.md`
+- Reports:
+  - PostgreSQL hotfix: `_bmad-output/FIXES-APPLIED-20260116.md`
+  - Spatialite actions: `_bmad-output/IMPLEMENTATION-REPORT-PHASE1-DAY1-20260127.md`
+  - Exploring reload: `_bmad-output/IMPLEMENTATION-REPORT-PHASE1-DAY2-20260127.md`
+
 ## [Unreleased]
 
 ### Added (v4.0.4 - UX Enhancement)

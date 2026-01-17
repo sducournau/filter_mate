@@ -294,15 +294,41 @@ class ExpressionBuilder:
         logger.info("=" * 80)
         
         # Check for task_features (user's selection) FIRST
+        # HOTFIX 2026-01-17: Add fallback logic for thread-safe feature extraction
         task_features = self.task_parameters.get("task", {}).get("features", [])
-        logger.info(f"      📋 task_features check:")
+        logger.info(f"      📋 ATTEMPT 1: task_parameters['task']['features']")
         logger.info(f"         Count: {len(task_features)} features")
+        
+        # ATTEMPT 2: task_parameters["task"]["feature_fids"] (backup FIDs)
+        if not task_features or len(task_features) == 0:
+            feature_fids = self.task_parameters.get("task", {}).get("feature_fids", [])
+            if feature_fids and self.source_layer:
+                logger.warning(f"      ⚠️ ATTEMPT 1 FAILED - trying feature_fids backup")
+                logger.info(f"      📋 ATTEMPT 2: Reconstructing features from feature_fids")
+                logger.info(f"         FID count: {len(feature_fids)}")
+                
+                # Reconstruct features from FIDs
+                from qgis.core import QgsFeatureRequest
+                request = QgsFeatureRequest().setFilterFids(feature_fids)
+                task_features = list(self.source_layer.getFeatures(request))
+                logger.info(f"         Reconstructed {len(task_features)} features from FIDs")
+        
+        # ATTEMPT 3: source_layer.selectedFeatures() (direct from layer)
+        if not task_features or len(task_features) == 0:
+            if self.source_layer and self.source_layer.selectedFeatureCount() > 0:
+                logger.warning(f"      ⚠️ ATTEMPT 2 FAILED - trying selectedFeatures")
+                logger.info(f"      📋 ATTEMPT 3: source_layer.selectedFeatures()")
+                task_features = self.source_layer.selectedFeatures()
+                logger.info(f"         Selected {len(task_features)} features from layer")
+        
+        # Log final result
         if task_features:
             if hasattr(task_features[0], 'id'):
                 logger.info(f"         First feature ID: {task_features[0].id()}")
-            logger.info(f"         ✓ User has SELECTED features - will use for source_filter")
+            logger.info(f"         ✅ User has {len(task_features)} features for source_filter")
         else:
-            logger.info(f"         ⚠️ No task_features - will try source_subset instead")
+            logger.warning(f"         ❌ ALL ATTEMPTS FAILED - No task_features available!")
+            logger.warning(f"         → Will try source_subset as last resort")
         
         use_task_features = task_features and len(task_features) > 0
         
@@ -310,6 +336,15 @@ class ExpressionBuilder:
             # PRIORITY: Generate filter from task_features
             logger.debug(f"🎯 PostgreSQL EXISTS: Using {len(task_features)} task_features (selection priority)")
             source_filter = self._generate_fid_filter(task_features)
+            
+            # HOTFIX VERIFICATION: Log the generated filter
+            logger.info(f"✅ Generated source_filter:")
+            logger.info(f"   Length: {len(source_filter) if source_filter else 0} chars")
+            if source_filter:
+                logger.info(f"   Preview: '{source_filter[:100]}'...")
+                logger.info(f"   ✅ Backend will include this in EXISTS WHERE clause")
+            else:
+                logger.error(f"   ❌ ERROR: _generate_fid_filter() returned None!")
         elif source_subset and not skip_source_subset:
             # FALLBACK: Use source layer's subset string
             logger.debug("PostgreSQL EXISTS: Using source layer subsetString as source_filter")

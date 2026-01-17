@@ -189,6 +189,30 @@ class BackendServices:
             logger.debug(f"Spatialite functions not available: {e}")
             return None
     
+    def get_spatialite_filter_actions(self) -> Optional[Dict[str, Callable]]:
+        """
+        Get Spatialite filter action functions (reset/unfilter).
+        
+        Phase 1 v4.1: Added Spatialite backend actions.
+        
+        Returns:
+            Dict with action functions or None
+        """
+        try:
+            from ...adapters.backends.spatialite.filter_actions import (
+                execute_reset_action_spatialite,
+                execute_unfilter_action_spatialite,
+                cleanup_spatialite_session_tables
+            )
+            return {
+                'reset': execute_reset_action_spatialite,
+                'unfilter': execute_unfilter_action_spatialite,
+                'cleanup': cleanup_spatialite_session_tables
+            }
+        except ImportError as e:
+            logger.debug(f"Spatialite filter actions not available: {e}")
+            return None
+    
     # ==================== OGR Services ====================
     
     def get_ogr_executor(self) -> Optional[Any]:
@@ -205,6 +229,32 @@ class BackendServices:
             except ImportError as e:
                 logger.debug(f"OGR executor not available: {e}")
         return self._ogr_executor
+    
+    def get_ogr_filter_actions(self) -> Optional[Dict[str, Callable]]:
+        """
+        Get OGR filter action functions.
+        
+        EPIC-1 Phase E4-S8: OGR Reset and Unfilter Actions
+        
+        Returns:
+            Dict with action functions or None
+        """
+        try:
+            from ...adapters.backends.ogr.filter_executor import (
+                execute_reset_action_ogr,
+                execute_unfilter_action_ogr,
+                apply_ogr_subset,
+                cleanup_ogr_temp_layers
+            )
+            return {
+                'reset': execute_reset_action_ogr,
+                'unfilter': execute_unfilter_action_ogr,
+                'apply_subset': apply_ogr_subset,
+                'cleanup': cleanup_ogr_temp_layers
+            }
+        except ImportError as e:
+            logger.debug(f"OGR filter actions not available: {e}")
+            return None
     
     def cleanup_ogr_temp_layers(self) -> int:
         """

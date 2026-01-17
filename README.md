@@ -269,6 +269,38 @@ modules/backends/
   └── factory.py             # Automatic selection
 ```
 
+### Backend Features Matrix
+
+Comprehensive feature support across backends:
+
+| Feature | PostgreSQL | Spatialite | OGR | Notes |
+|---------|:----------:|:----------:|:---:|-------|
+| **Geometric Filtering** | ✅ | ✅ | ✅ | All backends support all geometric predicates |
+| **Buffer Operations** | ✅ | ✅ | ✅ | Positive, negative, and zero buffers |
+| **Multi-layer Filtering** | ✅ | ✅ | ✅ | Filter multiple layers simultaneously |
+| **Reset Action** | ✅ | ✅ **(v4.1)** | ✅ | Clear filter and refresh layer |
+| **Unfilter Action** | ✅ | ✅ **(v4.1)** | ✅ | Restore previous subset string |
+| **Session Cleanup** | ✅ | ✅ **(v4.1)** | ✅ | Automatic cleanup of temp tables/views |
+| **Materialized Views** | ✅ | ❌ | ❌ | PostgreSQL only (>10k features) |
+| **R-tree Indexes** | ✅ | ✅ | ❌ | PostgreSQL (GIST), Spatialite (R-tree) |
+| **Temp Tables** | ❌ | ✅ | ✅ | Spatialite/OGR use temp tables |
+| **Two-phase Filtering** | ✅ | ❌ | ❌ | PostgreSQL optimization for >50k |
+| **Parallel Queries** | ✅ | ❌ | ❌ | PostgreSQL parallel workers |
+| **Progressive Chunking** | ❌ | ❌ | ✅ | OGR fallback for large datasets |
+
+**Legend:**
+- ✅ Full support
+- ❌ Not supported
+- ⚠️ Partial support
+- **(v4.1)** New in v4.1.0-beta.1
+
+**Key Updates in v4.1.0-beta.1:**
+- **Spatialite Reset/Unfilter**: Restored actions for Spatialite backend (regression fix)
+- **Session Cleanup**: All backends now support automatic cleanup of temporary resources
+- **PostgreSQL EXISTS**: Fixed source filter application in EXISTS subqueries
+
+```
+
 ### Backend Performance
 
 | Backend    | 10k Features | 100k Features | 1M Features |
