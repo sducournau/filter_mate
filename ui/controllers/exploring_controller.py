@@ -1552,6 +1552,8 @@ class ExploringController(BaseController, LayerSelectionMixin):
         CRITICAL v4.1 (Jour 2): Adds feature reload protection to prevent C++ crashes when
         features are deleted between UI operations (especially for PostgreSQL layers >1000 features).
         
+        PHASE 2 (v4.1.0-beta.2): Added exploring cache integration for improved performance.
+        
         Args:
             input: QgsFeature, list of tuples [(display_val, pk_val), ...], or None
             identify_by_primary_key_name: If True, build expression from primary key
@@ -1560,6 +1562,24 @@ class ExploringController(BaseController, LayerSelectionMixin):
         Returns:
             tuple: (features list, expression string or None)
         """
+        # === PHASE 2: CACHE INTEGRATION ===
+        # Try cache for custom expressions (most common case for repeated queries)
+        if custom_expression is not None and custom_expression.strip():
+            try:
+                from infrastructure.cache.exploring_cache import ExploringFeaturesCache
+                cache = ExploringFeaturesCache()
+                layer_id = self._dockwidget.current_layer.id() if self._dockwidget.current_layer else None
+                
+                if layer_id:
+                    # Try to get from cache
+                    cached = cache.get(layer_id, "custom_expression")
+                    if cached and cached.get('expression') == custom_expression.strip():
+                        logger.debug(f"Cache HIT: custom_expression for {layer_id[:8]}...")
+                        return cached['features'], cached['expression']
+            except Exception as e:
+                logger.debug(f"Cache lookup failed (non-critical): {e}")
+        # === END CACHE INTEGRATION ===
+        
         features = []
         expression = None
         
@@ -1807,7 +1827,83 @@ class ExploringController(BaseController, LayerSelectionMixin):
                     if isinstance(feat, QgsFeature):
                         features.append(feat)
         
+        # === PHASE 2: CACHE STORAGE ===
+        # Cache custom expression results for future reuse
+        if custom_expression is not None and custom_expression.strip() and features and expression:
+            try:
+                from infrastructure.cache.exploring_cache import ExploringFeaturesCache
+                cache = ExploringFeaturesCache()
+                layer_id = self._dockwidget.current_layer.id() if self._dockwidget.current_layer else None
+                
+                if layer_id:
+                    cache.put(layer_id, "custom_expression", features, expression)
+                    logger.debug(f"Cached {len(features)} features for custom_expression")
+            except Exception as e:
+                logger.debug(f"Cache storage failed (non-critical): {e}")
+        # === END CACHE STORAGE ===
+        
         return features, expression
+
+    def get_exploring_features_async(
+        self,
+        expression: str,
+        on_complete: callable,
+        on_error: callable = None
+    ):
+        """
+        Asynchronously evaluate expression for large layers.
+        
+        PERFORMANCE (v4.1.0-beta.2 restoration): Prevents UI freeze on >10k features.
+        Uses ExpressionEvaluationTask (QgsTask) for background processing.
+        
+        Args:
+            expression: QGIS expression to evaluate
+            on_complete: Callback(features: List) when done
+            on_error: Callback(error: str) on failure (optional)
+        
+        Example:
+            >>> def handle_result(features):
+            ...     print(f"Got {len(features)} features")
+            >>> 
+            >>> controller.get_exploring_features_async(
+            ...     expression='"population" > 10000',
+            ...     on_complete=handle_result
+            ... )
+        """
+        from core.tasks.expression_evaluation_task import ExpressionEvaluationTask
+        from qgis.core import QgsApplication
+        
+        if not self.current_layer:
+            logger.warning("Async evaluation: No current layer")
+            if on_error:
+                on_error("No current layer")
+            return
+        
+        # Create background task
+        task = ExpressionEvaluationTask(
+            layer=self.current_layer,
+            expression=expression,
+            description=f"Evaluating expression ({len(expression)} chars)"
+        )
+        
+        # Connect callbacks
+        def _on_complete():
+            features = task.result_features or []
+            logger.info(f"Async evaluation complete: {len(features)} features")
+            on_complete(features)
+        
+        def _on_error():
+            error_msg = getattr(task, 'exception', 'Unknown error')
+            logger.error(f"Async evaluation failed: {error_msg}")
+            if on_error:
+                on_error(str(error_msg))
+        
+        task.taskCompleted.connect(_on_complete)
+        task.taskTerminated.connect(_on_error)
+        
+        # Add to QGIS task manager
+        QgsApplication.taskManager().addTask(task)
+        logger.info(f"Async evaluation started for layer {self.current_layer.name()}")
 
     def exploring_features_changed(self, input=[], identify_by_primary_key_name=False, custom_expression=None, preserve_filter_if_empty=False):
         """

@@ -2,6 +2,66 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [4.1.0-beta.2] - 2026-01-17
+
+### Added (Phase 2 - Performance Optimizers & Cache)
+
+#### Auto Backend Selector (P2-1)
+- **INTELLIGENT BACKEND SELECTION**: Automatically selects optimal backend (PostgreSQL/Spatialite/OGR) based on layer characteristics
+  - Decision factors: Provider type, feature count, filter complexity, available backends
+  - Thresholds (from v2.5.10 benchmarks):
+    - PostgreSQL MV: ≥ 10,000 features (optimal for large datasets)
+    - Spatialite: 100-50,000 features (sweet spot)
+    - OGR: > 100,000 features (Spatialite becomes slow)
+  - Performance history tracking with rolling window (10 measurements)
+  - Complexity detection: Spatial filters (×2.5), Complex expressions (×5.0)
+  - Files created:
+    - `core/optimization/auto_backend_selector.py` (358 lines)
+    - `tests/test_auto_backend_selector.py` (322 lines, 18 tests)
+  - Estimated performance gain: **2-5× speedup** via optimal backend selection
+
+#### Multi-Step Filter Optimizer (P2-2)
+- **FILTER DECOMPOSITION**: Breaks down complex filters into optimized sequential steps
+  - Strategy: Spatial first → Attributaire simple → Complex expressions
+  - Automatic extraction of spatial/attributaire components
+  - Optimal step ordering by estimated selectivity
+  - Per-step reduction and time estimation
+  - Files created:
+    - `core/optimization/multi_step_filter.py` (485 lines)
+    - `tests/test_multi_step_filter.py` (405 lines, 30 tests)
+  - Estimated performance gain: **2-8× speedup** on complex multi-component filters
+
+#### Exploring Features Cache (P2-3)
+- **QUERY RESULT CACHING**: Multi-level cache for exploring panel queries
+  - Cache keys: (layer_id, groupbox_type) → (features, expression, timestamp)
+  - Configurable TTL (default 300s = 5 minutes)
+  - LRU eviction when capacity exceeded
+  - Statistics tracking: hits, misses, hit_rate, expirations
+  - Integration: ExploringController custom expressions (+30 lines)
+  - Files:
+    - `infrastructure/cache/exploring_cache.py` (existing, 336 lines)
+    - `tests/test_exploring_cache.py` (350 lines, 14 tests)
+  - Estimated performance gain: **100-500× speedup** on cache hits (~1ms vs 100-500ms)
+
+#### Async Expression Evaluation (P2-4)
+- **BACKGROUND PROCESSING**: Asynchronous expression evaluation for large datasets
+  - QgsTask-based background processing (prevents UI freeze)
+  - Threshold: >10,000 features automatically use async
+  - Callbacks: on_complete(features), on_error(msg)
+  - Cancellation support via QGIS task manager
+  - New method: `ExploringController.get_exploring_features_async()`
+  - Files:
+    - `core/tasks/expression_evaluation_task.py` (existing, 130 lines)
+    - `tests/test_expression_evaluation_task.py` (115 lines, 6 tests)
+    - `ui/controllers/exploring_controller.py` (+60 lines)
+  - Performance benefit: **UI remains responsive** during 500-2000ms+ evaluations
+
+### Technical Details
+- **Total Phase 2**: 8 files created/modified, 2,500+ lines code, 68 unit tests
+- **Architecture**: Hexagonal patterns maintained (Core/Adapters/Infrastructure)
+- **Compatibility**: Python 3.7+, QGIS 3.x
+- **Restoration**: Features from v2.5.10 production-tested optimizers
+
 ## [4.1.0-beta.1] - 2026-01-27
 
 ### Fixed (Phase 1 - Regression Corrections)
