@@ -37,7 +37,7 @@ class OGRFilterExecutor(FilterExecutorPort):
                 from .backend import OGRBackend
                 self._backend = OGRBackend()
             except Exception as e:
-                logger.warning(f"Could not initialize OGR backend: {e}")
+                logger.warning(f"[OGR] Could not initialize OGR backend: {e}")
         return self._backend
     
     def execute_filter(
@@ -103,7 +103,7 @@ class OGRFilterExecutor(FilterExecutorPort):
                 )
                 
         except Exception as e:
-            logger.error(f"OGR filter execution failed: {e}")
+            logger.error(f"[OGR] OGR filter execution failed: {e}")
             return FilterExecutionResult.failed(str(e), backend='ogr')
     
     def prepare_source_geometry(
@@ -131,7 +131,7 @@ class OGRFilterExecutor(FilterExecutorPort):
             return result, None
             
         except Exception as e:
-            logger.error(f"OGR geometry preparation failed: {e}")
+            logger.error(f"[OGR] OGR geometry preparation failed: {e}")
             return None, str(e)
     
     def apply_subset_string(
@@ -144,7 +144,7 @@ class OGRFilterExecutor(FilterExecutorPort):
             from ...infrastructure.database.sql_utils import safe_set_subset_string
             return safe_set_subset_string(layer, expression)
         except Exception as e:
-            logger.error(f"Failed to apply OGR subset: {e}")
+            logger.error(f"[OGR] Failed to apply OGR subset: {e}")
             return False
     
     def cleanup_resources(self) -> None:
@@ -152,9 +152,9 @@ class OGRFilterExecutor(FilterExecutorPort):
         try:
             from .filter_executor import cleanup_ogr_temp_layers
             cleanup_ogr_temp_layers()
-            logger.debug("OGR temp layers cleaned up")
+            logger.debug(f"[OGR] OGR temp layers cleaned up")
         except Exception as e:
-            logger.warning(f"OGR cleanup failed: {e}")
+            logger.warning(f"[OGR] OGR cleanup failed: {e}")
     
     @property
     def backend_name(self) -> str:

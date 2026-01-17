@@ -185,7 +185,7 @@ class MaterializedViewManager:
 
         # Check if already exists
         if self.mv_exists(mv_name, connection=connection):
-            logger.debug(f"MV {mv_name} already exists, reusing")
+            logger.debug(f"[PostgreSQL] MV {mv_name} already exists, reusing")
             self._metrics['cache_hits'] += 1
             return mv_name
 
@@ -234,11 +234,11 @@ class MaterializedViewManager:
             )
 
             self._metrics['mvs_created'] += 1
-            logger.info(f"Created MV: {mv_name}")
+            logger.info(f"[PostgreSQL] Created MV: {mv_name}")
             return mv_name
 
         except Exception as e:
-            logger.error(f"Failed to create MV {mv_name}: {e}")
+            logger.error(f"[PostgreSQL] Failed to create MV {mv_name}: {e}")
             raise
 
     def refresh_mv(
@@ -263,7 +263,7 @@ class MaterializedViewManager:
 
         conn = connection or self._get_connection()
         if conn is None:
-            logger.error("No database connection for MV refresh")
+            logger.error(f"[PostgreSQL] No database connection for MV refresh")
             return False
 
         try:
@@ -291,11 +291,11 @@ class MaterializedViewManager:
                 )
 
             self._metrics['mvs_refreshed'] += 1
-            logger.debug(f"Refreshed MV: {mv_name}")
+            logger.debug(f"[PostgreSQL] Refreshed MV: {mv_name}")
             return True
 
         except Exception as e:
-            logger.error(f"Failed to refresh MV {mv_name}: {e}")
+            logger.error(f"[PostgreSQL] Failed to refresh MV {mv_name}: {e}")
             return False
 
     def drop_mv(
@@ -319,7 +319,7 @@ class MaterializedViewManager:
 
         conn = connection or self._get_connection()
         if conn is None:
-            logger.error("No database connection for MV drop")
+            logger.error(f"[PostgreSQL] No database connection for MV drop")
             return False
 
         try:
@@ -335,11 +335,11 @@ class MaterializedViewManager:
             self._created_mvs.pop(mv_name, None)
 
             self._metrics['mvs_dropped'] += 1
-            logger.debug(f"Dropped MV: {mv_name}")
+            logger.debug(f"[PostgreSQL] Dropped MV: {mv_name}")
             return True
 
         except Exception as e:
-            logger.error(f"Failed to drop MV {mv_name}: {e}")
+            logger.error(f"[PostgreSQL] Failed to drop MV {mv_name}: {e}")
             return False
 
     def mv_exists(
@@ -416,7 +416,7 @@ class MaterializedViewManager:
                 )
 
         except Exception as e:
-            logger.error(f"Failed to get MV info for {mv_name}: {e}")
+            logger.error(f"[PostgreSQL] Failed to get MV info for {mv_name}: {e}")
 
         return None
 
@@ -453,9 +453,9 @@ class MaterializedViewManager:
                 conn.commit()
 
         except Exception as e:
-            logger.error(f"Failed to cleanup session MVs: {e}")
+            logger.error(f"[PostgreSQL] Failed to cleanup session MVs: {e}")
 
-        logger.info(f"Cleaned up {count} session MVs")
+        logger.info(f"[PostgreSQL] Cleaned up {count} session MVs")
         return count
 
     def get_created_mvs(self) -> List[MVInfo]:
@@ -498,7 +498,7 @@ class MaterializedViewManager:
             return cursor.fetchall()
 
         except Exception as e:
-            logger.error(f"Failed to query MV {mv_name}: {e}")
+            logger.error(f"[PostgreSQL] Failed to query MV {mv_name}: {e}")
             return []
 
     # === Private Methods ===
@@ -548,7 +548,7 @@ class MaterializedViewManager:
                 ON {table_name} USING GIST ("{geometry_column}")
             """)
         except Exception as e:
-            logger.warning(f"Failed to create spatial index: {e}")
+            logger.warning(f"[PostgreSQL] Failed to create spatial index: {e}")
 
     def _create_index(
         self,
@@ -566,7 +566,7 @@ class MaterializedViewManager:
                 ON {table_name} ("{column}")
             """)
         except Exception as e:
-            logger.warning(f"Failed to create index on {column}: {e}")
+            logger.warning(f"[PostgreSQL] Failed to create index on {column}: {e}")
 
 
 def create_mv_manager(

@@ -46,7 +46,7 @@ class PostgreSQLFilterExecutor(FilterExecutorPort):
                 from .backend import PostgreSQLBackend
                 self._backend = PostgreSQLBackend()
             except Exception as e:
-                logger.warning(f"Could not initialize PostgreSQL backend: {e}")
+                logger.warning(f"[PostgreSQL] Could not initialize PostgreSQL backend: {e}")
         return self._backend
     
     def execute_filter(
@@ -118,7 +118,7 @@ class PostgreSQLFilterExecutor(FilterExecutorPort):
                 )
                 
         except Exception as e:
-            logger.error(f"PostgreSQL filter execution failed: {e}")
+            logger.error(f"[PostgreSQL] PostgreSQL filter execution failed: {e}")
             return FilterExecutionResult.failed(str(e), backend='postgresql')
     
     def prepare_source_geometry(
@@ -146,7 +146,7 @@ class PostgreSQLFilterExecutor(FilterExecutorPort):
             return result, None
             
         except Exception as e:
-            logger.error(f"PostgreSQL geometry preparation failed: {e}")
+            logger.error(f"[PostgreSQL] PostgreSQL geometry preparation failed: {e}")
             return None, str(e)
     
     def apply_subset_string(
@@ -159,7 +159,7 @@ class PostgreSQLFilterExecutor(FilterExecutorPort):
             from ...infrastructure.database.sql_utils import safe_set_subset_string
             return safe_set_subset_string(layer, expression)
         except Exception as e:
-            logger.error(f"Failed to apply PostgreSQL subset: {e}")
+            logger.error(f"[PostgreSQL] Failed to apply PostgreSQL subset: {e}")
             return False
     
     def cleanup_resources(self) -> None:
@@ -167,9 +167,9 @@ class PostgreSQLFilterExecutor(FilterExecutorPort):
         try:
             from .cleanup import cleanup_materialized_views
             cleanup_materialized_views()
-            logger.debug("PostgreSQL MVs cleaned up")
+            logger.debug(f"[PostgreSQL] PostgreSQL MVs cleaned up")
         except Exception as e:
-            logger.warning(f"PostgreSQL cleanup failed: {e}")
+            logger.warning(f"[PostgreSQL] PostgreSQL cleanup failed: {e}")
     
     @property
     def backend_name(self) -> str:

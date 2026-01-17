@@ -43,23 +43,23 @@ def ensure_temp_schema_exists(connexion, schema_name: str) -> str:
     """
     # Validate connection before use
     if connexion is None:
-        logger.error("Cannot ensure temp schema: connection is None")
+        logger.error(f"[PostgreSQL] Cannot ensure temp schema: connection is None")
         raise Exception(f"Cannot create schema '{schema_name}': PostgreSQL connection is None")
     
     # Check if connexion is a string (connection string) instead of a connection object
     if isinstance(connexion, str):
-        logger.error(f"Cannot ensure temp schema: connexion is a string ('{connexion[:50]}...'), not a connection object")
+        logger.error(f"[PostgreSQL] Cannot ensure temp schema: connexion is a string ('{connexion[:50]}...'), not a connection object")
         raise Exception(f"Cannot create schema '{schema_name}': PostgreSQL connexion is a string, not a connection object. This indicates ACTIVE_POSTGRESQL was not properly initialized.")
     
     # Check if connection has cursor method (duck typing validation)
     if not hasattr(connexion, 'cursor') or not callable(getattr(connexion, 'cursor', None)):
-        logger.error(f"Cannot ensure temp schema: connexion object has no cursor() method (type: {type(connexion).__name__})")
+        logger.error(f"[PostgreSQL] Cannot ensure temp schema: connexion object has no cursor() method (type: {type(connexion).__name__})")
         raise Exception(f"Cannot create schema '{schema_name}': PostgreSQL connexion is not a valid connection object (type: {type(connexion).__name__})")
     
     # Check if connection is closed
     try:
         if connexion.closed:
-            logger.error("Cannot ensure temp schema: connection is closed")
+            logger.error(f"[PostgreSQL] Cannot ensure temp schema: connection is closed")
             raise Exception(f"Cannot create schema '{schema_name}': PostgreSQL connection is closed")
     except AttributeError:
         # Connection object doesn't have 'closed' attribute - proceed anyway
@@ -74,10 +74,10 @@ def ensure_temp_schema_exists(connexion, schema_name: str) -> str:
             """, (schema_name,))
             result = cursor.fetchone()
             if result:
-                logger.debug(f"Schema '{schema_name}' already exists")
+                logger.debug(f"[PostgreSQL] Schema '{schema_name}' already exists")
                 return schema_name
     except Exception as check_e:
-        logger.debug(f"Could not check if schema exists: {check_e}")
+        logger.debug(f"[PostgreSQL] Could not check if schema exists: {check_e}")
         # Continue to try creating it
     
     # Try creating schema without explicit authorization (uses current user)
@@ -85,10 +85,10 @@ def ensure_temp_schema_exists(connexion, schema_name: str) -> str:
         with connexion.cursor() as cursor:
             cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}";')
             connexion.commit()
-        logger.debug(f"Ensured schema '{schema_name}' exists")
+        logger.debug(f"[PostgreSQL] Ensured schema '{schema_name}' exists")
         return schema_name
     except Exception as e:
-        logger.warning(f"Error creating schema '{schema_name}' (no auth): {e}")
+        logger.warning(f"[PostgreSQL] Error creating schema '{schema_name}' (no auth): {e}")
         # Rollback failed transaction
         try:
             connexion.rollback()
@@ -100,10 +100,10 @@ def ensure_temp_schema_exists(connexion, schema_name: str) -> str:
             with connexion.cursor() as cursor:
                 cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}" AUTHORIZATION CURRENT_USER;')
                 connexion.commit()
-            logger.debug(f"Created schema '{schema_name}' with CURRENT_USER authorization")
+            logger.debug(f"[PostgreSQL] Created schema '{schema_name}' with CURRENT_USER authorization")
             return schema_name
         except Exception as e2:
-            logger.warning(f"Error creating schema with CURRENT_USER: {e2}")
+            logger.warning(f"[PostgreSQL] Error creating schema with CURRENT_USER: {e2}")
             try:
                 connexion.rollback()
             except Exception:
@@ -114,7 +114,7 @@ def ensure_temp_schema_exists(connexion, schema_name: str) -> str:
                 with connexion.cursor() as cursor:
                     cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}" AUTHORIZATION postgres;')
                     connexion.commit()
-                logger.debug(f"Created schema '{schema_name}' with postgres authorization")
+                logger.debug(f"[PostgreSQL] Created schema '{schema_name}' with postgres authorization")
                 return schema_name
             except Exception as e3:
                 try:
@@ -176,7 +176,7 @@ def schema_exists(connexion, schema_name: str) -> bool:
             result = cursor.fetchone()
             return result is not None
     except Exception as e:
-        logger.debug(f"Could not check if schema '{schema_name}' exists: {e}")
+        logger.debug(f"[PostgreSQL] Could not check if schema '{schema_name}' exists: {e}")
         return False
 
 
@@ -241,7 +241,7 @@ def execute_commands(connexion, commands: list) -> bool:
                 connexion.commit()
         return True
     except Exception as e:
-        logger.error(f"Error executing PostgreSQL commands: {e}")
+        logger.error(f"[PostgreSQL] Error executing PostgreSQL commands: {e}")
         try:
             connexion.rollback()
         except Exception:
@@ -291,13 +291,13 @@ def cleanup_orphaned_materialized_views(connexion, schema_name: str, current_ses
                     
                     # For non-session views or very old ones, we could drop them
                     # But to be safe, we only log here
-                    logger.debug(f"Found potentially orphaned view: {view_name}")
+                    logger.debug(f"[PostgreSQL] Found potentially orphaned view: {view_name}")
                 except Exception as e:
-                    logger.debug(f"Error processing view {view_name}: {e}")
+                    logger.debug(f"[PostgreSQL] Error processing view {view_name}: {e}")
             
             return count
     except Exception as e:
-        logger.error(f"Error checking orphaned views: {e}")
+        logger.error(f"[PostgreSQL] Error checking orphaned views: {e}")
         return 0
 
 
@@ -330,12 +330,12 @@ def cleanup_session_materialized_views(connexion, schema_name: str, session_id: 
                     cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema_name}"."{view_name}" CASCADE;')
                     count += 1
                 except Exception as e:
-                    logger.warning(f"Error dropping view {view_name}: {e}")
+                    logger.warning(f"[PostgreSQL] Error dropping view {view_name}: {e}")
             
             connexion.commit()
             return count
     except Exception as e:
-        logger.error(f"Error cleaning up session views: {e}")
+        logger.error(f"[PostgreSQL] Error cleaning up session views: {e}")
         return 0
 
 

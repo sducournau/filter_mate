@@ -107,7 +107,7 @@ def prepare_postgresql_source_geom(
         # because the view already contains buffered geometries
         # ORDER OF APPLICATION: Buffer expression creates MV first, centroid cannot be applied after
         if use_centroids:
-            logger.warning("⚠️ PostgreSQL: Centroid option ignored when using buffer expression (materialized view)")
+            logger.warning(f"[PostgreSQL] ⚠️ PostgreSQL: Centroid option ignored when using buffer expression (materialized view)")
             # v4.1.3: Notify user via QGIS message log for visibility
             from qgis.core import QgsMessageLog, Qgis
             QgsMessageLog.logMessage(
@@ -157,28 +157,28 @@ def prepare_postgresql_source_geom(
         # Negative buffers can produce empty geometries which must be handled
         # with ST_MakeValid() and ST_IsEmpty() to prevent matching issues
         if buffer_value < 0:
-            logger.info(f"📐 Applying NEGATIVE buffer (erosion): {buffer_value}m")
-            logger.info(f"  🛡️ Wrapping in ST_MakeValid() + ST_IsEmpty check for empty geometry handling")
+            logger.info(f"[PostgreSQL] 📐 Applying NEGATIVE buffer (erosion): {buffer_value}m")
+            logger.info(f"[PostgreSQL]   🛡️ Wrapping in ST_MakeValid() + ST_IsEmpty check for empty geometry handling")
             validated_expr = f"ST_MakeValid({base_buffer_expr})"
             postgresql_source_geom = f"CASE WHEN ST_IsEmpty({validated_expr}) THEN NULL ELSE {validated_expr} END"
-            logger.info(f"  📝 Generated expression: {postgresql_source_geom[:150]}...")
+            logger.info(f"[PostgreSQL]   📝 Generated expression: {postgresql_source_geom[:150]}...")
         else:
             postgresql_source_geom = base_buffer_expr
         
         buffer_type_desc = "expansion" if buffer_value > 0 else "erosion"
         centroid_desc = " (on centroids)" if use_centroids else ""
-        logger.info(f"✓ PostgreSQL source geom prepared with {buffer_value}m buffer ({buffer_type_desc}, endcap={endcap_style}, segments={buffer_segments}){centroid_desc}")
-        logger.debug(f"Using simple buffer: ST_Buffer with {buffer_value}m ({buffer_type_desc}){centroid_desc}")
+        logger.info(f"[PostgreSQL] ✓ PostgreSQL source geom prepared with {buffer_value}m buffer ({buffer_type_desc}, endcap={endcap_style}, segments={buffer_segments}){centroid_desc}")
+        logger.debug(f"[PostgreSQL] Using simple buffer: ST_Buffer with {buffer_value}m ({buffer_type_desc}){centroid_desc}")
     
     else:
         # No buffer - just apply centroid if enabled
         if use_centroids:
             postgresql_source_geom = f"ST_Centroid({base_geom})"
-            logger.info(f"✓ PostgreSQL: Using ST_Centroid for source layer geometry simplification")
+            logger.info(f"[PostgreSQL] ✓ PostgreSQL: Using ST_Centroid for source layer geometry simplification")
         else:
             postgresql_source_geom = base_geom
     
-    logger.debug(f"prepare_postgresql_source_geom: {postgresql_source_geom}")
+    logger.debug(f"[PostgreSQL] prepare_postgresql_source_geom: {postgresql_source_geom}")
     
     return postgresql_source_geom, materialized_view_name
 
@@ -234,7 +234,7 @@ def qgis_expression_to_postgis(expression: str, geom_col: str = 'geometry') -> s
             expression,
             flags=re.IGNORECASE
         )
-        logger.debug(f"Expression after IF conversion: {expression}")
+        logger.debug(f"[PostgreSQL] Expression after IF conversion: {expression}")
 
     # 3. Add type casting for numeric operations
     expression = expression.replace('" >', '"::numeric >').replace('">', '"::numeric >')
@@ -312,10 +312,10 @@ def build_postgis_predicates(
                     geom_col = layer.geometryColumn()
                     if geom_col and geom_col.strip():
                         param_distant_geometry_field = geom_col
-                        logger.debug(f"Memory layer geometry column: '{geom_col}'")
+                        logger.debug(f"[PostgreSQL] Memory layer geometry column: '{geom_col}'")
                     else:
                         param_distant_geometry_field = 'geometry'
-                        logger.debug(f"Memory layer {param_distant_table}: using default 'geometry'")
+                        logger.debug(f"[PostgreSQL] Memory layer {param_distant_table}: using default 'geometry'")
                 except Exception:
                     param_distant_geometry_field = 'geometry'
             else:
@@ -326,14 +326,14 @@ def build_postgis_predicates(
                     detected_geom = uri.geometryColumn()
                     if detected_geom:
                         param_distant_geometry_field = detected_geom
-                        logger.info(f"✓ Auto-detected geometry column for {param_distant_table}: '{detected_geom}'")
+                        logger.info(f"[PostgreSQL] ✓ Auto-detected geometry column for {param_distant_table}: '{detected_geom}'")
                 except Exception as e:
-                    logger.warning(f"Could not auto-detect geometry column: {e}")
+                    logger.warning(f"[PostgreSQL] Could not auto-detect geometry column: {e}")
         
         # Final fallback to 'geom' (PostgreSQL default)
         if not param_distant_geometry_field or param_distant_geometry_field in ('NULL', 'None', ''):
             param_distant_geometry_field = 'geom'
-            logger.warning(f"⚠️ Using fallback geometry column 'geom' for {param_distant_table}")
+            logger.warning(f"[PostgreSQL] ⚠️ Using fallback geometry column 'geom' for {param_distant_table}")
     
     postgis_sub_expression_array = []
     param_distant_geom_expression = (
@@ -517,7 +517,7 @@ def build_spatial_join_query(
                     f'ON {param_postgis_sub_expression} WHERE {sub_expression})'
                 )
     
-    logger.debug(f"Built spatial join query: {query[:150]}...")
+    logger.debug(f"[PostgreSQL] Built spatial join query: {query[:150]}...")
     return query
 
 
@@ -603,7 +603,7 @@ def execute_postgresql_commands(
         with connexion.cursor() as cursor:
             cursor.execute("SELECT 1")
     except (psycopg2.OperationalError, psycopg2.InterfaceError, AttributeError) as e:
-        logger.debug(f"PostgreSQL connection test failed, reconnecting: {e}")
+        logger.debug(f"[PostgreSQL] PostgreSQL connection test failed, reconnecting: {e}")
         if reconnect_func and source_layer:
             connexion, _ = reconnect_func(source_layer)
     
@@ -716,7 +716,7 @@ def normalize_column_names_for_postgresql(expression: str, field_names: list) ->
             corrections_made.append(f'"{col_name}" → "{correct_name}"')
     
     if corrections_made:
-        logger.info(f"PostgreSQL column case normalization: {', '.join(corrections_made)}")
+        logger.info(f"[PostgreSQL] PostgreSQL column case normalization: {', '.join(corrections_made)}")
     
     return result_expression
 

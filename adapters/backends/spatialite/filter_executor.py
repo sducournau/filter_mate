@@ -140,11 +140,11 @@ def determine_spatialite_source_mode(context: SpatialiteSourceContext) -> Tuple[
     task_features = task_parameters.get("task", {}).get("features", [])
     has_task_features = task_features and len(task_features) > 0
     
-    logger.info(f"=== determine_spatialite_source_mode DEBUG ===")
-    logger.info(f"  has_task_features: {has_task_features} ({len(task_features) if task_features else 0} features)")
-    logger.info(f"  has_subset: {has_subset}")
-    logger.info(f"  has_selection: {has_selection}")
-    logger.info(f"  is_field_based_mode: {is_field_based_mode}")
+    logger.info(f"[Spatialite] === determine_spatialite_source_mode DEBUG ===")
+    logger.info(f"[Spatialite]   has_task_features: {has_task_features} ({len(task_features) if task_features else 0} features)")
+    logger.info(f"[Spatialite]   has_subset: {has_subset}")
+    logger.info(f"[Spatialite]   has_selection: {has_selection}")
+    logger.info(f"[Spatialite]   is_field_based_mode: {is_field_based_mode}")
     
     metadata = {
         "has_task_features": has_task_features,
@@ -200,12 +200,12 @@ def validate_spatialite_features(task_features: List, layer: Any = None) -> Tupl
                                    f"({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})")
                 else:
                     skipped_no_geometry += 1
-                    logger.debug(f"  Skipping feature[{i}] without valid geometry")
+                    logger.debug(f"[Spatialite]   Skipping feature[{i}] without valid geometry")
             elif f:
                 valid_features.append(f)
         except Exception as e:
             validation_errors += 1
-            logger.warning(f"  Feature[{i}] validation error (thread-safety): {e}")
+            logger.warning(f"[Spatialite]   Feature[{i}] validation error (thread-safety): {e}")
             continue
     
     return valid_features, validation_errors, skipped_no_geometry
@@ -235,10 +235,10 @@ def recover_spatialite_features_from_fids(
         request = QgsFeatureRequest().setFilterFids(feature_fids)
         recovered = list(layer.getFeatures(request))
         if recovered:
-            logger.info(f"  ✓ Recovered {len(recovered)} features using FIDs")
+            logger.info(f"[Spatialite]   ✓ Recovered {len(recovered)} features using FIDs")
         return recovered
     except Exception as e:
-        logger.error(f"  ❌ FID recovery failed: {e}")
+        logger.error(f"[Spatialite]   ❌ FID recovery failed: {e}")
         return []
 
 
@@ -265,9 +265,9 @@ def resolve_spatialite_features(
     features = []
     
     if mode == SourceMode.TASK_PARAMS:
-        logger.info(f"=== resolve_spatialite_features (TASK PARAMS PRIORITY MODE) ===")
+        logger.info(f"[Spatialite] === resolve_spatialite_features (TASK PARAMS PRIORITY MODE) ===")
         task_features = metadata["task_features"]
-        logger.info(f"  Using {len(task_features)} features from task_parameters (thread-safe)")
+        logger.info(f"[Spatialite]   Using {len(task_features)} features from task_parameters (thread-safe)")
         
         # Validate features
         valid_features, validation_errors, skipped_no_geometry = validate_spatialite_features(
@@ -276,15 +276,15 @@ def resolve_spatialite_features(
         
         total_failures = validation_errors + skipped_no_geometry
         features = valid_features
-        logger.info(f"  Valid features after filtering: {len(features)}")
+        logger.info(f"[Spatialite]   Valid features after filtering: {len(features)}")
         
         if skipped_no_geometry > 0:
-            logger.warning(f"  Skipped {skipped_no_geometry} features with no/empty geometry")
+            logger.warning(f"[Spatialite]   Skipped {skipped_no_geometry} features with no/empty geometry")
         
         # Recovery logic if all features failed
         if len(features) == 0 and len(task_features) > 0 and total_failures > 0:
             recovery_attempted = True
-            logger.error(f"  ❌ ALL {len(task_features)} task_features failed validation")
+            logger.error(f"[Spatialite]   ❌ ALL {len(task_features)} task_features failed validation")
             
             # Try FID recovery
             feature_fids = metadata.get("feature_fids", [])
@@ -292,30 +292,30 @@ def resolve_spatialite_features(
                 feature_fids = context.task_parameters.get("feature_fids", [])
             
             if feature_fids:
-                logger.info(f"  → Attempting recovery using {len(feature_fids)} feature_fids")
+                logger.info(f"[Spatialite]   → Attempting recovery using {len(feature_fids)} feature_fids")
                 features = recover_spatialite_features_from_fids(source_layer, feature_fids)
             
             # Try selection recovery
             if len(features) == 0 and source_layer.selectedFeatureCount() > 0:
-                logger.info(f"  → Attempting recovery from source layer selection")
+                logger.info(f"[Spatialite]   → Attempting recovery from source layer selection")
                 try:
                     from qgis.core import QgsFeatureRequest
                     selected_fids = list(source_layer.selectedFeatureIds())
                     if selected_fids:
                         request = QgsFeatureRequest().setFilterFids(selected_fids)
                         features = list(source_layer.getFeatures(request))
-                        logger.info(f"  ✓ Recovered {len(features)} from selection")
+                        logger.info(f"[Spatialite]   ✓ Recovered {len(features)} from selection")
                 except Exception as e:
-                    logger.error(f"  ❌ Selection recovery failed: {e}")
+                    logger.error(f"[Spatialite]   ❌ Selection recovery failed: {e}")
                     
     elif mode == SourceMode.SUBSET:
-        logger.info(f"=== resolve_spatialite_features (FILTERED MODE) ===")
-        logger.info(f"  Source layer has filter: {source_layer.subsetString()[:100]}")
+        logger.info(f"[Spatialite] === resolve_spatialite_features (FILTERED MODE) ===")
+        logger.info(f"[Spatialite]   Source layer has filter: {source_layer.subsetString()[:100]}")
         features = list(source_layer.getFeatures())
-        logger.debug(f"  Retrieved {len(features)} features")
+        logger.debug(f"[Spatialite]   Retrieved {len(features)} features")
         
     elif mode == SourceMode.SELECTION:
-        logger.info(f"=== resolve_spatialite_features (MULTI-SELECTION MODE) ===")
+        logger.info(f"[Spatialite] === resolve_spatialite_features (MULTI-SELECTION MODE) ===")
         try:
             from qgis.core import QgsFeatureRequest
             selected_fids = list(source_layer.selectedFeatureIds())
@@ -323,15 +323,15 @@ def resolve_spatialite_features(
                 request = QgsFeatureRequest().setFilterFids(selected_fids)
                 features = list(source_layer.getFeatures(request))
         except Exception as e:
-            logger.error(f"Failed to get selected features: {e}")
+            logger.error(f"[Spatialite] Failed to get selected features: {e}")
             
     elif mode == SourceMode.FIELD_BASED:
-        logger.info(f"=== resolve_spatialite_features (FIELD-BASED MODE) ===")
-        logger.info(f"  Field name: '{context.is_field_expression[1] if context.is_field_expression else 'unknown'}'")
+        logger.info(f"[Spatialite] === resolve_spatialite_features (FIELD-BASED MODE) ===")
+        logger.info(f"[Spatialite]   Field name: '{context.is_field_expression[1] if context.is_field_expression else 'unknown'}'")
         features = list(source_layer.getFeatures())
         
     else:  # FALLBACK
-        logger.info(f"=== resolve_spatialite_features (FALLBACK MODE) ===")
+        logger.info(f"[Spatialite] === resolve_spatialite_features (FALLBACK MODE) ===")
         from qgis.core import QgsMessageLog, Qgis
         QgsMessageLog.logMessage(
             f"⚠️ FALLBACK MODE: Using ALL {source_layer.featureCount()} features",
@@ -372,10 +372,10 @@ def process_spatialite_geometries(
     )
     
     raw_geometries = [f.geometry() for f in features if f.hasGeometry()]
-    logger.debug(f"process_spatialite_geometries: {len(raw_geometries)} geometries")
+    logger.debug(f"[Spatialite] process_spatialite_geometries: {len(raw_geometries)} geometries")
     
     if len(raw_geometries) == 0:
-        logger.error("No geometries found in features")
+        logger.error(f"[Spatialite] No geometries found in features")
         return None
     
     geometries = []
@@ -386,7 +386,7 @@ def process_spatialite_geometries(
     if context.has_to_reproject_source_layer and context.source_crs:
         source_crs_obj = QgsCoordinateReferenceSystem(context.source_crs.authid())
         transform = QgsCoordinateTransform(source_crs_obj, target_crs, context.PROJECT)
-        logger.debug(f"Will reproject from {context.source_crs.authid()} to {context.source_layer_crs_authid}")
+        logger.debug(f"[Spatialite] Will reproject from {context.source_crs.authid()} to {context.source_layer_crs_authid}")
     
     for geometry in raw_geometries:
         if geometry.isEmpty():
@@ -401,7 +401,7 @@ def process_spatialite_geometries(
             centroid = geom_copy.centroid()
             if centroid and not centroid.isEmpty():
                 geom_copy = centroid
-                logger.debug("Converted to centroid")
+                logger.debug(f"[Spatialite] Converted to centroid")
         
         if geom_copy.isMultipart():
             geom_copy.convertToSingleType()
@@ -412,32 +412,32 @@ def process_spatialite_geometries(
         # Log buffer info (buffer applied via SQL, not here)
         if context.param_buffer_value and context.param_buffer_value != 0:
             buffer_type = "expansion" if context.param_buffer_value > 0 else "erosion"
-            logger.debug(f"Buffer of {context.param_buffer_value}m ({buffer_type}) via ST_Buffer() in SQL")
+            logger.debug(f"[Spatialite] Buffer of {context.param_buffer_value}m ({buffer_type}) via ST_Buffer() in SQL")
         
         geometries.append(geom_copy)
     
     if len(geometries) == 0:
-        logger.error("No valid geometries after processing")
+        logger.error(f"[Spatialite] No valid geometries after processing")
         return None
     
     # Dissolve using unaryUnion
-    logger.info(f"Applying dissolve (unaryUnion) on {len(geometries)} geometries")
+    logger.info(f"[Spatialite] Applying dissolve (unaryUnion) on {len(geometries)} geometries")
     collected_geometry = safe_unary_union(geometries)
     
     if collected_geometry is None:
-        logger.warning("unaryUnion failed, falling back to safe_collect_geometry")
+        logger.warning(f"[Spatialite] unaryUnion failed, falling back to safe_collect_geometry")
         collected_geometry = safe_collect_geometry(geometries)
     
     if collected_geometry is None:
-        logger.error("Both unaryUnion and collect failed")
+        logger.error(f"[Spatialite] Both unaryUnion and collect failed")
         return None
     
     collected_type = get_geometry_type_name(collected_geometry)
-    logger.info(f"Dissolved geometry type: {collected_type}")
+    logger.info(f"[Spatialite] Dissolved geometry type: {collected_type}")
     
     # Handle GeometryCollection conversion
     if 'GeometryCollection' in collected_type:
-        logger.warning(f"Dissolve produced {collected_type} - converting to homogeneous type")
+        logger.warning(f"[Spatialite] Dissolve produced {collected_type} - converting to homogeneous type")
         
         has_polygons = any('Polygon' in get_geometry_type_name(g) for g in geometries if validate_geometry(g))
         has_lines = any('Line' in get_geometry_type_name(g) for g in geometries if validate_geometry(g))
@@ -485,7 +485,7 @@ def process_spatialite_geometries(
             cloned.dropZValue()
             cloned.dropMValue()
             collected_geometry = QgsGeometry(cloned)
-            logger.info(f"  ✓ Dropped Z/M: {original_type} → {get_geometry_type_name(collected_geometry)}")
+            logger.info(f"[Spatialite]   ✓ Dropped Z/M: {original_type} → {get_geometry_type_name(collected_geometry)}")
     
     # Generate WKT with optimized precision
     crs_authid = context.source_layer_crs_authid
@@ -495,8 +495,8 @@ def process_spatialite_geometries(
         wkt = collected_geometry.asWkt()
     
     geom_type = wkt.split('(')[0].strip() if '(' in wkt else 'Unknown'
-    logger.info(f"  Final geometry type: {geom_type}")
-    logger.info(f"  📏 WKT length: {len(wkt):,} chars")
+    logger.info(f"[Spatialite]   Final geometry type: {geom_type}")
+    logger.info(f"[Spatialite]   📏 WKT length: {len(wkt):,} chars")
     
     # Apply adaptive simplification for large geometries
     if context.get_optimization_thresholds:
@@ -504,7 +504,7 @@ def process_spatialite_geometries(
         max_wkt_length = thresholds.get('exists_subquery_threshold', 100000)
         
         if len(wkt) > max_wkt_length and context.simplify_geometry_adaptive:
-            logger.warning(f"  ⚠️ WKT too long ({len(wkt)} > {max_wkt_length})")
+            logger.warning(f"[Spatialite]   ⚠️ WKT too long ({len(wkt)} > {max_wkt_length})")
             
             simplified = context.simplify_geometry_adaptive(
                 collected_geometry,
@@ -519,7 +519,7 @@ def process_spatialite_geometries(
                     simplified_wkt = simplified.asWkt()
                 
                 reduction_pct = (1 - len(simplified_wkt) / len(wkt)) * 100
-                logger.info(f"  ✓ Simplified: {len(wkt)} → {len(simplified_wkt)} chars ({reduction_pct:.1f}% reduction)")
+                logger.info(f"[Spatialite]   ✓ Simplified: {len(wkt)} → {len(simplified_wkt)} chars ({reduction_pct:.1f}% reduction)")
                 wkt = simplified_wkt
     
     # Escape single quotes for SQL
@@ -555,7 +555,7 @@ def prepare_spatialite_source_geom(context: SpatialiteSourceContext) -> Spatiali
     
     # Step 1: Determine source mode
     mode, metadata = determine_spatialite_source_mode(context)
-    logger.info(f"Source mode: {mode}")
+    logger.info(f"[Spatialite] Source mode: {mode}")
     
     # Step 2: Check cache first
     current_subset = source_layer.subsetString() or ''
@@ -575,7 +575,7 @@ def prepare_spatialite_source_geom(context: SpatialiteSourceContext) -> Spatiali
         new_subset = context.param_source_new_subset
         
         if recovery_attempted:
-            logger.error("BLOCKING fallback - recovery was attempted")
+            logger.error(f"[Spatialite] BLOCKING fallback - recovery was attempted")
             return SpatialiteSourceResult(
                 success=False,
                 error_message="Cannot recover source features. Verify selection before filtering."
@@ -589,13 +589,13 @@ def prepare_spatialite_source_geom(context: SpatialiteSourceContext) -> Spatiali
                 if not expr.hasParserError():
                     request = QgsFeatureRequest(expr)
                     features = list(source_layer.getFeatures(request))
-                    logger.info(f"Expression fallback: {len(features)} features")
+                    logger.info(f"[Spatialite] Expression fallback: {len(features)} features")
             except Exception as e:
-                logger.warning(f"Expression fallback failed: {e}")
+                logger.warning(f"[Spatialite] Expression fallback failed: {e}")
         
         if not features:
             features = list(source_layer.getFeatures())
-            logger.info(f"Final fallback: Using all {len(features)} features")
+            logger.info(f"[Spatialite] Final fallback: Using all {len(features)} features")
     
     if not features:
         return SpatialiteSourceResult(
@@ -603,9 +603,9 @@ def prepare_spatialite_source_geom(context: SpatialiteSourceContext) -> Spatiali
             error_message="No features found for geometry preparation"
         )
     
-    logger.info(f"Processing {len(features)} features")
-    logger.debug(f"Buffer value: {context.param_buffer_value}")
-    logger.debug(f"Target CRS: {context.source_layer_crs_authid}")
+    logger.info(f"[Spatialite] Processing {len(features)} features")
+    logger.debug(f"[Spatialite] Buffer value: {context.param_buffer_value}")
+    logger.debug(f"[Spatialite] Target CRS: {context.source_layer_crs_authid}")
     
     # Step 4: Check cache with proper key
     if context.geom_cache:
@@ -625,12 +625,12 @@ def prepare_spatialite_source_geom(context: SpatialiteSourceContext) -> Spatiali
             cache_is_valid = True
             if context.param_buffer_value and context.param_buffer_value != 0:
                 if 'LineString' in wkt_type or 'Line' in wkt_type:
-                    logger.error("❌ CACHE BUG DETECTED - stale geometry without buffer")
+                    logger.error(f"[Spatialite] ❌ CACHE BUG DETECTED - stale geometry without buffer")
                     context.geom_cache.clear()
                     cache_is_valid = False
             
             if cache_is_valid:
-                logger.info("✓ Using CACHED source geometry for Spatialite")
+                logger.info(f"[Spatialite] ✓ Using CACHED source geometry for Spatialite")
                 return SpatialiteSourceResult(
                     wkt=cached_wkt,
                     success=True,
@@ -649,8 +649,8 @@ def prepare_spatialite_source_geom(context: SpatialiteSourceContext) -> Spatiali
         )
     
     geom_type = wkt.split('(')[0].strip() if '(' in wkt else 'Unknown'
-    logger.info(f"  WKT length: {len(wkt)} chars")
-    logger.info(f"=== prepare_spatialite_source_geom END ===")
+    logger.info(f"[Spatialite]   WKT length: {len(wkt)} chars")
+    logger.info(f"[Spatialite] === prepare_spatialite_source_geom END ===")
     
     # Step 6: Build buffer state for multi-step filters
     buffer_value = context.param_buffer_value or 0
@@ -670,7 +670,7 @@ def prepare_spatialite_source_geom(context: SpatialiteSourceContext) -> Spatiali
     }
     
     if is_multi_step and previous_buffer_value == buffer_value and buffer_value != 0:
-        logger.info(f"  ✓ Multi-step: Reusing existing {buffer_value}m buffer")
+        logger.info(f"[Spatialite]   ✓ Multi-step: Reusing existing {buffer_value}m buffer")
     
     # Step 7: Store in cache
     if context.geom_cache:
@@ -682,7 +682,7 @@ def prepare_spatialite_source_geom(context: SpatialiteSourceContext) -> Spatiali
             layer_id=layer_id,
             subset_string=current_subset
         )
-        logger.info("✓ Source geometry computed and CACHED")
+        logger.info(f"[Spatialite] ✓ Source geometry computed and CACHED")
     
     return SpatialiteSourceResult(
         wkt=wkt,
@@ -865,7 +865,7 @@ def apply_spatialite_subset(
         f'"{primary_key_name}" IN '
         f'(SELECT "{primary_key_name}" FROM mv_{session_name})'
     )
-    logger.debug(f"Applying Spatialite subset string: {layer_subsetString}")
+    logger.debug(f"[Spatialite] Applying Spatialite subset string: {layer_subsetString}")
     
     # THREAD SAFETY: Queue subset string for application in finished()
     if queue_subset_func:
@@ -883,7 +883,7 @@ def apply_spatialite_subset(
                 source_layer_id=source_layer_id or ''
             )
         except Exception as e:
-            logger.warning(f"Failed to update Spatialite history: {e}")
+            logger.warning(f"[Spatialite] Failed to update Spatialite history: {e}")
         finally:
             history_repo.close()
     
@@ -937,7 +937,7 @@ def manage_spatialite_subset(
     try:
         from ....infrastructure.database.sql_utils import create_temp_spatialite_table
     except ImportError:
-        logger.error("create_temp_spatialite_table not available")
+        logger.error(f"[Spatialite] create_temp_spatialite_table not available")
         return False
     
     # Get datasource information
@@ -984,7 +984,7 @@ def manage_spatialite_subset(
     )
     
     if not success:
-        logger.error("Failed to create Spatialite temp table")
+        logger.error(f"[Spatialite] Failed to create Spatialite temp table")
         return False
     
     # Apply subset and update history
@@ -1034,7 +1034,7 @@ def get_last_subset_info(cur, layer, project_uuid: str, conn=None) -> tuple:
             else:
                 return None, 0, layer_name, name
         except Exception as e:
-            logger.warning(f"Failed to get last subset info via repository: {e}")
+            logger.warning(f"[Spatialite] Failed to get last subset info via repository: {e}")
             return None, 0, layer_name, name
         finally:
             history_repo.close()
@@ -1057,7 +1057,7 @@ def get_last_subset_info(cur, layer, project_uuid: str, conn=None) -> tuple:
         else:
             return None, 0, layer_name, name
     except Exception as e:
-        logger.warning(f"Failed to get last subset info: {e}")
+        logger.warning(f"[Spatialite] Failed to get last subset info: {e}")
         return None, 0, layer_name, name
 
 
@@ -1106,7 +1106,7 @@ def cleanup_session_temp_tables(
                 cur.execute(f'DROP TABLE IF EXISTS "idx_{table_name}_geometry";')
                 count += 1
             except Exception as e:
-                logger.warning(f"Error dropping temp table {table_name}: {e}")
+                logger.warning(f"[Spatialite] Error dropping temp table {table_name}: {e}")
         
         conn.commit()
         conn.close()
@@ -1119,7 +1119,7 @@ def cleanup_session_temp_tables(
         return count
         
     except Exception as e:
-        logger.error(f"Error cleaning up session tables: {e}")
+        logger.error(f"[Spatialite] Error cleaning up session tables: {e}")
         return 0
 
 

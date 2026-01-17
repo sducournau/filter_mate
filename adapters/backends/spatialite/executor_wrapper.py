@@ -102,7 +102,7 @@ class SpatialiteFilterExecutor(FilterExecutorPort):
                 )
                 
         except Exception as e:
-            logger.error(f"Spatialite filter execution failed: {e}")
+            logger.error(f"[Spatialite] Spatialite filter execution failed: {e}")
             return FilterExecutionResult.failed(str(e), backend='spatialite')
     
     def prepare_source_geometry(
@@ -128,7 +128,7 @@ class SpatialiteFilterExecutor(FilterExecutorPort):
             return result, None
             
         except Exception as e:
-            logger.error(f"Spatialite geometry preparation failed: {e}")
+            logger.error(f"[Spatialite] Spatialite geometry preparation failed: {e}")
             return None, str(e)
     
     def apply_subset_string(
@@ -140,16 +140,16 @@ class SpatialiteFilterExecutor(FilterExecutorPort):
         try:
             return apply_spatialite_subset(layer, expression)
         except Exception as e:
-            logger.error(f"Failed to apply Spatialite subset: {e}")
+            logger.error(f"[Spatialite] Failed to apply Spatialite subset: {e}")
             return False
     
     def cleanup_resources(self) -> None:
         """Clean up temporary tables."""
         try:
             cleanup_session_temp_tables()
-            logger.debug("Spatialite temp tables cleaned up")
+            logger.debug(f"[Spatialite] Spatialite temp tables cleaned up")
         except Exception as e:
-            logger.warning(f"Spatialite cleanup failed: {e}")
+            logger.warning(f"[Spatialite] Spatialite cleanup failed: {e}")
     
     @property
     def backend_name(self) -> str:

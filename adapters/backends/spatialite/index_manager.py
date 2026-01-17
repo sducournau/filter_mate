@@ -97,7 +97,7 @@ class RTreeIndexManager:
             """, (index_table,))
             return cursor.fetchone() is not None
         except Exception as e:
-            logger.debug(f"Error checking index existence: {e}")
+            logger.debug(f"[Spatialite] Error checking index existence: {e}")
             return False
 
     def create_index(
@@ -125,11 +125,11 @@ class RTreeIndexManager:
             self._conn.commit()
 
             self._metrics['indexes_created'] += 1
-            logger.info(f"Created R-tree index on {table_name}.{geometry_column}")
+            logger.info(f"[Spatialite] Created R-tree index on {table_name}.{geometry_column}")
             return True
 
         except Exception as e:
-            logger.error(f"Failed to create index on {table_name}.{geometry_column}: {e}")
+            logger.error(f"[Spatialite] Failed to create index on {table_name}.{geometry_column}: {e}")
             return False
 
     def ensure_index(
@@ -181,11 +181,11 @@ class RTreeIndexManager:
             self._conn.commit()
 
             self._metrics['indexes_dropped'] += 1
-            logger.info(f"Dropped R-tree index on {table_name}.{geometry_column}")
+            logger.info(f"[Spatialite] Dropped R-tree index on {table_name}.{geometry_column}")
             return True
 
         except Exception as e:
-            logger.error(f"Failed to drop index on {table_name}.{geometry_column}: {e}")
+            logger.error(f"[Spatialite] Failed to drop index on {table_name}.{geometry_column}: {e}")
             return False
 
     def rebuild_index(
@@ -266,7 +266,7 @@ class RTreeIndexManager:
             )
 
         except Exception as e:
-            logger.error(f"Failed to get index info for {table_name}.{geometry_column}: {e}")
+            logger.error(f"[Spatialite] Failed to get index info for {table_name}.{geometry_column}: {e}")
             return None
 
     def get_all_indexes(self) -> List[IndexInfo]:
@@ -292,7 +292,7 @@ class RTreeIndexManager:
                     indexes.append(info)
 
         except Exception as e:
-            logger.error(f"Failed to get all indexes: {e}")
+            logger.error(f"[Spatialite] Failed to get all indexes: {e}")
 
         return indexes
 
@@ -318,9 +318,9 @@ class RTreeIndexManager:
                         count += 1
 
         except Exception as e:
-            logger.error(f"Failed to optimize indexes: {e}")
+            logger.error(f"[Spatialite] Failed to optimize indexes: {e}")
 
-        logger.info(f"Optimized {count} spatial indexes")
+        logger.info(f"[Spatialite] Optimized {count} spatial indexes")
         return count
 
     def vacuum_index_tables(self) -> bool:
@@ -346,11 +346,11 @@ class RTreeIndexManager:
             cursor.execute("VACUUM")
             self._conn.commit()
 
-            logger.info(f"Vacuumed database (includes {len(index_tables)} index tables)")
+            logger.info(f"[Spatialite] Vacuumed database (includes {len(index_tables)} index tables)")
             return True
 
         except Exception as e:
-            logger.error(f"Failed to vacuum: {e}")
+            logger.error(f"[Spatialite] Failed to vacuum: {e}")
             return False
 
     def create_indexes_for_layer(
@@ -387,7 +387,7 @@ class RTreeIndexManager:
                     )
                     count += 1
                 except Exception as e:
-                    logger.warning(f"Failed to create index on {table_name}.{col}: {e}")
+                    logger.warning(f"[Spatialite] Failed to create index on {table_name}.{col}: {e}")
 
             self._conn.commit()
 

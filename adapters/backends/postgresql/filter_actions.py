@@ -138,7 +138,7 @@ def build_combined_expression(
     should_combine, reason = should_combine_filters(old_subset)
     
     if not should_combine:
-        logger.info(f"Old subset contains {reason} - replacing instead of combining")
+        logger.info(f"[PostgreSQL] Old subset contains {reason} - replacing instead of combining")
         return new_where_clause
     
     # Check if filters are identical (avoid duplication)
@@ -146,11 +146,11 @@ def build_combined_expression(
     normalized_new = new_where_clause.strip().strip('()')
     
     if normalized_old == normalized_new:
-        logger.debug("New filter identical to existing - replacing instead of combining")
+        logger.debug(f"[PostgreSQL] New filter identical to existing - replacing instead of combining")
         return new_where_clause
     
     # Different filters - combine with AND
-    logger.debug(f"Combining with existing filter: {old_subset[:50]}...")
+    logger.debug(f"[PostgreSQL] Combining with existing filter: {old_subset[:50]}...")
     return f"({old_subset}) AND ({new_where_clause})"
 
 
@@ -242,7 +242,7 @@ def execute_filter_action_postgresql(
     if use_materialized_view:
         # Log strategy decision
         if custom:
-            logger.info("PostgreSQL: Using materialized views for custom buffer expression")
+            logger.info(f"[PostgreSQL] PostgreSQL: Using materialized views for custom buffer expression")
         elif has_complex_expression:
             logger.info(
                 "PostgreSQL: Complex spatial expression detected (EXISTS/ST_Buffer/ST_Intersects). "
@@ -413,7 +413,7 @@ def execute_filter_action_postgresql_direct(
             # Build final expression (combine or replace)
             final_expression = build_combined_expression(old_subset, clean_where_clause)
             
-            logger.debug(f"Direct filter expression: {final_expression[:200]}...")
+            logger.debug(f"[PostgreSQL] Direct filter expression: {final_expression[:200]}...")
             
             # THREAD SAFETY: Queue filter for application in finished()
             queue_subset_fn(layer, final_expression)
@@ -429,17 +429,17 @@ def execute_filter_action_postgresql_direct(
             insert_history_fn(cur, conn, layer, sql_subset_string, seq_order)
             return True
         else:
-            logger.warning(f"Could not extract WHERE clause from: {sql_subset_string[:100]}...")
+            logger.warning(f"[PostgreSQL] Could not extract WHERE clause from: {sql_subset_string[:100]}...")
             # Fallback to materialized view approach
             if fallback_to_materialized_fn:
-                logger.info("Falling back to materialized view approach")
+                logger.info(f"[PostgreSQL] Falling back to materialized view approach")
                 return fallback_to_materialized_fn()
             return False
             
     except Exception as e:
-        logger.error(f"Error applying direct PostgreSQL filter: {str(e)}")
+        logger.error(f"[PostgreSQL] Error applying direct PostgreSQL filter: {str(e)}")
         import traceback
-        logger.debug(f"Traceback: {traceback.format_exc()}")
+        logger.debug(f"[PostgreSQL] Traceback: {traceback.format_exc()}")
         return False
 
 
@@ -516,7 +516,7 @@ def execute_filter_action_postgresql_materialized(
     
     # Generate session-unique view name for multi-client isolation
     session_name = get_session_name_fn(name)
-    logger.debug(f"Using session-prefixed view name: {session_name} (session_id: {session_id})")
+    logger.debug(f"[PostgreSQL] Using session-prefixed view name: {session_name} (session_id: {session_id})")
     
     # Ensure temp schema exists before creating materialized views
     connexion = get_connection_fn()
@@ -549,7 +549,7 @@ def execute_filter_action_postgresql_materialized(
             where_clauses = parse_where_clauses_fn()
             where_clause_fields_arr = [clause.split(' ')[0] for clause in where_clauses]
         else:
-            logger.warning("Custom buffer requested but param_buffer_expression is None, using simple view")
+            logger.warning(f"[PostgreSQL] Custom buffer requested but param_buffer_expression is None, using simple view")
             where_clause_fields_arr = []
         
         sql_create = create_custom_mv_fn(
@@ -570,8 +570,8 @@ def execute_filter_action_postgresql_materialized(
     sql_analyze = f'ANALYZE VERBOSE "{schema}"."mv_{session_name}";'
     
     sql_create = sql_create.replace('\n', '').replace('\t', '').replace('  ', ' ').strip()
-    logger.debug(f"SQL drop request: {sql_drop}")
-    logger.debug(f"SQL create request: {sql_create}")
+    logger.debug(f"[PostgreSQL] SQL drop request: {sql_drop}")
+    logger.debug(f"[PostgreSQL] SQL create request: {sql_create}")
     
     # Execute PostgreSQL commands
     connexion = get_connection_fn()
@@ -596,7 +596,7 @@ def execute_filter_action_postgresql_materialized(
         f'"{primary_key_name}" IN '
         f'(SELECT "mv_{session_name}"."{primary_key_name}" FROM "{schema}"."mv_{session_name}")'
     )
-    logger.debug(f"Layer subset string: {layer_subset_string}")
+    logger.debug(f"[PostgreSQL] Layer subset string: {layer_subset_string}")
     queue_subset_fn(layer, layer_subset_string)
     
     elapsed = time.time() - start_time

@@ -43,7 +43,7 @@ def register_temp_layer(layer_id: str) -> None:
     with _temp_layer_registry_lock:
         if layer_id not in _temp_layer_registry:
             _temp_layer_registry.append(layer_id)
-            logger.debug(f"Registered temp layer for cleanup: {layer_id}")
+            logger.debug(f"[OGR] Registered temp layer for cleanup: {layer_id}")
 
 
 def cleanup_ogr_temp_layers() -> int:
@@ -73,12 +73,12 @@ def cleanup_ogr_temp_layers() -> int:
             if project.mapLayer(layer_id) is not None:
                 project.removeMapLayer(layer_id)
                 removed_count += 1
-                logger.debug(f"Cleaned up temp layer: {layer_id}")
+                logger.debug(f"[OGR] Cleaned up temp layer: {layer_id}")
         except Exception as e:
-            logger.warning(f"Failed to cleanup temp layer {layer_id}: {e}")
+            logger.warning(f"[OGR] Failed to cleanup temp layer {layer_id}: {e}")
     
     if removed_count > 0:
-        logger.info(f"Cleaned up {removed_count} temporary OGR layers")
+        logger.info(f"[OGR] Cleaned up {removed_count} temporary OGR layers")
     
     return removed_count
 
@@ -143,7 +143,7 @@ def build_ogr_filter_from_selection(
                 pk_value = feature[param_distant_primary_key_name]
                 features_ids.append(str(pk_value))
     except Exception as e:
-        logger.warning(f"Error extracting feature IDs: {e}")
+        logger.warning(f"[OGR] Error extracting feature IDs: {e}")
         # Fallback to fids directly
         features_ids = [str(fid) for fid in selected_fids]
     
@@ -313,7 +313,7 @@ def apply_ogr_subset(
         try:
             return layer.setSubsetString(subset_string)
         except Exception as e:
-            logger.error(f"Failed to apply OGR subset: {e}")
+            logger.error(f"[OGR] Failed to apply OGR subset: {e}")
             return False
 
 
@@ -375,23 +375,23 @@ def execute_reset_action_ogr(
         if cleanup_temp_layers:
             cleaned = cleanup_ogr_temp_layers()
             if cleaned > 0:
-                logger.info(f"Reset: Cleaned up {cleaned} temporary OGR layers")
+                logger.info(f"[OGR] Reset: Cleaned up {cleaned} temporary OGR layers")
         
         # Clear the subset string
         if queue_subset_func:
             # Thread-safe: queue for main thread application
             queue_subset_func(layer, '')
-            logger.debug(f"Reset: Queued empty subset for {layer.name()}")
+            logger.debug(f"[OGR] Reset: Queued empty subset for {layer.name()}")
         else:
             # Direct application (only safe from main thread)
             layer.setSubsetString('')
-            logger.debug(f"Reset: Applied empty subset directly for {layer.name()}")
+            logger.debug(f"[OGR] Reset: Applied empty subset directly for {layer.name()}")
         
-        logger.info(f"OGR Reset completed for layer: {layer.name()}")
+        logger.info(f"[OGR] OGR Reset completed for layer: {layer.name()}")
         return True
         
     except Exception as e:
-        logger.error(f"Failed to execute OGR reset: {e}")
+        logger.error(f"[OGR] Failed to execute OGR reset: {e}")
         return False
 
 
@@ -437,14 +437,14 @@ def execute_unfilter_action_ogr(
             )
         
         if previous_subset:
-            logger.info(f"OGR Unfilter: Restored previous state for {layer.name()}")
+            logger.info(f"[OGR] OGR Unfilter: Restored previous state for {layer.name()}")
         else:
-            logger.info(f"OGR Unfilter: Cleared filter for {layer.name()} (no previous state)")
+            logger.info(f"[OGR] OGR Unfilter: Cleared filter for {layer.name()} (no previous state)")
         
         return True
         
     except Exception as e:
-        logger.error(f"Failed to execute OGR unfilter: {e}")
+        logger.error(f"[OGR] Failed to execute OGR unfilter: {e}")
         return False
 
 
@@ -532,16 +532,16 @@ def validate_task_features(task_features: list, layer: Any = None) -> tuple:
                         valid_features.append(f)
                     else:
                         invalid_count += 1
-                        logger.debug(f"  Skipping feature with empty geometry")
+                        logger.debug(f"[OGR]   Skipping feature with empty geometry")
                 else:
                     invalid_count += 1
-                    logger.debug(f"  Skipping feature without geometry")
+                    logger.debug(f"[OGR]   Skipping feature without geometry")
             elif f:
                 # Non-QgsFeature truthy value (e.g., feature ID)
                 valid_features.append(f)
         except (RuntimeError, AttributeError) as e:
             invalid_count += 1
-            logger.warning(f"  ⚠️ Feature access error (thread-safety issue?): {e}")
+            logger.warning(f"[OGR]   ⚠️ Feature access error (thread-safety issue?): {e}")
     
     return valid_features, invalid_count, recovered_via_fids
 
@@ -570,10 +570,10 @@ def recover_features_from_fids(
         request = QgsFeatureRequest().setFilterFids(feature_fids)
         recovered_features = list(layer.getFeatures(request))
         if recovered_features:
-            logger.info(f"  ✓ Recovered {len(recovered_features)} features using FIDs")
+            logger.info(f"[OGR]   ✓ Recovered {len(recovered_features)} features using FIDs")
         return recovered_features
     except Exception as e:
-        logger.error(f"  ❌ FID recovery failed: {e}")
+        logger.error(f"[OGR]   ❌ FID recovery failed: {e}")
         return []
 
 
@@ -723,58 +723,58 @@ def prepare_ogr_source_geom(
     layer = context.source_layer
     
     if not layer:
-        logger.error("prepare_ogr_source_geom: source_layer is None")
+        logger.error(f"[OGR] prepare_ogr_source_geom: source_layer is None")
         return None
     
     # Step 0: Determine mode and prepare layer
     mode, mode_data = determine_source_mode(context)
     
-    logger.info(f"=== prepare_ogr_source_geom ({mode} MODE) ===")
-    logger.info(f"  Source layer: {layer.name()}")
-    logger.info(f"  Feature count: {layer.featureCount()}")
+    logger.info(f"[OGR] === prepare_ogr_source_geom ({mode} MODE) ===")
+    logger.info(f"[OGR]   Source layer: {layer.name()}")
+    logger.info(f"[OGR]   Feature count: {layer.featureCount()}")
     
     if mode == "INVALID":
-        logger.error("  Mode is INVALID, returning None")
+        logger.error(f"[OGR]   Mode is INVALID, returning None")
         return None
     
     elif mode == "TASK_PARAMS":
         valid_features = mode_data
-        logger.info(f"  Using {len(valid_features)} features from task_parameters")
+        logger.info(f"[OGR]   Using {len(valid_features)} features from task_parameters")
         
         if context.create_memory_layer_from_features:
             layer = context.create_memory_layer_from_features(
                 valid_features, layer.crs(), "source_from_task"
             )
             if layer:
-                logger.info(f"  ✓ Memory layer created with {layer.featureCount()} features")
+                logger.info(f"[OGR]   ✓ Memory layer created with {layer.featureCount()} features")
             else:
-                logger.error("  ✗ Failed to create memory layer")
+                logger.error(f"[OGR]   ✗ Failed to create memory layer")
                 layer = context.source_layer
     
     elif mode == "SELECTION":
-        logger.info(f"  Copying selected features to memory")
+        logger.info(f"[OGR]   Copying selected features to memory")
         if context.copy_selected_features_to_memory:
             layer = context.copy_selected_features_to_memory(layer, "source_selection")
     
     elif mode == "SUBSET":
-        logger.info(f"  Copying filtered layer to memory")
+        logger.info(f"[OGR]   Copying filtered layer to memory")
         if context.copy_filtered_layer_to_memory:
             layer = context.copy_filtered_layer_to_memory(layer, "source_filtered")
     
     elif mode == "FIELD_BASED":
-        logger.info(f"  Field-based mode: using all filtered features")
+        logger.info(f"[OGR]   Field-based mode: using all filtered features")
         if context.copy_filtered_layer_to_memory:
             layer = context.copy_filtered_layer_to_memory(layer, "source_field_based")
     
     elif mode == "EXPRESSION_FALLBACK":
         filter_to_use = mode_data
-        logger.info(f"  Expression fallback: '{filter_to_use[:80]}...'")
+        logger.info(f"[OGR]   Expression fallback: '{filter_to_use[:80]}...'")
         
         try:
             from qgis.core import QgsFeatureRequest, QgsExpression
             expr = QgsExpression(filter_to_use)
             if expr.hasParserError():
-                logger.warning(f"  Expression parse error: {expr.parserErrorString()}")
+                logger.warning(f"[OGR]   Expression parse error: {expr.parserErrorString()}")
             else:
                 request = QgsFeatureRequest(expr)
                 filtered_features = list(layer.getFeatures(request))
@@ -784,12 +784,12 @@ def prepare_ogr_source_geom(
                         filtered_features, layer.crs(), "source_expr_filtered"
                     )
                     if layer:
-                        logger.info(f"  ✓ Filtered to {layer.featureCount()} features")
+                        logger.info(f"[OGR]   ✓ Filtered to {layer.featureCount()} features")
         except Exception as e:
-            logger.error(f"  Expression filtering failed: {e}")
+            logger.error(f"[OGR]   Expression filtering failed: {e}")
     
     elif mode == "DIRECT":
-        logger.info(f"  Direct mode: using source layer as-is")
+        logger.info(f"[OGR]   Direct mode: using source layer as-is")
         QgsMessageLog.logMessage(
             f"OGR DIRECT MODE: Using {layer.featureCount()} features",
             "FilterMate", Qgis.Warning
@@ -827,7 +827,7 @@ def prepare_ogr_source_geom(
     # Step 3: Validate result
     is_valid, error_msg = validate_ogr_result_layer(layer)
     if not is_valid:
-        logger.error(f"prepare_ogr_source_geom: {error_msg}")
+        logger.error(f"[OGR] prepare_ogr_source_geom: {error_msg}")
         QgsMessageLog.logMessage(
             f"OGR source preparation FAILED: {error_msg}",
             "FilterMate", Qgis.Critical
@@ -839,16 +839,16 @@ def prepare_ogr_source_geom(
     # This creates a new memory layer with Point geometries from centroids
     if context.param_use_centroids_source_layer:
         if context.convert_layer_to_centroids:
-            logger.info("  Applying centroid optimization")
+            logger.info(f"[OGR]   Applying centroid optimization")
             centroid_layer = context.convert_layer_to_centroids(layer)
             if centroid_layer and centroid_layer.isValid() and centroid_layer.featureCount() > 0:
                 layer = centroid_layer
-                logger.info(f"  ✓ Converted to centroids: {layer.featureCount()} points")
+                logger.info(f"[OGR]   ✓ Converted to centroids: {layer.featureCount()} points")
             else:
-                logger.warning("  ⚠️ Centroid conversion failed - using original geometries")
+                logger.warning(f"[OGR]   ⚠️ Centroid conversion failed - using original geometries")
         else:
             # v4.1.3: Warn if centroid requested but callback not provided
-            logger.warning("  ⚠️ Centroid optimization requested but convert_layer_to_centroids callback not provided!")
+            logger.warning(f"[OGR]   ⚠️ Centroid optimization requested but convert_layer_to_centroids callback not provided!")
             from qgis.core import QgsMessageLog, Qgis
             QgsMessageLog.logMessage(
                 "⚠️ Centroid optimization was requested but is not available for this layer type. "
@@ -859,7 +859,7 @@ def prepare_ogr_source_geom(
     # Step 5: Prevent garbage collection for memory layers
     # FIX v4.1.1: Register layer for cleanup after filtering completes
     if layer and layer.isValid() and layer.providerType() == 'memory':
-        logger.debug("  Adding memory layer to project (prevent GC)")
+        logger.debug(f"[OGR]   Adding memory layer to project (prevent GC)")
         QgsProject.instance().addMapLayer(layer, addToLegend=False)
         register_temp_layer(layer.id())  # Register for cleanup
     
@@ -942,20 +942,20 @@ def execute_ogr_spatial_selection(
     
     # Validate source geometry
     if not ogr_source_geom:
-        logger.error("ogr_source_geom is None - cannot execute spatial selection")
+        logger.error(f"[OGR] ogr_source_geom is None - cannot execute spatial selection")
         raise Exception("Source geometry layer is not available for spatial selection")
     
     if not isinstance(ogr_source_geom, QgsVectorLayer):
-        logger.error(f"ogr_source_geom is not a QgsVectorLayer: {type(ogr_source_geom)}")
+        logger.error(f"[OGR] ogr_source_geom is not a QgsVectorLayer: {type(ogr_source_geom)}")
         raise Exception(f"Source geometry must be a QgsVectorLayer, got {type(ogr_source_geom)}")
     
     if not ogr_source_geom.isValid():
-        logger.error(f"ogr_source_geom is not valid: {ogr_source_geom.name()}")
+        logger.error(f"[OGR] ogr_source_geom is not valid: {ogr_source_geom.name()}")
         raise Exception("Source geometry layer is not valid")
     
     feature_count = ogr_source_geom.featureCount()
     if feature_count is None or feature_count == 0:
-        logger.warning("ogr_source_geom has no features - spatial selection will return no results")
+        logger.warning(f"[OGR] ogr_source_geom has no features - spatial selection will return no results")
         return
     
     # Validate at least one geometry
@@ -967,7 +967,7 @@ def execute_ogr_spatial_selection(
             break
     
     if not has_valid_geom:
-        logger.error("ogr_source_geom has no valid geometries")
+        logger.error(f"[OGR] ogr_source_geom has no valid geometries")
         raise Exception("Source geometry layer has no valid geometries")
     
     logger.info(f"Using ogr_source_geom: {ogr_source_geom.name()}, "
@@ -980,33 +980,33 @@ def execute_ogr_spatial_selection(
     feedback = QgsProcessingFeedback()
     
     # Create GEOS-safe source layer
-    logger.info("🛡️ Creating GEOS-safe source layer...")
+    logger.info(f"[OGR] 🛡️ Creating GEOS-safe source layer...")
     if create_geos_safe_layer:
         safe_source_geom = create_geos_safe_layer(ogr_source_geom, "_safe_source")
     else:
         safe_source_geom = ogr_source_geom
     
     if safe_source_geom is None:
-        logger.warning("create_geos_safe_layer returned None, using original")
+        logger.warning(f"[OGR] create_geos_safe_layer returned None, using original")
         safe_source_geom = ogr_source_geom
     
     if not safe_source_geom.isValid() or safe_source_geom.featureCount() == 0:
-        logger.error("No valid source geometries available")
+        logger.error(f"[OGR] No valid source geometries available")
         raise Exception("Source geometry layer has no valid geometries")
     
-    logger.info(f"✓ Safe source layer: {safe_source_geom.featureCount()} features")
+    logger.info(f"[OGR] ✓ Safe source layer: {safe_source_geom.featureCount()} features")
     
     # Process target layer for smaller datasets
     safe_current_layer = current_layer
     use_safe_current = False
     target_count = current_layer.featureCount()
     if target_count and target_count <= 50000 and create_geos_safe_layer:
-        logger.debug("🛡️ Creating GEOS-safe target layer...")
+        logger.debug(f"[OGR] 🛡️ Creating GEOS-safe target layer...")
         temp_safe = create_geos_safe_layer(current_layer, "_safe_target")
         if temp_safe and temp_safe.isValid() and temp_safe.featureCount() > 0:
             safe_current_layer = temp_safe
             use_safe_current = True
-            logger.info(f"✓ Safe target layer: {safe_current_layer.featureCount()} features")
+            logger.info(f"[OGR] ✓ Safe target layer: {safe_current_layer.featureCount()} features")
     
     # FIX 2026-01-15: Extract numeric QGIS predicate codes from current_predicates
     # current_predicates peut contenir:
@@ -1020,15 +1020,15 @@ def execute_ogr_spatial_selection(
     
     # DIAGNOSTIC 2026-01-16: Trace predicates received in OGR executor
     logger.info("=" * 70)
-    logger.info("🔍 DIAGNOSTIC: execute_ogr_spatial_selection - PREDICATE ANALYSIS")
-    logger.info(f"   context.current_predicates = {context.current_predicates}")
-    logger.info(f"   predicates type = {type(context.current_predicates).__name__}")
+    logger.info(f"[OGR] 🔍 DIAGNOSTIC: execute_ogr_spatial_selection - PREDICATE ANALYSIS")
+    logger.info(f"[OGR]    context.current_predicates = {context.current_predicates}")
+    logger.info(f"[OGR]    predicates type = {type(context.current_predicates).__name__}")
     if context.current_predicates:
-        logger.info(f"   predicates keys = {list(context.current_predicates.keys())}")
+        logger.info(f"[OGR]    predicates keys = {list(context.current_predicates.keys())}")
         for k, v in context.current_predicates.items():
-            logger.info(f"      key={k!r} (type={type(k).__name__}), value={v!r}")
+            logger.info(f"[OGR]       key={k!r} (type={type(k).__name__}), value={v!r}")
     else:
-        logger.warning("   ⚠️ context.current_predicates is EMPTY!")
+        logger.warning(f"[OGR]    ⚠️ context.current_predicates is EMPTY!")
     logger.info("=" * 70)
     
     predicate_list = []
@@ -1036,15 +1036,15 @@ def execute_ogr_spatial_selection(
         if isinstance(key, int):
             # C'est déjà un code numérique QGIS
             predicate_list.append(key)
-            logger.debug(f"   Found numeric key: {key}")
+            logger.debug(f"[OGR]    Found numeric key: {key}")
         elif isinstance(key, str) and key.isdigit():
             # C'est un string numérique
             predicate_list.append(int(key))
-            logger.debug(f"   Found string-numeric key: {key} -> {int(key)}")
+            logger.debug(f"[OGR]    Found string-numeric key: {key} -> {int(key)}")
     
     # Si aucun code numérique trouvé, tenter de convertir les noms SQL en codes
     if not predicate_list:
-        logger.warning(f"No numeric QGIS predicate codes found in current_predicates: {context.current_predicates}")
+        logger.warning(f"[OGR] No numeric QGIS predicate codes found in current_predicates: {context.current_predicates}")
         # DIAGNOSTIC 2026-01-16: Try to recover from SQL names
         sql_name_to_code = {
             'ST_Intersects': 0, 'intersects': 0,
@@ -1060,23 +1060,23 @@ def execute_ogr_spatial_selection(
             if isinstance(key, str) and key in sql_name_to_code:
                 code = sql_name_to_code[key]
                 predicate_list.append(code)
-                logger.info(f"   ✓ Converted SQL name '{key}' to QGIS code {code}")
+                logger.info(f"[OGR]    ✓ Converted SQL name '{key}' to QGIS code {code}")
         
         if not predicate_list:
-            logger.warning("   ⚠️ Could not convert any predicates - Defaulting to 'intersects' (code 0)")
+            logger.warning(f"[OGR]    ⚠️ Could not convert any predicates - Defaulting to 'intersects' (code 0)")
             predicate_list = [0]
     
     # DIAGNOSTIC LOGS 2026-01-15: Trace OGR spatial selection execution
     logger.info("=" * 70)
-    logger.info(f"🚀 execute_ogr_spatial_selection STARTING")
-    logger.info(f"   Layer: {current_layer.name() if hasattr(current_layer, 'name') else 'unknown'}")
-    logger.info(f"   Source geom: {ogr_source_geom.name() if hasattr(ogr_source_geom, 'name') else 'unknown'}")
-    logger.info(f"   Source features: {ogr_source_geom.featureCount() if hasattr(ogr_source_geom, 'featureCount') else 'unknown'}")
-    logger.info(f"   Predicate list (numeric): {predicate_list}")
-    logger.info(f"   Predicate names: {list(context.current_predicates.keys())}")
-    logger.info(f"   Has combine operator: {context.has_combine_operator}")
-    logger.info(f"   Combine operator: {context.param_other_layers_combine_operator}")
-    logger.info(f"   Old subset: {param_old_subset[:100] if param_old_subset else 'None'}...")
+    logger.info(f"[OGR] 🚀 execute_ogr_spatial_selection STARTING")
+    logger.info(f"[OGR]    Layer: {current_layer.name() if hasattr(current_layer, 'name') else 'unknown'}")
+    logger.info(f"[OGR]    Source geom: {ogr_source_geom.name() if hasattr(ogr_source_geom, 'name') else 'unknown'}")
+    logger.info(f"[OGR]    Source features: {ogr_source_geom.featureCount() if hasattr(ogr_source_geom, 'featureCount') else 'unknown'}")
+    logger.info(f"[OGR]    Predicate list (numeric): {predicate_list}")
+    logger.info(f"[OGR]    Predicate names: {list(context.current_predicates.keys())}")
+    logger.info(f"[OGR]    Has combine operator: {context.has_combine_operator}")
+    logger.info(f"[OGR]    Combine operator: {context.param_other_layers_combine_operator}")
+    logger.info(f"[OGR]    Old subset: {param_old_subset[:100] if param_old_subset else 'None'}...")
     logger.info("=" * 70)
     
     def map_selection_to_original():
@@ -1085,7 +1085,7 @@ def execute_ogr_spatial_selection(
             selected_fids = list(safe_current_layer.selectedFeatureIds())
             if selected_fids:
                 current_layer.selectByIds(selected_fids)
-                logger.debug(f"Mapped {len(selected_fids)} features to original layer")
+                logger.debug(f"[OGR] Mapped {len(selected_fids)} features to original layer")
     
     work_layer = safe_current_layer if use_safe_current else current_layer
     verify_index = context.verify_and_create_spatial_index

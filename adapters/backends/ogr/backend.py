@@ -66,7 +66,7 @@ class OGRBackend(BackendPort):
             'errors': 0
         }
 
-        logger.info("OGR backend initialized")
+        logger.info(f"[OGR] OGR backend initialized")
 
     @property
     def metrics(self) -> Dict[str, Any]:
@@ -109,9 +109,9 @@ class OGRBackend(BackendPort):
         start_time = time.time()
         self._metrics['executions'] += 1
         
-        logger.info(f"🔧 OGRBackend.execute() STARTED")
-        logger.info(f"   layer: {layer_info.name} ({layer_info.layer_id})")
-        logger.info(f"   expression: {expression.raw[:100]}{'...' if len(expression.raw) > 100 else ''}")
+        logger.info(f"[OGR] 🔧 OGRBackend.execute() STARTED")
+        logger.info(f"[OGR]    layer: {layer_info.name} ({layer_info.layer_id})")
+        logger.info(f"[OGR]    expression: {expression.raw[:100]}{'...' if len(expression.raw) > 100 else ''}")
 
         try:
             # Import QGIS modules (may not be available in all contexts)
@@ -124,7 +124,7 @@ class OGRBackend(BackendPort):
             layer = QgsProject.instance().mapLayer(layer_info.layer_id)
 
             if not layer:
-                logger.error(f"   ❌ Layer not found: {layer_info.layer_id}")
+                logger.error(f"[OGR]    ❌ Layer not found: {layer_info.layer_id}")
                 return FilterResult.error(
                     layer_id=layer_info.layer_id,
                     expression_raw=expression.raw,
@@ -136,7 +136,7 @@ class OGRBackend(BackendPort):
             qgs_expression = QgsExpression(expression.raw)
 
             if qgs_expression.hasParserError():
-                logger.error(f"   ❌ Expression parse error: {qgs_expression.parserErrorString()}")
+                logger.error(f"[OGR]    ❌ Expression parse error: {qgs_expression.parserErrorString()}")
                 return FilterResult.error(
                     layer_id=layer_info.layer_id,
                     expression_raw=expression.raw,
@@ -150,7 +150,7 @@ class OGRBackend(BackendPort):
 
             # Prepare expression
             qgs_expression.prepare(context)
-            logger.debug(f"   Expression prepared successfully")
+            logger.debug(f"[OGR]    Expression prepared successfully")
 
             # Evaluate for each feature
             feature_ids: List[int] = []
@@ -181,11 +181,11 @@ class OGRBackend(BackendPort):
             execution_time = (time.time() - start_time) * 1000
             self._metrics['total_time_ms'] += execution_time
 
-            logger.info(f"   ✓ OGRBackend.execute() COMPLETED")
-            logger.info(f"   matched: {len(feature_ids)}/{features_processed} features")
-            logger.info(f"   time: {execution_time:.1f}ms")
+            logger.info(f"[OGR]    ✓ OGRBackend.execute() COMPLETED")
+            logger.info(f"[OGR]    matched: {len(feature_ids)}/{features_processed} features")
+            logger.info(f"[OGR]    time: {execution_time:.1f}ms")
             if eval_errors > 0:
-                logger.warning(f"   eval_errors: {eval_errors}")
+                logger.warning(f"[OGR]    eval_errors: {eval_errors}")
 
             return FilterResult.success(
                 feature_ids=feature_ids,
@@ -197,7 +197,7 @@ class OGRBackend(BackendPort):
 
         except ImportError:
             self._metrics['errors'] += 1
-            logger.error("   ❌ QGIS modules not available")
+            logger.error(f"[OGR]    ❌ QGIS modules not available")
             return FilterResult.error(
                 layer_id=layer_info.layer_id,
                 expression_raw=expression.raw,

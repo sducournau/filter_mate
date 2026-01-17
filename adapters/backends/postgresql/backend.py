@@ -93,7 +93,7 @@ class PostgreSQLBackend(BackendPort):
             'errors': 0
         }
 
-        logger.info(f"PostgreSQL backend initialized: session={self._session_id[:8]}")
+        logger.info(f"[PostgreSQL] PostgreSQL backend initialized: session={self._session_id[:8]}")
 
     @property
     def name(self) -> str:
@@ -159,34 +159,34 @@ class PostgreSQLBackend(BackendPort):
         self._metrics['executions'] += 1
 
         # DEBUG: Log execution details
-        logger.debug(f"[PostgreSQL v4.0] EXECUTE START:")
-        logger.debug(f"  Layer: {layer_info.layer_id}")
-        logger.debug(f"  Table: {layer_info.table_name} (schema: {layer_info.schema_name})")
-        logger.debug(f"  PK: {layer_info.pk_attr}")
-        logger.debug(f"  Geometry: {layer_info.geometry_column}")
-        logger.debug(f"  Features: {layer_info.feature_count}")
-        logger.debug(f"  Expression SQL: {expression.sql[:200]}...")
+        logger.debug(f"[PostgreSQL] [PostgreSQL v4.0] EXECUTE START:")
+        logger.debug(f"[PostgreSQL]   Layer: {layer_info.layer_id}")
+        logger.debug(f"[PostgreSQL]   Table: {layer_info.table_name} (schema: {layer_info.schema_name})")
+        logger.debug(f"[PostgreSQL]   PK: {layer_info.pk_attr}")
+        logger.debug(f"[PostgreSQL]   Geometry: {layer_info.geometry_column}")
+        logger.debug(f"[PostgreSQL]   Features: {layer_info.feature_count}")
+        logger.debug(f"[PostgreSQL]   Expression SQL: {expression.sql[:200]}...")
 
         try:
             # Get connection
             conn = self._get_connection()
             if conn is None:
-                logger.error(f"[PostgreSQL v4.0] No connection available for {layer_info.layer_id}")
+                logger.error(f"[PostgreSQL] [PostgreSQL v4.0] No connection available for {layer_info.layer_id}")
                 return FilterResult.error(
                     layer_id=layer_info.layer_id,
                     expression_raw=expression.raw,
                     error_message="No database connection available",
                     backend_name=self.name
                 )
-            logger.debug(f"[PostgreSQL v4.0] Connection obtained: {type(conn).__name__}")
+            logger.debug(f"[PostgreSQL] [PostgreSQL v4.0] Connection obtained: {type(conn).__name__}")
 
             # Analyze query
             analysis = self._optimizer.analyze(expression.sql)
-            logger.debug(f"[PostgreSQL v4.0] Query complexity: {analysis.estimated_complexity}")
+            logger.debug(f"[PostgreSQL] [PostgreSQL v4.0] Query complexity: {analysis.estimated_complexity}")
 
             # Determine execution strategy
             use_mv = self._should_use_mv(layer_info, analysis)
-            logger.debug(f"[PostgreSQL v4.0] Strategy: {'MV' if use_mv else 'DIRECT'}")
+            logger.debug(f"[PostgreSQL] [PostgreSQL v4.0] Strategy: {'MV' if use_mv else 'DIRECT'}")
             
             if use_mv:
                 feature_ids = self._execute_with_mv(expression, layer_info, conn)
@@ -195,7 +195,7 @@ class PostgreSQLBackend(BackendPort):
                 feature_ids = self._execute_direct(expression, layer_info, conn)
                 self._metrics['direct_executions'] += 1
             
-            logger.debug(f"[PostgreSQL v4.0] Execution successful: {len(feature_ids)} features matched")
+            logger.debug(f"[PostgreSQL] [PostgreSQL v4.0] Execution successful: {len(feature_ids)} features matched")
 
             execution_time = (time.time() - start_time) * 1000
             self._metrics['total_time_ms'] += execution_time
@@ -248,9 +248,9 @@ class PostgreSQLBackend(BackendPort):
             if conn:
                 mv_count = self._mv_manager.cleanup_session_mvs(connection=conn)
                 view_count, _ = self._cleanup_service.cleanup_session_views(conn)
-                logger.info(f"PostgreSQL cleanup: {mv_count + view_count} objects dropped")
+                logger.info(f"[PostgreSQL] PostgreSQL cleanup: {mv_count + view_count} objects dropped")
         except Exception as e:
-            logger.error(f"Cleanup failed: {e}")
+            logger.error(f"[PostgreSQL] Cleanup failed: {e}")
 
     def estimate_execution_time(
         self,
@@ -323,7 +323,7 @@ class PostgreSQLBackend(BackendPort):
             return cursor.fetchone() is not None
 
         except Exception as e:
-            logger.warning(f"Connection test failed: {e}")
+            logger.warning(f"[PostgreSQL] Connection test failed: {e}")
             return False
 
     # === Private Methods ===
@@ -345,7 +345,7 @@ class PostgreSQLBackend(BackendPort):
             else:
                 return self._pool
         except Exception as e:
-            logger.error(f"Failed to get connection: {e}")
+            logger.error(f"[PostgreSQL] Failed to get connection: {e}")
             return None
 
     def _ensure_schema(self) -> None:
@@ -355,7 +355,7 @@ class PostgreSQLBackend(BackendPort):
             if conn:
                 self._cleanup_service.ensure_schema_exists(conn)
         except Exception as e:
-            logger.warning(f"Failed to ensure schema: {e}")
+            logger.warning(f"[PostgreSQL] Failed to ensure schema: {e}")
 
     def _should_use_mv(self, layer_info: LayerInfo, analysis) -> bool:
         """Determine if MV should be used."""
@@ -413,17 +413,17 @@ class PostgreSQLBackend(BackendPort):
             WHERE {expression.sql}
         """
 
-        logger.debug(f"[PostgreSQL v4.0] DIRECT Query: {query[:500]}...")
+        logger.debug(f"[PostgreSQL] [PostgreSQL v4.0] DIRECT Query: {query[:500]}...")
 
         try:
             cursor = connection.cursor()
             cursor.execute(query)
             results = cursor.fetchall()
-            logger.debug(f"[PostgreSQL v4.0] DIRECT Results: {len(results)} rows")
+            logger.debug(f"[PostgreSQL] [PostgreSQL v4.0] DIRECT Results: {len(results)} rows")
             return [row[0] for row in results]
         except Exception as e:
-            logger.error(f"[PostgreSQL v4.0] Direct query FAILED: {e}")
-            logger.error(f"[PostgreSQL v4.0] Failed query: {query[:1000]}")
+            logger.error(f"[PostgreSQL] [PostgreSQL v4.0] Direct query FAILED: {e}")
+            logger.error(f"[PostgreSQL] [PostgreSQL v4.0] Failed query: {query[:1000]}")
             raise
 
     def _get_table_name(self, layer_info: LayerInfo) -> str:
@@ -432,20 +432,20 @@ class PostgreSQLBackend(BackendPort):
         # Format: "dbname=x user=y table=schema.table" or "table=\"schema\".\"table\""
         source = layer_info.source_path
 
-        logger.debug(f"[PostgreSQL v4.0] Extracting table from source: {source[:200]}...")
+        logger.debug(f"[PostgreSQL] [PostgreSQL v4.0] Extracting table from source: {source[:200]}...")
 
         # Try to extract table from source
         match = re.search(r'table=["\']?([^"\'"\s]+)["\']?', source)
         if match:
             table = match.group(1)
-            logger.debug(f"[PostgreSQL v4.0] Table extracted (method 1): {table}")
+            logger.debug(f"[PostgreSQL] [PostgreSQL v4.0] Table extracted (method 1): {table}")
             return table
 
         # Try schema.table format
         match = re.search(r'table="([^"]+)"\.?"([^"]+)"', source)
         if match:
             table = f'"{match.group(1)}"."{match.group(2)}"'
-            logger.debug(f"[PostgreSQL v4.0] Table extracted (method 2): {table}")
+            logger.debug(f"[PostgreSQL] [PostgreSQL v4.0] Table extracted (method 2): {table}")
             return table
 
         # Fallback to layer table_name
@@ -454,10 +454,10 @@ class PostgreSQLBackend(BackendPort):
                 table = f'"{layer_info.schema_name}"."{layer_info.table_name}"'
             else:
                 table = f'"{layer_info.table_name}"'
-            logger.debug(f"[PostgreSQL v4.0] Table from LayerInfo: {table}")
+            logger.debug(f"[PostgreSQL] [PostgreSQL v4.0] Table from LayerInfo: {table}")
             return table
 
-        logger.warning(f"[PostgreSQL v4.0] Could not extract table name - using 'unknown_table'")
+        logger.warning(f"[PostgreSQL] [PostgreSQL v4.0] Could not extract table name - using 'unknown_table'")
         return "unknown_table"
 
     def _get_geometry_column(self, layer_info: LayerInfo) -> str:

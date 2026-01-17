@@ -228,7 +228,7 @@ class QueryOptimizer:
             result = cursor.fetchone()
             return result[0] if result else None
         except Exception as e:
-            logger.warning(f"Failed to get execution plan: {e}")
+            logger.warning(f"[PostgreSQL] Failed to get execution plan: {e}")
             return None
 
     def estimate_row_count(

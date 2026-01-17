@@ -70,14 +70,14 @@ except ImportError:
         for ext in extensions:
             try:
                 conn.load_extension(ext)
-                logger.debug(f"Loaded Spatialite extension: {ext}")
+                logger.debug(f"[Spatialite] Extension Loaded - Name: {ext}")
                 loaded = True
                 break
             except Exception:
                 continue
 
         if not loaded:
-            logger.warning("mod_spatialite not loaded - spatial functions may be limited")
+            logger.warning("[Spatialite] Extension Not Loaded - mod_spatialite unavailable - Spatial functions may be limited")
 
         return conn
 
@@ -149,7 +149,7 @@ class SpatialiteBackend(BackendPort):
         }
 
         if db_path:
-            logger.info(f"Spatialite backend initialized: {Path(db_path).name}")
+            logger.info(f"[Spatialite] Backend Initialized - Database: {Path(db_path).name} - Cache enabled: {self._cache is not None}")
 
     @property
     def cache(self) -> SpatialiteCache:
@@ -300,7 +300,7 @@ class SpatialiteBackend(BackendPort):
         """Clean up resources."""
         # Clear cache
         cleared = self._cache.clear()
-        logger.debug(f"Spatialite cache cleared: {cleared} entries")
+        logger.debug(f"[Spatialite] Spatialite cache cleared: {cleared} entries")
 
     def estimate_execution_time(
         self,
@@ -359,11 +359,11 @@ class SpatialiteBackend(BackendPort):
                 self._index_manager.create_index(table_name, geometry_column)
 
             self._conn.commit()
-            logger.debug(f"Created temp table: {table_name}")
+            logger.debug(f"[Spatialite] Temp Table Created - Name: {table_name} - Spatial index: {geometry_column is not None}")
             return True
 
         except Exception as e:
-            logger.error(f"Failed to create temp table {table_name}: {e}")
+            logger.error(f"[Spatialite] Temp Table Creation Failed - Name: {table_name} - {type(e).__name__}: {str(e)}")
             return False
 
     def drop_temp_table(self, table_name: str) -> bool:
@@ -383,9 +383,10 @@ class SpatialiteBackend(BackendPort):
             cursor = self._conn.cursor()
             cursor.execute(f'DROP TABLE IF EXISTS "{table_name}"')
             self._conn.commit()
+            logger.debug(f"[Spatialite] Temp Table Dropped - Name: {table_name}")
             return True
         except Exception as e:
-            logger.error(f"Failed to drop temp table {table_name}: {e}")
+            logger.error(f"[Spatialite] Temp Table Drop Failed - Name: {table_name} - {type(e).__name__}: {str(e)}")
             return False
 
     def test_connection(self) -> bool:

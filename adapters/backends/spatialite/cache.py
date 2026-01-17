@@ -335,7 +335,7 @@ class SpatialiteCache:
                 del self._geometry_cache[key]
                 count += 1
 
-        logger.debug(f"Invalidated {count} cache entries for layer {layer_id}")
+        logger.debug(f"[Spatialite] Invalidated {count} cache entries for layer {layer_id}")
         return count
 
     # === Statistics ===
@@ -398,7 +398,7 @@ class SpatialiteCache:
                 count += 1
 
         if count > 0:
-            logger.debug(f"Cleaned up {count} expired cache entries")
+            logger.debug(f"[Spatialite] Cleaned up {count} expired cache entries")
         return count
 
     # === Private Methods ===

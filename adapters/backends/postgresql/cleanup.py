@@ -124,7 +124,7 @@ class PostgreSQLCleanupService:
             return True
         
         if hasattr(self._circuit_breaker, 'is_open') and self._circuit_breaker.is_open:
-            logger.debug("PostgreSQL cleanup skipped - circuit breaker is OPEN")
+            logger.debug(f"[PostgreSQL] PostgreSQL cleanup skipped - circuit breaker is OPEN")
             return False
         
         return True
@@ -198,10 +198,10 @@ class PostgreSQLCleanupService:
                     cleaned_views.append(view_name)
                     self._metrics['views_cleaned'] += 1
                     
-                    logger.debug(f"Dropped MV: {view_name}")
+                    logger.debug(f"[PostgreSQL] Dropped MV: {view_name}")
                     
                 except Exception as e:
-                    logger.warning(f"Error dropping view {view_name}: {e}")
+                    logger.warning(f"[PostgreSQL] Error dropping view {view_name}: {e}")
                     self._metrics['errors'] += 1
             
             connexion.commit()
@@ -218,7 +218,7 @@ class PostgreSQLCleanupService:
             return (len(cleaned_views), cleaned_views)
             
         except Exception as e:
-            logger.error(f"Error during session cleanup: {e}")
+            logger.error(f"[PostgreSQL] Error during session cleanup: {e}")
             self._record_failure()
             raise
     
@@ -282,21 +282,21 @@ class PostgreSQLCleanupService:
                     )
                     cleaned.append(view_name)
                     self._metrics['views_cleaned'] += 1
-                    logger.debug(f"Dropped orphaned MV: {view_name}")
+                    logger.debug(f"[PostgreSQL] Dropped orphaned MV: {view_name}")
                 except Exception as e:
-                    logger.warning(f"Error dropping orphaned view {view_name}: {e}")
+                    logger.warning(f"[PostgreSQL] Error dropping orphaned view {view_name}: {e}")
                     self._metrics['errors'] += 1
             
             connexion.commit()
             
             if cleaned:
-                logger.info(f"Cleaned up {len(cleaned)} orphaned materialized view(s)")
+                logger.info(f"[PostgreSQL] Cleaned up {len(cleaned)} orphaned materialized view(s)")
             
             self._record_success()
             return (len(cleaned), cleaned)
             
         except Exception as e:
-            logger.error(f"Error during orphaned view cleanup: {e}")
+            logger.error(f"[PostgreSQL] Error during orphaned view cleanup: {e}")
             self._record_failure()
             raise
     
@@ -332,7 +332,7 @@ class PostgreSQLCleanupService:
             """, (self._schema,))
             
             if cursor.fetchone()[0] == 0:
-                logger.debug(f"Schema '{self._schema}' does not exist")
+                logger.debug(f"[PostgreSQL] Schema '{self._schema}' does not exist")
                 return False
             
             # Check for existing views
@@ -366,12 +366,12 @@ class PostgreSQLCleanupService:
             cursor.execute(f'DROP SCHEMA IF EXISTS "{self._schema}" CASCADE;')
             connexion.commit()
             
-            logger.info(f"Dropped schema '{self._schema}'")
+            logger.info(f"[PostgreSQL] Dropped schema '{self._schema}'")
             self._record_success()
             return True
             
         except Exception as e:
-            logger.error(f"Error dropping schema: {e}")
+            logger.error(f"[PostgreSQL] Error dropping schema: {e}")
             self._record_failure()
             return False
     
@@ -393,12 +393,12 @@ class PostgreSQLCleanupService:
             cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{self._schema}";')
             connexion.commit()
             
-            logger.debug(f"Ensured schema '{self._schema}' exists")
+            logger.debug(f"[PostgreSQL] Ensured schema '{self._schema}' exists")
             self._record_success()
             return True
             
         except Exception as e:
-            logger.error(f"Error creating schema: {e}")
+            logger.error(f"[PostgreSQL] Error creating schema: {e}")
             self._record_failure()
             return False
     
@@ -428,7 +428,7 @@ class PostgreSQLCleanupService:
             return cursor.fetchone()[0]
             
         except Exception as e:
-            logger.debug(f"Error counting session views: {e}")
+            logger.debug(f"[PostgreSQL] Error counting session views: {e}")
             return 0
     
     def get_all_filtermate_views(self, connexion) -> List[dict]:
@@ -466,7 +466,7 @@ class PostgreSQLCleanupService:
             return views
             
         except Exception as e:
-            logger.debug(f"Error listing views: {e}")
+            logger.debug(f"[PostgreSQL] Error listing views: {e}")
             return []
 
 
@@ -495,7 +495,7 @@ def create_cleanup_service(
             from ....infrastructure.resilience import get_postgresql_breaker
             circuit_breaker = get_postgresql_breaker()
         except ImportError:
-            logger.debug("Circuit breaker not available")
+            logger.debug(f"[PostgreSQL] Circuit breaker not available")
     
     return PostgreSQLCleanupService(
         session_id=session_id,
