@@ -213,6 +213,9 @@ from .task_completion_handler import (
     cleanup_memory_layer
 )
 
+# EPIC-1 Phase E4-S9: Centralized history repository
+from ...adapters.repositories.history_repository import HistoryRepository
+
 # EPIC-1 E13: Use BackendServices facade for all adapter imports
 # This maintains hexagonal architecture by routing through core/ports
 
@@ -249,6 +252,19 @@ SL_EXECUTOR_AVAILABLE = sl_executor is not None
 # OGR filter executor - lazy loaded via facade
 ogr_executor = _backend_services.get_ogr_executor()
 OGR_EXECUTOR_AVAILABLE = ogr_executor is not None
+
+# OGR filter actions - EPIC-1 Phase E4-S8
+_ogr_actions = _backend_services.get_ogr_filter_actions()
+if _ogr_actions:
+    ogr_execute_reset = _ogr_actions.get('reset')
+    ogr_execute_unfilter = _ogr_actions.get('unfilter')
+    ogr_apply_subset = _ogr_actions.get('apply_subset')
+    ogr_cleanup_temp_layers = _ogr_actions.get('cleanup')
+else:
+    ogr_execute_reset = None
+    ogr_execute_unfilter = None
+    ogr_apply_subset = None
+    ogr_cleanup_temp_layers = None
 
 class FilterEngineTask(QgsTask):
     """Main QgsTask class which filter and unfilter data"""
@@ -4374,7 +4390,7 @@ class FilterEngineTask(QgsTask):
                 provider_type = 'postgresql'
             self._ps_manager = create_prepared_statements(conn, provider_type)
         
-        # Use prepared statement if available
+        # Use prepared statement if available (best performance)
         if self._ps_manager:
             try:
                 return self._ps_manager.insert_subset_history(
@@ -4386,21 +4402,21 @@ class FilterEngineTask(QgsTask):
                     subset_string=sql_subset_string
                 )
             except Exception as e:
-                logger.warning(f"Prepared statement failed, falling back to direct SQL: {e}")
+                logger.warning(f"Prepared statement failed, falling back to repository: {e}")
         
-        # Fallback to direct SQL if prepared statements unavailable
-        cur.execute(
-            """INSERT INTO fm_subset_history 
-               VALUES('{id}', datetime(), '{fk_project}', '{layer_id}', '{layer_source_id}', {seq_order}, '{subset_string}');""".format(
-                id=uuid.uuid4(),
-                fk_project=self.project_uuid,
+        # EPIC-1 E4-S9: Use centralized HistoryRepository instead of direct SQL
+        history_repo = HistoryRepository(conn, cur)
+        try:
+            source_layer_id = self.source_layer.id() if self.source_layer else ''
+            return history_repo.insert(
+                project_uuid=self.project_uuid,
                 layer_id=layer.id(),
-                layer_source_id=self.source_layer.id(),
+                subset_string=sql_subset_string,
                 seq_order=seq_order,
-                subset_string=sql_subset_string.replace("'", "''")
+                source_layer_id=source_layer_id
             )
-        )
-        conn.commit()
+        finally:
+            history_repo.close()
 
 
     def _filter_action_postgresql(self, layer, sql_subset_string, primary_key_name, geom_key_name, name, custom, cur, conn, seq_order):
@@ -4544,25 +4560,20 @@ class FilterEngineTask(QgsTask):
         """
         logger.info("Reset - Spatialite backend - dropping temp table")
         
-        # Delete history using prepared statement
-        if self._ps_manager:
-            try:
-                self._ps_manager.delete_subset_history(self.project_uuid, layer.id())
-            except Exception as e:
-                logger.warning(f"Prepared statement failed, falling back to direct SQL: {e}")
-                # Fallback
-                cur.execute(
-                    f"""DELETE FROM fm_subset_history 
-                        WHERE fk_project = '{self.project_uuid}' AND layer_id = '{layer.id()}';"""
-                )
-                conn.commit()
-        else:
-            # Direct SQL if no prepared statements
-            cur.execute(
-                f"""DELETE FROM fm_subset_history 
-                    WHERE fk_project = '{self.project_uuid}' AND layer_id = '{layer.id()}';"""
-            )
-            conn.commit()
+        # EPIC-1 E4-S9: Use centralized HistoryRepository instead of duplicated SQL
+        history_repo = HistoryRepository(conn, cur)
+        try:
+            if self._ps_manager:
+                try:
+                    self._ps_manager.delete_subset_history(self.project_uuid, layer.id())
+                except Exception as e:
+                    logger.warning(f"Prepared statement failed, falling back to repository: {e}")
+                    history_repo.delete_for_layer(self.project_uuid, layer.id())
+            else:
+                # Use repository instead of direct SQL
+                history_repo.delete_for_layer(self.project_uuid, layer.id())
+        finally:
+            history_repo.close()
         
         # Drop temp table from filterMate_db using session-prefixed name
         import sqlite3
@@ -4581,6 +4592,49 @@ class FilterEngineTask(QgsTask):
         self._queue_subset_string(layer, '')
         return True
 
+    def _reset_action_ogr(self, layer, name, cur, conn):
+        """
+        Execute reset action using OGR backend.
+        
+        EPIC-1 Phase E4-S8: OGR-specific reset with temp layer cleanup.
+        
+        Args:
+            layer: QgsVectorLayer to reset
+            name: Layer identifier
+            cur: Database cursor (for history)
+            conn: Database connection (for history)
+            
+        Returns:
+            bool: True if successful
+        """
+        logger.info("Reset - OGR backend")
+        
+        # EPIC-1 E4-S9: Use centralized HistoryRepository instead of duplicated SQL
+        history_repo = HistoryRepository(conn, cur)
+        try:
+            if self._ps_manager:
+                try:
+                    self._ps_manager.delete_subset_history(self.project_uuid, layer.id())
+                except Exception as e:
+                    logger.warning(f"Prepared statement failed, falling back to repository: {e}")
+                    history_repo.delete_for_layer(self.project_uuid, layer.id())
+            else:
+                # Use repository instead of direct SQL
+                history_repo.delete_for_layer(self.project_uuid, layer.id())
+        finally:
+            history_repo.close()
+        
+        # Use OGR-specific reset function if available
+        if ogr_execute_reset:
+            return ogr_execute_reset(
+                layer=layer,
+                queue_subset_func=self._queue_subset_string,
+                cleanup_temp_layers=True
+            )
+        
+        # Fallback: simple subset clear
+        self._queue_subset_string(layer, '')
+        return True
 
     def _unfilter_action(self, layer, primary_key_name, geom_key_name, name, custom, cur, conn, last_subset_id, use_postgresql, use_spatialite):
         """
@@ -4626,34 +4680,87 @@ class FilterEngineTask(QgsTask):
             logger.error(error_msg)
             raise ImportError(error_msg)
         
-        # Spatialite path
+        # Determine if this is OGR or Spatialite
+        provider_type = detect_layer_provider_type(layer)
+        if provider_type == PROVIDER_OGR and ogr_execute_unfilter:
+            return self._unfilter_action_ogr(
+                layer, cur, conn, last_subset_id
+            )
+        
+        # Spatialite path (also used as fallback for OGR without ogr_execute_unfilter)
         return self._unfilter_action_spatialite(
             layer, primary_key_name, geom_key_name, name, custom,
             cur, conn, last_subset_id
         )
+
+    def _unfilter_action_ogr(self, layer, cur, conn, last_subset_id):
+        """
+        Unfilter implementation for OGR backend.
+        
+        EPIC-1 Phase E4-S8: OGR-specific unfilter.
+        
+        Args:
+            layer: QgsVectorLayer to unfilter
+            cur: Database cursor (for history)
+            conn: Database connection (for history)
+            last_subset_id: Last subset ID to remove
+            
+        Returns:
+            bool: True if successful
+        """
+        # EPIC-1 E4-S9: Use centralized HistoryRepository instead of duplicated SQL
+        history_repo = HistoryRepository(conn, cur)
+        try:
+            # Delete last subset from history
+            if last_subset_id:
+                history_repo.delete_entry(self.project_uuid, layer.id(), last_subset_id)
+            
+            # Get previous subset using repository
+            last_entry = history_repo.get_last_entry(self.project_uuid, layer.id())
+        finally:
+            history_repo.close()
+        
+        previous_subset = None
+        
+        if last_entry:
+            previous_subset = last_entry.subset_string
+            
+            # Validate previous subset
+            if not previous_subset or not previous_subset.strip():
+                logger.warning(
+                    f"Unfilter OGR: Previous subset from history is empty for {layer.name()}. "
+                    f"Clearing layer filter."
+                )
+                previous_subset = None
+        
+        # Use OGR-specific unfilter function
+        if ogr_execute_unfilter:
+            return ogr_execute_unfilter(
+                layer=layer,
+                previous_subset=previous_subset,
+                queue_subset_func=self._queue_subset_string
+            )
+        
+        # Fallback: direct subset application
+        self._queue_subset_string(layer, previous_subset or '')
+        return True
     
     def _unfilter_action_spatialite(self, layer, primary_key_name, geom_key_name, name, custom, cur, conn, last_subset_id):
         """Unfilter implementation for Spatialite backend."""
-        # Delete last subset from history
-        if last_subset_id:
-            cur.execute(
-                f"""DELETE FROM fm_subset_history 
-                    WHERE fk_project = '{self.project_uuid}' 
-                      AND layer_id = '{layer.id()}' 
-                      AND id = '{last_subset_id}';"""
-            )
-            conn.commit()
+        # EPIC-1 E4-S9: Use centralized HistoryRepository instead of duplicated SQL
+        history_repo = HistoryRepository(conn, cur)
+        try:
+            # Delete last subset from history
+            if last_subset_id:
+                history_repo.delete_entry(self.project_uuid, layer.id(), last_subset_id)
+            
+            # Get previous subset using repository
+            last_entry = history_repo.get_last_entry(self.project_uuid, layer.id())
+        finally:
+            history_repo.close()
         
-        # Get previous subset
-        cur.execute(
-            f"""SELECT * FROM fm_subset_history 
-                WHERE fk_project = '{self.project_uuid}' AND layer_id = '{layer.id()}' 
-                ORDER BY seq_order DESC LIMIT 1;"""
-        )
-        
-        results = cur.fetchall()
-        if len(results) == 1:
-            sql_subset_string = results[0][-1]
+        if last_entry:
+            sql_subset_string = last_entry.subset_string
             
             # CRITICAL FIX: Validate sql_subset_string from history before using
             if not sql_subset_string or not sql_subset_string.strip():
@@ -4746,10 +4853,13 @@ class FilterEngineTask(QgsTask):
                 )
             
             elif self.task_action == 'reset':
-                if use_spatialite:
-                    return self._reset_action_spatialite(layer, name, cur, conn)
-                elif use_postgresql:
+                # EPIC-1 Phase E4-S8: Distinguish OGR from Spatialite
+                if use_postgresql:
                     return self._reset_action_postgresql(layer, name, cur, conn)
+                elif provider_type == PROVIDER_OGR:
+                    return self._reset_action_ogr(layer, name, cur, conn)
+                elif use_spatialite:
+                    return self._reset_action_spatialite(layer, name, cur, conn)
             
             elif self.task_action == 'unfilter':
                 return self._unfilter_action(

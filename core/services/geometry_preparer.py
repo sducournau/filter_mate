@@ -451,30 +451,21 @@ def prepare_geometries_by_provider(
             logger.info(f"PostgreSQL EXISTS mode: source IS PostgreSQL with {source_feature_count} features")
             logger.info("  → Will use EXISTS subquery with table reference (no WKT simplification)")
     
-    # Check if any OGR layer needs Spatialite geometry
-    # FIX 2026-01-15: Use new backend architecture instead of legacy SpatialiteGeometricFilter
+    # Check if any OGR layer needs Spatialite geometry (WKT)
+    # FIX 2026-01-17: ALL OGR layers need WKT for spatial filtering, not just GeoPackages
+    # The OGR backend uses WKT in expressions like Intersects(GeomFromText('...'), geometry)
     ogr_needs_spatialite_geom = False
     if 'ogr' in provider_list and layers_dict and 'ogr' in layers_dict:
-        try:
-            from ..ports import get_backend_services
-            SpatialiteBackend = get_backend_services().get_spatialite_backend()
-            if not SpatialiteBackend:
-                # Backend not available, skip Spatialite geometry preparation
-                pass  # Fixed: was 'continue' outside loop
-            # Check if any OGR layer could benefit from Spatialite backend
-            # by checking if it's a GeoPackage or SQLite file
-            for layer, layer_props in layers_dict['ogr']:
+        # FIX 2026-01-17: Set True for ANY OGR layer, as they all need WKT for spatial predicates
+        ogr_needs_spatialite_geom = True
+        if logger:
+            ogr_layer_count = len(layers_dict['ogr'])
+            logger.info(f"  FIX 2026-01-17: {ogr_layer_count} OGR layer(s) detected - will prepare WKT geometry")
+            for layer, layer_props in layers_dict['ogr'][:3]:  # Show first 3
                 layer_source = layer.source() if hasattr(layer, 'source') else ''
-                # GeoPackage and SQLite files can use Spatialite backend
-                if any(ext in layer_source.lower() for ext in ['.gpkg', '.sqlite', '.db']):
-                    ogr_needs_spatialite_geom = True
-                    if logger:
-                        logger.info(f"  OGR layer '{layer.name()}' is GeoPackage/SQLite - will prepare WKT geometry")
-                    break
-        except ImportError as e:
-            if logger:
-                logger.warning(f"Spatialite backend not available: {e}")
-            # Continue without Spatialite optimization
+                is_gpkg = any(ext in layer_source.lower() for ext in ['.gpkg', '.sqlite', '.db'])
+                gpkg_tag = " (GeoPackage/SQLite)" if is_gpkg else " (Shapefile/other)"
+                logger.info(f"    - {layer.name()}{gpkg_tag}")
     
     # Prepare PostgreSQL source geometry
     has_postgresql_fallback_layers = False

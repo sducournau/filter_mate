@@ -1230,20 +1230,28 @@ class FilterMateApp:
         
         v4.1.0: Restored from before_migration with full guards and protections.
         """
-        # FIX 2026-01-15: CRITICAL - Extensive logging for debugging
-        logger.info(f"🚀 manage_task RECEIVED: task_name={task_name}, data={data is not None}")
+        # FIX 2026-01-17: CRITICAL - Use print() for visibility (logger.info not visible in console)
+        print(f"🚀 manage_task RECEIVED: task_name={task_name}, data={data is not None}")
+        print(f"   STEP 1: Checking task_name validity...")
         
         assert task_name in list(self.tasks_descriptions.keys()), f"Unknown task: {task_name}"
+        print(f"   ✓ STEP 1 PASSED: task_name '{task_name}' is valid")
         
         # v4.1.0: STABILITY FIX - Check and reset stale flags before processing
+        print(f"   STEP 2: Checking and resetting stale flags...")
         self._check_and_reset_stale_flags()
+        print(f"   ✓ STEP 2 PASSED: stale flags checked")
         
         # v4.1.0: CRITICAL - Skip layersAdded signals during project initialization
+        print(f"   STEP 3: Checking if add_layers during init...")
         if task_name == 'add_layers' and self._initializing_project:
             logger.debug("Skipping add_layers - project initialization in progress")
+            print(f"   ❌ STEP 3 BLOCKED: add_layers during init - RETURNING")
             return
+        print(f"   ✓ STEP 3 PASSED: not add_layers during init")
         
         # v4.1.0: STABILITY FIX - Queue concurrent add_layers tasks
+        print(f"   STEP 4: Checking add_layers queueing...")
         if task_name == 'add_layers':
             max_queue_size = STABILITY_CONSTANTS.get('MAX_ADD_LAYERS_QUEUE', 5)
             if self._pending_add_layers_tasks > 0:
@@ -1255,11 +1263,17 @@ class FilterMateApp:
                 return
             self._pending_add_layers_tasks += 1
             logger.debug(f"Starting add_layers (pending: {self._pending_add_layers_tasks})")
+        print(f"   ✓ STEP 4 PASSED: add_layers queue handled")
         
         # v4.1.0: Guard - Ensure dockwidget is initialized for most tasks
+        print(f"   STEP 5: Checking dockwidget initialization...")
+        print(f"      task_name={task_name}, dockwidget={self.dockwidget is not None}")
+        if self.dockwidget:
+            print(f"      widgets_initialized={hasattr(self.dockwidget, 'widgets_initialized') and self.dockwidget.widgets_initialized}")
         if task_name not in ('remove_all_layers', 'project_read', 'new_project', 'add_layers'):
             if self.dockwidget is None or not hasattr(self.dockwidget, 'widgets_initialized') or not self.dockwidget.widgets_initialized:
                 logger.warning(f"Task '{task_name}' called before dockwidget initialization, deferring by 500ms...")
+                print(f"   ❌ STEP 5 BLOCKED: dockwidget not initialized - DEFERRING")
                 weak_self = weakref.ref(self)
                 captured_task_name, captured_data = task_name, data
                 def safe_deferred_task():
@@ -1268,18 +1282,26 @@ class FilterMateApp:
                         strong_self.manage_task(captured_task_name, captured_data)
                 QTimer.singleShot(500, safe_deferred_task)
                 return
+        print(f"   ✓ STEP 5 PASSED: dockwidget initialized")
         
         # v4.1.0: CRITICAL - For filtering tasks, ensure widgets are ready with retry logic
+        print(f"   STEP 6: Checking if filtering task needs widget readiness check...")
         if task_name in ('filter', 'unfilter', 'reset'):
+            print(f"      YES - This is a filtering task, checking readiness...")
             if not hasattr(self, '_filter_retry_count'):
                 self._filter_retry_count = {}
             
             retry_key = f"{task_name}_{id(data)}"
             retry_count = self._filter_retry_count.get(retry_key, 0)
             
-            if not self._is_dockwidget_ready_for_filtering():
+            print(f"      Calling _is_dockwidget_ready_for_filtering()...")
+            is_ready = self._is_dockwidget_ready_for_filtering()
+            print(f"      Result: is_ready={is_ready}, retry_count={retry_count}")
+            
+            if not is_ready:
                 if retry_count >= 10:  # Max 10 retries = 5 seconds
                     logger.error(f"❌ GIVING UP: Task '{task_name}' not ready after {retry_count} retries")
+                    print(f"   ❌ STEP 6 BLOCKED: Max retries reached - GIVING UP")
                     iface.messageBar().pushCritical(
                         "FilterMate ERROR",
                         f"Impossible d'exécuter {task_name}: initialisation des widgets échouée."
@@ -1300,6 +1322,7 @@ class FilterMateApp:
                 
                 self._filter_retry_count[retry_key] = retry_count + 1
                 logger.warning(f"Task '{task_name}' deferring 500ms (attempt {retry_count + 1}/10)")
+                print(f"   ❌ STEP 6 BLOCKED: Not ready - DEFERRING (attempt {retry_count + 1}/10)")
                 weak_self = weakref.ref(self)
                 captured_tn, captured_d = task_name, data
                 def safe_filter_retry():
@@ -1311,24 +1334,35 @@ class FilterMateApp:
             else:
                 # Success! Reset counter
                 self._filter_retry_count[retry_key] = 0
+                print(f"      ✓ Widgets ready! Proceeding...")
+        print(f"   ✓ STEP 6 PASSED: filtering readiness check complete")
         
         # Sync PROJECT_LAYERS from dockwidget
+        print(f"   STEP 7: Syncing PROJECT_LAYERS from dockwidget...")
         if self.dockwidget is not None:
             self.PROJECT_LAYERS = self.dockwidget.PROJECT_LAYERS
             self.CONFIG_DATA = self.dockwidget.CONFIG_DATA
+        print(f"   ✓ STEP 7 PASSED: PROJECT_LAYERS synced")
         
         # Dispatch via TaskOrchestrator or fallback
+        print(f"   STEP 8: Dispatching task...")
+        print(f"      _task_orchestrator={self._task_orchestrator is not None}")
         if self._task_orchestrator:
             try:
                 logger.info(f"   Using TaskOrchestrator to dispatch {task_name}")
+                print(f"      → Calling TaskOrchestrator.dispatch_task('{task_name}', data={data is not None})")
                 self._task_orchestrator.dispatch_task(task_name, data)
+                print(f"   ✓ STEP 8 COMPLETE: TaskOrchestrator dispatched successfully")
                 return
             except Exception as e:
                 logger.error(f"TaskOrchestrator failed: {e}, using fallback")
+                print(f"   ⚠️ STEP 8 FALLBACK: TaskOrchestrator failed - {e}")
         
         # Fallback: legacy dispatch
         logger.info(f"   Using legacy dispatch for {task_name}")
+        print(f"      → Calling _legacy_dispatch_task('{task_name}', data={data is not None})")
         self._legacy_dispatch_task(task_name, data)
+        print(f"   ✓ STEP 8 COMPLETE: Legacy dispatch finished")
 
 
     def _safe_cancel_all_tasks(self):

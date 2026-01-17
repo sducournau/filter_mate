@@ -53,16 +53,28 @@ class LayerHistory:
         full_metadata = metadata or {}
         full_metadata['feature_count'] = feature_count
         
-        # Create history entry
+        # Get previous filter state for this layer (for undo functionality)
+        # Look at the last history entry that affected this layer
+        previous_expression = ""
+        previous_entries = self._parent.get_history_for_layer(self.layer_id)
+        if previous_entries:
+            # The expression in the last entry is what we're replacing
+            last_entry = previous_entries[-1]
+            previous_expression = last_entry.expression
+        
+        # Create history entry with correct previous_filters for undo
         entry = HistoryEntry.create(
             expression=expression,
             layer_ids=[self.layer_id],
-            previous_filters=[],  # Will be filled by caller if needed
+            previous_filters=[(self.layer_id, previous_expression)],
             description=description or f"Filter on layer {self.layer_id}",
             metadata=full_metadata
         )
         
-        # Add to simulated per-layer states
+        # CRITICAL: Push to parent service for actual undo/redo functionality
+        self._parent.push(entry)
+        
+        # Add to simulated per-layer states (for backward compatibility)
         self._states.append({
             'expression': expression,
             'feature_count': feature_count,
@@ -71,7 +83,8 @@ class LayerHistory:
             'metadata': full_metadata
         })
         
-        logger.debug(f"LayerHistory: Pushed state for layer {self.layer_id}")
+        prev_display = previous_expression[:30] + '...' if len(previous_expression) > 30 else previous_expression
+        logger.debug(f"LayerHistory: Pushed state for layer {self.layer_id} (previous: '{prev_display}')")
 
 
 @dataclass(frozen=True)
@@ -452,19 +465,37 @@ class HistoryService:
         
         Args:
             source_layer_id: ID of the source layer
-            source_expression: Filter expression for source layer
+            source_expression: Filter expression for source layer (CURRENT/NEW expression)
             source_feature_count: Feature count for source layer
-            remote_layers: Dict of {layer_id: (expression, feature_count)}
+            remote_layers: Dict of {layer_id: (expression, feature_count)} (CURRENT expressions)
             description: Optional description
             metadata: Optional metadata
         """
         # Build list of all affected layer IDs
         all_layer_ids = [source_layer_id] + list(remote_layers.keys())
         
-        # Build previous_filters list with current state of all layers
-        previous_filters = [(source_layer_id, source_expression)]
+        # Build previous_filters list with PREVIOUS state of all layers (for undo)
+        # IMPORTANT: LayerHistory.push_state() has already pushed entries for each layer,
+        # so we need to look at the SECOND-TO-LAST entry (index -2) to get the true previous state.
+        # If there's only one entry (the one just pushed), use empty string (no previous filter).
+        previous_filters = []
+        
+        # Get previous expression for source layer
+        source_previous_entries = self.get_history_for_layer(source_layer_id)
+        if len(source_previous_entries) >= 2:
+            source_previous_expr = source_previous_entries[-2].expression
+        else:
+            source_previous_expr = ""  # No previous filter (first filter applied)
+        previous_filters.append((source_layer_id, source_previous_expr))
+        
+        # Get previous expressions for remote layers
         for layer_id, (expression, _) in remote_layers.items():
-            previous_filters.append((layer_id, expression))
+            layer_previous_entries = self.get_history_for_layer(layer_id)
+            if len(layer_previous_entries) >= 2:
+                layer_previous_expr = layer_previous_entries[-2].expression
+            else:
+                layer_previous_expr = ""  # No previous filter (first filter applied)
+            previous_filters.append((layer_id, layer_previous_expr))
         
         # Build metadata with feature counts
         full_metadata = metadata or {}

@@ -1,23 +1,24 @@
-# Repository Structure - FilterMate v2.9.6
+# Repository Structure - FilterMate v4.0.3
 
-**Last Updated:** January 6, 2026
+**Last Updated:** January 17, 2026
 
 ## Overview
 
-FilterMate follows a clean, organized repository structure with clear separation between:
-- **Runtime code**: Plugin files needed for QGIS execution
-- **Development tools**: Scripts for building, translating, and debugging
-- **Documentation**: User and developer documentation
-- **Tests**: Unit tests and integration tests
+FilterMate v4.0 uses a **complete hexagonal architecture** with clear separation:
+- **Core**: Business logic (tasks, services, domain, ports)
+- **Adapters**: External integrations (backends, QGIS, repositories)
+- **Infrastructure**: Cross-cutting concerns (cache, database, utils)
+- **UI**: User interface (controllers, widgets, styles)
+- **Tests**: Comprehensive test suite (157 files, ~47K lines)
 
 ## Root Directory Files
 
 ### Core Plugin Files (Runtime)
 ```
 filter_mate.py              # Plugin entry point (QGIS integration)
-filter_mate_app.py          # Main application orchestrator
-filter_mate_dockwidget.py   # UI dockwidget management
-filter_mate_dockwidget_base.py  # Base UI class (auto-generated from .ui)
+filter_mate_app.py          # Main application orchestrator (2,271 lines)
+filter_mate_dockwidget.py   # UI dockwidget management (5,987 lines)
+filter_mate_dockwidget_base.py  # Base UI class (auto-generated)
 filter_mate_dockwidget_base.ui  # Qt Designer UI file
 resources.py                # Qt resources (auto-generated)
 resources.qrc               # Qt resource definitions
@@ -26,263 +27,372 @@ __init__.py                 # Package initialization
 
 ### Build & Configuration
 ```
-metadata.txt                # QGIS plugin metadata
-compile_ui.bat              # Windows: Compile .ui to .py
-setup_tests.bat             # Windows: Test environment setup
-setup_tests.sh              # Linux: Test environment setup
+metadata.txt                # QGIS plugin metadata (v4.0.3)
+compile_ui.bat/sh           # Compile .ui to .py
+setup_tests.bat/sh          # Test environment setup
 requirements-test.txt       # Test dependencies
+pytest.ini                  # Pytest configuration
 ```
 
-**Note (December 16, 2025):** Build and development scripts have been moved to `tools/` directory:
-- `create_release_zip.py` → `tools/build/`
-- `fix_pyuic5_imports.py`, `remove_ui_suffixes.py` → `tools/ui/`
-- `test_import.py`, `test_plugin_load.py`, `reload_plugin.py` → `tools/diagnostic/`
-
-### Documentation (Root)
+### Documentation
 ```
 README.md                   # User-facing introduction
-CHANGELOG.md                # Complete version history
+CHANGELOG.md                # Complete version history (5,987 lines)
 LICENSE                     # License file
 ```
 
-### Git & Editor Configuration
+### Development Tools (Root)
 ```
-.gitignore                  # Git ignore patterns
-.gitattributes              # Git attributes
-.editorconfig               # Editor settings
-```
-
-## Directory Structure
-
-### config/
-Plugin configuration files:
-```
-config/
-├── config.json             # Active configuration (user-editable)
-├── config.default.json     # Default configuration (reference)
-├── config.py               # Configuration loader
-└── config.v2.example.json  # Example for v2 format
+check_imports.py            # Import validation
+fix_imports.py              # Import fixes
+DIAGNOSTIC_FILTER.py        # Filter diagnostics
+ENABLE_DEBUG_LOGGING.py     # Debug logging
+ENABLE_LOGGING.py           # Logging setup
+clean_python_cache.sh       # Cache cleanup
 ```
 
-### modules/
-Core application modules:
+## Hexagonal Architecture Directories
+
+### core/
+Core business logic:
 ```
-modules/
-├── appTasks.py             # Re-exports (backwards compat)
-├── appUtils.py             # Database & utility functions
-├── config_helpers.py       # Configuration utilities
-├── constants.py            # Application constants
-├── customExceptions.py     # Custom exceptions
-├── feedback_utils.py       # User feedback utilities
-├── filter_history.py       # Filter history & undo/redo
-├── logging_config.py       # Logging setup
-├── prepared_statements.py  # SQL prepared statements
-├── psycopg2_availability.py  # Centralized psycopg2 imports (v2.8.7)
-├── signal_utils.py         # Qt signal utilities
-├── state_manager.py        # Application state
-├── crs_utils.py            # CRS utilities (v2.5.7)
-├── type_utils.py           # Type conversion utilities
-├── ui_config.py            # Dynamic UI dimensions
-├── ui_elements.py          # UI element creation
-├── ui_elements_helpers.py  # UI helpers
-├── ui_styles.py            # Theme management
-├── ui_widget_utils.py      # Widget utilities
-├── widgets.py              # Custom widgets
+core/
+├── domain/                 # Domain models
+│   ├── exceptions.py
+│   ├── favorites_manager.py
+│   ├── filter_expression.py
+│   ├── filter_result.py
+│   ├── layer_info.py
+│   └── optimization_config.py
+├── export/                 # Export functionality
+│   ├── batch_exporter.py
+│   ├── export_validator.py
+│   ├── layer_exporter.py
+│   └── style_exporter.py
+├── filter/                 # Filter domain logic
+│   ├── expression_builder.py
+│   ├── expression_combiner.py
+│   ├── expression_sanitizer.py
+│   ├── filter_orchestrator.py
+│   ├── pk_formatter.py
+│   ├── result_processor.py
+│   └── source_filter_builder.py
+├── geometry/               # Geometry utilities
+│   ├── buffer_processor.py
+│   ├── crs_utils.py
+│   ├── geometry_converter.py
+│   ├── geometry_repair.py
+│   ├── geometry_safety.py
+│   └── spatial_index.py
+├── optimization/           # Query optimization
+│   ├── combined_query_optimizer.py (1,599 lines)
+│   ├── config_provider.py
+│   ├── logging_utils.py
+│   ├── performance_advisor.py
+│   └── query_analyzer.py
+├── ports/                  # Port interfaces (hexagonal)
+│   ├── backend_port.py
+│   ├── backend_services.py
+│   ├── cache_port.py
+│   ├── filter_executor_port.py
+│   ├── filter_optimizer.py
+│   ├── layer_lifecycle_port.py
+│   ├── qgis_port.py
+│   ├── repository_port.py
+│   └── task_management_port.py
+├── services/               # Hexagonal services (26 services, 14,520 lines)
+│   ├── app_initializer.py (696)
+│   ├── auto_optimizer.py (678)
+│   ├── backend_expression_builder.py (593)
+│   ├── backend_service.py (735)
+│   ├── buffer_service.py (470)
+│   ├── canvas_refresh_service.py (382)
+│   ├── datasource_manager.py (508)
+│   ├── export_service.py (422)
+│   ├── expression_service.py (741)
+│   ├── favorites_service.py (853)
+│   ├── filter_application_service.py (201)
+│   ├── filter_parameter_builder.py (419)
+│   ├── filter_service.py (785)
+│   ├── geometry_preparer.py (703)
+│   ├── history_service.py (625)
+│   ├── layer_filter_builder.py (348)
+│   ├── layer_lifecycle_service.py (860)
+│   ├── layer_organizer.py (454)
+│   ├── layer_service.py (728)
+│   ├── optimization_manager.py (545)
+│   ├── postgres_session_manager.py (698)
+│   ├── source_layer_filter_executor.py (410)
+│   ├── source_subset_buffer_builder.py (440)
+│   ├── task_management_service.py (216)
+│   ├── task_orchestrator.py (545)
+│   └── task_run_orchestrator.py (465)
+├── strategies/             # Filter strategies
+│   ├── multi_step_filter.py (1,050)
+│   └── progressive_filter.py (880)
+└── tasks/                  # Async task modules
+    ├── filter_task.py (5,217 lines - main!)
+    ├── layer_management_task.py (1,869)
+    ├── expression_evaluation_task.py
+    ├── task_completion_handler.py
+    ├── builders/           # Subset string builders
+    ├── cache/              # Expression/geometry cache
+    ├── collectors/         # Feature collectors
+    ├── connectors/         # Backend connectors
+    ├── dispatchers/        # Action dispatchers
+    └── executors/          # Filter executors
+```
+
+### adapters/
+External integrations:
+```
+adapters/
 ├── backends/               # Multi-backend architecture
-│   ├── __init__.py
-│   ├── base_backend.py     # Abstract base class
-│   ├── factory.py          # Backend factory
-│   ├── postgresql_backend.py
-│   ├── spatialite_backend.py
-│   └── ogr_backend.py
-├── tasks/                  # Async task modules
-│   ├── __init__.py
-│   ├── README.md
-│   ├── task_utils.py           # Common utilities
-│   ├── geometry_cache.py       # Geometry caching
-│   ├── layer_management_task.py
-│   ├── filter_task.py
-│   ├── expression_evaluation_task.py  # Expression evaluation
-│   ├── multi_step_filter.py    # Multi-step filtering
-│   ├── parallel_executor.py    # Parallel execution
-│   ├── progressive_filter.py   # Progressive/two-phase filtering (v2.5.9)
-│   ├── query_cache.py          # Query caching with TTL
-│   ├── query_complexity_estimator.py  # SQL complexity analysis (v2.5.9)
-│   └── result_streaming.py     # Streaming exports
-└── qt_json_view/           # JSON tree view widgets
-    ├── __init__.py
-    ├── CHANGELOG.md
-    ├── README.md
-    ├── datatypes.py
-    ├── delegate.py
-    ├── model.py
-    └── view.py
+│   ├── factory.py
+│   ├── hexagonal_config.py
+│   ├── legacy_adapter.py
+│   ├── postgresql_availability.py
+│   ├── memory/             # Memory backend
+│   │   └── backend.py
+│   ├── ogr/                # OGR backend
+│   │   ├── backend.py
+│   │   ├── executor_wrapper.py
+│   │   ├── filter_executor.py (1,033)
+│   │   └── geometry_optimizer.py
+│   ├── postgresql/         # PostgreSQL backend
+│   │   ├── backend.py
+│   │   ├── cleanup.py
+│   │   ├── executor_wrapper.py
+│   │   ├── filter_actions.py (787)
+│   │   ├── filter_executor.py (948)
+│   │   ├── mv_manager.py
+│   │   ├── optimizer.py
+│   │   └── schema_manager.py
+│   └── spatialite/         # Spatialite backend
+│       ├── backend.py
+│       ├── cache.py
+│       ├── executor_wrapper.py
+│       ├── filter_executor.py (1,144)
+│       └── index_manager.py
+├── qgis/                   # QGIS adapters
+│   ├── expression_adapter.py
+│   ├── factory.py
+│   ├── feature_adapter.py
+│   ├── filter_optimizer.py (820)
+│   ├── geometry_adapter.py
+│   ├── geometry_preparation.py (1,204)
+│   ├── layer_adapter.py
+│   ├── source_feature_resolver.py
+│   ├── signals/            # Signal management
+│   │   ├── debouncer.py
+│   │   ├── layer_signal_handler.py
+│   │   ├── migration_helper.py
+│   │   └── signal_manager.py
+│   └── tasks/              # QGIS tasks
+│       ├── base_task.py
+│       ├── export_task.py
+│       ├── filter_task.py
+│       ├── layer_task.py
+│       ├── multi_step_task.py
+│       ├── progress_handler.py
+│       └── spatial_task.py
+├── repositories/           # Data access
+│   └── layer_repository.py
+├── app_bridge.py
+├── backend_registry.py
+├── compat.py
+├── database_manager.py
+├── filter_result_handler.py (809)
+├── layer_refresh_manager.py
+├── layer_task_completion_handler.py
+├── layer_validator.py
+├── legacy_adapter.py
+├── task_bridge.py
+├── task_builder.py (957)
+├── undo_redo_handler.py
+└── variables_manager.py
 ```
 
-### tools/
-Development utilities (NOT part of plugin runtime):
+### infrastructure/
+Cross-cutting concerns:
 ```
-tools/
-├── README.md                       # Tool documentation
-├── add_missing_strings.py          # Add missing translation strings
-├── compile_translations_simple.py  # Simple translation compiler
-├── create_new_translations.py      # Create new language translations
-├── enable_debug_logs.py            # Enable debug logging
-├── test_spatialite_large_gpkg.py   # Spatialite performance testing
-├── update_translations.py          # Update translation files
-├── verify_all_translations.py      # Verify translation completeness
-├── zip_plugin.py                   # Create plugin ZIP (Python)
-├── zip_plugin.sh                   # Create plugin ZIP (Shell)
-├── i18n/                           # Translation tools (additional)
-│   └── ...
-└── ui/                             # UI modification tools
-    └── ...
+infrastructure/
+├── cache/                  # Caching
+│   ├── cache_manager.py
+│   ├── exploring_cache.py
+│   ├── geometry_cache.py
+│   └── query_cache.py
+├── config/                 # Configuration
+│   └── config_migration.py
+├── database/               # Database utilities
+│   ├── connection_pool.py (995)
+│   ├── postgresql_support.py
+│   ├── prepared_statements.py
+│   ├── spatialite_support.py
+│   └── sql_utils.py
+├── di/                     # Dependency injection
+│   ├── container.py
+│   └── providers.py
+├── feedback/               # User feedback
+├── logging/                # Logging setup
+├── parallel/               # Parallel execution
+│   └── parallel_executor.py
+├── state/                  # State management
+│   └── flag_manager.py
+├── streaming/              # Result streaming
+│   └── result_streaming.py
+├── utils/                  # Utilities
+│   ├── complexity_estimator.py
+│   ├── layer_utils.py (1,185)
+│   ├── provider_utils.py
+│   ├── signal_utils.py
+│   ├── task_utils.py
+│   └── validation_utils.py
+├── constants.py
+├── field_utils.py
+├── resilience.py
+├── signal_utils.py
+└── state_manager.py
+```
+
+### ui/
+User interface:
+```
+ui/
+├── config/                 # UI configuration
+│   ├── ui_elements.py
+│   └── __init__.py (924) - UI profiles (COMPACT/NORMAL)
+├── controllers/            # MVC controllers (12 controllers)
+│   ├── integration.py (2,971) - Main orchestrator
+│   ├── exploring_controller.py (2,922)
+│   ├── filtering_controller.py (1,467)
+│   ├── property_controller.py (1,267)
+│   ├── layer_sync_controller.py (1,244)
+│   ├── exporting_controller.py (975)
+│   ├── backend_controller.py (974)
+│   ├── config_controller.py
+│   ├── favorites_controller.py
+│   ├── ui_layout_controller.py
+│   ├── base_controller.py
+│   ├── registry.py
+│   └── mixins/             # Controller mixins
+│       └── layer_selection_mixin.py
+├── dialogs/                # Dialogs
+│   ├── config_editor_widget.py
+│   ├── favorites_manager.py
+│   ├── optimization_dialog.py
+│   └── postgres_info_dialog.py
+├── elements/               # UI elements
+├── layout/                 # Layout management
+│   ├── action_bar_manager.py
+│   ├── base_manager.py
+│   ├── dimensions_manager.py (902)
+│   ├── spacing_manager.py
+│   └── splitter_manager.py
+├── managers/               # UI managers
+│   ├── configuration_manager.py (915)
+│   └── exploring_signal_manager.py
+├── styles/                 # Styling
+│   ├── base_styler.py
+│   ├── button_styler.py
+│   ├── icon_manager.py
+│   ├── style_loader.py
+│   ├── theme_manager.py
+│   └── theme_watcher.py
+├── widgets/                # Custom widgets
+│   ├── backend_indicator.py
+│   ├── custom_widgets.py (1,166)
+│   ├── favorites_widget.py
+│   ├── history_widget.py
+│   ├── tree_view.py
+│   └── json_view/          # JSON tree view
+│       ├── datatypes.py (823)
+│       ├── delegate.py
+│       ├── model.py
+│       ├── themes.py
+│       └── view.py
+└── orchestrator.py
 ```
 
 ### tests/
-Unit and integration tests:
+Comprehensive test suite (157 files, ~47,600 lines):
 ```
 tests/
-├── conftest.py                      # Pytest fixtures
-├── README.md                        # Testing documentation
-├── __init__.py                      # Package init
-├── test_auto_activate_config.py     # Config auto-activation tests
-├── test_auto_config_reset.py        # Config reset tests
-├── test_config_fallback.py          # Config fallback tests
-├── test_config_helpers.py           # Config helper tests
-├── test_config_improved_structure.py # Config structure tests
-├── test_config_migration.py         # Config migration tests
-├── test_filter_preservation.py      # Filter preservation tests
-├── test_forced_backend_respect.py   # Backend forcing tests
-├── test_geographic_crs.py           # CRS handling tests
-├── test_negative_buffer.py          # Negative buffer tests (v2.5.x)
-├── test_phase4_optimizations.py     # Phase 4 optimization tests
-├── test_plugin_loading.py           # Plugin loading tests
-├── test_postgresql_buffer.py        # PostgreSQL buffer tests
-├── test_postgresql_layer_handling.py # PostgreSQL layer tests
-├── test_postgresql_mv_cleanup.py    # MV cleanup tests
-├── test_primary_key_detection.py    # PK detection tests
-├── test_project_change.py           # Project change tests
-├── test_undo_redo.py                # Undo/redo tests
-└── test_backends/                   # Backend-specific tests
+├── unit/                   # Unit tests
+│   ├── adapters/           # Adapter tests
+│   ├── core/               # Core tests
+│   ├── infrastructure/     # Infrastructure tests
+│   ├── ports/              # Port tests
+│   ├── services/           # Service tests
+│   ├── tasks/              # Task tests
+│   ├── ui/                 # UI tests
+│   └── utils/              # Utils tests
+├── integration/            # Integration tests
+│   ├── backends/           # Backend integration
+│   ├── workflows/          # E2E workflows
+│   └── fixtures/           # Test fixtures
+├── regression/             # Regression tests
+├── performance/            # Performance benchmarks
+├── manual/                 # Manual test docs
+├── test_backends/          # Legacy backend tests
+├── conftest.py             # Pytest fixtures
+└── README.md               # Testing documentation
 ```
 
-### docs/
-Documentation:
+### Other Directories
+
 ```
-docs/
-├── EXPRESSION_LOADING_OPTIMIZATION.md        # Expression loading optimizations
-├── FIX_MEMORY_LAYER_COUNT_2025-12.md         # Memory layer feature count fix
-├── FIX_NEGATIVE_BUFFER_2025-12.md            # Negative buffer handling fix
-├── NEGATIVE_BUFFER_FIX_README.md             # Negative buffer documentation
-├── PERFORMANCE_OPTIMIZATION_v2.5.10.md       # v2.5.10 performance optimizations
-├── RELEASE_NOTES_v2.5.3.md                   # v2.5.3 release notes
-├── RELEASE_NOTES_v2.5.4.md                   # v2.5.4 release notes
-├── RELEASE_NOTES_v2.5.5.md                   # v2.5.5 release notes (CRITICAL)
-├── RELEASE_NOTES_v2.5.6.md                   # v2.5.6 release notes
-├── RELEASE_NOTES_v2.5.7.md                   # v2.5.7 release notes
-├── SYNC_ARCHITECTURE_v2.5.6.md               # Bidirectional sync architecture
-├── TRANSLATION_PLAN_2025-12.md               # Translation planning
-├── archive/                                   # Historical documentation
-│   └── ... (archived docs)
-└── fixes/                                     # Bug fix documentation (legacy)
-    └── ... (older fix documentation)
+config/                     # Plugin configuration
+├── config.json             # Active configuration
+├── config.default.json     # Defaults
+├── config.py               # Configuration loader
+└── config.v2.example.json  # V2 format example
+
+docs/                       # Documentation
+├── fixes/                  # Bug fix documentation
+└── archive/                # Historical docs
+
+tools/                      # Development utilities (NOT packaged)
+├── i18n/                   # Translation tools
+└── ui/                     # UI tools
+
+i18n/                       # Translations (21 languages)
+resources/                  # Static resources (QSS themes)
+icons/                      # Plugin icons
+website/                    # Docusaurus website
+utils/                      # Python utilities
+├── deprecation.py
+├── type_utils.py
+
+before_migration/           # ARCHIVED: Legacy modules/ code
+├── modules/                # Old structure (preserved)
+└── ARCHIVE_NOTICE.md
+
+_bmad/                      # BMAD methodology
+└── bmm/, core/, _config/
+
+_bmad-output/               # BMAD outputs
+.serena/                    # Serena MCP config
+.github/                    # GitHub config
 ```
 
-### i18n/
-Translations (21 languages):
-```
-i18n/
-├── FilterMate_am.ts/.qm    # Amharic (NEW v2.4.1)
-├── FilterMate_da.ts/.qm    # Danish
-├── FilterMate_de.ts/.qm    # German
-├── FilterMate_en.ts/.qm    # English
-├── FilterMate_es.ts/.qm    # Spanish
-├── FilterMate_fi.ts/.qm    # Finnish
-├── FilterMate_fr.ts/.qm    # French
-├── FilterMate_hi.ts/.qm    # Hindi
-├── FilterMate_id.ts/.qm    # Indonesian
-├── FilterMate_it.ts/.qm    # Italian
-├── FilterMate_nb.ts/.qm    # Norwegian Bokmål
-├── FilterMate_nl.ts/.qm    # Dutch
-├── FilterMate_pl.ts/.qm    # Polish
-├── FilterMate_pt.ts/.qm    # Portuguese
-├── FilterMate_ru.ts/.qm    # Russian
-├── FilterMate_sl.ts/.qm    # Slovenian (NEW v2.4.1)
-├── FilterMate_sv.ts/.qm    # Swedish
-├── FilterMate_tl.ts/.qm    # Filipino/Tagalog (NEW v2.4.1)
-├── FilterMate_tr.ts/.qm    # Turkish
-├── FilterMate_uz.ts/.qm    # Uzbek
-├── FilterMate_vi.ts/.qm    # Vietnamese
-└── FilterMate_zh.ts/.qm    # Chinese
-```
+## File Statistics Summary
 
-### resources/
-Static resources:
-```
-resources/
-└── styles/                 # QSS theme files
-    ├── default.qss
-    ├── dark.qss
-    ├── light.qss
-    └── dynamic_template.qss
-```
-
-### icons/
-Plugin icons and images.
-
-### website/
-Docusaurus documentation website:
-```
-website/
-├── docusaurus.config.ts
-├── package.json
-├── docs/                   # MDX documentation
-├── src/                    # Website components
-└── i18n/                   # Website translations
-```
-
-### .github/
-GitHub configuration:
-```
-.github/
-├── copilot-instructions.md # Coding guidelines
-└── workflows/
-    └── test.yml            # CI/CD pipeline
-```
-
-### .serena/
-Serena MCP configuration:
-```
-.serena/
-├── config.json             # Serena project config
-└── memories/               # Project memories
-```
-
-## File Counts Summary
-
-| Category | File Count | Description |
-|----------|------------|-------------|
-| Core Plugin | ~10 | Runtime Python files |
-| Modules | ~35 | Application modules (including object_safety.py) |
-| Tests | ~20 | Test files |
-| Tools | ~15 | Development utilities |
-| Documentation | ~20 | Markdown files |
-| Translations | 42 | .ts and .qm files (21 languages × 2) |
-| Resources | ~10 | QSS and icons |
-
-## Gitignore Patterns
-
-Key patterns in `.gitignore`:
-- `__pycache__/`, `*.py[cod]` - Python cache
-- `.pytest_cache/`, `htmlcov/` - Test outputs
-- `website/node_modules/` - Node dependencies
-- `*.backup`, `*.bak` - Backup files
-- `*.sqlite-wal`, `*.sqlite-shm` - SQLite temp files
+| Category | Files | Lines | Description |
+|----------|-------|-------|-------------|
+| Core | ~50 | ~28,000 | Tasks, services, domain |
+| Adapters | ~40 | ~15,000 | Backends, QGIS, repos |
+| Infrastructure | ~25 | ~8,000 | Cache, DB, utils |
+| UI | ~45 | ~15,000 | Controllers, widgets |
+| Root | ~10 | ~8,300 | Entry points |
+| **Subtotal** | **~170** | **~74,300** | Runtime code |
+| Tests | 157 | ~47,600 | Test suite |
+| **Total** | **~327** | **~122,000** | All Python |
 
 ## Notes
 
-1. **Root directory is clean**: Only essential files, no utility scripts
-2. **tools/ is not packaged**: Excluded from release ZIP
-3. **docs/archive/**: Historical documentation preserved but not active
-4. **Backwards compatibility**: Module re-exports maintain API stability
+1. **Hexagonal complete**: Core isolated from external concerns
+2. **modules/ archived**: Migrated to `before_migration/`
+3. **tools/ not packaged**: Development utilities only
+4. **21 languages**: Full i18n support
+5. **157 test files**: Comprehensive coverage

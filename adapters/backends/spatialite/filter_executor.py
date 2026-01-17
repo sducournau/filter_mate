@@ -19,6 +19,9 @@ import logging
 from dataclasses import dataclass, field
 from typing import Optional, List, Any, Callable, Dict, Tuple
 
+# EPIC-1 E4-S9: Import centralized HistoryRepository
+from ...repositories.history_repository import HistoryRepository
+
 logger = logging.getLogger('FilterMate.Adapters.Backends.Spatialite.FilterExecutor')
 
 
@@ -854,8 +857,6 @@ def apply_spatialite_subset(
     Returns:
         bool: True if successful
     """
-    import uuid
-    
     # Build session-prefixed name for multi-client isolation
     session_name = f"{session_id}_{name}" if session_id else name
     
@@ -870,24 +871,21 @@ def apply_spatialite_subset(
     if queue_subset_func:
         queue_subset_func(layer, layer_subsetString)
     
-    # Update history
+    # EPIC-1 E4-S9: Use centralized HistoryRepository instead of direct SQL
     if cur and conn and project_uuid:
+        history_repo = HistoryRepository(conn, cur)
         try:
-            cur.execute(
-                """INSERT INTO fm_subset_history 
-                   VALUES('{id}', datetime(), '{fk_project}', '{layer_id}', 
-                          '{layer_source_id}', {seq_order}, '{subset_string}');""".format(
-                    id=uuid.uuid4(),
-                    fk_project=project_uuid,
-                    layer_id=layer.id(),
-                    layer_source_id=source_layer_id or '',
-                    seq_order=current_seq_order,
-                    subset_string=sql_subset_string.replace("'", "''")
-                )
+            history_repo.insert(
+                project_uuid=project_uuid,
+                layer_id=layer.id(),
+                subset_string=sql_subset_string,
+                seq_order=current_seq_order,
+                source_layer_id=source_layer_id or ''
             )
-            conn.commit()
         except Exception as e:
             logger.warning(f"Failed to update Spatialite history: {e}")
+        finally:
+            history_repo.close()
     
     return True
 
@@ -1005,7 +1003,7 @@ def manage_spatialite_subset(
     )
 
 
-def get_last_subset_info(cur, layer, project_uuid: str) -> tuple:
+def get_last_subset_info(cur, layer, project_uuid: str, conn=None) -> tuple:
     """
     Get the last subset information for a layer from history.
     
@@ -1015,6 +1013,7 @@ def get_last_subset_info(cur, layer, project_uuid: str) -> tuple:
         cur: Database cursor
         layer: QgsVectorLayer
         project_uuid: Project UUID
+        conn: Database connection (optional, for HistoryRepository)
         
     Returns:
         tuple: (last_subset_id, last_seq_order, layer_name, sanitized_name)
@@ -1025,6 +1024,22 @@ def get_last_subset_info(cur, layer, project_uuid: str) -> tuple:
     # Use sanitize_sql_identifier to handle all special chars (em-dash, etc.)
     name = sanitize_sql_identifier(layer.id().replace(layer_name, ''))
     
+    # EPIC-1 E4-S9: Use centralized HistoryRepository if connection available
+    if conn:
+        history_repo = HistoryRepository(conn, cur)
+        try:
+            last_entry = history_repo.get_last_entry(project_uuid, layer.id())
+            if last_entry:
+                return last_entry.id, last_entry.seq_order, layer_name, name
+            else:
+                return None, 0, layer_name, name
+        except Exception as e:
+            logger.warning(f"Failed to get last subset info via repository: {e}")
+            return None, 0, layer_name, name
+        finally:
+            history_repo.close()
+    
+    # Fallback to direct SQL if no connection provided
     try:
         cur.execute(
             """SELECT * FROM fm_subset_history 

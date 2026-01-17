@@ -15,6 +15,10 @@ from .filter_executor import (
     build_ogr_simple_filter,
     apply_ogr_subset,
     combine_ogr_filters,
+    # EPIC-1 Phase E4-S8: OGR Reset and Unfilter Actions
+    execute_reset_action_ogr,
+    execute_unfilter_action_ogr,
+    cleanup_ogr_temp_layers,
     # EPIC-1 Phase E4-S7: OGR Source Geometry Preparation
     OGRSourceContext,
     validate_task_features,
@@ -37,6 +41,10 @@ __all__ = [
     'build_ogr_simple_filter',
     'apply_ogr_subset',
     'combine_ogr_filters',
+    # EPIC-1 Phase E4-S8: Reset and Unfilter
+    'execute_reset_action_ogr',
+    'execute_unfilter_action_ogr',
+    'cleanup_ogr_temp_layers',
     # EPIC-1 Phase E4-S7
     'OGRSourceContext',
     'validate_task_features',

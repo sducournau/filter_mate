@@ -347,6 +347,108 @@ def combine_ogr_filters(
 
 
 # =============================================================================
+# EPIC-1 Phase E4-S8: OGR Reset and Unfilter Actions
+# Parity with PostgreSQL and Spatialite backends
+# =============================================================================
+
+def execute_reset_action_ogr(
+    layer,
+    queue_subset_func=None,
+    cleanup_temp_layers: bool = True
+) -> bool:
+    """
+    Execute reset action for OGR backend.
+    
+    Clears the filter on a layer and optionally cleans up temporary layers.
+    Provides parity with execute_reset_action_postgresql and _reset_action_spatialite.
+    
+    Args:
+        layer: QgsVectorLayer to reset
+        queue_subset_func: Function to queue subset string for main thread
+        cleanup_temp_layers: Whether to cleanup temporary OGR layers
+        
+    Returns:
+        bool: True if successful
+    """
+    try:
+        # Cleanup temporary layers if requested
+        if cleanup_temp_layers:
+            cleaned = cleanup_ogr_temp_layers()
+            if cleaned > 0:
+                logger.info(f"Reset: Cleaned up {cleaned} temporary OGR layers")
+        
+        # Clear the subset string
+        if queue_subset_func:
+            # Thread-safe: queue for main thread application
+            queue_subset_func(layer, '')
+            logger.debug(f"Reset: Queued empty subset for {layer.name()}")
+        else:
+            # Direct application (only safe from main thread)
+            layer.setSubsetString('')
+            logger.debug(f"Reset: Applied empty subset directly for {layer.name()}")
+        
+        logger.info(f"OGR Reset completed for layer: {layer.name()}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to execute OGR reset: {e}")
+        return False
+
+
+def execute_unfilter_action_ogr(
+    layer,
+    previous_subset: str = None,
+    queue_subset_func=None
+) -> bool:
+    """
+    Execute unfilter action for OGR backend (restore previous filter state).
+    
+    Restores the previous filter state or clears the filter if no previous state.
+    Provides parity with execute_unfilter_action_postgresql and _unfilter_action_spatialite.
+    
+    Note: For OGR layers, history is managed by the HistoryService/UndoRedoHandler.
+    This function just applies the provided previous_subset string.
+    
+    Args:
+        layer: QgsVectorLayer to unfilter
+        previous_subset: Previous subset string to restore (empty string clears filter)
+        queue_subset_func: Function to queue subset string for main thread
+        
+    Returns:
+        bool: True if successful
+    """
+    try:
+        # Determine what subset to apply
+        subset_to_apply = previous_subset if previous_subset else ''
+        
+        if queue_subset_func:
+            # Thread-safe: queue for main thread application
+            queue_subset_func(layer, subset_to_apply)
+            logger.debug(
+                f"Unfilter: Queued {'previous' if previous_subset else 'empty'} "
+                f"subset for {layer.name()}"
+            )
+        else:
+            # Direct application (only safe from main thread)
+            layer.setSubsetString(subset_to_apply)
+            logger.debug(
+                f"Unfilter: Applied {'previous' if previous_subset else 'empty'} "
+                f"subset directly for {layer.name()}"
+            )
+        
+        if previous_subset:
+            logger.info(f"OGR Unfilter: Restored previous state for {layer.name()}")
+        else:
+            logger.info(f"OGR Unfilter: Cleared filter for {layer.name()} (no previous state)")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to execute OGR unfilter: {e}")
+        return False
+
+
+# =============================================================================
 # EPIC-1 Phase E4-S7: OGR Source Geometry Preparation
 # =============================================================================
 

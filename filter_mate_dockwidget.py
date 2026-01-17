@@ -1810,6 +1810,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         CRITICAL: These signals must be connected at startup for proper widget synchronization:
         - FILTERING.CURRENT_LAYER.layerChanged: Updates exploring widgets when current layer changes
+        - ACTION buttons: FILTER, UNFILTER, UNDO_FILTER, REDO_FILTER, EXPORT
         
         NOTE: QGIS.LAYER_TREE_VIEW.currentLayerChanged is NOT connected here.
         It is managed by filtering_auto_current_layer_changed() based on AUTO_CURRENT_LAYER state.
@@ -1837,6 +1838,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.info("✓ Connected FILTERING.CURRENT_LAYER.layerChanged signal via manageSignal")
         except Exception as e:
             logger.warning(f"Could not connect CURRENT_LAYER signal: {e}")
+        
+        # FIX 2026-01-16: CRITICAL - Connect ACTION button signals at startup
+        # These must be connected ALWAYS, not just when layers are loaded
+        try:
+            logger.info("🔌 Connecting ACTION button signals at startup...")
+            self.force_reconnect_action_signals()
+            logger.info("✓ ACTION button signals connected at startup")
+        except Exception as e:
+            logger.warning(f"Could not connect ACTION signals at startup: {e}")
         
         # FIX 2026-01-14: Connect LAYER_TREE_VIEW only if AUTO_CURRENT_LAYER is enabled
         # This is also handled by filtering_auto_current_layer_changed() but we need to
@@ -2729,30 +2739,112 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     pass
 
     def force_reconnect_action_signals(self):
-        """v4.0 Sprint 8: Ultra-simplified - force reconnect ACTION signals bypassing cache."""
-        logger.info("🔄 force_reconnect_action_signals CALLED")
+        """v4.0 Sprint 8: Ultra-simplified - force reconnect ACTION signals bypassing cache.
+        
+        FIX 2026-01-17 v2: CRITICAL - Disconnect ALL receivers from clicked signal, then reconnect our handler.
+        This ensures no stale lambdas are left connected that could interfere with signal delivery.
+        """
+        print("🔄 force_reconnect_action_signals CALLED")
         if 'ACTION' not in self.widgets:
-            logger.warning("❌ force_reconnect_action_signals: 'ACTION' not in self.widgets")
+            print("❌ force_reconnect_action_signals: 'ACTION' not in self.widgets")
             return
         
         connected_count = 0
         for w in ['FILTER', 'UNFILTER', 'UNDO_FILTER', 'REDO_FILTER', 'EXPORT']:
             if w not in self.widgets['ACTION']:
-                logger.warning(f"⚠️ force_reconnect_action_signals: {w} not in self.widgets['ACTION']")
+                print(f"⚠️ force_reconnect_action_signals: {w} not in self.widgets['ACTION']")
                 continue
-            for s_tuple in self.widgets['ACTION'][w].get("SIGNALS", []):
+            widget_info = self.widgets['ACTION'][w]
+            widget = widget_info.get("WIDGET")
+            if not widget:
+                print(f"⚠️ force_reconnect_action_signals: {w} has no WIDGET")
+                continue
+            for s_tuple in widget_info.get("SIGNALS", []):
                 if not s_tuple[-1]:
-                    logger.warning(f"⚠️ force_reconnect_action_signals: {w} signal tuple has no handler: {s_tuple}")
+                    print(f"⚠️ force_reconnect_action_signals: {w} signal tuple has no handler: {s_tuple}")
                     continue
-                key = f"ACTION.{w}.{s_tuple[0]}"
+                signal_name = s_tuple[0]
+                handler = s_tuple[-1]
+                key = f"ACTION.{w}.{signal_name}"
                 self._signal_connection_states.pop(key, None)
                 try:
-                    state = self.changeSignalState(['ACTION', w], s_tuple[0], s_tuple[-1], 'connect')
-                    self._signal_connection_states[key] = state
+                    signal = getattr(widget, signal_name)
+                    
+                    # FIX 2026-01-17 v2: Disconnect ALL receivers to ensure clean state
+                    # This is more aggressive but necessary when lambdas may have been duplicated
+                    try:
+                        signal.disconnect()  # Disconnect ALL receivers
+                        print(f"   Disconnected all receivers from {w}.{signal_name}")
+                    except TypeError:
+                        pass  # No receivers connected, which is fine
+                    
+                    # Now connect our handler
+                    signal.connect(handler)
+                    self._signal_connection_states[key] = True
                     connected_count += 1
-                    logger.info(f"✅ force_reconnect_action_signals: Connected {w}.{s_tuple[0]} -> state={state}")
+                    print(f"✅ force_reconnect_action_signals: DIRECTLY connected {w}.{signal_name}")
                 except Exception as e:
-                    logger.error(f"❌ force_reconnect_action_signals: Failed to connect {w}.{s_tuple[0]}: {e}")
+                    print(f"❌ force_reconnect_action_signals: Failed to connect {w}.{signal_name}: {e}")
+        
+        print(f"🔄 force_reconnect_action_signals COMPLETED: {connected_count} signals connected")
+    
+    def diagnose_action_buttons(self):
+        """
+        v2026-01-17: DIAGNOSTIC method - call from QGIS console to test button signals.
+        
+        Usage in QGIS Python console:
+            from filter_mate.filter_mate_dockwidget import FilterMateDockWidget
+            dw = iface.mainWindow().findChild(FilterMateDockWidget)
+            dw.diagnose_action_buttons()
+        """
+        print("=" * 60)
+        print("🔍 DIAGNOSTIC: Action button signal analysis")
+        print("=" * 60)
+        
+        if 'ACTION' not in self.widgets:
+            print("ACTION category not in widgets!")
+            return
+        
+        for btn_name in ['FILTER', 'UNFILTER', 'UNDO_FILTER', 'REDO_FILTER']:
+            if btn_name not in self.widgets['ACTION']:
+                print(f"  {btn_name}: NOT FOUND in widgets['ACTION']")
+                continue
+            
+            widget_info = self.widgets['ACTION'][btn_name]
+            widget = widget_info.get("WIDGET")
+            
+            print(f"  {btn_name}:")
+            print(f"    - Widget exists: {widget is not None}")
+            
+            if widget:
+                print(f"    - isEnabled: {widget.isEnabled()}")
+                print(f"    - isVisible: {widget.isVisible()}")
+                print(f"    - receivers('clicked'): {widget.receivers(widget.clicked)}")
+                
+                # Check signal tuple
+                signals = widget_info.get("SIGNALS", [])
+                for s_tuple in signals:
+                    signal_name = s_tuple[0] if s_tuple else "?"
+                    handler = s_tuple[-1] if s_tuple else None
+                    print(f"    - Signal tuple: {signal_name}, handler={handler is not None}")
+                    
+                    if handler:
+                        # Try to manually call the handler to see what happens
+                        print(f"    - Testing handler call for {btn_name}...")
+                        try:
+                            handler(False)  # Simulate unchecked button click
+                            print(f"    ✅ Handler executed successfully for {btn_name}")
+                        except Exception as e:
+                            print(f"    ❌ Handler execution FAILED for {btn_name}: {e}")
+        
+        print("=" * 60)
+        print("Current state:")
+        print(f"  widgets_initialized: {self.widgets_initialized}")
+        print(f"  _filtering_in_progress: {getattr(self, '_filtering_in_progress', False)}")
+        print(f"  current_layer: {self.current_layer.name() if self.current_layer else 'None'}")
+        if self.current_layer:
+            print(f"  in_PROJECT_LAYERS: {self.current_layer.id() in self.PROJECT_LAYERS}")
+        print("=" * 60)
 
     def force_reconnect_exploring_signals(self):
         """v4.0 S18: Force reconnect EXPLORING signals bypassing cache."""
@@ -5852,20 +5944,42 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._exploring_cache.invalidate_all() if layer_id is None else (self._exploring_cache.invalidate_layer(layer_id) if groupbox_type is None else self._exploring_cache.invalidate(layer_id, groupbox_type))
 
     def launchTaskEvent(self, state, task_name):
-        """v4.0 S18: Emit signal to launch a task."""
-        # FIX 2026-01-15 v10: CRITICAL - Add extensive logging to debug filter button issue
-        logger.info(f"🎯 launchTaskEvent CALLED: state={state}, task_name={task_name}")
-        logger.info(f"   widgets_initialized={self.widgets_initialized}, has_current_layer={self.current_layer is not None}")
+        """v4.0 S18: Emit signal to launch a task.
+        
+        FIX 2026-01-17: Allow undo/redo/unfilter/reset tasks to run even when
+        _filtering_in_progress is True. These are explicit user actions that should
+        not be blocked by the protection flag. The protection is meant to block
+        automatic signals (like layer change), not user button clicks.
+        """
+        # FIX 2026-01-17 v2: Enhanced diagnostic logging - USE PRINT for visibility!
+        print(f"{'='*60}")
+        print(f"🎯 launchTaskEvent CALLED: state={state}, task_name={task_name}")
+        print(f"   widgets_initialized={self.widgets_initialized}")
+        print(f"   _filtering_in_progress={getattr(self, '_filtering_in_progress', False)}")
+        print(f"   has_current_layer={self.current_layer is not None}")
         if self.current_layer:
-            logger.info(f"   current_layer.id={self.current_layer.id()}, in_PROJECT_LAYERS={self.current_layer.id() in self.PROJECT_LAYERS}")
+            print(f"   current_layer.name={self.current_layer.name()}")
+            print(f"   current_layer.id={self.current_layer.id()}")
+            print(f"   PROJECT_LAYERS keys count={len(self.PROJECT_LAYERS)}")
+            print(f"   in_PROJECT_LAYERS={self.current_layer.id() in self.PROJECT_LAYERS}")
+        else:
+            print(f"   current_layer is None!")
+            print(f"   PROJECT_LAYERS keys={list(self.PROJECT_LAYERS.keys())[:3]}...")
+        print(f"{'='*60}")
         
         if not self.widgets_initialized or not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS:
-            logger.warning(f"❌ launchTaskEvent BLOCKED: widgets_initialized={self.widgets_initialized}, current_layer={self.current_layer}, in_PROJECT_LAYERS={self.current_layer.id() in self.PROJECT_LAYERS if self.current_layer else False}")
+            print(f"❌ launchTaskEvent BLOCKED: widgets_initialized={self.widgets_initialized}, current_layer={self.current_layer}, in_PROJECT_LAYERS={self.current_layer.id() in self.PROJECT_LAYERS if self.current_layer else False}")
             return
+        
+        # FIX 2026-01-17: For undo/redo/unfilter/reset, bypass the _filtering_in_progress protection
+        # These are explicit user actions that should always be allowed
+        user_action_tasks = ('undo', 'redo', 'unfilter', 'reset')
+        if task_name in user_action_tasks and getattr(self, '_filtering_in_progress', False):
+            print(f"🔓 FIX 2026-01-17: Allowing {task_name} despite _filtering_in_progress=True (user action)")
         
         self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = self.get_layers_to_filter()
         self.setLayerVariableEvent(self.current_layer, [("filtering", "layers_to_filter")])
-        logger.info(f"📡 Emitting launchingTask signal: {task_name}")
+        print(f"📡 Emitting launchingTask signal: {task_name}")
         self.launchingTask.emit(task_name)
     
     def _setup_truncation_tooltips(self):

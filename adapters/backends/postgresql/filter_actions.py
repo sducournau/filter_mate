@@ -20,6 +20,9 @@ import re
 import time
 from typing import Optional, Tuple, Callable, Any
 
+# EPIC-1 E4-S9: Import centralized HistoryRepository
+from ...repositories.history_repository import HistoryRepository
+
 logger = logging.getLogger('FilterMate.Adapters.Backends.PostgreSQL.FilterActions')
 
 
@@ -532,14 +535,13 @@ def execute_filter_action_postgresql_materialized(
         # Parse custom buffer expression
         sql_drop += f' DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{session_name}_dump" CASCADE;'
         
-        # Get previous subset if exists
-        cur.execute(
-            f"""SELECT * FROM fm_subset_history 
-                WHERE fk_project = '{project_uuid}' AND layer_id = '{layer.id()}' 
-                ORDER BY seq_order DESC LIMIT 1;"""
-        )
-        results = cur.fetchall()
-        last_subset_id = results[0][0] if len(results) == 1 else None
+        # EPIC-1 E4-S9: Use centralized HistoryRepository instead of direct SQL
+        history_repo = HistoryRepository(conn, cur)
+        try:
+            last_entry = history_repo.get_last_entry(project_uuid, layer.id())
+            last_subset_id = last_entry.id if last_entry else None
+        finally:
+            history_repo.close()
         
         # Parse WHERE clauses
         if param_buffer_expression and parse_where_clauses_fn:
@@ -646,23 +648,27 @@ def execute_reset_action_postgresql(
     Returns:
         bool: True if successful
     """
-    # Delete history
+    logger.info(f"[PostgreSQL] Reset Action - Layer: {layer.name()} ({layer.featureCount()} features) - Dropping materialized views")
+    
+    # Delete history using prepared statements if available, otherwise use repository
     if delete_history_fn:
         try:
             delete_history_fn(project_uuid, layer.id())
         except Exception as e:
-            logger.warning(f"Delete history failed, falling back to direct SQL: {e}")
-            cur.execute(
-                f"""DELETE FROM fm_subset_history 
-                    WHERE fk_project = '{project_uuid}' AND layer_id = '{layer.id()}';"""
-            )
-            conn.commit()
+            logger.warning(f"[PostgreSQL] History Delete Fallback - Layer: {layer.name()} - {type(e).__name__}: {str(e)}")
+            # EPIC-1 E4-S9: Use centralized HistoryRepository
+            history_repo = HistoryRepository(conn, cur)
+            try:
+                history_repo.delete_for_layer(project_uuid, layer.id())
+            finally:
+                history_repo.close()
     else:
-        cur.execute(
-            f"""DELETE FROM fm_subset_history 
-                WHERE fk_project = '{project_uuid}' AND layer_id = '{layer.id()}';"""
-        )
-        conn.commit()
+        # EPIC-1 E4-S9: Use centralized HistoryRepository instead of direct SQL
+        history_repo = HistoryRepository(conn, cur)
+        try:
+            history_repo.delete_for_layer(project_uuid, layer.id())
+        finally:
+            history_repo.close()
     
     # Drop materialized view
     schema = current_mv_schema
@@ -674,9 +680,11 @@ def execute_reset_action_postgresql(
     
     connexion = get_connection_fn()
     execute_commands_fn(connexion, [sql_drop])
+    logger.debug(f"[PostgreSQL] Materialized View Dropped - Schema: {schema} - Session: {session_name}")
     
     # THREAD SAFETY: Queue subset clear for application in finished()
     queue_subset_fn(layer, '')
+    logger.info(f"[PostgreSQL] Reset Complete - Layer: {layer.name()} - Filter cleared")
     return True
 
 
@@ -722,32 +730,28 @@ def execute_unfilter_action_postgresql(
     Returns:
         bool: True if successful
     """
-    # Delete last subset from history
-    if last_subset_id:
-        cur.execute(
-            f"""DELETE FROM fm_subset_history 
-                WHERE fk_project = '{project_uuid}' 
-                  AND layer_id = '{layer.id()}' 
-                  AND id = '{last_subset_id}';"""
-        )
-        conn.commit()
+    logger.info(f"[PostgreSQL] Unfilter Action - Layer: {layer.name()} ({layer.featureCount()} features) - Restoring previous filter")
     
-    # Get previous subset
-    cur.execute(
-        f"""SELECT * FROM fm_subset_history 
-            WHERE fk_project = '{project_uuid}' AND layer_id = '{layer.id()}' 
-            ORDER BY seq_order DESC LIMIT 1;"""
-    )
+    # EPIC-1 E4-S9: Use centralized HistoryRepository instead of direct SQL
+    history_repo = HistoryRepository(conn, cur)
+    try:
+        # Delete last subset from history
+        if last_subset_id:
+            history_repo.delete_entry(project_uuid, layer.id(), last_subset_id)
+        
+        # Get previous subset
+        last_entry = history_repo.get_last_entry(project_uuid, layer.id())
+    finally:
+        history_repo.close()
     
-    results = cur.fetchall()
-    if len(results) == 1:
-        sql_subset_string = results[0][-1]
+    if last_entry:
+        sql_subset_string = last_entry.subset_string
         
         # Validate sql_subset_string from history
         if not sql_subset_string or not sql_subset_string.strip():
             logger.warning(
-                f"Unfilter: Previous subset string from history is empty for {layer.name()}. "
-                "Clearing layer filter."
+                f"[PostgreSQL] Empty Previous Subset - Layer: {layer.name()} - "
+                "History entry exists but subset string is empty. Clearing filter."
             )
             queue_subset_fn(layer, '')
             return True
@@ -774,14 +778,17 @@ def execute_unfilter_action_postgresql(
         
         connexion = get_connection_fn()
         execute_commands_fn(connexion, [sql_drop, sql_create, sql_create_index, sql_cluster, sql_analyze])
+        logger.debug(f"[PostgreSQL] Materialized View Recreated - Schema: {schema} - Session: {session_name} - Previous filter restored")
         
         layer_subset_string = (
             f'"{primary_key_name}" IN '
             f'(SELECT "mv_{session_name}"."{primary_key_name}" FROM "{schema}"."mv_{session_name}")'
         )
         queue_subset_fn(layer, layer_subset_string)
+        logger.info(f"[PostgreSQL] Unfilter Complete - Layer: {layer.name()} - Previous state restored")
     else:
         # No previous filter - clear
         queue_subset_fn(layer, '')
+        logger.info(f"[PostgreSQL] No Previous Filter - Layer: {layer.name()} - Filter cleared")
     
     return True

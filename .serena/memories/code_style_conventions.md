@@ -1,6 +1,6 @@
-# Code Style Conventions - FilterMate v2.9.6
+# Code Style Conventions - FilterMate v4.0.3
 
-**Last Updated:** January 6, 2026
+**Last Updated:** January 17, 2026
 
 ## Python Standards
 
@@ -35,8 +35,10 @@ from qgis.PyQt.QtCore import Qt, pyqtSignal, QObject
 from qgis.PyQt.QtWidgets import QWidget, QMessageBox
 
 from .config.config import ENV_VARS
-from .modules.appUtils import get_datasource_connexion_from_layer
-from .modules.config_helpers import get_config_value
+# NEW v4.0: Import from hexagonal locations
+from .adapters.backends.postgresql_availability import POSTGRESQL_AVAILABLE
+from .infrastructure.utils.layer_utils import get_datasource_connexion_from_layer
+from .core.services import FilterService, LayerService
 ```
 
 ### Wildcard Imports (CRITICAL - v2.3.0-alpha)
@@ -138,7 +140,7 @@ geometry_cache = SourceGeometryCache()  # Phase 3a
 **ALWAYS** check `POSTGRESQL_AVAILABLE` before using PostgreSQL-specific code:
 
 ```python
-from modules.appUtils import POSTGRESQL_AVAILABLE
+from adapters.backends.postgresql_availability import POSTGRESQL_AVAILABLE
 
 if POSTGRESQL_AVAILABLE and provider_type == 'postgresql':
     # PostgreSQL-specific code
@@ -149,7 +151,7 @@ else:
     pass
 ```
 
-**Location:** `modules/appUtils.py` (top of file)
+**Location v4.0:** `adapters/backends/postgresql_availability.py`
 ```python
 try:
     import psycopg2

@@ -45,29 +45,29 @@ def execute_reset_action_spatialite(
     Returns:
         Tuple[bool, str]: (success, message)
     """
-    logger.info(f"Spatialite: Executing RESET action for layer '{layer.name()}'")
+    logger.info(f"[Spatialite] Reset Action - Layer: {layer.name()} ({layer.featureCount()} features) - Clearing filter")
     
     try:
         # Clear subset string
         layer.setSubsetString("")
-        logger.info(f"   ✅ Subset string cleared")
+        logger.debug(f"[Spatialite] Subset cleared - Layer: {layer.name()}")
         
         # Trigger layer refresh
         layer.triggerRepaint()
         layer.reload()
-        logger.info(f"   ✅ Layer refreshed")
+        logger.debug(f"[Spatialite] Layer refreshed - Layer: {layer.name()}")
         
         # Cleanup temporary session tables
         db_path = datasource_info.get('dbname')
         if db_path:
             cleaned_count = cleanup_session_temp_tables(db_path)
-            logger.info(f"   ✅ Cleaned {cleaned_count} temporary tables")
+            logger.info(f"[Spatialite] Cleanup Complete - Layer: {layer.name()} - Removed {cleaned_count} temporary tables")
         
         message = f"Filter reset successfully for layer '{layer.name()}'"
         return True, message
         
     except Exception as e:
-        error_msg = f"Failed to reset Spatialite layer: {str(e)}"
+        error_msg = f"[Spatialite] Reset Failed - Layer: {layer.name()} - {type(e).__name__}: {str(e)}"
         logger.error(error_msg, exc_info=True)
         return False, error_msg
 
@@ -95,29 +95,30 @@ def execute_unfilter_action_spatialite(
     Returns:
         Tuple[bool, str]: (success, message)
     """
-    logger.info(f"Spatialite: Executing UNFILTER action for layer '{layer.name()}'")
-    logger.info(f"   Previous subset: '{previous_subset}'" if previous_subset else "   No previous subset")
+    logger.info(f"[Spatialite] Unfilter Action - Layer: {layer.name()} ({layer.featureCount()} features) - Restoring previous state")
+    if previous_subset:
+        logger.debug(f"[Spatialite] Previous subset: {previous_subset[:100]}..." if len(previous_subset) > 100 else f"[Spatialite] Previous subset: {previous_subset}")
     
     try:
         if previous_subset:
             # Restore previous subset
             layer.setSubsetString(previous_subset)
-            logger.info(f"   ✅ Restored previous subset ({len(previous_subset)} chars)")
+            logger.info(f"[Spatialite] Subset Restored - Layer: {layer.name()} - Expression length: {len(previous_subset)} chars")
         else:
             # No previous state - clear filter
             layer.setSubsetString("")
-            logger.info(f"   ✅ No previous subset - cleared filter")
+            logger.info(f"[Spatialite] No Previous State - Layer: {layer.name()} - Filter cleared")
         
         # Trigger layer refresh
         layer.triggerRepaint()
         layer.reload()
-        logger.info(f"   ✅ Layer refreshed")
+        logger.debug(f"[Spatialite] Layer refreshed - Layer: {layer.name()}")
         
         message = f"Filter restored for layer '{layer.name()}'"
         return True, message
         
     except Exception as e:
-        error_msg = f"Failed to unfilter Spatialite layer: {str(e)}"
+        error_msg = f"[Spatialite] Unfilter Failed - Layer: {layer.name()} - {type(e).__name__}: {str(e)}"
         logger.error(error_msg, exc_info=True)
         return False, error_msg
 
@@ -135,15 +136,15 @@ def cleanup_spatialite_session_tables(db_path: str) -> int:
     Returns:
         int: Number of tables cleaned up
     """
-    logger.info(f"Spatialite: Cleaning up session tables in: {db_path}")
+    logger.debug(f"[Spatialite] Cleanup Session Tables - Database: {db_path}")
     
     try:
         cleaned_count = cleanup_session_temp_tables(db_path)
-        logger.info(f"   ✅ Cleaned {cleaned_count} temporary tables")
+        logger.info(f"[Spatialite] Cleanup Complete - Database: {db_path} - Removed {cleaned_count} temporary tables")
         return cleaned_count
         
     except Exception as e:
-        logger.error(f"   ❌ Failed to cleanup tables: {str(e)}", exc_info=True)
+        logger.error(f"[Spatialite] Cleanup Failed - Database: {db_path} - {type(e).__name__}: {str(e)}", exc_info=True)
         return 0
 
 

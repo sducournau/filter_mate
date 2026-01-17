@@ -1,5 +1,7 @@
 # Suggested Commands for FilterMate Development
 
+**Last Updated:** January 17, 2026 (v4.0.3)
+
 ## Windows Commands (Primary Development Environment)
 
 ### Directory Navigation

@@ -709,12 +709,27 @@ class FilterResultHandler:
         Schedule delayed combobox checks and signal reconnection.
         
         v3.0.19: Keep signals BLOCKED during entire 5s protection window
+        v4.1.4 FIX 2026-01-17: ALWAYS reset _filtering_in_progress, even if layer ID is None
         
         Args:
             current_layer_id_before_filter: Layer ID to monitor and restore
         """
         dockwidget = self._get_dockwidget() if self._get_dockwidget else None
-        if not dockwidget or not current_layer_id_before_filter:
+        if not dockwidget:
+            return
+        
+        # FIX 2026-01-17: If no layer ID to restore, still schedule the flag reset
+        # This ensures undo/redo/unfilter buttons work after filtering
+        if not current_layer_id_before_filter:
+            logger.warning("v4.1.4: ⚠️ No layer ID to restore, scheduling immediate flag reset")
+            def reset_flag_only():
+                try:
+                    if dockwidget:
+                        dockwidget._filtering_in_progress = False
+                        logger.info("v4.1.4: ✅ Reset _filtering_in_progress (no layer restoration needed)")
+                except Exception as e:
+                    logger.error(f"v4.1.4: Error resetting flag: {e}")
+            QTimer.singleShot(100, reset_flag_only)
             return
         
         saved_layer_id = current_layer_id_before_filter

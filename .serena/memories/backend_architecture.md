@@ -1,7 +1,7 @@
 # Backend Architecture - FilterMate
 
-**Last Updated:** January 6, 2026
-**Current Version:** 2.9.6
+**Last Updated:** January 17, 2026
+**Current Version:** 4.0.3
 
 ## Multi-Backend System
 
@@ -21,17 +21,41 @@ FilterMate v2.1+ implements a **factory pattern** for automatic backend selectio
 - Thread tracking with concurrent access warnings
 - Clear logging about execution mode chosen
 
-## Backend Structure
+## Backend Structure (v4.0 Hexagonal)
 
 ```
-modules/backends/
-  ├── __init__.py            # Package initialization
-  ├── base_backend.py        # Abstract base class (interface)
-  ├── postgresql_backend.py  # PostgreSQL/PostGIS implementation
-  ├── spatialite_backend.py  # Spatialite implementation
-  ├── ogr_backend.py         # Universal OGR fallback
-  ├── memory_backend.py      # Optimized QGIS memory layer backend (v2.5.8)
-  └── factory.py             # Automatic backend selection logic
+adapters/backends/
+├── __init__.py                 # Package exports
+├── factory.py                  # Backend factory pattern
+├── hexagonal_config.py         # Hexagonal configuration
+├── legacy_adapter.py           # Legacy compatibility
+├── postgresql_availability.py  # psycopg2 availability check
+├── memory/                     # Memory backend
+│   ├── __init__.py
+│   └── backend.py
+├── ogr/                        # OGR backend (universal fallback)
+│   ├── __init__.py
+│   ├── backend.py
+│   ├── executor_wrapper.py
+│   ├── filter_executor.py (1,033 lines)
+│   └── geometry_optimizer.py
+├── postgresql/                 # PostgreSQL backend (optimal)
+│   ├── __init__.py
+│   ├── backend.py
+│   ├── cleanup.py
+│   ├── executor_wrapper.py
+│   ├── filter_actions.py (787 lines)
+│   ├── filter_executor.py (948 lines)
+│   ├── mv_manager.py
+│   ├── optimizer.py
+│   └── schema_manager.py
+└── spatialite/                 # Spatialite backend
+    ├── __init__.py
+    ├── backend.py
+    ├── cache.py
+    ├── executor_wrapper.py
+    ├── filter_executor.py (1,144 lines)
+    └── index_manager.py
 ```
 
 ## Backend Selection Logic
@@ -116,8 +140,26 @@ modules/backends/
 **Key Methods:**
 - `use_qgis_processing()`: Processing algorithm calls
 - `memory_layer_filtering()`: In-memory operations
+- `execute_reset_action_ogr()`: Reset filter with temp layer cleanup (v4.0.4)
+- `execute_unfilter_action_ogr()`: Restore previous filter state (v4.0.4)
 
-## Forced Backend System (v2.3.5+)
+**v4.0.4 Changes (January 2026):**
+- Added `execute_reset_action_ogr()` for parity with PostgreSQL/Spatialite
+- Added `execute_unfilter_action_ogr()` for parity with PostgreSQL/Spatialite
+- Both exposed via `BackendServices.get_ogr_filter_actions()`
+- New `HistoryRepository` centralizes all history SQL operations
+- FilterEngineTask now distinguishes OGR from Spatialite in reset/unfilter actions
+- New methods: `_reset_action_ogr()`, `_unfilter_action_ogr()` in FilterEngineTask
+
+**v4.0.5 Changes (January 2026):**
+- **HistoryRepository Migration**: All direct SQL to `fm_subset_history` replaced with `HistoryRepository`
+- **Files migrated:**
+  - `core/tasks/filter_task.py`: `_reset_action_spatialite`, `_reset_action_ogr`, `_unfilter_action_spatialite`, `_unfilter_action_ogr`, `_insert_subset_history`
+  - `adapters/backends/postgresql/filter_actions.py`: `execute_reset_action_postgresql`, `execute_unfilter_action_postgresql`, `execute_filter_action_postgresql_materialized`
+  - `adapters/backends/spatialite/filter_executor.py`: `apply_spatialite_subset`, `get_last_subset_info`
+- **SQL duplication eliminated**: All INSERT/DELETE/SELECT operations now use centralized repository methods
+
+$2 (v2.3.5+)
 
 ### User-Controlled Backend Selection
 
@@ -353,10 +395,10 @@ for attempt in range(max_retries):
 
 ## Integration Points
 
-### Usage in appTasks.py
+### Usage in core/tasks/filter_task.py
 
 ```python
-from modules.backends.factory import BackendFactory
+from adapters.backends.factory import BackendFactory
 
 class FilterEngineTask(QgsTask):
     def run(self):

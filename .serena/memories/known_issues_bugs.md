@@ -1,6 +1,107 @@
 # Known Issues & Bug Fixes - FilterMate
 
-**Last Updated:** January 6, 2026
+**Last Updated:** January 17, 2026
+**Current Version:** 4.1.4
+
+## Recent Fixes (January 17, 2026)
+
+### v4.1.4 - OGR Distant Layer Geometric Filtering Fix
+
+**Status:** ✅ FIXED
+
+**Problem:**
+- Geometric filtering of OGR distant layers fails when source is PostgreSQL
+- WKT geometry not prepared for OGR layers (only for GeoPackages)
+- Diagnostic shows `postgresql in provider_list: False` when OGR layers need filtering
+
+**Root Cause:**
+- `ogr_needs_spatialite_geom` was only set `True` for GeoPackage/SQLite files
+- All OGR layers need WKT geometry for spatial predicates (Intersects, Contains, etc.)
+
+**Solution:**
+- Changed condition to set `ogr_needs_spatialite_geom = True` for ALL OGR layers
+- Now any layer in `layers_dict['ogr']` triggers WKT preparation
+
+**Files Changed:**
+- `core/services/geometry_preparer.py` - `prepare_geometries_by_provider()`
+
+---
+
+### v4.1.4 - Undo/Redo Blocked After Filter Fix
+
+**Status:** ✅ FIXED
+
+**Problem:**
+- After successful OGR filter, undo/redo/unfilter buttons do nothing
+- `_filtering_in_progress` remains `True` blocking all action buttons
+
+**Root Cause:**
+- `_schedule_delayed_reconnection()` returns early if `current_layer_id_before_filter` is `None`
+- In this case, `_filtering_in_progress` was never reset to `False`
+
+**Solution:**
+- Added immediate flag reset when no layer ID to restore
+- Uses `QTimer.singleShot(100, reset_flag_only)` to ensure cleanup
+
+**Files Changed:**
+- `adapters/filter_result_handler.py` - `_schedule_delayed_reconnection()`
+
+---
+**Current Version:** 4.0.3
+
+## Recent Fixes (v4.0.x Series - January 2026)
+
+### v4.0.5 - Splitter Layout Fix (In Development)
+**Status:** ⏳ IN PROGRESS
+
+**Problem:**
+- Panel truncation when dragging splitter handle
+- GroupBoxes in exploring frame getting hidden
+
+**Solution:**
+- Increased minimum heights: exploring 140px, toolset 250px
+- Changed initial ratio: 35/65 (more space for toolset)
+
+### v4.0.4 - Conditional Widget States (January 13, 2026)
+**Status:** ✅ FIXED
+
+**Feature:**
+- Widgets auto enable/disable based on pushbutton toggles
+- 12 mappings implemented (6 FILTERING + 6 EXPORTING)
+
+### v4.0.3 - Missing Icons (January 13, 2026)
+**Status:** ✅ FIXED
+
+**Problem:**
+- Button icons not displaying after UI refactoring
+
+**Solution:**
+- Migrated to IconManager system
+- Icons now store `icon_name` property for theme refresh
+
+### v4.0.2 - Duplicate Signal Connections (January 13, 2026)
+**Status:** ✅ FIXED
+
+**Problem:**
+- Triple fieldChanged signal connection risk
+
+**Solution:**
+- Removed obsolete references to `setup_expression_widget_direct_connections()`
+- Single source of truth via ExploringController/SignalManager
+
+### v4.0.1 - UI Profile Default (January 13, 2026)
+**Status:** ✅ FIXED
+
+**Problem:**
+- NORMAL profile causing spacing issues on laptops/Full HD
+
+**Solution:**
+- COMPACT restored as default
+- Breakpoint adjusted: 2560x1440
+
+---
+
+## Previous Updates (v2.9.x Series)
 
 ## Critical Bug Fixes (v2.9.x Series - January 2026)
 

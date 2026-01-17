@@ -1,83 +1,98 @@
 # FilterMate Project Overview
 
-**Last Updated:** January 6, 2026  
-**Version:** 2.9.6  
-**Status:** Production - Active Development
+**Last Updated:** January 17, 2026  
+**Version:** 4.0.3 (v4.0.5 in development)  
+**Status:** Production - Hexagonal Architecture Complete
 
-## Recent Changes (v2.9.x Series - January 2026)
+## Recent Changes (v4.0.x Series - January 2026)
 
-### v2.9.6 - Invalid Geometry Handling (January 6, 2026)
-- 🐛 FIX: Spatialite filtering now handles invalid source geometries correctly
-- 🔧 Added `MakeValid()` wrapper to ALL geometry insertions and expressions
-- ✅ Layers from same GeoPackage now filter correctly
-- 🛡️ Invalid geometries no longer cause 0 results on valid datasets
+### v4.0.5 - Splitter Layout (In Development)
+- 🔧 FIX: Panel truncation when dragging splitter handle
+- 📐 Increased minimum heights: exploring 120→140px, toolset 200→250px
+- 📊 Initial splitter ratio changed: 50/50 → 35/65
 
-### v2.9.5 - Shutdown Crash Fix (January 5, 2026)
-- 🐛 FIX: Windows crash during QGIS shutdown (fatal access violation)
-- 🔧 Task cancellation now uses Python logger instead of QgsMessageLog
-- ✅ Safe shutdown: Avoids calling destroyed C++ objects during QgsTaskManager::cancelAll()
+### v4.0.4 - UX Enhancement (January 13, 2026)
+- ✨ NEW: Conditional widget states with automatic enable/disable
+- 🎯 12 pushbutton→widget mappings (6 FILTERING + 6 EXPORTING)
+- 📄 Documentation: `docs/UX-ENHANCEMENT-CONDITIONAL-WIDGET-STATES.md`
 
-### v2.9.4 - Spatialite Subquery Fix (January 5, 2026)
-- 🐛 FIX: Spatialite large dataset filtering now works correctly (≥20K features)
-- 🔧 Replaced SQL subquery with range-based filter for OGR compatibility
-- ✅ Filter expressions now use BETWEEN/IN() instead of unsupported subqueries
-- ⚠️ DEPRECATED: `_build_fid_table_filter()` method
+### v4.0.3 - Icons & Compact Mode (January 13, 2026)
+- 🐛 FIX: Missing button icons via IconManager migration
+- 🎨 Improved COMPACT mode dimensions (button 48→42px)
+- 📐 Better layout spacing (margins 8→10px, GroupBox padding 6→8px)
 
-### v2.9.2 - Centroid & Simplification Optimizations (January 4, 2026)
-- 🎯 NEW: ST_PointOnSurface() for accurate polygon centroids (guaranteed inside)
-- 📐 NEW: Adaptive simplification before buffer operations
-- 🔧 Configurable CENTROID_MODE: 'point_on_surface' | 'centroid' | 'auto'
-- ⚡ Simplification reduces vertex count 50-90% before buffer
+### v4.0.2 - Signal Cleanup (January 13, 2026)
+- 🧹 Eliminated duplicate fieldChanged signal connections
+- ♻️ All signals now handled ONLY by ExploringController via SignalManager
 
-### v2.9.1 - PostgreSQL MV Optimizations (January 4, 2026)
-- 🚀 INCLUDE clause in GIST indexes (PostgreSQL 11+) - 10-30% faster
-- 📊 Bbox column for fast pre-filtering on large datasets (≥10K features)
-- ⏳ Async CLUSTER for medium datasets (50k-100k) - non-blocking
-- 📈 Extended statistics for better query plans (PostgreSQL 10+)
+### v4.0.1 - UI Profile Fix (January 13, 2026)
+- 🐛 FIX: COMPACT restored as default UI profile
+- 📐 Resolution breakpoint: 1920x1080 → 2560x1440
 
-## Critical Fixes (v2.8.x Series - January 2026)
+### v4.0.0-alpha - God Classes Complete! (January 12, 2026)
+- 🎉 MILESTONE: All god classes objectives achieved (-66.9% reduction)
+- 🏗️ Hexagonal architecture fully established
+- 📊 20 services (10,528 lines), 12 controllers (13,143 lines)
+- 🗂️ modules/ folder migrated to `before_migration/`
 
-### v2.8.9 - MV Management UI (January 4, 2026)
-- ✨ Real-time MV status widget with count and session info
-- 🧹 One-click cleanup actions (Session / Orphaned / All)
-- 🔄 Simplified optimization confirmation popup
+## Architecture v4.0 (Hexagonal)
 
-### v2.8.8 - Selection Sync Initialization Fix (January 4, 2026)
-- 🐛 FIX: Selection Auto-Sync not working on project load
-- ✅ Explicit initialization of selection sync in `_reconnect_layer_signals()`
+```
+filter_mate.py              → Plugin entry point
+filter_mate_app.py          → Application orchestrator (2,271 lines)
+filter_mate_dockwidget.py   → UI management (5,987 lines)
+ui/controllers/             → MVC Controllers (13,143 lines)
+core/
+├── tasks/                  → Async operations (filter_task.py: 5,217 lines)
+├── services/               → Hexagonal services (26 services, 14,520 lines)
+├── domain/                 → Domain models
+├── filter/                 → Filter domain logic
+├── geometry/               → Geometry utilities
+├── optimization/           → Query optimization
+├── ports/                  → Port interfaces
+├── strategies/             → Filter strategies
+adapters/
+├── backends/               → Multi-backend (postgresql/spatialite/ogr/memory)
+├── qgis/                   → QGIS adapters (signals, tasks)
+├── repositories/           → Data access
+infrastructure/
+├── logging/, cache/, utils/, database/
+├── di/, feedback/, parallel/, streaming/
 
-### v2.8.7 - Complex Expression Materialization (January 4, 2026)
-- 🐛 FIX: Slow canvas rendering with complex spatial expressions
-- 🚀 Automatic detection and materialization of expensive expressions
-- ♻️ Centralized psycopg2 imports (`modules/psycopg2_availability.py`)
-- ♻️ Deduplicated buffer methods to base_backend.py (~230 lines removed)
+REMOVED: modules/ → migrated to before_migration/modules/ (v4.0)
+```
 
-### v2.8.1 - Orphaned MV Recovery (January 3, 2026)
-- 🐛 FIX: PostgreSQL "relation does not exist" errors after QGIS restart
-- ✅ Automatic MV reference detection and cleanup on project load
+## Code Statistics (January 17, 2026)
 
-## Architecture
+| Layer | Lines | Files |
+|-------|-------|-------|
+| Core (tasks+services+domain+...) | ~22,000 | 50+ |
+| Adapters (backends+qgis+repos) | ~15,000 | 40+ |
+| Infrastructure | ~8,000 | 25+ |
+| UI (controllers+widgets+...) | ~20,000 | 45+ |
+| Tests | ~47,600 | 157 |
+| **Total (excl. tests)** | **~109,000** | **220+** |
 
-- **Multi-backend:** PostgreSQL, Spatialite, OGR, Memory
-- **Factory pattern** with automatic backend selection + forced backend override
-- **QgsTask** for async operations
-- **Thread safety:** OGR forced sequential, PostgreSQL/Spatialite parallel
+## Key Metrics
+
+- **Test Coverage**: ~75% (target: 80%)
+- **God Classes Reduction**: -66.9% complete
+- **Backend Support**: PostgreSQL, Spatialite, OGR, Memory
+- **Translations**: 21 languages
 
 ## Key Files
 
 | File | Purpose | Lines |
 |------|---------|-------|
-| `filter_mate_app.py` | Application orchestrator | ~3000+ |
-| `filter_mate_dockwidget.py` | UI management | ~5100+ |
-| `modules/backends/` | Multi-backend implementations | |
-| `modules/tasks/filter_task.py` | Core filtering task | ~950 |
-| `modules/constants.py` | Centralized constants | ~120+ |
-| `modules/psycopg2_availability.py` | Centralized psycopg2 handling | NEW v2.8.7 |
+| `filter_mate_app.py` | Application orchestrator | 2,271 |
+| `filter_mate_dockwidget.py` | UI management | 5,987 |
+| `core/tasks/filter_task.py` | Main filtering task | 5,217 |
+| `ui/controllers/integration.py` | UI orchestration | 2,971 |
+| `ui/controllers/exploring_controller.py` | Feature explorer | 2,922 |
 
 ## See Also
 
-- Memory: `enhanced_optimizer_v2.8.0` - Detailed v2.8.0 documentation
-- Memory: `backend_architecture` - Multi-backend system details
-- Memory: `known_issues_bugs` - Bug fixes and known issues
-- Docs: `docs/FIX_INVALID_GEOMETRY_SPATIALITE_2026-01.md` - v2.9.6 fix
-- Docs: `docs/FIX_SPATIALITE_SUBQUERY_2026-01.md` - v2.9.4 fix
+- Memory: `architecture_overview` - Detailed architecture
+- Memory: `backend_architecture` - Multi-backend system
+- Memory: `code_style_conventions` - Coding guidelines
+- CHANGELOG.md - Full version history
