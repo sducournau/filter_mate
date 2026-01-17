@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 # Protection window after filter completes (seconds)
 # Must cover refresh_delay (1500ms) + layer.reload() + margin
-POST_FILTER_PROTECTION_WINDOW = 5.0
+POST_FILTER_PROTECTION_WINDOW = 1.5  # v4.1.3: Reduced from 5.0s for faster user interaction
 
 
 class LayerSyncController(BaseController):
@@ -1218,3 +1218,27 @@ class LayerSyncController(BaseController):
             logger.debug("reconnect_layer_signals: is_selecting=True, initializing selection sync")
             if hasattr(dw, 'exploring_select_features'):
                 dw.exploring_select_features()
+    
+    # === FIX 2026-01-16: Methods required by integration.py signal handlers ===
+    
+    def on_layers_ready(self) -> None:
+        """
+        Handle project layers ready notification.
+        
+        Called by integration._on_project_layers_ready() when PROJECT_LAYERS is populated.
+        Can be used to refresh layer list or update sync state.
+        """
+        logger.info("LayerSyncController: Project layers ready")
+        
+        dw = self.dockwidget
+        if not dw:
+            return
+        
+        # Refresh current layer state if one is selected
+        current_layer = getattr(dw, 'current_layer', None)
+        if current_layer:
+            try:
+                self.set_layer(current_layer)
+                logger.debug(f"LayerSyncController: Synced with current layer: {current_layer.name()}")
+            except Exception as e:
+                logger.debug(f"LayerSyncController: Could not sync with current layer: {e}")

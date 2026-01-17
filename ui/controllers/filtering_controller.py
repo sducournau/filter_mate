@@ -1434,3 +1434,34 @@ class FilteringController(BaseController, LayerSelectionMixin):
             f"undo={len(self._undo_stack)}, "
             f"redo={len(self._redo_stack)})"
         )
+    
+    # === FIX 2026-01-16: Methods required by integration.py signal handlers ===
+    
+    def on_task_started(self, task_type: str) -> None:
+        """
+        Handle task started notification.
+        
+        Called by integration._on_launching_task() when a filter task starts.
+        Can be used to update UI state (disable buttons, show progress).
+        
+        Args:
+            task_type: Type of task started (e.g., 'filter', 'unfilter', 'reset')
+        """
+        logger.info(f"FilteringController: Task started: {task_type}")
+        # Could disable filter buttons during task execution
+        # Could show progress indicator
+    
+    def on_task_completed(self, task_type: str, success: bool) -> None:
+        """
+        Handle task completed notification.
+        
+        Called when a filter task completes.
+        
+        Args:
+            task_type: Type of task that completed
+            success: Whether task succeeded
+        """
+        logger.info(f"FilteringController: Task completed: {task_type}, success={success}")
+        # Could re-enable filter buttons
+        # Could update undo/redo stacks
+

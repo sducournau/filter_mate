@@ -5,6 +5,12 @@ End-to-End Tests for Export Workflow - ARCH-050
 Tests the complete export workflow from layer selection
 to file output.
 
+IMPORTANT: Export is INDEPENDENT from "exploring" and feature selection.
+- Export exports ENTIRE layers (with subset if active, without otherwise)
+- Export NEVER uses current_layer from exploring tab
+- Export NEVER uses selectedFeatures() from QGIS selection
+- Layers to export are configured in the EXPORTING tab (checkboxes)
+
 Part of Phase 5 Integration & Release.
 
 Author: FilterMate Team
@@ -137,30 +143,76 @@ class TestExportWorkflowE2E:
             
             assert result.success is True
     
-    def test_export_selected_features_only(
+    def test_export_with_subset_exports_filtered_features(
         self,
         export_controller_mock,
         sample_vector_layer,
         mock_export_result
     ):
-        """Test exporting only selected features."""
+        """
+        Test that export with active subset exports only filtered features.
+        
+        IMPORTANT: This tests the CORRECT behavior:
+        - Export uses subset string (filter) if active on layer
+        - Export does NOT use QGIS selectedFeatures()
+        - Export is INDEPENDENT from exploring tab
+        """
         controller = export_controller_mock
         
         with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = Path(tmpdir) / "selected_export.gpkg"
+            output_path = Path(tmpdir) / "subset_export.gpkg"
+            
+            # Simulate a layer with active filter (subset string)
+            sample_vector_layer.setSubsetString('"population" > 10000')
             
             controller.set_source_layer(sample_vector_layer)
             controller.set_output_path(str(output_path))
-            controller.set_export_selected_only = MagicMock()
-            controller.set_export_selected_only(True)
             
-            # Mock export with fewer features
-            mock_export_result.feature_count = 25
+            # Export should export features matching subset (fewer than total)
+            mock_export_result.feature_count = 25  # Only features matching subset
             controller.export_layer = MagicMock(return_value=mock_export_result)
             
             result = controller.export_layer()
             assert result.success is True
+            # Export uses subset - fewer features than full layer
             assert result.feature_count == 25
+    
+    def test_export_is_independent_of_qgis_selection(
+        self,
+        export_controller_mock,
+        sample_vector_layer,
+        mock_export_result
+    ):
+        """
+        Test that export ignores QGIS feature selection.
+        
+        CRITICAL: Export must NEVER depend on:
+        - QGIS selectedFeatures()
+        - exploring tab's current_layer
+        - exploring tab's selection expression
+        
+        Export only depends on:
+        - Layers checked in EXPORTING tab
+        - Subset string (filter) if active on layer
+        """
+        controller = export_controller_mock
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "no_selection_export.gpkg"
+            
+            # Even if layer has QGIS selection, export ignores it
+            # (export uses subset string, not selectedFeatures())
+            controller.set_source_layer(sample_vector_layer)
+            controller.set_output_path(str(output_path))
+            
+            # Export all features (100) regardless of any selection
+            mock_export_result.feature_count = 100
+            controller.export_layer = MagicMock(return_value=mock_export_result)
+            
+            result = controller.export_layer()
+            assert result.success is True
+            # All features exported (selection ignored)
+            assert result.feature_count == 100
     
     def test_export_with_crs_transform(
         self,

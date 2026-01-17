@@ -121,6 +121,8 @@ def apply_pending_subset_requests(
     
     for layer, expression in pending_requests:
         try:
+            layer_name = layer.name() if layer else "NONE"
+            
             if not layer or not is_valid_layer(layer):
                 QgsMessageLog.logMessage(
                     f"finished() ✗ Layer invalid: {layer.name() if layer else 'None'}",
@@ -175,6 +177,7 @@ def apply_pending_subset_requests(
             else:
                 # Apply new filter
                 success = safe_set_subset_fn(layer, expression_str)
+                
                 if success:
                     # Force reload for PostgreSQL/Spatialite/OGR layers
                     if layer.providerType() in ('postgres', 'spatialite', 'ogr'):

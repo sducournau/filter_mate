@@ -376,6 +376,48 @@ class ControllerIntegration:
             except Exception as e:
                 logger.warning(f"Could not connect currentLayerChanged signal: {e}")
         
+        # === FIX 2026-01-16: Connect critical dockwidget signals (regression fix) ===
+        # These signals were not connected during hexagonal migration, causing:
+        # - Controllers unaware when widgets are ready
+        # - Task launches not tracked
+        # - Export combobox not populated
+        
+        # FIX-1: widgetsInitialized - Controllers need to know when UI is ready
+        if hasattr(dw, 'widgetsInitialized'):
+            try:
+                dw.widgetsInitialized.connect(self._on_widgets_initialized)
+                self._connections.append(('widgetsInitialized', self._on_widgets_initialized))
+                logger.debug("✓ Connected widgetsInitialized signal")
+            except Exception as e:
+                logger.warning(f"Could not connect widgetsInitialized signal: {e}")
+        
+        # FIX-2: launchingTask - Track task launches for filtering/export operations
+        if hasattr(dw, 'launchingTask'):
+            try:
+                dw.launchingTask.connect(self._on_launching_task)
+                self._connections.append(('launchingTask', self._on_launching_task))
+                logger.debug("✓ Connected launchingTask signal")
+            except Exception as e:
+                logger.warning(f"Could not connect launchingTask signal: {e}")
+        
+        # FIX-4: projectLayersReady - Populate export combobox when layers are ready
+        if hasattr(dw, 'projectLayersReady'):
+            try:
+                dw.projectLayersReady.connect(self._on_project_layers_ready)
+                self._connections.append(('projectLayersReady', self._on_project_layers_ready))
+                logger.debug("✓ Connected projectLayersReady signal")
+            except Exception as e:
+                logger.warning(f"Could not connect projectLayersReady signal: {e}")
+        
+        # FIX-4b: gettingProjectLayers - Show loading feedback
+        if hasattr(dw, 'gettingProjectLayers'):
+            try:
+                dw.gettingProjectLayers.connect(self._on_getting_project_layers)
+                self._connections.append(('gettingProjectLayers', self._on_getting_project_layers))
+                logger.debug("✓ Connected gettingProjectLayers signal")
+            except Exception as e:
+                logger.warning(f"Could not connect gettingProjectLayers signal: {e}")
+        
         # === v4.0.5: Connect controller signals to integration handlers ===
         # This enables proper event-driven communication between controllers and UI
         
@@ -446,6 +488,15 @@ class ControllerIntegration:
                     dw.tabTools.currentChanged.disconnect(handler)
                 elif signal_name == 'currentLayerChanged' and hasattr(dw, 'currentLayerChanged'):
                     dw.currentLayerChanged.disconnect(handler)
+                # FIX 2026-01-16: Disconnect critical dockwidget signals
+                elif signal_name == 'widgetsInitialized' and hasattr(dw, 'widgetsInitialized'):
+                    dw.widgetsInitialized.disconnect(handler)
+                elif signal_name == 'launchingTask' and hasattr(dw, 'launchingTask'):
+                    dw.launchingTask.disconnect(handler)
+                elif signal_name == 'projectLayersReady' and hasattr(dw, 'projectLayersReady'):
+                    dw.projectLayersReady.disconnect(handler)
+                elif signal_name == 'gettingProjectLayers' and hasattr(dw, 'gettingProjectLayers'):
+                    dw.gettingProjectLayers.disconnect(handler)
                 # v4.0.5: Controller signals
                 elif signal_name.startswith('layer_sync.') and self._layer_sync_controller:
                     if 'layer_synchronized' in signal_name:
@@ -600,6 +651,109 @@ class ControllerIntegration:
         """Handle config change event from ConfigController."""
         logger.debug(f"Config changed: {key} = {value}")
         # Could propagate config changes to components that need them
+    
+    # === FIX 2026-01-16: Handlers for critical dockwidget signals ===
+    
+    def _on_widgets_initialized(self) -> None:
+        """
+        FIX-1: Handle widgets initialized event from dockwidget.
+        
+        This signal is emitted when all dockwidget widgets are configured.
+        Controllers can now safely access widgets.
+        """
+        logger.info("✓ Widgets initialized - controllers can now access UI")
+        
+        # Sync all controllers with current dockwidget state
+        self.sync_from_dockwidget()
+        
+        # Notify exploring controller to refresh if layer exists
+        if self._exploring_controller and self._dockwidget:
+            layer = getattr(self._dockwidget, 'current_layer', None)
+            if layer:
+                try:
+                    self._exploring_controller.set_layer(layer)
+                    logger.debug(f"ExploringController synced with layer: {layer.name()}")
+                except Exception as e:
+                    logger.debug(f"Could not sync exploring controller: {e}")
+        
+        # Notify exporting controller to populate layers
+        if self._exporting_controller and self._dockwidget:
+            try:
+                if hasattr(self._exporting_controller, 'refresh_layers'):
+                    self._exporting_controller.refresh_layers()
+                    logger.debug("ExportingController layers refreshed")
+            except Exception as e:
+                logger.debug(f"Could not refresh exporting layers: {e}")
+    
+    def _on_launching_task(self, task_type: str) -> None:
+        """
+        FIX-2: Handle task launch event from dockwidget.
+        
+        This signal is emitted when a filtering/export task is launched.
+        Controllers can track task state and show progress.
+        
+        Args:
+            task_type: Type of task being launched (e.g., 'filter', 'export')
+        """
+        logger.info(f"📋 Task launched: {task_type}")
+        
+        # Could show progress indicator or disable UI during task
+        # For now, just log and let the task complete
+        
+        # Notify filtering controller if it's a filter task
+        if task_type in ('filter', 'unfilter', 'reset') and self._filtering_controller:
+            try:
+                if hasattr(self._filtering_controller, 'on_task_started'):
+                    self._filtering_controller.on_task_started(task_type)
+            except Exception as e:
+                logger.debug(f"FilteringController task notification failed: {e}")
+        
+        # Notify exporting controller if it's an export task
+        if task_type == 'export' and self._exporting_controller:
+            try:
+                if hasattr(self._exporting_controller, 'on_task_started'):
+                    self._exporting_controller.on_task_started(task_type)
+            except Exception as e:
+                logger.debug(f"ExportingController task notification failed: {e}")
+    
+    def _on_project_layers_ready(self) -> None:
+        """
+        FIX-4: Handle project layers ready event from dockwidget.
+        
+        This signal is emitted when PROJECT_LAYERS is fully populated.
+        Export combobox should be populated now.
+        """
+        logger.info("✓ Project layers ready - populating export combobox")
+        
+        # Populate export layers combobox
+        if self._exporting_controller:
+            try:
+                # FIX-6 (2026-01-16): Use correct method name - refresh_layers() not populate_export_layers()
+                if hasattr(self._exporting_controller, 'refresh_layers'):
+                    self._exporting_controller.refresh_layers()
+                    logger.debug("Export layers combobox populated")
+                elif hasattr(self._exporting_controller, 'populate_export_combobox'):
+                    self._exporting_controller.populate_export_combobox()
+                    logger.debug("Export layers combobox populated (fallback)")
+            except Exception as e:
+                logger.debug(f"Could not populate export layers: {e}")
+        
+        # Also refresh layer sync controller
+        if self._layer_sync_controller:
+            try:
+                if hasattr(self._layer_sync_controller, 'on_layers_ready'):
+                    self._layer_sync_controller.on_layers_ready()
+            except Exception as e:
+                logger.debug(f"LayerSyncController layers ready notification failed: {e}")
+    
+    def _on_getting_project_layers(self) -> None:
+        """
+        FIX-4b: Handle getting project layers event from dockwidget.
+        
+        This signal is emitted when layer loading starts.
+        Could show loading indicator.
+        """
+        logger.debug("⏳ Loading project layers...")
 
     def _cleanup_on_error(self) -> None:
         """Cleanup after setup error."""

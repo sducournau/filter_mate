@@ -150,8 +150,12 @@ class ExpressionBuilder:
             if source_filter:
                 logger.info(f"   Length: {len(source_filter)} chars")
                 logger.info(f"   Preview: {source_filter[:200]}...")
+            elif backend_name == 'PostgreSQL':
+                # WARNING: Only for PostgreSQL EXISTS mode - OGR/Spatialite don't need source_filter
+                logger.warning("   ⚠️ source_filter is NULL/EMPTY - PostgreSQL EXISTS will query entire source table!")
             else:
-                logger.warning("   ⚠️ source_filter is NULL/EMPTY - EXISTS will query entire source table!")
+                # INFO: OGR and Spatialite don't use source_filter (normal behavior)
+                logger.debug(f"   ℹ️ source_filter=None for {backend_name} backend (expected)")
             logger.info("=" * 80)
             
             # ==========================================

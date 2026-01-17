@@ -4922,6 +4922,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.debug("current_layer_changed: Already updating, skipping")
             return
         
+        # FIX-5 (2026-01-16): CRITICAL - Ignore layer change signals during filtering
+        # This prevents the comboBox from changing value when layerTreeView emits currentLayerChanged
+        # Restored from v2.9.26 - was lost during hexagonal migration
+        if getattr(self, '_filtering_in_progress', False):
+            logger.debug("v4.0.5: 🛡️ current_layer_changed BLOCKED - filtering in progress")
+            return
+        
         # CRITICAL FIX (2026-01-14): Delegate to controller with manual_change flag
         # Manual changes should bypass protection windows and always update widgets
         if self._controller_integration:

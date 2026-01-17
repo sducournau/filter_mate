@@ -517,7 +517,12 @@ def prepare_geometries_by_provider(
         if source_is_postgresql_with_connection:
             print(f"  ✓ PREPARING PostgreSQL source geometry...")
             result['postgresql_source_geom'] = prepare_postgresql_geom_callback()
-            print(f"  ✓ PostgreSQL source geometry result: {result['postgresql_source_geom'] is not None}")
+            pg_geom = result['postgresql_source_geom']
+            print(f"  ✓ PostgreSQL source geometry result: {pg_geom is not None}")
+            if pg_geom:
+                print(f"  ✓ PostgreSQL source geometry VALUE: '{str(pg_geom)[:150]}...'")
+            else:
+                print(f"  ❌ PostgreSQL source geometry is None/empty!")
         elif has_distant_postgresql_with_connection:
             print(f"  ⚠️ PostgreSQL distant layers detected but source is NOT PostgreSQL")
             print(f"  → Will use WKT mode (ST_GeomFromText) for PostgreSQL filtering")
@@ -650,6 +655,7 @@ def prepare_geometries_by_provider(
         param_buffer_expression != '' or
         'postgresql' in provider_list
     )
+    
     if needs_ogr_geom:
         if logger:
             logger.info("Preparing OGR/Spatialite source geometry...")

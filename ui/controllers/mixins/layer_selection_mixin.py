@@ -18,12 +18,20 @@ except ImportError:
     # Mock types for testing
     QgsVectorLayer = Any
     QgsProject = Any
+
 # Import centralized provider detection (v4.0.4 - eliminate duplication)
 try:
     from ....infrastructure.utils import detect_provider_type, ProviderType
     _HAS_PROVIDER_UTILS = True
 except ImportError:
     _HAS_PROVIDER_UTILS = False
+
+# v4.0.10: Import centralized layer validation (eliminate duplication)
+try:
+    from ....infrastructure.utils import is_layer_valid as _is_layer_valid_util
+    _HAS_VALIDATION_UTILS = True
+except ImportError:
+    _HAS_VALIDATION_UTILS = False
 
 class LayerSelectionMixin:
     """
@@ -79,12 +87,20 @@ class LayerSelectionMixin:
         """
         Check if layer is valid for operations.
 
+        v4.0.10: Delegates to centralized validation_utils.is_layer_valid()
+        which includes SIP deletion check for robustness.
+
         Args:
             layer: Layer to validate
 
         Returns:
             True if layer is valid and usable, False otherwise
         """
+        # v4.0.10: Delegate to centralized validation (includes SIP check)
+        if _HAS_VALIDATION_UTILS:
+            return _is_layer_valid_util(layer)
+        
+        # Fallback for testing or import issues
         if layer is None:
             return False
         

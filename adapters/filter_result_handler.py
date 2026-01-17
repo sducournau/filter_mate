@@ -752,7 +752,7 @@ class FilterResultHandler:
                 # v3.0.19: CRITICAL FIX - Reset _filtering_in_progress HERE, not earlier
                 dockwidget._filtering_in_progress = False
                 
-                logger.info("v3.0.19: ✅ Unblocked combobox, reconnected handler, and reset filtering flag after 5s protection")
+                logger.info("v3.0.19: ✅ Unblocked combobox, reconnected handler, and reset filtering flag after protection")
                 QgsMessageLog.logMessage(
                     "v3.0.19: ✅ Combobox protection ENDED - signals reconnected, filtering flag reset",
                     "FilterMate", Qgis.Info
@@ -761,13 +761,15 @@ class FilterResultHandler:
                 logger.error(f"v3.0.19: Error reconnecting combobox: {e}")
         
         # Schedule checks during protection window (signals still blocked)
-        for delay in [200, 600, 1000, 1500, 2000, 2500, 3000, 4000]:
+        # v4.1.3: Reduced delays for faster response time
+        for delay in [100, 300, 500, 800, 1000]:
             QTimer.singleShot(delay, restore_combobox_if_needed)
         
-        # Unblock and reconnect AFTER 5s protection window
-        QTimer.singleShot(5100, unblock_and_reconnect_combobox)  # 5.1s to ensure protection has expired
+        # v4.1.3: Reduced protection window from 5s to 1.5s for faster user interaction
+        # Unblock and reconnect AFTER protection window
+        QTimer.singleShot(1500, unblock_and_reconnect_combobox)
         
-        logger.info(f"v3.0.19: 📋 Scheduled 8 delayed checks + signal reconnection at 5.1s")
+        logger.info(f"v4.1.3: 📋 Scheduled 5 delayed checks + signal reconnection at 1.5s")
     
     def _invalidate_expression_cache(self, source_layer: QgsVectorLayer, task_parameters: Dict[str, Any]) -> None:
         """

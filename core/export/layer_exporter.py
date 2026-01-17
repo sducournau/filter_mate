@@ -5,6 +5,16 @@ v4.0 EPIC-1 Phase E1: Extracted from filter_task.py export methods
 
 Handles layer export operations to various formats.
 
+IMPORTANT: Export is INDEPENDENT from "exploring" and QGIS selection.
+====================================================================
+
+Export behavior:
+- Uses QgsVectorFileWriter which respects the layer's subsetString (filter)
+- WITH subset: exports only features matching the filter
+- WITHOUT subset: exports all features in the layer
+- Does NOT use QGIS selectedFeatures() - selection is ignored
+- Does NOT reference current_layer from exploring tab
+
 Original source: modules/tasks/filter_task.py lines 9551-10400 (~850 lines)
 """
 

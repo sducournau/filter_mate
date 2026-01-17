@@ -2629,13 +2629,6 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 # THREAD SAFETY FIX: Use queue callback if available (called from background thread)
                 queue_callback = self.task_params.get('_subset_queue_callback')
                 
-                # DIAGNOSTIC
-                from qgis.core import QgsMessageLog, Qgis
-                QgsMessageLog.logMessage(
-                    f"Applying subset on {layer.name()}: queue_callback={'Yes' if queue_callback else 'No'}, expr_len={len(final_expression)}",
-                    "FilterMate", Qgis.Info  # DEBUG
-                )
-                
                 if queue_callback:
                     queue_callback(layer, final_expression)
                     self.log_debug(f"OGR filter queued for main thread application")

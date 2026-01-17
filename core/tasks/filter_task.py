@@ -632,7 +632,9 @@ class FilterEngineTask(QgsTask):
                 get_predicates_callback=lambda: getattr(self, 'current_predicates', {})
             )
             logger.debug("FilterOrchestrator lazy-initialized with predicate callback")
-            logger.debug(f"FilterOrchestrator: ALWAYS propagating predicates: {list(predicates_to_pass.keys()) if predicates_to_pass else 'EMPTY'}")
+            # FIX 2026-01-17: Use self.current_predicates directly instead of undefined predicates_to_pass
+            current_preds = getattr(self, 'current_predicates', None) or {}
+            logger.debug(f"FilterOrchestrator: ALWAYS propagating predicates: {list(current_preds.keys()) if current_preds else 'EMPTY'}")
         
         return self._filter_orchestrator
 
@@ -1205,16 +1207,8 @@ class FilterEngineTask(QgsTask):
         import traceback
         run_start_time = time.time()
         
-        # FIX 2026-01-16: Log PostgreSQL availability at task start
+        # Log PostgreSQL availability at task start
         from qgis.core import QgsMessageLog, Qgis as QgisLevel
-        
-        # CRITICAL: Use print() to force output to Python Console
-        print("=" * 80)
-        print(f"🔍 DIAGNOSTIC FilterMate - FilterEngineTask.run() STARTED")
-        print(f"   POSTGRESQL_AVAILABLE = {POSTGRESQL_AVAILABLE}")
-        print(f"   PSYCOPG2_AVAILABLE = {PSYCOPG2_AVAILABLE}")
-        print(f"   action = {self.task_action}")
-        print("=" * 80)
         
         logger.info(f"{'=' * 60}")
         logger.info(f"🔍 POSTGRESQL_AVAILABLE = {POSTGRESQL_AVAILABLE}")
@@ -1949,6 +1943,7 @@ class FilterEngineTask(QgsTask):
         # MIG-023: STRANGLER FIG PATTERN - Try v3 multi-step first
         # =====================================================================
         v3_result = self._try_v3_multi_step_filter(self.layers)
+        
         if v3_result is True:
             logger.info("✅ V3 multi-step completed successfully - skipping legacy code")
             return True
@@ -1967,9 +1962,11 @@ class FilterEngineTask(QgsTask):
         
         # Use parallel execution if enabled and enough layers
         if parallel_enabled and total_layers >= min_layers_for_parallel:
-            return self._filter_all_layers_parallel(max_workers)
+            result = self._filter_all_layers_parallel(max_workers)
+            return result
         else:
-            return self._filter_all_layers_sequential()
+            result = self._filter_all_layers_sequential()
+            return result
     
     def _filter_all_layers_parallel(self, max_workers: int = 0):
         """Filter all layers using parallel execution."""
@@ -1983,6 +1980,8 @@ class FilterEngineTask(QgsTask):
                 layer_props_with_provider = layer_props.copy()
                 layer_props_with_provider['_effective_provider_type'] = provider_type
                 all_layers.append((layer, layer_props_with_provider))
+        
+        logger.debug(f"Prepared {len(all_layers)} layers for parallel filtering")
         
         # Create executor with config
         config = ParallelConfig(
@@ -2014,7 +2013,6 @@ class FilterEngineTask(QgsTask):
         failed_filters = 0
         failed_layer_names = []  # Track names of failed layers for error message
         
-        # DIAGNOSTIC: Log results for debugging
         logger.debug(f"_filter_all_layers_parallel: all_layers count={len(all_layers)}, results count={len(results)}")
         for idx, res in enumerate(results):
             logger.debug(f"  Result[{idx}]: {res.layer_name} → success={res.success}, error={res.error_message}")
@@ -2068,6 +2066,10 @@ class FilterEngineTask(QgsTask):
         successful_filters = 0
         failed_filters = 0
         failed_layer_names = []  # Track names of failed layers for error message
+        
+        logger.debug(f"Processing providers: {list(self.layers.keys())}")
+        for provider_type in self.layers:
+            logger.debug(f"Provider '{provider_type}' has {len(self.layers[provider_type])} layers")
         
         for layer_provider_type in self.layers:
             for layer, layer_props in self.layers[layer_provider_type]:
@@ -2184,7 +2186,9 @@ class FilterEngineTask(QgsTask):
         
         # Prepare geometries for all provider types
         # NOTE: This will use self.param_buffer_value set above
-        if not self._prepare_geometries_by_provider(provider_list):
+        geom_prep_result = self._prepare_geometries_by_provider(provider_list)
+        
+        if not geom_prep_result:
             # If self.message wasn't set by _prepare_geometries_by_provider, set a generic one
             if not hasattr(self, 'message') or not self.message:
                 self.message = "Failed to prepare source geometries for distant layers filtering"
@@ -2611,7 +2615,7 @@ class FilterEngineTask(QgsTask):
         if not OGR_EXECUTOR_AVAILABLE or not hasattr(ogr_executor, 'OGRSourceContext'):
             logger.error("OGR executor not available")
             self.ogr_source_geom = None
-            return
+            return None
         context = ogr_executor.OGRSourceContext(
             source_layer=self.source_layer, task_parameters=self.task_parameters,
             is_field_expression=getattr(self, 'is_field_expression', None),
@@ -2631,6 +2635,9 @@ class FilterEngineTask(QgsTask):
         )
         self.ogr_source_geom = ogr_executor.prepare_ogr_source_geom(context)
         logger.debug(f"prepare_ogr_source_geom: {self.ogr_source_geom}")
+        
+        # FIX 2026-01-17: Return the prepared geometry so the callback gets a value
+        return self.ogr_source_geom
 
 
     def _verify_and_create_spatial_index(self, layer, layer_name=None):
@@ -3053,7 +3060,8 @@ class FilterEngineTask(QgsTask):
             logger.error(f"   Exception message: {str(e)}")
             logger.error("=" * 70)
             import traceback
-            logger.error(f"Full traceback:\n{traceback.format_exc()}")
+            full_tb = traceback.format_exc()
+            logger.error(f"Full traceback:\n{full_tb}")
             # Afficher AUSSI dans la console QGIS
             from qgis.core import QgsMessageLog, Qgis as QgisLevel
             QgsMessageLog.logMessage(
@@ -3262,7 +3270,6 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if filtering succeeded, False otherwise
         """
-        
         # FIX 2026-01-16: Initialize current_predicates EARLY
         # current_predicates must be populated BEFORE execute_source_layer_filtering()
         # because ExpressionBuilder and FilterOrchestrator need them during lazy init.
@@ -3345,9 +3352,24 @@ class FilterEngineTask(QgsTask):
         # ÉTAPE 2: FILTRER LES COUCHES DISTANTES (si prédicats géométriques)
         # ═══════════════════════════════════════════════════════════════
         
+        # FIX 2026-01-17: Enhanced console diagnostic for distant layers filtering
+        print("=" * 80)
+        print("📋 ÉTAPE 2: DIAGNOSTIC FILTRAGE COUCHES DISTANTES")
+        print("=" * 80)
+        
         has_geom_predicates = self.task_parameters["filtering"]["has_geometric_predicates"]
+        print(f"  has_geometric_predicates: {has_geom_predicates}")
         has_layers_to_filter = self.task_parameters["filtering"]["has_layers_to_filter"]
+        print(f"  has_layers_to_filter: {has_layers_to_filter}")
         has_layers_in_params = len(self.task_parameters['task'].get('layers', [])) > 0
+        print(f"  has_layers_in_params: {has_layers_in_params}")
+        print(f"  self.layers_count: {self.layers_count}")
+        print(f"  self.layers keys: {list(self.layers.keys()) if self.layers else 'None'}")
+        for prov_type, layer_list in (self.layers or {}).items():
+            print(f"    {prov_type}: {len(layer_list)} layer(s)")
+            for lyr, lyr_props in layer_list[:3]:  # Show first 3
+                print(f"      - {lyr.name()}")
+        print("=" * 80)
         
         # FIX v3.0.7: Log to QGIS message panel for visibility
         from qgis.core import QgsMessageLog, Qgis as QgisLevel
@@ -3525,6 +3547,7 @@ class FilterEngineTask(QgsTask):
         logger.info("=" * 60)
         logger.info(f"✓ FilterMate: Unfilter queued for {i} layer(s)")
         logger.info("=" * 60)
+        
         return True
     
     def execute_reseting(self) -> bool:
@@ -4963,6 +4986,7 @@ class FilterEngineTask(QgsTask):
         # E6: Check if subset application should be skipped
         has_pending = hasattr(self, '_pending_subset_requests')
         pending_list = self._pending_subset_requests if has_pending else []
+        
         truly_canceled = should_skip_subset_application(
             self.isCanceled(), has_pending, pending_list, result
         )
@@ -4975,10 +4999,11 @@ class FilterEngineTask(QgsTask):
         # THREAD SAFETY FIX v2.3.21: Apply pending subset strings on main thread
         # E6: Delegated to task_completion_handler.apply_pending_subset_requests()
         if hasattr(self, '_pending_subset_requests') and self._pending_subset_requests:
-            apply_pending_subset_requests(
+            applied_count = apply_pending_subset_requests(
                 self._pending_subset_requests,
                 safe_set_subset_string
             )
+            logger.info(f"Applied {applied_count} pending subset requests")
             # Clear the pending requests
             self._pending_subset_requests = []
             
@@ -5143,3 +5168,50 @@ class FilterEngineTask(QgsTask):
                 logger.info(metrics_report)
             except Exception as metrics_err:
                 logger.debug(f"TaskBridge metrics logging failed: {metrics_err}")
+        
+        # FIX 2026-01-17: Clean up orphaned safe_intersect layers from project
+        # These temporary layers should be removed after task completion
+        self._cleanup_safe_intersect_layers()
+    
+    def _cleanup_safe_intersect_layers(self):
+        """
+        Clean up orphaned safe_intersect temporary layers from the project.
+        
+        These layers are created during OGR/Spatialite filtering as GEOS-safe wrappers
+        and should be removed after task completion to prevent project pollution.
+        """
+        try:
+            import re
+            from qgis.core import QgsProject
+            
+            project = QgsProject.instance()
+            layers_to_remove = []
+            
+            # Patterns for temp layers created by FilterMate
+            temp_patterns = [
+                r'_safe_intersect_\d+',
+                r'_safe_source$',
+                r'_safe_target$',
+                r'_geos_safe$',
+                r'^source_from_task$',
+                r'^source_selection$',
+                r'^source_filtered$',
+                r'^source_field_based$',
+                r'^source_expr_filtered$',
+            ]
+            
+            for layer_id, layer in project.mapLayers().items():
+                layer_name = layer.name()
+                for pattern in temp_patterns:
+                    if re.search(pattern, layer_name):
+                        layers_to_remove.append(layer_id)
+                        logger.debug(f"Marking for removal: {layer_name}")
+                        break
+            
+            if layers_to_remove:
+                # Remove layers from project (not from legend - they were never added to legend)
+                project.removeMapLayers(layers_to_remove)
+                print(f"🧹 Cleaned up {len(layers_to_remove)} temporary layer(s)")
+                logger.info(f"Cleaned up {len(layers_to_remove)} temporary safe_intersect layers")
+        except Exception as e:
+            logger.debug(f"safe_intersect cleanup failed (non-critical): {e}")

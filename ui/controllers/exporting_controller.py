@@ -4,6 +4,24 @@ FilterMate Exporting Controller.
 Manages exporting tab logic including layer selection,
 format configuration, output path, CRS selection,
 and export execution (single and batch).
+
+IMPORTANT: Export is INDEPENDENT from "exploring" tab and QGIS selection.
+==========================================================================
+
+Export behavior:
+- Exports ENTIRE layers (all features visible with current subset)
+- WITH subset string: exports only filtered features (respects active filter)
+- WITHOUT subset string: exports all features in the layer
+- Layers to export are selected via checkboxes in the EXPORTING tab
+
+Export does NOT use:
+- exploring tab's current_layer
+- exploring tab's selection expression
+- QGIS selectedFeatures() or layer selection
+- Any data from the filtering process
+
+This design ensures export is a standalone operation that can be performed
+independently of any filtering or exploring activity.
 """
 from typing import TYPE_CHECKING, Optional, List, Dict, Any, Callable
 from dataclasses import dataclass, field
@@ -905,3 +923,53 @@ class ExportingController(BaseController):
             f"path={path}, "
             f"exporting={self._is_exporting})"
         )
+    
+    # === FIX 2026-01-16: Methods required by integration.py signal handlers ===
+    
+    def refresh_layers(self) -> bool:
+        """
+        Refresh the export layers list.
+        
+        Called by integration._on_widgets_initialized() when widgets are ready.
+        Delegates to populate_export_combobox().
+        
+        Returns:
+            True if refresh succeeded, False otherwise
+        """
+        logger.debug("ExportingController.refresh_layers() called")
+        return self.populate_export_combobox()
+    
+    def on_task_started(self, task_type: str) -> None:
+        """
+        Handle task started notification.
+        
+        Called by integration._on_launching_task() when an export task starts.
+        Can be used to update UI state (disable buttons, show progress).
+        
+        Args:
+            task_type: Type of task started (e.g., 'export')
+        """
+        logger.info(f"ExportingController: Task started: {task_type}")
+        if task_type == 'export':
+            self._is_exporting = True
+            # Notify callbacks that export started
+            for callback in self._on_export_started_callbacks:
+                try:
+                    callback()
+                except Exception as e:
+                    logger.debug(f"Export started callback failed: {e}")
+    
+    def on_task_completed(self, task_type: str, success: bool) -> None:
+        """
+        Handle task completed notification.
+        
+        Called when an export task completes.
+        
+        Args:
+            task_type: Type of task that completed
+            success: Whether task succeeded
+        """
+        logger.info(f"ExportingController: Task completed: {task_type}, success={success}")
+        if task_type == 'export':
+            self._is_exporting = False
+

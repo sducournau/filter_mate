@@ -71,10 +71,10 @@ adapters/
 infrastructure/
 ├── logging/                → Logging setup
 ├── cache/                  → Query/geometry cache
-├── utils/                  → Utilities (migrated from modules/)
+├── utils/                  → Utilities (centralized validation, layer utils)
 └── database/               → Database utilities
 
-⚠️ DEPRECATED: modules/ (shims only - will be removed in v5.0)
+✅ REMOVED: modules/ folder has been completely removed in v4.0
 ```
 
 ## Code Style Guidelines
@@ -117,18 +117,16 @@ from .infrastructure.utils import get_datasource_connexion_from_layer
 from .core.tasks import FilterEngineTask
 ```
 
-## ⚠️ DEPRECATED IMPORTS (DON'T USE!)
+## ✅ MIGRATION COMPLETE (v4.0)
+
+The `modules/` folder has been **completely removed**. All code has been migrated:
 
 ```python
-# ❌ OLD - Will be removed in v5.0
-from modules.appUtils import POSTGRESQL_AVAILABLE
-from modules.tasks import FilterEngineTask
-from modules.backends import BackendFactory
-
-# ✅ NEW - Use these instead
+# ✅ Current imports (v4.0+)
 from adapters.backends.postgresql_availability import POSTGRESQL_AVAILABLE
 from core.tasks import FilterEngineTask
 from adapters.backends import BackendFactory
+from infrastructure.utils import is_layer_valid, get_datasource_connexion_from_layer
 ```
 
 ## Critical Patterns
@@ -138,7 +136,7 @@ from adapters.backends import BackendFactory
 **ALWAYS** check `POSTGRESQL_AVAILABLE` before using PostgreSQL-specific code:
 
 ```python
-from modules.appUtils import POSTGRESQL_AVAILABLE
+from adapters.backends.postgresql_availability import POSTGRESQL_AVAILABLE
 
 if POSTGRESQL_AVAILABLE and provider_type == 'postgresql':
     # PostgreSQL-specific code

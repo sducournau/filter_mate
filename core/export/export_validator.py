@@ -5,6 +5,20 @@ v4.0 EPIC-1 Phase E1: Extracted from filter_task.py._validate_export_parameters(
 
 Validates export configurations before execution.
 
+IMPORTANT: Export is INDEPENDENT from "exploring" and QGIS selection.
+====================================================================
+
+Export validation checks:
+- LAYERS_TO_EXPORT: layers selected via checkboxes in EXPORTING tab
+- DATATYPE_TO_EXPORT: export format (GPKG, SHP, etc.)
+- OUTPUT_FOLDER_TO_EXPORT: destination path
+
+Export does NOT validate or use:
+- current_layer from exploring tab
+- selection expression from exploring
+- QGIS selectedFeatures()
+- Any filtering/exploring state
+
 Original source: modules/tasks/filter_task.py lines 9253-9351 (~100 lines)
 """
 

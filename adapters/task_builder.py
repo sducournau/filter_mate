@@ -727,6 +727,21 @@ class TaskParameterBuilder:
         
         v4.7: Extracted from FilterMateApp.get_task_parameters() for God Class reduction.
         
+        IMPORTANT: Export is INDEPENDENT from "exploring" and QGIS selection.
+        ===================================================================
+        
+        This method builds export parameters from:
+        - LAYERS_TO_EXPORT: layers selected via checkboxes in EXPORTING tab
+        
+        Export does NOT use:
+        - current_layer from exploring tab
+        - selectedFeatures() or QGIS selection
+        - Any data from filtering/exploring process
+        
+        The actual export (via QgsVectorFileWriter) will:
+        - Respect layer's subsetString (exports filtered features if filter active)
+        - Export all features if no filter is active
+        
         Args:
             project_layers: PROJECT_LAYERS dictionary
             project: QgsProject instance

@@ -123,7 +123,7 @@ class LayerService(QObject):
         self._saved_layer_id_before_filter: Optional[str] = None
         
         # Protection window duration (matches dockwidget)
-        self.POST_FILTER_PROTECTION_WINDOW = 5.0  # seconds
+        self.POST_FILTER_PROTECTION_WINDOW = 1.5  # v4.1.3: Reduced from 5.0s for faster user interaction
     
     # ─────────────────────────────────────────────────────────────────
     # Layer Validation
