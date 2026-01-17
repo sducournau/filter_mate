@@ -105,8 +105,16 @@ def prepare_postgresql_source_geom(
         
         # NOTE: Centroids are not supported with buffer expressions (materialized views)
         # because the view already contains buffered geometries
+        # ORDER OF APPLICATION: Buffer expression creates MV first, centroid cannot be applied after
         if use_centroids:
             logger.warning("⚠️ PostgreSQL: Centroid option ignored when using buffer expression (materialized view)")
+            # v4.1.3: Notify user via QGIS message log for visibility
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(
+                "⚠️ Centroid optimization was requested but is incompatible with buffer expressions. "
+                "The centroid option has been ignored. Consider using a static buffer value instead.",
+                "FilterMate", Qgis.Warning
+            )
     
     elif buffer_value is not None and buffer_value != 0:
         # Static buffer value mode
@@ -124,6 +132,7 @@ def prepare_postgresql_source_geom(
             style_params += f" endcap={endcap_style}"
         
         # CENTROID + BUFFER: Determine the geometry to buffer
+        # ORDER OF APPLICATION: ST_Buffer(ST_Centroid(geom)) - centroid first, then buffer
         # If centroid is enabled, buffer the centroid point instead of the full geometry
         if use_centroids:
             geom_to_buffer = (

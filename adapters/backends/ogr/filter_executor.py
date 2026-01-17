@@ -733,12 +733,26 @@ def prepare_ogr_source_geom(
         return None
     
     # Step 4: Centroid optimization
-    if context.param_use_centroids_source_layer and context.convert_layer_to_centroids:
-        logger.info("  Applying centroid optimization")
-        centroid_layer = context.convert_layer_to_centroids(layer)
-        if centroid_layer and centroid_layer.isValid() and centroid_layer.featureCount() > 0:
-            layer = centroid_layer
-            logger.info(f"  ✓ Converted to centroids: {layer.featureCount()} points")
+    # ORDER OF APPLICATION: Applied after reprojection (Step 2), before validation (Step 5)
+    # This creates a new memory layer with Point geometries from centroids
+    if context.param_use_centroids_source_layer:
+        if context.convert_layer_to_centroids:
+            logger.info("  Applying centroid optimization")
+            centroid_layer = context.convert_layer_to_centroids(layer)
+            if centroid_layer and centroid_layer.isValid() and centroid_layer.featureCount() > 0:
+                layer = centroid_layer
+                logger.info(f"  ✓ Converted to centroids: {layer.featureCount()} points")
+            else:
+                logger.warning("  ⚠️ Centroid conversion failed - using original geometries")
+        else:
+            # v4.1.3: Warn if centroid requested but callback not provided
+            logger.warning("  ⚠️ Centroid optimization requested but convert_layer_to_centroids callback not provided!")
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(
+                "⚠️ Centroid optimization was requested but is not available for this layer type. "
+                "Using full geometries instead.",
+                "FilterMate", Qgis.Warning
+            )
     
     # Step 5: Prevent garbage collection for memory layers
     # FIX v4.1.1: Register layer for cleanup after filtering completes

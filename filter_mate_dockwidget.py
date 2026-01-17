@@ -2730,19 +2730,29 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def force_reconnect_action_signals(self):
         """v4.0 Sprint 8: Ultra-simplified - force reconnect ACTION signals bypassing cache."""
-        if 'ACTION' not in self.widgets: return
+        logger.info("🔄 force_reconnect_action_signals CALLED")
+        if 'ACTION' not in self.widgets:
+            logger.warning("❌ force_reconnect_action_signals: 'ACTION' not in self.widgets")
+            return
         
+        connected_count = 0
         for w in ['FILTER', 'UNFILTER', 'UNDO_FILTER', 'REDO_FILTER', 'EXPORT']:
-            if w not in self.widgets['ACTION']: continue
+            if w not in self.widgets['ACTION']:
+                logger.warning(f"⚠️ force_reconnect_action_signals: {w} not in self.widgets['ACTION']")
+                continue
             for s_tuple in self.widgets['ACTION'][w].get("SIGNALS", []):
-                if not s_tuple[-1]: continue
+                if not s_tuple[-1]:
+                    logger.warning(f"⚠️ force_reconnect_action_signals: {w} signal tuple has no handler: {s_tuple}")
+                    continue
                 key = f"ACTION.{w}.{s_tuple[0]}"
                 self._signal_connection_states.pop(key, None)
                 try:
                     state = self.changeSignalState(['ACTION', w], s_tuple[0], s_tuple[-1], 'connect')
                     self._signal_connection_states[key] = state
-                except Exception:  # Signal connection may fail if widget deleted - expected during cleanup
-                    pass
+                    connected_count += 1
+                    logger.info(f"✅ force_reconnect_action_signals: Connected {w}.{s_tuple[0]} -> state={state}")
+                except Exception as e:
+                    logger.error(f"❌ force_reconnect_action_signals: Failed to connect {w}.{s_tuple[0]}: {e}")
 
     def force_reconnect_exploring_signals(self):
         """v4.0 S18: Force reconnect EXPLORING signals bypassing cache."""

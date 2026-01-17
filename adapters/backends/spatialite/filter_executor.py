@@ -392,6 +392,8 @@ def process_spatialite_geometries(
         geom_copy = QgsGeometry(geometry)
         
         # Centroid optimization
+        # ORDER OF APPLICATION: Centroid first, then multipart conversion, then reprojection
+        # This creates points from source geometries before union to WKT
         if context.param_use_centroids_source_layer:
             centroid = geom_copy.centroid()
             if centroid and not centroid.isEmpty():

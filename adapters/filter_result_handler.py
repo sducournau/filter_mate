@@ -552,8 +552,10 @@ class FilterResultHandler:
         Args:
             current_layer_id_before_filter: Layer ID that was active before filtering
         """
+        logger.info("🔄 _finalize_filtering CALLED")
         dockwidget = self._get_dockwidget() if self._get_dockwidget else None
         if not dockwidget:
+            logger.warning("❌ _finalize_filtering: dockwidget is None")
             return
         
         try:
@@ -573,6 +575,7 @@ class FilterResultHandler:
             self._reconnect_layer_tree_view_signal()
             
             # v2.9.24: CRITICAL FIX - Force reconnect ACTION signals
+            logger.info("📡 About to call _force_reconnect_action_signals()")
             self._force_reconnect_action_signals()
             
             # v3.0.11: CRITICAL FIX - Force reconnect EXPLORING signals
@@ -655,9 +658,13 @@ class FilterResultHandler:
     
     def _force_reconnect_action_signals(self) -> None:
         """Force reconnect ACTION signals after filtering."""
+        logger.info("🔄 _force_reconnect_action_signals CALLED in filter_result_handler")
         dockwidget = self._get_dockwidget() if self._get_dockwidget else None
         if dockwidget and hasattr(dockwidget, 'force_reconnect_action_signals'):
+            logger.info("   -> Delegating to dockwidget.force_reconnect_action_signals()")
             dockwidget.force_reconnect_action_signals()
+        else:
+            logger.warning(f"   -> FAILED: dockwidget={dockwidget}, has_method={hasattr(dockwidget, 'force_reconnect_action_signals') if dockwidget else False}")
     
     def _force_reconnect_exploring_signals(self) -> None:
         """Force reconnect EXPLORING signals after filtering."""
