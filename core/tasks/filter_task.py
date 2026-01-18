@@ -1694,15 +1694,14 @@ class FilterEngineTask(QgsTask):
         Combine new expression with old subset.
         
         Phase E13: Delegates to AttributeFilterExecutor.
+        The executor already has old_subset, combine_operator, and provider_type
+        set during initialization, so we only pass the expression.
         """
         executor = self._get_attribute_executor()
         
-        return executor.combine_with_old_subset(
-            expression=expression,
-            old_subset=self.param_source_old_subset,
-            combine_operator=self._get_source_combine_operator() or 'AND',
-            provider_type=self.param_source_provider_type if hasattr(self, 'param_source_provider_type') else 'postgresql'
-        )
+        # FIX 2026-01-18: AttributeFilterExecutor.combine_with_old_subset() only takes
+        # the expression parameter - other values are stored in the executor instance
+        return executor.combine_with_old_subset(expression)
 
     def _build_feature_id_expression(self, features_list):
         """

@@ -774,7 +774,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             return visible_features_list if len(visible_features_list) > 0 else False
         return False
 
-    def setLayer(self, layer, layer_props, skip_task=False):
+    def setLayer(self, layer, layer_props, skip_task=False, preserve_checked=False):
         """
         Set the current layer and initialize its list widget.
         
@@ -786,6 +786,8 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                 - exploring.multiple_selection_expression: Display expression
             skip_task: If True, skip launching the feature loading task (useful during
                 widget reload to avoid redundant task execution)
+            preserve_checked: If True, preserve checked items during list rebuild.
+                FIX 2026-01-18 v8: Added to support QGIS sync.
         """
         try:
             if layer is not None:
@@ -836,9 +838,31 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                     expected_expression = layer_props.get("exploring", {}).get("multiple_selection_expression", "")
                     current_expression = self.list_widgets[self.layer.id()].getDisplayExpression()
                     
-                    if current_expression != expected_expression or not current_expression:
+                    # FIX 2026-01-18: ALWAYS ensure we have a valid expression
+                    # If expected_expression is empty, use identifier field or first field
+                    if not expected_expression or expected_expression.strip() == '':
+                        identifier_field = self.list_widgets[self.layer.id()].getIdentifierFieldName()
+                        if identifier_field:
+                            expected_expression = identifier_field
+                            logger.debug(f"Empty expected_expression, using identifier field '{identifier_field}'")
+                        else:
+                            # Fallback to first field
+                            field_names = [field.name() for field in layer.fields()]
+                            if field_names:
+                                expected_expression = field_names[0]
+                                logger.debug(f"No identifier, using first field '{expected_expression}'")
+                    
+                    # CRITICAL: Always update if current is empty or different
+                    should_update = (not current_expression or 
+                                   current_expression != expected_expression or
+                                   self.list_widgets[self.layer.id()].count() == 0)
+                    
+                    if should_update:
                         logger.debug(f"Updating display expression to '{expected_expression}'")
-                        self.setDisplayExpression(expected_expression, skip_task=skip_task)
+                        # FIX 2026-01-18: Never skip task when list is empty
+                        force_task = self.list_widgets[self.layer.id()].count() == 0
+                        # FIX 2026-01-18 v8: Propagate preserve_checked
+                        self.setDisplayExpression(expected_expression, skip_task=(skip_task and not force_task), preserve_checked=preserve_checked)
                     elif not skip_task:
                         # Only launch task if not skipped and expression already correct
                         self._populate_features_sync(expected_expression)
@@ -864,14 +888,24 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                         expression = self.list_widgets[self.layer.id()].getDisplayExpression()
                         self.setDisplayExpression(expression)
 
-    def setDisplayExpression(self, expression, skip_task=False):
+    def setDisplayExpression(self, expression, skip_task=False, preserve_checked=False):
         """Set the display expression and rebuild the features list.
         
         Args:
             expression: The display expression to use
-            skip_task: If True, skip the feature population task
+            skip_task: If True, skip the feature population task. However, if the list
+                      is empty, task will be forced to ensure data is loaded.
+            preserve_checked: If True, save checked items before clear and restore after.
+                            Use when syncing from QGIS to prevent losing selection.
+        
+        FIX 2026-01-18: Enhanced to always ensure list is populated, even when skip_task=True
+        if the list widget is empty. This fixes the issue where multiple selection widget
+        shows empty list on first load.
+        
+        FIX 2026-01-18 v8: Added preserve_checked parameter to save/restore checked items
+        during list rebuild. This prevents items from disappearing during QGIS sync.
         """
-        logger.debug(f"QgsCheckableComboBoxFeaturesListPickerWidget.setDisplayExpression: {expression}, skip_task={skip_task}")
+        logger.debug(f"QgsCheckableComboBoxFeaturesListPickerWidget.setDisplayExpression: {expression}, skip_task={skip_task}, preserve_checked={preserve_checked}")
         
         if self.layer is not None:
             if self.layer.id() not in self.list_widgets:
@@ -881,20 +915,26 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             self.filter_le.clear()
             self.items_le.clear()
             
+            # FIX 2026-01-18: Force task if list is empty (data must be loaded)
+            list_widget = self.list_widgets[self.layer.id()]
+            if list_widget.count() == 0 and skip_task:
+                logger.info(f"setDisplayExpression: List is empty, forcing feature load (was skip_task=True)")
+                skip_task = False
+            
             # Handle empty or invalid expression
             working_expression = expression
             if not expression or expression.strip() == '':
-                identifier_field = self.list_widgets[self.layer.id()].getIdentifierFieldName()
+                identifier_field = list_widget.getIdentifierFieldName()
                 if identifier_field:
                     logger.debug(f"Empty expression, using identifier field '{identifier_field}'")
                     working_expression = identifier_field
-                    self.list_widgets[self.layer.id()].setExpressionFieldFlag(True)
+                    list_widget.setExpressionFieldFlag(True)
                 else:
                     field_names = [field.name() for field in self.layer.fields()]
                     if field_names:
                         working_expression = field_names[0]
                         logger.debug(f"No identifier field, using first field '{working_expression}'")
-                        self.list_widgets[self.layer.id()].setExpressionFieldFlag(True)
+                        list_widget.setExpressionFieldFlag(True)
                     else:
                         logger.warning(f"No fields available for layer")
                         return
@@ -918,6 +958,15 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
             self.list_widgets[self.layer.id()].setDisplayExpression(working_expression)
 
+            # FIX 2026-01-18 v8: Save checked items before clear if preserve_checked is True
+            saved_checked_fids = []
+            if preserve_checked:
+                try:
+                    saved_checked_fids = self.list_widgets[self.layer.id()].checkedFeatureIds()
+                    logger.debug(f"Preserving {len(saved_checked_fids)} checked items: {saved_checked_fids}")
+                except Exception as save_err:
+                    logger.debug(f"Could not save checked items: {save_err}")
+
             # Clear widget before rebuilding
             try:
                 self.list_widgets[self.layer.id()].clear()
@@ -930,6 +979,14 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             # Build features list synchronously (unless skipped)
             if not skip_task:
                 self._populate_features_sync(working_expression)
+            
+            # FIX 2026-01-18 v8: Restore checked items after populate if preserve_checked is True
+            if preserve_checked and saved_checked_fids:
+                try:
+                    logger.debug(f"Restoring {len(saved_checked_fids)} checked items after populate")
+                    self.setCheckedFeatureIds(saved_checked_fids, emit_signal=False)
+                except Exception as restore_err:
+                    logger.debug(f"Could not restore checked items: {restore_err}")
 
     def _populate_features_sync(self, expression):
         """Populate features list synchronously."""
@@ -1226,15 +1283,17 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         self.filteringCheckedItemList.emit()
 
 
-    def setCheckedFeatureIds(self, feature_ids):
+    def setCheckedFeatureIds(self, feature_ids, emit_signal=True):
         """
         Set checked items by feature IDs.
         
         This method synchronizes the widget's checked items with the given feature IDs,
-        updating the visual checkbox state and emitting the update signal.
+        updating the visual checkbox state and optionally emitting the update signal.
         
         Args:
             feature_ids: List of feature IDs to check. Can be integers or strings.
+            emit_signal: If True (default), emit updatingCheckedItemList signal.
+                        Set to False when syncing from QGIS to prevent feedback loops.
         
         Returns:
             int: Number of items that were successfully checked
@@ -1244,8 +1303,16 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             return 0
         
         if not feature_ids:
-            # Clear all selections
-            self.deselect_all('De-select All')
+            # Clear all selections - but don't emit signal if emit_signal=False
+            if emit_signal:
+                self.deselect_all('De-select All')
+            else:
+                # Silent deselect
+                list_widget = self.list_widgets[self.layer.id()]
+                for i in range(list_widget.count()):
+                    item = list_widget.item(i)
+                    if item:
+                        item.setCheckState(Qt.Unchecked)
             return 0
         
         list_widget = self.list_widgets[self.layer.id()]
@@ -1260,7 +1327,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         
         checked_count = list_widget.setCheckedByFeatureIds(normalized_fids, self)
         
-        logger.debug(f"setCheckedFeatureIds: Checked {checked_count}/{len(feature_ids)} items")
+        logger.debug(f"setCheckedFeatureIds: Checked {checked_count}/{len(feature_ids)} items (emit_signal={emit_signal})")
         
         # Update display text
         checked = self.checkedItems()
@@ -1272,8 +1339,11 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         else:
             self.items_le.clear()
         
-        # Emit update signal
-        self._emit_checked_items_update()
+        # Emit update signal only if requested (not during QGIS sync)
+        if emit_signal:
+            self._emit_checked_items_update()
+        else:
+            logger.debug("setCheckedFeatureIds: Signal emission suppressed (syncing from QGIS)")
         
         return checked_count
 

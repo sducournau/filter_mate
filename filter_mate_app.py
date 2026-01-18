@@ -983,10 +983,8 @@ class FilterMateApp:
         if self._datasource_manager:
             self._datasource_manager.set_project_datasources(self.project_datasources)
         
-        # Load favorites from new project
-        if hasattr(self, 'favorites_manager'):
-            self.favorites_manager.load_from_project()
-            logger.info(f"FilterMate: Favorites loaded for {task_name} ({self.favorites_manager.count} favorites)")
+        # Note: favorites are loaded in init_filterMate_db() after database setup
+        # to avoid duplicate loading (see line ~2105)
         
         service.handle_project_initialization(
             task_name=task_name,

@@ -1919,6 +1919,13 @@ class ExploringController(BaseController, LayerSelectionMixin):
             custom_expression: Custom filter expression
             preserve_filter_if_empty: DEPRECATED - no longer needed since filters aren't auto-applied
         """
+        # FIX 2026-01-18 v5: Skip if we're syncing from QGIS canvas selection
+        # This prevents feedback loops where QGIS selection → widget sync → exploring_features_changed
+        # → which could reset or interfere with the sync operation
+        if getattr(self._dockwidget, '_syncing_from_qgis', False):
+            logger.debug("exploring_features_changed: SKIPPED (syncing from QGIS)")
+            return []
+        
         if self._dockwidget.widgets_initialized is True and self._dockwidget.current_layer is not None and isinstance(self._dockwidget.current_layer, QgsVectorLayer):
             
             # CACHE INVALIDATION: Selection is changing, invalidate cache for current groupbox
@@ -2186,6 +2193,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
                     _safe_set_single_filter(custom_filter)
 
                 # BIDIRECTIONAL DISPLAY EXPRESSION SYNCHRONIZATION
+                # FIX 2026-01-18: Enhanced linking to always sync when is_linking is checked
                 multiple_display_expression = layer_props["exploring"]["multiple_selection_expression"]
                 if QgsExpression(multiple_display_expression).isField():
                     multiple_display_expression = multiple_display_expression.replace('"','')
@@ -2194,9 +2202,11 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 if QgsExpression(single_display_expression).isField():
                     single_display_expression = single_display_expression.replace('"','')
 
-                # PROTECTION: Avoid infinite sync loops
-                if change_source and change_source == self._dockwidget._last_expression_change_source:
-                    logger.debug(f"exploring_link_widgets: Bidirectional sync from {change_source}")
+                # FIX 2026-01-18: When change_source is provided, ALWAYS propagate the change
+                # This ensures user's manual field changes are synchronized across pickers
+                if change_source:
+                    logger.info(f"exploring_link_widgets: User-initiated sync from {change_source}")
+                    # Reset the flag to prevent loops but allow this sync to proceed
                     self._dockwidget._last_expression_change_source = None
 
                     if change_source == "single_selection":
@@ -2204,31 +2214,48 @@ class ExploringController(BaseController, LayerSelectionMixin):
                             if QgsExpression(single_display_expression).isValid():
                                 logger.info(f"🔗 SYNC: single -> multiple | '{single_display_expression}'")
                                 self._dockwidget.PROJECT_LAYERS[self._dockwidget.current_layer.id()]["exploring"]["multiple_selection_expression"] = single_display_expression
-                                self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(single_display_expression)
-                                self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(single_display_expression)
+                                # Block signals to prevent recursion
+                                self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].blockSignals(True)
+                                try:
+                                    self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(single_display_expression)
+                                finally:
+                                    self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].blockSignals(False)
+                                # FIX 2026-01-18 v8: Use preserve_checked if syncing from QGIS
+                                preserve = getattr(self._dockwidget, '_syncing_from_qgis', False)
+                                self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(single_display_expression, preserve_checked=preserve)
 
                     elif change_source == "multiple_selection":
                         if multiple_display_expression != single_display_expression:
                             if QgsExpression(multiple_display_expression).isValid():
                                 logger.info(f"🔗 SYNC: multiple -> single | '{multiple_display_expression}'")
                                 self._dockwidget.PROJECT_LAYERS[self._dockwidget.current_layer.id()]["exploring"]["single_selection_expression"] = multiple_display_expression
-                                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(multiple_display_expression)
-                                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(multiple_display_expression)
+                                # Block signals to prevent recursion
+                                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].blockSignals(True)
+                                try:
+                                    self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(multiple_display_expression)
+                                finally:
+                                    self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].blockSignals(False)
+                                # FIX 2026-01-18: Also update the single picker's display expression
+                                single_picker = self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+                                single_picker.setDisplayExpression(multiple_display_expression)
+                                # Force rebuild of single picker by setting layer again
+                                single_picker.setLayer(self._dockwidget.current_layer)
 
-                # LEGACY BEHAVIOR: Keep existing primary key swap logic as fallback
-                elif QgsExpression(single_display_expression).isValid() and single_display_expression == layer_props["infos"]["primary_key_name"]:
-                    if QgsExpression(multiple_display_expression).isValid() and multiple_display_expression != layer_props["infos"]["primary_key_name"]:
-                        logger.debug(f"exploring_link_widgets: Swapping single (PK) -> multiple (descriptive)")
-                        self._dockwidget.PROJECT_LAYERS[self._dockwidget.current_layer.id()]["exploring"]["single_selection_expression"] = multiple_display_expression
-                        self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(multiple_display_expression)
-                        self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(multiple_display_expression)
-
-                elif QgsExpression(multiple_display_expression).isValid() and multiple_display_expression == layer_props["infos"]["primary_key_name"]:
-                    if QgsExpression(single_display_expression).isValid() and single_display_expression != layer_props["infos"]["primary_key_name"]:
-                        logger.debug(f"exploring_link_widgets: Swapping multiple (PK) -> single (descriptive)")
-                        self._dockwidget.PROJECT_LAYERS[self._dockwidget.current_layer.id()]["exploring"]["multiple_selection_expression"] = single_display_expression
-                        self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(single_display_expression)
-                        self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(single_display_expression)
+                # LEGACY BEHAVIOR: Only sync on INITIAL linking activation when expressions differ
+                # FIX 2026-01-18 v6: Don't override user's explicit field choice
+                # The swap logic should only apply when:
+                # 1. is_linking is being activated (not already active)
+                # 2. One picker has PK and the other has a descriptive field
+                # 3. User hasn't explicitly chosen the current fields
+                # 
+                # Since we can't easily detect "initial activation", we now only sync
+                # when change_source is provided (user explicitly changed a field).
+                # Without change_source, we preserve both pickers' current expressions.
+                else:
+                    # No change_source means this is a programmatic call (groupbox switch, etc.)
+                    # Preserve user's field choices - don't override
+                    logger.debug(f"exploring_link_widgets: No change_source, preserving current expressions")
+                    logger.debug(f"  single='{single_display_expression}', multiple='{multiple_display_expression}'")
             else:
                 # When is_linking is False, only clear filter expressions if not already empty
                 single_widget = self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
@@ -2254,6 +2281,11 @@ class ExploringController(BaseController, LayerSelectionMixin):
             groupbox_override: Optional groupbox to target instead of current_exploring_groupbox
             change_source: Optional source of the change for bidirectional sync
         """
+        # FIX 2026-01-18 v5: Skip if we're syncing from QGIS canvas selection
+        if getattr(self._dockwidget, '_syncing_from_qgis', False):
+            logger.debug("exploring_source_params_changed: SKIPPED (syncing from QGIS)")
+            return
+        
         if self._dockwidget.widgets_initialized is True and self._dockwidget.current_layer is not None:
 
             logger.debug(f"exploring_source_params_changed called with expression={expression}, groupbox_override={groupbox_override}, change_source={change_source}")
@@ -2488,7 +2520,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
                     # Persist upgraded field to SQLite for future sessions
                     if expressions_updated:
                         logger.debug(f"Persisting field '{best_field}' to SQLite for layer {layer.name()}")
-                        if is_valid_layer(layer):
+                        if is_layer_valid(layer):
                             properties_to_save = []
                             if should_upgrade_single:
                                 properties_to_save.append(("exploring", "single_selection_expression"))
@@ -2610,8 +2642,9 @@ class ExploringController(BaseController, LayerSelectionMixin):
                         saved_multi_layer_id = getattr(self._dockwidget, '_last_multiple_selection_layer_id', None)
                         logger.info(f"_reload_exploration_widgets: Using backup fids: {len(saved_checked_fids)}")
                 
-                self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(layer, layer_props, skip_task=True)
-                self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(multiple_expr)
+                self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(layer, layer_props, skip_task=True, preserve_checked=True)
+                # FIX 2026-01-18 v8: Use preserve_checked=True since setLayer already preserves
+                self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(multiple_expr, preserve_checked=True)
                 
                 if saved_checked_fids and layer is not None:
                     if saved_multi_layer_id is None or saved_multi_layer_id == layer.id():
@@ -2865,36 +2898,37 @@ class ExploringController(BaseController, LayerSelectionMixin):
             current_groupbox = self._dockwidget.current_exploring_groupbox
             logger.info(f"  📦 Current groupbox: {current_groupbox}")
             
-            # Auto-switch groupbox based on selection count
-            if selected_count == 1 and current_groupbox == "multiple_selection":
-                logger.info("  🔀 Auto-switching to single_selection groupbox (1 feature)")
-                self._dockwidget._syncing_from_qgis = True
-                try:
+            # FIX 2026-01-18 v5: Keep _syncing_from_qgis=True for the ENTIRE sync process
+            # Previously it was reset to False after groupbox switch but before widget sync,
+            # causing the updatingCheckedItemList signal to trigger exploring_features_changed
+            # which reset the checked items
+            self._dockwidget._syncing_from_qgis = True
+            try:
+                # Auto-switch groupbox based on selection count
+                if selected_count == 1 and current_groupbox == "multiple_selection":
+                    logger.info("  🔀 Auto-switching to single_selection groupbox (1 feature)")
                     self._dockwidget._force_exploring_groupbox_exclusive("single_selection")
                     self._dockwidget._configure_single_selection_groupbox()
                     logger.info("  ✅ Switched to single_selection")
-                finally:
-                    self._dockwidget._syncing_from_qgis = False
-                    
-            elif selected_count > 1 and current_groupbox == "single_selection":
-                logger.info(f"  🔀 Auto-switching to multiple_selection groupbox ({selected_count} features)")
-                self._dockwidget._syncing_from_qgis = True
-                try:
+                        
+                elif selected_count > 1 and current_groupbox == "single_selection":
+                    logger.info(f"  🔀 Auto-switching to multiple_selection groupbox ({selected_count} features)")
                     self._dockwidget._force_exploring_groupbox_exclusive("multiple_selection")
                     self._dockwidget._configure_multiple_selection_groupbox()
                     logger.info("  ✅ Switched to multiple_selection")
-                finally:
-                    self._dockwidget._syncing_from_qgis = False
-            else:
-                logger.info(f"  ℹ️ No groupbox switch needed (count={selected_count}, current={current_groupbox})")
-            
-            # Sync both widgets
-            logger.info("  🔧 Syncing single selection widget...")
-            self._sync_single_selection_from_qgis(selected_features, selected_count)
-            logger.info("  🔧 Syncing multiple selection widget...")
-            self._sync_multiple_selection_from_qgis(selected_features, selected_count)
-            
-            logger.info("  ✅ _sync_widgets_from_qgis_selection COMPLETED")
+                else:
+                    logger.info(f"  ℹ️ No groupbox switch needed (count={selected_count}, current={current_groupbox})")
+                
+                # Sync both widgets (still under _syncing_from_qgis protection)
+                logger.info("  🔧 Syncing single selection widget...")
+                self._sync_single_selection_from_qgis(selected_features, selected_count)
+                logger.info("  🔧 Syncing multiple selection widget...")
+                self._sync_multiple_selection_from_qgis(selected_features, selected_count)
+                
+                logger.info("  ✅ _sync_widgets_from_qgis_selection COMPLETED")
+            finally:
+                # Only reset _syncing_from_qgis AFTER all sync operations are complete
+                self._dockwidget._syncing_from_qgis = False
             
         except Exception as e:
             logger.warning(f"Error in _sync_widgets_from_qgis_selection: {type(e).__name__}: {e}")
@@ -2923,24 +2957,22 @@ class ExploringController(BaseController, LayerSelectionMixin):
             
             logger.info(f"Syncing single selection to feature ID {feature_id}")
             
-            self._dockwidget._syncing_from_qgis = True
-            try:
-                feature_picker.setFeature(feature_id)
-                
-                # FIX 2026-01-15 v6: Save FID for recovery
-                self._dockwidget._last_single_selection_fid = feature_id
-                self._dockwidget._last_single_selection_layer_id = self._dockwidget.current_layer.id()
-                
-                # FIX 2026-01-15: Force visual refresh
-                feature_picker.update()
-                feature_picker.repaint()
-                
-                # FIX 2026-01-15 v6: Update button states after sync
-                self._dockwidget._update_exploring_buttons_state()
-                
-                logger.info(f"  ✓ Single selection synced to feature {feature_id}")
-            finally:
-                self._dockwidget._syncing_from_qgis = False
+            # FIX 2026-01-18 v5: Don't reset _syncing_from_qgis here - it's managed at parent level
+            # in _sync_widgets_from_qgis_selection to protect the entire sync process
+            feature_picker.setFeature(feature_id)
+            
+            # FIX 2026-01-15 v6: Save FID for recovery
+            self._dockwidget._last_single_selection_fid = feature_id
+            self._dockwidget._last_single_selection_layer_id = self._dockwidget.current_layer.id()
+            
+            # FIX 2026-01-15: Force visual refresh
+            feature_picker.update()
+            feature_picker.repaint()
+            
+            # FIX 2026-01-15 v6: Update button states after sync
+            self._dockwidget._update_exploring_buttons_state()
+            
+            logger.info(f"  ✓ Single selection synced to feature {feature_id}")
                 
         except Exception as e:
             logger.warning(f"Error in _sync_single_selection_from_qgis: {type(e).__name__}: {e}")
@@ -2953,6 +2985,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
         Previous implementation only stored data without updating UI.
         
         FIX 2026-01-18 v2: Ensure list is populated before trying to check items.
+        FIX 2026-01-18 v3: Always ensure expression is valid before calling setDisplayExpression.
         """
         logger.info(f"_sync_multiple_selection_from_qgis: Syncing {selected_count} features to widget")
         
@@ -2966,57 +2999,78 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 logger.warning("_sync_multiple_selection_from_qgis: Multiple selection widget not found")
                 return
             
-            # Get primary key field for proper ID extraction
-            layer_props = self._dockwidget.PROJECT_LAYERS.get(self._dockwidget.current_layer.id(), {})
-            pk_name = layer_props.get("infos", {}).get("primary_key_name")
+            # FIX 2026-01-18 v9: Block signals during sync to prevent feedback loops
+            # The updatingCheckedItemList signal can be emitted by various widget operations
+            # and trigger exploring_features_changed which resets the selection
+            old_block_state = multi_widget.signalsBlocked()
+            multi_widget.blockSignals(True)
             
-            # FIX 2026-01-18 v2: Ensure list widget exists and is populated
-            layer_id = self._dockwidget.current_layer.id()
-            if not hasattr(multi_widget, 'list_widgets') or layer_id not in multi_widget.list_widgets:
-                logger.info("  📋 List widget missing, creating via setLayer...")
-                multi_widget.setLayer(self._dockwidget.current_layer, layer_props, skip_task=True)
-            
-            # Check if list is empty and needs population
-            if hasattr(multi_widget, 'list_widgets') and layer_id in multi_widget.list_widgets:
-                list_widget = multi_widget.list_widgets[layer_id]
-                if list_widget.count() == 0:
-                    logger.info("  📋 List is empty, populating features...")
-                    # Get display expression
-                    display_expr = layer_props.get("exploring", {}).get("multiple_selection_expression", "")
-                    if not display_expr:
-                        display_expr = pk_name if pk_name else ""
-                    # Force populate
-                    multi_widget.setDisplayExpression(display_expr)
-                    logger.info(f"  ✓ List populated with {list_widget.count()} items")
-            
-            # Build the selection list from selected features
-            feature_ids = []
-            for f in selected_features:
-                if f and f.isValid():
-                    # Try to get the primary key value for proper matching
-                    if pk_name and pk_name in [field.name() for field in f.fields()]:
-                        try:
-                            pk_value = f[pk_name]
-                            feature_ids.append(pk_value)
-                        except (KeyError, IndexError):
-                            feature_ids.append(f.id())
-                    else:
-                        feature_ids.append(f.id())
-            
-            if not feature_ids:
-                return
-            
-            # Store FIDs for recovery
-            self._dockwidget._last_multiple_selection_fids = feature_ids
-            self._dockwidget._last_multiple_selection_layer_id = self._dockwidget.current_layer.id()
-            
-            # Update the widget's checked items using the NEW method
-            self._dockwidget._syncing_from_qgis = True
             try:
-                # FIX 2026-01-18: Use setCheckedFeatureIds which properly updates visual checkboxes
+                # Get primary key field for proper ID extraction
+                layer_props = self._dockwidget.PROJECT_LAYERS.get(self._dockwidget.current_layer.id(), {})
+                pk_name = layer_props.get("infos", {}).get("primary_key_name")
+                
+                # FIX 2026-01-18 v2: Ensure list widget exists and is populated
+                layer_id = self._dockwidget.current_layer.id()
+                if not hasattr(multi_widget, 'list_widgets') or layer_id not in multi_widget.list_widgets:
+                    logger.info("  📋 List widget missing, creating via setLayer...")
+                    # FIX 2026-01-18 v8: Use preserve_checked=True when syncing from QGIS
+                    multi_widget.setLayer(self._dockwidget.current_layer, layer_props, skip_task=False, preserve_checked=True)
+                
+                # Check if list is empty and needs population
+                if hasattr(multi_widget, 'list_widgets') and layer_id in multi_widget.list_widgets:
+                    list_widget = multi_widget.list_widgets[layer_id]
+                    if list_widget.count() == 0:
+                        logger.info("  📋 List is empty, populating features...")
+                        # Get display expression - ENSURE we have a valid expression
+                        display_expr = layer_props.get("exploring", {}).get("multiple_selection_expression", "")
+                        
+                        # FIX 2026-01-18 v3: If display_expr is empty, use fallback
+                        if not display_expr or display_expr.strip() == '':
+                            if pk_name:
+                                display_expr = pk_name
+                            else:
+                                # Use first field as absolute fallback
+                                fields = self._dockwidget.current_layer.fields()
+                                if fields.count() > 0:
+                                    display_expr = fields[0].name()
+                                else:
+                                    display_expr = "$id"  # Ultimate fallback
+                            logger.debug(f"  Using fallback display expression: '{display_expr}'")
+                        
+                        # Force populate - DON'T skip task when list is empty
+                        # FIX 2026-01-18 v8: Use preserve_checked=True to not lose checked items
+                        multi_widget.setDisplayExpression(display_expr, preserve_checked=True)
+                        logger.info(f"  ✓ List populated with {list_widget.count()} items")
+                
+                # Build the selection list from selected features
+                feature_ids = []
+                for f in selected_features:
+                    if f and f.isValid():
+                        # Try to get the primary key value for proper matching
+                        if pk_name and pk_name in [field.name() for field in f.fields()]:
+                            try:
+                                pk_value = f[pk_name]
+                                feature_ids.append(pk_value)
+                            except (KeyError, IndexError):
+                                feature_ids.append(f.id())
+                        else:
+                            feature_ids.append(f.id())
+                
+                if not feature_ids:
+                    return
+                
+                # Store FIDs for recovery
+                self._dockwidget._last_multiple_selection_fids = feature_ids
+                self._dockwidget._last_multiple_selection_layer_id = self._dockwidget.current_layer.id()
+                
+                # Update the widget's checked items using the NEW method
+                # FIX 2026-01-18 v5: Don't reset _syncing_from_qgis here - it's managed at parent level
+                # in _sync_widgets_from_qgis_selection to protect the entire sync process
+                # FIX 2026-01-18: Use setCheckedFeatureIds with emit_signal=False to prevent feedback loop
                 if hasattr(multi_widget, 'setCheckedFeatureIds'):
-                    checked_count = multi_widget.setCheckedFeatureIds(feature_ids)
-                    logger.info(f"  ✓ Synced {checked_count}/{len(feature_ids)} features to multiple selection widget")
+                    checked_count = multi_widget.setCheckedFeatureIds(feature_ids, emit_signal=False)
+                    logger.info(f"  ✓ Synced {checked_count}/{len(feature_ids)} features to multiple selection widget (no signal)")
                 elif hasattr(multi_widget, 'list_widgets') and self._dockwidget.current_layer.id() in multi_widget.list_widgets:
                     # Fallback: use list_widgets with new setCheckedByFeatureIds method
                     list_widget = multi_widget.list_widgets[self._dockwidget.current_layer.id()]
@@ -3031,8 +3085,11 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 
                 # Update button states after sync
                 self._dockwidget._update_exploring_buttons_state()
+            
             finally:
-                self._dockwidget._syncing_from_qgis = False
+                # FIX 2026-01-18 v9: Always restore signal blocking state
+                multi_widget.blockSignals(old_block_state)
+                logger.debug(f"  🔓 Restored signal blocking state: {old_block_state}")
                 
         except Exception as e:
             logger.warning(f"_sync_multiple_selection_from_qgis error: {type(e).__name__}: {e}")

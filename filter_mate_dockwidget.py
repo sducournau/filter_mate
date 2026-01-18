@@ -1657,6 +1657,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     picker.repaint()
                     
                     logger.info(f"  ✓ Multiple picker refreshed")
+            
+            # FIX 2026-01-18: Trigger is_linking synchronization when user changes field
+            # This ensures that when IS_LINKING is checked, the other picker gets the same field
+            is_linking = layer_props.get("exploring", {}).get("is_linking", False)
+            if is_linking and groupbox in ("single_selection", "multiple_selection"):
+                logger.info(f"🔗 IS_LINKING is active, triggering bidirectional sync from {groupbox}")
+                # Call exploring_link_widgets with change_source to trigger the sync
+                self.exploring_link_widgets(change_source=groupbox)
                     
         except Exception as e:
             logger.warning(f"_refresh_feature_pickers_for_field_change error: {e}")
@@ -1965,11 +1973,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 widget = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
                 if widget and hasattr(widget, 'setLayer'):
                     logger.debug(f"  Updating MULTIPLE_SELECTION_FEATURES with layer {layer.name()}")
-                    widget.setLayer(layer, layer_props, skip_task=True)
+                    # FIX 2026-01-18 v8: Use preserve_checked=True to not lose selected items during refresh
+                    widget.setLayer(layer, layer_props, skip_task=True, preserve_checked=True)
                     # FIX 2026-01-18: Always call setDisplayExpression to populate the list
                     # Even with empty expression, setDisplayExpression handles fallback to identifier field
+                    # FIX 2026-01-18 v8: Use preserve_checked=True to not lose selected items
                     if hasattr(widget, 'setDisplayExpression'):
-                        widget.setDisplayExpression(multiple_expr if multiple_expr else "")
+                        widget.setDisplayExpression(multiple_expr if multiple_expr else "", preserve_checked=True)
             
             # Update expression widgets (QgsFieldExpressionWidget)
             # FIX 2026-01-16: Use setField() for simple field names, setExpression() for complex expressions
@@ -3032,7 +3042,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.PROJECT_LAYERS[layer_id]["exploring"]["is_linking"] = checked
                 logger.info(f"IS_LINKING state updated in PROJECT_LAYERS: {checked}")
             logger.info(f"IS_LINKING {'ON' if checked else 'OFF'}: Calling exploring_link_widgets()")
-            self.exploring_link_widgets()
+            
+            # FIX 2026-01-18 v6: When enabling IS_LINKING, propagate the CURRENT groupbox's field
+            # to the other picker. This respects the user's active selection context.
+            if checked and self.current_exploring_groupbox in ("single_selection", "multiple_selection"):
+                # Pass the current groupbox as change_source to propagate its field to the other
+                self.exploring_link_widgets(change_source=self.current_exploring_groupbox)
+            else:
+                self.exploring_link_widgets()
         
         btn_linking.toggled.connect(_on_linking_toggled)
         logger.info("✓ Connected IS_LINKING.toggled DIRECTLY to _on_linking_toggled()")
@@ -3571,10 +3588,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
         self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
-        self.exploring_link_widgets()
+        
+        # FIX 2026-01-18 v7: Don't call exploring_link_widgets during QGIS sync
         if not self._syncing_from_qgis:
+            self.exploring_link_widgets()
             f = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
             if f and f.isValid(): self.exploring_features_changed(f)
+        
         self._update_exploring_buttons_state()
         # FIX 2026-01-15: Force visual refresh of single selection widget
         if "EXPLORING" in self.widgets and "SINGLE_SELECTION_FEATURES" in self.widgets["EXPLORING"]:
@@ -3593,10 +3613,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._ensure_selection_changed_connected()
         
         self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect')
-        self.exploring_link_widgets()
+        
+        # FIX 2026-01-18 v7: Don't call exploring_link_widgets during QGIS sync
+        # exploring_link_widgets can trigger setDisplayExpression which clears the list,
+        # causing checked items to disappear immediately after being set
         if not self._syncing_from_qgis:
+            self.exploring_link_widgets()
             features = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures()
             if features: self.exploring_features_changed(features, True)
+        
         self._update_exploring_buttons_state()
         # FIX 2026-01-15: Force visual refresh of multiple selection widget
         if "EXPLORING" in self.widgets and "MULTIPLE_SELECTION_FEATURES" in self.widgets["EXPLORING"]:

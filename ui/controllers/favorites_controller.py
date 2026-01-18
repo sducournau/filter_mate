@@ -399,6 +399,11 @@ class FavoritesController(BaseController):
     def show_manager_dialog(self) -> None:
         """Show the favorites manager dialog."""
         try:
+            # Check if favorites manager is available
+            if not self._favorites_manager:
+                self._show_warning("Favorites manager not initialized. Please restart FilterMate.")
+                return
+            
             from ..dialogs import FavoritesManagerDialog
             # Note: FavoritesManagerDialog(favorites_manager, parent) - order matters!
             dialog = FavoritesManagerDialog(self._favorites_manager, self.dockwidget)

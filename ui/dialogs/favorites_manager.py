@@ -96,9 +96,10 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
         
-        # Header with count
+        # Header with count (handle None favorites_manager)
+        fav_count = self._favorites_manager.count if self._favorites_manager else 0
         self._header_label = QLabel(
-            f"<b>Saved Favorites ({self._favorites_manager.count})</b>"
+            f"<b>Saved Favorites ({fav_count})</b>"
         )
         self._header_label.setStyleSheet("font-size: 11pt; margin-bottom: 5px;")
         layout.addWidget(self._header_label)
@@ -140,8 +141,11 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         button_layout = self._create_buttons()
         layout.addLayout(button_layout)
         
-        # Initial population
-        self._all_favorites = self._favorites_manager.get_all_favorites()
+        # Initial population (handle None favorites_manager)
+        if self._favorites_manager:
+            self._all_favorites = self._favorites_manager.get_all_favorites()
+        else:
+            self._all_favorites = []
         self._populate_list(self._all_favorites)
         
         # Select first item
@@ -346,6 +350,8 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
     
     def _on_search_changed(self, text: str):
         """Filter favorites based on search text."""
+        if not self._favorites_manager:
+            return
         if not text.strip():
             self._populate_list(self._all_favorites)
             self._header_label.setText(
@@ -361,7 +367,7 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
     def _on_selection_changed(self):
         """Handle selection change in list."""
         item = self._list_widget.currentItem()
-        if not item:
+        if not item or not self._favorites_manager:
             return
         
         fav_id = item.data(Qt.UserRole)
@@ -422,7 +428,7 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
     
     def _on_save(self):
         """Save changes to selected favorite."""
-        if not self._current_fav_id:
+        if not self._current_fav_id or not self._favorites_manager:
             return
         
         new_name = self._name_edit.text().strip()
@@ -464,7 +470,7 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
     
     def _on_delete(self):
         """Delete selected favorite."""
-        if not self._current_fav_id:
+        if not self._current_fav_id or not self._favorites_manager:
             return
         
         fav = self._favorites_manager.get_favorite(self._current_fav_id)
@@ -485,8 +491,9 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         self._favorites_manager.remove_favorite(self._current_fav_id)
         self._list_widget.takeItem(self._list_widget.currentRow())
         
+        fav_count = self._favorites_manager.count if self._favorites_manager else 0
         self._header_label.setText(
-            f"<b>Saved Favorites ({self._favorites_manager.count})</b>"
+            f"<b>Saved Favorites ({fav_count})</b>"
         )
         
         # Clear all fields
@@ -529,6 +536,11 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
     
     def refresh(self):
         """Refresh the favorites list."""
+        if not self._favorites_manager:
+            self._all_favorites = []
+            self._populate_list(self._all_favorites)
+            self._header_label.setText("<b>Saved Favorites (0)</b>")
+            return
         self._all_favorites = self._favorites_manager.get_all_favorites()
         self._populate_list(self._all_favorites)
         self._header_label.setText(
