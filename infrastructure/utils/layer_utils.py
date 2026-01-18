@@ -323,6 +323,49 @@ def get_primary_key_name(layer) -> Optional[str]:
 # Display Field Detection
 # =============================================================================
 
+def _field_has_values(layer, field_name: str, sample_size: int = 5) -> bool:
+    """
+    Check if a field has at least one non-null, non-empty value.
+    
+    FIX 2026-01-18: Added to prevent selecting fields with no values as default display field.
+    This fixes the issue where the multiple selection picker shows an empty list because
+    the default field has no values in the database.
+    
+    Args:
+        layer: QgsVectorLayer to check
+        field_name: Name of the field to check
+        sample_size: Maximum number of features to sample (for performance)
+    
+    Returns:
+        bool: True if field has at least one non-null value, False otherwise
+    """
+    if not QGIS_AVAILABLE:
+        return True  # Assume has values if we can't check
+    
+    try:
+        from qgis.core import QgsFeatureRequest
+        
+        # Create a request to fetch only the specified field (performance optimization)
+        request = QgsFeatureRequest()
+        request.setFlags(QgsFeatureRequest.NoGeometry)
+        request.setSubsetOfAttributes([field_name], layer.fields())
+        request.setLimit(sample_size)
+        
+        for feature in layer.getFeatures(request):
+            try:
+                value = feature[field_name]
+                # Check if value is not NULL and not empty string
+                if value is not None and value != '' and str(value).strip() != '':
+                    return True
+            except (KeyError, IndexError):
+                continue
+        
+        return False
+    except Exception as e:
+        logger.debug(f"_field_has_values check failed for {field_name}: {e}")
+        return True  # Assume has values on error to avoid breaking existing behavior
+
+
 def get_best_display_field(layer, sample_size: int = 10, use_value_relations: bool = True) -> str:
     """
     Determine the best field or expression to use for display in a layer.
@@ -330,9 +373,14 @@ def get_best_display_field(layer, sample_size: int = 10, use_value_relations: bo
     Priority order:
     1. Layer's configured display expression (if set in QGIS)
     2. ValueRelation fields using represent_value() for human-readable display
-    3. Fields matching common name patterns (name, nom, label, etc.)
-    4. First text/string field that's not an ID field
-    5. Primary key if no better option
+    3. Fields matching common name patterns (name, nom, label, etc.) WITH VALUES
+    4. First text/string field that's not an ID field AND HAS VALUES
+    5. Primary key if no better option (always has values)
+    6. First field with values
+    
+    FIX 2026-01-18: Now validates that candidate fields have non-null values
+    before returning them. This prevents the multiple selection picker from
+    showing an empty list when the default field has no values.
     
     Args:
         layer: QgsVectorLayer
@@ -398,21 +446,29 @@ def get_best_display_field(layer, sample_size: int = 10, use_value_relations: bo
         'objectid', 'object_id', '_id', 'rowid', 'row_id'
     ]
     
-    # Priority 3: Try to find a field matching name patterns
+    # Priority 3: Try to find a field matching name patterns WITH VALUES
     for field in fields:
         field_name_lower = field.name().lower()
         if any(pattern in field_name_lower for pattern in name_patterns):
             if not any(excl in field_name_lower for excl in exclude_patterns):
-                return field.name()
+                # FIX 2026-01-18: Check if field has values before returning
+                if _field_has_values(layer, field.name(), sample_size):
+                    return field.name()
+                else:
+                    logger.debug(f"Skipping field '{field.name()}' - no values found")
     
-    # Priority 4: Try to find first text field (not an ID)
+    # Priority 4: Try to find first text field (not an ID) WITH VALUES
     try:
         string_types = [QVariant.String, QVariant.Char] if QVariant else []
         for field in fields:
             if field.type() in string_types:
                 field_name_lower = field.name().lower()
                 if not any(excl in field_name_lower for excl in exclude_patterns):
-                    return field.name()
+                    # FIX 2026-01-18: Check if field has values before returning
+                    if _field_has_values(layer, field.name(), sample_size):
+                        return field.name()
+                    else:
+                        logger.debug(f"Skipping text field '{field.name()}' - no values found")
     except Exception:
         pass
     
@@ -421,13 +477,21 @@ def get_best_display_field(layer, sample_size: int = 10, use_value_relations: bo
         logger.debug(f"Using fallback ValueRelation for {layer.name()}: {first_vr_expression}")
         return first_vr_expression
     
-    # Fallback to primary key
+    # Priority 5: Fallback to primary key (always has values by definition)
     pk = get_primary_key_name(layer)
     if pk:
+        logger.debug(f"Using primary key '{pk}' as fallback for {layer.name()}")
         return pk
     
-    # Last resort: first field
+    # Priority 6: Last resort - find first field WITH VALUES
+    for field in fields:
+        if _field_has_values(layer, field.name(), sample_size):
+            logger.debug(f"Using first field with values '{field.name()}' for {layer.name()}")
+            return field.name()
+    
+    # Absolute fallback: first field (even if empty - better than nothing)
     if fields.count() > 0:
+        logger.warning(f"No field with values found for {layer.name()}, using first field '{fields[0].name()}'")
         return fields[0].name()
     
     return ""

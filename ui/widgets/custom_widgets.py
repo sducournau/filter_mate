@@ -471,6 +471,64 @@ class ListWidgetWrapper(QListWidget):
 
     def setSelectedFeaturesList(self, selected_features_list):
         self.selected_features_list = selected_features_list
+
+    def setCheckedByFeatureIds(self, feature_ids, parent_widget=None):
+        """
+        Check items in the list widget by matching feature IDs.
+        
+        This method updates the visual checkbox state (unlike setSelectedFeaturesList
+        which only stores data). The feature ID is stored in item.data(3).
+        
+        Args:
+            feature_ids: List of feature IDs to check
+            parent_widget: Optional parent QgsCheckableComboBoxFeaturesListPickerWidget
+                          for accessing font_by_state styling
+        
+        Returns:
+            int: Number of items that were successfully checked
+        """
+        if not feature_ids:
+            return 0
+        
+        # Convert to set for O(1) lookup
+        feature_ids_set = set(feature_ids)
+        checked_count = 0
+        
+        for i in range(self.count()):
+            item = self.item(i)
+            if item:
+                item_fid = item.data(3)  # Feature ID is stored in data(3)
+                
+                if item_fid in feature_ids_set:
+                    item.setCheckState(Qt.Checked)
+                    # Update font styling if parent_widget provided
+                    if parent_widget and hasattr(parent_widget, 'font_by_state'):
+                        # Check if item is in subset (data(4) == "True")
+                        is_in_subset = item.data(4) == "True"
+                        if is_in_subset:
+                            item.setData(6, parent_widget.font_by_state['checked'][0])
+                            item.setData(9, QBrush(parent_widget.font_by_state['checked'][1]))
+                        else:
+                            item.setData(6, parent_widget.font_by_state['checkedFiltered'][0])
+                            item.setData(9, QBrush(parent_widget.font_by_state['checkedFiltered'][1]))
+                    checked_count += 1
+                else:
+                    # Uncheck items not in the selection
+                    if item.checkState() == Qt.Checked:
+                        item.setCheckState(Qt.Unchecked)
+                        if parent_widget and hasattr(parent_widget, 'font_by_state'):
+                            is_in_subset = item.data(4) == "True"
+                            if is_in_subset:
+                                item.setData(6, parent_widget.font_by_state['unChecked'][0])
+                                item.setData(9, QBrush(parent_widget.font_by_state['unChecked'][1]))
+                            else:
+                                item.setData(6, parent_widget.font_by_state['unCheckedFiltered'][0])
+                                item.setData(9, QBrush(parent_widget.font_by_state['unCheckedFiltered'][1]))
+        
+        # Also update the stored selected_features_list
+        self.selected_features_list = [[str(fid), fid, True] for fid in feature_ids]
+        
+        return checked_count
     
     def setLimit(self, limit):
         self.limit = limit
@@ -716,7 +774,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             return visible_features_list if len(visible_features_list) > 0 else False
         return False
 
-    def setLayer(self, layer, layer_props):
+    def setLayer(self, layer, layer_props, skip_task=False):
         """
         Set the current layer and initialize its list widget.
         
@@ -726,6 +784,8 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                 - infos.primary_key_name: Primary key field name
                 - infos.primary_key_is_numeric: Whether PK is numeric
                 - exploring.multiple_selection_expression: Display expression
+            skip_task: If True, skip launching the feature loading task (useful during
+                widget reload to avoid redundant task execution)
         """
         try:
             if layer is not None:
@@ -778,7 +838,10 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                     
                     if current_expression != expected_expression or not current_expression:
                         logger.debug(f"Updating display expression to '{expected_expression}'")
-                        self.setDisplayExpression(expected_expression)
+                        self.setDisplayExpression(expected_expression, skip_task=skip_task)
+                    elif not skip_task:
+                        # Only launch task if not skipped and expression already correct
+                        self._populate_features_sync(expected_expression)
                 else:
                     logger.error(f"Failed to create list widget for layer {self.layer.id()}")
 
@@ -801,9 +864,14 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                         expression = self.list_widgets[self.layer.id()].getDisplayExpression()
                         self.setDisplayExpression(expression)
 
-    def setDisplayExpression(self, expression):
-        """Set the display expression and rebuild the features list."""
-        logger.debug(f"QgsCheckableComboBoxFeaturesListPickerWidget.setDisplayExpression: {expression}")
+    def setDisplayExpression(self, expression, skip_task=False):
+        """Set the display expression and rebuild the features list.
+        
+        Args:
+            expression: The display expression to use
+            skip_task: If True, skip the feature population task
+        """
+        logger.debug(f"QgsCheckableComboBoxFeaturesListPickerWidget.setDisplayExpression: {expression}, skip_task={skip_task}")
         
         if self.layer is not None:
             if self.layer.id() not in self.list_widgets:
@@ -859,9 +927,9 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             except Exception as clear_err:
                 logger.debug(f"Could not clear widget: {clear_err}")
 
-            # Build features list synchronously for now
-            # TODO: Restore async task-based population (PopulateListEngineTask)
-            self._populate_features_sync(working_expression)
+            # Build features list synchronously (unless skipped)
+            if not skip_task:
+                self._populate_features_sync(working_expression)
 
     def _populate_features_sync(self, expression):
         """Populate features list synchronously."""
@@ -1156,6 +1224,78 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         
         list_widget.setVisibleFeaturesList(visible_features)
         self.filteringCheckedItemList.emit()
+
+
+    def setCheckedFeatureIds(self, feature_ids):
+        """
+        Set checked items by feature IDs.
+        
+        This method synchronizes the widget's checked items with the given feature IDs,
+        updating the visual checkbox state and emitting the update signal.
+        
+        Args:
+            feature_ids: List of feature IDs to check. Can be integers or strings.
+        
+        Returns:
+            int: Number of items that were successfully checked
+        """
+        if self.layer is None or self.layer.id() not in self.list_widgets:
+            logger.warning("setCheckedFeatureIds: No layer or list_widget available")
+            return 0
+        
+        if not feature_ids:
+            # Clear all selections
+            self.deselect_all('De-select All')
+            return 0
+        
+        list_widget = self.list_widgets[self.layer.id()]
+        
+        # Normalize feature IDs for comparison (handle both int and str types)
+        normalized_fids = set()
+        for fid in feature_ids:
+            normalized_fids.add(fid)
+            # Also add string version for text-based PKs
+            if not isinstance(fid, str):
+                normalized_fids.add(str(fid))
+        
+        checked_count = list_widget.setCheckedByFeatureIds(normalized_fids, self)
+        
+        logger.debug(f"setCheckedFeatureIds: Checked {checked_count}/{len(feature_ids)} items")
+        
+        # Update display text
+        checked = self.checkedItems()
+        if checked:
+            display_text = ", ".join([str(item[0]) for item in checked[:5]])
+            if len(checked) > 5:
+                display_text += f"... (+{len(checked) - 5})"
+            self.items_le.setText(display_text)
+        else:
+            self.items_le.clear()
+        
+        # Emit update signal
+        self._emit_checked_items_update()
+        
+        return checked_count
+
+    def getCheckedFeatureIds(self):
+        """
+        Get list of currently checked feature IDs.
+        
+        Returns:
+            list: List of feature IDs (from item.data(3)) for checked items
+        """
+        if self.layer is None or self.layer.id() not in self.list_widgets:
+            return []
+        
+        feature_ids = []
+        list_widget = self.list_widgets[self.layer.id()]
+        
+        for i in range(list_widget.count()):
+            item = list_widget.item(i)
+            if item and item.checkState() == Qt.Checked:
+                feature_ids.append(item.data(3))
+        
+        return feature_ids
 
 
 __all__ = [

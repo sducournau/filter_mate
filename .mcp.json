@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "pml": {
+      "type": "stdio",
+      "command": "pml",
+      "args": [
+        "stdio"
+      ]
+    },
+    "serena": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "serena"
+      ],
+      "env": {
+        "SERENA_PROJECT": "/windows/c/Users/Simon/AppData/Roaming/QGIS/QGIS3/profiles/imagodata/python/plugins/filter_mate"
+      }
+    }
+  }
+}

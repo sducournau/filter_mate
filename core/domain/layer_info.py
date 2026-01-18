@@ -78,6 +78,8 @@ class LayerInfo:
         has_spatial_index: Whether layer has spatial index
         schema_name: Database schema name (PostgreSQL/Spatialite)
         table_name: Database table name
+        pk_attr: Primary key attribute name (e.g., "id", "fid")
+        geometry_column: Geometry column name (e.g., "geom", "geometry")
         
     Example:
         >>> layer = LayerInfo.create(
@@ -99,6 +101,8 @@ class LayerInfo:
     has_spatial_index: bool = False
     schema_name: str = ""
     table_name: str = ""
+    pk_attr: str = ""
+    geometry_column: str = "geom"
 
     def __eq__(self, other: object) -> bool:
         """

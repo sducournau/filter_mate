@@ -1040,45 +1040,44 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         lbl.setEnabled(True)
         lbl.setAttribute(Qt.WA_Hover, True)  # Enable hover events
         lbl.set_click_handler(click_handler)
-        print(f"Created indicator {name}: enabled={lbl.isEnabled()}, visible={lbl.isVisible()}, handler={click_handler is not None}")
+        logger.debug(f"Created indicator {name}: enabled={lbl.isEnabled()}, visible={lbl.isVisible()}, handler={click_handler is not None}")
         return lbl
     
     def _on_backend_indicator_clicked(self, event):
         """v4.0 Sprint 19: → BackendController."""
-        print(f"[DEBUG] _on_backend_indicator_clicked called")
-        print(f"[DEBUG]   _controller_integration = {self._controller_integration}")
+        logger.debug("_on_backend_indicator_clicked called")
+        logger.debug(f"_controller_integration = {self._controller_integration}")
         if self._controller_integration:
-            print(f"[DEBUG]   backend_controller = {self._controller_integration.backend_controller}")
+            logger.debug(f"backend_controller = {self._controller_integration.backend_controller}")
         
         if self._controller_integration and self._controller_integration.backend_controller:
-            print(f"[DEBUG]   Calling delegate_handle_backend_click()")
+            logger.debug("Calling delegate_handle_backend_click()")
             try:
                 self._controller_integration.delegate_handle_backend_click()
-                print(f"[DEBUG]   delegate_handle_backend_click() returned successfully")
+                logger.debug("delegate_handle_backend_click() returned successfully")
             except Exception as e:
-                print(f"[ERROR]   Exception in delegate_handle_backend_click(): {e}")
+                logger.error(f"Exception in delegate_handle_backend_click(): {e}")
                 import traceback
-                traceback.print_exc()
+                logger.error(traceback.format_exc())
         else:
-            print(f"[ERROR]   Backend controller unavailable!")
             logger.warning("Backend controller unavailable")
 
     def _on_favorite_indicator_clicked(self, event):
         """v4.0 S16: → FavoritesController."""
-        print(f"[DEBUG] _on_favorite_indicator_clicked called")
-        print(f"[DEBUG]   _favorites_ctrl = {self._favorites_ctrl}")
+        logger.debug("_on_favorite_indicator_clicked called")
+        logger.debug(f"_favorites_ctrl = {self._favorites_ctrl}")
         
         if self._favorites_ctrl:
-            print(f"[DEBUG]   Calling _favorites_ctrl.handle_indicator_clicked()")
+            logger.debug("Calling _favorites_ctrl.handle_indicator_clicked()")
             try:
                 self._favorites_ctrl.handle_indicator_clicked()
-                print(f"[DEBUG]   handle_indicator_clicked() returned successfully")
+                logger.debug("handle_indicator_clicked() returned successfully")
             except Exception as e:
-                print(f"[ERROR]   Exception in handle_indicator_clicked(): {e}")
+                logger.error(f"Exception in handle_indicator_clicked(): {e}")
                 import traceback
-                traceback.print_exc()
+                logger.error(traceback.format_exc())
         else:
-            print(f"[ERROR]   Favorites controller unavailable!")
+            logger.warning("Favorites controller unavailable")
     
     def _add_current_to_favorites(self):
         """v4.0 S16: → FavoritesController."""
@@ -1967,8 +1966,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if widget and hasattr(widget, 'setLayer'):
                     logger.debug(f"  Updating MULTIPLE_SELECTION_FEATURES with layer {layer.name()}")
                     widget.setLayer(layer, layer_props, skip_task=True)
-                    if hasattr(widget, 'setDisplayExpression') and multiple_expr:
-                        widget.setDisplayExpression(multiple_expr)
+                    # FIX 2026-01-18: Always call setDisplayExpression to populate the list
+                    # Even with empty expression, setDisplayExpression handles fallback to identifier field
+                    if hasattr(widget, 'setDisplayExpression'):
+                        widget.setDisplayExpression(multiple_expr if multiple_expr else "")
             
             # Update expression widgets (QgsFieldExpressionWidget)
             # FIX 2026-01-16: Use setField() for simple field names, setExpression() for complex expressions
@@ -2741,52 +2742,58 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def force_reconnect_action_signals(self):
         """v4.0 Sprint 8: Ultra-simplified - force reconnect ACTION signals bypassing cache.
         
-        FIX 2026-01-17 v2: CRITICAL - Disconnect ALL receivers from clicked signal, then reconnect our handler.
-        This ensures no stale lambdas are left connected that could interfere with signal delivery.
+        FIX 2026-01-17 v4: CRITICAL - Use DIRECT method references instead of stored lambdas.
+        Stored lambdas in widgets['ACTION'][x]['SIGNALS'] may become stale references
+        when widgets dict is recreated. By using direct method wrappers, we ensure
+        the connection is always to the current dockwidget instance.
         """
-        print("🔄 force_reconnect_action_signals CALLED")
-        if 'ACTION' not in self.widgets:
-            print("❌ force_reconnect_action_signals: 'ACTION' not in self.widgets")
-            return
+        print("🔄 force_reconnect_action_signals CALLED (v4 - direct handlers)")
+        
+        # Map button names to their task names and widgets
+        # Use direct attribute access to widgets (more reliable than widgets dict)
+        action_buttons = {
+            'FILTER': ('filter', getattr(self, 'pushButton_action_filter', None)),
+            'UNFILTER': ('unfilter', getattr(self, 'pushButton_action_unfilter', None)),
+            'UNDO_FILTER': ('undo', getattr(self, 'pushButton_action_undo_filter', None)),
+            'REDO_FILTER': ('redo', getattr(self, 'pushButton_action_redo_filter', None)),
+            'EXPORT': ('export', getattr(self, 'pushButton_action_export', None)),
+        }
         
         connected_count = 0
-        for w in ['FILTER', 'UNFILTER', 'UNDO_FILTER', 'REDO_FILTER', 'EXPORT']:
-            if w not in self.widgets['ACTION']:
-                print(f"⚠️ force_reconnect_action_signals: {w} not in self.widgets['ACTION']")
-                continue
-            widget_info = self.widgets['ACTION'][w]
-            widget = widget_info.get("WIDGET")
+        for btn_name, (task_name, widget) in action_buttons.items():
             if not widget:
-                print(f"⚠️ force_reconnect_action_signals: {w} has no WIDGET")
+                print(f"⚠️ force_reconnect_action_signals: {btn_name} widget not found")
                 continue
-            for s_tuple in widget_info.get("SIGNALS", []):
-                if not s_tuple[-1]:
-                    print(f"⚠️ force_reconnect_action_signals: {w} signal tuple has no handler: {s_tuple}")
-                    continue
-                signal_name = s_tuple[0]
-                handler = s_tuple[-1]
-                key = f"ACTION.{w}.{signal_name}"
-                self._signal_connection_states.pop(key, None)
+            
+            key = f"ACTION.{btn_name}.clicked"
+            self._signal_connection_states.pop(key, None)
+            
+            try:
+                # FIX 2026-01-17 v4: Disconnect ALL receivers to ensure clean state
                 try:
-                    signal = getattr(widget, signal_name)
-                    
-                    # FIX 2026-01-17 v2: Disconnect ALL receivers to ensure clean state
-                    # This is more aggressive but necessary when lambdas may have been duplicated
-                    try:
-                        signal.disconnect()  # Disconnect ALL receivers
-                        print(f"   Disconnected all receivers from {w}.{signal_name}")
-                    except TypeError:
-                        pass  # No receivers connected, which is fine
-                    
-                    # Now connect our handler
-                    signal.connect(handler)
-                    self._signal_connection_states[key] = True
-                    connected_count += 1
-                    print(f"✅ force_reconnect_action_signals: DIRECTLY connected {w}.{signal_name}")
-                except Exception as e:
-                    print(f"❌ force_reconnect_action_signals: Failed to connect {w}.{signal_name}: {e}")
+                    widget.clicked.disconnect()
+                    print(f"   Disconnected all receivers from {btn_name}.clicked")
+                except TypeError:
+                    pass  # No receivers connected, which is fine
+                
+                # FIX 2026-01-17 v4: Connect using a closure that captures task_name
+                # This avoids relying on potentially stale lambdas from widgets dict
+                def make_handler(task):
+                    """Factory function to create handler with properly captured task name."""
+                    def handler(state=False):
+                        print(f"🎯 ACTION handler triggered: task={task}, state={state}")
+                        self.launchTaskEvent(state, task)
+                    return handler
+                
+                handler = make_handler(task_name)
+                widget.clicked.connect(handler)
+                self._signal_connection_states[key] = True
+                connected_count += 1
+                print(f"✅ force_reconnect_action_signals: Connected {btn_name}.clicked → launchTaskEvent(_, '{task_name}')")
+            except Exception as e:
+                print(f"❌ force_reconnect_action_signals: Failed to connect {btn_name}.clicked: {e}")
         
-        print(f"🔄 force_reconnect_action_signals COMPLETED: {connected_count} signals connected")
+        print(f"🔄 force_reconnect_action_signals COMPLETED: {connected_count}/5 signals connected")
     
     def diagnose_action_buttons(self):
         """
@@ -3032,9 +3039,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def manage_interactions(self):
         """v4.0 Sprint 8: Optimized - initialize widget interactions and default values."""
-        from qgis.utils import iface
         logger.info("🚀 manage_interactions CALLED - Starting widget configuration")
-        iface.messageBar().pushInfo("FilterMate DEBUG", "manage_interactions starting...")
         
         self.coordinateReferenceSystem = QgsCoordinateReferenceSystem()
         
@@ -3871,23 +3876,45 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 picker = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
                 feature_ids_to_fetch = []
                 
+                # DIAGNOSTIC 2026-01-28: Detailed multiple_selection debugging
+                logger.info(f"  🔍 MULTIPLE_SELECTION DEBUG:")
+                logger.info(f"     picker type: {type(picker).__name__}")
+                logger.info(f"     picker.layer: {picker.layer.name() if picker.layer else 'None'}")
+                if picker.layer:
+                    logger.info(f"     picker.layer.id(): {picker.layer.id()}")
+                    logger.info(f"     list_widgets keys: {list(picker.list_widgets.keys()) if hasattr(picker, 'list_widgets') else 'N/A'}")
+                    if picker.layer.id() in picker.list_widgets:
+                        lw = picker.list_widgets[picker.layer.id()]
+                        logger.info(f"     list_widget count: {lw.count()}")
+                        # Check how many checked items
+                        checked_count = 0
+                        for i in range(lw.count()):
+                            item = lw.item(i)
+                            if item and item.checkState() == Qt.Checked:
+                                checked_count += 1
+                        logger.info(f"     checked items count: {checked_count}")
+                    else:
+                        logger.warning(f"     ⚠️ layer.id() NOT in list_widgets!")
+                
                 # FIX v10: Use multiple strategies to get checked feature IDs
                 # Strategy 1: Try checkedItemsData first (returns FIDs directly)
                 if hasattr(picker, 'checkedItemsData'):
                     checked = picker.checkedItemsData()
                     if checked:
                         feature_ids_to_fetch = list(checked)
-                        logger.debug(f"  → Got {len(feature_ids_to_fetch)} FIDs from checkedItemsData")
+                        logger.info(f"  → Got {len(feature_ids_to_fetch)} FIDs from checkedItemsData")
                     
                 # Strategy 2: Fallback to checkedItems (returns [display, pk, ...] tuples)
                 if not feature_ids_to_fetch and hasattr(picker, 'checkedItems'):
                     items = picker.checkedItems()
+                    logger.info(f"  → checkedItems() returned: {len(items) if items else 0} items")
                     if items:
+                        logger.info(f"     First item sample: {items[0] if items else 'N/A'}")
                         # Extract PK values (index 1) from items
                         for item in items:
                             if isinstance(item, (list, tuple)) and len(item) > 1:
                                 feature_ids_to_fetch.append(item[1])
-                        logger.debug(f"  → Got {len(feature_ids_to_fetch)} PKs from checkedItems")
+                        logger.info(f"  → Got {len(feature_ids_to_fetch)} PKs from checkedItems")
                 
                 # Strategy 3: Try saved FIDs from _last_multiple_selection_fids
                 if not feature_ids_to_fetch:
@@ -5950,13 +5977,51 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         _filtering_in_progress is True. These are explicit user actions that should
         not be blocked by the protection flag. The protection is meant to block
         automatic signals (like layer change), not user button clicks.
+        
+        FIX 2026-01-17 v3: For user action tasks, try to recover current_layer from
+        saved ID or combobox if it's None during protection window.
         """
+        # FIX 2026-01-17 v3: Define user action tasks early (needed for recovery logic)
+        user_action_tasks = ('undo', 'redo', 'unfilter', 'reset')
+        is_user_action = task_name in user_action_tasks
+        
         # FIX 2026-01-17 v2: Enhanced diagnostic logging - USE PRINT for visibility!
         print(f"{'='*60}")
         print(f"🎯 launchTaskEvent CALLED: state={state}, task_name={task_name}")
         print(f"   widgets_initialized={self.widgets_initialized}")
         print(f"   _filtering_in_progress={getattr(self, '_filtering_in_progress', False)}")
+        print(f"   is_user_action={is_user_action}")
         print(f"   has_current_layer={self.current_layer is not None}")
+        
+        # FIX 2026-01-17 v3: For user actions during protection window, try to recover current_layer
+        if is_user_action and not self.current_layer:
+            print(f"   ⚠️ User action '{task_name}' but current_layer is None - attempting recovery...")
+            
+            # Try 1: Recover from saved layer ID (set during filtering)
+            saved_id = getattr(self, '_saved_layer_id_before_filter', None)
+            if saved_id:
+                from qgis.core import QgsProject
+                recovered_layer = QgsProject.instance().mapLayer(saved_id)
+                if recovered_layer and recovered_layer.isValid():
+                    self.current_layer = recovered_layer
+                    print(f"   ✅ RECOVERED current_layer from saved ID: {recovered_layer.name()}")
+            
+            # Try 2: Recover from combobox current selection
+            if not self.current_layer:
+                combo_layer = self.comboBox_filtering_current_layer.currentLayer()
+                if combo_layer and combo_layer.isValid():
+                    self.current_layer = combo_layer
+                    print(f"   ✅ RECOVERED current_layer from combobox: {combo_layer.name()}")
+            
+            # Try 3: Use first layer in PROJECT_LAYERS
+            if not self.current_layer and self.PROJECT_LAYERS:
+                first_id = list(self.PROJECT_LAYERS.keys())[0]
+                from qgis.core import QgsProject
+                first_layer = QgsProject.instance().mapLayer(first_id)
+                if first_layer and first_layer.isValid():
+                    self.current_layer = first_layer
+                    print(f"   ✅ RECOVERED current_layer from PROJECT_LAYERS: {first_layer.name()}")
+        
         if self.current_layer:
             print(f"   current_layer.name={self.current_layer.name()}")
             print(f"   current_layer.id={self.current_layer.id()}")
@@ -5967,15 +6032,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             print(f"   PROJECT_LAYERS keys={list(self.PROJECT_LAYERS.keys())[:3]}...")
         print(f"{'='*60}")
         
+        # FIX 2026-01-17 v3: For user actions, reset _filtering_in_progress immediately
+        # This allows the action to proceed without waiting for the 1.5s protection window
+        if is_user_action and getattr(self, '_filtering_in_progress', False):
+            print(f"🔓 FIX 2026-01-17 v3: Resetting _filtering_in_progress for user action '{task_name}'")
+            self._filtering_in_progress = False
+        
         if not self.widgets_initialized or not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS:
             print(f"❌ launchTaskEvent BLOCKED: widgets_initialized={self.widgets_initialized}, current_layer={self.current_layer}, in_PROJECT_LAYERS={self.current_layer.id() in self.PROJECT_LAYERS if self.current_layer else False}")
             return
-        
-        # FIX 2026-01-17: For undo/redo/unfilter/reset, bypass the _filtering_in_progress protection
-        # These are explicit user actions that should always be allowed
-        user_action_tasks = ('undo', 'redo', 'unfilter', 'reset')
-        if task_name in user_action_tasks and getattr(self, '_filtering_in_progress', False):
-            print(f"🔓 FIX 2026-01-17: Allowing {task_name} despite _filtering_in_progress=True (user action)")
         
         self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = self.get_layers_to_filter()
         self.setLayerVariableEvent(self.current_layer, [("filtering", "layers_to_filter")])

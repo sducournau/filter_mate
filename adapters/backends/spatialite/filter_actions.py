@@ -19,7 +19,7 @@ from typing import Optional, Tuple
 import logging
 from qgis.core import QgsVectorLayer
 
-from .database_manager import cleanup_session_temp_tables
+from .filter_executor import cleanup_session_temp_tables
 
 logger = logging.getLogger(__name__)
 

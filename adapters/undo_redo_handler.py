@@ -146,15 +146,24 @@ class UndoRedoHandler:
         """
         Handle undo operation with intelligent layer selection logic.
         
+        v4.1.3: Undo now respects the history entry type rather than current checkbox state.
+        - If history entry is multi-layer (layer_count > 1): perform global undo
+        - If history entry is single-layer: perform layer-only undo
+        
         Args:
             source_layer: The source layer for the undo operation
-            layers_to_filter: List of remote layer IDs
-            use_global: Whether to use global (multi-layer) undo
+            layers_to_filter: List of remote layer IDs (used for context, not decision)
+            use_global: Whether checkbox is checked (used for context, not decision)
             dockwidget: Optional dockwidget for combobox protection
             
         Returns:
             bool: True if undo was successful, False otherwise
         """
+        logger.info(f"=== handle_undo START ===")
+        logger.info(f"  source_layer: {source_layer.name() if source_layer else 'None'}")
+        logger.info(f"  layers_to_filter: {layers_to_filter}")
+        logger.info(f"  use_global (checkbox): {use_global}")
+        
         if not source_layer:
             logger.warning("No current layer for undo")
             return False
@@ -173,13 +182,30 @@ class UndoRedoHandler:
             logger.warning(f"handle_undo: layer {source_layer.name()} not in PROJECT_LAYERS")
             return False
         
-        has_remote_layers = bool(layers_to_filter)
-        use_global_undo = use_global and has_remote_layers
+        # v4.1.3: Peek at history entry to determine undo type
+        # The entry type (multi-layer vs single-layer) determines the undo behavior,
+        # NOT the current state of the checkbox
+        pending_entry = self._history_manager.peek_undo()
+        if not pending_entry:
+            logger.info("No undo history available")
+            return False
         
-        if use_global_undo:
+        # Determine undo type from the history entry itself
+        is_multi_layer_entry = pending_entry.layer_count > 1
+        
+        logger.info(f"  pending_entry: {pending_entry.entry_id}")
+        logger.info(f"  pending_entry.layer_count: {pending_entry.layer_count}")
+        logger.info(f"  pending_entry.layer_ids: {pending_entry.layer_ids}")
+        logger.info(f"  is_multi_layer_entry: {is_multi_layer_entry}")
+        
+        if is_multi_layer_entry:
+            logger.info(f"v4.1.3: History entry is multi-layer ({pending_entry.layer_count} layers) - using global undo")
             result = self._perform_global_undo(source_layer, project_layers)
         else:
+            logger.info("v4.1.3: History entry is single-layer - using layer undo")
             result = self._perform_layer_undo(source_layer, project_layers)
+        
+        logger.info(f"=== handle_undo END: result={result} ===")
         
         # Set up combobox protection if dockwidget provided
         if dockwidget and result:
@@ -197,10 +223,14 @@ class UndoRedoHandler:
         """
         Handle redo operation with intelligent layer selection logic.
         
+        v4.1.3: Redo now respects the history entry type rather than current checkbox state.
+        - If history entry is multi-layer (layer_count > 1): perform global redo
+        - If history entry is single-layer: perform layer-only redo
+        
         Args:
             source_layer: The source layer for the redo operation
-            layers_to_filter: List of remote layer IDs
-            use_global: Whether to use global (multi-layer) redo
+            layers_to_filter: List of remote layer IDs (used for context, not decision)
+            use_global: Whether checkbox is checked (used for context, not decision)
             dockwidget: Optional dockwidget for combobox protection
             
         Returns:
@@ -224,12 +254,22 @@ class UndoRedoHandler:
             logger.warning(f"handle_redo: layer {source_layer.name()} not in PROJECT_LAYERS")
             return False
         
-        has_remote_layers = bool(layers_to_filter)
-        use_global_redo = use_global and has_remote_layers
+        # v4.1.3: Peek at history entry to determine redo type
+        # The entry type (multi-layer vs single-layer) determines the redo behavior,
+        # NOT the current state of the checkbox
+        pending_entry = self._history_manager.peek_redo()
+        if not pending_entry:
+            logger.info("No redo history available")
+            return False
         
-        if use_global_redo and self._history_manager.can_redo:
+        # Determine redo type from the history entry itself
+        is_multi_layer_entry = pending_entry.layer_count > 1
+        
+        if is_multi_layer_entry:
+            logger.info(f"v4.1.3: History entry is multi-layer ({pending_entry.layer_count} layers) - using global redo")
             result = self._perform_global_redo(source_layer, project_layers)
         else:
+            logger.info("v4.1.3: History entry is single-layer - using layer redo")
             result = self._perform_layer_redo(source_layer, project_layers)
         
         # Set up combobox protection if dockwidget provided
@@ -243,13 +283,24 @@ class UndoRedoHandler:
         source_layer: 'QgsVectorLayer',
         project_layers: Dict
     ) -> bool:
-        """Perform global undo affecting all filtered layers."""
-        logger.info("Performing global undo (remote layers are filtered)")
+        """Perform global undo affecting all filtered layers.
+        
+        v4.1.3: Added detailed logging for debugging.
+        """
+        logger.info("Performing global undo (multi-layer entry)")
         history_entry = self._history_manager.undo()
         
         if not history_entry:
             logger.info("No global undo history available")
             return False
+        
+        # v4.1.3: Debug logging
+        logger.info(f"Undo entry: {history_entry.entry_id}")
+        logger.info(f"  - layer_ids: {history_entry.layer_ids}")
+        logger.info(f"  - previous_filters count: {len(history_entry.previous_filters)}")
+        for layer_id, prev_filter in history_entry.previous_filters:
+            preview = prev_filter[:40] if prev_filter else '(empty)'
+            logger.info(f"  - {layer_id}: '{preview}'")
         
         # Restore previous filters for all affected layers
         restored_layers = []
@@ -262,6 +313,10 @@ class UndoRedoHandler:
                     restored_layers.append(layer)
                     expr_preview = previous_filter[:60] if previous_filter else 'no filter'
                     logger.info(f"Restored layer {layer.name()}: {expr_preview}")
+                else:
+                    logger.warning(f"Layer {layer_id} found in project_layers but layer object is None")
+            else:
+                logger.warning(f"Layer {layer_id} not found in project_layers")
         
         # Refresh all affected layers
         self._refresh_affected_layers(source_layer, restored_layers)
@@ -282,16 +337,30 @@ class UndoRedoHandler:
             logger.info("No global redo history available")
             return False
         
+        # Extract the expressions to restore for each layer
+        # For redo, we need to apply the NEW expressions stored in metadata
+        # (the expression that was applied when this history entry was created)
+        remote_layers_info = history_entry.get_metadata_value('remote_layers') or {}
+        
         # Apply the filter expression to all affected layers
         restored_layers = []
         for layer_id in history_entry.layer_ids:
             if layer_id in project_layers:
                 layer = project_layers[layer_id].get("layer")
                 if layer:
-                    safe_set_subset_string(layer, history_entry.expression)
-                    project_layers[layer_id]["infos"]["is_already_subset"] = bool(history_entry.expression)
+                    # Determine the expression to apply:
+                    # - For source layer: use history_entry.expression
+                    # - For remote layers: use the expression from metadata
+                    if layer_id == source_layer.id():
+                        expression = history_entry.expression
+                    else:
+                        layer_info = remote_layers_info.get(layer_id, {})
+                        expression = layer_info.get('expression', '') if isinstance(layer_info, dict) else ''
+                    
+                    safe_set_subset_string(layer, expression)
+                    project_layers[layer_id]["infos"]["is_already_subset"] = bool(expression)
                     restored_layers.append(layer)
-                    expr_preview = history_entry.expression[:60] if history_entry.expression else 'no filter'
+                    expr_preview = expression[:60] if expression else 'no filter'
                     logger.info(f"Redone layer {layer.name()}: {expr_preview}")
         
         # Refresh all affected layers
@@ -305,15 +374,13 @@ class UndoRedoHandler:
         source_layer: 'QgsVectorLayer',
         project_layers: Dict
     ) -> bool:
-        """Perform undo for source layer only."""
+        """Perform undo for source layer only.
+        
+        v4.1.3: Simplified - caller has already verified entry exists via peek.
+        """
         logger.info("Performing source layer undo only")
         
-        # Check if there's any history that affects this layer
-        layer_history = self._history_manager.get_history_for_layer(source_layer.id())
-        if not layer_history or not self._history_manager.can_undo:
-            logger.info("No undo history for source layer")
-            return False
-        
+        # Pop the entry (caller already verified it exists)
         previous_state = self._history_manager.undo()
         if not previous_state:
             return False
@@ -338,20 +405,23 @@ class UndoRedoHandler:
         source_layer: 'QgsVectorLayer',
         project_layers: Dict
     ) -> bool:
-        """Perform redo for source layer only."""
+        """Perform redo for source layer only.
+        
+        v4.1.3: Simplified - caller has already verified entry exists via peek.
+        """
         logger.info("Performing source layer redo only")
         
-        if not self._history_manager.can_redo:
-            logger.info("No redo history for source layer")
-            return False
-        
+        # Pop the entry (caller already verified it exists)
         next_state = self._history_manager.redo()
         if not next_state:
             return False
         
-        # Apply the expression from the redo entry
-        safe_set_subset_string(source_layer, next_state.expression)
-        project_layers[source_layer.id()]["infos"]["is_already_subset"] = bool(next_state.expression)
+        # For redo, we apply the expression that was recorded (the NEW expression)
+        # For single-layer entry, this is simply next_state.expression
+        expression = next_state.expression
+        
+        safe_set_subset_string(source_layer, expression)
+        project_layers[source_layer.id()]["infos"]["is_already_subset"] = bool(expression)
         logger.info(f"Redo source layer to: {next_state.description}")
         
         # Refresh
@@ -493,6 +563,18 @@ class UndoRedoHandler:
         
         Extracted from FilterMateApp._push_filter_to_history().
         
+        Note: This method creates a SINGLE history entry for the operation.
+        - For source-only filtering: creates a per-layer entry via LayerHistory
+        - For multi-layer filtering: creates a global entry via push_global_state
+        
+        CRITICAL: Previous expressions must be captured from the LAST history entry
+        (what was applied BEFORE this filter), not from the current layer state
+        (which already has the NEW filter applied).
+        
+        This ensures undo/redo works correctly without duplicate entries.
+        
+        v4.1.3: Added detailed logging for debugging.
+        
         Args:
             source_layer: Source layer being filtered
             task_parameters: Task parameters containing layers info
@@ -500,40 +582,118 @@ class UndoRedoHandler:
             provider_type: Backend provider type
             layer_count: Number of layers affected
         """
-        # Save source layer state to history
-        history = self._history_manager.get_or_create_history(source_layer.id())
         filter_expression = source_layer.subsetString()
+        
+        logger.info(f"push_filter_to_history: source={source_layer.name()}, expr='{filter_expression[:40] if filter_expression else '(none)'}...', layer_count={layer_count}")
         
         if len(filter_expression) > 60:
             description = f"Filter: {filter_expression[:60]}..."
         else:
             description = f"Filter: {filter_expression}"
         
-        history.push_state(
-            expression=filter_expression,
-            feature_count=feature_count,
-            description=description,
-            metadata={"backend": provider_type, "operation": "filter", "layer_count": layer_count}
-        )
-        
-        history_pos = history._current_index + 1 if hasattr(history, '_current_index') else '?'
-        history_len = len(history._states) if hasattr(history, '_states') else '?'
-        logger.info(f"Pushed filter state to history for source layer (position {history_pos}/{history_len})")
-        
-        # Collect and save remote layers state
+        # Collect remote layers state FIRST to determine if we have multi-layer filtering
         remote_layers_info = self._collect_remote_layers_history(task_parameters, provider_type)
         
-        # Push global state if we have remote layers
+        logger.info(f"push_filter_to_history: remote_layers_info has {len(remote_layers_info)} entries")
+        
         if remote_layers_info:
+            # Multi-layer filtering: use push_global_state which creates a single entry
+            # that captures ALL layer states for proper undo/redo
+            
+            # CRITICAL: Collect PREVIOUS expressions from last history entries
+            # These are what we need to restore on undo
+            previous_expressions = self._collect_previous_expressions(
+                source_layer.id(), list(remote_layers_info.keys())
+            )
+            
+            logger.info(f"push_filter_to_history: Creating GLOBAL entry with {len(remote_layers_info) + 1} layers")
+            for lid, prev_expr in previous_expressions.items():
+                logger.info(f"  - previous[{lid[:20]}...]: '{prev_expr[:30] if prev_expr else '(empty)'}...'")
+            
             self._history_manager.push_global_state(
                 source_layer_id=source_layer.id(),
                 source_expression=filter_expression,
                 source_feature_count=feature_count,
                 remote_layers=remote_layers_info,
+                previous_expressions=previous_expressions,  # Pass previous state!
                 description=f"Global filter: {len(remote_layers_info) + 1} layers",
                 metadata={"backend": provider_type, "operation": "filter"}
             )
             logger.info(f"Pushed global filter state ({len(remote_layers_info) + 1} layers)")
+        else:
+            # Source-only filtering: use LayerHistory.push_state for per-layer entry
+            logger.info(f"push_filter_to_history: Creating SINGLE-LAYER entry")
+            history = self._history_manager.get_or_create_history(source_layer.id())
+            history.push_state(
+                expression=filter_expression,
+                feature_count=feature_count,
+                description=description,
+                metadata={"backend": provider_type, "operation": "filter", "layer_count": layer_count}
+            )
+            
+            history_pos = history._current_index + 1 if hasattr(history, '_current_index') else '?'
+            history_len = len(history._states) if hasattr(history, '_states') else '?'
+            logger.info(f"Pushed filter state to history for source layer (position {history_pos}/{history_len})")
+    
+    def _collect_previous_expressions(self, source_layer_id: str, remote_layer_ids: List[str]) -> Dict[str, str]:
+        """
+        Collect previous filter expressions for all affected layers.
+        
+        v4.1.3: Fixed to correctly retrieve per-layer expressions.
+        
+        For the FIRST filter (no history yet), we need to get current layer expressions.
+        For subsequent filters, we look at the last entry's NEW expressions (what was applied).
+        
+        This is called BEFORE pushing a new history entry, so the last entry contains
+        what is currently applied to the layers.
+        
+        Args:
+            source_layer_id: Source layer ID
+            remote_layer_ids: List of remote layer IDs
+            
+        Returns:
+            Dict mapping layer_id to previous_expression
+        """
+        previous_expressions = {}
+        project = self._get_project()
+        
+        # For source layer: check if we have history
+        source_history = self._history_manager.get_history_for_layer(source_layer_id)
+        if source_history:
+            # Last entry's expression is what's currently applied to source
+            previous_expressions[source_layer_id] = source_history[-1].expression
+        else:
+            # No history - get current state from layer
+            layer = project.mapLayer(source_layer_id) if project else None
+            previous_expressions[source_layer_id] = layer.subsetString() if layer else ""
+        
+        # For remote layers: check metadata of last entry or get from layer
+        for layer_id in remote_layer_ids:
+            layer_history = self._history_manager.get_history_for_layer(layer_id)
+            if layer_history:
+                last_entry = layer_history[-1]
+                # Check if this layer's expression is in metadata (for global entries)
+                remote_layers_meta = last_entry.get_metadata_value('remote_layers') or {}
+                if layer_id in remote_layers_meta:
+                    layer_info = remote_layers_meta[layer_id]
+                    if isinstance(layer_info, dict):
+                        previous_expressions[layer_id] = layer_info.get('expression', '')
+                    else:
+                        previous_expressions[layer_id] = ''
+                elif layer_id == source_layer_id:
+                    # It's the source of that entry
+                    previous_expressions[layer_id] = last_entry.expression
+                else:
+                    # Fallback: get from layer
+                    layer = project.mapLayer(layer_id) if project else None
+                    previous_expressions[layer_id] = layer.subsetString() if layer else ""
+            else:
+                # No history - get current state from layer
+                layer = project.mapLayer(layer_id) if project else None
+                previous_expressions[layer_id] = layer.subsetString() if layer else ""
+        
+        logger.debug(f"Collected previous expressions for {len(previous_expressions)} layers")
+        return previous_expressions
     
     def _collect_remote_layers_history(
         self,
@@ -541,7 +701,13 @@ class UndoRedoHandler:
         provider_type: str
     ) -> Dict[str, tuple]:
         """
-        Collect and save history for remote layers.
+        Collect current filter expressions for remote layers.
+        
+        NOTE: This method no longer calls push_state() for each layer.
+        The history entry is created once by push_global_state() to avoid
+        duplicate entries that break undo/redo.
+        
+        v4.1.3: Added debug logging to trace remote layer collection.
         
         Args:
             task_parameters: Task parameters containing layers info
@@ -554,42 +720,39 @@ class UndoRedoHandler:
         project = self._get_project()
         project_layers = self._get_project_layers()
         
-        for layer_props in task_parameters.get("task", {}).get("layers", []):
+        # v4.1.3: Debug logging
+        task_layers = task_parameters.get("task", {}).get("layers", [])
+        logger.info(f"_collect_remote_layers_history: Found {len(task_layers)} layers in task_parameters")
+        
+        for layer_props in task_layers:
             layer_id = layer_props.get("layer_id")
             layer_name = layer_props.get("layer_name")
             
-            if not layer_id or layer_id not in project_layers:
+            logger.debug(f"  Processing layer: {layer_name} ({layer_id})")
+            
+            if not layer_id:
+                logger.debug(f"  - Skipped: no layer_id")
+                continue
+            if layer_id not in project_layers:
+                logger.debug(f"  - Skipped: not in project_layers")
                 continue
             
             # Find the layer in the project
             assoc_layer = project.mapLayer(layer_id)
             if not assoc_layer:
+                logger.debug(f"  - Skipped: mapLayer returned None")
                 continue
             
-            # Push state to layer history
-            assoc_history = self._history_manager.get_or_create_history(layer_id)
+            # Get current filter expression and feature count (NO push_state here!)
             assoc_filter = assoc_layer.subsetString()
             assoc_count = assoc_layer.featureCount()
             
-            if len(assoc_filter) > 60:
-                assoc_desc = f"Filter: {assoc_filter[:60]}..."
-            else:
-                assoc_desc = f"Filter: {assoc_filter}"
-            
-            assoc_history.push_state(
-                expression=assoc_filter,
-                feature_count=assoc_count,
-                description=assoc_desc,
-                metadata={
-                    "backend": layer_props.get("layer_provider_type", provider_type),
-                    "operation": "filter"
-                }
-            )
-            logger.info(f"Pushed filter state to history for layer {layer_name}")
+            logger.info(f"  + Added remote layer {layer_name}: filter='{assoc_filter[:40] if assoc_filter else '(none)'}...'")
             
             # Add to remote layers info for global history
             remote_layers_info[layer_id] = (assoc_filter, assoc_count)
         
+        logger.info(f"_collect_remote_layers_history: Collected {len(remote_layers_info)} remote layers")
         return remote_layers_info
 
     def initialize_filter_history(

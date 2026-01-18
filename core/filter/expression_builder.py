@@ -124,7 +124,13 @@ class ExpressionBuilder:
             Optional[str]: Filter expression or None on error
         """
         try:
+            # CONSOLE-VISIBLE DIAGNOSTIC
+            print("=" * 80)
+            print("🔧 ExpressionBuilder.build_backend_expression() CALLED!")
+            print("=" * 80)
+            
             backend_name = backend.get_backend_name()
+            print(f"   backend_name: {backend_name}")
             
             # DIAGNOSTIC LOGS 2026-01-16: ULTRA-DETAILED TRACE for source_filter debugging
             logger.info("=" * 80)
@@ -245,20 +251,33 @@ class ExpressionBuilder:
         Returns:
             Optional[str]: Source filter SQL or None
         """
+        # CONSOLE-VISIBLE DIAGNOSTIC
+        print("=" * 80)
+        print("🔍 ExpressionBuilder._prepare_source_filter() CALLED")
+        print("=" * 80)
+        print(f"   backend_name: {backend_name}")
         logger.info("   🔍 _prepare_source_filter() ENTERED")
         logger.info(f"      backend_name: {backend_name}")
         
         source_filter = None
         
         # PostgreSQL EXISTS mode needs source filter
-        if backend_name != 'PostgreSQL':
+        # FIX 2026-01-17: Case-insensitive comparison (backend returns 'Postgresql', not 'PostgreSQL')
+        if backend_name.lower() != 'postgresql':
+            print(f"   ↩️ Returning None - backend '{backend_name}' doesn't need source_filter")
             logger.info(f"      ↩️ Returning None - backend '{backend_name}' doesn't need source_filter")
             return None
         
+        print("   ✓ PostgreSQL backend detected - preparing source_filter...")
         logger.info("      ✓ PostgreSQL backend detected - preparing source_filter...")
         
         # Get source layer's existing subset string
         source_subset = self.source_layer.subsetString() if self.source_layer else None
+        print("=" * 80)
+        print("🔍 _prepare_source_filter: ANALYZING source_subset")
+        print("=" * 80)
+        print(f"   self.source_layer: {self.source_layer.name() if self.source_layer else 'None'}")
+        print(f"   source_subset: '{source_subset}'" if source_subset else "   source_subset: None (EMPTY!)")
         logger.info("=" * 80)
         logger.info("🔍 _prepare_source_filter: ANALYZING source_subset")
         logger.info("=" * 80)
@@ -297,7 +316,20 @@ class ExpressionBuilder:
         # HOTFIX 2026-01-17: Add fallback logic for thread-safe feature extraction
         task_features = self.task_parameters.get("task", {}).get("features", [])
         logger.info(f"      📋 ATTEMPT 1: task_parameters['task']['features']")
-        logger.info(f"         Count: {len(task_features)} features")
+        logger.info(f"         Count: {len(task_features)} items")
+        
+        # CRITICAL FIX 2026-01-17: Check if task_features are QgsFeatures or just values (strings/ints)
+        # If they are just values (e.g. ["1", "2"]), they are field values not QgsFeature objects
+        are_qgs_features = False
+        if task_features and len(task_features) > 0:
+            first_item = task_features[0]
+            are_qgs_features = hasattr(first_item, 'id') and hasattr(first_item, 'geometry')
+            logger.info(f"         First item type: {type(first_item).__name__}")
+            logger.info(f"         Are QgsFeatures: {are_qgs_features}")
+            if not are_qgs_features:
+                logger.warning(f"         ⚠️ task_features contains values, not QgsFeature objects!")
+                logger.warning(f"         → Will use source_subset instead")
+                task_features = []  # Reset to trigger source_subset fallback
         
         # ATTEMPT 2: task_parameters["task"]["feature_fids"] (backup FIDs)
         if not task_features or len(task_features) == 0:
@@ -325,33 +357,61 @@ class ExpressionBuilder:
         if task_features:
             if hasattr(task_features[0], 'id'):
                 logger.info(f"         First feature ID: {task_features[0].id()}")
-            logger.info(f"         ✅ User has {len(task_features)} features for source_filter")
+            logger.info(f"         ✅ User has {len(task_features)} QgsFeatures for source_filter")
         else:
-            logger.warning(f"         ❌ ALL ATTEMPTS FAILED - No task_features available!")
+            logger.warning(f"         ❌ ALL ATTEMPTS FAILED - No QgsFeature objects available!")
             logger.warning(f"         → Will try source_subset as last resort")
         
+        # ATTEMPT 4: Get features from filtered source layer (when source has a subset but can't use it directly)
+        # This handles the case where source_subset contains EXISTS patterns
+        if not task_features or len(task_features) == 0:
+            if self.source_layer and source_subset and skip_source_subset:
+                logger.info(f"      📋 ATTEMPT 4: Getting features from filtered source layer")
+                logger.info(f"         Source layer has filter applied, extracting visible features...")
+                try:
+                    from qgis.core import QgsFeatureRequest
+                    # Get all features currently visible (respecting the active filter)
+                    request = QgsFeatureRequest()
+                    task_features = list(self.source_layer.getFeatures(request))
+                    logger.info(f"         Extracted {len(task_features)} features from filtered source layer")
+                except Exception as e:
+                    logger.error(f"         Failed to extract features: {e}")
+        
         use_task_features = task_features and len(task_features) > 0
+        print(f"   use_task_features: {use_task_features}")
+        print(f"   skip_source_subset: {skip_source_subset}")
         
         if use_task_features:
             # PRIORITY: Generate filter from task_features
+            print(f"🎯 PATH 1: Using {len(task_features)} task_features")
             logger.debug(f"🎯 PostgreSQL EXISTS: Using {len(task_features)} task_features (selection priority)")
             source_filter = self._generate_fid_filter(task_features)
             
             # HOTFIX VERIFICATION: Log the generated filter
+            print(f"✅ Generated source_filter from task_features:")
+            print(f"   Length: {len(source_filter) if source_filter else 0} chars")
             logger.info(f"✅ Generated source_filter:")
             logger.info(f"   Length: {len(source_filter) if source_filter else 0} chars")
             if source_filter:
+                print(f"   Preview: '{source_filter[:100]}'...")
                 logger.info(f"   Preview: '{source_filter[:100]}'...")
                 logger.info(f"   ✅ Backend will include this in EXISTS WHERE clause")
             else:
+                print(f"   ❌ ERROR: _generate_fid_filter() returned None!")
                 logger.error(f"   ❌ ERROR: _generate_fid_filter() returned None!")
         elif source_subset and not skip_source_subset:
             # FALLBACK: Use source layer's subset string
+            print(f"🎯 PATH 2: Using source_subset as source_filter")
+            print(f"   source_filter = '{source_subset}'")
             logger.debug("PostgreSQL EXISTS: Using source layer subsetString as source_filter")
             source_filter = source_subset
         else:
             # NO FILTER: Will match all source features
+            print(f"❌ PATH 3: NO SOURCE FILTER - EXISTS will match ALL source features!")
             logger.debug("PostgreSQL EXISTS: No source filter (will match all source features)")
+        
+        print(f"   FINAL RETURN: source_filter = '{source_filter[:100] if source_filter else 'None'}'...")
+        print("=" * 80)
         
         return source_filter
     

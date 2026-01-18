@@ -524,6 +524,24 @@ class FilteringController(BaseController, LayerSelectionMixin):
                 for reason in skipped_reasons:
                     logger.warning(f"   - {reason}")
             
+            # FIX v4.1.3 (2026-01-18): Add missing layers directly to combobox (same as populate_export_combobox)
+            # This ensures PostgreSQL and remote layers missing from PROJECT_LAYERS are still filterable
+            from ...infrastructure.utils import geometry_type_to_string
+            
+            for missing_layer in missing:
+                if missing_layer.isValid() and is_layer_source_available(missing_layer, require_psycopg2=False):
+                    display_name = f"{missing_layer.name()} [{missing_layer.crs().authid()}]"
+                    geom_type_str = geometry_type_to_string(missing_layer)
+                    layer_icon = dockwidget.icon_per_geometry_type(geom_type_str)
+                    logger.debug(f"populate_layers_checkable_combobox [MISSING]: layer='{missing_layer.name()}', geom_type='{geom_type_str}', icon_isNull={layer_icon.isNull() if layer_icon else 'None'}")
+                    item_data = {"layer_id": missing_layer.id(), "layer_geometry_type": geom_type_str}
+                    layers_widget.addItem(layer_icon, display_name, item_data)
+                    item = layers_widget.model().item(item_index)
+                    # Check if this layer was previously selected for filtering
+                    item.setCheckState(Qt.Checked if missing_layer.id() in layers_to_filter else Qt.Unchecked)
+                    item_index += 1
+                    logger.info(f"✓ populate_layers_checkable_combobox: Added missing layer '{missing_layer.name()}'")
+            
             logger.info(f"✓ populate_layers_checkable_combobox: Added {item_index} layers (source layer '{layer.name()}' excluded)")
             logger.info(f"=== populate_layers_checkable_combobox END ===")
             return True

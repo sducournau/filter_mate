@@ -83,3 +83,7 @@ config/backups/*.backup
 # Coverage reports
 coverage/
 *.coverage
+
+# PML (per-project config and state)
+.pml.json
+.pml/

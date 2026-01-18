@@ -453,6 +453,7 @@ class HistoryService:
         source_expression: str,
         source_feature_count: int,
         remote_layers: Dict[str, tuple],
+        previous_expressions: Optional[Dict[str, str]] = None,
         description: str = "",
         metadata: Optional[Dict] = None
     ) -> None:
@@ -463,11 +464,17 @@ class HistoryService:
         and all associated remote layers, allowing undo/redo across the
         entire filter operation.
         
+        v4.1.3: Fixed fallback logic to correctly extract per-layer expressions
+        from global history entries.
+        
         Args:
             source_layer_id: ID of the source layer
             source_expression: Filter expression for source layer (CURRENT/NEW expression)
             source_feature_count: Feature count for source layer
             remote_layers: Dict of {layer_id: (expression, feature_count)} (CURRENT expressions)
+            previous_expressions: Dict of {layer_id: previous_expression} for undo.
+                If provided, these are used directly instead of querying history.
+                This is the preferred method to ensure correct undo behavior.
             description: Optional description
             metadata: Optional metadata
         """
@@ -475,27 +482,44 @@ class HistoryService:
         all_layer_ids = [source_layer_id] + list(remote_layers.keys())
         
         # Build previous_filters list with PREVIOUS state of all layers (for undo)
-        # IMPORTANT: LayerHistory.push_state() has already pushed entries for each layer,
-        # so we need to look at the SECOND-TO-LAST entry (index -2) to get the true previous state.
-        # If there's only one entry (the one just pushed), use empty string (no previous filter).
         previous_filters = []
         
-        # Get previous expression for source layer
-        source_previous_entries = self.get_history_for_layer(source_layer_id)
-        if len(source_previous_entries) >= 2:
-            source_previous_expr = source_previous_entries[-2].expression
+        if previous_expressions:
+            # Use provided previous expressions (preferred - caller knows the true previous state)
+            for layer_id in all_layer_ids:
+                prev_expr = previous_expressions.get(layer_id, "")
+                previous_filters.append((layer_id, prev_expr))
+            logger.debug(f"Using provided previous_expressions for {len(previous_filters)} layers")
         else:
-            source_previous_expr = ""  # No previous filter (first filter applied)
-        previous_filters.append((source_layer_id, source_previous_expr))
-        
-        # Get previous expressions for remote layers
-        for layer_id, (expression, _) in remote_layers.items():
-            layer_previous_entries = self.get_history_for_layer(layer_id)
-            if len(layer_previous_entries) >= 2:
-                layer_previous_expr = layer_previous_entries[-2].expression
-            else:
-                layer_previous_expr = ""  # No previous filter (first filter applied)
-            previous_filters.append((layer_id, layer_previous_expr))
+            # Fallback: Query history (less reliable due to timing issues)
+            # v4.1.3: Fixed to correctly extract per-layer expressions
+            
+            for layer_id in all_layer_ids:
+                layer_entries = self.get_history_for_layer(layer_id)
+                if layer_entries:
+                    last_entry = layer_entries[-1]
+                    
+                    # Determine the expression for this specific layer
+                    if layer_id in last_entry.layer_ids:
+                        if layer_id == last_entry.layer_ids[0]:
+                            # This layer was the source of the last entry
+                            prev_expr = last_entry.expression
+                        else:
+                            # This layer was a remote layer - check metadata
+                            remote_meta = last_entry.get_metadata_value('remote_layers') or {}
+                            if layer_id in remote_meta:
+                                layer_info = remote_meta[layer_id]
+                                prev_expr = layer_info.get('expression', '') if isinstance(layer_info, dict) else ''
+                            else:
+                                prev_expr = ""
+                    else:
+                        prev_expr = ""
+                else:
+                    prev_expr = ""
+                
+                previous_filters.append((layer_id, prev_expr))
+            
+            logger.debug(f"Queried history for previous_expressions ({len(previous_filters)} layers)")
         
         # Build metadata with feature counts
         full_metadata = metadata or {}

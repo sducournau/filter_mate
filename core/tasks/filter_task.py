@@ -1424,6 +1424,14 @@ class FilterEngineTask(QgsTask):
             logger.debug("TaskBridge: multi-step not supported - using legacy code")
             return None
         
+        # CRITICAL v4.1.1 (2026-01-17): Disable V3 for PostgreSQL spatial filtering
+        # The V3 PostgreSQLBackend does not generate proper EXISTS subqueries.
+        # It sends raw SQL placeholders like "SPATIAL_FILTER(intersects)" which fail.
+        # Use legacy PostgreSQLGeometricFilter which properly generates EXISTS clauses.
+        if 'postgresql' in layers_dict and len(layers_dict.get('postgresql', [])) > 0:
+            logger.debug("TaskBridge: PostgreSQL spatial filtering - using legacy code (V3 not ready)")
+            return None
+        
         # Skip multi-step for complex scenarios
         # Check for buffers which require special handling
         buffer_value = self.task_parameters.get("task", {}).get("buffer_value", 0)
@@ -1467,7 +1475,7 @@ class FilterEngineTask(QgsTask):
             # FIX 2026-01-16: Log source geometry diagnostic
             logger.info("=" * 70)
             logger.info("🔍 MULTI-STEP SOURCE GEOMETRY DIAGNOSTIC")
-            logger.info(f"   Source layer: {self.source_layer.name()} (provider: {param_source_provider_type})")
+            logger.info(f"   Source layer: {self.source_layer.name()} (provider: {self.param_source_provider_type})")
             logger.info(f"   Source feature count: {self.source_layer.featureCount()}")
             logger.info(f"   Source CRS: {self.source_layer.crs().authid() if self.source_layer.crs() else 'UNKNOWN'}")
             logger.info(f"   Target layers: {len(steps)}")
@@ -1669,18 +1677,14 @@ class FilterEngineTask(QgsTask):
         """
         executor = self._get_attribute_executor()
         
-        # Call executor method with required context
-        result = executor.process_qgis_expression(
-            expression=expression,
-            source_layer_fields=self.source_layer_fields_names,
-            primary_key=self.primary_key_name,
-            table_name=self.param_source_table,
-            provider_type=self.param_source_provider_type,
-            task_parameters=self.task_parameters
-        )
+        # FIX 2026-01-18: AttributeFilterExecutor.process_qgis_expression only accepts expression
+        # Other context is already available in the executor instance
+        result = executor.process_qgis_expression(expression=expression)
         
         # Update task state if field expression detected
-        if result[1] and result[1][0]:
+        if result[1] and isinstance(result[1], tuple) and result[1][0]:
+            self.is_field_expression = result[1]
+        elif result[1]:
             self.is_field_expression = result[1]
         
         return result
@@ -3303,6 +3307,15 @@ class FilterEngineTask(QgsTask):
         features_list = self.task_parameters["task"]["features"]
         qgis_expression = self.task_parameters["task"]["expression"]
         skip_source_filter = self.task_parameters["task"].get("skip_source_filter", False)
+        
+        # DIAGNOSTIC 2026-01-28: Log features details
+        logger.info(f"  features_list count: {len(features_list) if features_list else 0}")
+        logger.info(f"  features_list type: {type(features_list)}")
+        if features_list and len(features_list) > 0:
+            logger.info(f"  features_list[0] type: {type(features_list[0])}")
+            logger.info(f"  features_list[0]: {features_list[0]}")
+        logger.info(f"  qgis_expression: '{qgis_expression}'")
+        logger.info(f"  skip_source_filter: {skip_source_filter}")
         
         if len(features_list) > 0 and features_list[0] != "":
             if len(features_list) == 1:

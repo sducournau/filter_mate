@@ -492,7 +492,7 @@ class FavoritesService(QObject):
                     layers_affected += 1
             
             # Mark as used
-            self._favorites_manager.mark_favorite_used(favorite_id)
+            self._favorites_manager.increment_use_count(favorite_id)
             
             # Emit signal
             self.favorite_applied.emit(favorite_id, layers_affected)
@@ -526,7 +526,7 @@ class FavoritesService(QObject):
         if not self._favorites_manager:
             return False
         
-        return self._favorites_manager.mark_favorite_used(favorite_id)
+        return self._favorites_manager.increment_use_count(favorite_id)
     
     # ─────────────────────────────────────────────────────────────────
     # Create from Current State

@@ -278,9 +278,18 @@ def layer_info_from_qgis_layer(layer: 'QgsVectorLayer') -> LayerInfo:
     # Get table info for database layers
     schema_name = ""
     table_name = ""
+    geometry_column = "geom"  # Default
+    pk_attr = ""
+    
     if provider_type in (ProviderType.POSTGRESQL, ProviderType.SPATIALITE):
         uri = layer.dataProvider().dataSourceUri()
         schema_name, table_name = _parse_db_uri(uri, provider_type)
+        
+        # Extract geometry column from URI
+        geometry_column = _extract_geometry_column(uri) or "geom"
+        
+        # Extract primary key from provider
+        pk_attr = _extract_primary_key(layer)
     
     return LayerInfo(
         layer_id=layer.id(),
@@ -293,7 +302,9 @@ def layer_info_from_qgis_layer(layer: 'QgsVectorLayer') -> LayerInfo:
         source_path=layer.source(),
         has_spatial_index=has_spatial_index,
         schema_name=schema_name,
-        table_name=table_name
+        table_name=table_name,
+        pk_attr=pk_attr,
+        geometry_column=geometry_column
     )
 
 
@@ -336,6 +347,61 @@ def _parse_db_uri(uri: str, provider_type: ProviderType) -> tuple:
     
     return schema_name, table_name
 
+
+def _extract_geometry_column(uri: str) -> str:
+    """Extract geometry column name from database URI."""
+    import re
+    
+    # Pattern: (geom_column_name) in PostgreSQL/Spatialite URIs
+    # Example: table="public"."roads" (geom)
+    match = re.search(r'\(([^)]+)\)\s*(?:sql=|$)', uri)
+    if match:
+        return match.group(1).strip()
+    
+    # Fallback: try key= pattern
+    match = re.search(r'key=\'?([^\'"\s]+)', uri)
+    
+    return ""
+
+
+def _extract_primary_key(layer: 'QgsVectorLayer') -> str:
+    """
+    Extract primary key attribute name from layer.
+    
+    Args:
+        layer: QGIS vector layer
+        
+    Returns:
+        Primary key field name or empty string
+    """
+    try:
+        provider = layer.dataProvider()
+        
+        # Try to get PK from provider's pkAttributeIndexes
+        if hasattr(provider, 'pkAttributeIndexes'):
+            pk_indexes = provider.pkAttributeIndexes()
+            if pk_indexes:
+                fields = layer.fields()
+                if pk_indexes[0] < fields.count():
+                    return fields.at(pk_indexes[0]).name()
+        
+        # Fallback: look for common PK field names
+        fields = layer.fields()
+        common_pk_names = ['id', 'fid', 'gid', 'ogc_fid', 'pk', 'oid']
+        for field_name in common_pk_names:
+            idx = fields.indexOf(field_name)
+            if idx >= 0:
+                return field_name
+        
+        # Last resort: first integer field
+        for field in fields:
+            if field.type() in [2, 4]:  # Integer types in QVariant
+                return field.name()
+                
+    except Exception:
+        pass
+    
+    return ""
 
 # ============================================================================
 # Legacy Compatibility Functions

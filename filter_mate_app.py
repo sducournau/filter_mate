@@ -638,18 +638,18 @@ class FilterMateApp:
 
     def run(self):
         """Initialize and display the FilterMate dockwidget. Delegates to AppInitializer."""
-        print(f"DEBUG: FilterMateApp.run() called")
-        print(f"DEBUG: HEXAGONAL_AVAILABLE = {HEXAGONAL_AVAILABLE}")
-        print(f"DEBUG: self._app_initializer = {self._app_initializer}")
+        logger.debug("FilterMateApp.run() called")
+        logger.debug(f"HEXAGONAL_AVAILABLE = {HEXAGONAL_AVAILABLE}")
+        logger.debug(f"self._app_initializer = {self._app_initializer}")
         
         USE_APP_INITIALIZER = True
         if USE_APP_INITIALIZER and self._app_initializer is not None:
-            logger.info(f"v4.4: Delegating application initialization to AppInitializer")
-            print(f"DEBUG: Calling AppInitializer.initialize_application()")
+            logger.info("v4.4: Delegating application initialization to AppInitializer")
+            logger.debug("Calling AppInitializer.initialize_application()")
             try:
                 is_first_run = (self.dockwidget is None)
                 success = self._app_initializer.initialize_application(is_first_run)
-                print(f"DEBUG: AppInitializer returned {success}")
+                logger.debug(f"AppInitializer returned {success}")
                 if success:
                     # v4.5: Ensure signal connections even after AppInitializer success
                     # This is the simplified direct connection system
@@ -660,13 +660,12 @@ class FilterMateApp:
                     logger.error(f"AppInitializer returned False - falling back to legacy initialization")
             except Exception as e:
                 logger.error(f"AppInitializer raised exception: {e}")
-                print(f"DEBUG: AppInitializer exception: {e}")
+                logger.debug(f"AppInitializer exception details: {e}")
                 import traceback
                 logger.error(f"Traceback: {traceback.format_exc()}")
-                traceback.print_exc()
         
         # Fallback: Legacy initialization when AppInitializer not available or fails
-        print(f"DEBUG: Using legacy fallback initialization")
+        logger.debug("Using legacy fallback initialization")
         logger.warning("Using legacy initialization - AppInitializer not available")
         
         # Basic initialization: create and show dockwidget

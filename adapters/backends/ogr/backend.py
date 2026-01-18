@@ -18,7 +18,7 @@ Date: January 2026
 
 import logging
 import time
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 
 from ....core.ports.backend_port import BackendPort, BackendInfo, BackendCapability
 from ....core.domain.filter_expression import FilterExpression, ProviderType
@@ -265,7 +265,7 @@ class OGRBackend(BackendPort):
     def validate_expression(
         self,
         expression: FilterExpression
-    ) -> List[str]:
+    ) -> Tuple[bool, Optional[str]]:
         """
         Validate expression syntax.
 
@@ -273,7 +273,7 @@ class OGRBackend(BackendPort):
             expression: Expression to validate
 
         Returns:
-            List of validation errors (empty if valid)
+            Tuple of (is_valid, error_message)
         """
         errors: List[str] = []
 
@@ -289,7 +289,9 @@ class OGRBackend(BackendPort):
         except Exception as e:
             errors.append(str(e))
 
-        return errors
+        if errors:
+            return False, "; ".join(errors)
+        return True, None
 
 
 def create_ogr_backend(

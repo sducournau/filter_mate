@@ -20,7 +20,7 @@ Date: January 2026
 import logging
 import time
 import re
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 
 from ....core.ports.backend_port import BackendPort, BackendInfo, BackendCapability
 from ....core.domain.filter_expression import FilterExpression, ProviderType
@@ -168,8 +168,11 @@ class PostgreSQLBackend(BackendPort):
         logger.debug(f"[PostgreSQL]   Expression SQL: {expression.sql[:200]}...")
 
         try:
-            # Get connection
+            # Get connection - first from pool, then from layer
             conn = self._get_connection()
+            if conn is None:
+                # Try to get connection from QGIS layer
+                conn = self._get_connection_from_layer(layer_info.layer_id)
             if conn is None:
                 logger.error(f"[PostgreSQL] [PostgreSQL v4.0] No connection available for {layer_info.layer_id}")
                 return FilterResult.error(
@@ -285,17 +288,17 @@ class PostgreSQLBackend(BackendPort):
     def validate_expression(
         self,
         expression: FilterExpression,
-        layer_info: LayerInfo
-    ) -> List[str]:
+        layer_info: LayerInfo = None
+    ) -> Tuple[bool, Optional[str]]:
         """
         Validate expression for PostgreSQL.
 
         Args:
             expression: Expression to validate
-            layer_info: Target layer
+            layer_info: Target layer (optional, for backwards compatibility)
 
         Returns:
-            List of validation errors (empty if valid)
+            Tuple of (is_valid, error_message)
         """
         errors: List[str] = []
 
@@ -309,7 +312,9 @@ class PostgreSQLBackend(BackendPort):
             if pattern in sql_lower:
                 errors.append(f"Potentially dangerous SQL pattern detected: {pattern}")
 
-        return errors
+        if errors:
+            return False, "; ".join(errors)
+        return True, None
 
     def test_connection(self) -> bool:
         """Test database connection."""
@@ -346,6 +351,38 @@ class PostgreSQLBackend(BackendPort):
                 return self._pool
         except Exception as e:
             logger.error(f"[PostgreSQL] Failed to get connection: {e}")
+            return None
+
+    def _get_connection_from_layer(self, layer_id: str):
+        """
+        Get connection from QGIS layer when pool is not available.
+        
+        Args:
+            layer_id: QGIS layer ID
+            
+        Returns:
+            psycopg2 connection or None
+        """
+        try:
+            from qgis.core import QgsProject
+            from ....infrastructure.utils.layer_utils import get_datasource_connexion_from_layer
+            
+            # Get layer from QGIS project
+            layer = QgsProject.instance().mapLayer(layer_id)
+            if not layer:
+                logger.warning(f"[PostgreSQL] Layer not found in project: {layer_id}")
+                return None
+            
+            # Get connection from layer
+            conn, _ = get_datasource_connexion_from_layer(layer)
+            if conn:
+                logger.debug(f"[PostgreSQL] Connection obtained from layer {layer_id}")
+            else:
+                logger.warning(f"[PostgreSQL] Could not get connection from layer {layer_id}")
+            return conn
+            
+        except Exception as e:
+            logger.error(f"[PostgreSQL] Failed to get connection from layer: {e}")
             return None
 
     def _ensure_schema(self) -> None:

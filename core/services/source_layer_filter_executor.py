@@ -20,6 +20,9 @@ from typing import Dict, Any, Optional, List, Tuple, Callable
 from dataclasses import dataclass
 from qgis.core import QgsExpression, QgsFeature
 
+# FIX 2026-01-18: Import get_qgis_factory for hexagonal expression handling
+from ..ports.qgis_port import get_qgis_factory
+
 logger = logging.getLogger('FilterMate.Core.Services.SourceLayerFilterExecutor')
 
 

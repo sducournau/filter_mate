@@ -718,27 +718,55 @@ class ControllerIntegration:
     
     def _on_project_layers_ready(self) -> None:
         """
-        FIX-4: Handle project layers ready event from dockwidget.
+        v4.1.4: Unified handler for project layers ready event.
         
-        This signal is emitted when PROJECT_LAYERS is fully populated.
-        Export combobox should be populated now.
+        This is the SINGLE handler for projectLayersReady signal.
+        Previously, both app_initializer.py and integration.py connected to this signal,
+        causing duplicate operations. Now only integration.py handles this signal.
+        
+        This handler:
+        1. Sets has_loaded_layers flag on dockwidget
+        2. Populates export combobox via ExportingController
+        3. Populates filtering layers combobox via FilteringController
+        4. Notifies LayerSyncController
         """
-        logger.info("✓ Project layers ready - populating export combobox")
+        logger.info("✓ Project layers ready - populating comboboxes (unified handler)")
         
-        # Populate export layers combobox
+        dw = self._dockwidget
+        if not dw:
+            logger.warning("_on_project_layers_ready: No dockwidget available")
+            return
+        
+        # Step 1: Set loaded flag (previously done in dockwidget._on_project_layers_ready)
+        dw.has_loaded_layers = True
+        
+        # Step 2: Populate export layers combobox
         if self._exporting_controller:
             try:
-                # FIX-6 (2026-01-16): Use correct method name - refresh_layers() not populate_export_layers()
-                if hasattr(self._exporting_controller, 'refresh_layers'):
-                    self._exporting_controller.refresh_layers()
-                    logger.debug("Export layers combobox populated")
-                elif hasattr(self._exporting_controller, 'populate_export_combobox'):
+                dw.manageSignal(["EXPORTING", "LAYERS_TO_EXPORT"], 'disconnect')
+                if hasattr(self._exporting_controller, 'populate_export_combobox'):
                     self._exporting_controller.populate_export_combobox()
-                    logger.debug("Export layers combobox populated (fallback)")
+                    logger.debug("Export layers combobox populated via controller")
+                elif hasattr(self._exporting_controller, 'refresh_layers'):
+                    self._exporting_controller.refresh_layers()
+                    logger.debug("Export layers combobox populated via refresh_layers")
+                dw.manageSignal(["EXPORTING", "LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
             except Exception as e:
                 logger.debug(f"Could not populate export layers: {e}")
         
-        # Also refresh layer sync controller
+        # Step 3: Populate filtering layers combobox
+        if self._filtering_controller:
+            try:
+                layer = dw.current_layer
+                if layer:
+                    dw.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
+                    self._filtering_controller.populate_layers_checkable_combobox(layer)
+                    dw.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
+                    logger.debug("Filtering layers combobox populated via controller")
+            except Exception as e:
+                logger.debug(f"Could not populate filtering layers: {e}")
+        
+        # Step 4: Notify layer sync controller
         if self._layer_sync_controller:
             try:
                 if hasattr(self._layer_sync_controller, 'on_layers_ready'):

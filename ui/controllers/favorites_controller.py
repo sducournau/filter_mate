@@ -205,7 +205,7 @@ class FavoritesController(BaseController):
         if not self._favorites_manager:
             return False
 
-        favorite = self._favorites_manager.get_by_id(favorite_id)
+        favorite = self._favorites_manager.get_favorite(favorite_id)
         if not favorite:
             logger.warning(f"Favorite not found: {favorite_id}")
             return False
@@ -214,7 +214,7 @@ class FavoritesController(BaseController):
         success = self._apply_favorite_expression(favorite)
         if success:
             # Update use count
-            self._favorites_manager.increment_use_count(favorite_id)
+            self._favorites_manager.mark_favorite_used(favorite_id)
             self.favorite_applied.emit(favorite.name)
             logger.info(f"Applied favorite: {favorite.name}")
 
@@ -233,14 +233,14 @@ class FavoritesController(BaseController):
         if not self._favorites_manager:
             return False
 
-        favorite = self._favorites_manager.get_by_id(favorite_id)
+        favorite = self._favorites_manager.get_favorite(favorite_id)
         if not favorite:
             return False
 
         name = favorite.name
-        success = self._favorites_manager.remove(favorite_id)
+        success = self._favorites_manager.remove_favorite(favorite_id)
         if success:
-            self._favorites_manager.save_to_project()
+            self._favorites_manager.save()
             self.favorite_removed.emit(name)
             self.favorites_changed.emit()
             self.update_indicator()
@@ -398,18 +398,20 @@ class FavoritesController(BaseController):
 
     def show_manager_dialog(self) -> None:
         """Show the favorites manager dialog."""
-        # Try to use new FavoritesManagerDialog if available
         try:
-            from ui.dialogs import FavoritesManagerDialog
-            dialog = FavoritesManagerDialog(self.dockwidget, self._favorites_manager)
+            from ..dialogs import FavoritesManagerDialog
+            # Note: FavoritesManagerDialog(favorites_manager, parent) - order matters!
+            dialog = FavoritesManagerDialog(self._favorites_manager, self.dockwidget)
             dialog.exec_()
             # Refresh after dialog closes
             self.favorites_changed.emit()
             self.update_indicator()
-        except ImportError:
-            # Fallback to dockwidget method
-            if hasattr(self.dockwidget, '_show_favorites_manager_dialog'):
-                self.dockwidget._show_favorites_manager_dialog()
+        except ImportError as e:
+            logger.warning(f"FavoritesManagerDialog not available: {e}")
+            self._show_warning("Favorites manager dialog not available")
+        except Exception as e:
+            logger.error(f"Error showing favorites manager: {e}")
+            self._show_warning(f"Error: {e}")
 
     # === Private Methods ===
 
@@ -578,7 +580,7 @@ class FavoritesController(BaseController):
 
         # Check for duplicates
         if self._favorites_manager:
-            existing = self._favorites_manager.get_by_name(name)
+            existing = self._favorites_manager.get_favorite_by_name(name)
             if existing:
                 result = QMessageBox.question(
                     self.dockwidget,
@@ -590,7 +592,7 @@ class FavoritesController(BaseController):
                 if result != QMessageBox.Yes:
                     return False
                 # Remove existing
-                self._favorites_manager.remove(existing.id)
+                self._favorites_manager.remove_favorite(existing.id)
 
         return True
 
@@ -600,22 +602,13 @@ class FavoritesController(BaseController):
             return False
 
         try:
-            from ...core.domain.favorites_manager import FilterFavorite
-
             # Get layer info
             layer = self.dockwidget.current_layer
             layer_name = layer.name() if layer else None
-            layer_id = layer.id() if layer else None
-
-            # Create favorite
-            favorite = FilterFavorite(
-                name=name,
-                expression=expression,
-                layer_name=layer_name,
-                layer_id=layer_id
-            )
+            layer_provider = layer.providerType() if layer else None
 
             # Get remote layers if multi-layer filtering is active
+            remote_layers = None
             if hasattr(self.dockwidget, 'listWidget_filtering_remote_layers'):
                 remote_layers = {}
                 widget = self.dockwidget.listWidget_filtering_remote_layers
@@ -626,11 +619,21 @@ class FavoritesController(BaseController):
                         remote_layer = QgsProject.instance().mapLayer(remote_layer_id)
                         if remote_layer:
                             remote_layers[remote_layer.name()] = remote_layer_id
-                favorite.remote_layers = remote_layers
 
-            self._favorites_manager.add_favorite(favorite)
-            self._favorites_manager.save_to_project()
-            return True
+            # Use FavoritesService.add_favorite() with individual parameters
+            favorite_id = self._favorites_manager.add_favorite(
+                name=name,
+                expression=expression,
+                layer_name=layer_name,
+                layer_provider=layer_provider,
+                remote_layers=remote_layers if remote_layers else None
+            )
+            
+            if favorite_id:
+                # Save changes
+                self._favorites_manager.save()
+                return True
+            return False
 
         except Exception as e:
             logger.error(f"Failed to create favorite: {e}")

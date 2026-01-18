@@ -1138,6 +1138,10 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         self.log_debug(f"Building PostgreSQL expression for {layer_props.get('layer_name', 'unknown')}, buffer={buffer_value}")
         
         # v2.7.10 DIAGNOSTIC: Log source_filter value
+        print(f"🔍 PostgreSQLGeometricFilter.build_expression CALLED")
+        print(f"   source_filter={'None' if source_filter is None else f'len={len(source_filter)}'}")
+        if source_filter:
+            print(f"   → source_filter value: '{source_filter}'")
         self.log_info(f"🔍 build_expression DEBUG: source_filter={'None' if source_filter is None else f'len={len(source_filter)}'}")
         if source_filter:
             self.log_info(f"   → source_filter preview: '{source_filter[:80]}...'")
@@ -1300,6 +1304,8 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             
             # STRATEGY 2: EXISTS subquery mode (many source features or no WKT available)
             if source_geom:
+                print(f"🔍 STRATEGY 2 ENTERED: EXISTS subquery mode")
+                print(f"   source_geom: {source_geom[:80]}...")
                 # CRITICAL FIX: Detect if source_geom references another table
                 # Pattern: "schema"."table"."column" or ST_Buffer("schema"."table"."column", value)
                 # In these cases, we MUST use EXISTS subquery because setSubsetString 
@@ -1309,6 +1315,7 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                 source_table_ref = self._parse_source_table_reference(source_geom)
                 
                 # v2.7.11 DIAGNOSTIC
+                print(f"   source_table_ref = {'None' if source_table_ref is None else source_table_ref}")
                 self.log_info(f"🔍 STRATEGY 2: source_table_ref = {'None' if source_table_ref is None else source_table_ref}")
                 
                 if source_table_ref:
@@ -1433,13 +1440,17 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                     
                     spatial_predicate = f"{predicate_func}({geom_expr}, {source_geom_in_subquery})"
                     where_clauses = [spatial_predicate]
+                    print(f"   ✓ Spatial predicate built: {spatial_predicate[:100]}...")
                     self.log_debug(f"  ✓ Spatial predicate: {spatial_predicate[:100]}...")
                     
                     # v2.7.12 DIAGNOSTIC: Log source_filter processing in EXISTS path
                     source_filter_status = 'None' if source_filter is None else f'len={len(source_filter)}'
+                    print(f"   🔍 EXISTS path: source_filter={source_filter_status}")
                     self.log_info(f"  🔍 EXISTS path: source_filter={source_filter_status}")
                     
                     if source_filter:
+                        print(f"   ✓ source_filter IS NOT NONE - will try to include in WHERE")
+                        print(f"   source_filter value: '{source_filter}'")
                         # CRITICAL FIX v2.5.11: Include source layer's spatial filter in EXISTS
                         # 
                         # The source_filter now comes from _extract_spatial_clauses_for_exists()
@@ -1531,6 +1542,7 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                                         break
                         
                         if skip_filter:
+                            print(f"   ❌ skip_filter=True - source_filter will NOT be included!")
                             self.log_warning(f"  ⚠️ Source filter contains __source, EXISTS, MV, or external table reference - SKIPPING")
                             self.log_warning(f"  → Filter: '{source_filter[:100]}'...")
                             # v2.7.13: Log to QGIS panel
@@ -1540,6 +1552,7 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                                 "FilterMate", Qgis.Warning
                             )
                         else:
+                            print(f"   ✓ skip_filter=False - will adapt and include source_filter")
                             # CRITICAL: Replace table references with __source alias
                             # The source_filter comes from setSubsetString and contains qualified table names
                             # like "troncon_de_route"."geometrie" which must become __source."geometrie"
@@ -1550,20 +1563,26 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                                 source_schema_name, 
                                 source_table_name
                             )
+                            print(f"   → Adapted filter: '{adapted_filter}'")
                             
                             # CRITICAL FIX v2.5.20: Verify adapted filter doesn't have residual table references
                             # After adaptation, there should be no "table"."column" patterns left (except __source)
                             residual_table_refs = re.findall(r'"(?!__source)([^"]+)"\s*\.\s*"([^"]+)"', adapted_filter)
                             if residual_table_refs:
+                                print(f"   ❌ Residual table refs found: {residual_table_refs} - SKIPPING filter!")
                                 self.log_warning(f"  ⚠️ Adapted filter still has table references: {residual_table_refs}")
                                 self.log_warning(f"  → Skipping filter to avoid SQL error")
                             else:
                                 # Add the adapted filter to WHERE clause
+                                print(f"   ✓ No residual refs - ADDING adapted filter to WHERE clause")
                                 where_clauses.append(f"({adapted_filter})")
                                 self.log_info(f"  - Adapted: '{adapted_filter[:100]}'...")
                                 self.log_info(f"  ✓ EXISTS will filter source to match QGIS view")
                     
                     # v2.7.12 DIAGNOSTIC: Log WHERE clauses BEFORE joining
+                    print(f"   🔍 WHERE CLAUSES COUNT: {len(where_clauses)}")
+                    for i, clause in enumerate(where_clauses):
+                        print(f"      [{i}] {clause[:100]}...")
                     self.log_info(f"  🔍 WHERE CLAUSES COUNT: {len(where_clauses)}")
                     for i, clause in enumerate(where_clauses):
                         self.log_info(f"     [{i}] {clause[:80]}...")
@@ -1577,6 +1596,7 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                         f'WHERE {where_clause}'
                         f')'
                     )
+                    print(f"   ✅ FINAL EXISTS: {expr[:200]}...")
                     self.log_info(f"  ✓ Built EXISTS expression: '{expr[:150]}'...")
                     self.log_info(f"  🔍 EXISTS WHERE clause length: {len(where_clause)} chars")
                     self.log_debug(f"Using EXISTS subquery to avoid missing FROM-clause error")

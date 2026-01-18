@@ -497,8 +497,11 @@ class BackendController(BaseController):
 
     def _find_indicator_label(self) -> None:
         """Find the backend indicator label in dockwidget."""
-        if hasattr(self.dockwidget, 'backend_indicator_label'):
+        if hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
             self._indicator_label = self.dockwidget.backend_indicator_label
+            logger.debug(f"BackendController: Found indicator label: {self._indicator_label}")
+        else:
+            logger.debug("BackendController: backend_indicator_label not found in dockwidget")
 
     def _sync_with_dockwidget(self) -> None:
         """Sync state with dockwidget attributes."""
@@ -574,8 +577,18 @@ class BackendController(BaseController):
             is_forced: Whether backend is forced by user
             layer: Current layer for context
         """
+        # Try to find indicator label if not set
         if not self._indicator_label:
-            return
+            self._find_indicator_label()
+        
+        # Still no indicator label? Try direct access to dockwidget's label
+        if not self._indicator_label:
+            if hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
+                self._indicator_label = self.dockwidget.backend_indicator_label
+                logger.debug("Found backend_indicator_label via direct dockwidget access")
+            else:
+                logger.warning("BackendController: _indicator_label not found, cannot update display")
+                return
 
         style = BACKEND_STYLES.get(backend_type, BACKEND_STYLES['unknown'])
         
@@ -612,6 +625,29 @@ class BackendController(BaseController):
             tooltip += "\n⚡ Manually forced"
 
         self._indicator_label.setToolTip(tooltip)
+
+    def _refresh_indicator_for_current_layer(self) -> None:
+        """
+        Refresh the backend indicator for the current layer.
+        
+        This method ensures the indicator is updated after batch operations
+        (like force_backend_for_all_layers or auto_select_optimal_backends).
+        """
+        current_layer = self.dockwidget.current_layer
+        if not current_layer or not current_layer.isValid():
+            return
+        
+        # Get the backend for current layer (may have been changed by batch operation)
+        backend_type = self._detect_backend_for_layer(
+            current_layer, self._current_postgresql_available
+        )
+        
+        # Check if forced
+        is_forced = current_layer.id() in self._forced_backends
+        
+        # Update the display
+        self._update_indicator_display(backend_type, is_forced, current_layer)
+        logger.debug(f"Refreshed indicator for layer {current_layer.name()}: {backend_type} (forced: {is_forced})")
 
     def _show_backend_menu(self, layer: QgsVectorLayer) -> None:
         """
@@ -686,9 +722,13 @@ class BackendController(BaseController):
             if data == '__AUTO_ALL__':
                 count = self.auto_select_optimal_backends()
                 show_success("FilterMate", f"Auto-selected backends for {count} layers")
+                # Update indicator for current layer after batch operation
+                self._refresh_indicator_for_current_layer()
             elif data == '__FORCE_ALL__':
                 count = self.force_backend_for_all_layers(current_backend)
                 show_success("FilterMate", f"Forced {current_backend.upper()} for {count} layers")
+                # Update indicator for current layer after batch operation
+                self._refresh_indicator_for_current_layer()
             else:
                 self.set_forced_backend(layer.id(), data)
                 if data:

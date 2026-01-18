@@ -391,10 +391,11 @@ class AppInitializer:
             dockwidget.widgetsInitialized.connect(task_orchestrator.on_widgets_initialized)
             logger.debug("widgetsInitialized signal connected to TaskOrchestrator")
         
-        # v4.0.4: Connect projectLayersReady signal to populate comboboxes
-        if hasattr(dockwidget, 'projectLayersReady') and hasattr(dockwidget, '_on_project_layers_ready'):
-            dockwidget.projectLayersReady.connect(dockwidget._on_project_layers_ready)
-            logger.debug("projectLayersReady signal connected to _on_project_layers_ready")
+        # v4.1.4: REMOVED - projectLayersReady signal is now connected ONLY in 
+        # ui/controllers/integration.py to avoid duplicate handler execution.
+        # The ControllerIntegration._on_project_layers_ready() method properly
+        # delegates to ExportingController.refresh_layers() and LayerSyncController.on_layers_ready()
+        # See: integration.py line 406 and line 719 for the unified handler.
         
         # CRITICAL FIX: Signal may have been emitted BEFORE connection
         if hasattr(dockwidget, 'widgets_initialized') and dockwidget.widgets_initialized:

@@ -2949,17 +2949,13 @@ class ExploringController(BaseController, LayerSelectionMixin):
         """
         Sync multiple selection widget with QGIS selection.
         
-        FIX 2026-01-15 v4: Implement fallback when UILayoutController unavailable.
-        """
-        # Try delegation first
-        if hasattr(self._dockwidget, '_controller_integration'):
-            ci = self._dockwidget._controller_integration
-            if ci and ci.delegate_sync_multiple_selection_from_qgis():
-                return
+        FIX 2026-01-18: Use setCheckedFeatureIds() to properly update visual checkboxes.
+        Previous implementation only stored data without updating UI.
         
-        # FIX v4: Implement fallback synchronization
-        # FIX v6: Also update button states after sync
+        FIX 2026-01-18 v2: Ensure list is populated before trying to check items.
+        """
         logger.info(f"_sync_multiple_selection_from_qgis: Syncing {selected_count} features to widget")
+        
         try:
             if selected_count == 0:
                 return
@@ -2970,8 +2966,43 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 logger.warning("_sync_multiple_selection_from_qgis: Multiple selection widget not found")
                 return
             
+            # Get primary key field for proper ID extraction
+            layer_props = self._dockwidget.PROJECT_LAYERS.get(self._dockwidget.current_layer.id(), {})
+            pk_name = layer_props.get("infos", {}).get("primary_key_name")
+            
+            # FIX 2026-01-18 v2: Ensure list widget exists and is populated
+            layer_id = self._dockwidget.current_layer.id()
+            if not hasattr(multi_widget, 'list_widgets') or layer_id not in multi_widget.list_widgets:
+                logger.info("  📋 List widget missing, creating via setLayer...")
+                multi_widget.setLayer(self._dockwidget.current_layer, layer_props, skip_task=True)
+            
+            # Check if list is empty and needs population
+            if hasattr(multi_widget, 'list_widgets') and layer_id in multi_widget.list_widgets:
+                list_widget = multi_widget.list_widgets[layer_id]
+                if list_widget.count() == 0:
+                    logger.info("  📋 List is empty, populating features...")
+                    # Get display expression
+                    display_expr = layer_props.get("exploring", {}).get("multiple_selection_expression", "")
+                    if not display_expr:
+                        display_expr = pk_name if pk_name else ""
+                    # Force populate
+                    multi_widget.setDisplayExpression(display_expr)
+                    logger.info(f"  ✓ List populated with {list_widget.count()} items")
+            
             # Build the selection list from selected features
-            feature_ids = [f.id() for f in selected_features if f and f.isValid()]
+            feature_ids = []
+            for f in selected_features:
+                if f and f.isValid():
+                    # Try to get the primary key value for proper matching
+                    if pk_name and pk_name in [field.name() for field in f.fields()]:
+                        try:
+                            pk_value = f[pk_name]
+                            feature_ids.append(pk_value)
+                        except (KeyError, IndexError):
+                            feature_ids.append(f.id())
+                    else:
+                        feature_ids.append(f.id())
+            
             if not feature_ids:
                 return
             
@@ -2979,21 +3010,26 @@ class ExploringController(BaseController, LayerSelectionMixin):
             self._dockwidget._last_multiple_selection_fids = feature_ids
             self._dockwidget._last_multiple_selection_layer_id = self._dockwidget.current_layer.id()
             
-            # Update the widget's checked items
+            # Update the widget's checked items using the NEW method
             self._dockwidget._syncing_from_qgis = True
             try:
+                # FIX 2026-01-18: Use setCheckedFeatureIds which properly updates visual checkboxes
                 if hasattr(multi_widget, 'setCheckedFeatureIds'):
-                    multi_widget.setCheckedFeatureIds(feature_ids)
-                    logger.info(f"  ✓ Synced {len(feature_ids)} features to multiple selection widget")
+                    checked_count = multi_widget.setCheckedFeatureIds(feature_ids)
+                    logger.info(f"  ✓ Synced {checked_count}/{len(feature_ids)} features to multiple selection widget")
                 elif hasattr(multi_widget, 'list_widgets') and self._dockwidget.current_layer.id() in multi_widget.list_widgets:
-                    # Alternative: use list_widgets
+                    # Fallback: use list_widgets with new setCheckedByFeatureIds method
                     list_widget = multi_widget.list_widgets[self._dockwidget.current_layer.id()]
-                    if hasattr(list_widget, 'setSelectedFeaturesList'):
+                    if hasattr(list_widget, 'setCheckedByFeatureIds'):
+                        checked_count = list_widget.setCheckedByFeatureIds(feature_ids, multi_widget)
+                        logger.info(f"  ✓ Synced {checked_count}/{len(feature_ids)} features via list_widget.setCheckedByFeatureIds")
+                    else:
+                        # Last resort fallback (old behavior - won't update UI)
                         selection_data = [[str(fid), fid, True] for fid in feature_ids]
                         list_widget.setSelectedFeaturesList(selection_data)
-                        logger.info(f"  ✓ Synced {len(feature_ids)} features via list_widget")
+                        logger.warning("  ⚠️ Used old setSelectedFeaturesList (UI may not update)")
                 
-                # FIX 2026-01-15 v6: Update button states after sync
+                # Update button states after sync
                 self._dockwidget._update_exploring_buttons_state()
             finally:
                 self._dockwidget._syncing_from_qgis = False
