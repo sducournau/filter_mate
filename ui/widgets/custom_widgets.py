@@ -958,14 +958,17 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
             self.list_widgets[self.layer.id()].setDisplayExpression(working_expression)
 
-            # FIX 2026-01-18 v8: Save checked items before clear if preserve_checked is True
+            # FIX 2026-01-18 v10: Save checked items before clear if preserve_checked is True
+            # Use getCheckedFeatureIds() on self (the parent widget), NOT on list_widgets
             saved_checked_fids = []
             if preserve_checked:
                 try:
-                    saved_checked_fids = self.list_widgets[self.layer.id()].checkedFeatureIds()
-                    logger.debug(f"Preserving {len(saved_checked_fids)} checked items: {saved_checked_fids}")
+                    # getCheckedFeatureIds() is defined on QgsCheckableComboBoxFeaturesListPickerWidget
+                    saved_checked_fids = self.getCheckedFeatureIds()
+                    if saved_checked_fids:
+                        logger.info(f"Preserving {len(saved_checked_fids)} checked items: {saved_checked_fids}")
                 except Exception as save_err:
-                    logger.debug(f"Could not save checked items: {save_err}")
+                    logger.warning(f"Could not save checked items: {save_err}")
 
             # Clear widget before rebuilding
             try:
@@ -980,13 +983,13 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             if not skip_task:
                 self._populate_features_sync(working_expression)
             
-            # FIX 2026-01-18 v8: Restore checked items after populate if preserve_checked is True
+            # FIX 2026-01-18 v10: Restore checked items after populate if preserve_checked is True
             if preserve_checked and saved_checked_fids:
                 try:
-                    logger.debug(f"Restoring {len(saved_checked_fids)} checked items after populate")
+                    logger.info(f"Restoring {len(saved_checked_fids)} checked items after populate")
                     self.setCheckedFeatureIds(saved_checked_fids, emit_signal=False)
                 except Exception as restore_err:
-                    logger.debug(f"Could not restore checked items: {restore_err}")
+                    logger.warning(f"Could not restore checked items: {restore_err}")
 
     def _populate_features_sync(self, expression):
         """Populate features list synchronously."""
@@ -1098,7 +1101,13 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
     def _emit_checked_items_update(self):
         """Emit update signal with current checked items."""
+        # FIX 2026-01-18 v10: Add debug logging to trace who calls this
+        import traceback
         checked = self.checkedItems()
+        logger.info(f"🔔 _emit_checked_items_update: {len(checked)} items")
+        # Log the call stack to identify the caller
+        stack = traceback.format_stack()
+        logger.debug(f"Call stack:\n{''.join(stack[-5:-1])}")
         self.updatingCheckedItemList.emit(checked, True)
 
     def connect_filter_lineEdit(self):

@@ -81,6 +81,7 @@ class FavoritesController(BaseController):
         super().__init__(dockwidget)
         self._favorites_manager: Optional['FavoritesManager'] = None
         self._indicator_label: Optional[QLabel] = None
+        self._initialized: bool = False
 
     @property
     def favorites_manager(self) -> Optional['FavoritesManager']:
@@ -100,9 +101,12 @@ class FavoritesController(BaseController):
 
         Initializes the favorites manager and connects to indicator.
         """
+        print("🔧 FavoritesController.setup() START")
         self._find_indicator_label()
+        print(f"🔧 _indicator_label = {self._indicator_label}")
         self._init_favorites_manager()
         self._initialized = True
+        print(f"🔧 FavoritesController.setup() END - _initialized={self._initialized}, _favorites_manager={self._favorites_manager}")
         logger.debug("FavoritesController setup complete")
 
     def teardown(self) -> None:
@@ -148,6 +152,7 @@ class FavoritesController(BaseController):
 
         Shows the favorites context menu.
         """
+        print(f"🔧 handle_indicator_clicked() - _favorites_manager={self._favorites_manager}, _initialized={self._initialized}")
         self._show_favorites_menu()
 
     def add_current_to_favorites(self, name: Optional[str] = None) -> bool:
@@ -427,39 +432,57 @@ class FavoritesController(BaseController):
 
     def _init_favorites_manager(self) -> None:
         """Initialize the favorites manager."""
+        print("🔧 _init_favorites_manager() START")
         # Check if already initialized on dockwidget
         if hasattr(self.dockwidget, '_favorites_manager') and self.dockwidget._favorites_manager:
             self._favorites_manager = self.dockwidget._favorites_manager
+            print(f"🔧 Re-using existing _favorites_manager from dockwidget: {self._favorites_manager}")
             return
 
         # Create new manager
         try:
+            print("🔧 Creating new FavoritesService...")
             from ...core.services.favorites_service import FavoritesService
             self._favorites_manager = FavoritesService()
+            print(f"🔧 FavoritesService created: {self._favorites_manager}")
 
             # Try to connect to database
             project = getattr(self.dockwidget, 'PROJECT', None) or QgsProject.instance()
+            print(f"🔧 Project: {project}")
             if project:
                 scope = QgsExpressionContextUtils.projectScope(project)
                 project_uuid = scope.variable('filterMate_db_project_uuid')
+                print(f"🔧 project_uuid: {project_uuid}")
                 if project_uuid:
                     from ...config.config import ENV_VARS
                     import os
                     db_path = os.path.normpath(
                         ENV_VARS.get("PLUGIN_CONFIG_DIRECTORY", "") + os.sep + 'filterMate_db.sqlite'
                     )
+                    print(f"🔧 db_path: {db_path}")
                     if os.path.exists(db_path):
                         self._favorites_manager.set_database(db_path, str(project_uuid))
+                        print(f"🔧 Database set: {db_path}")
+                    else:
+                        print(f"🔧 Database file does not exist: {db_path}")
 
+            print("🔧 Calling load_from_project()...")
             self._favorites_manager.load_from_project()
+            print("🔧 load_from_project() complete")
 
             # Store reference on dockwidget
             self.dockwidget._favorites_manager = self._favorites_manager
+            print(f"🔧 FavoritesManager initialized with {self.count} favorites")
             logger.debug(f"FavoritesManager initialized with {self.count} favorites")
 
         except Exception as e:
+            print(f"🔧 ERROR in _init_favorites_manager: {e}")
+            import traceback
+            print(f"🔧 Traceback: {traceback.format_exc()}")
             logger.error(f"Failed to initialize FavoritesManager: {e}")
             self._favorites_manager = None
+        
+        print(f"🔧 _init_favorites_manager() END - _favorites_manager = {self._favorites_manager}")
 
     def _get_indicator_style(self, state: str) -> str:
         """Get stylesheet for indicator state."""
@@ -481,6 +504,7 @@ class FavoritesController(BaseController):
 
     def _show_favorites_menu(self) -> None:
         """Show context menu with favorites options."""
+        print(f"🔧 _show_favorites_menu() START - _favorites_manager={self._favorites_manager}")
         menu = QMenu(self.dockwidget)
         menu.setStyleSheet("""
             QMenu {
@@ -552,14 +576,19 @@ class FavoritesController(BaseController):
         import_action.setData('__IMPORT__')
 
         # Show menu
+        print(f"🔧 About to show menu.exec_() at position {QCursor.pos()}")
         selected_action = menu.exec_(QCursor.pos())
+        print(f"🔧 menu.exec_() returned: {selected_action}")
 
         if selected_action:
             action_data = selected_action.data()
+            print(f"🔧 Selected action data: {action_data}")
             self._handle_menu_action(action_data)
+        print("🔧 _show_favorites_menu() END")
 
     def _handle_menu_action(self, action_data: Any) -> None:
         """Handle favorites menu action."""
+        print(f"🔧 _handle_menu_action() called with: {action_data}")
         if action_data == '__ADD_FAVORITE__':
             self.add_current_to_favorites()
         elif action_data == '__MANAGE__':

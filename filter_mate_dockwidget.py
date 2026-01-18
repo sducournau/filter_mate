@@ -1045,38 +1045,36 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _on_backend_indicator_clicked(self, event):
         """v4.0 Sprint 19: → BackendController."""
+        print("🎯 _on_backend_indicator_clicked CALLED")
         logger.debug("_on_backend_indicator_clicked called")
-        logger.debug(f"_controller_integration = {self._controller_integration}")
-        if self._controller_integration:
-            logger.debug(f"backend_controller = {self._controller_integration.backend_controller}")
         
         if self._controller_integration and self._controller_integration.backend_controller:
-            logger.debug("Calling delegate_handle_backend_click()")
-            try:
-                self._controller_integration.delegate_handle_backend_click()
-                logger.debug("delegate_handle_backend_click() returned successfully")
-            except Exception as e:
-                logger.error(f"Exception in delegate_handle_backend_click(): {e}")
-                import traceback
-                logger.error(traceback.format_exc())
+            print("🎯 Using QTimer to defer backend menu display...")
+            # Use QTimer to defer menu display after mouse event completes
+            # This prevents issues with QMenu.exec_() during mousePressEvent
+            from qgis.PyQt.QtCore import QTimer
+            QTimer.singleShot(0, self._controller_integration.delegate_handle_backend_click)
+            print("🎯 QTimer.singleShot scheduled for backend")
         else:
+            print("🎯 WARNING: Backend controller unavailable")
             logger.warning("Backend controller unavailable")
 
     def _on_favorite_indicator_clicked(self, event):
         """v4.0 S16: → FavoritesController."""
+        print("🎯 _on_favorite_indicator_clicked CALLED")
         logger.debug("_on_favorite_indicator_clicked called")
+        print(f"🎯 _favorites_ctrl = {self._favorites_ctrl}")
         logger.debug(f"_favorites_ctrl = {self._favorites_ctrl}")
         
         if self._favorites_ctrl:
-            logger.debug("Calling _favorites_ctrl.handle_indicator_clicked()")
-            try:
-                self._favorites_ctrl.handle_indicator_clicked()
-                logger.debug("handle_indicator_clicked() returned successfully")
-            except Exception as e:
-                logger.error(f"Exception in handle_indicator_clicked(): {e}")
-                import traceback
-                logger.error(traceback.format_exc())
+            print("🎯 Using QTimer to defer menu display...")
+            # Use QTimer to defer menu display after mouse event completes
+            # This prevents issues with QMenu.exec_() during mousePressEvent
+            from qgis.PyQt.QtCore import QTimer
+            QTimer.singleShot(0, self._favorites_ctrl.handle_indicator_clicked)
+            print("🎯 QTimer.singleShot scheduled")
         else:
+            print("🎯 WARNING: Favorites controller unavailable")
             logger.warning("Favorites controller unavailable")
     
     def _add_current_to_favorites(self):
@@ -3328,44 +3326,134 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.set_exporting_properties()
 
     def _connect_groupbox_signals_directly(self):
-        """v4.0 S18: Connect groupbox signals for exclusive behavior."""
+        """v4.0 S18: Connect groupbox signals for exclusive behavior.
+        
+        FIX 2026-01-18: Ensure signals are always unblocked even if exception occurs.
+        """
+        gbs = [(self.mGroupBox_exploring_single_selection, 'single_selection'), 
+               (self.mGroupBox_exploring_multiple_selection, 'multiple_selection'), 
+               (self.mGroupBox_exploring_custom_selection, 'custom_selection')]
         try:
-            gbs = [(self.mGroupBox_exploring_single_selection, 'single_selection'), (self.mGroupBox_exploring_multiple_selection, 'multiple_selection'), (self.mGroupBox_exploring_custom_selection, 'custom_selection')]
+            # Disconnect existing signals first
             for gb, _ in gbs:
-                gb.blockSignals(True)
-                try: gb.toggled.disconnect(); gb.collapsedStateChanged.disconnect()
-                except TypeError:  # Signals not connected yet - expected on first setup
+                try:
+                    gb.blockSignals(True)
+                    try: 
+                        gb.toggled.disconnect()
+                        gb.collapsedStateChanged.disconnect()
+                    except TypeError:  # Signals not connected yet - expected on first setup
+                        pass
+                finally:
+                    gb.blockSignals(False)  # Always unblock even if disconnect fails
+            
+            # Now connect new signals
+            for gb, name in gbs: 
+                gb.toggled.connect(lambda c, n=name: self._on_groupbox_clicked(n, c))
+                gb.collapsedStateChanged.connect(lambda col, n=name: self._on_groupbox_collapse_changed(n, col))
+                
+            logger.debug("_connect_groupbox_signals_directly: Signals connected successfully")
+        except Exception as e: 
+            logger.warning(f"_connect_groupbox_signals_directly error: {e}")
+            # Ensure all groupboxes have signals unblocked
+            for gb, _ in gbs:
+                try:
+                    gb.blockSignals(False)
+                except:
                     pass
-                gb.blockSignals(False)
-            for gb, name in gbs: gb.toggled.connect(lambda c, n=name: self._on_groupbox_clicked(n, c)); gb.collapsedStateChanged.connect(lambda col, n=name: self._on_groupbox_collapse_changed(n, col))
-        except Exception as e: logger.debug(f"_connect_groupbox_signals_directly: {e}")
 
     def _force_exploring_groupbox_exclusive(self, active_groupbox):
-        """v4.0 S18: Force exclusive state for exploring groupboxes."""
-        if self._updating_groupbox: return
+        """v4.0 S18: Force exclusive state for exploring groupboxes.
+        
+        FIX 2026-01-18: Added timeout protection to prevent click blocking if
+        _updating_groupbox gets stuck True due to unexpected exception.
+        Also ensures signals are always unblocked even if exception occurs.
+        """
+        if self._updating_groupbox:
+            # FIX: Check if stuck for too long (> 500ms) and force reset
+            import time
+            if hasattr(self, '_groupbox_update_start'):
+                elapsed = time.time() - self._groupbox_update_start
+                if elapsed > 0.5:
+                    logger.warning(f"_force_exploring_groupbox_exclusive: _updating_groupbox stuck for {elapsed:.2f}s, forcing reset")
+                    self._updating_groupbox = False
+                else:
+                    return
+            else:
+                return
         self._updating_groupbox = True
+        import time
+        self._groupbox_update_start = time.time()
+        
+        gbs = None
         try:
-            gbs = {"single": self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"], "multiple": self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"], "custom": self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"]}
+            gbs = {"single": self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"], 
+                   "multiple": self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"], 
+                   "custom": self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"]}
             active_key = active_groupbox.split("_")[0]
-            for gb in gbs.values(): gb.blockSignals(True)
-            for key, gb in gbs.items(): gb.setChecked(key == active_key); gb.setCollapsed(key != active_key)
-            for gb in gbs.values(): gb.blockSignals(False)
+            
+            # Block all signals
+            for gb in gbs.values(): 
+                gb.blockSignals(True)
+            
+            # Update states
+            for key, gb in gbs.items(): 
+                gb.setChecked(key == active_key)
+                gb.setCollapsed(key != active_key)
+                
+        except Exception as e:
+            logger.warning(f"_force_exploring_groupbox_exclusive error: {e}")
         finally:
+            # CRITICAL: Always unblock signals and reset flag
+            if gbs:
+                for gb in gbs.values():
+                    try:
+                        gb.blockSignals(False)
+                    except:
+                        pass
             self._updating_groupbox = False
 
     def _on_groupbox_clicked(self, groupbox, state):
-        """v4.0 S18: Handle groupbox toggle for exclusive behavior."""
-        if self._updating_groupbox or not self.widgets_initialized: return
-        if state: self.exploring_groupbox_changed(groupbox); return
-        try: gbs = {"single_selection": self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"], "multiple_selection": self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"], "custom_selection": self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"]}
-        except: return
-        if not any(gbs[k].isChecked() for k in gbs if k != groupbox): gbs[groupbox].blockSignals(True); gbs[groupbox].setChecked(True); gbs[groupbox].setCollapsed(False); gbs[groupbox].blockSignals(False)
+        """v4.0 S18: Handle groupbox toggle for exclusive behavior.
+        
+        FIX 2026-01-18: Added debug logging and safe signal blocking.
+        """
+        logger.debug(f"_on_groupbox_clicked: groupbox={groupbox}, state={state}, _updating_groupbox={self._updating_groupbox}, widgets_initialized={self.widgets_initialized}")
+        if self._updating_groupbox or not self.widgets_initialized:
+            logger.debug(f"_on_groupbox_clicked: BLOCKED - _updating_groupbox={self._updating_groupbox}")
+            return
+        if state: 
+            self.exploring_groupbox_changed(groupbox)
+            return
+        try: 
+            gbs = {"single_selection": self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"], 
+                   "multiple_selection": self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"], 
+                   "custom_selection": self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"]}
+        except: 
+            return
+        
+        # Check if at least one other groupbox is checked
+        if not any(gbs[k].isChecked() for k in gbs if k != groupbox):
+            # No other groupbox checked - re-check this one (prevent all unchecked)
+            gb = gbs[groupbox]
+            try:
+                gb.blockSignals(True)
+                gb.setChecked(True)
+                gb.setCollapsed(False)
+            finally:
+                gb.blockSignals(False)
         else:
+            # Another groupbox is checked - switch to it
             for name, gb in gbs.items():
-                if gb.isChecked(): self.exploring_groupbox_changed(name); break
+                if gb.isChecked(): 
+                    self.exploring_groupbox_changed(name)
+                    break
 
     def _on_groupbox_collapse_changed(self, groupbox, collapsed):
-        """v3.1 Sprint 10: Handle groupbox expand - make it the active one."""
+        """v3.1 Sprint 10: Handle groupbox expand - make it the active one.
+        
+        FIX 2026-01-18: Added debug logging to diagnose click issues.
+        """
+        logger.debug(f"_on_groupbox_collapse_changed: groupbox={groupbox}, collapsed={collapsed}, _updating_groupbox={self._updating_groupbox}")
         if self._updating_groupbox or not self.widgets_initialized or collapsed:
             return
         self.exploring_groupbox_changed(groupbox)
@@ -3612,7 +3700,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # FIX 2026-01-15 v9: Ensure selectionChanged stays connected for IS_TRACKING/IS_SELECTING
         self._ensure_selection_changed_connected()
         
-        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect')
+        # FIX 2026-01-18 v11: Don't connect signals during QGIS sync - they will be connected after
+        # This prevents the signal from triggering exploring_features_changed immediately
+        if not self._syncing_from_qgis:
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect')
         
         # FIX 2026-01-18 v7: Don't call exploring_link_widgets during QGIS sync
         # exploring_link_widgets can trigger setDisplayExpression which clears the list,

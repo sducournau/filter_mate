@@ -478,20 +478,27 @@ class BackendController(BaseController):
 
         Shows backend selection menu or triggers reload if no layers.
         """
+        print("🔧 BackendController.handle_indicator_clicked() START")
         # Check if in waiting state (no layers)
         if self._indicator_label:
             text = self._indicator_label.text()
+            print(f"🔧 indicator_label text = '{text}'")
             if text in ('...', '⟳'):
                 logger.info("Backend indicator clicked in waiting state - requesting reload")
+                print("🔧 In waiting state - emitting reload_requested")
                 self.reload_requested.emit()
                 return
 
         current_layer = self.dockwidget.current_layer
+        print(f"🔧 current_layer = {current_layer}")
         if not current_layer:
+            print("🔧 No current_layer - emitting reload_requested")
             self.reload_requested.emit()
             return
 
+        print(f"🔧 Calling _show_backend_menu({current_layer.name()})")
         self._show_backend_menu(current_layer)
+        print("🔧 BackendController.handle_indicator_clicked() END")
 
     # === Private Methods ===
 
@@ -656,9 +663,11 @@ class BackendController(BaseController):
         Args:
             layer: Current layer for backend selection
         """
+        print(f"🔧 _show_backend_menu() START for layer '{layer.name()}'")
         from ...infrastructure.feedback import show_info, show_success, show_warning
 
         available = self.get_available_backends_for_layer(layer)
+        print(f"🔧 available backends: {available}")
         
         if not available:
             show_warning("FilterMate", "No alternative backends available for this layer")
@@ -714,10 +723,13 @@ class BackendController(BaseController):
         force_all_action.setData('__FORCE_ALL__')
 
         # Show menu
+        print(f"🔧 About to show backend menu.exec_() at position {QCursor.pos()}")
         selected_action = menu.exec_(QCursor.pos())
+        print(f"🔧 backend menu.exec_() returned: {selected_action}")
 
         if selected_action:
             data = selected_action.data()
+            print(f"🔧 Selected backend data: {data}")
 
             if data == '__AUTO_ALL__':
                 count = self.auto_select_optimal_backends()

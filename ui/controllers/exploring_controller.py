@@ -1919,11 +1919,15 @@ class ExploringController(BaseController, LayerSelectionMixin):
             custom_expression: Custom filter expression
             preserve_filter_if_empty: DEPRECATED - no longer needed since filters aren't auto-applied
         """
+        # FIX 2026-01-18 v10: Enhanced logging to trace the issue
+        input_info = f"type={type(input).__name__}, len={len(input) if hasattr(input, '__len__') else 'N/A'}"
+        logger.info(f"🎯 exploring_features_changed CALLED: {input_info}, syncing={getattr(self._dockwidget, '_syncing_from_qgis', False)}")
+        
         # FIX 2026-01-18 v5: Skip if we're syncing from QGIS canvas selection
         # This prevents feedback loops where QGIS selection → widget sync → exploring_features_changed
         # → which could reset or interfere with the sync operation
         if getattr(self._dockwidget, '_syncing_from_qgis', False):
-            logger.debug("exploring_features_changed: SKIPPED (syncing from QGIS)")
+            logger.info("exploring_features_changed: SKIPPED (syncing from QGIS)")
             return []
         
         if self._dockwidget.widgets_initialized is True and self._dockwidget.current_layer is not None and isinstance(self._dockwidget.current_layer, QgsVectorLayer):
@@ -2929,6 +2933,14 @@ class ExploringController(BaseController, LayerSelectionMixin):
             finally:
                 # Only reset _syncing_from_qgis AFTER all sync operations are complete
                 self._dockwidget._syncing_from_qgis = False
+                
+                # FIX 2026-01-18 v11: Reconnect signals that were skipped during sync
+                # This must be done AFTER _syncing_from_qgis is reset to avoid immediate triggering
+                try:
+                    self._dockwidget.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect')
+                    logger.info("  🔌 Reconnected MULTIPLE_SELECTION_FEATURES signals")
+                except Exception as conn_err:
+                    logger.debug(f"  Could not reconnect signals: {conn_err}")
             
         except Exception as e:
             logger.warning(f"Error in _sync_widgets_from_qgis_selection: {type(e).__name__}: {e}")

@@ -188,12 +188,22 @@ class ControllerRegistry:
         Returns:
             Number of controllers set up
         """
+        print(f"🔧 ControllerRegistry.setup_all() START - {len(self._registration_order)} controllers to setup")
+        print(f"🔧 Registration order: {self._registration_order}")
         count = 0
         for name in self._registration_order:
             controller = self._controllers.get(name)
+            print(f"🔧 Setting up controller '{name}': {controller}")
             if controller:
-                controller.setup()
-                count += 1
+                try:
+                    controller.setup()
+                    print(f"🔧 Controller '{name}' setup OK")
+                    count += 1
+                except Exception as e:
+                    print(f"🔧 Controller '{name}' setup FAILED: {e}")
+                    import traceback
+                    print(f"🔧 Traceback: {traceback.format_exc()}")
+        print(f"🔧 ControllerRegistry.setup_all() END - {count} controllers setup")
         return count
 
     def teardown_all(self) -> int:

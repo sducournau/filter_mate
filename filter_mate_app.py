@@ -1886,45 +1886,58 @@ class FilterMateApp:
     def _handle_undo_redo(self, is_undo: bool):
         """Handle undo/redo operation (delegates to UndoRedoHandler, with legacy fallback)."""
         action_name = "undo" if is_undo else "redo"
+        print(f"🔄 _handle_undo_redo CALLED: is_undo={is_undo}, action_name={action_name}")
+        
         if not self.dockwidget or not self.dockwidget.current_layer:
             logger.warning(f"FilterMate: No current layer for {action_name}")
+            print(f"   ❌ No dockwidget or current_layer - returning early")
             return
         
         source_layer = self.dockwidget.current_layer
+        print(f"   source_layer: {source_layer.name()}")
         
         # Guard: ensure layer is usable
         if not is_layer_source_available(source_layer):
             logger.warning(f"handle_{action_name}: source layer invalid or source missing; aborting.")
             show_warning(f"Impossible de {action_name}: couche invalide ou source introuvable.")
+            print(f"   ❌ Layer source not available - returning early")
             return
         
         # STABILITY FIX: Verify layer exists in PROJECT_LAYERS before access
         if source_layer.id() not in self.dockwidget.PROJECT_LAYERS:
             logger.warning(f"handle_{action_name}: layer {source_layer.name()} not in PROJECT_LAYERS; aborting.")
+            print(f"   ❌ Layer not in PROJECT_LAYERS - returning early")
             return
         
         layers_to_filter = self.dockwidget.PROJECT_LAYERS.get(source_layer.id(), {}).get("filtering", {}).get("layers_to_filter", [])
         button_is_checked = self.dockwidget.pushButton_checkable_filtering_layers_to_filter.isChecked()
+        print(f"   layers_to_filter count: {len(layers_to_filter)}")
+        print(f"   button_is_checked (global mode): {button_is_checked}")
         
         # v4.1: Set filtering protection to prevent layer change signals
         self.dockwidget._filtering_in_progress = True
         logger.info(f"v4.1: 🔒 handle_{action_name} - Filtering protection enabled")
+        print(f"   🔒 Filtering protection enabled")
         
         try:
             # Try UndoRedoHandler first (v4.0 hexagonal architecture)
+            print(f"   _undo_redo_handler exists: {self._undo_redo_handler is not None}")
             if self._undo_redo_handler:
                 handler_method = self._undo_redo_handler.handle_undo if is_undo else self._undo_redo_handler.handle_redo
+                print(f"   Calling handler_method: {handler_method}")
                 result = handler_method(source_layer=source_layer, layers_to_filter=layers_to_filter, use_global=button_is_checked, dockwidget=self.dockwidget)
+                print(f"   handler_method result: {result}")
                 if result: self.update_undo_redo_buttons()
             else:
                 # LEGACY FALLBACK: Direct history_manager access (v2.x behavior)
                 logger.warning(f"UndoRedoHandler unavailable - using legacy {action_name}")
+                print(f"   ⚠️ Using legacy fallback")
                 self._legacy_handle_undo_redo(is_undo, source_layer, layers_to_filter, button_is_checked)
         finally:
             if self.dockwidget:
                 self.dockwidget._filtering_in_progress = False
                 logger.info(f"v4.1: 🔓 handle_{action_name} - Filtering protection disabled")
-    
+                print(f"   🔓 Filtering protection disabled")    
     def _legacy_handle_undo_redo(self, is_undo: bool, source_layer, layers_to_filter: list, button_is_checked: bool):
         """
         Legacy undo/redo fallback when UndoRedoHandler is unavailable.

@@ -170,27 +170,36 @@ class ControllerIntegration:
             return True
         
         try:
+            print("🔧 ControllerIntegration.setup() START")
             logger.debug("Creating controller registry...")
             self._registry = ControllerRegistry()
             
             logger.debug("Creating controller instances...")
             self._create_controllers()
+            print(f"🔧 Controllers created: favorites={self._favorites_controller}")
             
             logger.debug("Registering controllers...")
             self._register_controllers()
+            print(f"🔧 Registry has {len(self._registry)} controllers")
             
             logger.debug("Wiring up signals...")
             self._connect_signals()
             
             logger.debug("Setting up all controllers...")
+            print("🔧 Calling self._registry.setup_all()...")
             setup_count = self._registry.setup_all()
+            print(f"🔧 setup_all() returned: {setup_count} controllers initialized")
             logger.info(f"✓ {setup_count} controllers initialized successfully")
             
             self._is_setup = True
+            print("🔧 ControllerIntegration.setup() END - SUCCESS")
             logger.info("✓ Controller integration setup complete")
             return True
             
         except Exception as e:
+            print(f"🔧 ControllerIntegration.setup() FAILED: {e}")
+            import traceback
+            print(f"🔧 Traceback: {traceback.format_exc()}")
             logger.error(f"Failed to setup controller integration: {e}", exc_info=True)
             self._cleanup_on_error()
             return False
