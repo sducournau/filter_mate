@@ -2127,8 +2127,14 @@ class FilterMateApp:
             # Configure FavoritesService with SQLite database
             # Note: set_database() already calls _load_favorites() internally
             if hasattr(self, 'favorites_manager') and self.db_file_path and self.project_uuid:
+                logger.debug(f"Configuring FavoritesService with database:")
+                logger.debug(f"  → DB Path: {self.db_file_path}")
+                logger.debug(f"  → Project UUID: {self.project_uuid}")
                 self.favorites_manager.set_database(self.db_file_path, str(self.project_uuid))
-                logger.info(f"FavoritesService configured with SQLite database ({self.favorites_manager.count} favorites loaded)")
+                favorites_count = self.favorites_manager.count
+                logger.info(f"✓ FavoritesService configured ({favorites_count} favorites loaded)")
+                if favorites_count == 0:
+                    logger.debug("  → No favorites found for this project (new project or no favorites saved yet)")
 
     def add_project_datasource(self, layer):
         """Add PostgreSQL datasource and create temp schema via DatasourceManager."""

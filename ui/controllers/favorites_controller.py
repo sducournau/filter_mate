@@ -105,6 +105,13 @@ class FavoritesController(BaseController):
         self._find_indicator_label()
         print(f"🔧 _indicator_label = {self._indicator_label}")
         self._init_favorites_manager()
+        
+        # CRITICAL FIX 2026-01-18: Connect to favorites_changed signal from FavoritesService
+        # This ensures the UI is updated when favorites are loaded from database
+        if self._favorites_manager and hasattr(self._favorites_manager, 'favorites_changed'):
+            self._favorites_manager.favorites_changed.connect(self._on_favorites_loaded)
+            logger.debug("✓ Connected to FavoritesService.favorites_changed signal")
+        
         self._initialized = True
         print(f"🔧 FavoritesController.setup() END - _initialized={self._initialized}, _favorites_manager={self._favorites_manager}")
         logger.debug("FavoritesController setup complete")
@@ -124,6 +131,15 @@ class FavoritesController(BaseController):
         super().on_tab_deactivated()
 
     # === Public API ===
+    
+    def _on_favorites_loaded(self) -> None:
+        """
+        Handler for favorites_changed signal from FavoritesService.
+        Updates the indicator when favorites are loaded/added/removed.
+        """
+        logger.info(f"✓ Favorites changed - updating UI (count: {self.count})")
+        self.update_indicator()
+        self.favorites_changed.emit()  # Propagate signal
 
     def update_indicator(self) -> None:
         """Update the favorites indicator badge with current count."""
@@ -495,6 +511,72 @@ class FavoritesController(BaseController):
         
         print(f"🔧 _init_favorites_manager() END - _favorites_manager = {self._favorites_manager}")
 
+    def _restore_spatial_config(self, favorite: 'FilterFavorite') -> bool:
+        """
+        Restore spatial configuration from favorite to dockwidget.
+        
+        This ensures task_features (selected FIDs) are available when
+        launchTaskEvent is called, so the filter task can rebuild
+        EXISTS expressions correctly.
+        
+        Args:
+            favorite: Favorite containing spatial_config
+            
+        Returns:
+            True if config was restored successfully
+        """
+        if not favorite.spatial_config:
+            logger.warning(f"Favorite '{favorite.name}' has no spatial_config to restore")
+            return False
+        
+        try:
+            from qgis.core import QgsProject
+            config = favorite.spatial_config
+            
+            # Restore selected feature IDs (task_features)
+            if 'task_feature_ids' in config and self.dockwidget.current_layer:
+                feature_ids = config['task_feature_ids']
+                logger.info(f"Restoring {len(feature_ids)} task_feature IDs from favorite")
+                
+                # Fetch actual QgsFeature objects from the source layer
+                source_layer = self.dockwidget.current_layer
+                features = []
+                for fid in feature_ids:
+                    feature = source_layer.getFeature(fid)
+                    if feature and feature.isValid():
+                        features.append(feature)
+                    else:
+                        logger.warning(f"  ⚠️ Could not fetch feature {fid} from {source_layer.name()}")
+                
+                if features:
+                    logger.info(f"  → Loaded {len(features)} features from {len(feature_ids)} FIDs")
+                    # Store in dockwidget for get_current_features() to pick up
+                    self.dockwidget._restored_task_features = features
+                    logger.info(f"  ✓ Stored {len(features)} features in dockwidget._restored_task_features")
+                else:
+                    logger.warning(f"  ⚠️ Could not load any features from {len(feature_ids)} FIDs!")
+            
+            # Restore predicates if present
+            if 'predicates' in config:
+                predicates = config['predicates']
+                logger.info(f"Restoring predicates: {list(predicates.keys())}")
+                # Store in dockwidget for task to pick up
+                self.dockwidget._restored_predicates = predicates
+            
+            # Restore buffer settings if present
+            if 'buffer_value' in config:
+                logger.info(f"Restoring buffer_value: {config['buffer_value']}")
+                # TODO: Set buffer widget value if needed
+            
+            logger.info(f"✓ Spatial config restored from favorite '{favorite.name}'")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to restore spatial_config: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
+
     def _get_indicator_style(self, state: str) -> str:
         """Get stylesheet for indicator state."""
         style_data = FAVORITES_STYLES.get(state, FAVORITES_STYLES['empty'])
@@ -650,7 +732,12 @@ class FavoritesController(BaseController):
         return True
 
     def _create_favorite(self, name: str, expression: str) -> bool:
-        """Create a new favorite."""
+        """
+        Create a new favorite.
+        
+        ENHANCEMENT 2026-01-18: Capture spatial_config (task_features, predicates, etc.)
+        so favorites can be properly restored with full geometric context.
+        """
         if not self._favorites_manager:
             return False
 
@@ -682,25 +769,74 @@ class FavoritesController(BaseController):
                         'layer_id': layer_id,
                         'provider': map_layer.providerType()
                     }
-
+            
+            # ENHANCEMENT 2026-01-18: Capture spatial configuration
+            spatial_config = self._capture_spatial_config()
+            
             # Use FavoritesService.add_favorite() with individual parameters
             favorite_id = self._favorites_manager.add_favorite(
                 name=name,
                 expression=expression,
                 layer_name=layer_name,
                 layer_provider=layer_provider,
-                remote_layers=remote_layers if remote_layers else None
+                remote_layers=remote_layers if remote_layers else None,
+                spatial_config=spatial_config
             )
             
             if favorite_id:
-                # Save changes
-                self._favorites_manager.save()
+                # Note: Favorite already saved to database in add_favorite()
+                # save() is a no-op but we call it for consistency
+                logger.debug(f"Favorite '{name}' created successfully (ID: {favorite_id})")
+                self._favorites_manager.save()  # No-op, already persisted
                 return True
+            else:
+                logger.warning(f"Failed to create favorite '{name}' - add_favorite() returned None")
             return False
 
         except Exception as e:
             logger.error(f"Failed to create favorite: {e}")
             return False
+    
+    def _capture_spatial_config(self) -> dict:
+        """
+        Capture current spatial configuration for favorite restoration.
+        
+        This ensures favorites can be restored with full geometric context,
+        including selected features, predicates, buffer settings, etc.
+        
+        Returns:
+            dict: Spatial configuration
+        """
+        config = {}
+        
+        try:
+            # Capture task_features (selected feature IDs)
+            features, _ = self.dockwidget.get_current_features()
+            if features:
+                feature_ids = [f.id() for f in features if f.isValid()]
+                if feature_ids:
+                    config['task_feature_ids'] = feature_ids
+                    logger.info(f"Captured {len(feature_ids)} task_feature IDs for favorite")
+            
+            # Capture predicates from dockwidget if available
+            if hasattr(self.dockwidget, 'PROJECT_LAYERS') and self.dockwidget.current_layer:
+                layer_id = self.dockwidget.current_layer.id()
+                if layer_id in self.dockwidget.PROJECT_LAYERS:
+                    layer_data = self.dockwidget.PROJECT_LAYERS[layer_id]
+                    predicates = layer_data.get('filtering', {}).get('predicates', {})
+                    if predicates:
+                        config['predicates'] = predicates
+                        logger.info(f"Captured predicates: {list(predicates.keys())}")
+            
+            # Capture buffer value if set
+            # TODO: Read from buffer widget when implemented
+            
+            logger.info(f"Spatial config captured: {list(config.keys())}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to capture spatial config: {e}")
+        
+        return config if config else None
 
     def _apply_favorite_expression(self, favorite: 'FilterFavorite') -> bool:
         """Apply a favorite's expression to the filtering widgets and execute the filter."""
@@ -713,24 +849,21 @@ class FavoritesController(BaseController):
                 elif hasattr(widget, 'setCurrentText'):
                     widget.setCurrentText(favorite.expression)
 
-            # Apply remote layers filters directly to the layers
+            # CRITICAL FIX 2026-01-18: Do NOT apply remote layer filters directly via setSubsetString!
+            # The filters contain __source alias which _clean_corrupted_subsets() will erase.
+            # Instead, we restore the spatial context (task_features, predicates, etc.) from
+            # favorite.spatial_config so the filter task can REBUILD the remote filters properly.
             if favorite.remote_layers:
-                project = QgsProject.instance()
-                for layer_name, layer_data in favorite.remote_layers.items():
-                    # Handle both new format (dict) and legacy format (string layer_id)
-                    if isinstance(layer_data, dict):
-                        layer_id = layer_data.get('layer_id')
-                        expr = layer_data.get('expression', '')
-                    else:
-                        # Legacy format: layer_data is just the layer_id string
-                        layer_id = layer_data
-                        expr = ''
-                    
-                    if layer_id and expr:
-                        remote_layer = project.mapLayer(layer_id)
-                        if remote_layer and hasattr(remote_layer, 'setSubsetString'):
-                            remote_layer.setSubsetString(expr)
-                            logger.debug(f"Applied filter to remote layer {layer_name}: {expr[:50]}...")
+                logger.info(f"Favorite has {len(favorite.remote_layers)} remote layers")
+                logger.info(f"  → Remote layers will be re-filtered by main filter task")
+                logger.info(f"  → NOT applying filters directly to avoid __source cleanup")
+            
+            # Restore spatial configuration (task_features, predicates, buffer, etc.)
+            if favorite.spatial_config:
+                logger.info(f"Restoring spatial_config from favorite '{favorite.name}'...")
+                self._restore_spatial_config(favorite)
+            else:
+                logger.warning(f"Favorite '{favorite.name}' has no spatial_config - remote layers may not filter correctly")
 
             # Trigger the filter action to apply the main expression
             if hasattr(self.dockwidget, 'launchTaskEvent'):

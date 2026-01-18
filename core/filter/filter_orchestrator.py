@@ -383,22 +383,40 @@ class FilterOrchestrator:
         """
         Clean corrupted subset strings containing invalid __source aliases.
         
-        Proactively clears subset strings that contain __source alias patterns
-        which indicate failed previous operations. These cause SQL errors if
-        not cleaned before applying new filters.
+        CRITICAL FIX 2026-01-18: Only clean TRULY corrupted subsets, not valid EXISTS expressions!
+        Valid EXISTS format: EXISTS (SELECT 1 FROM "schema"."table" AS __source WHERE ...)
+        Corrupted format: Partial/malformed expressions from failed operations.
         
         Args:
             layer: Layer to check and clean
         """
+        import re
         current_subset = layer.subsetString()
-        if current_subset and '__source' in current_subset.lower():
-            logger.warning(f"🧹 CLEANING corrupted subset on {layer.name()} BEFORE filtering")
-            logger.warning(f"  → Corrupted subset found: '{current_subset[:100]}'...")
-            logger.warning(f"  → Clearing it to prevent SQL errors")
-            
-            # Queue subset clear for main thread application
-            self.subset_queue_callback(layer, "")
-            logger.info(f"  ✓ Queued subset clear for {layer.name()} - ready for fresh filter")
+        
+        if not current_subset or '__source' not in current_subset.lower():
+            return
+        
+        # Check if this is a VALID EXISTS expression (well-formed)
+        # Pattern: EXISTS (SELECT ... FROM ... AS __source WHERE ...) 
+        is_valid_exists = bool(re.match(
+            r'^\s*EXISTS\s*\(\s*SELECT\s+.+\s+FROM\s+.+\s+AS\s+__source\s+WHERE\s+.+\)\s*$',
+            current_subset,
+            re.IGNORECASE | re.DOTALL
+        ))
+        
+        if is_valid_exists:
+            logger.debug(f"✓ Layer {layer.name()} has VALID EXISTS expression - keeping it")
+            logger.debug(f"  → Expression: '{current_subset[:100]}'...")
+            return
+        
+        # If we reach here, it's a CORRUPTED expression with __source
+        logger.warning(f"🧹 CLEANING corrupted subset on {layer.name()} BEFORE filtering")
+        logger.warning(f"  → Corrupted subset found: '{current_subset[:100]}'...")
+        logger.warning(f"  → Clearing it to prevent SQL errors (NOT a valid EXISTS expression)")
+        
+        # Queue subset clear for main thread application
+        self.subset_queue_callback(layer, "")
+        logger.info(f"  ✓ Queued subset clear for {layer.name()} - ready for fresh filter")
     
     def _determine_subset_strategy(
         self, 

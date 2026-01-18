@@ -821,7 +821,8 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                 self._cached_layer_name = layer.name()
 
                 # Ensure the widget exists for the new layer
-                if self.layer.id() not in self.list_widgets:
+                widget_already_existed = self.layer.id() in self.list_widgets
+                if not widget_already_existed:
                     self.manage_list_widgets(layer_props)
 
                 # Validate required keys exist
@@ -837,8 +838,10 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                         logger.debug(f"Resetting stale display expression '{current_expr}'")
                         self.list_widgets[self.layer.id()].setDisplayExpression("")
 
-                # Refresh widgets
-                self.manage_list_widgets(layer_props)
+                # FIX 2026-01-18: Only refresh widget visibility if it already existed
+                # If widget was just created, it's already visible and properly configured
+                if widget_already_existed:
+                    self.manage_list_widgets(layer_props)
 
                 if self.layer.id() in self.list_widgets:
                     self.filter_le.setText(self.list_widgets[self.layer.id()].getFilterText())

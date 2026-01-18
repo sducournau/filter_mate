@@ -2,6 +2,22 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [4.1.1] - 2026-01-18 🐘 PostgreSQL-Only Project Fix
+
+### Fixed
+
+#### PostgreSQL Backend Selection for PostgreSQL-Only Projects
+- **HYBRID DETECTION (Option C)**: PostgreSQL backend now correctly selected for all layers in PostgreSQL-only projects
+  - **Smart Initialization**: Detects PostgreSQL-only projects at BackendFactory startup
+  - **Dynamic Updates**: Responds to project layer changes via `update_project_context()`
+  - **Consistent Backend**: Prevents unwanted fallback to MEMORY backend for small datasets
+  - File: `adapters/backends/factory.py` (+60 lines)
+  - New method: `_detect_project_is_postgresql_only()` - Auto-detection at startup
+  - Enhanced: `update_project_context()` - Logs state changes
+  - Diagnostic: `DIAGNOSTIC_POSTGRESQL_PROJECT.py` - Verify detection in QGIS Console
+  - Tests: `tests/test_postgresql_only_project.py` (5 tests)
+  - **Impact**: Projects with ONLY PostgreSQL layers now use PostgreSQL backend consistently
+
 ## [4.1.0] - 2026-01-17 🚀 PRODUCTION RELEASE
 
 FilterMate v4.1.0 brings major performance improvements, comprehensive testing, and professional-grade quality enhancements across 3 development phases.

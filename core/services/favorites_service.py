@@ -172,6 +172,9 @@ class FavoritesService(QObject):
         """
         if self._favorites_manager and hasattr(self._favorites_manager, 'set_database'):
             self._favorites_manager.set_database(db_path, project_uuid)
+            # CRITICAL: Emit favorites_changed to update UI after loading
+            self.favorites_changed.emit()
+            logger.info(f"✓ Favorites loaded from database and UI notified (count: {self.count})")
         else:
             # TODO: Implement internal database storage when manager not available
             logger.debug(f"FavoritesService: Database set to {db_path} (stub - no manager)")
@@ -183,6 +186,9 @@ class FavoritesService(QObject):
         """
         if self._favorites_manager and hasattr(self._favorites_manager, 'load_from_project'):
             self._favorites_manager.load_from_project()
+            # CRITICAL: Emit favorites_changed to update UI after loading
+            self.favorites_changed.emit()
+            logger.info(f"✓ Favorites reloaded from database and UI notified (count: {self.count})")
         else:
             # TODO: Implement internal project loading when manager not available
             logger.debug("FavoritesService: Loading from project (stub - no manager)")
@@ -264,8 +270,10 @@ class FavoritesService(QObject):
             if success:
                 self.favorite_added.emit(favorite.id, name)
                 self.favorites_changed.emit()
-                logger.info(f"Added favorite: {name} ({favorite.id})")
+                logger.info(f"✓ Favorite added via FavoritesService: {name} (ID: {favorite.id})")
                 return favorite.id
+            else:
+                logger.error(f"✗ Failed to add favorite '{name}' - FavoritesManager.add_favorite() returned False")
             
             return None
             

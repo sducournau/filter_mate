@@ -1112,11 +1112,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if cnt > 0:
             self.favorites_indicator_label.setText(f"★ {cnt}")
             self.favorites_indicator_label.setToolTip(f"★ {cnt} Favorites saved\nClick to apply or manage")
-            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:white;font-size:8pt;font-weight:600;padding:1px 6px;border-radius:8px;border:none;background-color:#f39c12;}QLabel#label_favorites_indicator:hover{background-color:#d68910;}")
+            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:white;font-size:9pt;font-weight:600;padding:3px 10px;border-radius:12px;border:none;background-color:#f39c12;}QLabel#label_favorites_indicator:hover{background-color:#d68910;}")
         else:
             self.favorites_indicator_label.setText("★")
             self.favorites_indicator_label.setToolTip("★ No favorites saved\nClick to add current filter")
-            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:#95a5a6;font-size:8pt;font-weight:600;padding:1px 6px;border-radius:8px;border:none;background-color:#ecf0f1;}QLabel#label_favorites_indicator:hover{background-color:#d5dbdb;}")
+            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:#95a5a6;font-size:9pt;font-weight:600;padding:3px 10px;border-radius:12px;border:none;background-color:#ecf0f1;}QLabel#label_favorites_indicator:hover{background-color:#d5dbdb;}")
         self.favorites_indicator_label.adjustSize()
 
     def _get_available_backends_for_layer(self, layer):
@@ -1630,16 +1630,32 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         except Exception as e:
                             logger.debug(f"  → Could not save checked items: {e}")
                     
+                    # FIX 2026-01-18 v16: Don't call setDisplayExpression before setLayer
+                    # setLayer() will handle the display expression update internally.
+                    # Calling setDisplayExpression first causes double-clear and list disappears.
+                    # Update layer_props with new expression BEFORE calling setLayer
+                    if "exploring" not in layer_props:
+                        layer_props["exploring"] = {}
+                    layer_props["exploring"]["multiple_selection_expression"] = field_or_expression
+                    
                     # FIX v3: For multiple picker, setLayer() with layer_props triggers full rebuild
                     # This is more reliable than just setDisplayExpression()
                     try:
-                        picker.setDisplayExpression(field_or_expression)
-                        picker.setLayer(self.current_layer, layer_props, skip_task=True)
-                        logger.debug(f"  → Called setLayer with layer_props for full rebuild")
+                        # CRITICAL: Don't skip task if list is currently empty
+                        # The widget's internal logic will force populate if needed
+                        current_count = 0
+                        if hasattr(picker, 'list_widgets') and layer_id in picker.list_widgets:
+                            current_count = picker.list_widgets[layer_id].count()
+                        
+                        # Only skip task if list already has items (performance optimization)
+                        skip = (current_count > 0)
+                        picker.setLayer(self.current_layer, layer_props, skip_task=skip, preserve_checked=True)
+                        logger.debug(f"  → Called setLayer (skip_task={skip}, current_count={current_count})")
                     except Exception as e:
-                        logger.warning(f"  → setLayer failed, using setDisplayExpression only: {e}")
+                        logger.warning(f"  → setLayer failed: {e}")
+                        # Fallback to direct expression update
                         if hasattr(picker, 'setDisplayExpression'):
-                            picker.setDisplayExpression(field_or_expression)
+                            picker.setDisplayExpression(field_or_expression, preserve_checked=True)
                     
                     # FIX v3: Try to restore checked items AFTER refresh
                     if saved_checked_fids and hasattr(picker, 'list_widgets') and layer_id in picker.list_widgets:
@@ -3913,11 +3929,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _fallback_get_current_features(self):
         """
         FIX 2026-01-15 v10: Fallback for get_current_features when controller unavailable.
+        FIX 2026-01-18: Check for restored_task_features from favorite application.
         
         Pattern from before_migration (lines 7385-7480):
         - single_selection: get feature from QgsFeaturePickerWidget, ALWAYS reload to get geometry
         - multiple_selection: get checked items, ALWAYS fetch full features with geometry
         - custom_selection: delegate to exploring_custom_selection()
+        - FAVORITE_RESTORE: use _restored_task_features if present (from favorite application)
         
         CRITICAL: The widget may return features WITHOUT geometry loaded.
         We MUST reload each feature from the layer to ensure geometry is available.
@@ -3928,6 +3946,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         FIX 2026-01-16: Use _is_layer_valid() for safe layer checking.
         """
+        # CRITICAL FIX 2026-01-18: Check if features were restored from favorite
+        if hasattr(self, '_restored_task_features') and self._restored_task_features:
+            features = self._restored_task_features
+            logger.info(f"Using {len(features)} restored task_features from favorite")
+            # Clear after use to avoid reusing in next filter
+            self._restored_task_features = None
+            return features, ''
+        
         if not self._is_layer_valid():
             logger.warning("   🔴 _fallback_get_current_features: Layer is INVALID!")
             return [], ''

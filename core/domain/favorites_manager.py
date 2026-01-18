@@ -114,6 +114,10 @@ class FavoritesManager:
             db_path: Path to SQLite database
             project_uuid: Project UUID
         """
+        logger.debug(f"FavoritesManager: Configuring database")
+        logger.debug(f"  → Path: {db_path}")
+        logger.debug(f"  → Project UUID: {project_uuid}")
+        
         self._db_path = db_path
         self._project_uuid = project_uuid
         self._initialize_database()
@@ -201,7 +205,12 @@ class FavoritesManager:
     
     def _load_favorites(self) -> None:
         """Load favorites from database."""
-        if not self._initialized or not self._project_uuid:
+        if not self._initialized:
+            logger.warning("Cannot load favorites: database not initialized")
+            return
+        
+        if not self._project_uuid:
+            logger.warning("Cannot load favorites: no project UUID set")
             return
         
         try:
@@ -269,7 +278,10 @@ class FavoritesManager:
                 self._favorites[favorite.id] = favorite
             
             conn.close()
-            logger.info(f"Loaded {len(self._favorites)} favorites for project {self._project_uuid}")
+            logger.info(f"✓ Loaded {len(self._favorites)} favorites for project {self._project_uuid}")
+            if len(self._favorites) > 0:
+                logger.debug(f"  → Database: {self._db_path}")
+                logger.debug(f"  → Favorites: {', '.join([f.name for f in list(self._favorites.values())[:5]])}{'...' if len(self._favorites) > 5 else ''}")
             
         except Exception as e:
             logger.error(f"Failed to load favorites: {e}")
@@ -353,7 +365,9 @@ class FavoritesManager:
             conn.close()
             
             self._favorites[favorite.id] = favorite
-            logger.info(f"Added favorite: {favorite.name}")
+            logger.info(f"✓ Favorite '{favorite.name}' saved to database (ID: {favorite.id}, Project: {self._project_uuid})")
+            logger.debug(f"  → Database: {self._db_path}")
+            logger.debug(f"  → Expression: {favorite.expression[:80]}..." if len(favorite.expression) > 80 else f"  → Expression: {favorite.expression}")
             return True
             
         except Exception as e:

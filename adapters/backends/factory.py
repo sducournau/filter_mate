@@ -42,9 +42,10 @@ class BackendSelector:
     """
     
     # Priority order for fallback
+    # MEMORY first (faster for small datasets), then OGR (universal compatibility)
     FALLBACK_PRIORITY = [
-        ProviderType.OGR,
         ProviderType.MEMORY,
+        ProviderType.OGR,
     ]
     
     def __init__(
@@ -314,6 +315,19 @@ class BackendFactory:
             'prefer_native_for_postgresql_project', True
         )
         
+        # OPTION C (Hybrid): Smart initialization - detect if project is PostgreSQL-only
+        # This enables immediate PostgreSQL backend selection without waiting for
+        # update_project_context() to be called by filter tasks
+        initial_prefer_native = False
+        if self._prefer_native_for_pg_project and self._postgresql_available:
+            is_pg_only_project = self._detect_project_is_postgresql_only()
+            if is_pg_only_project:
+                initial_prefer_native = True
+                logger.info(
+                    "🐘 Smart Init: Detected PostgreSQL-only project - "
+                    "forcing PostgreSQL backend for all layers"
+                )
+        
         self._selector = BackendSelector(
             postgresql_available=self._postgresql_available,
             small_dataset_optimization=opt_config.get('enabled', False),
@@ -321,22 +335,25 @@ class BackendFactory:
                 'threshold',
                 DEFAULT_SMALL_DATASET_THRESHOLD
             ),
-            # Will be updated by update_project_context() when project layers are known
-            prefer_native_backend=False
+            # Smart initialization based on project context
+            prefer_native_backend=initial_prefer_native
         )
         
-        logger.debug(f"BackendFactory initialized: postgresql={self._postgresql_available}")
+        logger.debug(
+            f"BackendFactory initialized: postgresql={self._postgresql_available}, "
+            f"prefer_native={initial_prefer_native}"
+        )
     
     def _check_postgresql_available(self) -> bool:
-        """Check if PostgreSQL backend is available."""
+        """Check if PostgreSQL backend with psycopg2 is available."""
         try:
-            from . import POSTGRESQL_AVAILABLE
-            return POSTGRESQL_AVAILABLE
+            # CRITICAL: Use PSYCOPG2_AVAILABLE not POSTGRESQL_AVAILABLE!
+            # POSTGRESQL_AVAILABLE is always True (QGIS native support)
+            # But we need psycopg2 for advanced backend features (MV, pooling)
+            from .postgresql_availability import PSYCOPG2_AVAILABLE
+            return PSYCOPG2_AVAILABLE
         except ImportError:
-            try:
-                return True
-            except ImportError:
-                return False
+            return False
 
     def update_project_context(self, all_layers_postgresql: bool) -> None:
         """
@@ -345,6 +362,8 @@ class BackendFactory:
         When all project layers are PostgreSQL and prefer_native_for_postgresql_project
         is enabled, this ensures PostgreSQL backend is used even for small datasets
         (avoids switching to MEMORY backend which would be inconsistent).
+        
+        This is called dynamically when project layers change (Option C - Hybrid approach).
         
         Args:
             all_layers_postgresql: True if all vector layers in the project are PostgreSQL
@@ -355,11 +374,19 @@ class BackendFactory:
             self._postgresql_available
         )
         
-        if should_prefer_native:
-            logger.info(
-                "All project layers are PostgreSQL - forcing PostgreSQL backend "
-                "even for small datasets (prefer_native_for_postgresql_project=True)"
-            )
+        # Log state change
+        previous_state = self._selector._prefer_native_backend
+        if should_prefer_native != previous_state:
+            if should_prefer_native:
+                logger.info(
+                    "🔄 Dynamic Update: All project layers are PostgreSQL - "
+                    "forcing PostgreSQL backend even for small datasets"
+                )
+            else:
+                logger.info(
+                    "🔄 Dynamic Update: Project has mixed backends - "
+                    "allowing backend optimization"
+                )
         
         # Update selector's prefer_native_backend flag
         self._selector._prefer_native_backend = should_prefer_native
@@ -385,6 +412,45 @@ class BackendFactory:
                 return False
         
         return True
+    
+    def _detect_project_is_postgresql_only(self) -> bool:
+        """
+        Detect if the current QGIS project contains ONLY PostgreSQL vector layers.
+        
+        This is called during BackendFactory initialization to enable smart
+        backend selection at startup.
+        
+        Returns:
+            True if all project vector layers are PostgreSQL, False otherwise
+        """
+        try:
+            from qgis.core import QgsProject
+            
+            project = QgsProject.instance()
+            if not project:
+                return False
+            
+            # Get all map layers
+            all_layers = project.mapLayers().values()
+            
+            # Filter to vector layers only
+            vector_layers = [
+                layer for layer in all_layers 
+                if hasattr(layer, 'providerType') and layer.type() == 0  # QgsMapLayer.VectorLayer
+            ]
+            
+            if not vector_layers:
+                return False
+            
+            # Check if ALL vector layers are PostgreSQL
+            return self.is_all_layers_postgresql(vector_layers)
+            
+        except ImportError:
+            logger.debug("QgsProject not available during initialization")
+            return False
+        except Exception as e:
+            logger.debug(f"Could not detect project layers: {e}")
+            return False
     
     def get_backend_instance(
         self,
@@ -475,7 +541,11 @@ class BackendFactory:
             
             elif provider_type == ProviderType.POSTGRESQL:
                 if not self._postgresql_available:
-                    logger.warning("PostgreSQL backend requested but not available")
+                    logger.warning(
+                        "PostgreSQL backend requested but psycopg2 not available. "
+                        "Install psycopg2 for advanced PostgreSQL features. "
+                        "Falling back to OGR backend."
+                    )
                     return None
                 from .postgresql.backend import PostgreSQLBackend
                 return PostgreSQLBackend()
