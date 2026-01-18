@@ -239,46 +239,137 @@
 
 ## 🏗️ Architecture
 
-FilterMate v3.0 uses a **hexagonal architecture** (ports & adapters) for maintainability and testability:
+FilterMate v4.0+ uses a **hexagonal architecture** (ports & adapters) for maintainability, testability, and clean separation of concerns.
+
+### 🎯 Hexagonal Architecture Benefits
+
+| Benefit | Description |
+|---------|-------------|
+| **🔌 Pluggable Backends** | Easy to add new data sources (PostgreSQL, Spatialite, OGR, Memory) |
+| **✅ Testable** | Pure business logic in `core/` with 85% test coverage |
+| **🔧 Maintainable** | Clear separation: UI → Services → Adapters → Infrastructure |
+| **🚀 Scalable** | Add features without breaking existing code |
+| **📦 Portable** | Core logic is QGIS-independent, can be reused elsewhere |
+
+### 📂 Directory Structure
 
 ```
 filter_mate/
-├── core/                    # Pure Python - Business Logic
+├── core/                    # 🧠 Business Logic (Pure Python)
 │   ├── domain/              # Value Objects & Entities
-│   ├── ports/               # Interfaces (Abstract Base Classes)
-│   └── services/            # Business Logic Services
+│   │   ├── favorites_manager.py      # Favorites persistence & management
+│   │   ├── filter_expression.py     # Filter expression domain model
+│   │   └── layer_info.py            # Layer metadata value object
+│   ├── ports/               # 🔌 Interfaces (Abstract Base Classes)
+│   │   └── backend_port.py          # Backend interface contract
+│   ├── services/            # 🎯 Business Logic Services
+│   │   ├── filter_service.py        # Core filtering orchestration
+│   │   ├── history_service.py       # Undo/Redo management
+│   │   ├── favorites_service.py     # Favorites business logic
+│   │   ├── layer_organizer.py       # Layer organization by provider
+│   │   └── task_orchestrator.py     # Async task coordination
+│   ├── tasks/               # ⚡ Background Tasks (QgsTask)
+│   │   ├── filter_task.py           # Main filtering task (6,022 lines → refactored)
+│   │   └── layer_management_task.py # Layer CRUD operations
+│   ├── filter/              # 🔍 Filter Domain Logic
+│   │   ├── expression_builder.py   # Expression construction
+│   │   ├── filter_orchestrator.py  # Multi-backend orchestration
+│   │   └── result_processor.py     # Result aggregation
+│   └── geometry/            # 📐 Geometry Utilities
+│       └── crs_utils.py             # CRS transformations
 │
-├── adapters/                # External World Integration
-│   ├── backends/            # Filter Backends (PostgreSQL, Spatialite, OGR, Memory)
-│   │   ├── postgresql/      # PostgreSQL package (MV, optimizer)
-│   │   ├── spatialite/      # Spatialite package (cache, index)
-│   │   ├── ogr/             # OGR universal fallback
-│   │   └── memory/          # In-memory operations
-│   ├── qgis/                # QGIS-specific adapters
-│   │   ├── tasks/           # QgsTask hierarchy
-│   │   └── signals/         # Signal management
-│   └── repositories/        # Data access layer
+├── adapters/                # 🔗 External World Integration
+│   ├── backends/            # 💾 Filter Backends (Data Sources)
+│   │   ├── factory.py               # Smart backend selection (v4.1.1 hybrid detection)
+│   │   ├── postgresql/              # PostgreSQL backend (psycopg2)
+│   │   │   ├── backend.py           # PostgreSQL executor
+│   │   │   ├── materialized_view.py # MV optimization (>10k features)
+│   │   │   └── optimizer.py         # Query optimization
+│   │   ├── spatialite/              # Spatialite backend
+│   │   │   ├── backend.py           # Spatialite executor
+│   │   │   ├── filter_actions.py    # Reset/Unfilter/Cleanup (v4.1.0)
+│   │   │   └── rtree.py             # R-tree spatial indexing
+│   │   ├── ogr/                     # OGR universal fallback
+│   │   │   └── backend.py           # OGR executor
+│   │   └── memory/                  # In-memory operations
+│   │       └── backend.py           # Memory backend
+│   ├── qgis/                # 🗺️ QGIS-specific adapters
+│   │   └── tasks/                   # QgsTask wrappers
+│   ├── repositories/        # 💽 Data Access Layer
+│   │   └── layer_repository.py      # Layer CRUD operations
+│   ├── app_bridge.py        # 🌉 App ↔ Hexagonal services bridge
+│   ├── task_builder.py      # 🏗️ Task parameter construction
+│   ├── undo_redo_handler.py # ⏮️ Undo/Redo adapter
+│   └── database_manager.py  # 🗄️ SQLite database management
 │
-├── ui/                      # User Interface Layer
-│   ├── controllers/         # UI Controllers (MVC pattern)
-│   ├── widgets/             # Custom widgets
-│   └── dialogs/             # Dialog windows
+├── ui/                      # 🎨 User Interface Layer (MVC)
+│   ├── controllers/         # 🎮 UI Controllers
+│   │   ├── favorites_controller.py  # Favorites UI logic
+│   │   ├── exploring_controller.py  # Exploring panel logic
+│   │   └── filtering_controller.py  # Filtering panel logic
+│   ├── widgets/             # 🧩 Custom Widgets
+│   │   └── custom_widgets.py        # QgsCheckableComboBox extensions
+│   └── dialogs/             # 💬 Dialog Windows
 │
-└── infrastructure/          # Cross-cutting concerns
-    ├── cache/               # Caching infrastructure
-    ├── config/              # Configuration management
-    └── logging/             # Logging infrastructure
+└── infrastructure/          # ⚙️ Cross-cutting Concerns
+    ├── cache/               # 💾 Caching Infrastructure
+    │   └── exploring_cache.py       # Feature list caching (100-500× speedup)
+    ├── config/              # 📋 Configuration Management
+    │   ├── config.py                # Config system v2.0
+    │   └── config_metadata.py       # Metadata handling
+    ├── logging/             # 📊 Logging Infrastructure
+    │   └── logger.py                # Centralized logging
+    └── utils/               # 🛠️ Utilities
+        └── layer_utils.py           # Layer validation, safety checks
 ```
 
-### Legacy Backend Structure (for reference)
+### 🔄 Architecture Evolution
 
+FilterMate has undergone a major refactoring from **God Classes** to **Hexagonal Architecture**:
+
+| Version | Architecture | Lines of Code | Test Coverage | Notes |
+|---------|--------------|---------------|---------------|-------|
+| **v2.x** | Monolithic | ~15,000 LOC | <10% | Legacy: All logic in `filter_mate_app.py` |
+| **v3.0** | Mixed | ~18,000 LOC | ~30% | Transition: Started extracting services |
+| **v4.0-alpha** | Hexagonal | ~22,000 LOC | 75% | Migration: Modules shims, core extraction |
+| **v4.1.0** | Hexagonal | ~24,000 LOC | 85% | Production: Full hexagonal, 106 tests |
+
+**Key Milestones:**
+- **EPIC-1 (v4.0)**: `modules/` → `core/`, `adapters/`, `infrastructure/`
+- **Phase E9-E11**: God classes eliminated (-67% reduction in app/dockwidget)
+- **Phase E12**: `filter_task.py` migrated to `core/tasks/`
+- **Phase E13 (v5.0 planned)**: Complete removal of `modules/` shims
+
+### 🧪 Testing Philosophy
+
+The hexagonal architecture enables comprehensive testing:
+
+```python
+# Example: Testing filter service WITHOUT QGIS
+from core.services.filter_service import FilterService
+from core.domain.filter_expression import FilterExpression
+
+# Pure Python test - no QGIS dependencies
+def test_filter_expression_building():
+    service = FilterService()
+    expr = FilterExpression(layer_id="test", expression='"population" > 1000')
+    result = service.build_filter(expr)
+    assert result.is_valid()
 ```
-modules/backends/
-  ├── postgresql_backend.py  # PostgreSQL/PostGIS (optimal)
-  ├── spatialite_backend.py  # Spatialite (good)
-  ├── ogr_backend.py         # Universal OGR (compatible)
-  └── factory.py             # Automatic selection
-```
+
+**Test Organization:**
+- `tests/`: Unit tests for core services (85% coverage)
+- `tests/backends/`: Backend-specific tests (PostgreSQL, Spatialite, OGR)
+- `tests/integration/`: End-to-end QGIS integration tests
+
+### 📖 Architecture Documentation
+
+For detailed architecture information, see:
+
+- **Architecture Overview**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- **Developer Onboarding**: [docs/DEVELOPER_ONBOARDING.md](docs/DEVELOPER_ONBOARDING.md)
+- **Coding Standards**: [.github/copilot-instructions.md](.github/copilot-instructions.md)
+- **Refactoring Status**: [_bmad-output/REFACTORING-STATUS-20260112.md](_bmad-output/REFACTORING-STATUS-20260112.md)
 
 ### Backend Features Matrix
 
