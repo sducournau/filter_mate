@@ -30,7 +30,7 @@ about=🎯 FilterMate 4.1 - Your Swiss Army Knife for Spatial Data!
     🎨 Beautiful UI that adapts to your QGIS theme
     
     💡 v4.1.1: Smart PostgreSQL backend selection for PostgreSQL-only projects!
-    💡 v4.1.0: Major performance release! 2-8× faster, 85% test coverage, 106 tests.
+    💡 v4.1.0: Major performance release! 2-8× faster, 85%% test coverage, 106 tests.
     
     📖 Full docs: https://sducournau.github.io/filter_mate
 
