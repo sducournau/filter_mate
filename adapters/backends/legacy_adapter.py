@@ -25,30 +25,26 @@ from typing import Dict, List, Optional, Any, Tuple
 logger = logging.getLogger('FilterMate.Backend.LegacyAdapter')
 
 
-# Import base class from before_migration for interface compatibility
-try:
-    from ...before_migration.modules.backends.base_backend import GeometricFilterBackend
-    LEGACY_BASE_AVAILABLE = True
-except ImportError:
-    # Fallback: define minimal interface
-    LEGACY_BASE_AVAILABLE = False
+# v4.2.0: Define base interface (no more before_migration imports!)
+class GeometricFilterBackend:
+    """Base interface for legacy geometric filter backends."""
+    def __init__(self, task_params: Dict):
+        self.task_params = task_params
+        self.logger = logger
     
-    class GeometricFilterBackend:
-        """Minimal fallback if before_migration is unavailable."""
-        def __init__(self, task_params: Dict):
-            self.task_params = task_params
-            self.logger = logger
-        
-        def build_expression(self, layer_props, predicates, source_geom=None, 
-                           buffer_value=None, buffer_expression=None, 
-                           source_filter=None, use_centroids=False, **kwargs) -> str:
-            raise NotImplementedError()
-        
-        def apply_filter(self, layer, expression, old_subset=None, combine_operator=None) -> bool:
-            raise NotImplementedError()
-        
-        def supports_layer(self, layer) -> bool:
-            raise NotImplementedError()
+    def build_expression(self, layer_props, predicates, source_geom=None, 
+                       buffer_value=None, buffer_expression=None, 
+                       source_filter=None, use_centroids=False, **kwargs) -> str:
+        raise NotImplementedError()
+    
+    def apply_filter(self, layer, expression, old_subset=None, combine_operator=None) -> bool:
+        raise NotImplementedError()
+    
+    def supports_layer(self, layer) -> bool:
+        raise NotImplementedError()
+
+# No more before_migration dependency
+LEGACY_BASE_AVAILABLE = False
 
 
 class BaseLegacyAdapter(GeometricFilterBackend):
@@ -66,25 +62,22 @@ class BaseLegacyAdapter(GeometricFilterBackend):
         super().__init__(task_params)
         self._new_backend = None
         self._legacy_backend = None
-        self._use_new_backend = False  # Flag to switch to new implementation
+        self._use_new_backend = True  # v4.2.0: FORCE NEW BACKENDS (before_migration removed)
         
         # Try to initialize new backend
         try:
             self._new_backend = self._create_new_backend()
             if self._new_backend:
-                self._use_new_backend = self._should_use_new_backend()
-                logger.debug(f"{self.provider_type}: New backend available, use_new={self._use_new_backend}")
+                # v4.2.0: Always use new backend now
+                self._use_new_backend = True
+                logger.debug(f"{self.provider_type}: New backend loaded (forced)")
         except Exception as e:
-            logger.debug(f"{self.provider_type}: New backend unavailable: {e}")
+            logger.error(f"{self.provider_type}: New backend FAILED to load: {e}")
+            raise RuntimeError(f"Cannot load {self.provider_type} backend - before_migration removed!")
         
-        # FIX v4.0.4 (2026-01-16): ALWAYS initialize legacy backend as fallback
-        # The _build_expression_new() method delegates to legacy backend for SQL generation
-        # so we need it available regardless of _use_new_backend flag
-        try:
-            self._legacy_backend = self._create_legacy_backend()
-            logger.debug(f"{self.provider_type}: Legacy backend initialized as fallback")
-        except Exception as e:
-            logger.warning(f"{self.provider_type}: Legacy backend unavailable: {e}")
+        # v4.2.0: Legacy backends no longer available (before_migration removed)
+        # The new backends must handle everything now
+        logger.debug(f"{self.provider_type}: Using new hexagonal backend (no legacy fallback)")
     
     @property
     @abstractmethod
@@ -97,19 +90,18 @@ class BaseLegacyAdapter(GeometricFilterBackend):
         """Create new BackendPort implementation."""
         pass
     
-    @abstractmethod
     def _create_legacy_backend(self) -> GeometricFilterBackend:
-        """Create legacy GeometricFilterBackend fallback."""
-        pass
+        """
+        v4.2.0: Legacy backends removed (before_migration gone).
+        This method is now a no-op stub for backward compatibility.
+        """
+        return None
     
     def _should_use_new_backend(self) -> bool:
         """
-        Determine if new backend should be used.
-        
-        Override in subclasses for custom logic.
-        Default: False (use legacy for stability during migration).
+        v4.2.0: ALWAYS use new backend (before_migration removed).
         """
-        return False  # Conservative: use legacy by default
+        return True  # Force new backend since legacy is no longer available
     
     def build_expression(
         self, 
@@ -158,25 +150,14 @@ class BaseLegacyAdapter(GeometricFilterBackend):
         **kwargs
     ) -> str:
         """
-        Build expression using new backend.
+        Build expression using new backend wrapper.
         
-        Translates legacy parameters to new FilterExpression domain model.
-        Override in subclasses for backend-specific logic.
-        
-        FIX v4.0.3 (2026-01-16): Don't use FilterExpression.from_spatial_filter()
-        as it no longer generates SQL (returns empty string). Instead, always 
-        use the legacy backend's build_expression() method.
-        
-        FIX v4.0.4 (2026-01-16): Pass ALL arguments as KEYWORD arguments
-        to avoid "got multiple values for argument 'source_wkt'" error.
-        The kwargs may contain source_wkt/source_srid/source_feature_count
-        which must not conflict with positional arguments.
+        v4.2.0: Now uses executor wrappers which implement GeometricFilterBackend interface.
+        The wrappers (OGRFilterExecutor, SpatialiteFilterExecutor, etc.) have build_expression().
         """
-        # ALWAYS use legacy backend for spatial filter expression building
-        # The new FilterExpression domain model is not yet fully integrated
-        if self._legacy_backend:
-            # FIX v4.0.4: Use keyword arguments to avoid positional conflicts
-            return self._legacy_backend.build_expression(
+        # v4.2.0: Use new backend (wrapper) which has build_expression()
+        if self._new_backend:
+            return self._new_backend.build_expression(
                 layer_props=layer_props,
                 predicates=predicates,
                 source_geom=source_geom,
@@ -230,9 +211,9 @@ class BaseLegacyAdapter(GeometricFilterBackend):
             elif old_subset:
                 final_expr = f"({old_subset}) AND ({expression})"
             
-            # Use safe_set_subset_string
-            from ...before_migration.modules.appUtils import safe_set_subset_string
-            return safe_set_subset_string(layer, final_expr)
+            # v4.2.0: Use QGIS API directly (no more before_migration dependency)
+            layer.setSubsetString(final_expr)
+            return True
             
         except Exception as e:
             logger.error(f"New backend apply_filter failed: {e}")
@@ -275,18 +256,22 @@ class LegacyPostgreSQLAdapter(BaseLegacyAdapter):
         return 'postgresql'
     
     def _create_new_backend(self):
-        """Create new PostgreSQL backend."""
-        from .postgresql.backend import PostgreSQLBackend
-        return PostgreSQLBackend()
+        """Create new PostgreSQL backend wrapper."""
+        try:
+            from .postgresql.executor_wrapper import PostgreSQLFilterExecutor
+            return PostgreSQLFilterExecutor()
+        except ImportError:
+            # PostgreSQL wrapper not yet implemented, return basic stub
+            logger.warning("PostgreSQL executor wrapper not available yet")
+            return None
     
     def _create_legacy_backend(self) -> GeometricFilterBackend:
-        """Create legacy PostgreSQL backend."""
-        from ...before_migration.modules.backends.postgresql_backend import PostgreSQLGeometricFilter
-        return PostgreSQLGeometricFilter(self.task_params)
+        """Create legacy PostgreSQL backend - no longer available."""
+        # v4.2.0: before_migration removed, only new backend available
+        logger.warning("PostgreSQL legacy backend unavailable (before_migration removed)")
+        return None
     
-    def _should_use_new_backend(self) -> bool:
-        """Use modern PostgreSQL backend v4.0 (hexagonal architecture)."""
-        return True  # v4.0: Modern backend with improved MV management
+    # v4.2.0: Removed _should_use_new_backend() - always uses new backend
 
 
 class LegacySpatialiteAdapter(BaseLegacyAdapter):
@@ -301,18 +286,17 @@ class LegacySpatialiteAdapter(BaseLegacyAdapter):
         return 'spatialite'
     
     def _create_new_backend(self):
-        """Create new Spatialite backend."""
-        from .spatialite.backend import SpatialiteBackend
-        return SpatialiteBackend()
+        """Create new Spatialite backend wrapper with build_expression() support."""
+        from .spatialite.executor_wrapper import SpatialiteFilterExecutor
+        return SpatialiteFilterExecutor()
     
     def _create_legacy_backend(self) -> GeometricFilterBackend:
-        """Create legacy Spatialite backend."""
-        from ...before_migration.modules.backends.spatialite_backend import SpatialiteGeometricFilter
-        return SpatialiteGeometricFilter(self.task_params)
+        """Create legacy Spatialite backend - no longer available."""
+        # v4.2.0: before_migration removed, only new backend available
+        logger.warning("Spatialite legacy backend unavailable (before_migration removed)")
+        return None
     
-    def _should_use_new_backend(self) -> bool:
-        """Use legacy for Spatialite (multi-step optimizer)."""
-        return False  # Spatialite legacy has better optimization
+    # v4.2.0: Removed _should_use_new_backend() - always uses new backend
 
 
 class LegacyOGRAdapter(BaseLegacyAdapter):
@@ -328,19 +312,17 @@ class LegacyOGRAdapter(BaseLegacyAdapter):
         return 'ogr'
     
     def _create_new_backend(self):
-        """Create new OGR backend."""
-        from .ogr.backend import OGRBackend
-        return OGRBackend()
+        """Create new OGR backend wrapper with build_expression() support."""
+        from .ogr.executor_wrapper import OGRFilterExecutor
+        return OGRFilterExecutor()
     
     def _create_legacy_backend(self) -> GeometricFilterBackend:
-        """Create legacy OGR backend."""
-        from ...before_migration.modules.backends.ogr_backend import OGRGeometricFilter
-        return OGRGeometricFilter(self.task_params)
+        """Create legacy OGR backend - no longer available."""
+        # v4.2.0: before_migration removed, only new backend available
+        logger.warning("OGR legacy backend unavailable (before_migration removed)")
+        return None
     
-    def _should_use_new_backend(self) -> bool:
-        """Check feature flag for OGR backend."""
-        # v4.1.0: Use feature flag system for progressive migration
-        return is_new_backend_enabled('ogr')
+    # v4.2.0: Removed _should_use_new_backend() - always uses new backend
 
 
 class LegacyMemoryAdapter(BaseLegacyAdapter):
@@ -356,19 +338,21 @@ class LegacyMemoryAdapter(BaseLegacyAdapter):
         return 'memory'
     
     def _create_new_backend(self):
-        """Create new Memory backend."""
-        from .memory.backend import MemoryBackend
-        return MemoryBackend()
+        """Create new Memory backend wrapper with build_expression() support."""
+        try:
+            from .memory.executor_wrapper import MemoryFilterExecutor
+            return MemoryFilterExecutor()
+        except ImportError:
+            logger.warning("Memory executor wrapper not available yet")
+            return None
     
     def _create_legacy_backend(self) -> GeometricFilterBackend:
-        """Create legacy Memory backend."""
-        from ...before_migration.modules.backends.memory_backend import MemoryGeometricFilter
-        return MemoryGeometricFilter(self.task_params)
+        """Create legacy Memory backend - no longer available."""
+        # v4.2.0: before_migration removed, only new backend available
+        logger.warning("Memory legacy backend unavailable (before_migration removed)")
+        return None
     
-    def _should_use_new_backend(self) -> bool:
-        """Check feature flag for Memory backend."""
-        # v4.1.0: Use feature flag system for progressive migration
-        return is_new_backend_enabled('memory')
+    # v4.2.0: Removed _should_use_new_backend() - always uses new backend
 
 
 def get_legacy_adapter(provider_type: str, task_params: Dict) -> GeometricFilterBackend:

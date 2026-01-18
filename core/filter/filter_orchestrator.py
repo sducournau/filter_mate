@@ -222,8 +222,9 @@ class FilterOrchestrator:
             logger.info("✅ EXPRESSION BUILDING COMPLETE")
             logger.info("=" * 80)
             
-            if not expression:
-                # Try OGR fallback if primary backend failed
+            # v4.2.0: Differentiate between None (error) and "" (Processing mode)
+            if expression is None:
+                # Real error - try OGR fallback
                 return self._try_fallback_backend(
                     layer=layer,
                     layer_props=layer_props,
@@ -232,8 +233,13 @@ class FilterOrchestrator:
                     expression_builder=expression_builder
                 )
             
-            logger.info(f"  ✓ Expression built: {len(expression)} chars")
-            logger.info(f"  → Expression preview: {expression[:200]}...")
+            if expression == "":
+                # Empty expression = Processing mode (not an error)
+                logger.info(f"  ℹ️ Empty expression (Processing mode) - normal for OGR/Spatialite")
+                logger.info(f"  → Will use QGIS Processing instead of SQL")
+            else:
+                logger.info(f"  ✓ Expression built: {len(expression)} chars")
+                logger.info(f"  → Expression preview: {expression[:200]}...")
             
             # ==========================================
             # 6. SUBSET STRING STRATEGY

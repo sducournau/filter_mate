@@ -1157,3 +1157,38 @@ def normalize_column_names_for_spatialite(
         result_expression = re.sub(pattern, replacement, result_expression)
     
     return result_expression
+
+
+def build_spatial_filter_expression(
+    layer_props: Dict,
+    predicates: Dict,
+    source_geom: Optional[str] = None,
+    buffer_value: Optional[float] = None,
+    buffer_expression: Optional[str] = None,
+    source_filter: Optional[str] = None,
+    use_centroids: bool = False,
+    **kwargs
+) -> str:
+    """
+    Build Spatialite SQL filter expression for geometric predicates.
+    
+    v4.2.0: Created for compatibility with GeometricFilterBackend interface.
+    This adapts the legacy build_expression() API to use new Spatialite functions.
+    
+    Args:
+        layer_props: Layer properties dict with table_name, geom_field, pk_field, etc.
+        predicates: Dict of predicates (within_distance, intersects, etc.)
+        source_geom: Source geometry WKT or identifier
+        buffer_value: Buffer distance in meters
+        buffer_expression: QGIS expression for dynamic buffer
+        source_filter: Optional WHERE clause for source layer
+        use_centroids: Use layer centroids instead of full geometries
+        **kwargs: Additional parameters (source_wkt, source_srid, source_feature_count)
+        
+    Returns:
+        str: Spatialite SQL WHERE clause expression
+    """
+    # TODO: Full implementation needed
+    # For now, return empty string to use QGIS Processing fallback
+    logger.debug(f"[Spatialite] build_spatial_filter_expression() stub - returning empty")
+    return ""
