@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 3.0.1** | January 2026 | **Production-Ready** 🎉
+**Version 4.1.1** | January 2026 | **Production-Ready** 🎉
 
 > 🚀 The ultimate spatial filtering plugin! Explore, filter & export vector data with lightning-fast performance on ANY data source.
 
@@ -27,14 +27,25 @@
 
 ## 📋 Recent Changes
 
-### 🐛 v3.0.1 - Critical OGR Fallback Fix (January 2026)
+### � v4.1.1 - PostgreSQL-Only Project Fix (January 2026)
 
-**Critical stability fix** for OGR fallback failures in multi-layer filtering scenarios.
+**Smart backend selection** for PostgreSQL-only projects eliminates performance degradation.
 
-- **Fixed:** Qt garbage collection destroying GEOS-safe layers before processing
-- **Impact:** Eliminates intermittent "C++ object deleted" errors
-- **Stability:** Tested with 20+ layer filtering iterations
+- **Fixed:** PostgreSQL layers in PostgreSQL-only projects now consistently use PostgreSQL backend
+- **Hybrid Detection:** Combines smart initialization + dynamic updates
+- **Impact:** Prevents unwanted MEMORY backend fallback for small datasets (<5,000 features)
+- **Enhancement:** Favorites now restore spatial context (task_features, predicates)
+- **Cleanup:** Removed 600+ lines of diagnostic code, integrated into production logging
 - See [CHANGELOG.md](CHANGELOG.md) for complete details
+
+### 🚀 v4.1.0 - Performance & Quality Release (January 2026)
+
+**Major performance improvements** with 2-8× faster filtering and 85% test coverage.
+
+- **Performance:** 4 new optimizers (Auto Backend, Multi-Step, Cache, Async)
+- **Quality:** 106 automated tests (+1,567% vs v4.0), 85% coverage
+- **Stability:** 3 critical bug fixes (PostgreSQL EXISTS, Spatialite actions, Exploring reload)
+- **Documentation:** 1,000+ lines of professional documentation
 
 ### 🎉 v3.0.0 - Major Milestone Release (January 2026)
 

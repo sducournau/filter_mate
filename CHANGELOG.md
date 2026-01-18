@@ -14,9 +14,86 @@ All notable changes to FilterMate will be documented in this file.
   - File: `adapters/backends/factory.py` (+60 lines)
   - New method: `_detect_project_is_postgresql_only()` - Auto-detection at startup
   - Enhanced: `update_project_context()` - Logs state changes
-  - Diagnostic: `DIAGNOSTIC_POSTGRESQL_PROJECT.py` - Verify detection in QGIS Console
   - Tests: `tests/test_postgresql_only_project.py` (5 tests)
   - **Impact**: Projects with ONLY PostgreSQL layers now use PostgreSQL backend consistently
+
+#### Favorites Persistence & Spatial Config Restoration
+- **SQLite Persistence**: Favorites now emit `favorites_changed` signal after loading from database
+- **UI Auto-Update**: FavoritesController automatically refreshes indicator on database load
+- **Spatial Config Capture**: Favorites now save `task_features` (selected FIDs) and predicates
+- **Context Restoration**: Apply favorite restores spatial context for proper EXISTS rebuilding
+- **Prevents Bug**: Stops `_clean_corrupted_subsets()` from erasing valid remote layer filters
+- Files: `core/services/favorites_service.py`, `ui/controllers/favorites_controller.py`
+- New methods: `_capture_spatial_config()`, `_restore_spatial_config()`
+- Documentation: `docs/FAVORITES_PERSISTENCE.md` (250+ lines comprehensive guide)
+
+#### Filter Orchestrator - EXISTS Validation
+- **Smart Cleanup**: `_clean_corrupted_subsets()` now validates EXISTS expressions with regex
+- **Prevents Erasure**: Only cleans TRULY corrupted subsets, not valid EXISTS queries
+- **Pattern**: `EXISTS (SELECT ... FROM ... AS __source WHERE ...)` recognized as valid
+- File: `core/filter/filter_orchestrator.py`
+
+#### Layer Organizer - PostgreSQL Always Native
+- **Simplified Logic**: PostgreSQL layers ALWAYS use PostgreSQL backend (QGIS native API)
+- **No OGR Fallback**: Removed confusing fallback that broke spatial filtering
+- **Cleaner Logs**: Eliminated diagnostic noise, kept only essential INFO messages
+- File: `core/services/layer_organizer.py`
+
+### Improved
+
+#### UI Enhancements
+- **Favorites Indicator**: Larger badge (padding: 3px→10px, font: 8pt→9pt)
+- **Feature Picker**: Fixed double-clear bug in `setDisplayExpression()` + `setLayer()` sequence
+- Files: `filter_mate_dockwidget.py`, `ui/widgets/custom_widgets.py`
+
+#### Logging Improvements
+- **Enhanced Logging**: Added ✓ checkmarks for success messages across favorites system
+- **Debug Details**: Database path, project UUID, and loaded favorites now logged
+- **PostgreSQL Events**: 🐘 emoji marks PostgreSQL-specific backend decisions
+- Files: `adapters/backends/factory.py`, `core/domain/favorites_manager.py`
+
+### Removed
+
+#### Diagnostic Scripts Cleanup
+- **600+ lines removed**: Diagnostic scripts integrated into production code with proper logging
+- Removed files:
+  - `DIAGNOSTIC_FILTER.py` (112 lines)
+  - `DIAGNOSTIC_SOURCE_FILTER_EXISTS.py` (300 lines)
+  - `ENABLE_DEBUG_LOGGING.py` (44 lines)
+  - `ENABLE_LOGGING.py` (66 lines)
+  - `fix_imports.py` (122 lines)
+- **Impact**: Cleaner codebase, all diagnostic features available via production logging
+
+### Documentation
+
+#### New Documentation
+- **FAVORITES_PERSISTENCE.md**: Comprehensive 250+ line guide covering:
+  - SQLite architecture and schema
+  - Persistence flow diagrams
+  - Troubleshooting guide (4 common problems)
+  - API reference with code examples
+  - Migration from v3.0 variables-based system
+  - Test script for verification
+
+### Testing
+
+#### New Tests
+- **test_postgresql_only_project.py**: 5 tests for smart initialization
+  - `test_detect_postgresql_only_project_at_startup()`
+  - `test_detect_mixed_project_at_startup()`
+  - `test_dynamic_update_overrides_initial_detection()`
+  - `test_is_all_layers_postgresql_helper()`
+  - Coverage: Backend selection, initialization, dynamic updates
+
+### Statistics
+
+- **Files changed**: 15
+- **Lines added**: ~380 (code + docs + tests)
+- **Lines removed**: ~600 (diagnostic cleanup)
+- **Net change**: -220 lines (cleaner codebase)
+- **New tests**: 5
+- **Documentation**: 1 comprehensive guide (250+ lines)
+- **Test coverage**: Maintained at ~75%
 
 ## [4.1.0] - 2026-01-17 🚀 PRODUCTION RELEASE
 
