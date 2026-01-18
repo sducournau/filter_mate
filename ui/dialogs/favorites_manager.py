@@ -88,40 +88,45 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
     def _setup_ui(self):
         """Build the dialog UI."""
         self.setWindowTitle("FilterMate - Favorites Manager")
-        self.setMinimumSize(550, 400)
-        self.resize(650, 480)
+        self.setMinimumSize(600, 450)
+        self.resize(720, 520)
         self.setModal(True)
         
+        # Apply FilterMate dialog style
+        self.setStyleSheet(self._get_dialog_stylesheet())
+        
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(8)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
         
         # Header with count (handle None favorites_manager)
         fav_count = self._favorites_manager.count if self._favorites_manager else 0
         self._header_label = QLabel(
             f"<b>Saved Favorites ({fav_count})</b>"
         )
-        self._header_label.setStyleSheet("font-size: 11pt; margin-bottom: 5px;")
+        self._header_label.setObjectName("dialogHeader")
         layout.addWidget(self._header_label)
         
         # Search box
         search_layout = QHBoxLayout()
+        search_layout.setSpacing(8)
         search_label = QLabel("🔍")
-        search_label.setStyleSheet("font-size: 12pt;")
+        search_label.setObjectName("searchIcon")
         search_layout.addWidget(search_label)
         
         self._search_edit = QLineEdit()
+        self._search_edit.setObjectName("searchEdit")
         self._search_edit.setPlaceholderText(
             "Search by name, expression, tags, or description..."
         )
         self._search_edit.setClearButtonEnabled(True)
-        self._search_edit.setStyleSheet("padding: 4px 8px; border-radius: 4px;")
         self._search_edit.textChanged.connect(self._on_search_changed)
         search_layout.addWidget(self._search_edit)
         layout.addLayout(search_layout)
         
         # Main content with splitter
         splitter = QSplitter(Qt.Horizontal)
+        splitter.setObjectName("mainSplitter")
         
         # Left panel: List of favorites
         left_panel = self._create_left_panel()
@@ -132,7 +137,7 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         splitter.addWidget(right_panel)
         
         # Set splitter proportions (30% list, 70% details)
-        splitter.setSizes([200, 450])
+        splitter.setSizes([220, 480])
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 2)
         layout.addWidget(splitter, 1)
@@ -151,6 +156,192 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         # Select first item
         if self._list_widget.count() > 0:
             self._list_widget.setCurrentRow(0)
+    
+    def _get_dialog_stylesheet(self) -> str:
+        """Get FilterMate harmonized stylesheet for the dialog."""
+        return """
+            /* Dialog background */
+            QDialog {
+                background-color: #f8f9fa;
+            }
+            
+            /* Header */
+            QLabel#dialogHeader {
+                font-size: 14pt;
+                font-weight: 600;
+                color: #2c3e50;
+                padding: 8px 0px;
+                margin-bottom: 4px;
+            }
+            
+            /* Search */
+            QLabel#searchIcon {
+                font-size: 14pt;
+                padding: 4px;
+            }
+            QLineEdit#searchEdit {
+                padding: 8px 12px;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                background-color: white;
+                font-size: 10pt;
+            }
+            QLineEdit#searchEdit:focus {
+                border-color: #f39c12;
+                background-color: #fffef5;
+            }
+            
+            /* List widget */
+            QListWidget {
+                background-color: white;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                padding: 4px;
+                font-size: 10pt;
+            }
+            QListWidget::item {
+                padding: 8px 10px;
+                border-radius: 6px;
+                margin: 2px 0px;
+            }
+            QListWidget::item:selected {
+                background-color: #f5b041;
+                color: white;
+            }
+            QListWidget::item:hover:!selected {
+                background-color: #fef5e7;
+            }
+            
+            /* Tab widget */
+            QTabWidget::pane {
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                background-color: white;
+                padding: 8px;
+            }
+            QTabBar::tab {
+                background-color: #f0f0f0;
+                border: 1px solid #ddd;
+                border-bottom: none;
+                padding: 8px 16px;
+                margin-right: 2px;
+                border-top-left-radius: 6px;
+                border-top-right-radius: 6px;
+                font-size: 9pt;
+            }
+            QTabBar::tab:selected {
+                background-color: white;
+                border-bottom: 1px solid white;
+                font-weight: 500;
+            }
+            QTabBar::tab:hover:!selected {
+                background-color: #fef5e7;
+            }
+            
+            /* Form inputs */
+            QLineEdit, QTextEdit {
+                border: 1px solid #ddd;
+                border-radius: 6px;
+                padding: 6px 10px;
+                background-color: white;
+                font-size: 10pt;
+            }
+            QLineEdit:focus, QTextEdit:focus {
+                border-color: #f39c12;
+                background-color: #fffef5;
+            }
+            
+            /* Tree widget */
+            QTreeWidget {
+                background-color: white;
+                border: 1px solid #e0e0e0;
+                border-radius: 6px;
+                alternate-background-color: #fafafa;
+            }
+            QTreeWidget::item {
+                padding: 4px;
+            }
+            QHeaderView::section {
+                background-color: #f5f5f5;
+                padding: 6px 8px;
+                border: none;
+                border-bottom: 1px solid #ddd;
+                font-weight: 500;
+            }
+            
+            /* Buttons - FilterMate mousse style */
+            QPushButton {
+                padding: 8px 16px;
+                border-radius: 8px;
+                font-size: 10pt;
+                font-weight: 500;
+                border: none;
+            }
+            QPushButton#applyBtn {
+                background-color: #27ae60;
+                color: white;
+            }
+            QPushButton#applyBtn:hover {
+                background-color: #219a52;
+            }
+            QPushButton#applyBtn:disabled {
+                background-color: #95d5b2;
+                color: #e8e8e8;
+            }
+            QPushButton#saveBtn {
+                background-color: #3498db;
+                color: white;
+            }
+            QPushButton#saveBtn:hover {
+                background-color: #2980b9;
+            }
+            QPushButton#saveBtn:disabled {
+                background-color: #a9cce3;
+                color: #e8e8e8;
+            }
+            QPushButton#deleteBtn {
+                background-color: #e74c3c;
+                color: white;
+            }
+            QPushButton#deleteBtn:hover {
+                background-color: #c0392b;
+            }
+            QPushButton#deleteBtn:disabled {
+                background-color: #f5b7b1;
+                color: #e8e8e8;
+            }
+            QPushButton#closeBtn {
+                background-color: #ecf0f1;
+                color: #2c3e50;
+                border: 1px solid #bdc3c7;
+            }
+            QPushButton#closeBtn:hover {
+                background-color: #d5dbdb;
+            }
+            
+            /* Labels */
+            QLabel {
+                color: #34495e;
+            }
+            QLabel#infoLabel {
+                color: #7f8c8d;
+                font-size: 9pt;
+            }
+            QLabel#noRemoteLabel {
+                color: #95a5a6;
+                font-style: italic;
+                padding: 20px;
+            }
+            
+            /* Splitter */
+            QSplitter::handle {
+                background-color: #e0e0e0;
+                width: 3px;
+            }
+            QSplitter::handle:hover {
+                background-color: #f39c12;
+            }
+        """
     
     def _create_left_panel(self) -> QWidget:
         """Create the left panel with favorites list."""
@@ -196,8 +387,8 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         """Create the General Info tab."""
         general_tab = QWidget()
         general_layout = QFormLayout(general_tab)
-        general_layout.setContentsMargins(8, 8, 8, 8)
-        general_layout.setSpacing(6)
+        general_layout.setContentsMargins(12, 12, 12, 12)
+        general_layout.setSpacing(10)
         general_layout.setRowWrapPolicy(QFormLayout.DontWrapRows)
         
         self._name_edit = QLineEdit()
@@ -205,7 +396,7 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         general_layout.addRow("Name:", self._name_edit)
         
         self._description_edit = QTextEdit()
-        self._description_edit.setMaximumHeight(60)
+        self._description_edit.setMaximumHeight(70)
         self._description_edit.setPlaceholderText("Description (auto-generated, editable)")
         general_layout.addRow("Description:", self._description_edit)
         
@@ -219,20 +410,20 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         general_layout.addRow("Tags:", self._tags_edit)
         
         self._layer_label = QLabel("-")
-        self._layer_label.setStyleSheet("color: #555;")
+        self._layer_label.setObjectName("infoLabel")
         self._layer_label.setWordWrap(True)
         general_layout.addRow("Source Layer:", self._layer_label)
         
         self._provider_label = QLabel("-")
-        self._provider_label.setStyleSheet("color: #777;")
+        self._provider_label.setObjectName("infoLabel")
         general_layout.addRow("Provider:", self._provider_label)
         
         # Stats row
         stats_layout = QHBoxLayout()
-        stats_layout.setContentsMargins(0, 0, 0, 0)
+        stats_layout.setContentsMargins(0, 4, 0, 0)
         self._use_count_label = QLabel("-")
         self._created_label = QLabel("-")
-        self._created_label.setStyleSheet("color: #777; font-size: 9pt;")
+        self._created_label.setObjectName("infoLabel")
         stats_layout.addWidget(QLabel("Used:"))
         stats_layout.addWidget(self._use_count_label)
         stats_layout.addStretch()
@@ -246,8 +437,8 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         """Create the Expression tab."""
         expr_tab = QWidget()
         expr_layout = QVBoxLayout(expr_tab)
-        expr_layout.setContentsMargins(8, 8, 8, 8)
-        expr_layout.setSpacing(4)
+        expr_layout.setContentsMargins(12, 12, 12, 12)
+        expr_layout.setSpacing(8)
         
         source_expr_label = QLabel("<b>Source Layer Expression:</b>")
         expr_layout.addWidget(source_expr_label)
@@ -255,7 +446,7 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         self._expression_edit = QTextEdit()
         self._expression_edit.setPlaceholderText("Filter expression for source layer")
         self._expression_edit.setStyleSheet(
-            "font-family: monospace; font-size: 10pt;"
+            "font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 10pt;"
         )
         expr_layout.addWidget(self._expression_edit)
         
@@ -265,8 +456,8 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         """Create the Remote Layers tab."""
         remote_tab = QWidget()
         remote_layout = QVBoxLayout(remote_tab)
-        remote_layout.setContentsMargins(8, 8, 8, 8)
-        remote_layout.setSpacing(4)
+        remote_layout.setContentsMargins(12, 12, 12, 12)
+        remote_layout.setSpacing(8)
         
         remote_header = QLabel("<b>Filtered Remote Layers:</b>")
         remote_layout.addWidget(remote_header)
@@ -281,7 +472,7 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         remote_layout.addWidget(self._remote_tree)
         
         self._no_remote_label = QLabel("<i>No remote layers in this favorite</i>")
-        self._no_remote_label.setStyleSheet("color: #888; padding: 10px;")
+        self._no_remote_label.setObjectName("noRemoteLabel")
         self._no_remote_label.setAlignment(Qt.AlignCenter)
         remote_layout.addWidget(self._no_remote_label)
         
@@ -290,30 +481,30 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
     def _create_buttons(self) -> QHBoxLayout:
         """Create the button row."""
         button_layout = QHBoxLayout()
-        button_layout.setContentsMargins(0, 8, 0, 0)
+        button_layout.setContentsMargins(0, 12, 0, 0)
+        button_layout.setSpacing(10)
         
         self._apply_btn = QPushButton("▶ Apply")
+        self._apply_btn.setObjectName("applyBtn")
         self._apply_btn.setEnabled(False)
-        self._apply_btn.setStyleSheet(
-            "background-color: #27ae60; color: white; "
-            "font-weight: bold; padding: 6px 12px;"
-        )
+        self._apply_btn.setToolTip("Apply this favorite filter to the project")
         self._apply_btn.clicked.connect(self._on_apply)
         
         self._save_btn = QPushButton("💾 Save Changes")
+        self._save_btn.setObjectName("saveBtn")
         self._save_btn.setEnabled(False)
-        self._save_btn.setStyleSheet("padding: 6px 12px;")
+        self._save_btn.setToolTip("Save modifications to this favorite")
         self._save_btn.clicked.connect(self._on_save)
         
         self._delete_btn = QPushButton("🗑️ Delete")
+        self._delete_btn.setObjectName("deleteBtn")
         self._delete_btn.setEnabled(False)
-        self._delete_btn.setStyleSheet(
-            "background-color: #e74c3c; color: white; padding: 6px 12px;"
-        )
+        self._delete_btn.setToolTip("Permanently delete this favorite")
         self._delete_btn.clicked.connect(self._on_delete)
         
         close_btn = QPushButton("Close")
-        close_btn.setStyleSheet("padding: 6px 12px;")
+        close_btn.setObjectName("closeBtn")
+        close_btn.setToolTip("Close this dialog")
         close_btn.clicked.connect(self.reject)
         
         button_layout.addWidget(self._apply_btn)

@@ -153,6 +153,13 @@ class FavoritesController(BaseController):
         Shows the favorites context menu.
         """
         print(f"🔧 handle_indicator_clicked() - _favorites_manager={self._favorites_manager}, _initialized={self._initialized}")
+        
+        # Lazy initialization fallback - if setup() was never called, do it now
+        if not self._initialized:
+            print("🔧 handle_indicator_clicked: setup() was never called - performing lazy initialization...")
+            self.setup()
+            print(f"🔧 After lazy setup: _favorites_manager={self._favorites_manager}, _initialized={self._initialized}")
+        
         self._show_favorites_menu()
 
     def add_current_to_favorites(self, name: Optional[str] = None) -> bool:

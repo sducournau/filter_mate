@@ -116,6 +116,7 @@ class BackendController(BaseController):
         self._current_provider_type: Optional[str] = None
         self._current_postgresql_available: Optional[bool] = None
         self._indicator_label: Optional[QLabel] = None
+        self._initialized: bool = False
         # Optimization settings
         self._optimization_enabled: bool = True
         self._centroid_auto_enabled: bool = True
@@ -478,7 +479,14 @@ class BackendController(BaseController):
 
         Shows backend selection menu or triggers reload if no layers.
         """
-        print("🔧 BackendController.handle_indicator_clicked() START")
+        print(f"🔧 BackendController.handle_indicator_clicked() START - _initialized={self._initialized}")
+        
+        # Lazy initialization fallback
+        if not self._initialized:
+            print("🔧 BackendController: setup() was never called - performing lazy initialization...")
+            self.setup()
+            print(f"🔧 After lazy setup: _initialized={self._initialized}")
+        
         # Check if in waiting state (no layers)
         if self._indicator_label:
             text = self._indicator_label.text()

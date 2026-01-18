@@ -784,6 +784,10 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 if feat_widget:
                     feat_widget.setEnabled(True)
                     try:
+                        # FIX 2026-01-18 v13: Skip setLayer for multiple_selection during QGIS sync
+                        # setLayer calls setDisplayExpression which rebuilds the list and clears checked items
+                        # The _sync_multiple_selection_from_qgis will handle widget population
+                        is_syncing = getattr(dw, '_syncing_from_qgis', False)
                         if mode == 'single_selection':
                             feat_widget.setLayer(target_layer)
                             if layer_props:
@@ -792,7 +796,16 @@ class ExploringController(BaseController, LayerSelectionMixin):
                                     feat_widget.setDisplayExpression(expr)
                             feat_widget.setAllowNull(True)
                         elif mode == 'multiple_selection' and layer_props:
-                            feat_widget.setLayer(target_layer, layer_props)
+                            if is_syncing:
+                                # During QGIS sync, only set layer if list widget doesn't exist
+                                layer_id = target_layer.id() if target_layer else None
+                                if layer_id and (not hasattr(feat_widget, 'list_widgets') or layer_id not in feat_widget.list_widgets):
+                                    logger.debug("configure_groupbox: Creating list_widgets during sync")
+                                    feat_widget.setLayer(target_layer, layer_props, skip_task=True, preserve_checked=True)
+                                else:
+                                    logger.debug("configure_groupbox: Skipping setLayer during QGIS sync (list exists)")
+                            else:
+                                feat_widget.setLayer(target_layer, layer_props)
                     except (AttributeError, RuntimeError) as e:
                         logger.warning(f"Could not configure {feat_key}: {e}")
             
@@ -2073,15 +2086,10 @@ class ExploringController(BaseController, LayerSelectionMixin):
         is_selecting_from_button = dw.pushButton_checkable_exploring_selecting.isChecked() if hasattr(dw, 'pushButton_checkable_exploring_selecting') else False
         
         if is_selecting_from_button and not getattr(dw, '_syncing_from_qgis', False):
-            # Auto-switch only if not syncing from QGIS (to prevent infinite loops)
-            if feature_count == 1 and current_groupbox == "multiple_selection":
-                logger.info(f"handle_exploring_features_result: Auto-switching to single_selection (1 feature from widget)")
-                try:
-                    dw._force_exploring_groupbox_exclusive("single_selection")
-                    dw._configure_single_selection_groupbox()
-                except Exception as e:
-                    logger.warning(f"Auto-switch to single_selection failed: {e}")
-            elif feature_count > 1 and current_groupbox == "single_selection":
+            # Auto-switch only from single to multiple (not the reverse)
+            # FIX 2026-01-18: Don't auto-switch from multiple_selection to single_selection
+            # User should stay on multiple_selection even with 1 feature selected
+            if feature_count > 1 and current_groupbox == "single_selection":
                 logger.info(f"handle_exploring_features_result: Auto-switching to multiple_selection ({feature_count} features from widget)")
                 try:
                     dw._force_exploring_groupbox_exclusive("multiple_selection")
@@ -2909,19 +2917,18 @@ class ExploringController(BaseController, LayerSelectionMixin):
             self._dockwidget._syncing_from_qgis = True
             try:
                 # Auto-switch groupbox based on selection count
-                if selected_count == 1 and current_groupbox == "multiple_selection":
-                    logger.info("  🔀 Auto-switching to single_selection groupbox (1 feature)")
-                    self._dockwidget._force_exploring_groupbox_exclusive("single_selection")
-                    self._dockwidget._configure_single_selection_groupbox()
-                    logger.info("  ✅ Switched to single_selection")
-                        
-                elif selected_count > 1 and current_groupbox == "single_selection":
+                # FIX 2026-01-18: Only auto-switch from single to multiple, NOT the reverse
+                # User should stay on multiple_selection even with 1 feature selected
+                if selected_count > 1 and current_groupbox == "single_selection":
                     logger.info(f"  🔀 Auto-switching to multiple_selection groupbox ({selected_count} features)")
                     self._dockwidget._force_exploring_groupbox_exclusive("multiple_selection")
                     self._dockwidget._configure_multiple_selection_groupbox()
                     logger.info("  ✅ Switched to multiple_selection")
                 else:
                     logger.info(f"  ℹ️ No groupbox switch needed (count={selected_count}, current={current_groupbox})")
+                    # FIX 2026-01-18: Ensure multiple_selection groupbox is configured even without switch
+                    if current_groupbox == "multiple_selection":
+                        self._dockwidget._configure_multiple_selection_groupbox()
                 
                 # Sync both widgets (still under _syncing_from_qgis protection)
                 logger.info("  🔧 Syncing single selection widget...")
@@ -3022,38 +3029,47 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 layer_props = self._dockwidget.PROJECT_LAYERS.get(self._dockwidget.current_layer.id(), {})
                 pk_name = layer_props.get("infos", {}).get("primary_key_name")
                 
-                # FIX 2026-01-18 v2: Ensure list widget exists and is populated
+                # FIX 2026-01-18 v12: Check if list widget exists AND has items before deciding to rebuild
                 layer_id = self._dockwidget.current_layer.id()
-                if not hasattr(multi_widget, 'list_widgets') or layer_id not in multi_widget.list_widgets:
-                    logger.info("  📋 List widget missing, creating via setLayer...")
-                    # FIX 2026-01-18 v8: Use preserve_checked=True when syncing from QGIS
-                    multi_widget.setLayer(self._dockwidget.current_layer, layer_props, skip_task=False, preserve_checked=True)
+                list_needs_rebuild = False
                 
-                # Check if list is empty and needs population
-                if hasattr(multi_widget, 'list_widgets') and layer_id in multi_widget.list_widgets:
-                    list_widget = multi_widget.list_widgets[layer_id]
-                    if list_widget.count() == 0:
-                        logger.info("  📋 List is empty, populating features...")
-                        # Get display expression - ENSURE we have a valid expression
-                        display_expr = layer_props.get("exploring", {}).get("multiple_selection_expression", "")
-                        
-                        # FIX 2026-01-18 v3: If display_expr is empty, use fallback
-                        if not display_expr or display_expr.strip() == '':
-                            if pk_name:
-                                display_expr = pk_name
+                if not hasattr(multi_widget, 'list_widgets') or layer_id not in multi_widget.list_widgets:
+                    list_needs_rebuild = True
+                    logger.info("  📋 List widget missing")
+                elif multi_widget.list_widgets[layer_id].count() == 0:
+                    list_needs_rebuild = True
+                    logger.info("  📋 List is empty")
+                else:
+                    logger.info(f"  📋 List already populated with {multi_widget.list_widgets[layer_id].count()} items - skipping rebuild")
+                
+                # Only rebuild list if necessary - don't clear an existing populated list!
+                if list_needs_rebuild:
+                    logger.info("  📋 Building list...")
+                    # Get display expression - ENSURE we have a valid expression
+                    display_expr = layer_props.get("exploring", {}).get("multiple_selection_expression", "")
+                    
+                    # FIX 2026-01-18 v3: If display_expr is empty, use fallback
+                    if not display_expr or display_expr.strip() == '':
+                        if pk_name:
+                            display_expr = pk_name
+                        else:
+                            # Use first field as absolute fallback
+                            fields = self._dockwidget.current_layer.fields()
+                            if fields.count() > 0:
+                                display_expr = fields[0].name()
                             else:
-                                # Use first field as absolute fallback
-                                fields = self._dockwidget.current_layer.fields()
-                                if fields.count() > 0:
-                                    display_expr = fields[0].name()
-                                else:
-                                    display_expr = "$id"  # Ultimate fallback
-                            logger.debug(f"  Using fallback display expression: '{display_expr}'")
-                        
-                        # Force populate - DON'T skip task when list is empty
-                        # FIX 2026-01-18 v8: Use preserve_checked=True to not lose checked items
-                        multi_widget.setDisplayExpression(display_expr, preserve_checked=True)
-                        logger.info(f"  ✓ List populated with {list_widget.count()} items")
+                                display_expr = "$id"  # Ultimate fallback
+                        logger.debug(f"  Using fallback display expression: '{display_expr}'")
+                    
+                    # First ensure the list widget structure exists
+                    if not hasattr(multi_widget, 'list_widgets') or layer_id not in multi_widget.list_widgets:
+                        multi_widget.setLayer(self._dockwidget.current_layer, layer_props, skip_task=True, preserve_checked=False)
+                    
+                    # Now populate with the expression
+                    multi_widget.setDisplayExpression(display_expr, skip_task=False, preserve_checked=False)
+                    
+                    if hasattr(multi_widget, 'list_widgets') and layer_id in multi_widget.list_widgets:
+                        logger.info(f"  ✓ List populated with {multi_widget.list_widgets[layer_id].count()} items")
                 
                 # Build the selection list from selected features
                 feature_ids = []

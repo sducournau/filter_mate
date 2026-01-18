@@ -1756,6 +1756,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def dockwidget_widgets_configuration(self):
         """Configure widgets via ConfigurationManager and setup controllers."""
+        print("🔧 dockwidget_widgets_configuration() START")
         if self._configuration_manager is None: self._configuration_manager = ConfigurationManager(self)
         self.layer_properties_tuples_dict = self._configuration_manager.get_layer_properties_tuples_dict()
         self.export_properties_tuples_dict = self._configuration_manager.get_export_properties_tuples_dict()
@@ -1768,14 +1769,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._connect_initial_widget_signals()
         
         # v4.0 Sprint 16: Setup controller integration (Strangler Fig pattern)
+        print(f"🔧 About to setup controllers - _controller_integration = {self._controller_integration}")
         if self._controller_integration:
             try:
                 logger.info("Setting up controller integration...")
+                print("🔧 Calling _controller_integration.setup()...")
                 setup_success = self._controller_integration.setup()
+                print(f"🔧 _controller_integration.setup() returned: {setup_success}")
                 
                 if setup_success:
                     # Validate all controllers are properly initialized
                     validation = self._controller_integration.validate_controllers()
+                    print(f"🔧 Controller validation: {validation}")
                     
                     if validation['all_valid']:
                         logger.info(f"✓ Controller integration validated: {validation['registry_count']} controllers operational")
@@ -3565,6 +3570,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             controller_success = False
             logger.info(f"🔧 FORCING fallback configuration (layer not in PROJECT_LAYERS)")
         
+        # FIX 2026-01-18 v12: Skip fallback during QGIS sync to avoid clearing populated list
+        # The _sync_multiple_selection_from_qgis will handle widget population
+        if self._syncing_from_qgis:
+            logger.info("🛡️ _configure_groupbox_common: Skipping fallback during QGIS sync")
+            return layer_props
+        
         # FIX 2026-01-15 v5 + 2026-01-16 v2: FALLBACK - ALWAYS configure expression widgets
         # This prevents empty comboboxes when layer not in PROJECT_LAYERS yet
         # Pattern from before_migration: setEnabled(True) and setLayer(current_layer)
@@ -3674,8 +3685,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # FIX 2026-01-15 v9: Ensure selectionChanged stays connected for IS_TRACKING/IS_SELECTING
         self._ensure_selection_changed_connected()
         
-        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
-        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
+        # FIX 2026-01-18 v12: Don't connect multiple selection signals during QGIS sync
+        # This prevents the updatingCheckedItemList signal from firing during sync
+        if not self._syncing_from_qgis:
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
         
         # FIX 2026-01-18 v7: Don't call exploring_link_widgets during QGIS sync
         if not self._syncing_from_qgis:
@@ -4364,19 +4378,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             current_groupbox = self.current_exploring_groupbox
             
             # Auto-switch groupbox based on selection count (v2.5.11+)
-            if selected_count == 1 and current_groupbox == "multiple_selection":
-                logger.info("Fallback: Auto-switching to single_selection (1 feature)")
-                self._syncing_from_qgis = True
-                try:
-                    self._force_exploring_groupbox_exclusive("single_selection")
-                    self._configure_single_selection_groupbox()
-                finally:
-                    self._syncing_from_qgis = False
-            elif selected_count > 1 and current_groupbox == "single_selection":
+            # FIX 2026-01-18: Only auto-switch from single to multiple, NOT the reverse
+            # User should stay on multiple_selection even with 1 feature selected
+            if selected_count > 1 and current_groupbox == "single_selection":
                 logger.info(f"Fallback: Auto-switching to multiple_selection ({selected_count} features)")
                 self._syncing_from_qgis = True
                 try:
                     self._force_exploring_groupbox_exclusive("multiple_selection")
+                    self._configure_multiple_selection_groupbox()
+                finally:
+                    self._syncing_from_qgis = False
+            elif current_groupbox == "multiple_selection":
+                # FIX 2026-01-18: Stay on multiple_selection, just configure it
+                logger.info(f"Fallback: Staying on multiple_selection ({selected_count} features)")
+                self._syncing_from_qgis = True
+                try:
                     self._configure_multiple_selection_groupbox()
                 finally:
                     self._syncing_from_qgis = False
