@@ -1432,6 +1432,14 @@ class FilterEngineTask(QgsTask):
             logger.debug("TaskBridge: PostgreSQL spatial filtering - using legacy code (V3 not ready)")
             return None
         
+        # CRITICAL v4.1.2 (2026-01-18): Disable V3 for Spatialite spatial filtering
+        # Same issue as PostgreSQL - V3 sends "SPATIAL_FILTER(intersects)" which is not a real SQL function.
+        # Spatialite needs proper spatial predicates like ST_Intersects() or QGIS subset strings.
+        # Use legacy spatialite filter executor which properly handles distant layers.
+        if 'spatialite' in layers_dict and len(layers_dict.get('spatialite', [])) > 0:
+            logger.debug("TaskBridge: Spatialite spatial filtering - using legacy code (V3 not ready)")
+            return None
+        
         # Skip multi-step for complex scenarios
         # Check for buffers which require special handling
         buffer_value = self.task_parameters.get("task", {}).get("buffer_value", 0)

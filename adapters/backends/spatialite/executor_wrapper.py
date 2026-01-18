@@ -212,7 +212,17 @@ class SpatialiteFilterExecutor(FilterExecutorPort):
         Apply filter to Spatialite layer.
         
         v4.2.0: Added for compatibility with legacy adapter after before_migration removal.
+        v4.2.1 (2026-01-18): Handle empty expression properly.
         """
+        # CRITICAL FIX v4.2.1: Empty expression means build_expression() failed
+        # This should NOT happen anymore after implementing build_spatial_filter_expression()
+        # But if it does, log error and return False instead of clearing the layer
+        if expression == "":
+            logger.error(f"[Spatialite] Empty expression for {layer.name()} - filtering failed")
+            logger.error("  This indicates build_spatial_filter_expression() couldn't construct SQL")
+            logger.error("  Check that source_geom (WKT) and predicates were provided correctly")
+            return False
+        
         # Combine expressions if needed
         final_expr = expression
         if old_subset and combine_operator:
