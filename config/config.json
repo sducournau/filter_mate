@@ -249,6 +249,11 @@
           "value": "ogr_memory",
           "choices": ["ogr_memory", "qgis_processing"],
           "description": "Backend to use: 'ogr_memory' (fastest) or 'qgis_processing' (compatible)"
+        },
+        "prefer_native_for_postgresql_project": {
+          "value": true,
+          "choices": [true, false],
+          "description": "When all project layers are PostgreSQL, always use PostgreSQL backend even for small datasets (ensures consistent behavior and leverages server-side processing)"
         }
       },
       "PARALLEL_FILTERING": {

@@ -1943,6 +1943,18 @@ class ExploringController(BaseController, LayerSelectionMixin):
             logger.info("exploring_features_changed: SKIPPED (syncing from QGIS)")
             return []
         
+        # FIX 2026-01-18 v14: Check sync protection timestamp
+        # After QGIS sync completes, there's a protection window to prevent immediate signals from clearing the list
+        import time
+        sync_protection_until = getattr(self._dockwidget, '_sync_protection_until', 0)
+        if sync_protection_until > time.time():
+            # During protection window, only skip if input is empty (would clear the selection)
+            if not input or (hasattr(input, '__len__') and len(input) == 0):
+                logger.info(f"exploring_features_changed: SKIPPED empty input during sync protection (until {sync_protection_until:.2f}, now {time.time():.2f})")
+                return []
+            else:
+                logger.info(f"exploring_features_changed: Processing non-empty input during sync protection ({len(input) if hasattr(input, '__len__') else 'N/A'} items)")
+        
         if self._dockwidget.widgets_initialized is True and self._dockwidget.current_layer is not None and isinstance(self._dockwidget.current_layer, QgsVectorLayer):
             
             # CACHE INVALIDATION: Selection is changing, invalidate cache for current groupbox
@@ -2938,7 +2950,17 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 
                 logger.info("  ✅ _sync_widgets_from_qgis_selection COMPLETED")
             finally:
-                # Only reset _syncing_from_qgis AFTER all sync operations are complete
+                # FIX 2026-01-18 v14: Use QTimer to delay resetting _syncing_from_qgis
+                # This prevents immediate signal triggering after reconnection
+                # The delay allows any pending Qt events to be processed while still protected
+                import time
+                from qgis.PyQt.QtCore import QTimer
+                
+                # Set protection timestamp - any exploring_features_changed calls within 500ms will be skipped
+                self._dockwidget._sync_protection_until = time.time() + 0.5
+                logger.info(f"  ⏱️ Set sync protection until {self._dockwidget._sync_protection_until}")
+                
+                # Reset _syncing_from_qgis AFTER all sync operations are complete
                 self._dockwidget._syncing_from_qgis = False
                 
                 # FIX 2026-01-18 v11: Reconnect signals that were skipped during sync

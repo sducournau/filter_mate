@@ -49,6 +49,32 @@ class FilterFavorite:
         if 'tags' in data and isinstance(data['tags'], str):
             data['tags'] = json.loads(data['tags']) if data['tags'] else []
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+    
+    def get_layers_count(self) -> int:
+        """Get total number of layers (1 + remote layers)."""
+        count = 1  # Main layer
+        if self.remote_layers:
+            count += len(self.remote_layers)
+        return count
+    
+    def get_display_name(self, max_length: int = 30) -> str:
+        """Get truncated display name for UI."""
+        if len(self.name) <= max_length:
+            return self.name
+        return self.name[:max_length - 3] + "..."
+    
+    def get_preview(self, max_length: int = 80) -> str:
+        """Get expression preview for tooltips."""
+        if not self.expression:
+            return "(no expression)"
+        if len(self.expression) <= max_length:
+            return self.expression
+        return self.expression[:max_length - 3] + "..."
+    
+    def mark_used(self) -> None:
+        """Mark favorite as used (increment counter and update timestamp)."""
+        self.use_count += 1
+        self.last_used_at = datetime.now().isoformat()
 
 
 class FavoritesManager:

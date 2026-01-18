@@ -1,4 +1,5 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
 <TS version="2.1" language="it_IT" sourcelanguage="en_US">
 <context>
     <name>FilterMate</name>
@@ -100,7 +101,7 @@ Riavvia QGIS per applicare tutte le modifiche.</translation>
     </message>
     <message>
         <source>Configuration updated to latest version</source>
-        <translation>Configurazione aggiornata all'ultima versione</translation>
+        <translation>Configurazione aggiornata all&apos;ultima versione</translation>
     </message>
     <message>
         <source>Configuration updated: new settings available ({sections}). Access via Options menu.</source>
@@ -132,7 +133,7 @@ Riavvia QGIS per applicare tutte le modifiche.</translation>
     </message>
     <message>
         <source>Negative buffer (erosion): shrinks polygons inward</source>
-        <translation>Buffer negativo (erosione): riduce i poligoni verso l'interno</translation>
+        <translation>Buffer negativo (erosione): riduce i poligoni verso l&apos;interno</translation>
     </message>
     <message>
         <source>point</source>
@@ -211,25 +212,25 @@ Vuoi continuare?</translation>
         <translation>Errore durante la migrazione della configurazione: {}</translation>
     </message>
     <message>
-        <source>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
+        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
 
-FilterMate recommends disabling this setting (value 'Off') for the following reasons:
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
 
 Do you want to disable this setting now?
 
 • Yes: Disable filtering (recommended for FilterMate)
 • No: Keep current setting</source>
-        <translation>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
+        <translation>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
 
-FilterMate recommends disabling this setting (value 'Off') for the following reasons:
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
 
 Do you want to disable this setting now?
 
@@ -293,11 +294,11 @@ Riavvia QGIS per applicare le modifiche.</translation>
     </message>
     <message>
         <source>Identify feature - Display feature attributes</source>
-        <translation>Identifica elemento - Mostra attributi dell'elemento</translation>
+        <translation>Identifica elemento - Mostra attributi dell&apos;elemento</translation>
     </message>
     <message>
         <source>Zoom to feature - Center the map on the selected feature</source>
-        <translation>Zoom sull'elemento - Centra la mappa sull'elemento selezionato</translation>
+        <translation>Zoom sull&apos;elemento - Centra la mappa sull&apos;elemento selezionato</translation>
     </message>
     <message>
         <source>Enable selection - Select features on map</source>
@@ -305,7 +306,7 @@ Riavvia QGIS per applicare le modifiche.</translation>
     </message>
     <message>
         <source>Enable tracking - Follow the selected feature on the map</source>
-        <translation>Attiva tracciamento - Segui l'elemento selezionato sulla mappa</translation>
+        <translation>Attiva tracciamento - Segui l&apos;elemento selezionato sulla mappa</translation>
     </message>
     <message>
         <source>Link widgets - Synchronize selection between widgets</source>
@@ -417,7 +418,7 @@ Riavvia QGIS per applicare le modifiche.</translation>
     </message>
     <message>
         <source>ZIP filename - Enter the name for the compressed archive</source>
-        <translation>Nome file ZIP - Inserisci il nome per l'archivio compresso</translation>
+        <translation>Nome file ZIP - Inserisci il nome per l&apos;archivio compresso</translation>
     </message>
     <message>
         <source>Enter ZIP filename...</source>
@@ -437,7 +438,7 @@ Riavvia QGIS per applicare le modifiche.</translation>
     </message>
     <message>
         <source>Apply the current filter expression to filter features on the selected layer(s)</source>
-        <translation>Applica l'espressione filtro corrente per filtrare gli elementi sui layer selezionati</translation>
+        <translation>Applica l&apos;espressione filtro corrente per filtrare gli elementi sui layer selezionati</translation>
     </message>
     <message>
         <source>Undo Filter - Restore the previous filter state</source>
@@ -449,7 +450,7 @@ Riavvia QGIS per applicare le modifiche.</translation>
     </message>
     <message>
         <source>Undo the last filter operation and restore the previous state</source>
-        <translation>Annulla l'ultima operazione filtro e ripristina lo stato precedente</translation>
+        <translation>Annulla l&apos;ultima operazione filtro e ripristina lo stato precedente</translation>
     </message>
     <message>
         <source>Redo Filter - Reapply the previously undone filter</source>
@@ -461,7 +462,7 @@ Riavvia QGIS per applicare le modifiche.</translation>
     </message>
     <message>
         <source>Redo the previously undone filter operation</source>
-        <translation>Ripristina l'operazione filtro precedentemente annullata</translation>
+        <translation>Ripristina l&apos;operazione filtro precedentemente annullata</translation>
     </message>
     <message>
         <source>Clear All Filters - Remove all filters from all layers</source>
@@ -807,16 +808,16 @@ Primo attributo: {1}</translation>
         <translation>Mostra dialogo conferma prima delle ottimizzazioni</translation>
     </message>
     <message>
-        <source>Centroids enabled for '{0}' (~{1}x {2})</source>
-        <translation>Centroidi attivati per '{0}' (~{1}x {2})</translation>
+        <source>Centroids enabled for &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>Centroidi attivati per &apos;{0}&apos; (~{1}x {2})</translation>
     </message>
     <message>
-        <source>BBox pre-filter enabled for '{0}'</source>
-        <translation>Pre-filtro BBox attivato per '{0}'</translation>
+        <source>BBox pre-filter enabled for &apos;{0}&apos;</source>
+        <translation>Pre-filtro BBox attivato per &apos;{0}&apos;</translation>
     </message>
     <message>
-        <source>Optimization applied: '{0}' (~{1}x {2})</source>
-        <translation>Ottimizzazione applicata: '{0}' (~{1}x {2})</translation>
+        <source>Optimization applied: &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>Ottimizzazione applicata: &apos;{0}&apos; (~{1}x {2})</translation>
     </message>
     <message>
         <source>Simplify before buffer</source>
@@ -859,7 +860,7 @@ Primo attributo: {1}</translation>
     </message>
     <message>
         <source>You have {0} remote layers. Using centroids reduces network transfer by ~90%.</source>
-        <translation>Hai {0} layer remoti. L'uso dei centroidi riduce il trasferimento di rete del ~90%.</translation>
+        <translation>Hai {0} layer remoti. L&apos;uso dei centroidi riduce il trasferimento di rete del ~90%.</translation>
     </message>
     <message>
         <source>Enable Direct SQL for GeoPackage</source>
@@ -867,7 +868,7 @@ Primo attributo: {1}</translation>
     </message>
     <message>
         <source>Direct SQL access can make GeoPackage filtering 2-5x faster.</source>
-        <translation>L'accesso SQL diretto può rendere il filtro GeoPackage 2-5 volte più veloce.</translation>
+        <translation>L&apos;accesso SQL diretto può rendere il filtro GeoPackage 2-5 volte più veloce.</translation>
     </message>
     <message>
         <source>Create Spatial Indexes</source>
@@ -931,7 +932,7 @@ Primo attributo: {1}</translation>
     </message>
     <message>
         <source>Stream results in chunks to reduce memory usage. Essential for very large result sets.</source>
-        <translation>Trasmetti risultati a blocchi per ridurre l'uso della memoria. Essenziale per set di risultati molto grandi.</translation>
+        <translation>Trasmetti risultati a blocchi per ridurre l&apos;uso della memoria. Essenziale per set di risultati molto grandi.</translation>
     </message>
     <message>
         <source>Lazy cursor threshold:</source>
@@ -1011,7 +1012,7 @@ Primo attributo: {1}</translation>
     </message>
     <message>
         <source>Execute SQLite queries in background thread with cancellation support. Prevents UI freezing.</source>
-        <translation>Esegui query SQLite in thread di background con supporto alla cancellazione. Previene il blocco dell'interfaccia.</translation>
+        <translation>Esegui query SQLite in thread di background con supporto alla cancellazione. Previene il blocco dell&apos;interfaccia.</translation>
     </message>
     <message>
         <source>Query timeout (seconds):</source>
@@ -1083,7 +1084,7 @@ Primo attributo: {1}</translation>
     </message>
     <message>
         <source>Process features in chunks for very large datasets. Reduces peak memory usage.</source>
-        <translation>Elabora feature a blocchi per dataset molto grandi. Riduce l'uso di memoria di picco.</translation>
+        <translation>Elabora feature a blocchi per dataset molto grandi. Riduce l&apos;uso di memoria di picco.</translation>
     </message>
     <message>
         <source>Chunk size (features):</source>
@@ -1095,7 +1096,7 @@ Primo attributo: {1}</translation>
     </message>
     <message>
         <source>Validate and repair geometries before processing. Prevents crashes on invalid geometries.</source>
-        <translation>Valida e ripara le geometrie prima dell'elaborazione. Previene crash su geometrie non valide.</translation>
+        <translation>Valida e ripara le geometrie prima dell&apos;elaborazione. Previene crash su geometrie non valide.</translation>
     </message>
     <message>
         <source>Thread-safe Operations</source>
@@ -1139,7 +1140,7 @@ Primo attributo: {1}</translation>
     </message>
     <message>
         <source>Automatically choose optimal filtering strategy based on layer analysis. (attribute-first, bbox-prefilter, progressive chunks)</source>
-        <translation>Scegli automaticamente la strategia di filtro ottimale basata sull'analisi del layer. (attributi-prima, pre-filtro bbox, blocchi progressivi)</translation>
+        <translation>Scegli automaticamente la strategia di filtro ottimale basata sull&apos;analisi del layer. (attributi-prima, pre-filtro bbox, blocchi progressivi)</translation>
     </message>
     <message>
         <source>Auto-Simplify Geometries ⚠️</source>
@@ -1147,7 +1148,7 @@ Primo attributo: {1}</translation>
     </message>
     <message>
         <source>Automatically simplify complex geometries. WARNING: This is a LOSSY operation that may change polygon shapes.</source>
-        <translation>Semplifica automaticamente geometrie complesse. ATTENZIONE: Questa è un'operazione CON PERDITA che può cambiare la forma dei poligoni.</translation>
+        <translation>Semplifica automaticamente geometrie complesse. ATTENZIONE: Questa è un&apos;operazione CON PERDITA che può cambiare la forma dei poligoni.</translation>
     </message>
     <message>
         <source>Simplify Before Buffer</source>
@@ -1233,7 +1234,400 @@ Primo attributo: {1}</translation>
         <source>Reset all settings to balanced defaults?</source>
         <translation>Ripristinare tutte le impostazioni ai valori bilanciati predefiniti?</translation>
     </message>
-<message><source>MV Status: Checking...</source><translation>Stato MV: Verifica...</translation></message><message><source>MV Status: Error</source><translation>Stato MV: Errore</translation></message><message><source>MV Status: Clean</source><translation>Stato MV: Pulito</translation></message><message><source>MV Status:</source><translation>Stato MV:</translation></message><message><source>active</source><translation>attive</translation></message><message><source>No active materialized views</source><translation>Nessuna vista materializzata attiva</translation></message><message><source>Session:</source><translation>Sessione:</translation></message><message><source>Other sessions:</source><translation>Altre sessioni:</translation></message><message><source>🧹 Session</source><translation>🧹 Sessione</translation></message><message><source>Cleanup MVs from this session</source><translation>Pulisci MV di questa sessione</translation></message><message><source>🗑️ Orphaned</source><translation>🗑️ Orfane</translation></message><message><source>Cleanup orphaned MVs (&gt;24h old)</source><translation>Pulisci MV orfane (&gt;24h)</translation></message><message><source>⚠️ All</source><translation>⚠️ Tutte</translation></message><message><source>Cleanup ALL MVs (affects other sessions)</source><translation>Pulisci TUTTE le MV (influisce su altre sessioni)</translation></message><message><source>Confirm Cleanup</source><translation>Conferma pulizia</translation></message><message><source>Drop ALL materialized views?
-This affects other FilterMate sessions!</source><translation>Eliminare TUTTE le viste materializzate?
-Questo influisce su altre sessioni FilterMate!</translation></message><message><source>Refresh MV status</source><translation>Aggiorna stato MV</translation></message><message><source>Threshold:</source><translation>Soglia:</translation></message><message><source>features</source><translation>elementi</translation></message><message><source>Auto-cleanup on exit</source><translation>Pulizia auto all'uscita</translation></message><message><source>Automatically drop session MVs when plugin unloads</source><translation>Elimina automaticamente MV di sessione quando il plugin si chiude</translation></message><message><source>Create MVs for datasets larger than this</source><translation>Crea MV per dataset più grandi di questo</translation></message><message><source>faster possible</source><translation>più veloce possibile</translation></message><message><source>Optimizations available</source><translation>Ottimizzazioni disponibili</translation></message><message><source>FilterMate - Apply Optimizations?</source><translation>FilterMate - Applicare ottimizzazioni?</translation></message><message><source>Skip</source><translation>Salta</translation></message><message><source>✓ Apply</source><translation>✓ Applica</translation></message><message><source>Don't ask for this session</source><translation>Non chiedere per questa sessione</translation></message><message><source>Centroids</source><translation>Centroidi</translation></message><message><source>Simplify</source><translation>Semplifica</translation></message><message><source>Pre-simplify</source><translation>Pre-semplifica</translation></message><message><source>Fewer segments</source><translation>Meno segmenti</translation></message><message><source>Flat buffer</source><translation>Buffer piatto</translation></message><message><source>BBox filter</source><translation>Filtro BBox</translation></message><message><source>Attr-first</source><translation>Attributo prima</translation></message><message><source>PostgreSQL not available</source><translation>PostgreSQL non disponibile</translation></message><message><source>No connection</source><translation>Nessuna connessione</translation></message><message><source>Auto-zoom when feature changes</source><translation>Zoom automatico al cambio di elemento</translation></message><message><source>Backend optimization settings saved</source><translation>Impostazioni ottimizzazione backend salvate</translation></message><message><source>Backend optimizations configured</source><translation>Ottimizzazioni backend configurate</translation></message><message><source>Expression Evaluation</source><translation>Valutazione espressione</translation></message><message><source>Identify selected feature</source><translation>Identifica elemento selezionato</translation></message><message><source>Layer properties reset to defaults</source><translation>Proprietà layer ripristinate ai valori predefiniti</translation></message><message><source>Link exploring widgets together</source><translation>Collega widget esplorazione insieme</translation></message><message><source>Optimization settings saved</source><translation>Impostazioni ottimizzazione salvate</translation></message><message><source>Reset all layer exploring properties</source><translation>Ripristina tutte le proprietà esplorazione layer</translation></message><message><source>Toggle feature selection on map</source><translation>Attiva/disattiva selezione elementi sulla mappa</translation></message><message><source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source><translation>Usa centroidi invece delle geometrie complete per layer distanti (più veloce per poligoni complessi)</translation></message><message><source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source><translation>Usa centroidi invece delle geometrie complete per layer sorgente (più veloce per poligoni complessi)</translation></message><message><source>Zoom to selected feature</source><translation>Zoom su elemento selezionato</translation></message></context>
+    <message>
+        <source>MV Status: Checking...</source>
+        <translation>Stato MV: Verifica...</translation>
+    </message>
+    <message>
+        <source>MV Status: Error</source>
+        <translation>Stato MV: Errore</translation>
+    </message>
+    <message>
+        <source>MV Status: Clean</source>
+        <translation>Stato MV: Pulito</translation>
+    </message>
+    <message>
+        <source>MV Status:</source>
+        <translation>Stato MV:</translation>
+    </message>
+    <message>
+        <source>active</source>
+        <translation>attive</translation>
+    </message>
+    <message>
+        <source>No active materialized views</source>
+        <translation>Nessuna vista materializzata attiva</translation>
+    </message>
+    <message>
+        <source>Session:</source>
+        <translation>Sessione:</translation>
+    </message>
+    <message>
+        <source>Other sessions:</source>
+        <translation>Altre sessioni:</translation>
+    </message>
+    <message>
+        <source>🧹 Session</source>
+        <translation>🧹 Sessione</translation>
+    </message>
+    <message>
+        <source>Cleanup MVs from this session</source>
+        <translation>Pulisci MV di questa sessione</translation>
+    </message>
+    <message>
+        <source>🗑️ Orphaned</source>
+        <translation>🗑️ Orfane</translation>
+    </message>
+    <message>
+        <source>Cleanup orphaned MVs (&gt;24h old)</source>
+        <translation>Pulisci MV orfane (&gt;24h)</translation>
+    </message>
+    <message>
+        <source>⚠️ All</source>
+        <translation>⚠️ Tutte</translation>
+    </message>
+    <message>
+        <source>Cleanup ALL MVs (affects other sessions)</source>
+        <translation>Pulisci TUTTE le MV (influisce su altre sessioni)</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>Conferma pulizia</translation>
+    </message>
+    <message>
+        <source>Drop ALL materialized views?
+This affects other FilterMate sessions!</source>
+        <translation>Eliminare TUTTE le viste materializzate?
+Questo influisce su altre sessioni FilterMate!</translation>
+    </message>
+    <message>
+        <source>Refresh MV status</source>
+        <translation>Aggiorna stato MV</translation>
+    </message>
+    <message>
+        <source>Threshold:</source>
+        <translation>Soglia:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>elementi</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on exit</source>
+        <translation>Pulizia auto all&apos;uscita</translation>
+    </message>
+    <message>
+        <source>Automatically drop session MVs when plugin unloads</source>
+        <translation>Elimina automaticamente MV di sessione quando il plugin si chiude</translation>
+    </message>
+    <message>
+        <source>Create MVs for datasets larger than this</source>
+        <translation>Crea MV per dataset più grandi di questo</translation>
+    </message>
+    <message>
+        <source>faster possible</source>
+        <translation>più veloce possibile</translation>
+    </message>
+    <message>
+        <source>Optimizations available</source>
+        <translation>Ottimizzazioni disponibili</translation>
+    </message>
+    <message>
+        <source>FilterMate - Apply Optimizations?</source>
+        <translation>FilterMate - Applicare ottimizzazioni?</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Salta</translation>
+    </message>
+    <message>
+        <source>✓ Apply</source>
+        <translation>✓ Applica</translation>
+    </message>
+    <message>
+        <source>Don&apos;t ask for this session</source>
+        <translation>Non chiedere per questa sessione</translation>
+    </message>
+    <message>
+        <source>Centroids</source>
+        <translation>Centroidi</translation>
+    </message>
+    <message>
+        <source>Simplify</source>
+        <translation>Semplifica</translation>
+    </message>
+    <message>
+        <source>Pre-simplify</source>
+        <translation>Pre-semplifica</translation>
+    </message>
+    <message>
+        <source>Fewer segments</source>
+        <translation>Meno segmenti</translation>
+    </message>
+    <message>
+        <source>Flat buffer</source>
+        <translation>Buffer piatto</translation>
+    </message>
+    <message>
+        <source>BBox filter</source>
+        <translation>Filtro BBox</translation>
+    </message>
+    <message>
+        <source>Attr-first</source>
+        <translation>Attributo prima</translation>
+    </message>
+    <message>
+        <source>PostgreSQL not available</source>
+        <translation>PostgreSQL non disponibile</translation>
+    </message>
+    <message>
+        <source>No connection</source>
+        <translation>Nessuna connessione</translation>
+    </message>
+    <message>
+        <source>Auto-zoom when feature changes</source>
+        <translation>Zoom automatico al cambio di elemento</translation>
+    </message>
+    <message>
+        <source>Backend optimization settings saved</source>
+        <translation>Impostazioni ottimizzazione backend salvate</translation>
+    </message>
+    <message>
+        <source>Backend optimizations configured</source>
+        <translation>Ottimizzazioni backend configurate</translation>
+    </message>
+    <message>
+        <source>Expression Evaluation</source>
+        <translation>Valutazione espressione</translation>
+    </message>
+    <message>
+        <source>Identify selected feature</source>
+        <translation>Identifica elemento selezionato</translation>
+    </message>
+    <message>
+        <source>Layer properties reset to defaults</source>
+        <translation>Proprietà layer ripristinate ai valori predefiniti</translation>
+    </message>
+    <message>
+        <source>Link exploring widgets together</source>
+        <translation>Collega widget esplorazione insieme</translation>
+    </message>
+    <message>
+        <source>Optimization settings saved</source>
+        <translation>Impostazioni ottimizzazione salvate</translation>
+    </message>
+    <message>
+        <source>Reset all layer exploring properties</source>
+        <translation>Ripristina tutte le proprietà esplorazione layer</translation>
+    </message>
+    <message>
+        <source>Toggle feature selection on map</source>
+        <translation>Attiva/disattiva selezione elementi sulla mappa</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source>
+        <translation>Usa centroidi invece delle geometrie complete per layer distanti (più veloce per poligoni complessi)</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source>
+        <translation>Usa centroidi invece delle geometrie complete per layer sorgente (più veloce per poligoni complessi)</translation>
+    </message>
+    <message>
+        <source>Zoom to selected feature</source>
+        <translation>Zoom su elemento selezionato</translation>
+    </message>
+</context>
+<context>
+    <name>OptimizationDialog</name>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>Impostazioni di ottimizzazione</translation>
+    </message>
+    <message>
+        <source>Configure Optimization Settings</source>
+        <translation>Configura impostazioni di ottimizzazione</translation>
+    </message>
+    <message>
+        <source>Enable automatic optimizations</source>
+        <translation>Abilita ottimizzazioni automatiche</translation>
+    </message>
+    <message>
+        <source>Ask before applying optimizations</source>
+        <translation>Chiedi prima di applicare le ottimizzazioni</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid Settings</source>
+        <translation>Impostazioni auto-centroide</translation>
+    </message>
+    <message>
+        <source>Enable auto-centroid for distant layers</source>
+        <translation>Abilita auto-centroide per layer distanti</translation>
+    </message>
+    <message>
+        <source>Distance threshold (km):</source>
+        <translation>Soglia distanza (km):</translation>
+    </message>
+    <message>
+        <source>Feature threshold:</source>
+        <translation>Soglia feature:</translation>
+    </message>
+    <message>
+        <source>Buffer Optimizations</source>
+        <translation>Ottimizzazioni buffer</translation>
+    </message>
+    <message>
+        <source>Simplify geometry before buffer</source>
+        <translation>Semplifica geometria prima del buffer</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments to:</source>
+        <translation>Riduci segmenti buffer a:</translation>
+    </message>
+    <message>
+        <source>General</source>
+        <translation>Generale</translation>
+    </message>
+    <message>
+        <source>Use materialized views for filtering</source>
+        <translation>Usa viste materializzate per il filtraggio</translation>
+    </message>
+    <message>
+        <source>Create spatial indices automatically</source>
+        <translation>Crea indici spaziali automaticamente</translation>
+    </message>
+    <message>
+        <source>Use R-tree spatial index</source>
+        <translation>Usa indice spaziale R-tree</translation>
+    </message>
+    <message>
+        <source>Use bounding box pre-filter</source>
+        <translation>Usa pre-filtro bounding box</translation>
+    </message>
+    <message>
+        <source>Backends</source>
+        <translation>Backend</translation>
+    </message>
+    <message>
+        <source>Caching</source>
+        <translation>Caching</translation>
+    </message>
+    <message>
+        <source>Enable geometry cache</source>
+        <translation>Abilita cache geometria</translation>
+    </message>
+    <message>
+        <source>Batch Processing</source>
+        <translation>Elaborazione batch</translation>
+    </message>
+    <message>
+        <source>Batch size:</source>
+        <translation>Dimensione batch:</translation>
+    </message>
+    <message>
+        <source>Advanced settings affect performance and memory usage. Change only if you understand the implications.</source>
+        <translation>Le impostazioni avanzate influenzano prestazioni e uso della memoria. Modifica solo se comprendi le implicazioni.</translation>
+    </message>
+    <message>
+        <source>Advanced</source>
+        <translation>Avanzate</translation>
+    </message>
+</context>
+<context>
+    <name>RecommendationDialog</name>
+    <message>
+        <source>Apply Optimizations?</source>
+        <translation>Applicare ottimizzazioni?</translation>
+    </message>
+    <message>
+        <source>Optimizations Available</source>
+        <translation>Ottimizzazioni disponibili</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Salta</translation>
+    </message>
+    <message>
+        <source>Apply Selected</source>
+        <translation>Applica selezionati</translation>
+    </message>
+</context>
+<context>
+    <name>PostgresInfoDialog</name>
+    <message>
+        <source>PostgreSQL Session Info</source>
+        <translation>Info sessione PostgreSQL</translation>
+    </message>
+    <message>
+        <source>PostgreSQL Active</source>
+        <translation>PostgreSQL attivo</translation>
+    </message>
+    <message>
+        <source>Connection Info</source>
+        <translation>Info connessione</translation>
+    </message>
+    <message>
+        <source>Connection:</source>
+        <translation>Connessione:</translation>
+    </message>
+    <message>
+        <source>Temp Schema:</source>
+        <translation>Schema temporaneo:</translation>
+    </message>
+    <message>
+        <source>Status:</source>
+        <translation>Stato:</translation>
+    </message>
+    <message>
+        <source>Temporary Views</source>
+        <translation>Viste temporanee</translation>
+    </message>
+    <message>
+        <source>Cleanup Options</source>
+        <translation>Opzioni pulizia</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on close</source>
+        <translation>Pulizia automatica alla chiusura</translation>
+    </message>
+    <message>
+        <source>Automatically cleanup temporary views when FilterMate closes.</source>
+        <translation>Pulire automaticamente le viste temporanee alla chiusura di FilterMate.</translation>
+    </message>
+    <message>
+        <source>🗑️ Cleanup Now</source>
+        <translation>🗑️ Pulisci ora</translation>
+    </message>
+    <message>
+        <source>Drop all temporary views created by FilterMate in this session.</source>
+        <translation>Elimina tutte le viste temporanee create da FilterMate in questa sessione.</translation>
+    </message>
+    <message>
+        <source>(No temporary views)</source>
+        <translation>(Nessuna vista temporanea)</translation>
+    </message>
+    <message>
+        <source>No Views</source>
+        <translation>Nessuna vista</translation>
+    </message>
+    <message>
+        <source>There are no temporary views to clean up.</source>
+        <translation>Non ci sono viste temporanee da pulire.</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>Conferma pulizia</translation>
+    </message>
+    <message>
+        <source>Cleanup Complete</source>
+        <translation>Pulizia completata</translation>
+    </message>
+    <message>
+        <source>Cleanup Issue</source>
+        <translation>Problema di pulizia</translation>
+    </message>
+    <message>
+        <source>Cleanup Failed</source>
+        <translation>Pulizia fallita</translation>
+    </message>
+</context>
 </TS>

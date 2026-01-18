@@ -1,4 +1,5 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
 <TS version="2.1" language="da_DK" sourcelanguage="en_US">
 <context>
     <name>FilterMate</name>
@@ -211,25 +212,25 @@ Vil du fortsætte?</translation>
         <translation>Fejl under konfigurationsmigrering: {}</translation>
     </message>
     <message>
-        <source>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
+        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
 
-FilterMate recommends disabling this setting (value 'Off') for the following reasons:
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
 
 Do you want to disable this setting now?
 
 • Yes: Disable filtering (recommended for FilterMate)
 • No: Keep current setting</source>
-        <translation>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
+        <translation>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
 
-FilterMate recommends disabling this setting (value 'Off') for the following reasons:
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
 
 Do you want to disable this setting now?
 
@@ -584,7 +585,7 @@ Genstart QGIS for at anvende ændringerne.</translation>
     <name>FilterMateDockWidget</name>
     <message>
         <source>Reload the plugin to apply layout changes (action bar position)</source>
-        <translation>Genindlæs plugin'et for at anvende layoutændringer (handlingsbjælkeposition)</translation>
+        <translation>Genindlæs plugin&apos;et for at anvende layoutændringer (handlingsbjælkeposition)</translation>
     </message>
     <message>
         <source>Reload Plugin</source>
@@ -807,16 +808,16 @@ Første attribut: {1}</translation>
         <translation>Vis bekræftelsesdialog før optimeringer</translation>
     </message>
     <message>
-        <source>Centroids enabled for '{0}' (~{1}x {2})</source>
-        <translation>Centroider aktiveret for '{0}' (~{1}x {2})</translation>
+        <source>Centroids enabled for &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>Centroider aktiveret for &apos;{0}&apos; (~{1}x {2})</translation>
     </message>
     <message>
-        <source>BBox pre-filter enabled for '{0}'</source>
-        <translation>BBox forfilter aktiveret for '{0}'</translation>
+        <source>BBox pre-filter enabled for &apos;{0}&apos;</source>
+        <translation>BBox forfilter aktiveret for &apos;{0}&apos;</translation>
     </message>
     <message>
-        <source>Optimization applied: '{0}' (~{1}x {2})</source>
-        <translation>Optimering anvendt: '{0}' (~{1}x {2})</translation>
+        <source>Optimization applied: &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>Optimering anvendt: &apos;{0}&apos; (~{1}x {2})</translation>
     </message>
     <message>
         <source>Simplify before buffer</source>
@@ -1069,7 +1070,400 @@ Første attribut: {1}</translation>
         <source>Error applying settings</source>
         <translation>Fejl ved anvendelse af indstillinger</translation>
     </message>
-<message><source>MV Status: Checking...</source><translation type="unfinished">MV Status: Checking...</translation></message><message><source>MV Status: Error</source><translation type="unfinished">MV Status: Error</translation></message><message><source>MV Status: Clean</source><translation type="unfinished">MV Status: Clean</translation></message><message><source>MV Status:</source><translation type="unfinished">MV Status:</translation></message><message><source>active</source><translation type="unfinished">active</translation></message><message><source>No active materialized views</source><translation type="unfinished">No active materialized views</translation></message><message><source>Session:</source><translation type="unfinished">Session:</translation></message><message><source>Other sessions:</source><translation type="unfinished">Other sessions:</translation></message><message><source>🧹 Session</source><translation type="unfinished">🧹 Session</translation></message><message><source>Cleanup MVs from this session</source><translation type="unfinished">Cleanup MVs from this session</translation></message><message><source>🗑️ Orphaned</source><translation type="unfinished">🗑️ Orphaned</translation></message><message><source>Cleanup orphaned MVs (&gt;24h old)</source><translation type="unfinished">Cleanup orphaned MVs (&gt;24h old)</translation></message><message><source>⚠️ All</source><translation type="unfinished">⚠️ All</translation></message><message><source>Cleanup ALL MVs (affects other sessions)</source><translation type="unfinished">Cleanup ALL MVs (affects other sessions)</translation></message><message><source>Confirm Cleanup</source><translation type="unfinished">Confirm Cleanup</translation></message><message><source>Drop ALL materialized views?
-This affects other FilterMate sessions!</source><translation type="unfinished">Drop ALL materialized views?
-This affects other FilterMate sessions!</translation></message><message><source>Refresh MV status</source><translation type="unfinished">Refresh MV status</translation></message><message><source>Threshold:</source><translation type="unfinished">Threshold:</translation></message><message><source>features</source><translation type="unfinished">features</translation></message><message><source>Auto-cleanup on exit</source><translation type="unfinished">Auto-cleanup on exit</translation></message><message><source>Automatically drop session MVs when plugin unloads</source><translation type="unfinished">Automatically drop session MVs when plugin unloads</translation></message><message><source>Create MVs for datasets larger than this</source><translation type="unfinished">Create MVs for datasets larger than this</translation></message><message><source>faster possible</source><translation type="unfinished">faster possible</translation></message><message><source>Optimizations available</source><translation type="unfinished">Optimizations available</translation></message><message><source>FilterMate - Apply Optimizations?</source><translation type="unfinished">FilterMate - Apply Optimizations?</translation></message><message><source>Skip</source><translation type="unfinished">Skip</translation></message><message><source>✓ Apply</source><translation type="unfinished">✓ Apply</translation></message><message><source>Don't ask for this session</source><translation type="unfinished">Don't ask for this session</translation></message><message><source>Centroids</source><translation type="unfinished">Centroids</translation></message><message><source>Simplify</source><translation type="unfinished">Simplify</translation></message><message><source>Pre-simplify</source><translation type="unfinished">Pre-simplify</translation></message><message><source>Fewer segments</source><translation type="unfinished">Fewer segments</translation></message><message><source>Flat buffer</source><translation type="unfinished">Flat buffer</translation></message><message><source>BBox filter</source><translation type="unfinished">BBox filter</translation></message><message><source>Attr-first</source><translation type="unfinished">Attr-first</translation></message><message><source>PostgreSQL not available</source><translation type="unfinished">PostgreSQL not available</translation></message><message><source>No connection</source><translation type="unfinished">No connection</translation></message><message><source>Auto-zoom when feature changes</source><translation type="unfinished">Auto-zoom when feature changes</translation></message><message><source>Backend optimization settings saved</source><translation type="unfinished">Backend optimization settings saved</translation></message><message><source>Backend optimizations configured</source><translation type="unfinished">Backend optimizations configured</translation></message><message><source>Expression Evaluation</source><translation type="unfinished">Expression Evaluation</translation></message><message><source>Identify selected feature</source><translation type="unfinished">Identify selected feature</translation></message><message><source>Layer properties reset to defaults</source><translation type="unfinished">Layer properties reset to defaults</translation></message><message><source>Link exploring widgets together</source><translation type="unfinished">Link exploring widgets together</translation></message><message><source>Optimization settings saved</source><translation type="unfinished">Optimization settings saved</translation></message><message><source>Reset all layer exploring properties</source><translation type="unfinished">Reset all layer exploring properties</translation></message><message><source>Toggle feature selection on map</source><translation type="unfinished">Toggle feature selection on map</translation></message><message><source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for distant layers (faster for complex polygons)</translation></message><message><source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for source layer (faster for complex polygons)</translation></message><message><source>Zoom to selected feature</source><translation type="unfinished">Zoom to selected feature</translation></message></context>
+    <message>
+        <source>MV Status: Checking...</source>
+        <translation>MV Status: Tjekker...</translation>
+    </message>
+    <message>
+        <source>MV Status: Error</source>
+        <translation>MV Status: Fejl</translation>
+    </message>
+    <message>
+        <source>MV Status: Clean</source>
+        <translation>MV Status: Rent</translation>
+    </message>
+    <message>
+        <source>MV Status:</source>
+        <translation>MV Status:</translation>
+    </message>
+    <message>
+        <source>active</source>
+        <translation>aktiv</translation>
+    </message>
+    <message>
+        <source>No active materialized views</source>
+        <translation>Ingen aktive materialiserede visninger</translation>
+    </message>
+    <message>
+        <source>Session:</source>
+        <translation>Session:</translation>
+    </message>
+    <message>
+        <source>Other sessions:</source>
+        <translation>Andre sessioner:</translation>
+    </message>
+    <message>
+        <source>🧹 Session</source>
+        <translation>🧹 Session</translation>
+    </message>
+    <message>
+        <source>Cleanup MVs from this session</source>
+        <translation>Ryd MV&apos;er fra denne session</translation>
+    </message>
+    <message>
+        <source>🗑️ Orphaned</source>
+        <translation>🗑️ Forældreløse</translation>
+    </message>
+    <message>
+        <source>Cleanup orphaned MVs (&gt;24h old)</source>
+        <translation>Ryd forældreløse MV&apos;er (&gt;24 timer)</translation>
+    </message>
+    <message>
+        <source>⚠️ All</source>
+        <translation>⚠️ Alle</translation>
+    </message>
+    <message>
+        <source>Cleanup ALL MVs (affects other sessions)</source>
+        <translation>Ryd ALLE MV&apos;er (påvirker andre sessioner)</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>Bekræft oprydning</translation>
+    </message>
+    <message>
+        <source>Drop ALL materialized views?
+This affects other FilterMate sessions!</source>
+        <translation>Slet ALLE materialiserede visninger?
+Dette påvirker andre FilterMate sessioner!</translation>
+    </message>
+    <message>
+        <source>Refresh MV status</source>
+        <translation>Opdater MV status</translation>
+    </message>
+    <message>
+        <source>Threshold:</source>
+        <translation>Grænse:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>funktioner</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on exit</source>
+        <translation>Auto-oprydning ved afslutning</translation>
+    </message>
+    <message>
+        <source>Automatically drop session MVs when plugin unloads</source>
+        <translation>Drop automatisk sessions MV&apos;er når plugin afloades</translation>
+    </message>
+    <message>
+        <source>Create MVs for datasets larger than this</source>
+        <translation>Opret MV&apos;er for datasæt større end dette</translation>
+    </message>
+    <message>
+        <source>faster possible</source>
+        <translation>hurtigere muligt</translation>
+    </message>
+    <message>
+        <source>Optimizations available</source>
+        <translation>Optimeringer tilgængelige</translation>
+    </message>
+    <message>
+        <source>FilterMate - Apply Optimizations?</source>
+        <translation>FilterMate - Anvend optimeringer?</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Spring over</translation>
+    </message>
+    <message>
+        <source>✓ Apply</source>
+        <translation>✓ Anvend</translation>
+    </message>
+    <message>
+        <source>Don&apos;t ask for this session</source>
+        <translation>Spørg ikke for denne session</translation>
+    </message>
+    <message>
+        <source>Centroids</source>
+        <translation>Centroider</translation>
+    </message>
+    <message>
+        <source>Simplify</source>
+        <translation>Forenkle</translation>
+    </message>
+    <message>
+        <source>Pre-simplify</source>
+        <translation>For-forenkle</translation>
+    </message>
+    <message>
+        <source>Fewer segments</source>
+        <translation>Færre segmenter</translation>
+    </message>
+    <message>
+        <source>Flat buffer</source>
+        <translation>Flad buffer</translation>
+    </message>
+    <message>
+        <source>BBox filter</source>
+        <translation>BBox filter</translation>
+    </message>
+    <message>
+        <source>Attr-first</source>
+        <translation>Attr-først</translation>
+    </message>
+    <message>
+        <source>PostgreSQL not available</source>
+        <translation>PostgreSQL ikke tilgængelig</translation>
+    </message>
+    <message>
+        <source>No connection</source>
+        <translation>Ingen forbindelse</translation>
+    </message>
+    <message>
+        <source>Auto-zoom when feature changes</source>
+        <translation>Auto-zoom når funktionen ændres</translation>
+    </message>
+    <message>
+        <source>Backend optimization settings saved</source>
+        <translation>Backend optimeringsindstillinger gemt</translation>
+    </message>
+    <message>
+        <source>Backend optimizations configured</source>
+        <translation>Backend optimeringer konfigureret</translation>
+    </message>
+    <message>
+        <source>Expression Evaluation</source>
+        <translation>Udtryks evaluering</translation>
+    </message>
+    <message>
+        <source>Identify selected feature</source>
+        <translation>Identificer valgt funktion</translation>
+    </message>
+    <message>
+        <source>Layer properties reset to defaults</source>
+        <translation>Lagegenskaber nulstillet til standard</translation>
+    </message>
+    <message>
+        <source>Link exploring widgets together</source>
+        <translation>Forbind udforsknings widgets sammen</translation>
+    </message>
+    <message>
+        <source>Optimization settings saved</source>
+        <translation>Optimeringsindstillinger gemt</translation>
+    </message>
+    <message>
+        <source>Reset all layer exploring properties</source>
+        <translation>Nulstil alle lag udforskningsegenskaber</translation>
+    </message>
+    <message>
+        <source>Toggle feature selection on map</source>
+        <translation>Skift funktionsvalg på kort</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source>
+        <translation>Brug centroider i stedet for fulde geometrier for fjerne lag (hurtigere for komplekse polygoner)</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source>
+        <translation>Brug centroider i stedet for fulde geometrier for kildelag (hurtigere for komplekse polygoner)</translation>
+    </message>
+    <message>
+        <source>Zoom to selected feature</source>
+        <translation>Zoom til valgt funktion</translation>
+    </message>
+</context>
+<context>
+    <name>OptimizationDialog</name>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>Optimeringsindstillinger</translation>
+    </message>
+    <message>
+        <source>Configure Optimization Settings</source>
+        <translation>Konfigurer optimeringsindstillinger</translation>
+    </message>
+    <message>
+        <source>Enable automatic optimizations</source>
+        <translation>Aktiver automatiske optimeringer</translation>
+    </message>
+    <message>
+        <source>Ask before applying optimizations</source>
+        <translation>Spørg før optimeringer anvendes</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid Settings</source>
+        <translation>Auto-centroid indstillinger</translation>
+    </message>
+    <message>
+        <source>Enable auto-centroid for distant layers</source>
+        <translation>Aktiver auto-centroid for fjerne lag</translation>
+    </message>
+    <message>
+        <source>Distance threshold (km):</source>
+        <translation>Afstandstærskel (km):</translation>
+    </message>
+    <message>
+        <source>Feature threshold:</source>
+        <translation>Funktionstærskel:</translation>
+    </message>
+    <message>
+        <source>Buffer Optimizations</source>
+        <translation>Bufferoptimeringer</translation>
+    </message>
+    <message>
+        <source>Simplify geometry before buffer</source>
+        <translation>Forenkl geometri før buffer</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments to:</source>
+        <translation>Reducer buffersegmenter til:</translation>
+    </message>
+    <message>
+        <source>General</source>
+        <translation>Generelt</translation>
+    </message>
+    <message>
+        <source>Use materialized views for filtering</source>
+        <translation>Brug materialiserede views til filtrering</translation>
+    </message>
+    <message>
+        <source>Create spatial indices automatically</source>
+        <translation>Opret rumlige indekser automatisk</translation>
+    </message>
+    <message>
+        <source>Use R-tree spatial index</source>
+        <translation>Brug R-tree rumligt indeks</translation>
+    </message>
+    <message>
+        <source>Use bounding box pre-filter</source>
+        <translation>Brug bounding box præfilter</translation>
+    </message>
+    <message>
+        <source>Backends</source>
+        <translation>Backends</translation>
+    </message>
+    <message>
+        <source>Caching</source>
+        <translation>Caching</translation>
+    </message>
+    <message>
+        <source>Enable geometry cache</source>
+        <translation>Aktiver geometri cache</translation>
+    </message>
+    <message>
+        <source>Batch Processing</source>
+        <translation>Batchbehandling</translation>
+    </message>
+    <message>
+        <source>Batch size:</source>
+        <translation>Batchstørrelse:</translation>
+    </message>
+    <message>
+        <source>Advanced settings affect performance and memory usage. Change only if you understand the implications.</source>
+        <translation>Avancerede indstillinger påvirker ydeevne og hukommelsesforbrug. Ændr kun hvis du forstår konsekvenserne.</translation>
+    </message>
+    <message>
+        <source>Advanced</source>
+        <translation>Avanceret</translation>
+    </message>
+</context>
+<context>
+    <name>RecommendationDialog</name>
+    <message>
+        <source>Apply Optimizations?</source>
+        <translation>Anvend optimeringer?</translation>
+    </message>
+    <message>
+        <source>Optimizations Available</source>
+        <translation>Tilgængelige optimeringer</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Spring over</translation>
+    </message>
+    <message>
+        <source>Apply Selected</source>
+        <translation>Anvend valgte</translation>
+    </message>
+</context>
+<context>
+    <name>PostgresInfoDialog</name>
+    <message>
+        <source>PostgreSQL Session Info</source>
+        <translation>PostgreSQL sessionsinfo</translation>
+    </message>
+    <message>
+        <source>PostgreSQL Active</source>
+        <translation>PostgreSQL aktiv</translation>
+    </message>
+    <message>
+        <source>Connection Info</source>
+        <translation>Forbindelsesinfo</translation>
+    </message>
+    <message>
+        <source>Connection:</source>
+        <translation>Forbindelse:</translation>
+    </message>
+    <message>
+        <source>Temp Schema:</source>
+        <translation>Midlertidigt skema:</translation>
+    </message>
+    <message>
+        <source>Status:</source>
+        <translation>Status:</translation>
+    </message>
+    <message>
+        <source>Temporary Views</source>
+        <translation>Midlertidige views</translation>
+    </message>
+    <message>
+        <source>Cleanup Options</source>
+        <translation>Oprydningsmuligheder</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on close</source>
+        <translation>Automatisk oprydning ved lukning</translation>
+    </message>
+    <message>
+        <source>Automatically cleanup temporary views when FilterMate closes.</source>
+        <translation>Ryd automatisk midlertidige views når FilterMate lukkes.</translation>
+    </message>
+    <message>
+        <source>🗑️ Cleanup Now</source>
+        <translation>🗑️ Ryd nu</translation>
+    </message>
+    <message>
+        <source>Drop all temporary views created by FilterMate in this session.</source>
+        <translation>Slet alle midlertidige views oprettet af FilterMate i denne session.</translation>
+    </message>
+    <message>
+        <source>(No temporary views)</source>
+        <translation>(Ingen midlertidige views)</translation>
+    </message>
+    <message>
+        <source>No Views</source>
+        <translation>Ingen views</translation>
+    </message>
+    <message>
+        <source>There are no temporary views to clean up.</source>
+        <translation>Der er ingen midlertidige views at rydde op.</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>Bekræft oprydning</translation>
+    </message>
+    <message>
+        <source>Cleanup Complete</source>
+        <translation>Oprydning fuldført</translation>
+    </message>
+    <message>
+        <source>Cleanup Issue</source>
+        <translation>Oprydningsproblem</translation>
+    </message>
+    <message>
+        <source>Cleanup Failed</source>
+        <translation>Oprydning mislykkedes</translation>
+    </message>
+</context>
 </TS>

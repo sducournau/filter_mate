@@ -1183,9 +1183,6 @@
                        <property name="spacing">
                         <number>2</number>
                        </property>
-                       <property name="sizeConstraint">
-                        <enum>QLayout::SetMinimumSize</enum>
-                       </property>
                        <property name="leftMargin">
                         <number>0</number>
                        </property>

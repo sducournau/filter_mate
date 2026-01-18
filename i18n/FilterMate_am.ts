@@ -1,4 +1,5 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
 <TS version="2.1" language="am_ET" sourcelanguage="am_ET">
 <context>
     <name>FilterMate</name>
@@ -163,25 +164,25 @@ Do you want to continue?</translation>
         <translation>የጂኦሜትሪ ማረጋገጫ ቅንብር</translation>
     </message>
     <message>
-        <source>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
+        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
 
-FilterMate recommends disabling this setting (value 'Off') for the following reasons:
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
 
 Do you want to disable this setting now?
 
 • Yes: Disable filtering (recommended for FilterMate)
 • No: Keep current setting</source>
-        <translation>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
+        <translation>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
 
-FilterMate recommends disabling this setting (value 'Off') for the following reasons:
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
 
 Do you want to disable this setting now?
 
@@ -1073,7 +1074,400 @@ First attribute: {1}</translation>
         <source>Error applying settings</source>
         <translation>ቅንብሮችን በመተግበር ላይ ስህተት</translation>
     </message>
-<message><source>MV Status: Checking...</source><translation type="unfinished">MV Status: Checking...</translation></message><message><source>MV Status: Error</source><translation type="unfinished">MV Status: Error</translation></message><message><source>MV Status: Clean</source><translation type="unfinished">MV Status: Clean</translation></message><message><source>MV Status:</source><translation type="unfinished">MV Status:</translation></message><message><source>active</source><translation type="unfinished">active</translation></message><message><source>No active materialized views</source><translation type="unfinished">No active materialized views</translation></message><message><source>Session:</source><translation type="unfinished">Session:</translation></message><message><source>Other sessions:</source><translation type="unfinished">Other sessions:</translation></message><message><source>🧹 Session</source><translation type="unfinished">🧹 Session</translation></message><message><source>Cleanup MVs from this session</source><translation type="unfinished">Cleanup MVs from this session</translation></message><message><source>🗑️ Orphaned</source><translation type="unfinished">🗑️ Orphaned</translation></message><message><source>Cleanup orphaned MVs (&gt;24h old)</source><translation type="unfinished">Cleanup orphaned MVs (&gt;24h old)</translation></message><message><source>⚠️ All</source><translation type="unfinished">⚠️ All</translation></message><message><source>Cleanup ALL MVs (affects other sessions)</source><translation type="unfinished">Cleanup ALL MVs (affects other sessions)</translation></message><message><source>Confirm Cleanup</source><translation type="unfinished">Confirm Cleanup</translation></message><message><source>Drop ALL materialized views?
-This affects other FilterMate sessions!</source><translation type="unfinished">Drop ALL materialized views?
-This affects other FilterMate sessions!</translation></message><message><source>Refresh MV status</source><translation type="unfinished">Refresh MV status</translation></message><message><source>Threshold:</source><translation type="unfinished">Threshold:</translation></message><message><source>features</source><translation type="unfinished">features</translation></message><message><source>Auto-cleanup on exit</source><translation type="unfinished">Auto-cleanup on exit</translation></message><message><source>Automatically drop session MVs when plugin unloads</source><translation type="unfinished">Automatically drop session MVs when plugin unloads</translation></message><message><source>Create MVs for datasets larger than this</source><translation type="unfinished">Create MVs for datasets larger than this</translation></message><message><source>faster possible</source><translation type="unfinished">faster possible</translation></message><message><source>Optimizations available</source><translation type="unfinished">Optimizations available</translation></message><message><source>FilterMate - Apply Optimizations?</source><translation type="unfinished">FilterMate - Apply Optimizations?</translation></message><message><source>Skip</source><translation type="unfinished">Skip</translation></message><message><source>✓ Apply</source><translation type="unfinished">✓ Apply</translation></message><message><source>Don't ask for this session</source><translation type="unfinished">Don't ask for this session</translation></message><message><source>Centroids</source><translation type="unfinished">Centroids</translation></message><message><source>Simplify</source><translation type="unfinished">Simplify</translation></message><message><source>Pre-simplify</source><translation type="unfinished">Pre-simplify</translation></message><message><source>Fewer segments</source><translation type="unfinished">Fewer segments</translation></message><message><source>Flat buffer</source><translation type="unfinished">Flat buffer</translation></message><message><source>BBox filter</source><translation type="unfinished">BBox filter</translation></message><message><source>Attr-first</source><translation type="unfinished">Attr-first</translation></message><message><source>PostgreSQL not available</source><translation type="unfinished">PostgreSQL not available</translation></message><message><source>No connection</source><translation type="unfinished">No connection</translation></message><message><source>Auto-zoom when feature changes</source><translation type="unfinished">Auto-zoom when feature changes</translation></message><message><source>Backend optimization settings saved</source><translation type="unfinished">Backend optimization settings saved</translation></message><message><source>Backend optimizations configured</source><translation type="unfinished">Backend optimizations configured</translation></message><message><source>Expression Evaluation</source><translation type="unfinished">Expression Evaluation</translation></message><message><source>Identify selected feature</source><translation type="unfinished">Identify selected feature</translation></message><message><source>Layer properties reset to defaults</source><translation type="unfinished">Layer properties reset to defaults</translation></message><message><source>Link exploring widgets together</source><translation type="unfinished">Link exploring widgets together</translation></message><message><source>Optimization settings saved</source><translation type="unfinished">Optimization settings saved</translation></message><message><source>Reset all layer exploring properties</source><translation type="unfinished">Reset all layer exploring properties</translation></message><message><source>Toggle feature selection on map</source><translation type="unfinished">Toggle feature selection on map</translation></message><message><source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for distant layers (faster for complex polygons)</translation></message><message><source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for source layer (faster for complex polygons)</translation></message><message><source>Zoom to selected feature</source><translation type="unfinished">Zoom to selected feature</translation></message></context>
+    <message>
+        <source>MV Status: Checking...</source>
+        <translation>የ MV ሁኔታ: በመፈተሽ ላይ...</translation>
+    </message>
+    <message>
+        <source>MV Status: Error</source>
+        <translation>የ MV ሁኔታ: ስህተት</translation>
+    </message>
+    <message>
+        <source>MV Status: Clean</source>
+        <translation>የ MV ሁኔታ: ንፁህ</translation>
+    </message>
+    <message>
+        <source>MV Status:</source>
+        <translation>የ MV ሁኔታ:</translation>
+    </message>
+    <message>
+        <source>active</source>
+        <translation>ንቁ</translation>
+    </message>
+    <message>
+        <source>No active materialized views</source>
+        <translation>ምንም ንቁ materialized views የሉም</translation>
+    </message>
+    <message>
+        <source>Session:</source>
+        <translation>ክፍለ ጊዜ:</translation>
+    </message>
+    <message>
+        <source>Other sessions:</source>
+        <translation>ሌሎች ክፍለ ጊዜዎች:</translation>
+    </message>
+    <message>
+        <source>🧹 Session</source>
+        <translation>🧹 ክፍለ ጊዜ</translation>
+    </message>
+    <message>
+        <source>Cleanup MVs from this session</source>
+        <translation>የ MV ዎችን ከዚህ ክፍለ ጊዜ አጽዳ</translation>
+    </message>
+    <message>
+        <source>🗑️ Orphaned</source>
+        <translation>🗑️ ወላጅ አልባ</translation>
+    </message>
+    <message>
+        <source>Cleanup orphaned MVs (&gt;24h old)</source>
+        <translation>ወላጅ አልባ MV ዎችን አጽዳ (&gt;24 ሰዓት)</translation>
+    </message>
+    <message>
+        <source>⚠️ All</source>
+        <translation>⚠️ ሁሉም</translation>
+    </message>
+    <message>
+        <source>Cleanup ALL MVs (affects other sessions)</source>
+        <translation>ሁሉንም MV ዎች አጽዳ (ሌሎች ክፍለ ጊዜዎችን ይነካል)</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>ማጽዳትን አረጋግጥ</translation>
+    </message>
+    <message>
+        <source>Drop ALL materialized views?
+This affects other FilterMate sessions!</source>
+        <translation>ሁሉንም materialized views ይጣሉ?
+ይህ ሌሎች FilterMate ክፍለ ጊዜዎችን ይነካል!</translation>
+    </message>
+    <message>
+        <source>Refresh MV status</source>
+        <translation>የ MV ሁኔታን አድስ</translation>
+    </message>
+    <message>
+        <source>Threshold:</source>
+        <translation>ገደብ:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>ባህሪያት</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on exit</source>
+        <translation>በመውጫ ጊዜ ራስ-ሰር ያጽዱ</translation>
+    </message>
+    <message>
+        <source>Automatically drop session MVs when plugin unloads</source>
+        <translation>ተሰኪ ሲጫን የክፍለ ጊዜ MVs ን በራስ ሰር ይጣሉ</translation>
+    </message>
+    <message>
+        <source>Create MVs for datasets larger than this</source>
+        <translation>ከዚህ የሚበልጡ የውሂብ ስብስቦች ለ MVs ይፍጠሩ</translation>
+    </message>
+    <message>
+        <source>faster possible</source>
+        <translation>ፈጣን ይቻላል</translation>
+    </message>
+    <message>
+        <source>Optimizations available</source>
+        <translation>ማመቻቸቶች ይገኛሉ</translation>
+    </message>
+    <message>
+        <source>FilterMate - Apply Optimizations?</source>
+        <translation>FilterMate - ማመቻቸቶችን ይተግብሩ?</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>ዝለል</translation>
+    </message>
+    <message>
+        <source>✓ Apply</source>
+        <translation>✓ ተግብር</translation>
+    </message>
+    <message>
+        <source>Don&apos;t ask for this session</source>
+        <translation>ለዚህ ክፍለ ጊዜ አትጠይቅ</translation>
+    </message>
+    <message>
+        <source>Centroids</source>
+        <translation>ማእከላት</translation>
+    </message>
+    <message>
+        <source>Simplify</source>
+        <translation>ቀለል ያድርጉ</translation>
+    </message>
+    <message>
+        <source>Pre-simplify</source>
+        <translation>ቀድሞ-ቀለል ያድርጉ</translation>
+    </message>
+    <message>
+        <source>Fewer segments</source>
+        <translation>ያነሱ ክፍሎች</translation>
+    </message>
+    <message>
+        <source>Flat buffer</source>
+        <translation>ጠፍጣፋ ማቆያ</translation>
+    </message>
+    <message>
+        <source>BBox filter</source>
+        <translation>BBox ማጣሪያ</translation>
+    </message>
+    <message>
+        <source>Attr-first</source>
+        <translation>Attr-መጀመሪያ</translation>
+    </message>
+    <message>
+        <source>PostgreSQL not available</source>
+        <translation>PostgreSQL አይገኝም</translation>
+    </message>
+    <message>
+        <source>No connection</source>
+        <translation>ግንኙነት የለም</translation>
+    </message>
+    <message>
+        <source>Auto-zoom when feature changes</source>
+        <translation>ባህሪ ሲቀየር ራስ-ሰር አጉላ</translation>
+    </message>
+    <message>
+        <source>Backend optimization settings saved</source>
+        <translation>የኋላ ማመቻቸት ቅንብሮች ተቀምጠዋል</translation>
+    </message>
+    <message>
+        <source>Backend optimizations configured</source>
+        <translation>የኋላ ማመቻቸቶች ተዋቅረዋል</translation>
+    </message>
+    <message>
+        <source>Expression Evaluation</source>
+        <translation>አገላለጽ ግምገማ</translation>
+    </message>
+    <message>
+        <source>Identify selected feature</source>
+        <translation>የተመረጠውን ባህሪ ለይ</translation>
+    </message>
+    <message>
+        <source>Layer properties reset to defaults</source>
+        <translation>የንብርብር ባህሪያት ወደ ነባሪዎች ተመልሰዋል</translation>
+    </message>
+    <message>
+        <source>Link exploring widgets together</source>
+        <translation>የማስሳሻ ዊጀቶችን አገናኝ</translation>
+    </message>
+    <message>
+        <source>Optimization settings saved</source>
+        <translation>የማመቻቸት ቅንብሮች ተቀምጠዋል</translation>
+    </message>
+    <message>
+        <source>Reset all layer exploring properties</source>
+        <translation>ሁሉንም የንብርብር ማስሳሻ ባህሪያት ዳግም አስጀምር</translation>
+    </message>
+    <message>
+        <source>Toggle feature selection on map</source>
+        <translation>በካርታ ላይ የባህሪ ምርጫን ቀያይር</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source>
+        <translation>ለርቀት ንብርብሮች ሙሉ ጂኦሜትሪዎች ፈንታ ማእከላትን ይጠቀሙ (ለውስብስብ ፖሊጎኖች ፈጣን)</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source>
+        <translation>ለምንጭ ንብርብር ሙሉ ጂኦሜትሪዎች ፈንታ ማእከላትን ይጠቀሙ (ለውስብስብ ፖሊጎኖች ፈጣን)</translation>
+    </message>
+    <message>
+        <source>Zoom to selected feature</source>
+        <translation>ወደ ተመረጠው ባህሪ አጉላ</translation>
+    </message>
+</context>
+<context>
+    <name>OptimizationDialog</name>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>የማበልጸጊያ ቅንብሮች</translation>
+    </message>
+    <message>
+        <source>Configure Optimization Settings</source>
+        <translation>የማበልጸጊያ ቅንብሮችን ያዋቅሩ</translation>
+    </message>
+    <message>
+        <source>Enable automatic optimizations</source>
+        <translation>ራስ-ሰር ማበልጸጊያዎችን ያንቁ</translation>
+    </message>
+    <message>
+        <source>Ask before applying optimizations</source>
+        <translation>ማበልጸጊያዎችን ከመተግበርዎ በፊት ይጠይቁ</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid Settings</source>
+        <translation>ራስ-ሰር ማዕከል ቅንብሮች</translation>
+    </message>
+    <message>
+        <source>Enable auto-centroid for distant layers</source>
+        <translation>ለሩቅ ንብርብሮች ራስ-ሰር ማዕከልን ያንቁ</translation>
+    </message>
+    <message>
+        <source>Distance threshold (km):</source>
+        <translation>የርቀት ገደብ (ኪሜ)፡</translation>
+    </message>
+    <message>
+        <source>Feature threshold:</source>
+        <translation>የባህሪ ገደብ፡</translation>
+    </message>
+    <message>
+        <source>Buffer Optimizations</source>
+        <translation>የቋት ማበልጸጊያዎች</translation>
+    </message>
+    <message>
+        <source>Simplify geometry before buffer</source>
+        <translation>ቋት ከማድረግ በፊት ጂኦሜትሪን ቀላል ያድርጉ</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments to:</source>
+        <translation>የቋት ክፍሎችን ወደዚህ ይቀንሱ፡</translation>
+    </message>
+    <message>
+        <source>General</source>
+        <translation>አጠቃላይ</translation>
+    </message>
+    <message>
+        <source>Use materialized views for filtering</source>
+        <translation>ለማጣራት ቁሳዊ እይታዎችን ይጠቀሙ</translation>
+    </message>
+    <message>
+        <source>Create spatial indices automatically</source>
+        <translation>የቦታ መረጃ ጠቋሚዎችን በራስ-ሰር ይፍጠሩ</translation>
+    </message>
+    <message>
+        <source>Use R-tree spatial index</source>
+        <translation>R-ዛፍ የቦታ መረጃ ጠቋሚ ይጠቀሙ</translation>
+    </message>
+    <message>
+        <source>Use bounding box pre-filter</source>
+        <translation>የድንበር ሳጥን ቅድመ-ማጣሪያ ይጠቀሙ</translation>
+    </message>
+    <message>
+        <source>Backends</source>
+        <translation>የኋላ ክፍሎች</translation>
+    </message>
+    <message>
+        <source>Caching</source>
+        <translation>ማስቀመጫ</translation>
+    </message>
+    <message>
+        <source>Enable geometry cache</source>
+        <translation>የጂኦሜትሪ ማስቀመጫን ያንቁ</translation>
+    </message>
+    <message>
+        <source>Batch Processing</source>
+        <translation>የቡድን ሂደት</translation>
+    </message>
+    <message>
+        <source>Batch size:</source>
+        <translation>የቡድን መጠን፡</translation>
+    </message>
+    <message>
+        <source>Advanced settings affect performance and memory usage. Change only if you understand the implications.</source>
+        <translation>የላቁ ቅንብሮች አፈጻጸምን እና የማህደረ ትውስታ አጠቃቀምን ይነካሉ። ውጤቶቹን ከተረዱ ብቻ ይቀይሩ።</translation>
+    </message>
+    <message>
+        <source>Advanced</source>
+        <translation>የላቀ</translation>
+    </message>
+</context>
+<context>
+    <name>RecommendationDialog</name>
+    <message>
+        <source>Apply Optimizations?</source>
+        <translation>ማበልጸጊያዎችን ይተግብሩ?</translation>
+    </message>
+    <message>
+        <source>Optimizations Available</source>
+        <translation>የሚገኙ ማበልጸጊያዎች</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>ዝለል</translation>
+    </message>
+    <message>
+        <source>Apply Selected</source>
+        <translation>የተመረጡትን ይተግብሩ</translation>
+    </message>
+</context>
+<context>
+    <name>PostgresInfoDialog</name>
+    <message>
+        <source>PostgreSQL Session Info</source>
+        <translation>የPostgreSQL ክፍለ ጊዜ መረጃ</translation>
+    </message>
+    <message>
+        <source>PostgreSQL Active</source>
+        <translation>PostgreSQL ንቁ</translation>
+    </message>
+    <message>
+        <source>Connection Info</source>
+        <translation>የግንኙነት መረጃ</translation>
+    </message>
+    <message>
+        <source>Connection:</source>
+        <translation>ግንኙነት:</translation>
+    </message>
+    <message>
+        <source>Temp Schema:</source>
+        <translation>ጊዜያዊ ስክማ:</translation>
+    </message>
+    <message>
+        <source>Status:</source>
+        <translation>ሁኔታ:</translation>
+    </message>
+    <message>
+        <source>Temporary Views</source>
+        <translation>ጊዜያዊ እይታዎች</translation>
+    </message>
+    <message>
+        <source>Cleanup Options</source>
+        <translation>የማጽዳት አማራጮች</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on close</source>
+        <translation>በመዘጋት ላይ ራስ-ሰር ማጽዳት</translation>
+    </message>
+    <message>
+        <source>Automatically cleanup temporary views when FilterMate closes.</source>
+        <translation>FilterMate ሲዘጋ ጊዜያዊ እይታዎችን በራስ-ሰር ያጽዱ።</translation>
+    </message>
+    <message>
+        <source>🗑️ Cleanup Now</source>
+        <translation>🗑️ አሁን አጽዳ</translation>
+    </message>
+    <message>
+        <source>Drop all temporary views created by FilterMate in this session.</source>
+        <translation>በዚህ ክፍለ ጊዜ FilterMate የፈጠራቸውን ሁሉንም ጊዜያዊ እይታዎች ያስወግዱ።</translation>
+    </message>
+    <message>
+        <source>(No temporary views)</source>
+        <translation>(ጊዜያዊ እይታዎች የሉም)</translation>
+    </message>
+    <message>
+        <source>No Views</source>
+        <translation>እይታዎች የሉም</translation>
+    </message>
+    <message>
+        <source>There are no temporary views to clean up.</source>
+        <translation>የሚጸዱ ጊዜያዊ እይታዎች የሉም።</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>ማጽዳት ያረጋግጡ</translation>
+    </message>
+    <message>
+        <source>Cleanup Complete</source>
+        <translation>ማጽዳት ተጠናቋል</translation>
+    </message>
+    <message>
+        <source>Cleanup Issue</source>
+        <translation>የማጽዳት ችግር</translation>
+    </message>
+    <message>
+        <source>Cleanup Failed</source>
+        <translation>ማጽዳት አልተሳካም</translation>
+    </message>
+</context>
 </TS>

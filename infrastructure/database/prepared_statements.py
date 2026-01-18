@@ -85,11 +85,13 @@ class PostgreSQLPreparedStatements(PreparedStatementManager):
         try:
             cursor = self.connection.cursor()
             # Prepare insert statement
+            # Column names must match fm_subset_history schema:
+            # id, _updated_at, fk_project, layer_id, layer_source_id, seq_order, subset_string
             cursor.execute("""
-                PREPARE insert_subset_history_stmt (text, text, text, text, int, text) AS
+                PREPARE insert_subset_history_stmt (text, timestamp, text, text, text, int, text) AS
                 INSERT INTO fm_subset_history (
-                    history_id, project_uuid, layer_id, source_layer_id, seq_order, subset_string
-                ) VALUES ($1, $2, $3, $4, $5, $6)
+                    id, _updated_at, fk_project, layer_id, layer_source_id, seq_order, subset_string
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7)
             """)
             self._stmt_names.append('insert_subset_history_stmt')
             self._prepared = True
@@ -108,11 +110,12 @@ class PostgreSQLPreparedStatements(PreparedStatementManager):
         subset_string: str
     ) -> bool:
         """Execute prepared insert statement."""
+        from datetime import datetime
         try:
             cursor = self.connection.cursor()
             cursor.execute(
-                "EXECUTE insert_subset_history_stmt (%s, %s, %s, %s, %s, %s)",
-                (history_id, project_uuid, layer_id, source_layer_id, seq_order, subset_string)
+                "EXECUTE insert_subset_history_stmt (%s, %s, %s, %s, %s, %s, %s)",
+                (history_id, datetime.now(), project_uuid, layer_id, source_layer_id, seq_order, subset_string)
             )
             self.connection.commit()
             return True
@@ -166,10 +169,12 @@ class SpatialitePreparedStatements(PreparedStatementManager):
         """Prepare Spatialite parameterized queries."""
         try:
             # Spatialite/SQLite uses ? placeholders
+            # Column names must match fm_subset_history schema:
+            # id, _updated_at, fk_project, layer_id, layer_source_id, seq_order, subset_string
             self._insert_sql = """
                 INSERT INTO fm_subset_history (
-                    history_id, project_uuid, layer_id, source_layer_id, seq_order, subset_string
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    id, _updated_at, fk_project, layer_id, layer_source_id, seq_order, subset_string
+                ) VALUES (?, datetime('now'), ?, ?, ?, ?, ?)
             """
             self._prepared = True
             return True

@@ -1,4 +1,5 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
 <TS version="2.1" language="tr_TR" sourcelanguage="en_US">
 <context>
     <name>FilterMate</name>
@@ -64,7 +65,7 @@ Bu işlem:
 Please restart QGIS to apply all changes.</source>
         <translation>Yapılandırma sıfırlandı.
 
-Tüm değişiklikleri uygulamak için lütfen QGIS'i yeniden başlatın.</translation>
+Tüm değişiklikleri uygulamak için lütfen QGIS&apos;i yeniden başlatın.</translation>
     </message>
     <message>
         <source>Error during reset: {error}</source>
@@ -211,25 +212,25 @@ Devam etmek istiyor musunuz?</translation>
         <translation>Yapılandırma geçişi sırasında hata: {}</translation>
     </message>
     <message>
-        <source>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
+        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
 
-FilterMate recommends disabling this setting (value 'Off') for the following reasons:
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
 
 Do you want to disable this setting now?
 
 • Yes: Disable filtering (recommended for FilterMate)
 • No: Keep current setting</source>
-        <translation>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
+        <translation>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
 
-FilterMate recommends disabling this setting (value 'Off') for the following reasons:
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
 
 Do you want to disable this setting now?
 
@@ -258,7 +259,7 @@ Değişiklikleri uygulamak için QGIS yeniden başlatılmalıdır.</translation>
 Please restart QGIS to apply the changes.</source>
         <translation>Yapılandırma sıfırlandı.
 
-Değişiklikleri uygulamak için lütfen QGIS'i yeniden başlatın.</translation>
+Değişiklikleri uygulamak için lütfen QGIS&apos;i yeniden başlatın.</translation>
     </message>
 </context>
 <context>
@@ -309,7 +310,7 @@ Değişiklikleri uygulamak için lütfen QGIS'i yeniden başlatın.</translation
     </message>
     <message>
         <source>Link widgets - Synchronize selection between widgets</source>
-        <translation>Widget'ları bağla - Widget'lar arasında seçimi senkronize et</translation>
+        <translation>Widget&apos;ları bağla - Widget&apos;lar arasında seçimi senkronize et</translation>
     </message>
     <message>
         <source>Reset layer properties - Restore default layer settings</source>
@@ -592,7 +593,7 @@ Değişiklikleri uygulamak için lütfen QGIS'i yeniden başlatın.</translation
     </message>
     <message>
         <source>Do you want to reload FilterMate to apply all configuration changes?</source>
-        <translation>Tüm yapılandırma değişikliklerini uygulamak için FilterMate'i yeniden yüklemek istiyor musunuz?</translation>
+        <translation>Tüm yapılandırma değişikliklerini uygulamak için FilterMate&apos;i yeniden yüklemek istiyor musunuz?</translation>
     </message>
     <message>
         <source>Current layer: {name}</source>
@@ -1073,7 +1074,400 @@ First attribute: {1}</source>
         <source>Error applying settings</source>
         <translation>Ayarlar uygulanırken hata oluştu</translation>
     </message>
-<message><source>MV Status: Checking...</source><translation type="unfinished">MV Status: Checking...</translation></message><message><source>MV Status: Error</source><translation type="unfinished">MV Status: Error</translation></message><message><source>MV Status: Clean</source><translation type="unfinished">MV Status: Clean</translation></message><message><source>MV Status:</source><translation type="unfinished">MV Status:</translation></message><message><source>active</source><translation type="unfinished">active</translation></message><message><source>No active materialized views</source><translation type="unfinished">No active materialized views</translation></message><message><source>Session:</source><translation type="unfinished">Session:</translation></message><message><source>Other sessions:</source><translation type="unfinished">Other sessions:</translation></message><message><source>🧹 Session</source><translation type="unfinished">🧹 Session</translation></message><message><source>Cleanup MVs from this session</source><translation type="unfinished">Cleanup MVs from this session</translation></message><message><source>🗑️ Orphaned</source><translation type="unfinished">🗑️ Orphaned</translation></message><message><source>Cleanup orphaned MVs (&gt;24h old)</source><translation type="unfinished">Cleanup orphaned MVs (&gt;24h old)</translation></message><message><source>⚠️ All</source><translation type="unfinished">⚠️ All</translation></message><message><source>Cleanup ALL MVs (affects other sessions)</source><translation type="unfinished">Cleanup ALL MVs (affects other sessions)</translation></message><message><source>Confirm Cleanup</source><translation type="unfinished">Confirm Cleanup</translation></message><message><source>Drop ALL materialized views?
-This affects other FilterMate sessions!</source><translation type="unfinished">Drop ALL materialized views?
-This affects other FilterMate sessions!</translation></message><message><source>Refresh MV status</source><translation type="unfinished">Refresh MV status</translation></message><message><source>Threshold:</source><translation type="unfinished">Threshold:</translation></message><message><source>features</source><translation type="unfinished">features</translation></message><message><source>Auto-cleanup on exit</source><translation type="unfinished">Auto-cleanup on exit</translation></message><message><source>Automatically drop session MVs when plugin unloads</source><translation type="unfinished">Automatically drop session MVs when plugin unloads</translation></message><message><source>Create MVs for datasets larger than this</source><translation type="unfinished">Create MVs for datasets larger than this</translation></message><message><source>faster possible</source><translation type="unfinished">faster possible</translation></message><message><source>Optimizations available</source><translation type="unfinished">Optimizations available</translation></message><message><source>FilterMate - Apply Optimizations?</source><translation type="unfinished">FilterMate - Apply Optimizations?</translation></message><message><source>Skip</source><translation type="unfinished">Skip</translation></message><message><source>✓ Apply</source><translation type="unfinished">✓ Apply</translation></message><message><source>Don't ask for this session</source><translation type="unfinished">Don't ask for this session</translation></message><message><source>Centroids</source><translation type="unfinished">Centroids</translation></message><message><source>Simplify</source><translation type="unfinished">Simplify</translation></message><message><source>Pre-simplify</source><translation type="unfinished">Pre-simplify</translation></message><message><source>Fewer segments</source><translation type="unfinished">Fewer segments</translation></message><message><source>Flat buffer</source><translation type="unfinished">Flat buffer</translation></message><message><source>BBox filter</source><translation type="unfinished">BBox filter</translation></message><message><source>Attr-first</source><translation type="unfinished">Attr-first</translation></message><message><source>PostgreSQL not available</source><translation type="unfinished">PostgreSQL not available</translation></message><message><source>No connection</source><translation type="unfinished">No connection</translation></message><message><source>Auto-zoom when feature changes</source><translation type="unfinished">Auto-zoom when feature changes</translation></message><message><source>Backend optimization settings saved</source><translation type="unfinished">Backend optimization settings saved</translation></message><message><source>Backend optimizations configured</source><translation type="unfinished">Backend optimizations configured</translation></message><message><source>Expression Evaluation</source><translation type="unfinished">Expression Evaluation</translation></message><message><source>Identify selected feature</source><translation type="unfinished">Identify selected feature</translation></message><message><source>Layer properties reset to defaults</source><translation type="unfinished">Layer properties reset to defaults</translation></message><message><source>Link exploring widgets together</source><translation type="unfinished">Link exploring widgets together</translation></message><message><source>Optimization settings saved</source><translation type="unfinished">Optimization settings saved</translation></message><message><source>Reset all layer exploring properties</source><translation type="unfinished">Reset all layer exploring properties</translation></message><message><source>Toggle feature selection on map</source><translation type="unfinished">Toggle feature selection on map</translation></message><message><source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for distant layers (faster for complex polygons)</translation></message><message><source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for source layer (faster for complex polygons)</translation></message><message><source>Zoom to selected feature</source><translation type="unfinished">Zoom to selected feature</translation></message></context>
+    <message>
+        <source>MV Status: Checking...</source>
+        <translation>MV Durumu: Kontrol ediliyor...</translation>
+    </message>
+    <message>
+        <source>MV Status: Error</source>
+        <translation>MV Durumu: Hata</translation>
+    </message>
+    <message>
+        <source>MV Status: Clean</source>
+        <translation>MV Durumu: Temiz</translation>
+    </message>
+    <message>
+        <source>MV Status:</source>
+        <translation>MV Durumu:</translation>
+    </message>
+    <message>
+        <source>active</source>
+        <translation>aktif</translation>
+    </message>
+    <message>
+        <source>No active materialized views</source>
+        <translation>Aktif materialized view yok</translation>
+    </message>
+    <message>
+        <source>Session:</source>
+        <translation>Oturum:</translation>
+    </message>
+    <message>
+        <source>Other sessions:</source>
+        <translation>Diğer oturumlar:</translation>
+    </message>
+    <message>
+        <source>🧹 Session</source>
+        <translation>🧹 Oturum</translation>
+    </message>
+    <message>
+        <source>Cleanup MVs from this session</source>
+        <translation>Bu oturumun MV&apos;lerini temizle</translation>
+    </message>
+    <message>
+        <source>🗑️ Orphaned</source>
+        <translation>🗑️ Sahipsiz</translation>
+    </message>
+    <message>
+        <source>Cleanup orphaned MVs (&gt;24h old)</source>
+        <translation>Sahipsiz MV&apos;leri temizle (&gt;24 saat)</translation>
+    </message>
+    <message>
+        <source>⚠️ All</source>
+        <translation>⚠️ Tümü</translation>
+    </message>
+    <message>
+        <source>Cleanup ALL MVs (affects other sessions)</source>
+        <translation>TÜM MV&apos;leri temizle (diğer oturumları etkiler)</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>Temizlemeyi onayla</translation>
+    </message>
+    <message>
+        <source>Drop ALL materialized views?
+This affects other FilterMate sessions!</source>
+        <translation>TÜM materialized view&apos;ları sil?
+Bu diğer FilterMate oturumlarını etkiler!</translation>
+    </message>
+    <message>
+        <source>Refresh MV status</source>
+        <translation>MV durumunu yenile</translation>
+    </message>
+    <message>
+        <source>Threshold:</source>
+        <translation>Eşik:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>özellikler</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on exit</source>
+        <translation>Çıkışta otomatik temizleme</translation>
+    </message>
+    <message>
+        <source>Automatically drop session MVs when plugin unloads</source>
+        <translation>Eklenti kaldırıldığında oturum MV&apos;lerini otomatik sil</translation>
+    </message>
+    <message>
+        <source>Create MVs for datasets larger than this</source>
+        <translation>Bundan büyük veri setleri için MV&apos;ler oluştur</translation>
+    </message>
+    <message>
+        <source>faster possible</source>
+        <translation>daha hızlı mümkün</translation>
+    </message>
+    <message>
+        <source>Optimizations available</source>
+        <translation>Optimizasyonlar mevcut</translation>
+    </message>
+    <message>
+        <source>FilterMate - Apply Optimizations?</source>
+        <translation>FilterMate - Optimizasyonları Uygula?</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Atla</translation>
+    </message>
+    <message>
+        <source>✓ Apply</source>
+        <translation>✓ Uygula</translation>
+    </message>
+    <message>
+        <source>Don&apos;t ask for this session</source>
+        <translation>Bu oturum için sorma</translation>
+    </message>
+    <message>
+        <source>Centroids</source>
+        <translation>Sentroidler</translation>
+    </message>
+    <message>
+        <source>Simplify</source>
+        <translation>Basitleştir</translation>
+    </message>
+    <message>
+        <source>Pre-simplify</source>
+        <translation>Ön-basitleştir</translation>
+    </message>
+    <message>
+        <source>Fewer segments</source>
+        <translation>Daha az segment</translation>
+    </message>
+    <message>
+        <source>Flat buffer</source>
+        <translation>Düz tampon</translation>
+    </message>
+    <message>
+        <source>BBox filter</source>
+        <translation>BBox filtresi</translation>
+    </message>
+    <message>
+        <source>Attr-first</source>
+        <translation>Attr-önce</translation>
+    </message>
+    <message>
+        <source>PostgreSQL not available</source>
+        <translation>PostgreSQL mevcut değil</translation>
+    </message>
+    <message>
+        <source>No connection</source>
+        <translation>Bağlantı yok</translation>
+    </message>
+    <message>
+        <source>Auto-zoom when feature changes</source>
+        <translation>Özellik değiştiğinde otomatik yakınlaştır</translation>
+    </message>
+    <message>
+        <source>Backend optimization settings saved</source>
+        <translation>Backend optimizasyon ayarları kaydedildi</translation>
+    </message>
+    <message>
+        <source>Backend optimizations configured</source>
+        <translation>Backend optimizasyonları yapılandırıldı</translation>
+    </message>
+    <message>
+        <source>Expression Evaluation</source>
+        <translation>İfade Değerlendirme</translation>
+    </message>
+    <message>
+        <source>Identify selected feature</source>
+        <translation>Seçili özelliği tanımla</translation>
+    </message>
+    <message>
+        <source>Layer properties reset to defaults</source>
+        <translation>Katman özellikleri varsayılanlara sıfırlandı</translation>
+    </message>
+    <message>
+        <source>Link exploring widgets together</source>
+        <translation>Keşif widget&apos;larını birbirine bağla</translation>
+    </message>
+    <message>
+        <source>Optimization settings saved</source>
+        <translation>Optimizasyon ayarları kaydedildi</translation>
+    </message>
+    <message>
+        <source>Reset all layer exploring properties</source>
+        <translation>Tüm katman keşif özelliklerini sıfırla</translation>
+    </message>
+    <message>
+        <source>Toggle feature selection on map</source>
+        <translation>Haritada özellik seçimini değiştir</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source>
+        <translation>Uzak katmanlar için tam geometriler yerine sentroidler kullan (karmaşık çokgenler için daha hızlı)</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source>
+        <translation>Kaynak katman için tam geometriler yerine sentroidler kullan (karmaşık çokgenler için daha hızlı)</translation>
+    </message>
+    <message>
+        <source>Zoom to selected feature</source>
+        <translation>Seçili özelliğe yakınlaştır</translation>
+    </message>
+</context>
+<context>
+    <name>OptimizationDialog</name>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>Optimizasyon Ayarları</translation>
+    </message>
+    <message>
+        <source>Configure Optimization Settings</source>
+        <translation>Optimizasyon ayarlarını yapılandır</translation>
+    </message>
+    <message>
+        <source>Enable automatic optimizations</source>
+        <translation>Otomatik optimizasyonları etkinleştir</translation>
+    </message>
+    <message>
+        <source>Ask before applying optimizations</source>
+        <translation>Optimizasyonları uygulamadan önce sor</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid Settings</source>
+        <translation>Otomatik-Centroid Ayarları</translation>
+    </message>
+    <message>
+        <source>Enable auto-centroid for distant layers</source>
+        <translation>Uzak katmanlar için otomatik-centroid&apos;i etkinleştir</translation>
+    </message>
+    <message>
+        <source>Distance threshold (km):</source>
+        <translation>Mesafe eşiği (km):</translation>
+    </message>
+    <message>
+        <source>Feature threshold:</source>
+        <translation>Özellik eşiği:</translation>
+    </message>
+    <message>
+        <source>Buffer Optimizations</source>
+        <translation>Tampon Optimizasyonları</translation>
+    </message>
+    <message>
+        <source>Simplify geometry before buffer</source>
+        <translation>Tampon öncesi geometriyi basitleştir</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments to:</source>
+        <translation>Tampon segmentlerini şuna düşür:</translation>
+    </message>
+    <message>
+        <source>General</source>
+        <translation>Genel</translation>
+    </message>
+    <message>
+        <source>Use materialized views for filtering</source>
+        <translation>Filtreleme için materialized view kullan</translation>
+    </message>
+    <message>
+        <source>Create spatial indices automatically</source>
+        <translation>Mekansal indeksleri otomatik oluştur</translation>
+    </message>
+    <message>
+        <source>Use R-tree spatial index</source>
+        <translation>R-tree mekansal indeks kullan</translation>
+    </message>
+    <message>
+        <source>Use bounding box pre-filter</source>
+        <translation>Sınırlayıcı kutu ön filtresi kullan</translation>
+    </message>
+    <message>
+        <source>Backends</source>
+        <translation>Backend&apos;ler</translation>
+    </message>
+    <message>
+        <source>Caching</source>
+        <translation>Önbellekleme</translation>
+    </message>
+    <message>
+        <source>Enable geometry cache</source>
+        <translation>Geometri önbelleğini etkinleştir</translation>
+    </message>
+    <message>
+        <source>Batch Processing</source>
+        <translation>Toplu İşlem</translation>
+    </message>
+    <message>
+        <source>Batch size:</source>
+        <translation>Parti boyutu:</translation>
+    </message>
+    <message>
+        <source>Advanced settings affect performance and memory usage. Change only if you understand the implications.</source>
+        <translation>Gelişmiş ayarlar performansı ve bellek kullanımını etkiler. Yalnızca sonuçlarını anlıyorsanız değiştirin.</translation>
+    </message>
+    <message>
+        <source>Advanced</source>
+        <translation>Gelişmiş</translation>
+    </message>
+</context>
+<context>
+    <name>RecommendationDialog</name>
+    <message>
+        <source>Apply Optimizations?</source>
+        <translation>Optimizasyonları uygula?</translation>
+    </message>
+    <message>
+        <source>Optimizations Available</source>
+        <translation>Mevcut Optimizasyonlar</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Atla</translation>
+    </message>
+    <message>
+        <source>Apply Selected</source>
+        <translation>Seçilenleri uygula</translation>
+    </message>
+</context>
+<context>
+    <name>PostgresInfoDialog</name>
+    <message>
+        <source>PostgreSQL Session Info</source>
+        <translation>PostgreSQL Oturum Bilgisi</translation>
+    </message>
+    <message>
+        <source>PostgreSQL Active</source>
+        <translation>PostgreSQL Aktif</translation>
+    </message>
+    <message>
+        <source>Connection Info</source>
+        <translation>Bağlantı Bilgisi</translation>
+    </message>
+    <message>
+        <source>Connection:</source>
+        <translation>Bağlantı:</translation>
+    </message>
+    <message>
+        <source>Temp Schema:</source>
+        <translation>Geçici Şema:</translation>
+    </message>
+    <message>
+        <source>Status:</source>
+        <translation>Durum:</translation>
+    </message>
+    <message>
+        <source>Temporary Views</source>
+        <translation>Geçici Görünümler</translation>
+    </message>
+    <message>
+        <source>Cleanup Options</source>
+        <translation>Temizleme Seçenekleri</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on close</source>
+        <translation>Kapatırken otomatik temizlik</translation>
+    </message>
+    <message>
+        <source>Automatically cleanup temporary views when FilterMate closes.</source>
+        <translation>FilterMate kapatılırken geçici görünümleri otomatik temizle.</translation>
+    </message>
+    <message>
+        <source>🗑️ Cleanup Now</source>
+        <translation>🗑️ Şimdi Temizle</translation>
+    </message>
+    <message>
+        <source>Drop all temporary views created by FilterMate in this session.</source>
+        <translation>Bu oturumda FilterMate tarafından oluşturulan tüm geçici görünümleri sil.</translation>
+    </message>
+    <message>
+        <source>(No temporary views)</source>
+        <translation>(Geçici görünüm yok)</translation>
+    </message>
+    <message>
+        <source>No Views</source>
+        <translation>Görünüm yok</translation>
+    </message>
+    <message>
+        <source>There are no temporary views to clean up.</source>
+        <translation>Temizlenecek geçici görünüm yok.</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>Temizliği Onayla</translation>
+    </message>
+    <message>
+        <source>Cleanup Complete</source>
+        <translation>Temizlik Tamamlandı</translation>
+    </message>
+    <message>
+        <source>Cleanup Issue</source>
+        <translation>Temizlik Sorunu</translation>
+    </message>
+    <message>
+        <source>Cleanup Failed</source>
+        <translation>Temizlik Başarısız</translation>
+    </message>
+</context>
 </TS>

@@ -1,4 +1,5 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
 <TS version="2.1" language="zh_CN" sourcelanguage="en_US">
 <context>
     <name>FilterMate</name>
@@ -211,25 +212,25 @@ Do you want to continue?</source>
         <translation>配置迁移时出错：{}</translation>
     </message>
     <message>
-        <source>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
+        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
 
-FilterMate recommends disabling this setting (value 'Off') for the following reasons:
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
 
 Do you want to disable this setting now?
 
 • Yes: Disable filtering (recommended for FilterMate)
 • No: Keep current setting</source>
-        <translation>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
+        <translation>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
 
-FilterMate recommends disabling this setting (value 'Off') for the following reasons:
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
 
 Do you want to disable this setting now?
 
@@ -807,16 +808,16 @@ First attribute: {1}</source>
         <translation>优化前显示确认对话框</translation>
     </message>
     <message>
-        <source>Centroids enabled for '{0}' (~{1}x {2})</source>
-        <translation>已为 '{0}' 启用质心（约{1}倍{2}）</translation>
+        <source>Centroids enabled for &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>已为 &apos;{0}&apos; 启用质心（约{1}倍{2}）</translation>
     </message>
     <message>
-        <source>BBox pre-filter enabled for '{0}'</source>
-        <translation>已为 '{0}' 启用BBox预过滤</translation>
+        <source>BBox pre-filter enabled for &apos;{0}&apos;</source>
+        <translation>已为 &apos;{0}&apos; 启用BBox预过滤</translation>
     </message>
     <message>
-        <source>Optimization applied: '{0}' (~{1}x {2})</source>
-        <translation>已应用优化：'{0}'（约{1}倍{2}）</translation>
+        <source>Optimization applied: &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>已应用优化：&apos;{0}&apos;（约{1}倍{2}）</translation>
     </message>
     <message>
         <source>Simplify before buffer</source>
@@ -1069,7 +1070,400 @@ First attribute: {1}</source>
         <source>Error applying settings</source>
         <translation>应用设置时出错</translation>
     </message>
-<message><source>MV Status: Checking...</source><translation type="unfinished">MV Status: Checking...</translation></message><message><source>MV Status: Error</source><translation type="unfinished">MV Status: Error</translation></message><message><source>MV Status: Clean</source><translation type="unfinished">MV Status: Clean</translation></message><message><source>MV Status:</source><translation type="unfinished">MV Status:</translation></message><message><source>active</source><translation type="unfinished">active</translation></message><message><source>No active materialized views</source><translation type="unfinished">No active materialized views</translation></message><message><source>Session:</source><translation type="unfinished">Session:</translation></message><message><source>Other sessions:</source><translation type="unfinished">Other sessions:</translation></message><message><source>🧹 Session</source><translation type="unfinished">🧹 Session</translation></message><message><source>Cleanup MVs from this session</source><translation type="unfinished">Cleanup MVs from this session</translation></message><message><source>🗑️ Orphaned</source><translation type="unfinished">🗑️ Orphaned</translation></message><message><source>Cleanup orphaned MVs (&gt;24h old)</source><translation type="unfinished">Cleanup orphaned MVs (&gt;24h old)</translation></message><message><source>⚠️ All</source><translation type="unfinished">⚠️ All</translation></message><message><source>Cleanup ALL MVs (affects other sessions)</source><translation type="unfinished">Cleanup ALL MVs (affects other sessions)</translation></message><message><source>Confirm Cleanup</source><translation type="unfinished">Confirm Cleanup</translation></message><message><source>Drop ALL materialized views?
-This affects other FilterMate sessions!</source><translation type="unfinished">Drop ALL materialized views?
-This affects other FilterMate sessions!</translation></message><message><source>Refresh MV status</source><translation type="unfinished">Refresh MV status</translation></message><message><source>Threshold:</source><translation type="unfinished">Threshold:</translation></message><message><source>features</source><translation type="unfinished">features</translation></message><message><source>Auto-cleanup on exit</source><translation type="unfinished">Auto-cleanup on exit</translation></message><message><source>Automatically drop session MVs when plugin unloads</source><translation type="unfinished">Automatically drop session MVs when plugin unloads</translation></message><message><source>Create MVs for datasets larger than this</source><translation type="unfinished">Create MVs for datasets larger than this</translation></message><message><source>faster possible</source><translation type="unfinished">faster possible</translation></message><message><source>Optimizations available</source><translation type="unfinished">Optimizations available</translation></message><message><source>FilterMate - Apply Optimizations?</source><translation type="unfinished">FilterMate - Apply Optimizations?</translation></message><message><source>Skip</source><translation type="unfinished">Skip</translation></message><message><source>✓ Apply</source><translation type="unfinished">✓ Apply</translation></message><message><source>Don't ask for this session</source><translation type="unfinished">Don't ask for this session</translation></message><message><source>Centroids</source><translation type="unfinished">Centroids</translation></message><message><source>Simplify</source><translation type="unfinished">Simplify</translation></message><message><source>Pre-simplify</source><translation type="unfinished">Pre-simplify</translation></message><message><source>Fewer segments</source><translation type="unfinished">Fewer segments</translation></message><message><source>Flat buffer</source><translation type="unfinished">Flat buffer</translation></message><message><source>BBox filter</source><translation type="unfinished">BBox filter</translation></message><message><source>Attr-first</source><translation type="unfinished">Attr-first</translation></message><message><source>PostgreSQL not available</source><translation type="unfinished">PostgreSQL not available</translation></message><message><source>No connection</source><translation type="unfinished">No connection</translation></message><message><source>Auto-zoom when feature changes</source><translation type="unfinished">Auto-zoom when feature changes</translation></message><message><source>Backend optimization settings saved</source><translation type="unfinished">Backend optimization settings saved</translation></message><message><source>Backend optimizations configured</source><translation type="unfinished">Backend optimizations configured</translation></message><message><source>Expression Evaluation</source><translation type="unfinished">Expression Evaluation</translation></message><message><source>Identify selected feature</source><translation type="unfinished">Identify selected feature</translation></message><message><source>Layer properties reset to defaults</source><translation type="unfinished">Layer properties reset to defaults</translation></message><message><source>Link exploring widgets together</source><translation type="unfinished">Link exploring widgets together</translation></message><message><source>Optimization settings saved</source><translation type="unfinished">Optimization settings saved</translation></message><message><source>Reset all layer exploring properties</source><translation type="unfinished">Reset all layer exploring properties</translation></message><message><source>Toggle feature selection on map</source><translation type="unfinished">Toggle feature selection on map</translation></message><message><source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for distant layers (faster for complex polygons)</translation></message><message><source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for source layer (faster for complex polygons)</translation></message><message><source>Zoom to selected feature</source><translation type="unfinished">Zoom to selected feature</translation></message></context>
+    <message>
+        <source>MV Status: Checking...</source>
+        <translation>MV 状态：检查中...</translation>
+    </message>
+    <message>
+        <source>MV Status: Error</source>
+        <translation>MV 状态：错误</translation>
+    </message>
+    <message>
+        <source>MV Status: Clean</source>
+        <translation>MV 状态：干净</translation>
+    </message>
+    <message>
+        <source>MV Status:</source>
+        <translation>MV 状态：</translation>
+    </message>
+    <message>
+        <source>active</source>
+        <translation>活跃</translation>
+    </message>
+    <message>
+        <source>No active materialized views</source>
+        <translation>没有活动的物化视图</translation>
+    </message>
+    <message>
+        <source>Session:</source>
+        <translation>会话：</translation>
+    </message>
+    <message>
+        <source>Other sessions:</source>
+        <translation>其他会话：</translation>
+    </message>
+    <message>
+        <source>🧹 Session</source>
+        <translation>🧹 会话</translation>
+    </message>
+    <message>
+        <source>Cleanup MVs from this session</source>
+        <translation>清理此会话的物化视图</translation>
+    </message>
+    <message>
+        <source>🗑️ Orphaned</source>
+        <translation>🗑️ 孤立的</translation>
+    </message>
+    <message>
+        <source>Cleanup orphaned MVs (&gt;24h old)</source>
+        <translation>清理孤立的物化视图 (&gt;24小时)</translation>
+    </message>
+    <message>
+        <source>⚠️ All</source>
+        <translation>⚠️ 全部</translation>
+    </message>
+    <message>
+        <source>Cleanup ALL MVs (affects other sessions)</source>
+        <translation>清理所有物化视图 (影响其他会话)</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>确认清理</translation>
+    </message>
+    <message>
+        <source>Drop ALL materialized views?
+This affects other FilterMate sessions!</source>
+        <translation>删除所有物化视图？
+这会影响其他 FilterMate 会话！</translation>
+    </message>
+    <message>
+        <source>Refresh MV status</source>
+        <translation>刷新物化视图状态</translation>
+    </message>
+    <message>
+        <source>Threshold:</source>
+        <translation>阈值：</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>要素</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on exit</source>
+        <translation>退出时自动清理</translation>
+    </message>
+    <message>
+        <source>Automatically drop session MVs when plugin unloads</source>
+        <translation>插件卸载时自动删除会话物化视图</translation>
+    </message>
+    <message>
+        <source>Create MVs for datasets larger than this</source>
+        <translation>为大于此值的数据集创建物化视图</translation>
+    </message>
+    <message>
+        <source>faster possible</source>
+        <translation>更快可能</translation>
+    </message>
+    <message>
+        <source>Optimizations available</source>
+        <translation>可用优化</translation>
+    </message>
+    <message>
+        <source>FilterMate - Apply Optimizations?</source>
+        <translation>FilterMate - 应用优化？</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>跳过</translation>
+    </message>
+    <message>
+        <source>✓ Apply</source>
+        <translation>✓ 应用</translation>
+    </message>
+    <message>
+        <source>Don&apos;t ask for this session</source>
+        <translation>此会话不再询问</translation>
+    </message>
+    <message>
+        <source>Centroids</source>
+        <translation>质心</translation>
+    </message>
+    <message>
+        <source>Simplify</source>
+        <translation>简化</translation>
+    </message>
+    <message>
+        <source>Pre-simplify</source>
+        <translation>预简化</translation>
+    </message>
+    <message>
+        <source>Fewer segments</source>
+        <translation>更少的段</translation>
+    </message>
+    <message>
+        <source>Flat buffer</source>
+        <translation>平面缓冲</translation>
+    </message>
+    <message>
+        <source>BBox filter</source>
+        <translation>边界框过滤</translation>
+    </message>
+    <message>
+        <source>Attr-first</source>
+        <translation>属性优先</translation>
+    </message>
+    <message>
+        <source>PostgreSQL not available</source>
+        <translation>PostgreSQL 不可用</translation>
+    </message>
+    <message>
+        <source>No connection</source>
+        <translation>无连接</translation>
+    </message>
+    <message>
+        <source>Auto-zoom when feature changes</source>
+        <translation>要素更改时自动缩放</translation>
+    </message>
+    <message>
+        <source>Backend optimization settings saved</source>
+        <translation>后端优化设置已保存</translation>
+    </message>
+    <message>
+        <source>Backend optimizations configured</source>
+        <translation>后端优化已配置</translation>
+    </message>
+    <message>
+        <source>Expression Evaluation</source>
+        <translation>表达式求值</translation>
+    </message>
+    <message>
+        <source>Identify selected feature</source>
+        <translation>识别所选要素</translation>
+    </message>
+    <message>
+        <source>Layer properties reset to defaults</source>
+        <translation>图层属性已重置为默认值</translation>
+    </message>
+    <message>
+        <source>Link exploring widgets together</source>
+        <translation>链接探索小部件</translation>
+    </message>
+    <message>
+        <source>Optimization settings saved</source>
+        <translation>优化设置已保存</translation>
+    </message>
+    <message>
+        <source>Reset all layer exploring properties</source>
+        <translation>重置所有图层探索属性</translation>
+    </message>
+    <message>
+        <source>Toggle feature selection on map</source>
+        <translation>切换地图上的要素选择</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source>
+        <translation>对远距离图层使用质心而不是完整几何（复杂多边形更快）</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source>
+        <translation>对源图层使用质心而不是完整几何（复杂多边形更快）</translation>
+    </message>
+    <message>
+        <source>Zoom to selected feature</source>
+        <translation>缩放到所选要素</translation>
+    </message>
+</context>
+<context>
+    <name>OptimizationDialog</name>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>优化设置</translation>
+    </message>
+    <message>
+        <source>Configure Optimization Settings</source>
+        <translation>配置优化设置</translation>
+    </message>
+    <message>
+        <source>Enable automatic optimizations</source>
+        <translation>启用自动优化</translation>
+    </message>
+    <message>
+        <source>Ask before applying optimizations</source>
+        <translation>应用优化前询问</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid Settings</source>
+        <translation>自动质心设置</translation>
+    </message>
+    <message>
+        <source>Enable auto-centroid for distant layers</source>
+        <translation>为远程图层启用自动质心</translation>
+    </message>
+    <message>
+        <source>Distance threshold (km):</source>
+        <translation>距离阈值（公里）：</translation>
+    </message>
+    <message>
+        <source>Feature threshold:</source>
+        <translation>要素阈值：</translation>
+    </message>
+    <message>
+        <source>Buffer Optimizations</source>
+        <translation>缓冲区优化</translation>
+    </message>
+    <message>
+        <source>Simplify geometry before buffer</source>
+        <translation>缓冲前简化几何</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments to:</source>
+        <translation>将缓冲区段减少到：</translation>
+    </message>
+    <message>
+        <source>General</source>
+        <translation>常规</translation>
+    </message>
+    <message>
+        <source>Use materialized views for filtering</source>
+        <translation>使用物化视图进行过滤</translation>
+    </message>
+    <message>
+        <source>Create spatial indices automatically</source>
+        <translation>自动创建空间索引</translation>
+    </message>
+    <message>
+        <source>Use R-tree spatial index</source>
+        <translation>使用R树空间索引</translation>
+    </message>
+    <message>
+        <source>Use bounding box pre-filter</source>
+        <translation>使用边界框预过滤器</translation>
+    </message>
+    <message>
+        <source>Backends</source>
+        <translation>后端</translation>
+    </message>
+    <message>
+        <source>Caching</source>
+        <translation>缓存</translation>
+    </message>
+    <message>
+        <source>Enable geometry cache</source>
+        <translation>启用几何缓存</translation>
+    </message>
+    <message>
+        <source>Batch Processing</source>
+        <translation>批处理</translation>
+    </message>
+    <message>
+        <source>Batch size:</source>
+        <translation>批处理大小：</translation>
+    </message>
+    <message>
+        <source>Advanced settings affect performance and memory usage. Change only if you understand the implications.</source>
+        <translation>高级设置会影响性能和内存使用。仅在了解影响的情况下更改。</translation>
+    </message>
+    <message>
+        <source>Advanced</source>
+        <translation>高级</translation>
+    </message>
+</context>
+<context>
+    <name>RecommendationDialog</name>
+    <message>
+        <source>Apply Optimizations?</source>
+        <translation>应用优化？</translation>
+    </message>
+    <message>
+        <source>Optimizations Available</source>
+        <translation>可用优化</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>跳过</translation>
+    </message>
+    <message>
+        <source>Apply Selected</source>
+        <translation>应用所选</translation>
+    </message>
+</context>
+<context>
+    <name>PostgresInfoDialog</name>
+    <message>
+        <source>PostgreSQL Session Info</source>
+        <translation>PostgreSQL会话信息</translation>
+    </message>
+    <message>
+        <source>PostgreSQL Active</source>
+        <translation>PostgreSQL已激活</translation>
+    </message>
+    <message>
+        <source>Connection Info</source>
+        <translation>连接信息</translation>
+    </message>
+    <message>
+        <source>Connection:</source>
+        <translation>连接：</translation>
+    </message>
+    <message>
+        <source>Temp Schema:</source>
+        <translation>临时架构：</translation>
+    </message>
+    <message>
+        <source>Status:</source>
+        <translation>状态：</translation>
+    </message>
+    <message>
+        <source>Temporary Views</source>
+        <translation>临时视图</translation>
+    </message>
+    <message>
+        <source>Cleanup Options</source>
+        <translation>清理选项</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on close</source>
+        <translation>关闭时自动清理</translation>
+    </message>
+    <message>
+        <source>Automatically cleanup temporary views when FilterMate closes.</source>
+        <translation>关闭FilterMate时自动清理临时视图。</translation>
+    </message>
+    <message>
+        <source>🗑️ Cleanup Now</source>
+        <translation>🗑️ 立即清理</translation>
+    </message>
+    <message>
+        <source>Drop all temporary views created by FilterMate in this session.</source>
+        <translation>删除本次会话中FilterMate创建的所有临时视图。</translation>
+    </message>
+    <message>
+        <source>(No temporary views)</source>
+        <translation>（无临时视图）</translation>
+    </message>
+    <message>
+        <source>No Views</source>
+        <translation>没有视图</translation>
+    </message>
+    <message>
+        <source>There are no temporary views to clean up.</source>
+        <translation>没有临时视图需要清理。</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>确认清理</translation>
+    </message>
+    <message>
+        <source>Cleanup Complete</source>
+        <translation>清理完成</translation>
+    </message>
+    <message>
+        <source>Cleanup Issue</source>
+        <translation>清理问题</translation>
+    </message>
+    <message>
+        <source>Cleanup Failed</source>
+        <translation>清理失败</translation>
+    </message>
+</context>
 </TS>

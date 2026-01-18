@@ -1019,6 +1019,21 @@ class FilterMateApp:
         
         current_layer = self.dockwidget.current_layer
         
+        # Get layers from task parameters first (needed for project context)
+        layers = []
+        layers_props = [layer_infos for layer_infos in task_parameters["task"]["layers"]]
+        layers_ids = [layer_props["layer_id"] for layer_props in layers_props]
+        for layer_props in layers_props:
+            temp_layers = self.PROJECT.mapLayersByName(layer_props["layer_name"])
+            for temp_layer in temp_layers:
+                if temp_layer.id() in layers_ids:
+                    layers.append(temp_layer)
+        
+        # v4.1.1: Update backend registry with project context
+        # When all layers are PostgreSQL, use PostgreSQL backend even for small datasets
+        if self._backend_registry is not None:
+            self._backend_registry.update_project_context(layers)
+        
         # Create task with backend registry for hexagonal architecture (v4.0.1)
         logger.info(f"📦 Creating FilterEngineTask with {len(task_parameters.get('task', {}).get('layers', []))} layers")
         self.appTasks[task_name] = FilterEngineTask(
@@ -1028,16 +1043,6 @@ class FilterMateApp:
             backend_registry=self._backend_registry  # v4.0.1: Hexagonal DI
         )
         logger.info(f"✓ FilterEngineTask created: {self.appTasks[task_name].description()}")
-        
-        # Get layers from task parameters
-        layers = []
-        layers_props = [layer_infos for layer_infos in task_parameters["task"]["layers"]]
-        layers_ids = [layer_props["layer_id"] for layer_props in layers_props]
-        for layer_props in layers_props:
-            temp_layers = self.PROJECT.mapLayersByName(layer_props["layer_name"])
-            for temp_layer in temp_layers:
-                if temp_layer.id() in layers_ids:
-                    layers.append(temp_layer)
         
         # Save current layer before filtering
         self._save_current_layer_before_filter()
@@ -1909,9 +1914,18 @@ class FilterMateApp:
             print(f"   ❌ Layer not in PROJECT_LAYERS - returning early")
             return
         
-        layers_to_filter = self.dockwidget.PROJECT_LAYERS.get(source_layer.id(), {}).get("filtering", {}).get("layers_to_filter", [])
+        # v4.1.5: Get layers_to_filter from CURRENT UI selection, not from stored PROJECT_LAYERS
+        # This allows undo to respect the current checkbox state
         button_is_checked = self.dockwidget.pushButton_checkable_filtering_layers_to_filter.isChecked()
-        print(f"   layers_to_filter count: {len(layers_to_filter)}")
+        if button_is_checked:
+            # Use current UI selection
+            layers_to_filter = self.dockwidget.get_layers_to_filter()
+            print(f"   layers_to_filter from UI: {len(layers_to_filter)} layers")
+        else:
+            # Fallback to stored value (for compatibility)
+            layers_to_filter = self.dockwidget.PROJECT_LAYERS.get(source_layer.id(), {}).get("filtering", {}).get("layers_to_filter", [])
+            print(f"   layers_to_filter from PROJECT_LAYERS: {len(layers_to_filter)} layers")
+        
         print(f"   button_is_checked (global mode): {button_is_checked}")
         
         # v4.1: Set filtering protection to prevent layer change signals
@@ -1937,7 +1951,7 @@ class FilterMateApp:
             if self.dockwidget:
                 self.dockwidget._filtering_in_progress = False
                 logger.info(f"v4.1: 🔓 handle_{action_name} - Filtering protection disabled")
-                print(f"   🔓 Filtering protection disabled")    
+                print(f"   🔓 Filtering protection disabled")   
     def _legacy_handle_undo_redo(self, is_undo: bool, source_layer, layers_to_filter: list, button_is_checked: bool):
         """
         Legacy undo/redo fallback when UndoRedoHandler is unavailable.
@@ -2111,9 +2125,9 @@ class FilterMateApp:
             self.project_uuid = self._database_manager.project_uuid
             
             # Configure FavoritesService with SQLite database
+            # Note: set_database() already calls _load_favorites() internally
             if hasattr(self, 'favorites_manager') and self.db_file_path and self.project_uuid:
                 self.favorites_manager.set_database(self.db_file_path, str(self.project_uuid))
-                self.favorites_manager.load_from_project()
                 logger.info(f"FavoritesService configured with SQLite database ({self.favorites_manager.count} favorites loaded)")
 
     def add_project_datasource(self, layer):

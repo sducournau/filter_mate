@@ -1,4 +1,5 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
 <TS version="2.1" language="hi_IN" sourcelanguage="en_US">
 <context>
     <name>FilterMate</name>
@@ -211,25 +212,25 @@ Do you want to continue?</source>
         <translation>कॉन्फ़िगरेशन माइग्रेशन के दौरान त्रुटि: {}</translation>
     </message>
     <message>
-        <source>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
+        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
 
-FilterMate recommends disabling this setting (value 'Off') for the following reasons:
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
 
 Do you want to disable this setting now?
 
 • Yes: Disable filtering (recommended for FilterMate)
 • No: Keep current setting</source>
-        <translation>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
+        <translation>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
 
-FilterMate recommends disabling this setting (value 'Off') for the following reasons:
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
 
 Do you want to disable this setting now?
 
@@ -1073,7 +1074,400 @@ First attribute: {1}</source>
         <source>Error applying settings</source>
         <translation>सेटिंग्स लागू करने में त्रुटि</translation>
     </message>
-<message><source>MV Status: Checking...</source><translation type="unfinished">MV Status: Checking...</translation></message><message><source>MV Status: Error</source><translation type="unfinished">MV Status: Error</translation></message><message><source>MV Status: Clean</source><translation type="unfinished">MV Status: Clean</translation></message><message><source>MV Status:</source><translation type="unfinished">MV Status:</translation></message><message><source>active</source><translation type="unfinished">active</translation></message><message><source>No active materialized views</source><translation type="unfinished">No active materialized views</translation></message><message><source>Session:</source><translation type="unfinished">Session:</translation></message><message><source>Other sessions:</source><translation type="unfinished">Other sessions:</translation></message><message><source>🧹 Session</source><translation type="unfinished">🧹 Session</translation></message><message><source>Cleanup MVs from this session</source><translation type="unfinished">Cleanup MVs from this session</translation></message><message><source>🗑️ Orphaned</source><translation type="unfinished">🗑️ Orphaned</translation></message><message><source>Cleanup orphaned MVs (&gt;24h old)</source><translation type="unfinished">Cleanup orphaned MVs (&gt;24h old)</translation></message><message><source>⚠️ All</source><translation type="unfinished">⚠️ All</translation></message><message><source>Cleanup ALL MVs (affects other sessions)</source><translation type="unfinished">Cleanup ALL MVs (affects other sessions)</translation></message><message><source>Confirm Cleanup</source><translation type="unfinished">Confirm Cleanup</translation></message><message><source>Drop ALL materialized views?
-This affects other FilterMate sessions!</source><translation type="unfinished">Drop ALL materialized views?
-This affects other FilterMate sessions!</translation></message><message><source>Refresh MV status</source><translation type="unfinished">Refresh MV status</translation></message><message><source>Threshold:</source><translation type="unfinished">Threshold:</translation></message><message><source>features</source><translation type="unfinished">features</translation></message><message><source>Auto-cleanup on exit</source><translation type="unfinished">Auto-cleanup on exit</translation></message><message><source>Automatically drop session MVs when plugin unloads</source><translation type="unfinished">Automatically drop session MVs when plugin unloads</translation></message><message><source>Create MVs for datasets larger than this</source><translation type="unfinished">Create MVs for datasets larger than this</translation></message><message><source>faster possible</source><translation type="unfinished">faster possible</translation></message><message><source>Optimizations available</source><translation type="unfinished">Optimizations available</translation></message><message><source>FilterMate - Apply Optimizations?</source><translation type="unfinished">FilterMate - Apply Optimizations?</translation></message><message><source>Skip</source><translation type="unfinished">Skip</translation></message><message><source>✓ Apply</source><translation type="unfinished">✓ Apply</translation></message><message><source>Don't ask for this session</source><translation type="unfinished">Don't ask for this session</translation></message><message><source>Centroids</source><translation type="unfinished">Centroids</translation></message><message><source>Simplify</source><translation type="unfinished">Simplify</translation></message><message><source>Pre-simplify</source><translation type="unfinished">Pre-simplify</translation></message><message><source>Fewer segments</source><translation type="unfinished">Fewer segments</translation></message><message><source>Flat buffer</source><translation type="unfinished">Flat buffer</translation></message><message><source>BBox filter</source><translation type="unfinished">BBox filter</translation></message><message><source>Attr-first</source><translation type="unfinished">Attr-first</translation></message><message><source>PostgreSQL not available</source><translation type="unfinished">PostgreSQL not available</translation></message><message><source>No connection</source><translation type="unfinished">No connection</translation></message><message><source>Auto-zoom when feature changes</source><translation type="unfinished">Auto-zoom when feature changes</translation></message><message><source>Backend optimization settings saved</source><translation type="unfinished">Backend optimization settings saved</translation></message><message><source>Backend optimizations configured</source><translation type="unfinished">Backend optimizations configured</translation></message><message><source>Expression Evaluation</source><translation type="unfinished">Expression Evaluation</translation></message><message><source>Identify selected feature</source><translation type="unfinished">Identify selected feature</translation></message><message><source>Layer properties reset to defaults</source><translation type="unfinished">Layer properties reset to defaults</translation></message><message><source>Link exploring widgets together</source><translation type="unfinished">Link exploring widgets together</translation></message><message><source>Optimization settings saved</source><translation type="unfinished">Optimization settings saved</translation></message><message><source>Reset all layer exploring properties</source><translation type="unfinished">Reset all layer exploring properties</translation></message><message><source>Toggle feature selection on map</source><translation type="unfinished">Toggle feature selection on map</translation></message><message><source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for distant layers (faster for complex polygons)</translation></message><message><source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for source layer (faster for complex polygons)</translation></message><message><source>Zoom to selected feature</source><translation type="unfinished">Zoom to selected feature</translation></message></context>
+    <message>
+        <source>MV Status: Checking...</source>
+        <translation>MV स्थिति: जाँच रहा है...</translation>
+    </message>
+    <message>
+        <source>MV Status: Error</source>
+        <translation>MV स्थिति: त्रुटि</translation>
+    </message>
+    <message>
+        <source>MV Status: Clean</source>
+        <translation>MV स्थिति: साफ</translation>
+    </message>
+    <message>
+        <source>MV Status:</source>
+        <translation>MV स्थिति:</translation>
+    </message>
+    <message>
+        <source>active</source>
+        <translation>सक्रिय</translation>
+    </message>
+    <message>
+        <source>No active materialized views</source>
+        <translation>कोई सक्रिय materialized views नहीं</translation>
+    </message>
+    <message>
+        <source>Session:</source>
+        <translation>सत्र:</translation>
+    </message>
+    <message>
+        <source>Other sessions:</source>
+        <translation>अन्य सत्र:</translation>
+    </message>
+    <message>
+        <source>🧹 Session</source>
+        <translation>🧹 सत्र</translation>
+    </message>
+    <message>
+        <source>Cleanup MVs from this session</source>
+        <translation>इस सत्र से MVs साफ करें</translation>
+    </message>
+    <message>
+        <source>🗑️ Orphaned</source>
+        <translation>🗑️ अनाथ</translation>
+    </message>
+    <message>
+        <source>Cleanup orphaned MVs (&gt;24h old)</source>
+        <translation>अनाथ MVs साफ करें (&gt;24 घंटे पुराने)</translation>
+    </message>
+    <message>
+        <source>⚠️ All</source>
+        <translation>⚠️ सभी</translation>
+    </message>
+    <message>
+        <source>Cleanup ALL MVs (affects other sessions)</source>
+        <translation>सभी MVs साफ करें (अन्य सत्रों को प्रभावित करता है)</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>सफाई की पुष्टि करें</translation>
+    </message>
+    <message>
+        <source>Drop ALL materialized views?
+This affects other FilterMate sessions!</source>
+        <translation>सभी materialized views हटाएं?
+यह अन्य FilterMate सत्रों को प्रभावित करता है!</translation>
+    </message>
+    <message>
+        <source>Refresh MV status</source>
+        <translation>MV स्थिति रीफ्रेश करें</translation>
+    </message>
+    <message>
+        <source>Threshold:</source>
+        <translation>सीमा:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>विशेषताएं</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on exit</source>
+        <translation>बाहर निकलते समय स्वत: साफ करें</translation>
+    </message>
+    <message>
+        <source>Automatically drop session MVs when plugin unloads</source>
+        <translation>प्लगइन अनलोड होने पर सत्र MVs स्वचालित रूप से हटाएं</translation>
+    </message>
+    <message>
+        <source>Create MVs for datasets larger than this</source>
+        <translation>इससे बड़े डेटासेट के लिए MVs बनाएं</translation>
+    </message>
+    <message>
+        <source>faster possible</source>
+        <translation>तेज़ संभव</translation>
+    </message>
+    <message>
+        <source>Optimizations available</source>
+        <translation>अनुकूलन उपलब्ध</translation>
+    </message>
+    <message>
+        <source>FilterMate - Apply Optimizations?</source>
+        <translation>FilterMate - अनुकूलन लागू करें?</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>छोड़ें</translation>
+    </message>
+    <message>
+        <source>✓ Apply</source>
+        <translation>✓ लागू करें</translation>
+    </message>
+    <message>
+        <source>Don&apos;t ask for this session</source>
+        <translation>इस सत्र के लिए न पूछें</translation>
+    </message>
+    <message>
+        <source>Centroids</source>
+        <translation>सेंट्रॉइड</translation>
+    </message>
+    <message>
+        <source>Simplify</source>
+        <translation>सरल करें</translation>
+    </message>
+    <message>
+        <source>Pre-simplify</source>
+        <translation>पूर्व-सरल करें</translation>
+    </message>
+    <message>
+        <source>Fewer segments</source>
+        <translation>कम खंड</translation>
+    </message>
+    <message>
+        <source>Flat buffer</source>
+        <translation>फ्लैट बफर</translation>
+    </message>
+    <message>
+        <source>BBox filter</source>
+        <translation>BBox फ़िल्टर</translation>
+    </message>
+    <message>
+        <source>Attr-first</source>
+        <translation>Attr-पहले</translation>
+    </message>
+    <message>
+        <source>PostgreSQL not available</source>
+        <translation>PostgreSQL उपलब्ध नहीं</translation>
+    </message>
+    <message>
+        <source>No connection</source>
+        <translation>कोई कनेक्शन नहीं</translation>
+    </message>
+    <message>
+        <source>Auto-zoom when feature changes</source>
+        <translation>फ़ीचर बदलने पर ऑटो-ज़ूम</translation>
+    </message>
+    <message>
+        <source>Backend optimization settings saved</source>
+        <translation>बैकएंड अनुकूलन सेटिंग्स सहेजी गईं</translation>
+    </message>
+    <message>
+        <source>Backend optimizations configured</source>
+        <translation>बैकएंड अनुकूलन कॉन्फ़िगर किए गए</translation>
+    </message>
+    <message>
+        <source>Expression Evaluation</source>
+        <translation>अभिव्यक्ति मूल्यांकन</translation>
+    </message>
+    <message>
+        <source>Identify selected feature</source>
+        <translation>चयनित फ़ीचर की पहचान करें</translation>
+    </message>
+    <message>
+        <source>Layer properties reset to defaults</source>
+        <translation>परत गुण डिफ़ॉल्ट पर रीसेट</translation>
+    </message>
+    <message>
+        <source>Link exploring widgets together</source>
+        <translation>एक्सप्लोरिंग विजेट्स को एक साथ लिंक करें</translation>
+    </message>
+    <message>
+        <source>Optimization settings saved</source>
+        <translation>अनुकूलन सेटिंग्स सहेजी गईं</translation>
+    </message>
+    <message>
+        <source>Reset all layer exploring properties</source>
+        <translation>सभी परत अन्वेषण गुण रीसेट करें</translation>
+    </message>
+    <message>
+        <source>Toggle feature selection on map</source>
+        <translation>मानचित्र पर फ़ीचर चयन टॉगल करें</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source>
+        <translation>दूरस्थ परतों के लिए पूर्ण ज्यामिति के बजाय सेंट्रॉइड का उपयोग करें (जटिल बहुभुजों के लिए तेज़)</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source>
+        <translation>स्रोत परत के लिए पूर्ण ज्यामिति के बजाय सेंट्रॉइड का उपयोग करें (जटिल बहुभुजों के लिए तेज़)</translation>
+    </message>
+    <message>
+        <source>Zoom to selected feature</source>
+        <translation>चयनित फ़ीचर पर ज़ूम करें</translation>
+    </message>
+</context>
+<context>
+    <name>OptimizationDialog</name>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>अनुकूलन सेटिंग्स</translation>
+    </message>
+    <message>
+        <source>Configure Optimization Settings</source>
+        <translation>अनुकूलन सेटिंग्स कॉन्फ़िगर करें</translation>
+    </message>
+    <message>
+        <source>Enable automatic optimizations</source>
+        <translation>स्वचालित अनुकूलन सक्षम करें</translation>
+    </message>
+    <message>
+        <source>Ask before applying optimizations</source>
+        <translation>अनुकूलन लागू करने से पहले पूछें</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid Settings</source>
+        <translation>ऑटो-सेंट्रॉइड सेटिंग्स</translation>
+    </message>
+    <message>
+        <source>Enable auto-centroid for distant layers</source>
+        <translation>दूरस्थ परतों के लिए ऑटो-सेंट्रॉइड सक्षम करें</translation>
+    </message>
+    <message>
+        <source>Distance threshold (km):</source>
+        <translation>दूरी सीमा (किमी):</translation>
+    </message>
+    <message>
+        <source>Feature threshold:</source>
+        <translation>फीचर सीमा:</translation>
+    </message>
+    <message>
+        <source>Buffer Optimizations</source>
+        <translation>बफर अनुकूलन</translation>
+    </message>
+    <message>
+        <source>Simplify geometry before buffer</source>
+        <translation>बफर से पहले ज्यामिति को सरल बनाएं</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments to:</source>
+        <translation>बफर सेगमेंट को इतना करें:</translation>
+    </message>
+    <message>
+        <source>General</source>
+        <translation>सामान्य</translation>
+    </message>
+    <message>
+        <source>Use materialized views for filtering</source>
+        <translation>फ़िल्टरिंग के लिए मटेरियलाइज़्ड व्यू का उपयोग करें</translation>
+    </message>
+    <message>
+        <source>Create spatial indices automatically</source>
+        <translation>स्वचालित रूप से स्थानिक इंडेक्स बनाएं</translation>
+    </message>
+    <message>
+        <source>Use R-tree spatial index</source>
+        <translation>R-tree स्थानिक इंडेक्स का उपयोग करें</translation>
+    </message>
+    <message>
+        <source>Use bounding box pre-filter</source>
+        <translation>बाउंडिंग बॉक्स प्री-फ़िल्टर का उपयोग करें</translation>
+    </message>
+    <message>
+        <source>Backends</source>
+        <translation>बैकएंड</translation>
+    </message>
+    <message>
+        <source>Caching</source>
+        <translation>कैशिंग</translation>
+    </message>
+    <message>
+        <source>Enable geometry cache</source>
+        <translation>ज्यामिति कैश सक्षम करें</translation>
+    </message>
+    <message>
+        <source>Batch Processing</source>
+        <translation>बैच प्रोसेसिंग</translation>
+    </message>
+    <message>
+        <source>Batch size:</source>
+        <translation>बैच आकार:</translation>
+    </message>
+    <message>
+        <source>Advanced settings affect performance and memory usage. Change only if you understand the implications.</source>
+        <translation>उन्नत सेटिंग्स प्रदर्शन और मेमोरी उपयोग को प्रभावित करती हैं। केवल तभी बदलें जब आप प्रभाव समझते हों।</translation>
+    </message>
+    <message>
+        <source>Advanced</source>
+        <translation>उन्नत</translation>
+    </message>
+</context>
+<context>
+    <name>RecommendationDialog</name>
+    <message>
+        <source>Apply Optimizations?</source>
+        <translation>अनुकूलन लागू करें?</translation>
+    </message>
+    <message>
+        <source>Optimizations Available</source>
+        <translation>उपलब्ध अनुकूलन</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>छोड़ें</translation>
+    </message>
+    <message>
+        <source>Apply Selected</source>
+        <translation>चयनित लागू करें</translation>
+    </message>
+</context>
+<context>
+    <name>PostgresInfoDialog</name>
+    <message>
+        <source>PostgreSQL Session Info</source>
+        <translation>PostgreSQL सत्र जानकारी</translation>
+    </message>
+    <message>
+        <source>PostgreSQL Active</source>
+        <translation>PostgreSQL सक्रिय</translation>
+    </message>
+    <message>
+        <source>Connection Info</source>
+        <translation>कनेक्शन जानकारी</translation>
+    </message>
+    <message>
+        <source>Connection:</source>
+        <translation>कनेक्शन:</translation>
+    </message>
+    <message>
+        <source>Temp Schema:</source>
+        <translation>अस्थायी स्कीमा:</translation>
+    </message>
+    <message>
+        <source>Status:</source>
+        <translation>स्थिति:</translation>
+    </message>
+    <message>
+        <source>Temporary Views</source>
+        <translation>अस्थायी दृश्य</translation>
+    </message>
+    <message>
+        <source>Cleanup Options</source>
+        <translation>सफाई विकल्प</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on close</source>
+        <translation>बंद करते समय स्वतः साफ़ करें</translation>
+    </message>
+    <message>
+        <source>Automatically cleanup temporary views when FilterMate closes.</source>
+        <translation>FilterMate बंद होने पर स्वचालित रूप से अस्थायी दृश्य साफ़ करें।</translation>
+    </message>
+    <message>
+        <source>🗑️ Cleanup Now</source>
+        <translation>🗑️ अभी साफ़ करें</translation>
+    </message>
+    <message>
+        <source>Drop all temporary views created by FilterMate in this session.</source>
+        <translation>इस सत्र में FilterMate द्वारा बनाए गए सभी अस्थायी दृश्य हटाएं।</translation>
+    </message>
+    <message>
+        <source>(No temporary views)</source>
+        <translation>(कोई अस्थायी दृश्य नहीं)</translation>
+    </message>
+    <message>
+        <source>No Views</source>
+        <translation>कोई दृश्य नहीं</translation>
+    </message>
+    <message>
+        <source>There are no temporary views to clean up.</source>
+        <translation>साफ़ करने के लिए कोई अस्थायी दृश्य नहीं है।</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>सफाई की पुष्टि करें</translation>
+    </message>
+    <message>
+        <source>Cleanup Complete</source>
+        <translation>सफाई पूर्ण</translation>
+    </message>
+    <message>
+        <source>Cleanup Issue</source>
+        <translation>सफाई समस्या</translation>
+    </message>
+    <message>
+        <source>Cleanup Failed</source>
+        <translation>सफाई विफल</translation>
+    </message>
+</context>
 </TS>

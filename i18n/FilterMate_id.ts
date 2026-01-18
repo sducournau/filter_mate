@@ -1,4 +1,5 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
 <TS version="2.1" language="id_ID" sourcelanguage="en_US">
 <context>
     <name>FilterMate</name>
@@ -211,25 +212,25 @@ Apakah Anda ingin melanjutkan?</translation>
         <translation>Kesalahan selama migrasi konfigurasi: {}</translation>
     </message>
     <message>
-        <source>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
+        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
 
-FilterMate recommends disabling this setting (value 'Off') for the following reasons:
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
 
 Do you want to disable this setting now?
 
 • Yes: Disable filtering (recommended for FilterMate)
 • No: Keep current setting</source>
-        <translation>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
+        <translation>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
 
-FilterMate recommends disabling this setting (value 'Off') for the following reasons:
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
 
 Do you want to disable this setting now?
 
@@ -1073,7 +1074,400 @@ Atribut pertama: {1}</translation>
         <source>Error applying settings</source>
         <translation>Kesalahan saat menerapkan pengaturan</translation>
     </message>
-<message><source>MV Status: Checking...</source><translation type="unfinished">MV Status: Checking...</translation></message><message><source>MV Status: Error</source><translation type="unfinished">MV Status: Error</translation></message><message><source>MV Status: Clean</source><translation type="unfinished">MV Status: Clean</translation></message><message><source>MV Status:</source><translation type="unfinished">MV Status:</translation></message><message><source>active</source><translation type="unfinished">active</translation></message><message><source>No active materialized views</source><translation type="unfinished">No active materialized views</translation></message><message><source>Session:</source><translation type="unfinished">Session:</translation></message><message><source>Other sessions:</source><translation type="unfinished">Other sessions:</translation></message><message><source>🧹 Session</source><translation type="unfinished">🧹 Session</translation></message><message><source>Cleanup MVs from this session</source><translation type="unfinished">Cleanup MVs from this session</translation></message><message><source>🗑️ Orphaned</source><translation type="unfinished">🗑️ Orphaned</translation></message><message><source>Cleanup orphaned MVs (&gt;24h old)</source><translation type="unfinished">Cleanup orphaned MVs (&gt;24h old)</translation></message><message><source>⚠️ All</source><translation type="unfinished">⚠️ All</translation></message><message><source>Cleanup ALL MVs (affects other sessions)</source><translation type="unfinished">Cleanup ALL MVs (affects other sessions)</translation></message><message><source>Confirm Cleanup</source><translation type="unfinished">Confirm Cleanup</translation></message><message><source>Drop ALL materialized views?
-This affects other FilterMate sessions!</source><translation type="unfinished">Drop ALL materialized views?
-This affects other FilterMate sessions!</translation></message><message><source>Refresh MV status</source><translation type="unfinished">Refresh MV status</translation></message><message><source>Threshold:</source><translation type="unfinished">Threshold:</translation></message><message><source>features</source><translation type="unfinished">features</translation></message><message><source>Auto-cleanup on exit</source><translation type="unfinished">Auto-cleanup on exit</translation></message><message><source>Automatically drop session MVs when plugin unloads</source><translation type="unfinished">Automatically drop session MVs when plugin unloads</translation></message><message><source>Create MVs for datasets larger than this</source><translation type="unfinished">Create MVs for datasets larger than this</translation></message><message><source>faster possible</source><translation type="unfinished">faster possible</translation></message><message><source>Optimizations available</source><translation type="unfinished">Optimizations available</translation></message><message><source>FilterMate - Apply Optimizations?</source><translation type="unfinished">FilterMate - Apply Optimizations?</translation></message><message><source>Skip</source><translation type="unfinished">Skip</translation></message><message><source>✓ Apply</source><translation type="unfinished">✓ Apply</translation></message><message><source>Don't ask for this session</source><translation type="unfinished">Don't ask for this session</translation></message><message><source>Centroids</source><translation type="unfinished">Centroids</translation></message><message><source>Simplify</source><translation type="unfinished">Simplify</translation></message><message><source>Pre-simplify</source><translation type="unfinished">Pre-simplify</translation></message><message><source>Fewer segments</source><translation type="unfinished">Fewer segments</translation></message><message><source>Flat buffer</source><translation type="unfinished">Flat buffer</translation></message><message><source>BBox filter</source><translation type="unfinished">BBox filter</translation></message><message><source>Attr-first</source><translation type="unfinished">Attr-first</translation></message><message><source>PostgreSQL not available</source><translation type="unfinished">PostgreSQL not available</translation></message><message><source>No connection</source><translation type="unfinished">No connection</translation></message><message><source>Auto-zoom when feature changes</source><translation type="unfinished">Auto-zoom when feature changes</translation></message><message><source>Backend optimization settings saved</source><translation type="unfinished">Backend optimization settings saved</translation></message><message><source>Backend optimizations configured</source><translation type="unfinished">Backend optimizations configured</translation></message><message><source>Expression Evaluation</source><translation type="unfinished">Expression Evaluation</translation></message><message><source>Identify selected feature</source><translation type="unfinished">Identify selected feature</translation></message><message><source>Layer properties reset to defaults</source><translation type="unfinished">Layer properties reset to defaults</translation></message><message><source>Link exploring widgets together</source><translation type="unfinished">Link exploring widgets together</translation></message><message><source>Optimization settings saved</source><translation type="unfinished">Optimization settings saved</translation></message><message><source>Reset all layer exploring properties</source><translation type="unfinished">Reset all layer exploring properties</translation></message><message><source>Toggle feature selection on map</source><translation type="unfinished">Toggle feature selection on map</translation></message><message><source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for distant layers (faster for complex polygons)</translation></message><message><source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for source layer (faster for complex polygons)</translation></message><message><source>Zoom to selected feature</source><translation type="unfinished">Zoom to selected feature</translation></message></context>
+    <message>
+        <source>MV Status: Checking...</source>
+        <translation>Status MV: Memeriksa...</translation>
+    </message>
+    <message>
+        <source>MV Status: Error</source>
+        <translation>Status MV: Error</translation>
+    </message>
+    <message>
+        <source>MV Status: Clean</source>
+        <translation>Status MV: Bersih</translation>
+    </message>
+    <message>
+        <source>MV Status:</source>
+        <translation>Status MV:</translation>
+    </message>
+    <message>
+        <source>active</source>
+        <translation>aktif</translation>
+    </message>
+    <message>
+        <source>No active materialized views</source>
+        <translation>Tidak ada materialized view aktif</translation>
+    </message>
+    <message>
+        <source>Session:</source>
+        <translation>Sesi:</translation>
+    </message>
+    <message>
+        <source>Other sessions:</source>
+        <translation>Sesi lain:</translation>
+    </message>
+    <message>
+        <source>🧹 Session</source>
+        <translation>🧹 Sesi</translation>
+    </message>
+    <message>
+        <source>Cleanup MVs from this session</source>
+        <translation>Bersihkan MV dari sesi ini</translation>
+    </message>
+    <message>
+        <source>🗑️ Orphaned</source>
+        <translation>🗑️ Yatim</translation>
+    </message>
+    <message>
+        <source>Cleanup orphaned MVs (&gt;24h old)</source>
+        <translation>Bersihkan MV yatim (&gt;24 jam)</translation>
+    </message>
+    <message>
+        <source>⚠️ All</source>
+        <translation>⚠️ Semua</translation>
+    </message>
+    <message>
+        <source>Cleanup ALL MVs (affects other sessions)</source>
+        <translation>Bersihkan SEMUA MV (mempengaruhi sesi lain)</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>Konfirmasi pembersihan</translation>
+    </message>
+    <message>
+        <source>Drop ALL materialized views?
+This affects other FilterMate sessions!</source>
+        <translation>Hapus SEMUA materialized view?
+Ini mempengaruhi sesi FilterMate lain!</translation>
+    </message>
+    <message>
+        <source>Refresh MV status</source>
+        <translation>Perbarui status MV</translation>
+    </message>
+    <message>
+        <source>Threshold:</source>
+        <translation>Ambang batas:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>fitur</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on exit</source>
+        <translation>Bersihkan otomatis saat keluar</translation>
+    </message>
+    <message>
+        <source>Automatically drop session MVs when plugin unloads</source>
+        <translation>Otomatis hapus session MVs saat plugin dilepas</translation>
+    </message>
+    <message>
+        <source>Create MVs for datasets larger than this</source>
+        <translation>Buat MV untuk dataset yang lebih besar dari ini</translation>
+    </message>
+    <message>
+        <source>faster possible</source>
+        <translation>lebih cepat mungkin</translation>
+    </message>
+    <message>
+        <source>Optimizations available</source>
+        <translation>Optimasi tersedia</translation>
+    </message>
+    <message>
+        <source>FilterMate - Apply Optimizations?</source>
+        <translation>FilterMate - Terapkan Optimasi?</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Lewati</translation>
+    </message>
+    <message>
+        <source>✓ Apply</source>
+        <translation>✓ Terapkan</translation>
+    </message>
+    <message>
+        <source>Don&apos;t ask for this session</source>
+        <translation>Jangan tanya untuk sesi ini</translation>
+    </message>
+    <message>
+        <source>Centroids</source>
+        <translation>Sentroid</translation>
+    </message>
+    <message>
+        <source>Simplify</source>
+        <translation>Sederhanakan</translation>
+    </message>
+    <message>
+        <source>Pre-simplify</source>
+        <translation>Pra-sederhanakan</translation>
+    </message>
+    <message>
+        <source>Fewer segments</source>
+        <translation>Lebih sedikit segmen</translation>
+    </message>
+    <message>
+        <source>Flat buffer</source>
+        <translation>Buffer datar</translation>
+    </message>
+    <message>
+        <source>BBox filter</source>
+        <translation>Filter BBox</translation>
+    </message>
+    <message>
+        <source>Attr-first</source>
+        <translation>Attr-pertama</translation>
+    </message>
+    <message>
+        <source>PostgreSQL not available</source>
+        <translation>PostgreSQL tidak tersedia</translation>
+    </message>
+    <message>
+        <source>No connection</source>
+        <translation>Tidak ada koneksi</translation>
+    </message>
+    <message>
+        <source>Auto-zoom when feature changes</source>
+        <translation>Auto-zoom saat fitur berubah</translation>
+    </message>
+    <message>
+        <source>Backend optimization settings saved</source>
+        <translation>Pengaturan optimasi backend disimpan</translation>
+    </message>
+    <message>
+        <source>Backend optimizations configured</source>
+        <translation>Optimasi backend dikonfigurasi</translation>
+    </message>
+    <message>
+        <source>Expression Evaluation</source>
+        <translation>Evaluasi Ekspresi</translation>
+    </message>
+    <message>
+        <source>Identify selected feature</source>
+        <translation>Identifikasi fitur yang dipilih</translation>
+    </message>
+    <message>
+        <source>Layer properties reset to defaults</source>
+        <translation>Properti layer direset ke default</translation>
+    </message>
+    <message>
+        <source>Link exploring widgets together</source>
+        <translation>Hubungkan widget eksplorasi bersama</translation>
+    </message>
+    <message>
+        <source>Optimization settings saved</source>
+        <translation>Pengaturan optimasi disimpan</translation>
+    </message>
+    <message>
+        <source>Reset all layer exploring properties</source>
+        <translation>Reset semua properti eksplorasi layer</translation>
+    </message>
+    <message>
+        <source>Toggle feature selection on map</source>
+        <translation>Beralih pilihan fitur pada peta</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source>
+        <translation>Gunakan sentroid alih-alih geometri penuh untuk lapisan jauh (lebih cepat untuk poligon kompleks)</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source>
+        <translation>Gunakan sentroid alih-alih geometri penuh untuk lapisan sumber (lebih cepat untuk poligon kompleks)</translation>
+    </message>
+    <message>
+        <source>Zoom to selected feature</source>
+        <translation>Zoom ke fitur yang dipilih</translation>
+    </message>
+</context>
+<context>
+    <name>OptimizationDialog</name>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>Pengaturan Optimasi</translation>
+    </message>
+    <message>
+        <source>Configure Optimization Settings</source>
+        <translation>Konfigurasikan Pengaturan Optimasi</translation>
+    </message>
+    <message>
+        <source>Enable automatic optimizations</source>
+        <translation>Aktifkan optimasi otomatis</translation>
+    </message>
+    <message>
+        <source>Ask before applying optimizations</source>
+        <translation>Tanya sebelum menerapkan optimasi</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid Settings</source>
+        <translation>Pengaturan Auto-Centroid</translation>
+    </message>
+    <message>
+        <source>Enable auto-centroid for distant layers</source>
+        <translation>Aktifkan auto-centroid untuk layer jauh</translation>
+    </message>
+    <message>
+        <source>Distance threshold (km):</source>
+        <translation>Ambang batas jarak (km):</translation>
+    </message>
+    <message>
+        <source>Feature threshold:</source>
+        <translation>Ambang batas fitur:</translation>
+    </message>
+    <message>
+        <source>Buffer Optimizations</source>
+        <translation>Optimasi Buffer</translation>
+    </message>
+    <message>
+        <source>Simplify geometry before buffer</source>
+        <translation>Sederhanakan geometri sebelum buffer</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments to:</source>
+        <translation>Kurangi segmen buffer menjadi:</translation>
+    </message>
+    <message>
+        <source>General</source>
+        <translation>Umum</translation>
+    </message>
+    <message>
+        <source>Use materialized views for filtering</source>
+        <translation>Gunakan materialized views untuk filtering</translation>
+    </message>
+    <message>
+        <source>Create spatial indices automatically</source>
+        <translation>Buat indeks spasial secara otomatis</translation>
+    </message>
+    <message>
+        <source>Use R-tree spatial index</source>
+        <translation>Gunakan indeks spasial R-tree</translation>
+    </message>
+    <message>
+        <source>Use bounding box pre-filter</source>
+        <translation>Gunakan pra-filter bounding box</translation>
+    </message>
+    <message>
+        <source>Backends</source>
+        <translation>Backend</translation>
+    </message>
+    <message>
+        <source>Caching</source>
+        <translation>Caching</translation>
+    </message>
+    <message>
+        <source>Enable geometry cache</source>
+        <translation>Aktifkan cache geometri</translation>
+    </message>
+    <message>
+        <source>Batch Processing</source>
+        <translation>Pemrosesan Batch</translation>
+    </message>
+    <message>
+        <source>Batch size:</source>
+        <translation>Ukuran batch:</translation>
+    </message>
+    <message>
+        <source>Advanced settings affect performance and memory usage. Change only if you understand the implications.</source>
+        <translation>Pengaturan lanjutan mempengaruhi kinerja dan penggunaan memori. Ubah hanya jika Anda memahami implikasinya.</translation>
+    </message>
+    <message>
+        <source>Advanced</source>
+        <translation>Lanjutan</translation>
+    </message>
+</context>
+<context>
+    <name>RecommendationDialog</name>
+    <message>
+        <source>Apply Optimizations?</source>
+        <translation>Terapkan Optimasi?</translation>
+    </message>
+    <message>
+        <source>Optimizations Available</source>
+        <translation>Optimasi Tersedia</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Lewati</translation>
+    </message>
+    <message>
+        <source>Apply Selected</source>
+        <translation>Terapkan yang Dipilih</translation>
+    </message>
+</context>
+<context>
+    <name>PostgresInfoDialog</name>
+    <message>
+        <source>PostgreSQL Session Info</source>
+        <translation>Info Sesi PostgreSQL</translation>
+    </message>
+    <message>
+        <source>PostgreSQL Active</source>
+        <translation>PostgreSQL Aktif</translation>
+    </message>
+    <message>
+        <source>Connection Info</source>
+        <translation>Info Koneksi</translation>
+    </message>
+    <message>
+        <source>Connection:</source>
+        <translation>Koneksi:</translation>
+    </message>
+    <message>
+        <source>Temp Schema:</source>
+        <translation>Skema Sementara:</translation>
+    </message>
+    <message>
+        <source>Status:</source>
+        <translation>Status:</translation>
+    </message>
+    <message>
+        <source>Temporary Views</source>
+        <translation>View Sementara</translation>
+    </message>
+    <message>
+        <source>Cleanup Options</source>
+        <translation>Opsi Pembersihan</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on close</source>
+        <translation>Auto-cleanup saat ditutup</translation>
+    </message>
+    <message>
+        <source>Automatically cleanup temporary views when FilterMate closes.</source>
+        <translation>Bersihkan view sementara secara otomatis saat FilterMate ditutup.</translation>
+    </message>
+    <message>
+        <source>🗑️ Cleanup Now</source>
+        <translation>🗑️ Bersihkan Sekarang</translation>
+    </message>
+    <message>
+        <source>Drop all temporary views created by FilterMate in this session.</source>
+        <translation>Hapus semua view sementara yang dibuat FilterMate dalam sesi ini.</translation>
+    </message>
+    <message>
+        <source>(No temporary views)</source>
+        <translation>(Tidak ada view sementara)</translation>
+    </message>
+    <message>
+        <source>No Views</source>
+        <translation>Tidak ada view</translation>
+    </message>
+    <message>
+        <source>There are no temporary views to clean up.</source>
+        <translation>Tidak ada view sementara untuk dibersihkan.</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>Konfirmasi Pembersihan</translation>
+    </message>
+    <message>
+        <source>Cleanup Complete</source>
+        <translation>Pembersihan Selesai</translation>
+    </message>
+    <message>
+        <source>Cleanup Issue</source>
+        <translation>Masalah Pembersihan</translation>
+    </message>
+    <message>
+        <source>Cleanup Failed</source>
+        <translation>Pembersihan Gagal</translation>
+    </message>
+</context>
 </TS>

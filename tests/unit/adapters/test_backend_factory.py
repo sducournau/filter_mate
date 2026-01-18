@@ -177,6 +177,34 @@ class TestBackendSelector:
         
         assert result == ProviderType.POSTGRESQL
     
+    def test_prefer_native_for_postgresql_project(self, layer_info_postgresql):
+        """Test that prefer_native_backend uses PostgreSQL even for small datasets.
+        
+        When all project layers are PostgreSQL, we want consistent backend usage.
+        v4.1.1: Added prefer_native_backend option.
+        """
+        from adapters.backends.factory import BackendSelector
+        
+        small_layer = LayerInfo(
+            layer_id="small_pg",
+            name="small_pg_layer",
+            provider_type=ProviderType.POSTGRESQL,
+            feature_count=100,  # Below threshold
+            geometry_type=GeometryType.POINT,
+            crs_auth_id="EPSG:4326"
+        )
+        
+        # With prefer_native_backend=True, even small datasets use PostgreSQL
+        selector = BackendSelector(
+            postgresql_available=True,
+            small_dataset_optimization=True,
+            small_dataset_threshold=5000,
+            prefer_native_backend=True  # NEW: Force native backend
+        )
+        result = selector.select_provider_type(small_layer)
+        
+        assert result == ProviderType.POSTGRESQL
+    
     def test_unknown_provider_fallback(self):
         """Test unknown provider falls back to OGR."""
         from adapters.backends.factory import BackendSelector

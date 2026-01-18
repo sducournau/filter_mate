@@ -1,4 +1,5 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
 <TS version="2.1" language="vi_VN" sourcelanguage="en_US">
 <context>
     <name>FilterMate</name>
@@ -211,25 +212,25 @@ Bạn có muốn tiếp tục không?</translation>
         <translation>Lỗi trong quá trình di chuyển cấu hình: {}</translation>
     </message>
     <message>
-        <source>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
+        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
 
-FilterMate recommends disabling this setting (value 'Off') for the following reasons:
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
 
 Do you want to disable this setting now?
 
 • Yes: Disable filtering (recommended for FilterMate)
 • No: Keep current setting</source>
-        <translation>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
+        <translation>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
 
-FilterMate recommends disabling this setting (value 'Off') for the following reasons:
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
 
 Do you want to disable this setting now?
 
@@ -1073,7 +1074,400 @@ Thuộc tính đầu tiên: {1}</translation>
         <source>Error applying settings</source>
         <translation>Lỗi khi áp dụng cài đặt</translation>
     </message>
-<message><source>MV Status: Checking...</source><translation type="unfinished">MV Status: Checking...</translation></message><message><source>MV Status: Error</source><translation type="unfinished">MV Status: Error</translation></message><message><source>MV Status: Clean</source><translation type="unfinished">MV Status: Clean</translation></message><message><source>MV Status:</source><translation type="unfinished">MV Status:</translation></message><message><source>active</source><translation type="unfinished">active</translation></message><message><source>No active materialized views</source><translation type="unfinished">No active materialized views</translation></message><message><source>Session:</source><translation type="unfinished">Session:</translation></message><message><source>Other sessions:</source><translation type="unfinished">Other sessions:</translation></message><message><source>🧹 Session</source><translation type="unfinished">🧹 Session</translation></message><message><source>Cleanup MVs from this session</source><translation type="unfinished">Cleanup MVs from this session</translation></message><message><source>🗑️ Orphaned</source><translation type="unfinished">🗑️ Orphaned</translation></message><message><source>Cleanup orphaned MVs (&gt;24h old)</source><translation type="unfinished">Cleanup orphaned MVs (&gt;24h old)</translation></message><message><source>⚠️ All</source><translation type="unfinished">⚠️ All</translation></message><message><source>Cleanup ALL MVs (affects other sessions)</source><translation type="unfinished">Cleanup ALL MVs (affects other sessions)</translation></message><message><source>Confirm Cleanup</source><translation type="unfinished">Confirm Cleanup</translation></message><message><source>Drop ALL materialized views?
-This affects other FilterMate sessions!</source><translation type="unfinished">Drop ALL materialized views?
-This affects other FilterMate sessions!</translation></message><message><source>Refresh MV status</source><translation type="unfinished">Refresh MV status</translation></message><message><source>Threshold:</source><translation type="unfinished">Threshold:</translation></message><message><source>features</source><translation type="unfinished">features</translation></message><message><source>Auto-cleanup on exit</source><translation type="unfinished">Auto-cleanup on exit</translation></message><message><source>Automatically drop session MVs when plugin unloads</source><translation type="unfinished">Automatically drop session MVs when plugin unloads</translation></message><message><source>Create MVs for datasets larger than this</source><translation type="unfinished">Create MVs for datasets larger than this</translation></message><message><source>faster possible</source><translation type="unfinished">faster possible</translation></message><message><source>Optimizations available</source><translation type="unfinished">Optimizations available</translation></message><message><source>FilterMate - Apply Optimizations?</source><translation type="unfinished">FilterMate - Apply Optimizations?</translation></message><message><source>Skip</source><translation type="unfinished">Skip</translation></message><message><source>✓ Apply</source><translation type="unfinished">✓ Apply</translation></message><message><source>Don't ask for this session</source><translation type="unfinished">Don't ask for this session</translation></message><message><source>Centroids</source><translation type="unfinished">Centroids</translation></message><message><source>Simplify</source><translation type="unfinished">Simplify</translation></message><message><source>Pre-simplify</source><translation type="unfinished">Pre-simplify</translation></message><message><source>Fewer segments</source><translation type="unfinished">Fewer segments</translation></message><message><source>Flat buffer</source><translation type="unfinished">Flat buffer</translation></message><message><source>BBox filter</source><translation type="unfinished">BBox filter</translation></message><message><source>Attr-first</source><translation type="unfinished">Attr-first</translation></message><message><source>PostgreSQL not available</source><translation type="unfinished">PostgreSQL not available</translation></message><message><source>No connection</source><translation type="unfinished">No connection</translation></message><message><source>Auto-zoom when feature changes</source><translation type="unfinished">Auto-zoom when feature changes</translation></message><message><source>Backend optimization settings saved</source><translation type="unfinished">Backend optimization settings saved</translation></message><message><source>Backend optimizations configured</source><translation type="unfinished">Backend optimizations configured</translation></message><message><source>Expression Evaluation</source><translation type="unfinished">Expression Evaluation</translation></message><message><source>Identify selected feature</source><translation type="unfinished">Identify selected feature</translation></message><message><source>Layer properties reset to defaults</source><translation type="unfinished">Layer properties reset to defaults</translation></message><message><source>Link exploring widgets together</source><translation type="unfinished">Link exploring widgets together</translation></message><message><source>Optimization settings saved</source><translation type="unfinished">Optimization settings saved</translation></message><message><source>Reset all layer exploring properties</source><translation type="unfinished">Reset all layer exploring properties</translation></message><message><source>Toggle feature selection on map</source><translation type="unfinished">Toggle feature selection on map</translation></message><message><source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for distant layers (faster for complex polygons)</translation></message><message><source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for source layer (faster for complex polygons)</translation></message><message><source>Zoom to selected feature</source><translation type="unfinished">Zoom to selected feature</translation></message></context>
+    <message>
+        <source>MV Status: Checking...</source>
+        <translation>Trạng thái MV: Đang kiểm tra...</translation>
+    </message>
+    <message>
+        <source>MV Status: Error</source>
+        <translation>Trạng thái MV: Lỗi</translation>
+    </message>
+    <message>
+        <source>MV Status: Clean</source>
+        <translation>Trạng thái MV: Sạch</translation>
+    </message>
+    <message>
+        <source>MV Status:</source>
+        <translation>Trạng thái MV:</translation>
+    </message>
+    <message>
+        <source>active</source>
+        <translation>hoạt động</translation>
+    </message>
+    <message>
+        <source>No active materialized views</source>
+        <translation>Không có materialized view hoạt động</translation>
+    </message>
+    <message>
+        <source>Session:</source>
+        <translation>Phiên:</translation>
+    </message>
+    <message>
+        <source>Other sessions:</source>
+        <translation>Các phiên khác:</translation>
+    </message>
+    <message>
+        <source>🧹 Session</source>
+        <translation>🧹 Phiên</translation>
+    </message>
+    <message>
+        <source>Cleanup MVs from this session</source>
+        <translation>Dọn dẹp MV từ phiên này</translation>
+    </message>
+    <message>
+        <source>🗑️ Orphaned</source>
+        <translation>🗑️ Mồ côi</translation>
+    </message>
+    <message>
+        <source>Cleanup orphaned MVs (&gt;24h old)</source>
+        <translation>Dọn MV mồ côi (&gt;24 giờ)</translation>
+    </message>
+    <message>
+        <source>⚠️ All</source>
+        <translation>⚠️ Tất cả</translation>
+    </message>
+    <message>
+        <source>Cleanup ALL MVs (affects other sessions)</source>
+        <translation>Dọn TẤT CẢ MV (ảnh hưởng phiên khác)</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>Xác nhận dọn dẹp</translation>
+    </message>
+    <message>
+        <source>Drop ALL materialized views?
+This affects other FilterMate sessions!</source>
+        <translation>Xóa TẤT CẢ materialized view?
+Điều này ảnh hưởng đến các phiên FilterMate khác!</translation>
+    </message>
+    <message>
+        <source>Refresh MV status</source>
+        <translation>Làm mới trạng thái MV</translation>
+    </message>
+    <message>
+        <source>Threshold:</source>
+        <translation>Ngưỡng:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>tính năng</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on exit</source>
+        <translation>Tự động dọn dẹp khi thoát</translation>
+    </message>
+    <message>
+        <source>Automatically drop session MVs when plugin unloads</source>
+        <translation>Tự động xóa MV phiên khi plugin được dỡ</translation>
+    </message>
+    <message>
+        <source>Create MVs for datasets larger than this</source>
+        <translation>Tạo MV cho các bộ dữ liệu lớn hơn này</translation>
+    </message>
+    <message>
+        <source>faster possible</source>
+        <translation>nhanh hơn có thể</translation>
+    </message>
+    <message>
+        <source>Optimizations available</source>
+        <translation>Tối ưu hóa có sẵn</translation>
+    </message>
+    <message>
+        <source>FilterMate - Apply Optimizations?</source>
+        <translation>FilterMate - Áp dụng tối ưu hóa?</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Bỏ qua</translation>
+    </message>
+    <message>
+        <source>✓ Apply</source>
+        <translation>✓ Áp dụng</translation>
+    </message>
+    <message>
+        <source>Don&apos;t ask for this session</source>
+        <translation>Không hỏi cho phiên này</translation>
+    </message>
+    <message>
+        <source>Centroids</source>
+        <translation>Trọng tâm</translation>
+    </message>
+    <message>
+        <source>Simplify</source>
+        <translation>Đơn giản hóa</translation>
+    </message>
+    <message>
+        <source>Pre-simplify</source>
+        <translation>Tiền đơn giản hóa</translation>
+    </message>
+    <message>
+        <source>Fewer segments</source>
+        <translation>Ít phân đoạn hơn</translation>
+    </message>
+    <message>
+        <source>Flat buffer</source>
+        <translation>Bộ đệm phẳng</translation>
+    </message>
+    <message>
+        <source>BBox filter</source>
+        <translation>Bộ lọc BBox</translation>
+    </message>
+    <message>
+        <source>Attr-first</source>
+        <translation>Attr-trước</translation>
+    </message>
+    <message>
+        <source>PostgreSQL not available</source>
+        <translation>PostgreSQL không khả dụng</translation>
+    </message>
+    <message>
+        <source>No connection</source>
+        <translation>Không có kết nối</translation>
+    </message>
+    <message>
+        <source>Auto-zoom when feature changes</source>
+        <translation>Tự động thu phóng khi tính năng thay đổi</translation>
+    </message>
+    <message>
+        <source>Backend optimization settings saved</source>
+        <translation>Cài đặt tối ưu hóa backend đã lưu</translation>
+    </message>
+    <message>
+        <source>Backend optimizations configured</source>
+        <translation>Tối ưu hóa backend đã cấu hình</translation>
+    </message>
+    <message>
+        <source>Expression Evaluation</source>
+        <translation>Đánh giá biểu thức</translation>
+    </message>
+    <message>
+        <source>Identify selected feature</source>
+        <translation>Xác định tính năng đã chọn</translation>
+    </message>
+    <message>
+        <source>Layer properties reset to defaults</source>
+        <translation>Thuộc tính lớp đặt lại về mặc định</translation>
+    </message>
+    <message>
+        <source>Link exploring widgets together</source>
+        <translation>Liên kết các widget khám phá cùng nhau</translation>
+    </message>
+    <message>
+        <source>Optimization settings saved</source>
+        <translation>Cài đặt tối ưu hóa đã lưu</translation>
+    </message>
+    <message>
+        <source>Reset all layer exploring properties</source>
+        <translation>Đặt lại tất cả thuộc tính khám phá lớp</translation>
+    </message>
+    <message>
+        <source>Toggle feature selection on map</source>
+        <translation>Bật/tắt lựa chọn tính năng trên bản đồ</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source>
+        <translation>Sử dụng trọng tâm thay vì hình học đầy đủ cho các lớp xa (nhanh hơn cho đa giác phức tạp)</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source>
+        <translation>Sử dụng trọng tâm thay vì hình học đầy đủ cho lớp nguồn (nhanh hơn cho đa giác phức tạp)</translation>
+    </message>
+    <message>
+        <source>Zoom to selected feature</source>
+        <translation>Thu phóng đến tính năng đã chọn</translation>
+    </message>
+</context>
+<context>
+    <name>OptimizationDialog</name>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>Cài đặt tối ưu hóa</translation>
+    </message>
+    <message>
+        <source>Configure Optimization Settings</source>
+        <translation>Cấu hình cài đặt tối ưu hóa</translation>
+    </message>
+    <message>
+        <source>Enable automatic optimizations</source>
+        <translation>Bật tối ưu hóa tự động</translation>
+    </message>
+    <message>
+        <source>Ask before applying optimizations</source>
+        <translation>Hỏi trước khi áp dụng tối ưu hóa</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid Settings</source>
+        <translation>Cài đặt tâm tự động</translation>
+    </message>
+    <message>
+        <source>Enable auto-centroid for distant layers</source>
+        <translation>Bật tâm tự động cho lớp xa</translation>
+    </message>
+    <message>
+        <source>Distance threshold (km):</source>
+        <translation>Ngưỡng khoảng cách (km):</translation>
+    </message>
+    <message>
+        <source>Feature threshold:</source>
+        <translation>Ngưỡng đối tượng:</translation>
+    </message>
+    <message>
+        <source>Buffer Optimizations</source>
+        <translation>Tối ưu hóa vùng đệm</translation>
+    </message>
+    <message>
+        <source>Simplify geometry before buffer</source>
+        <translation>Đơn giản hóa hình học trước khi đệm</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments to:</source>
+        <translation>Giảm đoạn đệm xuống:</translation>
+    </message>
+    <message>
+        <source>General</source>
+        <translation>Chung</translation>
+    </message>
+    <message>
+        <source>Use materialized views for filtering</source>
+        <translation>Sử dụng view vật lý để lọc</translation>
+    </message>
+    <message>
+        <source>Create spatial indices automatically</source>
+        <translation>Tự động tạo chỉ mục không gian</translation>
+    </message>
+    <message>
+        <source>Use R-tree spatial index</source>
+        <translation>Sử dụng chỉ mục không gian R-tree</translation>
+    </message>
+    <message>
+        <source>Use bounding box pre-filter</source>
+        <translation>Sử dụng bộ lọc trước hộp giới hạn</translation>
+    </message>
+    <message>
+        <source>Backends</source>
+        <translation>Backend</translation>
+    </message>
+    <message>
+        <source>Caching</source>
+        <translation>Bộ nhớ đệm</translation>
+    </message>
+    <message>
+        <source>Enable geometry cache</source>
+        <translation>Bật bộ nhớ đệm hình học</translation>
+    </message>
+    <message>
+        <source>Batch Processing</source>
+        <translation>Xử lý hàng loạt</translation>
+    </message>
+    <message>
+        <source>Batch size:</source>
+        <translation>Kích thước lô:</translation>
+    </message>
+    <message>
+        <source>Advanced settings affect performance and memory usage. Change only if you understand the implications.</source>
+        <translation>Cài đặt nâng cao ảnh hưởng đến hiệu suất và bộ nhớ. Chỉ thay đổi nếu bạn hiểu tác động.</translation>
+    </message>
+    <message>
+        <source>Advanced</source>
+        <translation>Nâng cao</translation>
+    </message>
+</context>
+<context>
+    <name>RecommendationDialog</name>
+    <message>
+        <source>Apply Optimizations?</source>
+        <translation>Áp dụng tối ưu hóa?</translation>
+    </message>
+    <message>
+        <source>Optimizations Available</source>
+        <translation>Tối ưu hóa có sẵn</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Bỏ qua</translation>
+    </message>
+    <message>
+        <source>Apply Selected</source>
+        <translation>Áp dụng đã chọn</translation>
+    </message>
+</context>
+<context>
+    <name>PostgresInfoDialog</name>
+    <message>
+        <source>PostgreSQL Session Info</source>
+        <translation>Thông tin phiên PostgreSQL</translation>
+    </message>
+    <message>
+        <source>PostgreSQL Active</source>
+        <translation>PostgreSQL đang hoạt động</translation>
+    </message>
+    <message>
+        <source>Connection Info</source>
+        <translation>Thông tin kết nối</translation>
+    </message>
+    <message>
+        <source>Connection:</source>
+        <translation>Kết nối:</translation>
+    </message>
+    <message>
+        <source>Temp Schema:</source>
+        <translation>Schema tạm thời:</translation>
+    </message>
+    <message>
+        <source>Status:</source>
+        <translation>Trạng thái:</translation>
+    </message>
+    <message>
+        <source>Temporary Views</source>
+        <translation>View tạm thời</translation>
+    </message>
+    <message>
+        <source>Cleanup Options</source>
+        <translation>Tùy chọn dọn dẹp</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on close</source>
+        <translation>Tự động dọn dẹp khi đóng</translation>
+    </message>
+    <message>
+        <source>Automatically cleanup temporary views when FilterMate closes.</source>
+        <translation>Tự động dọn dẹp view tạm thời khi đóng FilterMate.</translation>
+    </message>
+    <message>
+        <source>🗑️ Cleanup Now</source>
+        <translation>🗑️ Dọn dẹp ngay</translation>
+    </message>
+    <message>
+        <source>Drop all temporary views created by FilterMate in this session.</source>
+        <translation>Xóa tất cả view tạm thời được FilterMate tạo trong phiên này.</translation>
+    </message>
+    <message>
+        <source>(No temporary views)</source>
+        <translation>(Không có view tạm thời)</translation>
+    </message>
+    <message>
+        <source>No Views</source>
+        <translation>Không có view</translation>
+    </message>
+    <message>
+        <source>There are no temporary views to clean up.</source>
+        <translation>Không có view tạm thời để dọn dẹp.</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>Xác nhận dọn dẹp</translation>
+    </message>
+    <message>
+        <source>Cleanup Complete</source>
+        <translation>Dọn dẹp hoàn tất</translation>
+    </message>
+    <message>
+        <source>Cleanup Issue</source>
+        <translation>Vấn đề dọn dẹp</translation>
+    </message>
+    <message>
+        <source>Cleanup Failed</source>
+        <translation>Dọn dẹp thất bại</translation>
+    </message>
+</context>
 </TS>

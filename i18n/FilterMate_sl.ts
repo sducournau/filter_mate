@@ -1,4 +1,5 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
 <TS version="2.1" language="sl_SI" sourcelanguage="sl_SI">
 <context>
     <name>FilterMate</name>
@@ -163,25 +164,25 @@ Do you want to continue?</translation>
         <translation>Nastavitev preverjanja geometrije</translation>
     </message>
     <message>
-        <source>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
+        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
 
-FilterMate recommends disabling this setting (value 'Off') for the following reasons:
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
 
 Do you want to disable this setting now?
 
 • Yes: Disable filtering (recommended for FilterMate)
 • No: Keep current setting</source>
-        <translation>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
+        <translation>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
 
-FilterMate recommends disabling this setting (value 'Off') for the following reasons:
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
 
 Do you want to disable this setting now?
 
@@ -1073,7 +1074,400 @@ First attribute: {1}</translation>
         <source>Error applying settings</source>
         <translation>Napaka pri uporabi nastavitev</translation>
     </message>
-<message><source>MV Status: Checking...</source><translation type="unfinished">MV Status: Checking...</translation></message><message><source>MV Status: Error</source><translation type="unfinished">MV Status: Error</translation></message><message><source>MV Status: Clean</source><translation type="unfinished">MV Status: Clean</translation></message><message><source>MV Status:</source><translation type="unfinished">MV Status:</translation></message><message><source>active</source><translation type="unfinished">active</translation></message><message><source>No active materialized views</source><translation type="unfinished">No active materialized views</translation></message><message><source>Session:</source><translation type="unfinished">Session:</translation></message><message><source>Other sessions:</source><translation type="unfinished">Other sessions:</translation></message><message><source>🧹 Session</source><translation type="unfinished">🧹 Session</translation></message><message><source>Cleanup MVs from this session</source><translation type="unfinished">Cleanup MVs from this session</translation></message><message><source>🗑️ Orphaned</source><translation type="unfinished">🗑️ Orphaned</translation></message><message><source>Cleanup orphaned MVs (&gt;24h old)</source><translation type="unfinished">Cleanup orphaned MVs (&gt;24h old)</translation></message><message><source>⚠️ All</source><translation type="unfinished">⚠️ All</translation></message><message><source>Cleanup ALL MVs (affects other sessions)</source><translation type="unfinished">Cleanup ALL MVs (affects other sessions)</translation></message><message><source>Confirm Cleanup</source><translation type="unfinished">Confirm Cleanup</translation></message><message><source>Drop ALL materialized views?
-This affects other FilterMate sessions!</source><translation type="unfinished">Drop ALL materialized views?
-This affects other FilterMate sessions!</translation></message><message><source>Refresh MV status</source><translation type="unfinished">Refresh MV status</translation></message><message><source>Threshold:</source><translation type="unfinished">Threshold:</translation></message><message><source>features</source><translation type="unfinished">features</translation></message><message><source>Auto-cleanup on exit</source><translation type="unfinished">Auto-cleanup on exit</translation></message><message><source>Automatically drop session MVs when plugin unloads</source><translation type="unfinished">Automatically drop session MVs when plugin unloads</translation></message><message><source>Create MVs for datasets larger than this</source><translation type="unfinished">Create MVs for datasets larger than this</translation></message><message><source>faster possible</source><translation type="unfinished">faster possible</translation></message><message><source>Optimizations available</source><translation type="unfinished">Optimizations available</translation></message><message><source>FilterMate - Apply Optimizations?</source><translation type="unfinished">FilterMate - Apply Optimizations?</translation></message><message><source>Skip</source><translation type="unfinished">Skip</translation></message><message><source>✓ Apply</source><translation type="unfinished">✓ Apply</translation></message><message><source>Don't ask for this session</source><translation type="unfinished">Don't ask for this session</translation></message><message><source>Centroids</source><translation type="unfinished">Centroids</translation></message><message><source>Simplify</source><translation type="unfinished">Simplify</translation></message><message><source>Pre-simplify</source><translation type="unfinished">Pre-simplify</translation></message><message><source>Fewer segments</source><translation type="unfinished">Fewer segments</translation></message><message><source>Flat buffer</source><translation type="unfinished">Flat buffer</translation></message><message><source>BBox filter</source><translation type="unfinished">BBox filter</translation></message><message><source>Attr-first</source><translation type="unfinished">Attr-first</translation></message><message><source>PostgreSQL not available</source><translation type="unfinished">PostgreSQL not available</translation></message><message><source>No connection</source><translation type="unfinished">No connection</translation></message><message><source>Auto-zoom when feature changes</source><translation type="unfinished">Auto-zoom when feature changes</translation></message><message><source>Backend optimization settings saved</source><translation type="unfinished">Backend optimization settings saved</translation></message><message><source>Backend optimizations configured</source><translation type="unfinished">Backend optimizations configured</translation></message><message><source>Expression Evaluation</source><translation type="unfinished">Expression Evaluation</translation></message><message><source>Identify selected feature</source><translation type="unfinished">Identify selected feature</translation></message><message><source>Layer properties reset to defaults</source><translation type="unfinished">Layer properties reset to defaults</translation></message><message><source>Link exploring widgets together</source><translation type="unfinished">Link exploring widgets together</translation></message><message><source>Optimization settings saved</source><translation type="unfinished">Optimization settings saved</translation></message><message><source>Reset all layer exploring properties</source><translation type="unfinished">Reset all layer exploring properties</translation></message><message><source>Toggle feature selection on map</source><translation type="unfinished">Toggle feature selection on map</translation></message><message><source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for distant layers (faster for complex polygons)</translation></message><message><source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for source layer (faster for complex polygons)</translation></message><message><source>Zoom to selected feature</source><translation type="unfinished">Zoom to selected feature</translation></message></context>
+    <message>
+        <source>MV Status: Checking...</source>
+        <translation>Stanje MV: Preverjanje...</translation>
+    </message>
+    <message>
+        <source>MV Status: Error</source>
+        <translation>Stanje MV: Napaka</translation>
+    </message>
+    <message>
+        <source>MV Status: Clean</source>
+        <translation>Stanje MV: Čisto</translation>
+    </message>
+    <message>
+        <source>MV Status:</source>
+        <translation>Stanje MV:</translation>
+    </message>
+    <message>
+        <source>active</source>
+        <translation>aktivno</translation>
+    </message>
+    <message>
+        <source>No active materialized views</source>
+        <translation>Ni aktivnih materializiranih pogledov</translation>
+    </message>
+    <message>
+        <source>Session:</source>
+        <translation>Seja:</translation>
+    </message>
+    <message>
+        <source>Other sessions:</source>
+        <translation>Druge seje:</translation>
+    </message>
+    <message>
+        <source>🧹 Session</source>
+        <translation>🧹 Seja</translation>
+    </message>
+    <message>
+        <source>Cleanup MVs from this session</source>
+        <translation>Počisti MV-je te seje</translation>
+    </message>
+    <message>
+        <source>🗑️ Orphaned</source>
+        <translation>🗑️ Osirotelih</translation>
+    </message>
+    <message>
+        <source>Cleanup orphaned MVs (&gt;24h old)</source>
+        <translation>Počisti osirotelih MV-jev (&gt;24h starih)</translation>
+    </message>
+    <message>
+        <source>⚠️ All</source>
+        <translation>⚠️ Vse</translation>
+    </message>
+    <message>
+        <source>Cleanup ALL MVs (affects other sessions)</source>
+        <translation>Počisti VSE MV-je (vpliva na druge seje)</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>Potrdi čiščenje</translation>
+    </message>
+    <message>
+        <source>Drop ALL materialized views?
+This affects other FilterMate sessions!</source>
+        <translation>Izbriši VSE materializirane poglede?
+To vpliva na druge FilterMate seje!</translation>
+    </message>
+    <message>
+        <source>Refresh MV status</source>
+        <translation>Osveži stanje MV</translation>
+    </message>
+    <message>
+        <source>Threshold:</source>
+        <translation>Prag:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>funkcije</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on exit</source>
+        <translation>Samodejno čiščenje ob izhodu</translation>
+    </message>
+    <message>
+        <source>Automatically drop session MVs when plugin unloads</source>
+        <translation>Samodejno odstrani MV-je seje ko se vtičnik odstrani</translation>
+    </message>
+    <message>
+        <source>Create MVs for datasets larger than this</source>
+        <translation>Ustvari MV-je za nabore podatkov večje od tega</translation>
+    </message>
+    <message>
+        <source>faster possible</source>
+        <translation>hitrejše mogoče</translation>
+    </message>
+    <message>
+        <source>Optimizations available</source>
+        <translation>Optimizacije na voljo</translation>
+    </message>
+    <message>
+        <source>FilterMate - Apply Optimizations?</source>
+        <translation>FilterMate - Uporabi optimizacije?</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Preskoči</translation>
+    </message>
+    <message>
+        <source>✓ Apply</source>
+        <translation>✓ Uporabi</translation>
+    </message>
+    <message>
+        <source>Don&apos;t ask for this session</source>
+        <translation>Ne sprašuj za to sejo</translation>
+    </message>
+    <message>
+        <source>Centroids</source>
+        <translation>Centroidi</translation>
+    </message>
+    <message>
+        <source>Simplify</source>
+        <translation>Poenostavi</translation>
+    </message>
+    <message>
+        <source>Pre-simplify</source>
+        <translation>Pred-poenostavi</translation>
+    </message>
+    <message>
+        <source>Fewer segments</source>
+        <translation>Manj segmentov</translation>
+    </message>
+    <message>
+        <source>Flat buffer</source>
+        <translation>Ploščat medpomnilnik</translation>
+    </message>
+    <message>
+        <source>BBox filter</source>
+        <translation>BBox filter</translation>
+    </message>
+    <message>
+        <source>Attr-first</source>
+        <translation>Attr-najprej</translation>
+    </message>
+    <message>
+        <source>PostgreSQL not available</source>
+        <translation>PostgreSQL ni na voljo</translation>
+    </message>
+    <message>
+        <source>No connection</source>
+        <translation>Ni povezave</translation>
+    </message>
+    <message>
+        <source>Auto-zoom when feature changes</source>
+        <translation>Samodejno povečavo ob spremembi funkcije</translation>
+    </message>
+    <message>
+        <source>Backend optimization settings saved</source>
+        <translation>Nastavitve optimizacije backend shranjene</translation>
+    </message>
+    <message>
+        <source>Backend optimizations configured</source>
+        <translation>Optimizacije backend konfigurirane</translation>
+    </message>
+    <message>
+        <source>Expression Evaluation</source>
+        <translation>Ovrednotenje izraza</translation>
+    </message>
+    <message>
+        <source>Identify selected feature</source>
+        <translation>Identificiraj izbrano funkcijo</translation>
+    </message>
+    <message>
+        <source>Layer properties reset to defaults</source>
+        <translation>Lastnosti sloja ponastavljene na privzete</translation>
+    </message>
+    <message>
+        <source>Link exploring widgets together</source>
+        <translation>Poveži raziskovalne pripomočke skupaj</translation>
+    </message>
+    <message>
+        <source>Optimization settings saved</source>
+        <translation>Nastavitve optimizacije shranjene</translation>
+    </message>
+    <message>
+        <source>Reset all layer exploring properties</source>
+        <translation>Ponastavi vse lastnosti raziskovanja sloja</translation>
+    </message>
+    <message>
+        <source>Toggle feature selection on map</source>
+        <translation>Preklopi izbiro funkcije na zemljevidu</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source>
+        <translation>Uporabi centroide namesto polnih geometrij za oddaljene sloje (hitreje za kompleksne poligone)</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source>
+        <translation>Uporabi centroide namesto polnih geometrij za izvorni sloj (hitreje za kompleksne poligone)</translation>
+    </message>
+    <message>
+        <source>Zoom to selected feature</source>
+        <translation>Povečaj na izbrano funkcijo</translation>
+    </message>
+</context>
+<context>
+    <name>OptimizationDialog</name>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>Nastavitve optimizacije</translation>
+    </message>
+    <message>
+        <source>Configure Optimization Settings</source>
+        <translation>Konfiguriraj nastavitve optimizacije</translation>
+    </message>
+    <message>
+        <source>Enable automatic optimizations</source>
+        <translation>Omogoči avtomatske optimizacije</translation>
+    </message>
+    <message>
+        <source>Ask before applying optimizations</source>
+        <translation>Vprašaj pred uporabo optimizacij</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid Settings</source>
+        <translation>Nastavitve avtomatskega centroida</translation>
+    </message>
+    <message>
+        <source>Enable auto-centroid for distant layers</source>
+        <translation>Omogoči avtomatski centroid za oddaljene sloje</translation>
+    </message>
+    <message>
+        <source>Distance threshold (km):</source>
+        <translation>Prag razdalje (km):</translation>
+    </message>
+    <message>
+        <source>Feature threshold:</source>
+        <translation>Prag objektov:</translation>
+    </message>
+    <message>
+        <source>Buffer Optimizations</source>
+        <translation>Optimizacije medpomnilnika</translation>
+    </message>
+    <message>
+        <source>Simplify geometry before buffer</source>
+        <translation>Poenostavi geometrijo pred medpomnilnikom</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments to:</source>
+        <translation>Zmanjšaj segmente medpomnilnika na:</translation>
+    </message>
+    <message>
+        <source>General</source>
+        <translation>Splošno</translation>
+    </message>
+    <message>
+        <source>Use materialized views for filtering</source>
+        <translation>Uporabi materializirane poglede za filtriranje</translation>
+    </message>
+    <message>
+        <source>Create spatial indices automatically</source>
+        <translation>Samodejno ustvari prostorske indekse</translation>
+    </message>
+    <message>
+        <source>Use R-tree spatial index</source>
+        <translation>Uporabi R-drevo prostorski indeks</translation>
+    </message>
+    <message>
+        <source>Use bounding box pre-filter</source>
+        <translation>Uporabi predfilter mejnega okvirja</translation>
+    </message>
+    <message>
+        <source>Backends</source>
+        <translation>Zaledja</translation>
+    </message>
+    <message>
+        <source>Caching</source>
+        <translation>Predpomnjenje</translation>
+    </message>
+    <message>
+        <source>Enable geometry cache</source>
+        <translation>Omogoči predpomnilnik geometrije</translation>
+    </message>
+    <message>
+        <source>Batch Processing</source>
+        <translation>Paketna obdelava</translation>
+    </message>
+    <message>
+        <source>Batch size:</source>
+        <translation>Velikost paketa:</translation>
+    </message>
+    <message>
+        <source>Advanced settings affect performance and memory usage. Change only if you understand the implications.</source>
+        <translation>Napredne nastavitve vplivajo na zmogljivost in porabo pomnilnika. Spreminjajte le če razumete posledice.</translation>
+    </message>
+    <message>
+        <source>Advanced</source>
+        <translation>Napredno</translation>
+    </message>
+</context>
+<context>
+    <name>RecommendationDialog</name>
+    <message>
+        <source>Apply Optimizations?</source>
+        <translation>Uporabi optimizacije?</translation>
+    </message>
+    <message>
+        <source>Optimizations Available</source>
+        <translation>Razpoložljive optimizacije</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Preskoči</translation>
+    </message>
+    <message>
+        <source>Apply Selected</source>
+        <translation>Uporabi izbrane</translation>
+    </message>
+</context>
+<context>
+    <name>PostgresInfoDialog</name>
+    <message>
+        <source>PostgreSQL Session Info</source>
+        <translation>Informacije o seji PostgreSQL</translation>
+    </message>
+    <message>
+        <source>PostgreSQL Active</source>
+        <translation>PostgreSQL aktiven</translation>
+    </message>
+    <message>
+        <source>Connection Info</source>
+        <translation>Informacije o povezavi</translation>
+    </message>
+    <message>
+        <source>Connection:</source>
+        <translation>Povezava:</translation>
+    </message>
+    <message>
+        <source>Temp Schema:</source>
+        <translation>Začasna shema:</translation>
+    </message>
+    <message>
+        <source>Status:</source>
+        <translation>Stanje:</translation>
+    </message>
+    <message>
+        <source>Temporary Views</source>
+        <translation>Začasni pogledi</translation>
+    </message>
+    <message>
+        <source>Cleanup Options</source>
+        <translation>Možnosti čiščenja</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on close</source>
+        <translation>Samodejno čiščenje ob zaprtju</translation>
+    </message>
+    <message>
+        <source>Automatically cleanup temporary views when FilterMate closes.</source>
+        <translation>Samodejno očisti začasne poglede ob zaprtju FilterMate.</translation>
+    </message>
+    <message>
+        <source>🗑️ Cleanup Now</source>
+        <translation>🗑️ Očisti zdaj</translation>
+    </message>
+    <message>
+        <source>Drop all temporary views created by FilterMate in this session.</source>
+        <translation>Izbriši vse začasne poglede, ki jih je FilterMate ustvaril v tej seji.</translation>
+    </message>
+    <message>
+        <source>(No temporary views)</source>
+        <translation>(Ni začasnih pogledov)</translation>
+    </message>
+    <message>
+        <source>No Views</source>
+        <translation>Ni pogledov</translation>
+    </message>
+    <message>
+        <source>There are no temporary views to clean up.</source>
+        <translation>Ni začasnih pogledov za čiščenje.</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>Potrdi čiščenje</translation>
+    </message>
+    <message>
+        <source>Cleanup Complete</source>
+        <translation>Čiščenje končano</translation>
+    </message>
+    <message>
+        <source>Cleanup Issue</source>
+        <translation>Težava s čiščenjem</translation>
+    </message>
+    <message>
+        <source>Cleanup Failed</source>
+        <translation>Čiščenje ni uspelo</translation>
+    </message>
+</context>
 </TS>

@@ -146,14 +146,14 @@ class UndoRedoHandler:
         """
         Handle undo operation with intelligent layer selection logic.
         
-        v4.1.3: Undo now respects the history entry type rather than current checkbox state.
-        - If history entry is multi-layer (layer_count > 1): perform global undo
-        - If history entry is single-layer: perform layer-only undo
+        v4.1.6: Undo behavior based on checkbox state:
+        - If use_global=True AND layers_to_filter not empty: apply undo to selected layers only
+        - If use_global=False: apply undo to source layer only (regardless of history)
         
         Args:
             source_layer: The source layer for the undo operation
-            layers_to_filter: List of remote layer IDs (used for context, not decision)
-            use_global: Whether checkbox is checked (used for context, not decision)
+            layers_to_filter: List of remote layer IDs from UI checkbox selection
+            use_global: Whether pushButton_checkable_filtering_layers_to_filter is checked
             dockwidget: Optional dockwidget for combobox protection
             
         Returns:
@@ -191,9 +191,7 @@ class UndoRedoHandler:
             print(f"  ❌ Layer {source_layer.id()} not in PROJECT_LAYERS - returning False")
             return False
         
-        # v4.1.3: Peek at history entry to determine undo type
-        # The entry type (multi-layer vs single-layer) determines the undo behavior,
-        # NOT the current state of the checkbox
+        # Peek at history entry
         print(f"  Checking _history_manager.peek_undo()...")
         print(f"  _history_manager type: {type(self._history_manager)}")
         
@@ -209,25 +207,23 @@ class UndoRedoHandler:
                 print(f"     total_entries: {self._history_manager.total_entries}")
             return False
         
-        # Determine undo type from the history entry itself
-        is_multi_layer_entry = pending_entry.layer_count > 1
-        
         print(f"  pending_entry: {pending_entry.entry_id}")
         print(f"  pending_entry.layer_count: {pending_entry.layer_count}")
         print(f"  pending_entry.layer_ids: {pending_entry.layer_ids}")
-        print(f"  is_multi_layer_entry: {is_multi_layer_entry}")
         logger.info(f"  pending_entry: {pending_entry.entry_id}")
         logger.info(f"  pending_entry.layer_count: {pending_entry.layer_count}")
         logger.info(f"  pending_entry.layer_ids: {pending_entry.layer_ids}")
-        logger.info(f"  is_multi_layer_entry: {is_multi_layer_entry}")
         
-        if is_multi_layer_entry:
-            logger.info(f"v4.1.3: History entry is multi-layer ({pending_entry.layer_count} layers) - using global undo")
-            print(f"  → Performing GLOBAL undo ({pending_entry.layer_count} layers)")
-            result = self._perform_global_undo(source_layer, project_layers)
+        # v4.1.6: Undo behavior based on checkbox state
+        if use_global and layers_to_filter:
+            # Checkbox checked with layers selected: apply undo to those specific layers
+            logger.info(f"v4.1.6: Checkbox checked with {len(layers_to_filter)} layers - using filtered undo")
+            print(f"  → Performing FILTERED undo (only {len(layers_to_filter)} selected layers)")
+            result = self._perform_filtered_undo(source_layer, project_layers, layers_to_filter)
         else:
-            logger.info("v4.1.3: History entry is single-layer - using layer undo")
-            print(f"  → Performing LAYER undo (single-layer)")
+            # Checkbox not checked: always undo source layer only (even if history is multi-layer)
+            logger.info("v4.1.6: Checkbox not checked - using source layer undo only")
+            print(f"  → Performing LAYER undo (source layer only)")
             result = self._perform_layer_undo(source_layer, project_layers)
         
         print(f"=== handle_undo END: result={result} ===")
@@ -349,10 +345,11 @@ class UndoRedoHandler:
             
             if layer:
                 print(f"    ✓ Layer found: {layer.name()}")
-                print(f"    BEFORE: subsetString='{layer.subsetString()[:40] if layer.subsetString() else '(empty)'}'")
+                before_str = layer.subsetString()[:40] if layer.subsetString() else "(empty)"
+                print(f"    BEFORE: subsetString='{before_str}'")
                 safe_set_subset_string(layer, previous_filter)
-                print(f"    AFTER: subsetString='{layer.subsetString()[:40] if layer.subsetString() else '(empty)'}'")
-                
+                after_str = layer.subsetString()[:40] if layer.subsetString() else "(empty)"
+                print(f"    AFTER: subsetString='{after_str}'")
                 # Update project_layers tracking if layer_id exists there
                 if layer_id in project_layers:
                     project_layers[layer_id]["infos"]["is_already_subset"] = bool(previous_filter)
@@ -370,6 +367,93 @@ class UndoRedoHandler:
         
         print(f"✅ _perform_global_undo COMPLETED - restored {len(restored_layers)} layers")
         logger.info(f"Global undo completed - restored {len(restored_layers)} layers")
+        return True
+
+    def _perform_filtered_undo(
+        self,
+        source_layer: 'QgsVectorLayer',
+        project_layers: Dict,
+        layers_to_filter: List[str]
+    ) -> bool:
+        """Perform undo only for the specified layers_to_filter list.
+        
+        v4.1.5: New method - applies undo only to layers selected in the 
+        checkableComboBoxLayer_filtering_layers_to_filter widget.
+        
+        Args:
+            source_layer: The source layer for the undo operation
+            project_layers: The PROJECT_LAYERS dictionary
+            layers_to_filter: List of layer IDs from the UI checkbox selection
+            
+        Returns:
+            bool: True if undo was successful, False otherwise
+        """
+        print("🔄 _perform_filtered_undo CALLED")
+        print(f"  layers_to_filter: {layers_to_filter}")
+        logger.info(f"Performing filtered undo for {len(layers_to_filter)} selected layers")
+        
+        history_entry = self._history_manager.undo()
+        
+        if not history_entry:
+            logger.info("No filtered undo history available")
+            print("  ❌ No history entry returned from undo()")
+            return False
+        
+        # v4.1.5: Debug logging
+        print(f"  history_entry: {history_entry.entry_id}")
+        print(f"  history_entry.layer_ids: {history_entry.layer_ids}")
+        print(f"  previous_filters count: {len(history_entry.previous_filters)}")
+        logger.info(f"Undo entry: {history_entry.entry_id}")
+        logger.info(f"  - layer_ids: {history_entry.layer_ids}")
+        
+        # Build set of allowed layer IDs (source + selected layers_to_filter)
+        allowed_layer_ids = set(layers_to_filter)
+        allowed_layer_ids.add(source_layer.id())
+        print(f"  allowed_layer_ids: {allowed_layer_ids}")
+        
+        # Get project instance
+        project = QgsProject.instance()
+        
+        # Restore previous filters ONLY for allowed layers
+        restored_layers = []
+        skipped_layers = []
+        
+        for layer_id, previous_filter in history_entry.previous_filters:
+            if layer_id not in allowed_layer_ids:
+                print(f"  ⏭️ Skipping layer_id: {layer_id[:30]}... (not in selected list)")
+                skipped_layers.append(layer_id)
+                continue
+            
+            print(f"  Processing layer_id: {layer_id[:30]}...")
+            
+            layer = project.mapLayer(layer_id)
+            
+            if layer:
+                print(f"    ✓ Layer found: {layer.name()}")
+                before_str = layer.subsetString()[:40] if layer.subsetString() else "(empty)"
+                print(f"    BEFORE: subsetString='{before_str}'")
+                safe_set_subset_string(layer, previous_filter)
+                after_str = layer.subsetString()[:40] if layer.subsetString() else "(empty)"
+                print(f"    AFTER: subsetString='{after_str}'")
+                
+                # Update project_layers tracking if layer_id exists there
+                if layer_id in project_layers:
+                    project_layers[layer_id]["infos"]["is_already_subset"] = bool(previous_filter)
+                
+                restored_layers.append(layer)
+                expr_preview = previous_filter[:60] if previous_filter else 'no filter'
+                logger.info(f"Restored layer {layer.name()}: {expr_preview}")
+            else:
+                print(f"    ⚠️ Layer not found in project via mapLayer()")
+                logger.warning(f"Layer {layer_id} not found in QgsProject")
+        
+        # Refresh all affected layers
+        print(f"  Refreshing {len(restored_layers)} layers...")
+        print(f"  Skipped {len(skipped_layers)} layers (not in selected list)")
+        self._refresh_affected_layers(source_layer, restored_layers)
+        
+        print(f"✅ _perform_filtered_undo COMPLETED - restored {len(restored_layers)} layers, skipped {len(skipped_layers)}")
+        logger.info(f"Filtered undo completed - restored {len(restored_layers)} layers, skipped {len(skipped_layers)}")
         return True
     
     def _perform_global_redo(
@@ -458,12 +542,15 @@ class UndoRedoHandler:
                 previous_expression = expr
                 break
         
-        print(f"  previous_expression for source: '{previous_expression[:40] if previous_expression else '(empty)'}'")
-        print(f"  BEFORE: subsetString='{source_layer.subsetString()[:40] if source_layer.subsetString() else '(empty)'}'")
+        prev_expr_str = previous_expression[:40] if previous_expression else "(empty)"
+        print(f"  previous_expression for source: '{prev_expr_str}'")
+        before_str = source_layer.subsetString()[:40] if source_layer.subsetString() else "(empty)"
+        print(f"  BEFORE: subsetString='{before_str}'")
         
         safe_set_subset_string(source_layer, previous_expression)
         
-        print(f"  AFTER: subsetString='{source_layer.subsetString()[:40] if source_layer.subsetString() else '(empty)'}'")
+        after_str = source_layer.subsetString()[:40] if source_layer.subsetString() else "(empty)"
+        print(f"  AFTER: subsetString='{after_str}'")
         
         project_layers[source_layer.id()]["infos"]["is_already_subset"] = bool(previous_expression)
         logger.info(f"Undo source layer to: {previous_state.description}")
@@ -681,7 +768,8 @@ class UndoRedoHandler:
             
             logger.info(f"push_filter_to_history: Creating GLOBAL entry with {len(remote_layers_info) + 1} layers")
             for lid, prev_expr in previous_expressions.items():
-                logger.info(f"  - previous[{lid[:20]}...]: '{prev_expr[:30] if prev_expr else '(empty)'}...'")
+                prev_str = prev_expr[:30] if prev_expr else "(empty)"
+                logger.info(f"  - previous[{lid[:20]}...]: '{prev_str}...'")
             
             self._history_manager.push_global_state(
                 source_layer_id=source_layer.id(),

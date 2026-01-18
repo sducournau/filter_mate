@@ -419,6 +419,10 @@ class FavoritesController(BaseController):
             from ..dialogs import FavoritesManagerDialog
             # Note: FavoritesManagerDialog(favorites_manager, parent) - order matters!
             dialog = FavoritesManagerDialog(self._favorites_manager, self.dockwidget)
+            
+            # Connect the favoriteApplied signal to apply the favorite
+            dialog.favoriteApplied.connect(self.apply_favorite)
+            
             dialog.exec_()
             # Refresh after dialog closes
             self.favorites_changed.emit()
@@ -494,13 +498,14 @@ class FavoritesController(BaseController):
     def _get_indicator_style(self, state: str) -> str:
         """Get stylesheet for indicator state."""
         style_data = FAVORITES_STYLES.get(state, FAVORITES_STYLES['empty'])
+        # v4.0: Harmonized with BackendIndicatorWidget - soft "mousse" style
         return f"""
             QLabel#label_favorites_indicator {{
                 color: {style_data['color']};
-                font-size: 9pt;
-                font-weight: 600;
-                padding: 3px 10px;
-                border-radius: 12px;
+                font-size: 8pt;
+                font-weight: 500;
+                padding: 2px 8px;
+                border-radius: 10px;
                 border: none;
                 background-color: {style_data['background']};
             }}
@@ -520,7 +525,7 @@ class FavoritesController(BaseController):
                 padding: 5px;
             }
             QMenu::item {
-                padding: 5px 20px;
+                padding: 6px 20px;
             }
             QMenu::item:selected {
                 background-color: #f39c12;
@@ -533,53 +538,60 @@ class FavoritesController(BaseController):
             }
         """)
 
-        # === ADD TO FAVORITES ===
-        current_expression = self.get_current_filter_expression()
-        add_action = menu.addAction("⭐ Add Current Filter to Favorites")
-        add_action.setData('__ADD_FAVORITE__')
-        if not current_expression:
-            add_action.setEnabled(False)
-            add_action.setText("⭐ Add Current Filter (no filter active)")
-
-        menu.addSeparator()
-
-        # === FAVORITES LIST ===
+        # === QUICK FILTER SECTION (Favorites) ===
         favorites = self.get_all_favorites()
-
+        
         if favorites:
-            header = menu.addAction(f"📋 Saved Favorites ({len(favorites)})")
+            # Header for quick filter
+            header = menu.addAction(f"⚡ Filtrage Rapide ({len(favorites)})")
             header.setEnabled(False)
+            font = header.font()
+            font.setBold(True)
+            header.setFont(font)
 
-            recent_favs = self.get_recent_favorites(limit=10)
-            for fav in recent_favs:
+            # Show favorites directly in menu for quick access
+            # Sort by use_count (most used first), then by name
+            sorted_favs = sorted(favorites, key=lambda f: (-f.use_count, f.name.lower()))
+            display_favs = sorted_favs[:8]
+            
+            for fav in display_favs:
                 layers_count = fav.get_layers_count() if hasattr(fav, 'get_layers_count') else 1
-                fav_text = f"  ★ {fav.get_display_name(25)}"
+                fav_text = f"★ {fav.get_display_name(30)}"
                 if layers_count > 1:
                     fav_text += f" [{layers_count}]"
-                if fav.use_count > 0:
-                    fav_text += f" ({fav.use_count}×)"
 
                 action = menu.addAction(fav_text)
                 action.setData(('apply', fav.id))
-                action.setToolTip(fav.get_preview(80))
+                # Build tooltip with expression preview
+                tooltip = f"{fav.name}\n{fav.get_preview(100)}"
+                if fav.use_count > 0:
+                    tooltip += f"\nUtilisé {fav.use_count}×"
+                action.setToolTip(tooltip)
 
-            if len(favorites) > 10:
-                more_action = menu.addAction(f"  ... {len(favorites) - 10} more favorites")
+            if len(favorites) > 8:
+                more_action = menu.addAction(f"  ➤ Voir tous ({len(favorites)})...")
                 more_action.setData('__SHOW_ALL__')
-        else:
-            no_favs = menu.addAction("(No favorites saved)")
-            no_favs.setEnabled(False)
+                
+            menu.addSeparator()
+
+        # === ADD TO FAVORITES ===
+        current_expression = self.get_current_filter_expression()
+        add_action = menu.addAction("⭐ Ajouter filtre actuel aux favoris")
+        add_action.setData('__ADD_FAVORITE__')
+        if not current_expression:
+            add_action.setEnabled(False)
+            add_action.setText("⭐ Ajouter filtre (aucun filtre actif)")
 
         menu.addSeparator()
 
         # === MANAGEMENT OPTIONS ===
-        manage_action = menu.addAction("⚙️ Manage Favorites...")
+        manage_action = menu.addAction("⚙️ Gérer les favoris...")
         manage_action.setData('__MANAGE__')
 
-        export_action = menu.addAction("📤 Export Favorites...")
+        export_action = menu.addAction("📤 Exporter...")
         export_action.setData('__EXPORT__')
 
-        import_action = menu.addAction("📥 Import Favorites...")
+        import_action = menu.addAction("📥 Importer...")
         import_action.setData('__IMPORT__')
 
         # Show menu
@@ -648,18 +660,28 @@ class FavoritesController(BaseController):
             layer_name = layer.name() if layer else None
             layer_provider = layer.providerType() if layer else None
 
-            # Get remote layers if multi-layer filtering is active
-            remote_layers = None
-            if hasattr(self.dockwidget, 'listWidget_filtering_remote_layers'):
-                remote_layers = {}
-                widget = self.dockwidget.listWidget_filtering_remote_layers
-                for i in range(widget.count()):
-                    item = widget.item(i)
-                    if item and item.checkState() == Qt.Checked:
-                        remote_layer_id = item.data(Qt.UserRole)
-                        remote_layer = QgsProject.instance().mapLayer(remote_layer_id)
-                        if remote_layer:
-                            remote_layers[remote_layer.name()] = remote_layer_id
+            # Collect all filtered layers (remote layers with active filters)
+            # Iterate through all vector layers to find those with filters
+            remote_layers = {}
+            source_layer_id = layer.id() if layer else None
+            project = QgsProject.instance()
+            
+            for layer_id, map_layer in project.mapLayers().items():
+                # Skip non-vector layers
+                if not hasattr(map_layer, 'subsetString'):
+                    continue
+                # Skip the source layer (already captured in main expression)
+                if layer_id == source_layer_id:
+                    continue
+                # Check if layer has an active filter
+                subset = map_layer.subsetString()
+                if subset and subset.strip():
+                    remote_layers[map_layer.name()] = {
+                        'expression': subset,
+                        'feature_count': map_layer.featureCount() if map_layer.isValid() else 0,
+                        'layer_id': layer_id,
+                        'provider': map_layer.providerType()
+                    }
 
             # Use FavoritesService.add_favorite() with individual parameters
             favorite_id = self._favorites_manager.add_favorite(
@@ -681,7 +703,7 @@ class FavoritesController(BaseController):
             return False
 
     def _apply_favorite_expression(self, favorite: 'FilterFavorite') -> bool:
-        """Apply a favorite's expression to the filtering widgets."""
+        """Apply a favorite's expression to the filtering widgets and execute the filter."""
         try:
             # Set expression in widget
             if hasattr(self.dockwidget, 'mQgsFieldExpressionWidget_filtering_active_expression'):
@@ -691,18 +713,30 @@ class FavoritesController(BaseController):
                 elif hasattr(widget, 'setCurrentText'):
                     widget.setCurrentText(favorite.expression)
 
-            # Handle remote layers if applicable
-            if favorite.remote_layers and hasattr(self.dockwidget, 'listWidget_filtering_remote_layers'):
-                widget = self.dockwidget.listWidget_filtering_remote_layers
-                for i in range(widget.count()):
-                    item = widget.item(i)
-                    if item:
-                        layer_id = item.data(Qt.UserRole)
-                        if layer_id in favorite.remote_layers.values():
-                            item.setCheckState(Qt.Checked)
-                        else:
-                            item.setCheckState(Qt.Unchecked)
+            # Apply remote layers filters directly to the layers
+            if favorite.remote_layers:
+                project = QgsProject.instance()
+                for layer_name, layer_data in favorite.remote_layers.items():
+                    # Handle both new format (dict) and legacy format (string layer_id)
+                    if isinstance(layer_data, dict):
+                        layer_id = layer_data.get('layer_id')
+                        expr = layer_data.get('expression', '')
+                    else:
+                        # Legacy format: layer_data is just the layer_id string
+                        layer_id = layer_data
+                        expr = ''
+                    
+                    if layer_id and expr:
+                        remote_layer = project.mapLayer(layer_id)
+                        if remote_layer and hasattr(remote_layer, 'setSubsetString'):
+                            remote_layer.setSubsetString(expr)
+                            logger.debug(f"Applied filter to remote layer {layer_name}: {expr[:50]}...")
 
+            # Trigger the filter action to apply the main expression
+            if hasattr(self.dockwidget, 'launchTaskEvent'):
+                self.dockwidget.launchTaskEvent(False, 'filter')
+                logger.info(f"Filter triggered for favorite: {favorite.name}")
+            
             return True
 
         except Exception as e:

@@ -51,7 +51,8 @@ class BackendSelector:
         self,
         postgresql_available: bool = False,
         small_dataset_optimization: bool = False,
-        small_dataset_threshold: int = DEFAULT_SMALL_DATASET_THRESHOLD
+        small_dataset_threshold: int = DEFAULT_SMALL_DATASET_THRESHOLD,
+        prefer_native_backend: bool = False
     ):
         """
         Initialize backend selector.
@@ -60,10 +61,14 @@ class BackendSelector:
             postgresql_available: Whether psycopg2 is installed
             small_dataset_optimization: Enable memory optimization for small PG datasets
             small_dataset_threshold: Threshold for small dataset optimization
+            prefer_native_backend: If True, always use the native backend (e.g., PostgreSQL)
+                                   even for small datasets. Useful when all project layers
+                                   are PostgreSQL and we want consistent backend usage.
         """
         self._postgresql_available = postgresql_available
         self._small_dataset_optimization = small_dataset_optimization
         self._small_dataset_threshold = small_dataset_threshold
+        self._prefer_native_backend = prefer_native_backend
     
     def select_provider_type(
         self,
@@ -147,8 +152,21 @@ class BackendSelector:
         return provider
     
     def _should_use_memory_optimization(self, layer_info: LayerInfo) -> bool:
-        """Check if memory optimization should be used for PostgreSQL layer."""
+        """Check if memory optimization should be used for PostgreSQL layer.
+        
+        Returns False if:
+        - small_dataset_optimization is disabled
+        - prefer_native_backend is enabled (e.g., all project layers are PostgreSQL)
+        - feature_count is unknown
+        - feature_count exceeds the threshold
+        """
         if not self._small_dataset_optimization:
+            return False
+        
+        # NEW: Respect prefer_native_backend setting
+        # When all project layers are PostgreSQL, we want to use PostgreSQL backend
+        # consistently, even for small datasets (avoids backend switching overhead)
+        if self._prefer_native_backend:
             return False
         
         if layer_info.feature_count is None:
@@ -281,6 +299,7 @@ class BackendFactory:
         self._container = container
         self._config = config or {}
         self._backends: Dict[ProviderType, BackendPort] = {}
+        self._prefer_native_for_pg_project = False
         
         # Set singleton instance
         if BackendFactory._instance is None:
@@ -289,15 +308,21 @@ class BackendFactory:
         # Check PostgreSQL availability
         self._postgresql_available = self._check_postgresql_available()
         
-        # Initialize selector
+        # Initialize selector with config
         opt_config = self._config.get('small_dataset_optimization', {})
+        self._prefer_native_for_pg_project = opt_config.get(
+            'prefer_native_for_postgresql_project', True
+        )
+        
         self._selector = BackendSelector(
             postgresql_available=self._postgresql_available,
             small_dataset_optimization=opt_config.get('enabled', False),
             small_dataset_threshold=opt_config.get(
                 'threshold',
                 DEFAULT_SMALL_DATASET_THRESHOLD
-            )
+            ),
+            # Will be updated by update_project_context() when project layers are known
+            prefer_native_backend=False
         )
         
         logger.debug(f"BackendFactory initialized: postgresql={self._postgresql_available}")
@@ -312,6 +337,54 @@ class BackendFactory:
                 return True
             except ImportError:
                 return False
+
+    def update_project_context(self, all_layers_postgresql: bool) -> None:
+        """
+        Update backend selector based on project context.
+        
+        When all project layers are PostgreSQL and prefer_native_for_postgresql_project
+        is enabled, this ensures PostgreSQL backend is used even for small datasets
+        (avoids switching to MEMORY backend which would be inconsistent).
+        
+        Args:
+            all_layers_postgresql: True if all vector layers in the project are PostgreSQL
+        """
+        should_prefer_native = (
+            all_layers_postgresql and 
+            self._prefer_native_for_pg_project and
+            self._postgresql_available
+        )
+        
+        if should_prefer_native:
+            logger.info(
+                "All project layers are PostgreSQL - forcing PostgreSQL backend "
+                "even for small datasets (prefer_native_for_postgresql_project=True)"
+            )
+        
+        # Update selector's prefer_native_backend flag
+        self._selector._prefer_native_backend = should_prefer_native
+    
+    def is_all_layers_postgresql(self, layers: list) -> bool:
+        """
+        Check if all provided layers are PostgreSQL.
+        
+        Args:
+            layers: List of QgsVectorLayer objects
+            
+        Returns:
+            True if all layers are PostgreSQL provider type
+        """
+        if not layers:
+            return False
+        
+        for layer in layers:
+            if layer is None:
+                continue
+            provider_type = layer.providerType() if hasattr(layer, 'providerType') else None
+            if provider_type != 'postgres':
+                return False
+        
+        return True
     
     def get_backend_instance(
         self,

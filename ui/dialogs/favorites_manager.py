@@ -127,6 +127,8 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         # Main content with splitter
         splitter = QSplitter(Qt.Horizontal)
         splitter.setObjectName("mainSplitter")
+        splitter.setHandleWidth(2)  # Minimal handle width
+        splitter.setChildrenCollapsible(False)
         
         # Left panel: List of favorites
         left_panel = self._create_left_panel()
@@ -218,24 +220,32 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
                 border-radius: 8px;
                 background-color: white;
                 padding: 8px;
+                margin-top: -1px;
+            }
+            QTabBar {
+                qproperty-drawBase: 0;
             }
             QTabBar::tab {
                 background-color: #f0f0f0;
+                color: #555555;
                 border: 1px solid #ddd;
                 border-bottom: none;
-                padding: 8px 16px;
-                margin-right: 2px;
+                padding: 8px 14px;
+                margin-right: 3px;
                 border-top-left-radius: 6px;
                 border-top-right-radius: 6px;
-                font-size: 9pt;
+                font-size: 10pt;
+                min-width: 70px;
             }
             QTabBar::tab:selected {
                 background-color: white;
-                border-bottom: 1px solid white;
-                font-weight: 500;
+                color: #2c3e50;
+                border-bottom: 2px solid #f39c12;
+                font-weight: 600;
             }
             QTabBar::tab:hover:!selected {
                 background-color: #fef5e7;
+                color: #34495e;
             }
             
             /* Form inputs */
@@ -336,7 +346,7 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
             /* Splitter */
             QSplitter::handle {
                 background-color: #e0e0e0;
-                width: 3px;
+                width: 1px;
             }
             QSplitter::handle:hover {
                 background-color: #f39c12;
@@ -370,15 +380,15 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         
         # Tab 1: General Info
         general_tab = self._create_general_tab()
-        self._tab_widget.addTab(general_tab, "📋 General")
+        self._tab_widget.addTab(general_tab, "Général")
         
         # Tab 2: Expression
         expr_tab = self._create_expression_tab()
-        self._tab_widget.addTab(expr_tab, "🔍 Expression")
+        self._tab_widget.addTab(expr_tab, "Expression")
         
         # Tab 3: Remote Layers
         remote_tab = self._create_remote_tab()
-        self._tab_widget.addTab(remote_tab, "🗂️ Remote Layers")
+        self._tab_widget.addTab(remote_tab, "Distant")
         
         right_layout.addWidget(self._tab_widget)
         return right_panel
@@ -588,8 +598,14 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
             self._remote_tree.show()
             
             for layer_name, layer_data in fav.remote_layers.items():
-                expr = layer_data.get('expression', '')
-                feature_count = layer_data.get('feature_count', '?')
+                # Handle both new format (dict) and legacy format (string layer_id)
+                if isinstance(layer_data, dict):
+                    expr = layer_data.get('expression', '')
+                    feature_count = layer_data.get('feature_count', '?')
+                else:
+                    # Legacy format: layer_data is just the layer_id string
+                    expr = ''
+                    feature_count = '?'
                 tree_item = QTreeWidgetItem([
                     layer_name,
                     str(feature_count),
@@ -599,12 +615,12 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
                 self._remote_tree.addTopLevelItem(tree_item)
             
             self._tab_widget.setTabText(
-                2, f"🗂️ Remote Layers ({len(fav.remote_layers)})"
+                2, f"Distant ({len(fav.remote_layers)})"
             )
         else:
             self._remote_tree.hide()
             self._no_remote_label.show()
-            self._tab_widget.setTabText(2, "🗂️ Remote Layers")
+            self._tab_widget.setTabText(2, "Distant")
         
         # Enable buttons
         self._apply_btn.setEnabled(True)
@@ -638,7 +654,7 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
                 description=new_desc,
                 tags=new_tags
             )
-            self._favorites_manager.save_to_project()
+            self._favorites_manager.save()
             
             # Update list item
             item = self._list_widget.currentItem()
@@ -696,7 +712,7 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         self._delete_btn.setEnabled(False)
         
         # Save changes
-        self._favorites_manager.save_to_project()
+        self._favorites_manager.save()
         
         # Auto-select next item
         if self._list_widget.count() > 0:

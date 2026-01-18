@@ -425,6 +425,8 @@ class ListWidgetWrapper(QListWidget):
             list_min_height = 225  # Match before_migration compact profile
         
         self.setMinimumHeight(list_min_height)
+        # FIX 2026-01-18: Explicit sizePolicy to ensure list expands in parent layout
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.identifier_field_name = identifier_field_name
         self.identifier_field_type_numeric = primary_key_is_numeric
         self.filter_expression = ''
@@ -611,6 +613,13 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         QWidget.__init__(self, parent)
 
         self.config_data = config_data
+        
+        # FIX 2026-01-18 v14: Reference to parent dockwidget for sync protection check
+        self._dockwidget_ref = None
+        
+        # FIX 2026-01-18 v16: Debounce protection for _emit_checked_items_update
+        self._last_emit_time = 0
+        self._emit_debounce_ms = 50  # 50ms debounce for rapid checkbox changes
         
         # Dynamic sizing based on config matching before_migration/UIConfig compact profile
         # before_migration: combobox.height = 36px, list.min_height = 225px
@@ -1099,15 +1108,53 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                 return True
         return False
 
-    def _emit_checked_items_update(self):
-        """Emit update signal with current checked items."""
-        # FIX 2026-01-18 v10: Add debug logging to trace who calls this
-        import traceback
+    def setDockwidgetRef(self, dockwidget):
+        """Set reference to parent dockwidget for sync protection checks."""
+        self._dockwidget_ref = dockwidget
+    
+    def _emit_checked_items_update(self, force_emit=False):
+        """Emit update signal with current checked items.
+        
+        Args:
+            force_emit: If True, bypass sync protection (for explicit user actions like deselect_all)
+        """
+        import time
+        
+        # FIX 2026-01-18 v16: Debounce protection for rapid changes (except for forced emits)
+        current_time = time.time() * 1000  # ms
+        if not force_emit and (current_time - self._last_emit_time) < self._emit_debounce_ms:
+            logger.debug(f"🔔 _emit_checked_items_update: DEBOUNCED (delta={(current_time - self._last_emit_time):.0f}ms < {self._emit_debounce_ms}ms)")
+            return
+        self._last_emit_time = current_time
+        
+        # FIX 2026-01-18 v14: Check if we should skip emission during sync protection
+        # FIX 2026-01-18 v15: Unless force_emit is True (explicit user action)
+        if self._dockwidget_ref and not force_emit:
+            # Check if syncing from QGIS
+            if getattr(self._dockwidget_ref, '_syncing_from_qgis', False):
+                logger.info("🔔 _emit_checked_items_update: SKIPPED (syncing from QGIS)")
+                return
+            
+            # Check sync protection timestamp
+            protection_until = getattr(self._dockwidget_ref, '_sync_protection_until', 0)
+            if protection_until > time.time():
+                checked = self.checkedItems()
+                if not checked or len(checked) == 0:
+                    logger.info(f"🔔 _emit_checked_items_update: SKIPPED empty during protection (until {protection_until:.2f})")
+                    return
+        
         checked = self.checkedItems()
-        logger.info(f"🔔 _emit_checked_items_update: {len(checked)} items")
-        # Log the call stack to identify the caller
-        stack = traceback.format_stack()
-        logger.debug(f"Call stack:\n{''.join(stack[-5:-1])}")
+        logger.info(f"🔔 _emit_checked_items_update: {len(checked)} items (force_emit={force_emit})")
+        
+        # Update items_le display text
+        if checked:
+            display_text = ", ".join([str(item[0]) for item in checked[:5]])
+            if len(checked) > 5:
+                display_text += f"... (+{len(checked) - 5})"
+            self.items_le.setText(display_text)
+        else:
+            self.items_le.clear()
+        
         self.updatingCheckedItemList.emit(checked, True)
 
     def connect_filter_lineEdit(self):
@@ -1155,8 +1202,13 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                 except KeyError:
                     pass
             try:
+                widget = self.list_widgets[layer_id]
+                # Remove from layout, hide and schedule for deletion
+                self.layout.removeWidget(widget)
+                widget.hide()
+                widget.deleteLater()
                 del self.list_widgets[layer_id]
-            except KeyError:
+            except (KeyError, RuntimeError):
                 pass
 
     def reset(self):
@@ -1172,16 +1224,21 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             'filterFeatures': {},
             'updateFeatures': {}
         }
-        for i in range(self.layout.count()):
-            item = self.layout.itemAt(i)
-            widget = item.widget()       
-            if widget:
-                try:
-                    widget.close()
-                except RuntimeError:
-                    pass
-
+        
+        # Properly remove and delete all list widgets
+        for layer_id, widget in list(self.list_widgets.items()):
+            try:
+                self.layout.removeWidget(widget)
+                widget.hide()
+                widget.deleteLater()
+            except RuntimeError:
+                pass
+        
+        # Clear the dictionary after all widgets are removed
         self.list_widgets = {}
+        
+        # Also clear items_le to reflect empty state
+        self.items_le.clear()
 
     def add_list_widget(self, layer_props):
         """Add a new list widget for the current layer."""
@@ -1219,6 +1276,9 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         self.list_widgets[self.layer.id()] = ListWidgetWrapper(pk_name, pk_is_numeric, self)
         self.list_widgets[self.layer.id()].viewport().installEventFilter(self)
         self.layout.addWidget(self.list_widgets[self.layer.id()])
+        # FIX 2026-01-18: Ensure list widget is visible after adding to layout
+        self.list_widgets[self.layer.id()].setVisible(True)
+        self.list_widgets[self.layer.id()].show()
 
     def select_all(self, x):
         """Select all items based on action type."""
@@ -1254,7 +1314,11 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                 elif x == 'De-select All (non subset)' and item.data(4) == "False":
                     item.setCheckState(Qt.Unchecked)
         
-        self._emit_checked_items_update()
+        # Clear selected_features_list in the wrapper
+        list_widget.setSelectedFeaturesList([])
+        
+        # FIX 2026-01-18 v15: Force emit to bypass sync protection (explicit user action)
+        self._emit_checked_items_update(force_emit=True)
         
     def filter_items(self, filter_txt=None):
         """Filter items based on text."""
@@ -1316,12 +1380,13 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             if emit_signal:
                 self.deselect_all('De-select All')
             else:
-                # Silent deselect
+                # Silent deselect - also clear items_le since we're not calling _emit_checked_items_update
                 list_widget = self.list_widgets[self.layer.id()]
                 for i in range(list_widget.count()):
                     item = list_widget.item(i)
                     if item:
                         item.setCheckState(Qt.Unchecked)
+                self.items_le.clear()
             return 0
         
         list_widget = self.list_widgets[self.layer.id()]
@@ -1338,20 +1403,20 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         
         logger.debug(f"setCheckedFeatureIds: Checked {checked_count}/{len(feature_ids)} items (emit_signal={emit_signal})")
         
-        # Update display text
-        checked = self.checkedItems()
-        if checked:
-            display_text = ", ".join([str(item[0]) for item in checked[:5]])
-            if len(checked) > 5:
-                display_text += f"... (+{len(checked) - 5})"
-            self.items_le.setText(display_text)
-        else:
-            self.items_le.clear()
-        
         # Emit update signal only if requested (not during QGIS sync)
+        # _emit_checked_items_update handles items_le update
         if emit_signal:
             self._emit_checked_items_update()
         else:
+            # If not emitting, still need to update items_le manually
+            checked = self.checkedItems()
+            if checked:
+                display_text = ", ".join([str(item[0]) for item in checked[:5]])
+                if len(checked) > 5:
+                    display_text += f"... (+{len(checked) - 5})"
+                self.items_le.setText(display_text)
+            else:
+                self.items_le.clear()
             logger.debug("setCheckedFeatureIds: Signal emission suppressed (syncing from QGIS)")
         
         return checked_count

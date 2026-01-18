@@ -481,6 +481,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 Sprint 15: Setup custom UI - splitter, dimensions, tabs, icons, tooltips."""
         # CRITICAL: Create all custom widgets FIRST (before configure_widgets() references them)
         self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self.CONFIG_DATA, self)
+        # FIX 2026-01-18 v14: Set dockwidget reference for sync protection checks
+        self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.setDockwidgetRef(self)
         # Don't override the widget's calculated minimum height - it knows its own size needs
         self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.show()
         logger.debug(f"Created multiple selection widget: {self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection}")
@@ -1034,7 +1036,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 S16: Create indicator label with soft "mousse" style."""
         lbl = ClickableLabel(self.frame_header)
         lbl.setObjectName(name); lbl.setText(text); lbl.setStyleSheet(f"QLabel#{name}{{{style}}}QLabel#{name}:hover{{{hover_style}}}")
-        lbl.setAlignment(Qt.AlignCenter); lbl.setMinimumWidth(min_width); lbl.setFixedHeight(13)  # v4.0: Slightly taller for padding
+        lbl.setAlignment(Qt.AlignCenter); lbl.setMinimumWidth(min_width); lbl.setFixedHeight(18)  # v4.0: Fixed height for proper text display with padding
         lbl.setCursor(Qt.PointingHandCursor); lbl.setToolTip(tooltip)
         # CRITICAL: Enable the widget to receive mouse events
         lbl.setEnabled(True)

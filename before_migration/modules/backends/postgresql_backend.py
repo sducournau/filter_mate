@@ -1183,6 +1183,9 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         # The geometry column should be referenced directly as "column" since it belongs to the target table
         geom_expr = f'"{geom_field}"'
         
+        # NOTE: geom_expr_qualified will be computed AFTER centroid/buffer transformations
+        # See v2.10.1 fix below (after buffer_expression handling)
+        
         # CENTROID OPTIMIZATION v2.9.2: Convert distant layer geometry to point if enabled
         # This significantly speeds up queries for complex polygons (e.g., buildings)
         # v2.9.2: Use ST_PointOnSurface() instead of ST_Centroid() for polygons
@@ -1229,6 +1232,13 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                 geom_expr = f"ST_Buffer({geom_expr}, {buffer_expression})"
             else:
                 geom_expr = f"ST_Buffer({geom_expr}, {buffer_expression}, 'endcap={endcap_style}')"
+        
+        # v2.10.1: Rebuild qualified geometry with same transformations (centroids, buffer)
+        # This is used in EXISTS subqueries to avoid column ambiguity
+        # geom_expr: "geom" -> ST_PointOnSurface("geom") -> ST_Buffer(...)
+        # geom_expr_qualified: "table"."geom" -> ST_PointOnSurface("table"."geom") -> ST_Buffer(...)
+        geom_expr_qualified = geom_expr.replace(f'"{geom_field}"', f'"{table}"."{geom_field}"')
+        self.log_debug(f"v2.10.1: Qualified geom for EXISTS: {geom_expr_qualified[:80]}...")
         
         # Determine strategy based on source feature count AND WKT size
         # v2.5.11: Also check WKT length to avoid very long SQL expressions
@@ -1422,23 +1432,24 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                     # 1. setSubsetString (DIRECT mode - THIS context):
                     #    PostgreSQL executes: SELECT * FROM target WHERE <expression>
                     #    Target table is IMPLICIT in FROM clause
-                    #    → Geometry MUST be unqualified: "geom"
-                    #    → Using "target"."geom" causes "missing FROM-clause entry" error
+                    #    → For simple WHERE: geometry MUST be unqualified: "geom"
+                    #    → For EXISTS subquery: geometry MUST be QUALIFIED to avoid ambiguity!
                     # 
-                    # 2. TwoPhaseFilter Phase 2 (DIFFERENT context - NOT this code path):
-                    #    PostgreSQL executes: SELECT pk FROM target WHERE pk IN (...) AND <expression>
-                    #    Target table is EXPLICIT in FROM clause
-                    #    → Geometry CAN be qualified: "target"."geom"
-                    #    → But TwoPhaseFilter doesn't use build_expression() for Phase 2
-                    #    → It builds its own SQL with qualified columns
+                    # 2. EXISTS SUBQUERY AMBIGUITY (BUG v2.10.0):
+                    #    EXISTS (SELECT 1 FROM source AS __source WHERE ST_Intersects("geom", __source."geom"))
+                    #    The unqualified "geom" is resolved FIRST in __source context (SQL standard)!
+                    #    → ST_Intersects(__source."geom", __source."geom") = ALWAYS TRUE!
+                    #    → This caused ALL features to be returned instead of spatial filter working.
                     # 
-                    # SOLUTION: Always use unqualified geometry (geom_expr) for EXISTS in build_expression()
-                    # This function is called for setSubsetString context, not TwoPhaseFilter Phase 2
+                    # 3. v2.10.1 FIX: Use QUALIFIED geometry in EXISTS subquery
+                    #    EXISTS (SELECT 1 FROM source AS __source WHERE ST_Intersects("target"."geom", __source."geom"))
+                    #    PostgreSQL allows referencing the outer table by name in correlated subquery.
+                    #    → Now correctly filters: "target"."geom" refers to outer FROM clause.
                     # 
-                    # v2.10.0: Use geom_expr (already correctly set as unqualified at line 1188)
-                    self.log_info(f"  ✓ v2.10.0: Using unqualified geom for EXISTS/setSubsetString: {geom_expr}")
+                    # v2.10.1: Use geom_expr_qualified for EXISTS subquery to avoid column ambiguity
+                    self.log_info(f"  ✓ v2.10.1: Using QUALIFIED geom for EXISTS subquery: {geom_expr_qualified}")
                     
-                    spatial_predicate = f"{predicate_func}({geom_expr}, {source_geom_in_subquery})"
+                    spatial_predicate = f"{predicate_func}({geom_expr_qualified}, {source_geom_in_subquery})"
                     where_clauses = [spatial_predicate]
                     print(f"   ✓ Spatial predicate built: {spatial_predicate[:100]}...")
                     self.log_debug(f"  ✓ Spatial predicate: {spatial_predicate[:100]}...")

@@ -1,4 +1,5 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
 <TS version="2.1" language="uz_UZ" sourcelanguage="en_US">
 <context>
     <name>FilterMate</name>
@@ -16,11 +17,11 @@
     </message>
     <message>
         <source>Reset configuration and database</source>
-        <translation>Sozlamalar va ma'lumotlar bazasini tiklash</translation>
+        <translation>Sozlamalar va ma&apos;lumotlar bazasini tiklash</translation>
     </message>
     <message>
         <source>Reset the default configuration and delete the SQLite database</source>
-        <translation>Standart sozlamalarni tiklash va SQLite ma'lumotlar bazasini o'chirish</translation>
+        <translation>Standart sozlamalarni tiklash va SQLite ma&apos;lumotlar bazasini o&apos;chirish</translation>
     </message>
     <message>
         <source>Reset Configuration</source>
@@ -36,7 +37,7 @@ This will:
 
 Bu quyidagilarni bajaradi:
 - Barcha FilterMate sozlamalarini tiklaydi
-- Barcha filtr tarixi ma'lumotlar bazalarini o'chiradi</translation>
+- Barcha filtr tarixi ma&apos;lumotlar bazalarini o&apos;chiradi</translation>
     </message>
     <message>
         <source>Configuration reset successfully.</source>
@@ -48,11 +49,11 @@ Bu quyidagilarni bajaradi:
     </message>
     <message>
         <source>Database deleted: {filename}</source>
-        <translation>Ma'lumotlar bazasi o'chirildi: {filename}</translation>
+        <translation>Ma&apos;lumotlar bazasi o&apos;chirildi: {filename}</translation>
     </message>
     <message>
         <source>Unable to delete {filename}: {error}</source>
-        <translation>{filename} ni o'chirib bo'lmadi: {error}</translation>
+        <translation>{filename} ni o&apos;chirib bo&apos;lmadi: {error}</translation>
     </message>
     <message>
         <source>Restart required</source>
@@ -64,7 +65,7 @@ Bu quyidagilarni bajaradi:
 Please restart QGIS to apply all changes.</source>
         <translation>Sozlamalar tiklandi.
 
-Barcha o'zgarishlarni qo'llash uchun QGIS ni qayta ishga tushiring.</translation>
+Barcha o&apos;zgarishlarni qo&apos;llash uchun QGIS ni qayta ishga tushiring.</translation>
     </message>
     <message>
         <source>Error during reset: {error}</source>
@@ -76,7 +77,7 @@ Barcha o'zgarishlarni qo'llash uchun QGIS ni qayta ishga tushiring.</translation
     </message>
     <message>
         <source>unknown version</source>
-        <translation>noma'lum versiya</translation>
+        <translation>noma&apos;lum versiya</translation>
     </message>
     <message>
         <source>An obsolete configuration ({}) has been detected.
@@ -90,7 +91,7 @@ Do you want to reset to default settings?
 Standart sozlamalarga tiklamoqchimisiz?
 
 • Ha: Tiklash (zaxira nusxa yaratiladi)
-• Yo'q: Joriy sozlamalarni saqlash (muammolar yuzaga kelishi mumkin)</translation>
+• Yo&apos;q: Joriy sozlamalarni saqlash (muammolar yuzaga kelishi mumkin)</translation>
     </message>
     <message>
         <source>Corrupted configuration detected</source>
@@ -103,12 +104,12 @@ Do you want to reset to default settings?
 
 • Yes: Reset (a backup will be created if possible)
 • No: Cancel (the plugin may not work correctly)</source>
-        <translation>Sozlamalar fayli buzilgan va o'qib bo'lmaydi.
+        <translation>Sozlamalar fayli buzilgan va o&apos;qib bo&apos;lmaydi.
 
 Standart sozlamalarga tiklamoqchimisiz?
 
-• Ha: Tiklash (iloji bo'lsa zaxira nusxa yaratiladi)
-• Yo'q: Bekor qilish (plagin to'g'ri ishlamasligi mumkin)</translation>
+• Ha: Tiklash (iloji bo&apos;lsa zaxira nusxa yaratiladi)
+• Yo&apos;q: Bekor qilish (plagin to&apos;g&apos;ri ishlamasligi mumkin)</translation>
     </message>
     <message>
         <source>Configuration reset</source>
@@ -124,7 +125,7 @@ Davom etmoqchimisiz?</translation>
     </message>
     <message>
         <source>Configuration not reset. Some features may not work correctly.</source>
-        <translation>Sozlamalar tiklanmadi. Ba'zi funksiyalar to'g'ri ishlamasligi mumkin.</translation>
+        <translation>Sozlamalar tiklanmadi. Ba&apos;zi funksiyalar to&apos;g&apos;ri ishlamasligi mumkin.</translation>
     </message>
     <message>
         <source>Configuration created with default values</source>
@@ -140,7 +141,7 @@ Davom etmoqchimisiz?</translation>
     </message>
     <message>
         <source>Configuration updated to latest version</source>
-        <translation>Sozlamalar eng so'nggi versiyaga yangilandi</translation>
+        <translation>Sozlamalar eng so&apos;nggi versiyaga yangilandi</translation>
     </message>
     <message>
         <source>Configuration updated: new settings available ({sections}). Access via Options menu.</source>
@@ -156,45 +157,45 @@ Davom etmoqchimisiz?</translation>
     </message>
     <message>
         <source>Error during configuration migration: {}</source>
-        <translation>Sozlamalarni ko'chirish vaqtida xatolik: {}</translation>
+        <translation>Sozlamalarni ko&apos;chirish vaqtida xatolik: {}</translation>
     </message>
     <message>
         <source>Geometry validation setting</source>
         <translation>Geometriya tekshirish sozlamalari</translation>
     </message>
     <message>
-        <source>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
+        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
 
-FilterMate recommends disabling this setting (value 'Off') for the following reasons:
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
 
 Do you want to disable this setting now?
 
 • Yes: Disable filtering (recommended for FilterMate)
 • No: Keep current setting</source>
-        <translation>QGIS sozlamasi 'Noto'g'ri obyektlarni filtrlash' hozirda '{mode}' ga o'rnatilgan.
+        <translation>QGIS sozlamasi &apos;Noto&apos;g&apos;ri obyektlarni filtrlash&apos; hozirda &apos;{mode}&apos; ga o&apos;rnatilgan.
 
-FilterMate quyidagi sabablarga ko'ra ushbu sozlamani o'chirishni tavsiya qiladi (qiymat 'O'chirilgan'):
+FilterMate quyidagi sabablarga ko&apos;ra ushbu sozlamani o&apos;chirishni tavsiya qiladi (qiymat &apos;O&apos;chirilgan&apos;):
 
-• Noto'g'ri geometriyali obyektlar eksport va filtrlardan jimgina chiqarib tashlanishi mumkin
+• Noto&apos;g&apos;ri geometriyali obyektlar eksport va filtrlardan jimgina chiqarib tashlanishi mumkin
 • FilterMate geometriya tekshiruvini avtomatik tuzatish imkoniyatlari bilan ichki boshqaradi
-• Ba'zi qonuniy ma'lumotlar qat'iy OGC qoidalariga ko'ra 'noto'g'ri' deb hisoblanishi mumkin
+• Ba&apos;zi qonuniy ma&apos;lumotlar qat&apos;iy OGC qoidalariga ko&apos;ra &apos;noto&apos;g&apos;ri&apos; deb hisoblanishi mumkin
 
-Hozir bu sozlamani o'chirmoqchimisiz?
+Hozir bu sozlamani o&apos;chirmoqchimisiz?
 
-• Ha: Filtrlashni o'chirish (FilterMate uchun tavsiya etiladi)
-• Yo'q: Joriy sozlamani saqlash</translation>
+• Ha: Filtrlashni o&apos;chirish (FilterMate uchun tavsiya etiladi)
+• Yo&apos;q: Joriy sozlamani saqlash</translation>
     </message>
     <message>
         <source>Invalid geometry filtering disabled successfully.</source>
-        <translation>Noto'g'ri geometriya filtrlash muvaffaqiyatli o'chirildi.</translation>
+        <translation>Noto&apos;g&apos;ri geometriya filtrlash muvaffaqiyatli o&apos;chirildi.</translation>
     </message>
     <message>
         <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
-        <translation>Noto'g'ri geometriya filtrlash o'zgartirilmadi. Ba'zi obyektlar eksportdan chiqarib tashlanishi mumkin.</translation>
+        <translation>Noto&apos;g&apos;ri geometriya filtrlash o&apos;zgartirilmadi. Ba&apos;zi obyektlar eksportdan chiqarib tashlanishi mumkin.</translation>
     </message>
     <message>
         <source>Are you sure you want to reset to the default configuration?
@@ -208,9 +209,9 @@ QGIS must be restarted to apply the changes.</source>
 
 Bu quyidagilarni bajaradi:
 - Standart sozlamalarni tiklaydi
-- Qatlam ma'lumotlar bazasini o'chiradi
+- Qatlam ma&apos;lumotlar bazasini o&apos;chiradi
 
-O'zgarishlarni qo'llash uchun QGIS qayta ishga tushirilishi kerak.</translation>
+O&apos;zgarishlarni qo&apos;llash uchun QGIS qayta ishga tushirilishi kerak.</translation>
     </message>
     <message>
         <source>The configuration has been reset.
@@ -218,7 +219,7 @@ O'zgarishlarni qo'llash uchun QGIS qayta ishga tushirilishi kerak.</translation>
 Please restart QGIS to apply the changes.</source>
         <translation>Sozlamalar tiklandi.
 
-O'zgarishlarni qo'llash uchun QGIS ni qayta ishga tushiring.</translation>
+O&apos;zgarishlarni qo&apos;llash uchun QGIS ni qayta ishga tushiring.</translation>
     </message>
     <message>
         <source>Buffer value in meters (positive=expand, negative=shrink polygons)</source>
@@ -238,11 +239,11 @@ O'zgarishlarni qo'llash uchun QGIS ni qayta ishga tushiring.</translation>
     </message>
     <message>
         <source>non-polygon</source>
-        <translation>ko'pburchak-emas</translation>
+        <translation>ko&apos;pburchak-emas</translation>
     </message>
     <message>
         <source>Buffer value in meters (positive only when centroids are enabled. Negative buffers cannot be applied to points)</source>
-        <translation>Bufer qiymati metrda (faqat sentroidlar yoqilganda ijobiy. Salbiy buferlar nuqtalarga qo'llanilmaydi)</translation>
+        <translation>Bufer qiymati metrda (faqat sentroidlar yoqilganda ijobiy. Salbiy buferlar nuqtalarga qo&apos;llanilmaydi)</translation>
     </message>
     <message>
         <source>Mode batch</source>
@@ -258,7 +259,7 @@ O'zgarishlarni qo'llash uchun QGIS ni qayta ishga tushiring.</translation>
     </message>
     <message>
         <source>Use centroids instead of full geometries for distant layers (faster for complex polygons like buildings)</source>
-        <translation>Uzoq qatlamlar uchun to'liq geometriyalar o'rniga markazlardan foydalaning (binolar kabi murakkab ko'pburchaklar uchun tezroq)</translation>
+        <translation>Uzoq qatlamlar uchun to&apos;liq geometriyalar o&apos;rniga markazlardan foydalaning (binolar kabi murakkab ko&apos;pburchaklar uchun tezroq)</translation>
     </message>
 </context>
 <context>
@@ -273,7 +274,7 @@ O'zgarishlarni qo'llash uchun QGIS ni qayta ishga tushiring.</translation>
     </message>
     <message>
         <source>MULTIPLE SELECTION</source>
-        <translation>KO'P TANLASH</translation>
+        <translation>KO&apos;P TANLASH</translation>
     </message>
     <message>
         <source>CUSTOM SELECTION</source>
@@ -293,7 +294,7 @@ O'zgarishlarni qo'llash uchun QGIS ni qayta ishga tushiring.</translation>
     </message>
     <message>
         <source>Identify feature - Display feature attributes</source>
-        <translation>Obyektni aniqlash - Obyekt atributlarini ko'rsatish</translation>
+        <translation>Obyektni aniqlash - Obyekt atributlarini ko&apos;rsatish</translation>
     </message>
     <message>
         <source>Zoom to feature - Center the map on the selected feature</source>
@@ -309,7 +310,7 @@ O'zgarishlarni qo'llash uchun QGIS ni qayta ishga tushiring.</translation>
     </message>
     <message>
         <source>Link widgets - Synchronize selection between widgets</source>
-        <translation>Vidjetlarni bog'lash - Vidjetlar o'rtasida tanlashni sinxronlashtirish</translation>
+        <translation>Vidjetlarni bog&apos;lash - Vidjetlar o&apos;rtasida tanlashni sinxronlashtirish</translation>
     </message>
     <message>
         <source>Reset layer properties - Restore default layer settings</source>
@@ -317,15 +318,15 @@ O'zgarishlarni qo'llash uchun QGIS ni qayta ishga tushiring.</translation>
     </message>
     <message>
         <source>Auto-sync with current layer - Automatically update when layer changes</source>
-        <translation>Joriy qatlam bilan avtomatik sinxronlash - Qatlam o'zgarganda avtomatik yangilash</translation>
+        <translation>Joriy qatlam bilan avtomatik sinxronlash - Qatlam o&apos;zgarganda avtomatik yangilash</translation>
     </message>
     <message>
         <source>Enable multi-layer filtering - Apply filter to multiple layers simultaneously</source>
-        <translation>Ko'p qatlamli filtrlashni yoqish - Filtrni bir vaqtda bir nechta qatlamlarga qo'llash</translation>
+        <translation>Ko&apos;p qatlamli filtrlashni yoqish - Filtrni bir vaqtda bir nechta qatlamlarga qo&apos;llash</translation>
     </message>
     <message>
         <source>Enable additive filtering - Combine multiple filters on the current layer</source>
-        <translation>Qo'shimcha filtrlashni yoqish - Joriy qatlamda bir nechta filtrlarni birlashtirish</translation>
+        <translation>Qo&apos;shimcha filtrlashni yoqish - Joriy qatlamda bir nechta filtrlarni birlashtirish</translation>
     </message>
     <message>
         <source>Enable spatial filtering - Filter features using geometric relationships</source>
@@ -333,7 +334,7 @@ O'zgarishlarni qo'llash uchun QGIS ni qayta ishga tushiring.</translation>
     </message>
     <message>
         <source>Enable buffer - Add a buffer zone around selected features</source>
-        <translation>Buferni yoqish - Tanlangan obyektlar atrofiga bufer zonasini qo'shish</translation>
+        <translation>Buferni yoqish - Tanlangan obyektlar atrofiga bufer zonasini qo&apos;shish</translation>
     </message>
     <message>
         <source>Buffer type - Select the buffer calculation method</source>
@@ -429,15 +430,15 @@ O'zgarishlarni qo'llash uchun QGIS ni qayta ishga tushiring.</translation>
     </message>
     <message>
         <source>Apply Filter - Execute the current filter on selected layers</source>
-        <translation>Filtrni qo'llash - Tanlangan qatlamlarda joriy filtrni bajarish</translation>
+        <translation>Filtrni qo&apos;llash - Tanlangan qatlamlarda joriy filtrni bajarish</translation>
     </message>
     <message>
         <source>Apply Filter</source>
-        <translation>Filtrni qo'llash</translation>
+        <translation>Filtrni qo&apos;llash</translation>
     </message>
     <message>
         <source>Apply the current filter expression to filter features on the selected layer(s)</source>
-        <translation>Tanlangan qatlam(lar)dagi obyektlarni filtrlash uchun joriy filtr ifodasini qo'llash</translation>
+        <translation>Tanlangan qatlam(lar)dagi obyektlarni filtrlash uchun joriy filtr ifodasini qo&apos;llash</translation>
     </message>
     <message>
         <source>Undo Filter - Restore the previous filter state</source>
@@ -453,11 +454,11 @@ O'zgarishlarni qo'llash uchun QGIS ni qayta ishga tushiring.</translation>
     </message>
     <message>
         <source>Redo Filter - Reapply the previously undone filter</source>
-        <translation>Filtrni qayta qo'llash - Oldin bekor qilingan filtrni qayta qo'llash</translation>
+        <translation>Filtrni qayta qo&apos;llash - Oldin bekor qilingan filtrni qayta qo&apos;llash</translation>
     </message>
     <message>
         <source>Redo Filter</source>
-        <translation>Filtrni qayta qo'llash</translation>
+        <translation>Filtrni qayta qo&apos;llash</translation>
     </message>
     <message>
         <source>Redo the previously undone filter operation</source>
@@ -477,7 +478,7 @@ O'zgarishlarni qo'llash uchun QGIS ni qayta ishga tushiring.</translation>
     </message>
     <message>
         <source>Export - Save filtered layers to the specified location</source>
-        <translation>Eksport - Filtrlangan qatlamlarni ko'rsatilgan joyga saqlash</translation>
+        <translation>Eksport - Filtrlangan qatlamlarni ko&apos;rsatilgan joyga saqlash</translation>
     </message>
     <message>
         <source>Export</source>
@@ -489,7 +490,7 @@ O'zgarishlarni qo'llash uchun QGIS ni qayta ishga tushiring.</translation>
     </message>
     <message>
         <source>About FilterMate - Display plugin information and help</source>
-        <translation>FilterMate haqida - Plagin ma'lumotlari va yordamni ko'rsatish</translation>
+        <translation>FilterMate haqida - Plagin ma&apos;lumotlari va yordamni ko&apos;rsatish</translation>
     </message>
     <message>
         <source>AND</source>
@@ -521,11 +522,11 @@ O'zgarishlarni qo'llash uchun QGIS ni qayta ishga tushiring.</translation>
     </message>
     <message>
         <source>Multi-layer filtering</source>
-        <translation>Ko'p qatlamli filtrlash</translation>
+        <translation>Ko&apos;p qatlamli filtrlash</translation>
     </message>
     <message>
         <source>Additive filtering for the selected layer</source>
-        <translation>Tanlangan qatlam uchun qo'shimcha filtrlash</translation>
+        <translation>Tanlangan qatlam uchun qo&apos;shimcha filtrlash</translation>
     </message>
     <message>
         <source>Geospatial filtering</source>
@@ -573,7 +574,7 @@ O'zgarishlarni qo'llash uchun QGIS ni qayta ishga tushiring.</translation>
     </message>
     <message>
         <source>Datatype export</source>
-        <translation>Ma'lumot turi eksporti</translation>
+        <translation>Ma&apos;lumot turi eksporti</translation>
     </message>
     <message>
         <source>Name of file/directory</source>
@@ -584,7 +585,7 @@ O'zgarishlarni qo'llash uchun QGIS ni qayta ishga tushiring.</translation>
     <name>FilterMateDockWidget</name>
     <message>
         <source>Reload the plugin to apply layout changes (action bar position)</source>
-        <translation>Tartib o'zgarishlarini qo'llash uchun plaginni qayta yuklash (amal paneli holati)</translation>
+        <translation>Tartib o&apos;zgarishlarini qo&apos;llash uchun plaginni qayta yuklash (amal paneli holati)</translation>
     </message>
     <message>
         <source>Reload Plugin</source>
@@ -592,7 +593,7 @@ O'zgarishlarni qo'llash uchun QGIS ni qayta ishga tushiring.</translation>
     </message>
     <message>
         <source>Do you want to reload FilterMate to apply all configuration changes?</source>
-        <translation>Barcha sozlama o'zgarishlarini qo'llash uchun FilterMate ni qayta yuklamoqchimisiz?</translation>
+        <translation>Barcha sozlama o&apos;zgarishlarini qo&apos;llash uchun FilterMate ni qayta yuklamoqchimisiz?</translation>
     </message>
     <message>
         <source>Current layer: {name}</source>
@@ -624,7 +625,7 @@ O'zgarishlarni qo'llash uchun QGIS ni qayta ishga tushiring.</translation>
     </message>
     <message>
         <source>Display expression: {expr}</source>
-        <translation>Ko'rsatish ifodasi: {expr}</translation>
+        <translation>Ko&apos;rsatish ifodasi: {expr}</translation>
     </message>
     <message>
         <source>Feature ID: {id}</source>
@@ -652,7 +653,7 @@ O'zgarishlarni qo'llash uchun QGIS ni qayta ishga tushiring.</translation>
     </message>
     <message>
         <source>Display expression: {0}</source>
-        <translation>Ko'rsatish ifodasi: {0}</translation>
+        <translation>Ko&apos;rsatish ifodasi: {0}</translation>
     </message>
     <message>
         <source>Feature ID: {0}
@@ -697,7 +698,7 @@ Birinchi atribut: {1}</translation>
     </message>
     <message>
         <source>Large dataset ({count} features) without PostgreSQL. Performance may be reduced.</source>
-        <translation>PostgreSQL siz katta ma'lumotlar to'plami ({count} ta obyekt). Ishlash samaradorligi kamayishi mumkin.</translation>
+        <translation>PostgreSQL siz katta ma&apos;lumotlar to&apos;plami ({count} ta obyekt). Ishlash samaradorligi kamayishi mumkin.</translation>
     </message>
     <message>
         <source>PostgreSQL recommended for better performance.</source>
@@ -728,7 +729,7 @@ Birinchi atribut: {1}</translation>
     </message>
     <message>
         <source>Use centroids instead of full geometries for large datasets</source>
-        <translation>Katta ma'lumotlar to'plami uchun to'liq geometriyalar o'rniga markazlardan foydalaning</translation>
+        <translation>Katta ma&apos;lumotlar to&apos;plami uchun to&apos;liq geometriyalar o&apos;rniga markazlardan foydalaning</translation>
     </message>
     <message>
         <source>Use centroids</source>
@@ -752,7 +753,7 @@ Birinchi atribut: {1}</translation>
     </message>
     <message>
         <source>Filter by bounding box first to eliminate distant features quickly</source>
-        <translation>Uzoqdagi obyektlarni tezda yo'q qilish uchun avval chegaralovchi quti bo'yicha filtrlang</translation>
+        <translation>Uzoqdagi obyektlarni tezda yo&apos;q qilish uchun avval chegaralovchi quti bo&apos;yicha filtrlang</translation>
     </message>
     <message>
         <source>BBox pre-filtering</source>
@@ -768,7 +769,7 @@ Birinchi atribut: {1}</translation>
     </message>
     <message>
         <source>Apply for current session only</source>
-        <translation>Faqat joriy seans uchun qo'llash</translation>
+        <translation>Faqat joriy seans uchun qo&apos;llash</translation>
     </message>
     <message>
         <source>Remember for this session</source>
@@ -776,19 +777,19 @@ Birinchi atribut: {1}</translation>
     </message>
     <message>
         <source>Skip without applying</source>
-        <translation>Qo'llamay o'tkazib yuborish</translation>
+        <translation>Qo&apos;llamay o&apos;tkazib yuborish</translation>
     </message>
     <message>
         <source>Skip</source>
-        <translation>O'tkazib yuborish</translation>
+        <translation>O&apos;tkazib yuborish</translation>
     </message>
     <message>
         <source>Apply selected optimizations</source>
-        <translation>Tanlangan optimallashtirish qo'llash</translation>
+        <translation>Tanlangan optimallashtirish qo&apos;llash</translation>
     </message>
     <message>
         <source>Apply</source>
-        <translation>Qo'llash</translation>
+        <translation>Qo&apos;llash</translation>
     </message>
     <message>
         <source>Optimization Settings</source>
@@ -804,23 +805,23 @@ Birinchi atribut: {1}</translation>
     </message>
     <message>
         <source>Auto-apply recommendations</source>
-        <translation>Tavsiyalarni avtomatik qo'llash</translation>
+        <translation>Tavsiyalarni avtomatik qo&apos;llash</translation>
     </message>
     <message>
         <source>Ask before applying</source>
-        <translation>Qo'llashdan oldin so'rash</translation>
+        <translation>Qo&apos;llashdan oldin so&apos;rash</translation>
     </message>
     <message>
         <source>Show optimization dialog</source>
-        <translation>Optimallashtirish dialogini ko'rsatish</translation>
+        <translation>Optimallashtirish dialogini ko&apos;rsatish</translation>
     </message>
     <message>
         <source>Never apply</source>
-        <translation>Hech qachon qo'llamang</translation>
+        <translation>Hech qachon qo&apos;llamang</translation>
     </message>
     <message>
         <source>No optimizations</source>
-        <translation>Optimallashtirish yo'q</translation>
+        <translation>Optimallashtirish yo&apos;q</translation>
     </message>
     <message>
         <source>Simplify before buffer</source>
@@ -863,11 +864,11 @@ Birinchi atribut: {1}</translation>
     </message>
     <message>
         <source>Materialized Views</source>
-        <translation>Materiallashtirilgan ko'rinishlar</translation>
+        <translation>Materiallashtirilgan ko&apos;rinishlar</translation>
     </message>
     <message>
         <source>Create temporary materialized views for complex filters</source>
-        <translation>Murakkab filtrlar uchun vaqtinchalik materiallashtirilgan ko'rinishlar yaratish</translation>
+        <translation>Murakkab filtrlar uchun vaqtinchalik materiallashtirilgan ko&apos;rinishlar yaratish</translation>
     </message>
     <message>
         <source>Two-Phase Filtering</source>
@@ -883,7 +884,7 @@ Birinchi atribut: {1}</translation>
     </message>
     <message>
         <source>Load data in chunks for very large datasets</source>
-        <translation>Juda katta ma'lumotlar to'plamlari uchun ma'lumotlarni qismlarga bo'lib yuklash</translation>
+        <translation>Juda katta ma&apos;lumotlar to&apos;plamlari uchun ma&apos;lumotlarni qismlarga bo&apos;lib yuklash</translation>
     </message>
     <message>
         <source>Chunk Size</source>
@@ -895,7 +896,7 @@ Birinchi atribut: {1}</translation>
     </message>
     <message>
         <source>Simplify geometries on server for display purposes</source>
-        <translation>Ko'rsatish maqsadlari uchun serverda geometriyalarni soddalashtirish</translation>
+        <translation>Ko&apos;rsatish maqsadlari uchun serverda geometriyalarni soddalashtirish</translation>
     </message>
     <message>
         <source>Simplification Tolerance</source>
@@ -903,11 +904,11 @@ Birinchi atribut: {1}</translation>
     </message>
     <message>
         <source>Parallel Query Execution</source>
-        <translation>Parallel so'rovlarni bajarish</translation>
+        <translation>Parallel so&apos;rovlarni bajarish</translation>
     </message>
     <message>
         <source>Execute independent queries in parallel</source>
-        <translation>Mustaqil so'rovlarni parallel bajarish</translation>
+        <translation>Mustaqil so&apos;rovlarni parallel bajarish</translation>
     </message>
     <message>
         <source>Expression Caching</source>
@@ -947,15 +948,15 @@ Birinchi atribut: {1}</translation>
     </message>
     <message>
         <source>Batch Processing</source>
-        <translation>To'plamli qayta ishlash</translation>
+        <translation>To&apos;plamli qayta ishlash</translation>
     </message>
     <message>
         <source>Process multiple operations in batches</source>
-        <translation>Bir nechta amallarni to'plamlarda qayta ishlash</translation>
+        <translation>Bir nechta amallarni to&apos;plamlarda qayta ishlash</translation>
     </message>
     <message>
         <source>Batch Size</source>
-        <translation>To'plam hajmi</translation>
+        <translation>To&apos;plam hajmi</translation>
     </message>
     <message>
         <source>OGR/Memory Optimizations</source>
@@ -971,7 +972,7 @@ Birinchi atribut: {1}</translation>
     </message>
     <message>
         <source>Progressive Chunking</source>
-        <translation>Progressiv bo'laklash</translation>
+        <translation>Progressiv bo&apos;laklash</translation>
     </message>
     <message>
         <source>Process large files in progressive chunks</source>
@@ -1007,7 +1008,7 @@ Birinchi atribut: {1}</translation>
     </message>
     <message>
         <source>Automatically optimize based on data analysis</source>
-        <translation>Ma'lumotlar tahlili asosida avtomatik optimallashtirish</translation>
+        <translation>Ma&apos;lumotlar tahlili asosida avtomatik optimallashtirish</translation>
     </message>
     <message>
         <source>Auto-Centroid</source>
@@ -1015,7 +1016,7 @@ Birinchi atribut: {1}</translation>
     </message>
     <message>
         <source>Automatically center view on filter results</source>
-        <translation>Ko'rinishni filtr natijalariga avtomatik markazlashtirish</translation>
+        <translation>Ko&apos;rinishni filtr natijalariga avtomatik markazlashtirish</translation>
     </message>
     <message>
         <source>Parallel Layer Filtering</source>
@@ -1023,7 +1024,7 @@ Birinchi atribut: {1}</translation>
     </message>
     <message>
         <source>Filter multiple layers simultaneously</source>
-        <translation>Bir vaqtning o'zida bir nechta qatlamlarni filtrlash</translation>
+        <translation>Bir vaqtning o&apos;zida bir nechta qatlamlarni filtrlash</translation>
     </message>
     <message>
         <source>Smart Expression Parsing</source>
@@ -1031,7 +1032,7 @@ Birinchi atribut: {1}</translation>
     </message>
     <message>
         <source>Optimize expression parsing for complex queries</source>
-        <translation>Murakkab so'rovlar uchun ifoda tahlilini optimallashtirish</translation>
+        <translation>Murakkab so&apos;rovlar uchun ifoda tahlilini optimallashtirish</translation>
     </message>
     <message>
         <source>Deferred Refresh</source>
@@ -1039,7 +1040,7 @@ Birinchi atribut: {1}</translation>
     </message>
     <message>
         <source>Delay map refresh until all filters are applied</source>
-        <translation>Barcha filtrlar qo'llanilgunga qadar xarita yangilanishini kechiktirish</translation>
+        <translation>Barcha filtrlar qo&apos;llanilgunga qadar xarita yangilanishini kechiktirish</translation>
     </message>
     <message>
         <source>Verbose Logging</source>
@@ -1051,7 +1052,7 @@ Birinchi atribut: {1}</translation>
     </message>
     <message>
         <source>Apply</source>
-        <translation>Qo'llash</translation>
+        <translation>Qo&apos;llash</translation>
     </message>
     <message>
         <source>Reset to Defaults</source>
@@ -1059,7 +1060,7 @@ Birinchi atribut: {1}</translation>
     </message>
     <message>
         <source>Settings applied successfully</source>
-        <translation>Sozlamalar muvaffaqiyatli qo'llandi</translation>
+        <translation>Sozlamalar muvaffaqiyatli qo&apos;llandi</translation>
     </message>
     <message>
         <source>Settings reset to defaults</source>
@@ -1067,13 +1068,406 @@ Birinchi atribut: {1}</translation>
     </message>
     <message>
         <source>Profile applied: {}</source>
-        <translation>Profil qo'llandi: {}</translation>
+        <translation>Profil qo&apos;llandi: {}</translation>
     </message>
     <message>
         <source>Error applying settings</source>
-        <translation>Sozlamalarni qo'llashda xato</translation>
+        <translation>Sozlamalarni qo&apos;llashda xato</translation>
     </message>
-<message><source>MV Status: Checking...</source><translation type="unfinished">MV Status: Checking...</translation></message><message><source>MV Status: Error</source><translation type="unfinished">MV Status: Error</translation></message><message><source>MV Status: Clean</source><translation type="unfinished">MV Status: Clean</translation></message><message><source>MV Status:</source><translation type="unfinished">MV Status:</translation></message><message><source>active</source><translation type="unfinished">active</translation></message><message><source>No active materialized views</source><translation type="unfinished">No active materialized views</translation></message><message><source>Session:</source><translation type="unfinished">Session:</translation></message><message><source>Other sessions:</source><translation type="unfinished">Other sessions:</translation></message><message><source>🧹 Session</source><translation type="unfinished">🧹 Session</translation></message><message><source>Cleanup MVs from this session</source><translation type="unfinished">Cleanup MVs from this session</translation></message><message><source>🗑️ Orphaned</source><translation type="unfinished">🗑️ Orphaned</translation></message><message><source>Cleanup orphaned MVs (&gt;24h old)</source><translation type="unfinished">Cleanup orphaned MVs (&gt;24h old)</translation></message><message><source>⚠️ All</source><translation type="unfinished">⚠️ All</translation></message><message><source>Cleanup ALL MVs (affects other sessions)</source><translation type="unfinished">Cleanup ALL MVs (affects other sessions)</translation></message><message><source>Confirm Cleanup</source><translation type="unfinished">Confirm Cleanup</translation></message><message><source>Drop ALL materialized views?
-This affects other FilterMate sessions!</source><translation type="unfinished">Drop ALL materialized views?
-This affects other FilterMate sessions!</translation></message><message><source>Refresh MV status</source><translation type="unfinished">Refresh MV status</translation></message><message><source>Threshold:</source><translation type="unfinished">Threshold:</translation></message><message><source>features</source><translation type="unfinished">features</translation></message><message><source>Auto-cleanup on exit</source><translation type="unfinished">Auto-cleanup on exit</translation></message><message><source>Automatically drop session MVs when plugin unloads</source><translation type="unfinished">Automatically drop session MVs when plugin unloads</translation></message><message><source>Create MVs for datasets larger than this</source><translation type="unfinished">Create MVs for datasets larger than this</translation></message><message><source>faster possible</source><translation type="unfinished">faster possible</translation></message><message><source>Optimizations available</source><translation type="unfinished">Optimizations available</translation></message><message><source>FilterMate - Apply Optimizations?</source><translation type="unfinished">FilterMate - Apply Optimizations?</translation></message><message><source>Skip</source><translation type="unfinished">Skip</translation></message><message><source>✓ Apply</source><translation type="unfinished">✓ Apply</translation></message><message><source>Don't ask for this session</source><translation type="unfinished">Don't ask for this session</translation></message><message><source>Centroids</source><translation type="unfinished">Centroids</translation></message><message><source>Simplify</source><translation type="unfinished">Simplify</translation></message><message><source>Pre-simplify</source><translation type="unfinished">Pre-simplify</translation></message><message><source>Fewer segments</source><translation type="unfinished">Fewer segments</translation></message><message><source>Flat buffer</source><translation type="unfinished">Flat buffer</translation></message><message><source>BBox filter</source><translation type="unfinished">BBox filter</translation></message><message><source>Attr-first</source><translation type="unfinished">Attr-first</translation></message><message><source>PostgreSQL not available</source><translation type="unfinished">PostgreSQL not available</translation></message><message><source>No connection</source><translation type="unfinished">No connection</translation></message><message><source>Auto-zoom when feature changes</source><translation type="unfinished">Auto-zoom when feature changes</translation></message><message><source>Backend optimization settings saved</source><translation type="unfinished">Backend optimization settings saved</translation></message><message><source>Backend optimizations configured</source><translation type="unfinished">Backend optimizations configured</translation></message><message><source>Expression Evaluation</source><translation type="unfinished">Expression Evaluation</translation></message><message><source>Identify selected feature</source><translation type="unfinished">Identify selected feature</translation></message><message><source>Layer properties reset to defaults</source><translation type="unfinished">Layer properties reset to defaults</translation></message><message><source>Link exploring widgets together</source><translation type="unfinished">Link exploring widgets together</translation></message><message><source>Optimization settings saved</source><translation type="unfinished">Optimization settings saved</translation></message><message><source>Reset all layer exploring properties</source><translation type="unfinished">Reset all layer exploring properties</translation></message><message><source>Toggle feature selection on map</source><translation type="unfinished">Toggle feature selection on map</translation></message><message><source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for distant layers (faster for complex polygons)</translation></message><message><source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for source layer (faster for complex polygons)</translation></message><message><source>Zoom to selected feature</source><translation type="unfinished">Zoom to selected feature</translation></message></context>
+    <message>
+        <source>MV Status: Checking...</source>
+        <translation>MV holati: Tekshirilmoqda...</translation>
+    </message>
+    <message>
+        <source>MV Status: Error</source>
+        <translation>MV holati: Xato</translation>
+    </message>
+    <message>
+        <source>MV Status: Clean</source>
+        <translation>MV holati: Toza</translation>
+    </message>
+    <message>
+        <source>MV Status:</source>
+        <translation>MV holati:</translation>
+    </message>
+    <message>
+        <source>active</source>
+        <translation>faol</translation>
+    </message>
+    <message>
+        <source>No active materialized views</source>
+        <translation>Faol materialized viewlar yo&apos;q</translation>
+    </message>
+    <message>
+        <source>Session:</source>
+        <translation>Sessiya:</translation>
+    </message>
+    <message>
+        <source>Other sessions:</source>
+        <translation>Boshqa sessiyalar:</translation>
+    </message>
+    <message>
+        <source>🧹 Session</source>
+        <translation>🧹 Sessiya</translation>
+    </message>
+    <message>
+        <source>Cleanup MVs from this session</source>
+        <translation>Ushbu sessiyaning MV larini tozalash</translation>
+    </message>
+    <message>
+        <source>🗑️ Orphaned</source>
+        <translation>🗑️ Yetim</translation>
+    </message>
+    <message>
+        <source>Cleanup orphaned MVs (&gt;24h old)</source>
+        <translation>Yetim MV larini tozalash (&gt;24 soat)</translation>
+    </message>
+    <message>
+        <source>⚠️ All</source>
+        <translation>⚠️ Barchasi</translation>
+    </message>
+    <message>
+        <source>Cleanup ALL MVs (affects other sessions)</source>
+        <translation>BARCHA MV larni tozalash (boshqa sessiyalarga ta&apos;sir qiladi)</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>Tozalashni tasdiqlash</translation>
+    </message>
+    <message>
+        <source>Drop ALL materialized views?
+This affects other FilterMate sessions!</source>
+        <translation>BARCHA materialized viewlarni o&apos;chirish?
+Bu boshqa FilterMate sessiyalariga ta&apos;sir qiladi!</translation>
+    </message>
+    <message>
+        <source>Refresh MV status</source>
+        <translation>MV holatini yangilash</translation>
+    </message>
+    <message>
+        <source>Threshold:</source>
+        <translation>Chegara:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>xususiyatlar</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on exit</source>
+        <translation>Chiqishda avtomatik tozalash</translation>
+    </message>
+    <message>
+        <source>Automatically drop session MVs when plugin unloads</source>
+        <translation>Plugin yuklanmagan holda sessiya MV larini avtomatik o&apos;chirish</translation>
+    </message>
+    <message>
+        <source>Create MVs for datasets larger than this</source>
+        <translation>Bundan kattaroq ma&apos;lumotlar to&apos;plamlari uchun MV lar yarating</translation>
+    </message>
+    <message>
+        <source>faster possible</source>
+        <translation>tezroq mumkin</translation>
+    </message>
+    <message>
+        <source>Optimizations available</source>
+        <translation>Optimizatsiyalar mavjud</translation>
+    </message>
+    <message>
+        <source>FilterMate - Apply Optimizations?</source>
+        <translation>FilterMate - Optimizatsiyalarni qo&apos;llash?</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>O&apos;tkazib yuborish</translation>
+    </message>
+    <message>
+        <source>✓ Apply</source>
+        <translation>✓ Qo&apos;llash</translation>
+    </message>
+    <message>
+        <source>Don&apos;t ask for this session</source>
+        <translation>Bu sessiya uchun so&apos;ramang</translation>
+    </message>
+    <message>
+        <source>Centroids</source>
+        <translation>Markazlar</translation>
+    </message>
+    <message>
+        <source>Simplify</source>
+        <translation>Soddalashtirish</translation>
+    </message>
+    <message>
+        <source>Pre-simplify</source>
+        <translation>Oldindan soddalashtirish</translation>
+    </message>
+    <message>
+        <source>Fewer segments</source>
+        <translation>Kamroq segmentlar</translation>
+    </message>
+    <message>
+        <source>Flat buffer</source>
+        <translation>Tekis bufer</translation>
+    </message>
+    <message>
+        <source>BBox filter</source>
+        <translation>BBox filtr</translation>
+    </message>
+    <message>
+        <source>Attr-first</source>
+        <translation>Attr-birinchi</translation>
+    </message>
+    <message>
+        <source>PostgreSQL not available</source>
+        <translation>PostgreSQL mavjud emas</translation>
+    </message>
+    <message>
+        <source>No connection</source>
+        <translation>Ulanish yo&apos;q</translation>
+    </message>
+    <message>
+        <source>Auto-zoom when feature changes</source>
+        <translation>Xususiyat o&apos;zgarganda avtomatik zoom</translation>
+    </message>
+    <message>
+        <source>Backend optimization settings saved</source>
+        <translation>Backend optimallashtirish sozlamalari saqlandi</translation>
+    </message>
+    <message>
+        <source>Backend optimizations configured</source>
+        <translation>Backend optimizatsiyalari sozlandi</translation>
+    </message>
+    <message>
+        <source>Expression Evaluation</source>
+        <translation>Ifoda baholash</translation>
+    </message>
+    <message>
+        <source>Identify selected feature</source>
+        <translation>Tanlangan xususiyatni aniqlash</translation>
+    </message>
+    <message>
+        <source>Layer properties reset to defaults</source>
+        <translation>Qatlam xususiyatlari standartlarga qaytarildi</translation>
+    </message>
+    <message>
+        <source>Link exploring widgets together</source>
+        <translation>Tadqiqot vidjetlarini birlashtiring</translation>
+    </message>
+    <message>
+        <source>Optimization settings saved</source>
+        <translation>Optimallashtirish sozlamalari saqlandi</translation>
+    </message>
+    <message>
+        <source>Reset all layer exploring properties</source>
+        <translation>Barcha qatlam tadqiqot xususiyatlarini qayta o&apos;rnatish</translation>
+    </message>
+    <message>
+        <source>Toggle feature selection on map</source>
+        <translation>Xaritada xususiyat tanlovini almashtirish</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source>
+        <translation>Uzoq qatlamlar uchun to&apos;liq geometriyalar o&apos;rniga markazlardan foydalaning (murakkab ko&apos;pburchaklar uchun tezroq)</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source>
+        <translation>Manba qatlam uchun to&apos;liq geometriyalar o&apos;rniga markazlardan foydalaning (murakkab ko&apos;pburchaklar uchun tezroq)</translation>
+    </message>
+    <message>
+        <source>Zoom to selected feature</source>
+        <translation>Tanlangan xususiyatga yaqinlashtirish</translation>
+    </message>
+</context>
+<context>
+    <name>OptimizationDialog</name>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>Optimallashtirish sozlamalari</translation>
+    </message>
+    <message>
+        <source>Configure Optimization Settings</source>
+        <translation>Optimallashtirish sozlamalarini sozlash</translation>
+    </message>
+    <message>
+        <source>Enable automatic optimizations</source>
+        <translation>Avtomatik optimallashtirishni yoqish</translation>
+    </message>
+    <message>
+        <source>Ask before applying optimizations</source>
+        <translation>Optimallashtirishni qo&apos;llashdan oldin so&apos;rash</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid Settings</source>
+        <translation>Avtomatik markaz sozlamalari</translation>
+    </message>
+    <message>
+        <source>Enable auto-centroid for distant layers</source>
+        <translation>Uzoq qatlamlar uchun avtomatik markazni yoqish</translation>
+    </message>
+    <message>
+        <source>Distance threshold (km):</source>
+        <translation>Masofa chegarasi (km):</translation>
+    </message>
+    <message>
+        <source>Feature threshold:</source>
+        <translation>Xususiyat chegarasi:</translation>
+    </message>
+    <message>
+        <source>Buffer Optimizations</source>
+        <translation>Bufer optimallashtirishlari</translation>
+    </message>
+    <message>
+        <source>Simplify geometry before buffer</source>
+        <translation>Buferdan oldin geometriyani soddalashtirish</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments to:</source>
+        <translation>Bufer segmentlarini qisqartirish:</translation>
+    </message>
+    <message>
+        <source>General</source>
+        <translation>Umumiy</translation>
+    </message>
+    <message>
+        <source>Use materialized views for filtering</source>
+        <translation>Filtrlash uchun materiallashtirilgan ko&apos;rinishlarni ishlatish</translation>
+    </message>
+    <message>
+        <source>Create spatial indices automatically</source>
+        <translation>Fazoviy indekslarni avtomatik yaratish</translation>
+    </message>
+    <message>
+        <source>Use R-tree spatial index</source>
+        <translation>R-daraxt fazoviy indeksidan foydalanish</translation>
+    </message>
+    <message>
+        <source>Use bounding box pre-filter</source>
+        <translation>Chegaralovchi quti oldindan filtrini ishlatish</translation>
+    </message>
+    <message>
+        <source>Backends</source>
+        <translation>Backendlar</translation>
+    </message>
+    <message>
+        <source>Caching</source>
+        <translation>Keshlash</translation>
+    </message>
+    <message>
+        <source>Enable geometry cache</source>
+        <translation>Geometriya keshini yoqish</translation>
+    </message>
+    <message>
+        <source>Batch Processing</source>
+        <translation>Paketli ishlov berish</translation>
+    </message>
+    <message>
+        <source>Batch size:</source>
+        <translation>Paket hajmi:</translation>
+    </message>
+    <message>
+        <source>Advanced settings affect performance and memory usage. Change only if you understand the implications.</source>
+        <translation>Kengaytirilgan sozlamalar unumdorlik va xotira ishlatishga ta&apos;sir qiladi. Faqat oqibatlarini tushungan holda o&apos;zgartiring.</translation>
+    </message>
+    <message>
+        <source>Advanced</source>
+        <translation>Kengaytirilgan</translation>
+    </message>
+</context>
+<context>
+    <name>RecommendationDialog</name>
+    <message>
+        <source>Apply Optimizations?</source>
+        <translation>Optimallashtirishlarni qo&apos;llash?</translation>
+    </message>
+    <message>
+        <source>Optimizations Available</source>
+        <translation>Mavjud optimallashtirishlar</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>O&apos;tkazib yuborish</translation>
+    </message>
+    <message>
+        <source>Apply Selected</source>
+        <translation>Tanlanganlarni qo&apos;llash</translation>
+    </message>
+</context>
+<context>
+    <name>PostgresInfoDialog</name>
+    <message>
+        <source>PostgreSQL Session Info</source>
+        <translation>PostgreSQL sessiyasi ma&apos;lumoti</translation>
+    </message>
+    <message>
+        <source>PostgreSQL Active</source>
+        <translation>PostgreSQL faol</translation>
+    </message>
+    <message>
+        <source>Connection Info</source>
+        <translation>Ulanish ma&apos;lumoti</translation>
+    </message>
+    <message>
+        <source>Connection:</source>
+        <translation>Ulanish:</translation>
+    </message>
+    <message>
+        <source>Temp Schema:</source>
+        <translation>Vaqtinchalik sxema:</translation>
+    </message>
+    <message>
+        <source>Status:</source>
+        <translation>Holat:</translation>
+    </message>
+    <message>
+        <source>Temporary Views</source>
+        <translation>Vaqtinchalik ko&apos;rinishlar</translation>
+    </message>
+    <message>
+        <source>Cleanup Options</source>
+        <translation>Tozalash sozlamalari</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on close</source>
+        <translation>Yopilganda avtomatik tozalash</translation>
+    </message>
+    <message>
+        <source>Automatically cleanup temporary views when FilterMate closes.</source>
+        <translation>FilterMate yopilganda vaqtinchalik ko&apos;rinishlarni avtomatik tozalash.</translation>
+    </message>
+    <message>
+        <source>🗑️ Cleanup Now</source>
+        <translation>🗑️ Hozir tozalash</translation>
+    </message>
+    <message>
+        <source>Drop all temporary views created by FilterMate in this session.</source>
+        <translation>Bu seansda FilterMate tomonidan yaratilgan barcha vaqtinchalik ko&apos;rinishlarni o&apos;chirish.</translation>
+    </message>
+    <message>
+        <source>(No temporary views)</source>
+        <translation>(Vaqtinchalik ko&apos;rinishlar yo&apos;q)</translation>
+    </message>
+    <message>
+        <source>No Views</source>
+        <translation>Ko&apos;rinishlar yo&apos;q</translation>
+    </message>
+    <message>
+        <source>There are no temporary views to clean up.</source>
+        <translation>Tozalash uchun vaqtinchalik ko&apos;rinishlar yo&apos;q.</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>Tozalashni tasdiqlash</translation>
+    </message>
+    <message>
+        <source>Cleanup Complete</source>
+        <translation>Tozalash tugallandi</translation>
+    </message>
+    <message>
+        <source>Cleanup Issue</source>
+        <translation>Tozalash muammosi</translation>
+    </message>
+    <message>
+        <source>Cleanup Failed</source>
+        <translation>Tozalash muvaffaqiyatsiz</translation>
+    </message>
+</context>
 </TS>

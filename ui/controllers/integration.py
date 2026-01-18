@@ -299,70 +299,90 @@ class ControllerIntegration:
     def _register_controllers(self) -> None:
         """Register all controllers with the registry."""
         if not self._registry:
+            print("🔧 _register_controllers: NO REGISTRY!")
             return
         
         # Register with tab indices
         # Note: TabIndex.FILTERING = 0, but exploring is typically first
         # We register by name, tab index is for tab switching
         
-        self._registry.register(
+        print(f"🔧 _register_controllers START: registry={self._registry}")
+        
+        def safe_register(name, controller, tab_index):
+            """Helper to register with error handling."""
+            try:
+                print(f"🔧   Registering '{name}': {controller}")
+                if controller is None:
+                    print(f"🔧   ⚠️ Controller '{name}' is None!")
+                    return False
+                self._registry.register(name, controller, tab_index=tab_index)
+                print(f"🔧   ✓ Registered '{name}'")
+                return True
+            except Exception as e:
+                print(f"🔧   ✗ Failed to register '{name}': {e}")
+                import traceback
+                print(f"🔧   Traceback: {traceback.format_exc()}")
+                return False
+        
+        safe_register(
             'exploring',
             self._exploring_controller,
-            tab_index=TabIndex.FILTERING  # Tab 0 - Exploring/Filtering combined?
+            TabIndex.FILTERING  # Tab 0 - Exploring/Filtering combined?
         )
         
-        self._registry.register(
+        safe_register(
             'filtering',
             self._filtering_controller,
-            tab_index=TabIndex.FILTERING  # Tab 0
+            TabIndex.FILTERING  # Tab 0
         )
         
-        self._registry.register(
+        safe_register(
             'exporting',
             self._exporting_controller,
-            tab_index=TabIndex.EXPORTING  # Tab 1
+            TabIndex.EXPORTING  # Tab 1
         )
         
-        self._registry.register(
+        safe_register(
             'backend',
             self._backend_controller,
-            tab_index=TabIndex.FILTERING  # Backend indicator visible on all tabs
+            TabIndex.FILTERING  # Backend indicator visible on all tabs
         )
         
-        self._registry.register(
+        safe_register(
             'layer_sync',
             self._layer_sync_controller,
-            tab_index=TabIndex.FILTERING  # Layer sync active on all tabs
+            TabIndex.FILTERING  # Layer sync active on all tabs
         )
         
         # v3.1 STORY-2.5: Register ConfigController
-        self._registry.register(
+        safe_register(
             'config',
             self._config_controller,
-            tab_index=TabIndex.CONFIGURATION  # Tab for configuration
+            TabIndex.CONFIGURATION  # Tab for configuration
         )
         
         # v4.0: Register FavoritesController
-        self._registry.register(
+        safe_register(
             'favorites',
             self._favorites_controller,
-            tab_index=TabIndex.FILTERING  # Favorites indicator visible on filtering tabs
+            TabIndex.FILTERING  # Favorites indicator visible on filtering tabs
         )
         
         # v4.0 Sprint 1: Register PropertyController
-        self._registry.register(
+        safe_register(
             'property',
             self._property_controller,
-            tab_index=TabIndex.FILTERING  # Property controller active on filtering tab
+            TabIndex.FILTERING  # Property controller active on filtering tab
         )
         
         # v4.0 Sprint 4: Register UILayoutController
-        self._registry.register(
+        safe_register(
             'ui_layout',
             self._ui_layout_controller,
-            tab_index=TabIndex.FILTERING  # UI layout controller active on all tabs
+            TabIndex.FILTERING  # UI layout controller active on all tabs
         )
         
+        print(f"🔧 _register_controllers END: registry now has {len(self._registry)} controllers")
         logger.debug("All controllers registered")
     
     def _connect_signals(self) -> None:

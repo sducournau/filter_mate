@@ -145,6 +145,68 @@ class BackendRegistry(BackendRegistryPort):
             except Exception as e:
                 logger.warning(f"Error cleaning up {name} backend: {e}")
 
+    def update_project_context(self, layers: list) -> None:
+        """
+        Update backend selection context based on project layers.
+        
+        When all project layers are PostgreSQL and the configuration enables
+        prefer_native_for_postgresql_project, this ensures PostgreSQL backend
+        is used even for small datasets (avoids inconsistent backend switching).
+        
+        Args:
+            layers: List of QgsVectorLayer objects in the project
+        """
+        # Check if all layers are PostgreSQL
+        all_postgresql = self._check_all_layers_postgresql(layers)
+        
+        if all_postgresql and self._postgresql_available:
+            logger.info(
+                "All project layers are PostgreSQL - backend will use native "
+                "PostgreSQL even for small datasets"
+            )
+        
+        # Store context for use by executors
+        self._all_layers_postgresql = all_postgresql
+        
+        # v4.1.1: Also update BackendFactory singleton if it exists
+        # This ensures BackendFactory.get_backend() also respects the context
+        try:
+            from .backends.factory import BackendFactory
+            if BackendFactory._instance is not None:
+                BackendFactory._instance.update_project_context(all_postgresql)
+                logger.debug("Updated BackendFactory singleton with project context")
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.warning(f"Could not update BackendFactory: {e}")
+    
+    def _check_all_layers_postgresql(self, layers: list) -> bool:
+        """
+        Check if all provided layers are PostgreSQL.
+        
+        Args:
+            layers: List of QgsVectorLayer objects
+            
+        Returns:
+            True if all layers are PostgreSQL provider type
+        """
+        if not layers:
+            return False
+        
+        for layer in layers:
+            if layer is None:
+                continue
+            provider_type = layer.providerType() if hasattr(layer, 'providerType') else None
+            if provider_type != 'postgres':
+                return False
+        
+        return True
+    
+    @property
+    def all_layers_postgresql(self) -> bool:
+        """Return whether all project layers are PostgreSQL."""
+        return getattr(self, '_all_layers_postgresql', False)
+
 
 # Global singleton instance (optional, for backward compatibility)
 _registry_instance: Optional[BackendRegistry] = None

@@ -1,4 +1,5 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
 <TS version="2.1" language="fi_FI" sourcelanguage="en_US">
 <context>
     <name>FilterMate</name>
@@ -211,25 +212,25 @@ Haluatko jatkaa?</translation>
         <translation>Virhe konfiguraation siirrossa: {}</translation>
     </message>
     <message>
-        <source>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
+        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
 
-FilterMate recommends disabling this setting (value 'Off') for the following reasons:
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
 
 Do you want to disable this setting now?
 
 • Yes: Disable filtering (recommended for FilterMate)
 • No: Keep current setting</source>
-        <translation>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
+        <translation>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
 
-FilterMate recommends disabling this setting (value 'Off') for the following reasons:
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
 
 Do you want to disable this setting now?
 
@@ -807,16 +808,16 @@ Ensimmäinen ominaisuus: {1}</translation>
         <translation>Näytä vahvistusikkuna ennen optimointeja</translation>
     </message>
     <message>
-        <source>Centroids enabled for '{0}' (~{1}x {2})</source>
-        <translation>Keskipisteet käytössä kohteelle '{0}' (~{1}x {2})</translation>
+        <source>Centroids enabled for &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>Keskipisteet käytössä kohteelle &apos;{0}&apos; (~{1}x {2})</translation>
     </message>
     <message>
-        <source>BBox pre-filter enabled for '{0}'</source>
-        <translation>BBox esisuodatin käytössä kohteelle '{0}'</translation>
+        <source>BBox pre-filter enabled for &apos;{0}&apos;</source>
+        <translation>BBox esisuodatin käytössä kohteelle &apos;{0}&apos;</translation>
     </message>
     <message>
-        <source>Optimization applied: '{0}' (~{1}x {2})</source>
-        <translation>Optimointi käytetty: '{0}' (~{1}x {2})</translation>
+        <source>Optimization applied: &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>Optimointi käytetty: &apos;{0}&apos; (~{1}x {2})</translation>
     </message>
     <message>
         <source>Simplify before buffer</source>
@@ -1069,7 +1070,400 @@ Ensimmäinen ominaisuus: {1}</translation>
         <source>Error applying settings</source>
         <translation>Virhe asetuksia sovellettaessa</translation>
     </message>
-<message><source>MV Status: Checking...</source><translation type="unfinished">MV Status: Checking...</translation></message><message><source>MV Status: Error</source><translation type="unfinished">MV Status: Error</translation></message><message><source>MV Status: Clean</source><translation type="unfinished">MV Status: Clean</translation></message><message><source>MV Status:</source><translation type="unfinished">MV Status:</translation></message><message><source>active</source><translation type="unfinished">active</translation></message><message><source>No active materialized views</source><translation type="unfinished">No active materialized views</translation></message><message><source>Session:</source><translation type="unfinished">Session:</translation></message><message><source>Other sessions:</source><translation type="unfinished">Other sessions:</translation></message><message><source>🧹 Session</source><translation type="unfinished">🧹 Session</translation></message><message><source>Cleanup MVs from this session</source><translation type="unfinished">Cleanup MVs from this session</translation></message><message><source>🗑️ Orphaned</source><translation type="unfinished">🗑️ Orphaned</translation></message><message><source>Cleanup orphaned MVs (&gt;24h old)</source><translation type="unfinished">Cleanup orphaned MVs (&gt;24h old)</translation></message><message><source>⚠️ All</source><translation type="unfinished">⚠️ All</translation></message><message><source>Cleanup ALL MVs (affects other sessions)</source><translation type="unfinished">Cleanup ALL MVs (affects other sessions)</translation></message><message><source>Confirm Cleanup</source><translation type="unfinished">Confirm Cleanup</translation></message><message><source>Drop ALL materialized views?
-This affects other FilterMate sessions!</source><translation type="unfinished">Drop ALL materialized views?
-This affects other FilterMate sessions!</translation></message><message><source>Refresh MV status</source><translation type="unfinished">Refresh MV status</translation></message><message><source>Threshold:</source><translation type="unfinished">Threshold:</translation></message><message><source>features</source><translation type="unfinished">features</translation></message><message><source>Auto-cleanup on exit</source><translation type="unfinished">Auto-cleanup on exit</translation></message><message><source>Automatically drop session MVs when plugin unloads</source><translation type="unfinished">Automatically drop session MVs when plugin unloads</translation></message><message><source>Create MVs for datasets larger than this</source><translation type="unfinished">Create MVs for datasets larger than this</translation></message><message><source>faster possible</source><translation type="unfinished">faster possible</translation></message><message><source>Optimizations available</source><translation type="unfinished">Optimizations available</translation></message><message><source>FilterMate - Apply Optimizations?</source><translation type="unfinished">FilterMate - Apply Optimizations?</translation></message><message><source>Skip</source><translation type="unfinished">Skip</translation></message><message><source>✓ Apply</source><translation type="unfinished">✓ Apply</translation></message><message><source>Don't ask for this session</source><translation type="unfinished">Don't ask for this session</translation></message><message><source>Centroids</source><translation type="unfinished">Centroids</translation></message><message><source>Simplify</source><translation type="unfinished">Simplify</translation></message><message><source>Pre-simplify</source><translation type="unfinished">Pre-simplify</translation></message><message><source>Fewer segments</source><translation type="unfinished">Fewer segments</translation></message><message><source>Flat buffer</source><translation type="unfinished">Flat buffer</translation></message><message><source>BBox filter</source><translation type="unfinished">BBox filter</translation></message><message><source>Attr-first</source><translation type="unfinished">Attr-first</translation></message><message><source>PostgreSQL not available</source><translation type="unfinished">PostgreSQL not available</translation></message><message><source>No connection</source><translation type="unfinished">No connection</translation></message><message><source>Auto-zoom when feature changes</source><translation type="unfinished">Auto-zoom when feature changes</translation></message><message><source>Backend optimization settings saved</source><translation type="unfinished">Backend optimization settings saved</translation></message><message><source>Backend optimizations configured</source><translation type="unfinished">Backend optimizations configured</translation></message><message><source>Expression Evaluation</source><translation type="unfinished">Expression Evaluation</translation></message><message><source>Identify selected feature</source><translation type="unfinished">Identify selected feature</translation></message><message><source>Layer properties reset to defaults</source><translation type="unfinished">Layer properties reset to defaults</translation></message><message><source>Link exploring widgets together</source><translation type="unfinished">Link exploring widgets together</translation></message><message><source>Optimization settings saved</source><translation type="unfinished">Optimization settings saved</translation></message><message><source>Reset all layer exploring properties</source><translation type="unfinished">Reset all layer exploring properties</translation></message><message><source>Toggle feature selection on map</source><translation type="unfinished">Toggle feature selection on map</translation></message><message><source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for distant layers (faster for complex polygons)</translation></message><message><source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for source layer (faster for complex polygons)</translation></message><message><source>Zoom to selected feature</source><translation type="unfinished">Zoom to selected feature</translation></message></context>
+    <message>
+        <source>MV Status: Checking...</source>
+        <translation>MV Tila: Tarkistetaan...</translation>
+    </message>
+    <message>
+        <source>MV Status: Error</source>
+        <translation>MV Tila: Virhe</translation>
+    </message>
+    <message>
+        <source>MV Status: Clean</source>
+        <translation>MV Tila: Puhdas</translation>
+    </message>
+    <message>
+        <source>MV Status:</source>
+        <translation>MV Tila:</translation>
+    </message>
+    <message>
+        <source>active</source>
+        <translation>aktiivinen</translation>
+    </message>
+    <message>
+        <source>No active materialized views</source>
+        <translation>Ei aktiivisia materiaalistettuja näkymiä</translation>
+    </message>
+    <message>
+        <source>Session:</source>
+        <translation>Istunto:</translation>
+    </message>
+    <message>
+        <source>Other sessions:</source>
+        <translation>Muut istunnot:</translation>
+    </message>
+    <message>
+        <source>🧹 Session</source>
+        <translation>🧹 Istunto</translation>
+    </message>
+    <message>
+        <source>Cleanup MVs from this session</source>
+        <translation>Siivoa tämän istunnon MV:t</translation>
+    </message>
+    <message>
+        <source>🗑️ Orphaned</source>
+        <translation>🗑️ Orvot</translation>
+    </message>
+    <message>
+        <source>Cleanup orphaned MVs (&gt;24h old)</source>
+        <translation>Siivoa orvot MV:t (&gt;24h vanhat)</translation>
+    </message>
+    <message>
+        <source>⚠️ All</source>
+        <translation>⚠️ Kaikki</translation>
+    </message>
+    <message>
+        <source>Cleanup ALL MVs (affects other sessions)</source>
+        <translation>Siivoa KAIKKI MV:t (vaikuttaa muihin istuntoihin)</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>Vahvista siivous</translation>
+    </message>
+    <message>
+        <source>Drop ALL materialized views?
+This affects other FilterMate sessions!</source>
+        <translation>Poista KAIKKI materialisoidut näkymät?
+Tämä vaikuttaa muihin FilterMate-istuntoihin!</translation>
+    </message>
+    <message>
+        <source>Refresh MV status</source>
+        <translation>Päivitä MV-tila</translation>
+    </message>
+    <message>
+        <source>Threshold:</source>
+        <translation>Kynnysarvo:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>ominaisuudet</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on exit</source>
+        <translation>Automaattinen siivous lopetettaessa</translation>
+    </message>
+    <message>
+        <source>Automatically drop session MVs when plugin unloads</source>
+        <translation>Poista istunnon MV:t automaattisesti kun lisäosa poistetaan</translation>
+    </message>
+    <message>
+        <source>Create MVs for datasets larger than this</source>
+        <translation>Luo MV:t tätä suuremmille tietojoukoille</translation>
+    </message>
+    <message>
+        <source>faster possible</source>
+        <translation>nopeampi mahdollista</translation>
+    </message>
+    <message>
+        <source>Optimizations available</source>
+        <translation>Optimoinnit saatavilla</translation>
+    </message>
+    <message>
+        <source>FilterMate - Apply Optimizations?</source>
+        <translation>FilterMate - Käytä optimointeja?</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Ohita</translation>
+    </message>
+    <message>
+        <source>✓ Apply</source>
+        <translation>✓ Käytä</translation>
+    </message>
+    <message>
+        <source>Don&apos;t ask for this session</source>
+        <translation>Älä kysy tästä istunnosta</translation>
+    </message>
+    <message>
+        <source>Centroids</source>
+        <translation>Keskipisteet</translation>
+    </message>
+    <message>
+        <source>Simplify</source>
+        <translation>Yksinkertaista</translation>
+    </message>
+    <message>
+        <source>Pre-simplify</source>
+        <translation>Esiyksinkertaista</translation>
+    </message>
+    <message>
+        <source>Fewer segments</source>
+        <translation>Vähemmän segmenttejä</translation>
+    </message>
+    <message>
+        <source>Flat buffer</source>
+        <translation>Tasainen puskuri</translation>
+    </message>
+    <message>
+        <source>BBox filter</source>
+        <translation>BBox-suodatin</translation>
+    </message>
+    <message>
+        <source>Attr-first</source>
+        <translation>Attr-ensin</translation>
+    </message>
+    <message>
+        <source>PostgreSQL not available</source>
+        <translation>PostgreSQL ei saatavilla</translation>
+    </message>
+    <message>
+        <source>No connection</source>
+        <translation>Ei yhteyttä</translation>
+    </message>
+    <message>
+        <source>Auto-zoom when feature changes</source>
+        <translation>Automaattinen zoomaus kun ominaisuus muuttuu</translation>
+    </message>
+    <message>
+        <source>Backend optimization settings saved</source>
+        <translation>Backend-optimointiasetukset tallennettu</translation>
+    </message>
+    <message>
+        <source>Backend optimizations configured</source>
+        <translation>Backend-optimoinnit määritetty</translation>
+    </message>
+    <message>
+        <source>Expression Evaluation</source>
+        <translation>Lausekkeen arviointi</translation>
+    </message>
+    <message>
+        <source>Identify selected feature</source>
+        <translation>Tunnista valittu ominaisuus</translation>
+    </message>
+    <message>
+        <source>Layer properties reset to defaults</source>
+        <translation>Tason ominaisuudet palautettu oletuksiin</translation>
+    </message>
+    <message>
+        <source>Link exploring widgets together</source>
+        <translation>Linkitä tutkimuswidgetit yhteen</translation>
+    </message>
+    <message>
+        <source>Optimization settings saved</source>
+        <translation>Optimointiasetukset tallennettu</translation>
+    </message>
+    <message>
+        <source>Reset all layer exploring properties</source>
+        <translation>Palauta kaikki tason tutkimusominaisuudet</translation>
+    </message>
+    <message>
+        <source>Toggle feature selection on map</source>
+        <translation>Vaihda ominaisuusvalinta kartalla</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source>
+        <translation>Käytä keskipisteitä täysien geometrioiden sijaan etäisille tasoille (nopeampi monimutkaisille monikulmioille)</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source>
+        <translation>Käytä keskipisteitä täysien geometrioiden sijaan lähdetasolle (nopeampi monimutkaisille monikulmioille)</translation>
+    </message>
+    <message>
+        <source>Zoom to selected feature</source>
+        <translation>Zoomaa valittuun ominaisuuteen</translation>
+    </message>
+</context>
+<context>
+    <name>OptimizationDialog</name>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>Optimointiasetukset</translation>
+    </message>
+    <message>
+        <source>Configure Optimization Settings</source>
+        <translation>Määritä optimointiasetukset</translation>
+    </message>
+    <message>
+        <source>Enable automatic optimizations</source>
+        <translation>Ota automaattiset optimoinnit käyttöön</translation>
+    </message>
+    <message>
+        <source>Ask before applying optimizations</source>
+        <translation>Kysy ennen optimointien käyttöönottoa</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid Settings</source>
+        <translation>Automaattiset keskipisteaseukset</translation>
+    </message>
+    <message>
+        <source>Enable auto-centroid for distant layers</source>
+        <translation>Ota automaattiset keskipisteet käyttöön etäisille tasoille</translation>
+    </message>
+    <message>
+        <source>Distance threshold (km):</source>
+        <translation>Etäisyyskynnys (km):</translation>
+    </message>
+    <message>
+        <source>Feature threshold:</source>
+        <translation>Kohdekynnys:</translation>
+    </message>
+    <message>
+        <source>Buffer Optimizations</source>
+        <translation>Puskurin optimoinnit</translation>
+    </message>
+    <message>
+        <source>Simplify geometry before buffer</source>
+        <translation>Yksinkertaista geometria ennen puskuria</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments to:</source>
+        <translation>Vähennä puskurisegmentit:</translation>
+    </message>
+    <message>
+        <source>General</source>
+        <translation>Yleiset</translation>
+    </message>
+    <message>
+        <source>Use materialized views for filtering</source>
+        <translation>Käytä materialisoituja näkymiä suodatukseen</translation>
+    </message>
+    <message>
+        <source>Create spatial indices automatically</source>
+        <translation>Luo paikkatietoindeksit automaattisesti</translation>
+    </message>
+    <message>
+        <source>Use R-tree spatial index</source>
+        <translation>Käytä R-puu paikkatietoindeksiä</translation>
+    </message>
+    <message>
+        <source>Use bounding box pre-filter</source>
+        <translation>Käytä rajauskehyksen esisuodatinta</translation>
+    </message>
+    <message>
+        <source>Backends</source>
+        <translation>Taustajärjestelmät</translation>
+    </message>
+    <message>
+        <source>Caching</source>
+        <translation>Välimuistiin tallentaminen</translation>
+    </message>
+    <message>
+        <source>Enable geometry cache</source>
+        <translation>Ota geometriavälimuisti käyttöön</translation>
+    </message>
+    <message>
+        <source>Batch Processing</source>
+        <translation>Erätoiminta</translation>
+    </message>
+    <message>
+        <source>Batch size:</source>
+        <translation>Eräkoko:</translation>
+    </message>
+    <message>
+        <source>Advanced settings affect performance and memory usage. Change only if you understand the implications.</source>
+        <translation>Lisäasetukset vaikuttavat suorituskykyyn ja muistin käyttöön. Muuta vain jos ymmärrät seuraukset.</translation>
+    </message>
+    <message>
+        <source>Advanced</source>
+        <translation>Lisäasetukset</translation>
+    </message>
+</context>
+<context>
+    <name>RecommendationDialog</name>
+    <message>
+        <source>Apply Optimizations?</source>
+        <translation>Ota optimoinnit käyttöön?</translation>
+    </message>
+    <message>
+        <source>Optimizations Available</source>
+        <translation>Käytettävissä olevat optimoinnit</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Ohita</translation>
+    </message>
+    <message>
+        <source>Apply Selected</source>
+        <translation>Käytä valittuja</translation>
+    </message>
+</context>
+<context>
+    <name>PostgresInfoDialog</name>
+    <message>
+        <source>PostgreSQL Session Info</source>
+        <translation>PostgreSQL-istunnon tiedot</translation>
+    </message>
+    <message>
+        <source>PostgreSQL Active</source>
+        <translation>PostgreSQL aktiivinen</translation>
+    </message>
+    <message>
+        <source>Connection Info</source>
+        <translation>Yhteystiedot</translation>
+    </message>
+    <message>
+        <source>Connection:</source>
+        <translation>Yhteys:</translation>
+    </message>
+    <message>
+        <source>Temp Schema:</source>
+        <translation>Väliaikainen skeema:</translation>
+    </message>
+    <message>
+        <source>Status:</source>
+        <translation>Tila:</translation>
+    </message>
+    <message>
+        <source>Temporary Views</source>
+        <translation>Väliaikaiset näkymät</translation>
+    </message>
+    <message>
+        <source>Cleanup Options</source>
+        <translation>Puhdistusasetukset</translation>
+    </message>
+    <message>
+        <source>Auto-cleanup on close</source>
+        <translation>Automaattinen puhdistus suljettaessa</translation>
+    </message>
+    <message>
+        <source>Automatically cleanup temporary views when FilterMate closes.</source>
+        <translation>Puhdista väliaikaiset näkymät automaattisesti kun FilterMate sulkeutuu.</translation>
+    </message>
+    <message>
+        <source>🗑️ Cleanup Now</source>
+        <translation>🗑️ Puhdista nyt</translation>
+    </message>
+    <message>
+        <source>Drop all temporary views created by FilterMate in this session.</source>
+        <translation>Poista kaikki FilterMaten tässä istunnossa luomat väliaikaiset näkymät.</translation>
+    </message>
+    <message>
+        <source>(No temporary views)</source>
+        <translation>(Ei väliaikaisia näkymiä)</translation>
+    </message>
+    <message>
+        <source>No Views</source>
+        <translation>Ei näkymiä</translation>
+    </message>
+    <message>
+        <source>There are no temporary views to clean up.</source>
+        <translation>Ei puhdistettavia väliaikaisia näkymiä.</translation>
+    </message>
+    <message>
+        <source>Confirm Cleanup</source>
+        <translation>Vahvista puhdistus</translation>
+    </message>
+    <message>
+        <source>Cleanup Complete</source>
+        <translation>Puhdistus valmis</translation>
+    </message>
+    <message>
+        <source>Cleanup Issue</source>
+        <translation>Puhdistusongelma</translation>
+    </message>
+    <message>
+        <source>Cleanup Failed</source>
+        <translation>Puhdistus epäonnistui</translation>
+    </message>
+</context>
 </TS>
