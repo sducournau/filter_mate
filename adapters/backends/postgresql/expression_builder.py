@@ -187,8 +187,9 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         if buffer_expression:
             geom_expr = self._apply_dynamic_buffer(geom_expr, buffer_expression)
         
-        # Build qualified geometry for EXISTS subqueries
-        geom_expr_qualified = geom_expr.replace(f'"{geom_field}"', f'"{table}"."{geom_field}"')
+        # NOTE: geom_expr stays UNQUALIFIED (e.g., "geom" not "table"."geom")
+        # because setSubsetString is applied to a single table context
+        # EXISTS subqueries reference the main table implicitly
         
         # Determine strategy
         wkt_length = len(source_wkt) if source_wkt else 0
@@ -221,8 +222,11 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                     buffer_value=buffer_value
                 )
             else:
+                # CRITICAL: Use unqualified geom_expr for EXISTS subquery
+                # setSubsetString applies to the main table, so no table prefix needed
+                # Format: EXISTS (SELECT 1 FROM source AS __source WHERE ST_Intersects("geom", __source."geom"))
                 expr = self._build_exists_expression(
-                    geom_expr=geom_expr_qualified,
+                    geom_expr=geom_expr,  # Unqualified - no table prefix!
                     predicate_func=predicate_func,
                     source_geom=source_geom,
                     source_filter=source_filter,
@@ -417,12 +421,15 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         """
         Build EXISTS subquery expression.
         
+        Format: EXISTS (SELECT 1 FROM "schema"."source_table" AS __source 
+                        WHERE ST_Predicate("target_geom", __source."source_geom"))
+        
         Args:
-            geom_expr: Target geometry expression (qualified)
-            predicate_func: PostGIS predicate
-            source_geom: Source geometry reference
-            source_filter: Optional source filter
-            buffer_value: Optional buffer
+            geom_expr: Target geometry expression (UNQUALIFIED - e.g., "geom")
+            predicate_func: PostGIS predicate (ST_Intersects, etc.)
+            source_geom: Source geometry reference ("schema"."table"."geom")
+            source_filter: Optional source filter (e.g., id IN (...))
+            buffer_value: Optional buffer distance
             layer_props: Layer properties
             
         Returns:
@@ -471,29 +478,43 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         return exists_expr
     
     def _parse_source_table_reference(self, source_geom: str) -> Optional[Dict]:
-        """Parse source table reference from geometry expression."""
-        # Pattern: "schema"."table"."column" or ST_Buffer("schema"."table"."column", value)
-        pattern = r'"([^"]+)"\.?"([^"]+)"\.?"([^"]+)"'
+        """Parse source table reference from geometry expression.
+        
+        Handles formats:
+        - "schema"."table"."column"
+        - ST_Buffer("schema"."table"."column", value)
+        - ST_Centroid("schema"."table"."column")
+        - CASE WHEN ... "schema"."table"."column" ...
+        """
+        self.log_debug(f"Parsing source_geom: '{source_geom[:100]}...' " if len(source_geom) > 100 else f"Parsing source_geom: '{source_geom}'")
+        
+        # Pattern 1: "schema"."table"."column" (3 parts with dots)
+        pattern = r'"([^"]+)"\."([^"]+)"\."([^"]+)"'
         match = re.search(pattern, source_geom)
         
         if match:
-            return {
+            result = {
                 'schema': match.group(1),
                 'table': match.group(2),
                 'geom_field': match.group(3)
             }
+            self.log_debug(f"Matched 3-part pattern: {result}")
+            return result
         
-        # Simpler pattern: "table"."column"
-        pattern2 = r'"([^"]+)"\.?"([^"]+)"'
+        # Pattern 2: "table"."column" (2 parts, assume public schema)
+        pattern2 = r'"([^"]+)"\."([^"]+)"'
         match2 = re.search(pattern2, source_geom)
         
         if match2:
-            return {
+            result = {
                 'schema': 'public',
                 'table': match2.group(1),
                 'geom_field': match2.group(2)
             }
+            self.log_debug(f"Matched 2-part pattern: {result}")
+            return result
         
+        self.log_warning(f"Could not parse source_geom: {source_geom[:200]}")
         return None
     
     def _build_st_buffer_with_style(self, geom_expr: str, buffer_value: float) -> str:

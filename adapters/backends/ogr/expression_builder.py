@@ -50,11 +50,20 @@ except ImportError:
 _ogr_operations_lock = threading.Lock()
 _last_operation_thread = None
 
+# Import QgsProcessingFeedback for proper inheritance
+try:
+    from qgis.core import QgsProcessingFeedback
+    _HAS_PROCESSING_FEEDBACK = True
+except ImportError:
+    _HAS_PROCESSING_FEEDBACK = False
+    QgsProcessingFeedback = object  # Fallback for type hints
 
-class CancellableFeedback:
+
+class CancellableFeedback(QgsProcessingFeedback if _HAS_PROCESSING_FEEDBACK else object):
     """
     Feedback class for cancellable QGIS processing operations.
     
+    Inherits from QgsProcessingFeedback to be compatible with QGIS processing.
     Allows interrupting long-running processing algorithms.
     """
     
@@ -65,6 +74,8 @@ class CancellableFeedback:
         Args:
             is_cancelled_callback: Callable returning True if cancelled
         """
+        if _HAS_PROCESSING_FEEDBACK:
+            super().__init__()
         self._cancelled = False
         self._is_cancelled_callback = is_cancelled_callback
     
@@ -79,10 +90,19 @@ class CancellableFeedback:
     def cancel(self):
         """Cancel the operation."""
         self._cancelled = True
+        if _HAS_PROCESSING_FEEDBACK:
+            try:
+                super().cancel()
+            except Exception:
+                pass
     
     def setProgress(self, progress: float):
         """Set progress (0-100)."""
-        pass  # Can be overridden for progress reporting
+        if _HAS_PROCESSING_FEEDBACK:
+            try:
+                super().setProgress(progress)
+            except Exception:
+                pass
 
 
 class OGRExpressionBuilder(GeometricFilterPort):
