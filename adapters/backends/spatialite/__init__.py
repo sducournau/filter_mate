@@ -42,6 +42,18 @@ from .filter_actions import (
     execute_unfilter_action_spatialite,
     cleanup_spatialite_session_tables,
 )
+from .interruptible_query import (
+    # v4.1.0: Interruptible SQLite queries (migrated from before_migration)
+    InterruptibleSQLiteQuery,
+    BatchedSQLiteQuery,
+    create_interruptible_connection,
+    SPATIALITE_QUERY_TIMEOUT,
+    SPATIALITE_BATCH_SIZE,
+    USE_OGR_FALLBACK,
+)
+
+# v4.1.0: Expression Builder (migrated from before_migration)
+from .expression_builder import SpatialiteExpressionBuilder
 
 __all__ = [
     # Main backend
@@ -78,4 +90,13 @@ __all__ = [
     'execute_reset_action_spatialite',
     'execute_unfilter_action_spatialite',
     'cleanup_spatialite_session_tables',
+    # v4.1.0: Interruptible SQLite queries
+    'InterruptibleSQLiteQuery',
+    'BatchedSQLiteQuery',
+    'create_interruptible_connection',
+    'SPATIALITE_QUERY_TIMEOUT',
+    'SPATIALITE_BATCH_SIZE',
+    'USE_OGR_FALLBACK',
+    # v4.1.0: Expression Builder
+    'SpatialiteExpressionBuilder',
 ]

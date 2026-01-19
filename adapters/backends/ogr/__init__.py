@@ -31,6 +31,9 @@ from .filter_executor import (
     execute_ogr_spatial_selection,
 )
 
+# v4.1.0: Expression Builder (migrated from before_migration)
+from .expression_builder import OGRExpressionBuilder, CancellableFeedback
+
 __all__ = [
     'OGRBackend',
     'create_ogr_backend',
@@ -55,4 +58,7 @@ __all__ = [
     # EPIC-1 Phase E4-S7b
     'OGRSpatialSelectionContext',
     'execute_ogr_spatial_selection',
+    # v4.1.0: Expression Builder
+    'OGRExpressionBuilder',
+    'CancellableFeedback',
 ]

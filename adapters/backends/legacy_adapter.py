@@ -8,11 +8,15 @@ GeometricFilterBackend API (build_expression + apply_filter).
 This enables progressive migration from before_migration backends to new
 hexagonal architecture backends without breaking FilterEngineTask.
 
+v4.1.0 UPDATE: Now uses new ExpressionBuilders instead of before_migration backends.
+The ExpressionBuilders implement the GeometricFilterPort interface with build_expression()
+and apply_filter() methods migrated from the legacy code.
+
 Migration Strategy:
 1. Legacy code calls: backend = BackendFactory.get_backend(provider_type, layer, task_params)
 2. BackendFactory returns: LegacyPostgreSQLAdapter / LegacySpatialiteAdapter / LegacyOGRAdapter
 3. These adapters implement: build_expression() + apply_filter() (legacy interface)
-4. Internally delegate to: new BackendPort.execute() when available
+4. Internally delegate to: new ExpressionBuilders (v4.1.0)
 
 Author: FilterMate Team
 Date: January 2026
@@ -25,19 +29,27 @@ from typing import Dict, List, Optional, Any, Tuple
 logger = logging.getLogger('FilterMate.Backend.LegacyAdapter')
 
 
-# Import base class from before_migration for interface compatibility
+# v4.1.0: Import GeometricFilterPort from new location
 try:
-    from ...before_migration.modules.backends.base_backend import GeometricFilterBackend
-    LEGACY_BASE_AVAILABLE = True
+    from ...core.ports.geometric_filter_port import GeometricFilterPort
+    GEOMETRIC_FILTER_PORT_AVAILABLE = True
 except ImportError:
+    GEOMETRIC_FILTER_PORT_AVAILABLE = False
+    GeometricFilterPort = None
+
+# v4.1.0: Define base class - prefer new port, fallback to minimal implementation
+if GEOMETRIC_FILTER_PORT_AVAILABLE and GeometricFilterPort is not None:
+    GeometricFilterBackend = GeometricFilterPort
+    LEGACY_BASE_AVAILABLE = True
+else:
     # Fallback: define minimal interface
     LEGACY_BASE_AVAILABLE = False
     
     class GeometricFilterBackend:
-        """Minimal fallback if before_migration is unavailable."""
+        """Minimal fallback if GeometricFilterPort is unavailable."""
         def __init__(self, task_params: Dict):
             self.task_params = task_params
-            self.logger = logger
+            self._logger = logger
         
         def build_expression(self, layer_props, predicates, source_geom=None, 
                            buffer_value=None, buffer_expression=None, 
@@ -49,6 +61,11 @@ except ImportError:
         
         def supports_layer(self, layer) -> bool:
             raise NotImplementedError()
+        
+        def log_info(self, msg): logger.info(msg)
+        def log_warning(self, msg): logger.warning(msg)
+        def log_error(self, msg): logger.error(msg)
+        def log_debug(self, msg): logger.debug(msg)
 
 
 class BaseLegacyAdapter(GeometricFilterBackend):
@@ -230,8 +247,8 @@ class BaseLegacyAdapter(GeometricFilterBackend):
             elif old_subset:
                 final_expr = f"({old_subset}) AND ({expression})"
             
-            # Use safe_set_subset_string
-            from ...before_migration.modules.appUtils import safe_set_subset_string
+            # v4.1.0: Use safe_set_subset_string from new location
+            from ...infrastructure.database.sql_utils import safe_set_subset_string
             return safe_set_subset_string(layer, final_expr)
             
         except Exception as e:
@@ -268,6 +285,7 @@ class LegacyPostgreSQLAdapter(BaseLegacyAdapter):
     Legacy adapter for PostgreSQL backend.
     
     Wraps new PostgreSQLBackend with GeometricFilterBackend interface.
+    v4.1.0: Uses PostgreSQLExpressionBuilder instead of before_migration backend.
     """
     
     @property
@@ -280,9 +298,9 @@ class LegacyPostgreSQLAdapter(BaseLegacyAdapter):
         return PostgreSQLBackend()
     
     def _create_legacy_backend(self) -> GeometricFilterBackend:
-        """Create legacy PostgreSQL backend."""
-        from ...before_migration.modules.backends.postgresql_backend import PostgreSQLGeometricFilter
-        return PostgreSQLGeometricFilter(self.task_params)
+        """Create PostgreSQL expression builder (v4.1.0 - migrated from before_migration)."""
+        from .postgresql.expression_builder import PostgreSQLExpressionBuilder
+        return PostgreSQLExpressionBuilder(self.task_params)
     
     def _should_use_new_backend(self) -> bool:
         """Use modern PostgreSQL backend v4.0 (hexagonal architecture)."""
@@ -294,6 +312,7 @@ class LegacySpatialiteAdapter(BaseLegacyAdapter):
     Legacy adapter for Spatialite backend.
     
     Wraps new SpatialiteBackend with GeometricFilterBackend interface.
+    v4.1.0: Uses SpatialiteExpressionBuilder instead of before_migration backend.
     """
     
     @property
@@ -306,9 +325,9 @@ class LegacySpatialiteAdapter(BaseLegacyAdapter):
         return SpatialiteBackend()
     
     def _create_legacy_backend(self) -> GeometricFilterBackend:
-        """Create legacy Spatialite backend."""
-        from ...before_migration.modules.backends.spatialite_backend import SpatialiteGeometricFilter
-        return SpatialiteGeometricFilter(self.task_params)
+        """Create Spatialite expression builder (v4.1.0 - migrated from before_migration)."""
+        from .spatialite.expression_builder import SpatialiteExpressionBuilder
+        return SpatialiteExpressionBuilder(self.task_params)
     
     def _should_use_new_backend(self) -> bool:
         """Use legacy for Spatialite (multi-step optimizer)."""
@@ -320,7 +339,7 @@ class LegacyOGRAdapter(BaseLegacyAdapter):
     Legacy adapter for OGR backend.
     
     Wraps new OGRBackend with GeometricFilterBackend interface.
-    v4.1.0: First backend to test new architecture.
+    v4.1.0: Uses OGRExpressionBuilder instead of before_migration backend.
     """
     
     @property
@@ -333,9 +352,9 @@ class LegacyOGRAdapter(BaseLegacyAdapter):
         return OGRBackend()
     
     def _create_legacy_backend(self) -> GeometricFilterBackend:
-        """Create legacy OGR backend."""
-        from ...before_migration.modules.backends.ogr_backend import OGRGeometricFilter
-        return OGRGeometricFilter(self.task_params)
+        """Create OGR expression builder (v4.1.0 - migrated from before_migration)."""
+        from .ogr.expression_builder import OGRExpressionBuilder
+        return OGRExpressionBuilder(self.task_params)
     
     def _should_use_new_backend(self) -> bool:
         """Check feature flag for OGR backend."""
@@ -348,7 +367,7 @@ class LegacyMemoryAdapter(BaseLegacyAdapter):
     Legacy adapter for Memory backend.
     
     Wraps new MemoryBackend with GeometricFilterBackend interface.
-    v4.1.0: Second backend to test new architecture.
+    v4.1.0: Uses OGRExpressionBuilder as fallback (memory layers use OGR-like filtering).
     """
     
     @property
@@ -361,9 +380,9 @@ class LegacyMemoryAdapter(BaseLegacyAdapter):
         return MemoryBackend()
     
     def _create_legacy_backend(self) -> GeometricFilterBackend:
-        """Create legacy Memory backend."""
-        from ...before_migration.modules.backends.memory_backend import MemoryGeometricFilter
-        return MemoryGeometricFilter(self.task_params)
+        """Create Memory expression builder (v4.1.0 - uses OGR builder for memory layers)."""
+        from .ogr.expression_builder import OGRExpressionBuilder
+        return OGRExpressionBuilder(self.task_params)
     
     def _should_use_new_backend(self) -> bool:
         """Check feature flag for Memory backend."""

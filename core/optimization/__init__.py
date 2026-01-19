@@ -70,6 +70,20 @@ from .multi_step_filter import (
     get_multi_step_optimizer
 )
 
+# Auto Optimizer (v4.1.0 migrated from before_migration)
+from .auto_optimizer import (
+    AUTO_OPTIMIZER_AVAILABLE,
+    AutoOptimizer,
+    LayerAnalyzer,
+    LayerAnalysis,
+    LayerLocationType,
+    OptimizationRecommendation,
+    OptimizationPlan,
+    get_auto_optimizer,
+    get_auto_optimization_config,
+    analyze_layer,
+)
+
 __all__ = [
     # Combined Query Optimizer (v3.0+)
     'OptimizationType',
@@ -92,5 +106,16 @@ __all__ = [
     # Multi-Step Filter Optimizer (v4.1 Phase 2)
     'MultiStepFilterOptimizer',
     'FilterStep',
-    'get_multi_step_optimizer'
+    'get_multi_step_optimizer',
+    # Auto Optimizer (v4.1.0 migrated from before_migration)
+    'AUTO_OPTIMIZER_AVAILABLE',
+    'AutoOptimizer',
+    'LayerAnalyzer',
+    'LayerAnalysis',
+    'LayerLocationType',
+    'OptimizationRecommendation',
+    'OptimizationPlan',
+    'get_auto_optimizer',
+    'get_auto_optimization_config',
+    'analyze_layer',
 ]

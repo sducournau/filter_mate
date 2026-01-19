@@ -2,6 +2,49 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [4.2.0] - 2026-01-19 🧹 Legacy Code Removal & Architecture Cleanup
+
+### Removed
+
+#### `before_migration/` Folder Deletion
+- **11 MB of legacy code removed**: Complete deletion of the `before_migration/` folder
+- **81 Python files eliminated**: All legacy modules, backends, and utilities
+- **20,170+ lines of legacy backend code** no longer needed
+- **Impact**: Cleaner codebase, single source of truth for all backends
+
+### Added
+
+#### New Expression Builders (Hexagonal Architecture)
+- **PostgreSQLExpressionBuilder**: PostGIS SQL expression generation (520+ lines)
+  - File: `adapters/backends/postgresql/expression_builder.py`
+  - Features: Column normalization, type casting, WKT simplification
+  
+- **SpatialiteExpressionBuilder**: Spatialite SQL expression generation (430+ lines)
+  - File: `adapters/backends/spatialite/expression_builder.py`
+  - Features: GeoPackage support (GeomFromGPB), CRS transformation
+  
+- **OGRExpressionBuilder**: OGR filtering via QGIS processing (380+ lines)
+  - File: `adapters/backends/ogr/expression_builder.py`
+  - Features: selectbylocation algorithm, FID-based filtering, CancellableFeedback
+
+#### New Port Interface
+- **GeometricFilterPort**: Abstract interface for filter API compatibility (261 lines)
+  - File: `core/ports/geometric_filter_port.py`
+  - Methods: `build_expression()`, `apply_filter()`, `supports_layer()`
+  - Pattern: Ports and Adapters (Hexagonal Architecture)
+
+### Changed
+
+#### Backend Factory & Legacy Adapter
+- **factory.py**: Removed 3 imports to `before_migration`, uses new ExpressionBuilders
+- **legacy_adapter.py**: Removed 6 imports to `before_migration`, delegates to ExpressionBuilders
+- **All backends now self-contained**: No external dependencies on legacy code
+
+### Documentation
+- **MIGRATION_PLAN_BEFORE_MIGRATION_DELETION.md**: Updated status to COMPLETED
+
+---
+
 ## [4.1.1] - 2026-01-18 🐘 PostgreSQL-Only Project Fix
 
 ### Fixed

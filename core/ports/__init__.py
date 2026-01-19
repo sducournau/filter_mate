@@ -45,6 +45,11 @@ from .filter_executor_port import (
     ProgressCallback,
 )
 
+# Geometric Filter Port (v4.1.0 - legacy API compatibility)
+from .geometric_filter_port import (
+    GeometricFilterPort,
+)
+
 # Backend Services Facade (EPIC-1 Phase E13)
 from .backend_services import (
     BackendServices,
@@ -77,6 +82,8 @@ __all__ = [
     'BackendRegistryPort',
     'CancellationCallback',
     'ProgressCallback',
+    # Geometric Filter (v4.1.0 - legacy API)
+    'GeometricFilterPort',
     # Backend Services Facade (EPIC-1 E13)
     'BackendServices',
     'get_backend_services',

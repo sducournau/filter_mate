@@ -40,6 +40,9 @@ from .filter_actions import (
     execute_unfilter_action_postgresql,
 )
 
+# v4.1.0: Expression Builder (migrated from before_migration)
+from .expression_builder import PostgreSQLExpressionBuilder
+
 __all__ = [
     # Main backend
     'PostgreSQLBackend',
@@ -77,4 +80,6 @@ __all__ = [
     # Reset and unfilter actions
     'execute_reset_action_postgresql',
     'execute_unfilter_action_postgresql',
+    # v4.1.0: Expression Builder
+    'PostgreSQLExpressionBuilder',
 ]
