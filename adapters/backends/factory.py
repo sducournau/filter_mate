@@ -223,10 +223,10 @@ class BackendFactory:
         except ImportError:
             USE_LEGACY_ADAPTERS = False
         
-        # v4.2.0: Import new hexagonal backends (no more before_migration!)
-        # These provide apply_filter() and build_expression() methods via adapters
-        from .ogr.executor_wrapper import OGRFilterExecutor
-        from .spatialite.executor_wrapper import SpatialiteFilterExecutor
+        # Import legacy geometric filter backends from before_migration
+        # These provide apply_filter() and build_expression() methods
+        from ...before_migration.modules.backends.ogr_backend import OGRGeometricFilter
+        from ...before_migration.modules.backends.spatialite_backend import SpatialiteGeometricFilter
         
         # Detect signature type
         if isinstance(provider_type_or_layer_info, str):
@@ -234,14 +234,8 @@ class BackendFactory:
             provider_type = provider_type_or_layer_info
             
             if force_ogr:
-                logger.info(f"🔄 Force OGR mode: Returning OGR adapter for '{layer.name() if layer else 'unknown'}' (bypassing auto-selection)")
-                # v4.2.0: Use legacy adapter wrapper instead of direct backend
-                if USE_LEGACY_ADAPTERS:
-                    return get_legacy_adapter('ogr', task_params or {})
-                else:
-                    # Fallback: Create executor wrapper directly
-                    from .ogr.executor_wrapper import OGRFilterExecutor
-                    return OGRFilterExecutor(task_params or {})
+                logger.info(f"🔄 Force OGR mode: Returning OGR backend for '{layer.name() if layer else 'unknown'}' (bypassing auto-selection)")
+                return OGRGeometricFilter(task_params or {})
             
             # Check for forced backend in task_params
             forced_backends = (task_params or {}).get('forced_backends', {})
@@ -265,37 +259,20 @@ class BackendFactory:
                 except Exception as e:
                     logger.warning(f"LegacyAdapter failed: {e}, falling back to direct legacy backend")
             
-            # Fallback: Return legacy geometric filter backend via adapters (if legacy adapters unavailable)
+            # Fallback: Return legacy geometric filter backend directly (if adapters unavailable)
             if provider_type in ('postgresql', 'postgres'):
                 try:
-                    if USE_LEGACY_ADAPTERS:
-                        return get_legacy_adapter('postgresql', task_params or {})
-                    else:
-                        # v4.2.0: PostgreSQL backend must use legacy adapter (not yet fully migrated)
-                        logger.warning("PostgreSQL backend requires legacy adapter, falling back to OGR")
-                        from .ogr.executor_wrapper import OGRFilterExecutor
-                        return OGRFilterExecutor(task_params or {})
+                    from ...before_migration.modules.backends.postgresql_backend import PostgreSQLGeometricFilter
+                    return PostgreSQLGeometricFilter(task_params or {})
                 except ImportError:
                     logger.warning("PostgreSQL backend not available, falling back to OGR")
-                    if USE_LEGACY_ADAPTERS:
-                        return get_legacy_adapter('ogr', task_params or {})
-                    else:
-                        from .ogr.executor_wrapper import OGRFilterExecutor
-                        return OGRFilterExecutor(task_params or {})
+                    return OGRGeometricFilter(task_params or {})
             
             elif provider_type == 'spatialite':
-                if USE_LEGACY_ADAPTERS:
-                    return get_legacy_adapter('spatialite', task_params or {})
-                else:
-                    from .spatialite.executor_wrapper import SpatialiteFilterExecutor
-                    return SpatialiteFilterExecutor(task_params or {})
+                return SpatialiteGeometricFilter(task_params or {})
             
             else:  # 'ogr' or unknown
-                if USE_LEGACY_ADAPTERS:
-                    return get_legacy_adapter('ogr', task_params or {})
-                else:
-                    from .ogr.executor_wrapper import OGRFilterExecutor
-                    return OGRFilterExecutor(task_params or {})
+                return OGRGeometricFilter(task_params or {})
         
         else:
             # NEW SIGNATURE: (layer_info, forced_backend)

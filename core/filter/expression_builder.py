@@ -170,8 +170,6 @@ class ExpressionBuilder:
             # Delegate to backend-specific build_expression()
             # Each backend knows how to construct expressions in its SQL dialect
             logger.info(f"🔧 Calling backend.build_expression()...")
-            logger.info(f"   backend type: {type(backend).__name__}")
-            logger.info(f"   backend has build_expression: {hasattr(backend, 'build_expression')}")
             logger.info(f"   source_wkt available: {self.source_wkt is not None}")
             logger.info(f"   source_srid: {self.source_srid}")
             logger.info(f"   source_feature_count: {self.source_feature_count}")
@@ -182,33 +180,24 @@ class ExpressionBuilder:
             # PostgreSQLGeometricFilter.build_expression() requires these for
             # generating proper EXISTS subqueries with ST_Intersects instead of
             # falling back to simple "id" IN (...) expressions
-            try:
-                logger.info(f"   → About to call backend.build_expression()...")
-                expression = backend.build_expression(
-                    layer_props=layer_props,
-                    predicates=self.current_predicates,
-                    source_geom=source_geom,
-                    buffer_value=self.buffer_value,
-                    buffer_expression=self.buffer_expression,
-                    source_filter=source_filter,
-                    source_wkt=self.source_wkt,
-                    source_srid=self.source_srid,
-                    source_feature_count=self.source_feature_count,
-                    use_centroids=self.use_centroids_distant
-                )
-                logger.info(f"   ✓ backend.build_expression() returned successfully")
-            except Exception as build_ex:
-                logger.error(f"   ✗ backend.build_expression() raised exception: {build_ex}")
-                raise
+            expression = backend.build_expression(
+                layer_props=layer_props,
+                predicates=self.current_predicates,
+                source_geom=source_geom,
+                buffer_value=self.buffer_value,
+                buffer_expression=self.buffer_expression,
+                source_filter=source_filter,
+                source_wkt=self.source_wkt,
+                source_srid=self.source_srid,
+                source_feature_count=self.source_feature_count,
+                use_centroids=self.use_centroids_distant
+            )
             
-            logger.info(f"✅ Backend returned expression: {expression[:200] if expression else '(empty - Processing mode)'}...")
+            logger.info(f"✅ Backend returned expression: {expression[:200] if expression else 'None'}...")
             
-            # v4.2.0: Allow empty expressions for backends using QGIS Processing (OGR, Spatialite)
-            # Empty expression signals "use Processing instead of SQL"
             if not expression:
-                logger.info(f"ℹ️ Backend {backend_name} returned empty expression (Processing mode)")
-                # Return empty expression to signal Processing should be used
-                return ""
+                logger.warning(f"Backend {backend_name} returned empty expression")
+                return None
             
             logger.debug(f"Expression built via {backend_name}: {len(expression)} chars")
             return expression
