@@ -66,7 +66,7 @@ class OGRBackend(BackendPort):
             'errors': 0
         }
 
-        logger.info(f"[OGR] OGR backend initialized")
+        logger.debug(f"[OGR] OGR backend initialized")
 
     @property
     def metrics(self) -> Dict[str, Any]:
@@ -109,7 +109,7 @@ class OGRBackend(BackendPort):
         start_time = time.time()
         self._metrics['executions'] += 1
         
-        logger.info(f"[OGR] 🔧 OGRBackend.execute() STARTED")
+        logger.debug(f"[OGR] 🔧 OGRBackend.execute() STARTED")
         logger.info(f"[OGR]    layer: {layer_info.name} ({layer_info.layer_id})")
         logger.info(f"[OGR]    expression: {expression.raw[:100]}{'...' if len(expression.raw) > 100 else ''}")
 
@@ -181,9 +181,9 @@ class OGRBackend(BackendPort):
             execution_time = (time.time() - start_time) * 1000
             self._metrics['total_time_ms'] += execution_time
 
-            logger.info(f"[OGR]    ✓ OGRBackend.execute() COMPLETED")
-            logger.info(f"[OGR]    matched: {len(feature_ids)}/{features_processed} features")
-            logger.info(f"[OGR]    time: {execution_time:.1f}ms")
+            logger.debug(f"[OGR]    ✓ OGRBackend.execute() COMPLETED")
+            logger.debug(f"[OGR]    matched: {len(feature_ids)}/{features_processed} features")
+            logger.debug(f"[OGR]    time: {execution_time:.1f}ms")
             if eval_errors > 0:
                 logger.warning(f"[OGR]    eval_errors: {eval_errors}")
 

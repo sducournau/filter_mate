@@ -133,7 +133,7 @@ class DockWidgetOrchestrator:
             self._init_controllers()
             
             self._initialized = True
-            logger.info("DockWidgetOrchestrator initialized successfully")
+            logger.debug("DockWidgetOrchestrator initialized successfully")
             return True
             
         except Exception as e:

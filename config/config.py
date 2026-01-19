@@ -160,6 +160,20 @@ def init_env_vars():
     try:
         with open(config_json_path) as f:
             CONFIG_DATA = json.load(f)
+        
+        # v4.0.7: Validate configuration after loading
+        try:
+            from .config_validator import validate_and_log
+            validate_and_log(CONFIG_DATA, DIR_CONFIG)
+        except ImportError:
+            pass  # Validator not available, skip validation
+        except Exception as validation_error:
+            QgsMessageLog.logMessage(
+                f"FilterMate: Configuration validation skipped: {validation_error}",
+                "FilterMate",
+                Qgis.Info
+            )
+            
     except Exception as e:
         QgsMessageLog.logMessage(
             f"Failed to load config from {config_json_path}: {e}",

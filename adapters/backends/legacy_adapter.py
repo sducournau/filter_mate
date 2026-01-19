@@ -413,7 +413,7 @@ def get_legacy_adapter(provider_type: str, task_params: Dict) -> GeometricFilter
     
     try:
         adapter = adapter_class(task_params)
-        logger.info(f"🔧 Created {adapter.get_backend_name()} for provider '{provider_type}'")
+        logger.debug(f"🔧 Created {adapter.get_backend_name()} for provider '{provider_type}'")
         return adapter
     except Exception as e:
         logger.warning(f"Could not create adapter for {provider_type}: {e}, falling back to OGR")
@@ -447,7 +447,7 @@ def set_new_backend_enabled(provider_type: str, enabled: bool):
     if provider_type.lower() in ENABLE_NEW_BACKENDS:
         old_value = ENABLE_NEW_BACKENDS[provider_type.lower()]
         ENABLE_NEW_BACKENDS[provider_type.lower()] = enabled
-        logger.info(f"🔄 Backend {provider_type.upper()}: {'LEGACY → NEW' if enabled else 'NEW → LEGACY'}")
+        logger.debug(f"🔄 Backend {provider_type.upper()}: {'LEGACY → NEW' if enabled else 'NEW → LEGACY'}")
     else:
         logger.warning(f"Unknown provider type: {provider_type}")
 
@@ -482,11 +482,11 @@ def enable_experimental_backends():
     """
     set_new_backend_enabled('ogr', True)
     set_new_backend_enabled('memory', True)
-    logger.info("🧪 Experimental backends enabled: OGR, Memory")
+    logger.debug("🧪 Experimental backends enabled: OGR, Memory")
 
 
 def disable_all_new_backends():
     """Disable all new backends, revert to legacy."""
     for provider in ENABLE_NEW_BACKENDS:
         ENABLE_NEW_BACKENDS[provider] = False
-    logger.info("🔙 All new backends disabled, using legacy")
+    logger.debug("🔙 All new backends disabled, using legacy")

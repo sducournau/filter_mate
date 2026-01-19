@@ -821,4 +821,6 @@ def match_type(data):
             return type_
 
 def set_plugin_dir(plugin_dir):
+    """Set the global PLUGIN_DIR variable used by FilepathTypeImages."""
+    global PLUGIN_DIR
     PLUGIN_DIR = plugin_dir

@@ -76,7 +76,7 @@ class LayerOrganizer:
         organizer = LayerOrganizer()
         result = organizer.organize(context)
         for provider, layers in result.layers_by_provider.items():
-            print(f"{provider}: {len(layers)} layers")
+            # print(f"{provider}: {len(layers)} layers")  # DEBUG REMOVED
     """
     
     def __init__(self, log_to_qgis: bool = True):
@@ -196,7 +196,7 @@ class LayerOrganizer:
             forced_backends
         )
         
-        logger.info(f"  Processing layer: {layer_name} ({provider_type}), id={layer_id}")
+        logger.debug(f"  Processing layer: {layer_name} ({provider_type}), id={layer_id}")
         
         # Resolve layer from project
         layer = self._resolve_layer(layer_props, layer_name, layer_id, context, result)
@@ -264,7 +264,7 @@ class LayerOrganizer:
         # PRIORITY 1: Check if backend is forced by user
         forced_backend = forced_backends.get(layer_id)
         if forced_backend:
-            logger.info(f"  🔒 Using FORCED backend '{forced_backend}' for layer '{layer_name}'")
+            logger.debug(f"  🔒 Using FORCED backend '{forced_backend}' for layer '{layer_name}'")
             layer_props["_effective_provider_type"] = forced_backend
             layer_props["_forced_backend"] = True
             return forced_backend
@@ -280,7 +280,7 @@ class LayerOrganizer:
             # ALWAYS use PostgreSQL backend for PostgreSQL layers
             # Force postgresql_connection_available to True for runtime consistency
             layer_props["postgresql_connection_available"] = True
-            logger.info(f"  ✓ PostgreSQL layer '{layer_name}': using PostgreSQL backend (QGIS native API)")
+            logger.debug(f"  ✓ PostgreSQL layer '{layer_name}': using PostgreSQL backend (QGIS native API)")
             # DO NOT fallback to OGR - this would break spatial filtering
         
         # PRIORITY 3: Detect provider from actual layer

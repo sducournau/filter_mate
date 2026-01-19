@@ -513,7 +513,7 @@ class LayersManagementEngineTask(QgsTask):
         if "layer_provider_type" not in infos:
             layer_provider_type = detect_layer_provider_type(layer)
             infos["layer_provider_type"] = layer_provider_type
-            logger.info(f"Added layer_provider_type='{layer_provider_type}' for layer {layer.id()}")
+            logger.debug(f"Added layer_provider_type='{layer_provider_type}' for layer {layer.id()}")
             
             try:
                 conn = self._safe_spatialite_connect()

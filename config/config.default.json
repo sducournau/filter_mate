@@ -16,14 +16,21 @@
       "FEEDBACK_LEVEL": {
         "value": "normal",
         "choices": ["minimal", "normal", "verbose"],
-        "description": "User feedback verbosity: 'minimal' (errors only), 'normal' (balanced), 'verbose' (all messages including debug)",
+        "description": "User feedback verbosity: 'minimal' (errors/warnings only), 'normal' (balanced - success messages), 'verbose' (all messages including info/debug)",
         "categories_affected": [
+          "info",
+          "success",
           "filter_count",
+          "filter_success",
           "undo_redo",
           "backend_info",
+          "backend_startup",
           "config_changes",
+          "layer_loaded",
+          "layer_reset",
           "progress_info",
-          "history_status"
+          "history_status",
+          "init_info"
         ]
       },
       "LANGUAGE": {

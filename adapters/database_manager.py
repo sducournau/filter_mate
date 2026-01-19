@@ -335,7 +335,7 @@ class DatabaseManager:
                     FOREIGN KEY (fk_project) REFERENCES fm_projects(project_id)
                 );
             """)
-            logger.info("Migration completed: fm_subset_history table created")
+            logger.debug("Migration completed: fm_subset_history table created")
         
         return subset_history_exists
     

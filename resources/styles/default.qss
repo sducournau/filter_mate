@@ -17,13 +17,14 @@
 
 /* ========================================================================
    DOCKWIDGET - Base styling for docked and floating modes
-   Responsive layout with flexible dimensions managed by UIConfig
+   NOTE: Generic QDockWidget rules REMOVED to prevent affecting other QGIS panels
+   FilterMate styling is applied via #dockWidgetContents descendants only
    ======================================================================== */
 
+/* REMOVED: Generic QDockWidget rules that affected all QGIS dockwidgets
 QDockWidget {
     background-color: {color_bg_0};
     color: {color_font_0};
-    /* Dimensions managed dynamically by UIConfig for profile-specific sizing */
 }
 
 QDockWidget::title {
@@ -36,6 +37,7 @@ QDockWidget::title {
 QDockWidget > QWidget {
     background-color: {color_bg_0};
 }
+*/
 
 #dockWidgetContents {
     background-color: {color_bg_0};
@@ -44,42 +46,44 @@ QDockWidget > QWidget {
 
 /* ========================================================================
    SPLITTER - Enhanced styling for responsive resizing
+   SCOPED to FilterMate only (fixes #issue: affects QGIS dialogs globally)
    ======================================================================== */
 
-QSplitter::handle {
+#dockWidgetContents QSplitter::handle {
     background-color: {color_2};
     border-radius: 2px;
 }
 
-QSplitter::handle:hover {
+#dockWidgetContents QSplitter::handle:hover {
     background-color: {color_accent};
 }
 
-QSplitter::handle:pressed {
+#dockWidgetContents QSplitter::handle:pressed {
     background-color: {color_accent_dark};
 }
 
-QSplitter::handle:vertical {
+#dockWidgetContents QSplitter::handle:vertical {
     height: 6px;
     margin: 2px 30px;
 }
 
-QSplitter::handle:horizontal {
+#dockWidgetContents QSplitter::handle:horizontal {
     width: 6px;
     margin: 30px 2px;
 }
 
 /* ========================================================================
    QGIS Widgets - Common Styling with better spacing
+   SCOPED to FilterMate only to avoid polluting global QGIS styles
    ======================================================================== */
-QgsFeaturePickerWidget,
-QgsProjectionSelectionWidget,
-QgsMapLayerComboBox,
-QgsFieldComboBox,
-QgsFieldExpressionWidget,
-QgsCheckableComboBox,
-QComboBox,
-QgsCheckableComboBoxLayer {
+#dockWidgetContents QgsFeaturePickerWidget,
+#dockWidgetContents QgsProjectionSelectionWidget,
+#dockWidgetContents QgsMapLayerComboBox,
+#dockWidgetContents QgsFieldComboBox,
+#dockWidgetContents QgsFieldExpressionWidget,
+#dockWidgetContents QgsCheckableComboBox,
+#dockWidgetContents QComboBox,
+#dockWidgetContents QgsCheckableComboBoxLayer {
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 4px;
@@ -89,26 +93,26 @@ QgsCheckableComboBoxLayer {
     max-height: 20px;
 }
 
-QgsFeaturePickerWidget:hover,
-QgsProjectionSelectionWidget:hover,
-QgsMapLayerComboBox:hover,
-QgsFieldComboBox:hover,
-QgsFieldExpressionWidget:hover,
-QgsCheckableComboBox:hover,
-QComboBox:hover,
-QgsCheckableComboBoxLayer:hover {
+#dockWidgetContents QgsFeaturePickerWidget:hover,
+#dockWidgetContents QgsProjectionSelectionWidget:hover,
+#dockWidgetContents QgsMapLayerComboBox:hover,
+#dockWidgetContents QgsFieldComboBox:hover,
+#dockWidgetContents QgsFieldExpressionWidget:hover,
+#dockWidgetContents QgsCheckableComboBox:hover,
+#dockWidgetContents QComboBox:hover,
+#dockWidgetContents QgsCheckableComboBoxLayer:hover {
     border: 2px solid {color_accent};
     padding: 2px 4px; /* Adjusted for thicker border */
 }
 
-QgsFeaturePickerWidget:focus,
-QgsProjectionSelectionWidget:focus,
-QgsMapLayerComboBox:focus,
-QgsFieldComboBox:focus,
-QgsFieldExpressionWidget:focus,
-QgsCheckableComboBox:focus,
-QComboBox:focus,
-QgsCheckableComboBoxLayer:focus {
+#dockWidgetContents QgsFeaturePickerWidget:focus,
+#dockWidgetContents QgsProjectionSelectionWidget:focus,
+#dockWidgetContents QgsMapLayerComboBox:focus,
+#dockWidgetContents QgsFieldComboBox:focus,
+#dockWidgetContents QgsFieldExpressionWidget:focus,
+#dockWidgetContents QgsCheckableComboBox:focus,
+#dockWidgetContents QComboBox:focus,
+#dockWidgetContents QgsCheckableComboBoxLayer:focus {
     border: 3px solid {color_accent}; /* Reduced from 5px to fit in smaller heights */
     background-color: {color_accent_light_bg};
     padding: 0px 2px; /* Minimal padding for focus state */
@@ -117,14 +121,14 @@ QgsCheckableComboBoxLayer:focus {
     /* Enhanced focus ring: 3px border + external halo for accessibility */
 }
 
-QgsFeaturePickerWidget QAbstractItemView,
-QgsProjectionSelectionWidget QAbstractItemView,
-QgsMapLayerComboBox QAbstractItemView,
-QgsFieldComboBox QAbstractItemView,
-QgsFieldExpressionWidget QAbstractItemView,
-QgsCheckableComboBox QAbstractItemView,
-QComboBox QAbstractItemView,
-QgsCheckableComboBoxLayer QAbstractItemView {
+#dockWidgetContents QgsFeaturePickerWidget QAbstractItemView,
+#dockWidgetContents QgsProjectionSelectionWidget QAbstractItemView,
+#dockWidgetContents QgsMapLayerComboBox QAbstractItemView,
+#dockWidgetContents QgsFieldComboBox QAbstractItemView,
+#dockWidgetContents QgsFieldExpressionWidget QAbstractItemView,
+#dockWidgetContents QgsCheckableComboBox QAbstractItemView,
+#dockWidgetContents QComboBox QAbstractItemView,
+#dockWidgetContents QgsCheckableComboBoxLayer QAbstractItemView {
     background-color: {color_bg_0};
     selection-background-color: {color_accent};
     selection-color: white;
@@ -133,7 +137,7 @@ QgsCheckableComboBoxLayer QAbstractItemView {
 }
 
 /* QgsCheckableComboBox Indicator */
-QgsCheckableComboBox::indicator {
+#dockWidgetContents QgsCheckableComboBox::indicator {
     width: 16px;
     height: 16px;
     border: 2px solid {color_2};
@@ -143,16 +147,17 @@ QgsCheckableComboBox::indicator {
 
 /* ========================================================================
    INPUT FIELDS - Standardized 20px height
+   SCOPED to FilterMate only
    ======================================================================== */
 
-QLineEdit,
-QSpinBox,
-QDoubleSpinBox {
+#dockWidgetContents QLineEdit,
+#dockWidgetContents QSpinBox,
+#dockWidgetContents QDoubleSpinBox {
     min-height: 20px;
     max-height: 20px;
 }
 
-QgsCheckableComboBox::indicator:checked {
+#dockWidgetContents QgsCheckableComboBox::indicator:checked {
     background-color: {color_accent};
     border: 2px solid {color_accent_dark};
 }
@@ -160,15 +165,16 @@ QgsCheckableComboBox::indicator:checked {
 /* ToolBox TabWidget */
 /* Note: Removed generic QWidget background to prevent unwanted overrides */
 /* Instead, backgrounds are set explicitly on specific widgets */
+/* SCOPED to FilterMate only */
 
-QToolBox {
+#dockWidgetContents QToolBox {
     background-color: {color_bg_0};
     border: none;
     padding: 4px;
 }
 
 /* Style pour les onglets du QToolBox */
-QToolBox::tab {
+#dockWidgetContents QToolBox::tab {
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 4px;
@@ -181,7 +187,7 @@ QToolBox::tab {
 }
 
 /* Style pour les boutons à l'intérieur des onglets - C'EST ICI QU'IL FAUT DÉFINIR LA HAUTEUR */
-QToolBox QToolButton {
+#dockWidgetContents QToolBox QToolButton {
     background-color: transparent;
     border: none;
     padding: 12px 10px 12px 45px;
@@ -193,7 +199,7 @@ QToolBox QToolButton {
     text-align: left;
 }
 
-QToolBox::tab:selected {
+#dockWidgetContents QToolBox::tab:selected {
     background-color: {color_accent_light_bg};
     color: {color_accent_dark};
     font-weight: 600;
@@ -201,21 +207,21 @@ QToolBox::tab:selected {
     border-left: 4px solid {color_accent};
 }
 
-QToolBox QToolButton:checked {
+#dockWidgetContents QToolBox QToolButton:checked {
     background-color: transparent;
     font-weight: 500;
 }
 
-QToolBox::tab:hover {
+#dockWidgetContents QToolBox::tab:hover {
     background-color: {color_2};
     color: {color_font_1};
 }
 
-QToolBox QToolButton:hover {
+#dockWidgetContents QToolBox QToolButton:hover {
     background-color: transparent;
 }
 
-/* DockWidget */
+/* DockWidget - REMOVED: Generic rules affected all QGIS dockwidgets
 QDockWidget {
     background: {color_bg_0};
     border: 1px solid {color_font_0};
@@ -246,12 +252,14 @@ QDockWidget::float-button:pressed {
     padding: 1px -1px -1px 1px;
     background: {color_accent};
 }
+*/
 
 /* ========================================================================
    FRAMES - Base styling with responsive dimensions
+   SCOPED to FilterMate only
    ======================================================================== */
 
-QFrame {
+#dockWidgetContents QFrame {
     background-color: {color_bg_0};
     border: none;
     border-radius: 6px;
@@ -294,6 +302,24 @@ QFrame#frame_filtering {
     margin: 2px;
 }
 
+/* FILTERING section - Harmonized widget heights for alignment */
+/* ComboBox in filtering section - height to match buttons (32px total) */
+QWidget#FILTERING QgsMapLayerComboBox,
+QWidget#FILTERING QgsCheckableComboBox,
+QWidget#FILTERING QComboBox {
+    min-height: 26px;
+    max-height: 26px;
+}
+
+/* SpinBox in filtering section */
+QWidget#FILTERING QgsDoubleSpinBox,
+QWidget#FILTERING QgsSpinBox,
+QWidget#FILTERING QDoubleSpinBox,
+QWidget#FILTERING QSpinBox {
+    min-height: 26px;
+    max-height: 26px;
+}
+
 /* Frame Exporting - Export options area */
 QFrame#frame_exporting {
     background-color: {color_bg_0};
@@ -320,7 +346,7 @@ QWidget#widget_exporting_content {
 }
 
 /* Expression Builder */
-QgsExpressionBuilderWidget {
+#dockWidgetContents QgsExpressionBuilderWidget {
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 4px;
@@ -329,7 +355,7 @@ QgsExpressionBuilderWidget {
 }
 
 /* Scroll Area */
-QScrollArea {
+#dockWidgetContents QScrollArea {
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 4px;
@@ -337,7 +363,7 @@ QScrollArea {
 }
 
 /* Collapsible Group Box */
-QgsCollapsibleGroupBox {
+#dockWidgetContents QgsCollapsibleGroupBox {
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 4px;
@@ -348,7 +374,7 @@ QgsCollapsibleGroupBox {
     min-height: 40px;
 }
 
-QgsCollapsibleGroupBox::title {
+#dockWidgetContents QgsCollapsibleGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
     padding: 2px 6px;
@@ -363,7 +389,7 @@ QgsCollapsibleGroupBox::title {
 }
 
 /* Property Override Button */
-QgsPropertyOverrideButton {
+#dockWidgetContents QgsPropertyOverrideButton {
     background-color: {color_1};
     color: {color_font_0};
     border-radius: 2px;
@@ -378,75 +404,74 @@ QgsPropertyOverrideButton {
     width: 22px;
 }
 
-QgsPropertyOverrideButton::menu-indicator {
+#dockWidgetContents QgsPropertyOverrideButton::menu-indicator {
     width: 0px;
     height: 0px;
 }
 
-QgsPropertyOverrideButton:hover,
-QgsPropertyOverrideButton:pressed {
+#dockWidgetContents QgsPropertyOverrideButton:hover,
+#dockWidgetContents QgsPropertyOverrideButton:pressed {
     border: 1px solid {color_accent};
     padding: 0px;
     margin: 0px;
     /* Keep 1px border to maintain 24px total height */
 }
 
-QgsPropertyOverrideButton:pressed {
+#dockWidgetContents QgsPropertyOverrideButton:pressed {
     background-color: {color_accent_light_bg};
     border-color: {color_accent_dark};
 }
 
 /* Active state for Property Override Button - more visible */
-QgsPropertyOverrideButton[active="true"] {
+#dockWidgetContents QgsPropertyOverrideButton[active="true"] {
     background-color: {color_accent};
     border: 2px solid {color_accent_dark};
     border-radius: 3px;
 }
 
-QgsPropertyOverrideButton[active="true"]:hover {
+#dockWidgetContents QgsPropertyOverrideButton[active="true"]:hover {
     background-color: {color_accent_light_bg};
     border: 2px solid {color_accent};
 }
 
-/* Specific height adjustment for buffer value property button */
-QgsPropertyOverrideButton#mPropertyOverrideButton_filtering_buffer_value_property {
-    min-height: 22px;
-    max-height: 22px;
-    height: 22px;
-    min-width: 22px;
-    max-width: 22px;
-    width: 22px;
+/* Specific height adjustment for buffer value property button - 15x15 base for alignment with spinbox */
+#dockWidgetContents QgsPropertyOverrideButton#mPropertyOverrideButton_filtering_buffer_value_property {
+    min-height: 15px;
+    max-height: 15px;
+    height: 15px;
+    min-width: 15px;
+    max-width: 15px;
+    width: 15px;
     padding: 0px;
-    margin: 0px;
-    line-height: 22px;
-    font-size: 9px;
+    margin: 4px 2px;
+    font-size: 8px;
 }
 
 /* Active state specific for buffer value property button - highly visible */
-QgsPropertyOverrideButton#mPropertyOverrideButton_filtering_buffer_value_property[active="true"] {
+#dockWidgetContents QgsPropertyOverrideButton#mPropertyOverrideButton_filtering_buffer_value_property[active="true"] {
     background-color: {color_accent};
-    border: 2px solid {color_accent_dark};
-    border-radius: 4px;
-    min-height: 24px;
-    max-height: 24px;
-    min-width: 24px;
-    max-width: 24px;
+    border: 1px solid {color_accent_dark};
+    border-radius: 3px;
+    min-height: 15px;
+    max-height: 15px;
+    min-width: 15px;
+    max-width: 15px;
 }
 
-QgsPropertyOverrideButton#mPropertyOverrideButton_filtering_buffer_value_property[active="true"]:hover {
+#dockWidgetContents QgsPropertyOverrideButton#mPropertyOverrideButton_filtering_buffer_value_property[active="true"]:hover {
     background-color: {color_accent_light_bg};
-    border: 2px solid {color_accent};
+    border: 1px solid {color_accent};
 }
 
-/* ScrollBar - Vertical */
-QScrollBar:vertical {
+/* ScrollBar - Vertical - SCOPED to FilterMate only */
+#dockWidgetContents QScrollBar:vertical {
     border: none;
     background: transparent;
     width: 4px;
     cursor: pointer;
 }
 
-QScrollBar::handle:vertical {
+#dockWidgetContents QScrollBar::handle:vertical {
     border: none;
     background: {color_font_2};
     width: 4px;
@@ -455,36 +480,36 @@ QScrollBar::handle:vertical {
     cursor: pointer;
 }
 
-QScrollBar::handle:vertical:hover {
+#dockWidgetContents QScrollBar::handle:vertical:hover {
     background: {color_font_1};
     cursor: pointer;
 }
 
-QScrollBar::handle:vertical:pressed {
+#dockWidgetContents QScrollBar::handle:vertical:pressed {
     background: {color_accent};
 }
 
-QScrollBar::add-line:vertical {
+#dockWidgetContents QScrollBar::add-line:vertical {
     background: transparent;
     height: 5px;
     subcontrol-position: bottom;
     subcontrol-origin: margin;
 }
 
-QScrollBar::sub-line:vertical {
+#dockWidgetContents QScrollBar::sub-line:vertical {
     background: transparent;
     height: 5px;
     subcontrol-position: top;
     subcontrol-origin: margin;
 }
 
-QScrollBar::add-page:vertical,
-QScrollBar::sub-page:vertical {
+#dockWidgetContents QScrollBar::add-page:vertical,
+#dockWidgetContents QScrollBar::sub-page:vertical {
     background: none;
 }
 
-/* ScrollBar - Horizontal */
-QScrollBar:horizontal {
+/* ScrollBar - Horizontal - SCOPED to FilterMate only */
+#dockWidgetContents QScrollBar:horizontal {
     border: none;
     background: transparent;
     height: 4px;
@@ -492,7 +517,7 @@ QScrollBar:horizontal {
     cursor: pointer;
 }
 
-QScrollBar::handle:horizontal {
+#dockWidgetContents QScrollBar::handle:horizontal {
     background: {color_font_2};
     min-width: 20px;
     border-radius: 2px;
@@ -500,30 +525,31 @@ QScrollBar::handle:horizontal {
     cursor: pointer;
 }
 
-QScrollBar::handle:horizontal:hover {
+#dockWidgetContents QScrollBar::handle:horizontal:hover {
     background: {color_font_1};
     cursor: pointer;
 }
 
-QScrollBar::handle:horizontal:pressed {
+#dockWidgetContents QScrollBar::handle:horizontal:pressed {
     background: {color_accent};
 }
 
-QScrollBar::add-line:horizontal,
-QScrollBar::sub-line:horizontal {
+#dockWidgetContents QScrollBar::add-line:horizontal,
+#dockWidgetContents QScrollBar::sub-line:horizontal {
     width: 0;
 }
 
-QScrollBar::add-page:horizontal,
-QScrollBar::sub-page:horizontal {
+#dockWidgetContents QScrollBar::add-page:horizontal,
+#dockWidgetContents QScrollBar::sub-page:horizontal {
     background: none;
 }
 
 /* ========================================================================
    GROUPBOX - Enhanced styling with better alignment
+   SCOPED to FilterMate only
    ======================================================================== */
 
-QGroupBox {
+#dockWidgetContents QGroupBox {
     background-color: transparent;
     border: 1px solid {color_2};
     border-radius: 6px;
@@ -534,7 +560,7 @@ QGroupBox {
     color: {color_font_0};
 }
 
-QGroupBox::title {
+#dockWidgetContents QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
     padding: 2px 10px;
@@ -548,8 +574,8 @@ QGroupBox::title {
     overflow: hidden;
 }
 
-/* Collapsible GroupBox - QGIS specific */
-QgsCollapsibleGroupBox {
+/* Collapsible GroupBox - QGIS specific - SCOPED to FilterMate */
+#dockWidgetContents QgsCollapsibleGroupBox {
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 6px;
@@ -559,7 +585,7 @@ QgsCollapsibleGroupBox {
     color: {color_font_0};
 }
 
-QgsCollapsibleGroupBox::title {
+#dockWidgetContents QgsCollapsibleGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
     padding: 4px 10px;
@@ -607,8 +633,8 @@ QGroupBox#groupBoxConfiguration::title {
     color: {color_accent};
 }
 
-/* Buttons - Non-checkable - Enhanced visibility */
-QPushButton:!checkable {
+/* Buttons - Non-checkable - Enhanced visibility - SCOPED to FilterMate */
+#dockWidgetContents QPushButton:!checkable {
     background-color: {color_1};
     border: 2px solid {color_2};
     border-radius: 5px;
@@ -618,7 +644,7 @@ QPushButton:!checkable {
     min-height: 32px;
 }
 
-QPushButton:!checkable:hover {
+#dockWidgetContents QPushButton:!checkable:hover {
     background-color: {color_accent_light_bg};
     border: 3px solid {color_accent};
     color: {color_accent_dark};
@@ -626,7 +652,7 @@ QPushButton:!checkable:hover {
     /* Padding compensation for border increase */
 }
 
-QPushButton:!checkable:pressed {
+#dockWidgetContents QPushButton:!checkable:pressed {
     background-color: {color_accent_pressed};
     border: 3px solid {color_accent_dark};
     color: white;
@@ -634,15 +660,15 @@ QPushButton:!checkable:pressed {
     /* Visual feedback: darker background, maintains padding */
 }
 
-QPushButton:!checkable:disabled {
+#dockWidgetContents QPushButton:!checkable:disabled {
     background-color: {color_1};
     border: 2px solid {color_2};
     color: {color_font_2};
     opacity: 0.6;
 }
 
-/* Checkable Buttons (behave like checkboxes) - Enhanced visibility */
-QPushButton:checkable {
+/* Checkable Buttons (behave like checkboxes) - Enhanced visibility - SCOPED to FilterMate */
+#dockWidgetContents QPushButton:checkable {
     background-color: {color_1};
     border: 2px solid {color_2};
     border-radius: 5px;
@@ -652,7 +678,7 @@ QPushButton:checkable {
     min-height: 32px;
 }
 
-QPushButton:checkable:hover:!checked {
+#dockWidgetContents QPushButton:checkable:hover:!checked {
     background-color: {color_accent_light_bg};
     border: 3px solid {color_accent};
     color: {color_accent_dark};
@@ -660,7 +686,7 @@ QPushButton:checkable:hover:!checked {
 }
 
 /* État checked - MAXIMUM VISIBILITY avec box-shadow */
-QPushButton:checkable:checked {
+#dockWidgetContents QPushButton:checkable:checked {
     background-color: {color_accent};
     border: 4px solid {color_accent_dark};
     color: white;
@@ -670,7 +696,7 @@ QPushButton:checkable:checked {
 }
 
 /* État checked + hover - effet lumineux accentué */
-QPushButton:checkable:checked:hover {
+#dockWidgetContents QPushButton:checkable:checked:hover {
     background-color: {color_accent_hover};
     border: 4px solid {color_accent_dark};
     color: white;
@@ -680,7 +706,7 @@ QPushButton:checkable:checked:hover {
 }
 
 /* État pressed non-checked - feedback tactile immédiat */
-QPushButton:checkable:pressed:!checked {
+#dockWidgetContents QPushButton:checkable:pressed:!checked {
     background-color: {color_accent_pressed};
     border: 3px solid {color_accent_dark};
     color: white;
@@ -689,7 +715,7 @@ QPushButton:checkable:pressed:!checked {
 }
 
 /* État checked + pressed - effet pressé accentué */
-QPushButton:checkable:checked:pressed {
+#dockWidgetContents QPushButton:checkable:checked:pressed {
     background-color: {color_accent_pressed};
     border: 4px solid {color_accent_dark};
     color: white;
@@ -699,7 +725,7 @@ QPushButton:checkable:checked:pressed {
     transform: translateY(1px);
 }
 
-QPushButton:checkable:disabled {
+#dockWidgetContents QPushButton:checkable:disabled {
     background-color: {color_1};
     border: 2px solid {color_2};
     color: {color_font_2};
@@ -719,10 +745,10 @@ QPushButton[objectName^="pushButton_checkable_exporting_"] {
     padding: 4px;
 }
 
-/* SpinBox & DoubleSpinBox - Enhanced focus visibility */
-QSpinBox,
-QDoubleSpinBox,
-QgsDoubleSpinBox {
+/* SpinBox & DoubleSpinBox - Enhanced focus visibility - SCOPED to FilterMate */
+#dockWidgetContents QSpinBox,
+#dockWidgetContents QDoubleSpinBox,
+#dockWidgetContents QgsDoubleSpinBox {
     background-color: {color_1};
     border: 2px solid {color_2};
     border-radius: 4px;
@@ -731,17 +757,17 @@ QgsDoubleSpinBox {
     /* min-height removed - managed dynamically by UIConfig in Python */
 }
 
-QSpinBox:hover,
-QDoubleSpinBox:hover,
-QgsDoubleSpinBox:hover {
+#dockWidgetContents QSpinBox:hover,
+#dockWidgetContents QDoubleSpinBox:hover,
+#dockWidgetContents QgsDoubleSpinBox:hover {
     border: 3px solid {color_accent};
     padding: 2px 4px;
     /* Border compensation */
 }
 
-QSpinBox:focus,
-QDoubleSpinBox:focus,
-QgsDoubleSpinBox:focus {
+#dockWidgetContents QSpinBox:focus,
+#dockWidgetContents QDoubleSpinBox:focus,
+#dockWidgetContents QgsDoubleSpinBox:focus {
     border: 3px solid {color_accent};
     background-color: {color_accent_light_bg};
     padding: 0px 2px;
@@ -750,8 +776,8 @@ QgsDoubleSpinBox:focus {
     /* STRONG focus indicator: 3px border + external halo + tinted background */
 }
 
-/* LineEdit - Enhanced focus visibility */
-QLineEdit {
+/* LineEdit - Enhanced focus visibility - SCOPED to FilterMate */
+#dockWidgetContents QLineEdit {
     background-color: {color_1};
     border: 2px solid {color_2};
     border-radius: 4px;
@@ -760,13 +786,13 @@ QLineEdit {
     /* min-height removed - managed dynamically by UIConfig in Python */
 }
 
-QLineEdit:hover {
+#dockWidgetContents QLineEdit:hover {
     border: 3px solid {color_accent};
     padding: 2px 4px;
     /* Border compensation */
 }
 
-QLineEdit:focus {
+#dockWidgetContents QLineEdit:focus {
     border: 3px solid {color_accent};
     background-color: {color_accent_light_bg};
     padding: 0px 2px;
@@ -775,8 +801,8 @@ QLineEdit:focus {
     /* STRONG focus indicator: 3px border + external halo + tinted background */
 }
 
-/* CheckBox */
-QCheckBox {
+/* CheckBox - SCOPED to FilterMate */
+#dockWidgetContents QCheckBox {
     background-color: transparent;
     border: none;
     border-radius: 3px;
@@ -785,11 +811,11 @@ QCheckBox {
     color: {color_font_0};
 }
 
-QCheckBox:hover {
+#dockWidgetContents QCheckBox:hover {
     background-color: {color_accent_light_bg};
 }
 
-QCheckBox::indicator {
+#dockWidgetContents QCheckBox::indicator {
     width: 18px;
     height: 18px;
     border: 2px solid {color_2};
@@ -797,28 +823,28 @@ QCheckBox::indicator {
     background-color: transparent;
 }
 
-QCheckBox::indicator:hover,
-QRadioButton::indicator:hover {
+#dockWidgetContents QCheckBox::indicator:hover,
+#dockWidgetContents QRadioButton::indicator:hover {
     border: 2px solid {color_accent};
 }
 
-QCheckBox::indicator:checked,
-QRadioButton::indicator:checked {
+#dockWidgetContents QCheckBox::indicator:checked,
+#dockWidgetContents QRadioButton::indicator:checked {
     background-color: {color_accent};
     border: 2px solid {color_accent_dark};
 }
 
-QCheckBox::indicator:checked:hover {
+#dockWidgetContents QCheckBox::indicator:checked:hover {
     background-color: {color_accent_hover};
 }
 
-/* RadioButton */
-QRadioButton {
+/* RadioButton - SCOPED to FilterMate */
+#dockWidgetContents QRadioButton {
     color: {color_font_0};
     spacing: 5px;
 }
 
-QRadioButton::indicator {
+#dockWidgetContents QRadioButton::indicator {
     width: 18px;
     height: 18px;
     border: 2px solid {color_2};
@@ -828,14 +854,14 @@ QRadioButton::indicator {
 
 /* Styles regroupés avec checkbox ci-dessus */
 
-/* TabWidget */
-QTabWidget::pane {
+/* TabWidget - SCOPED to FilterMate */
+#dockWidgetContents QTabWidget::pane {
     border: 1px solid {color_2};
     border-radius: 3px;
     background-color: {color_1};
 }
 
-QTabBar::tab {
+#dockWidgetContents QTabBar::tab {
     background-color: {color_2};
     border: 1px solid {color_2};
     border-bottom: none;
@@ -846,7 +872,7 @@ QTabBar::tab {
     margin-right: 2px;
 }
 
-QTabBar::tab:selected {
+#dockWidgetContents QTabBar::tab:selected {
     background-color: {color_accent};
     color: white;
     border: 1px solid {color_accent_dark};
@@ -854,7 +880,7 @@ QTabBar::tab:selected {
     font-weight: 600;
 }
 
-QTabBar::tab:hover:!selected {
+#dockWidgetContents QTabBar::tab:hover:!selected {
     background-color: {color_1};
     color: {color_font_0};
 }
@@ -871,8 +897,8 @@ QLabel#label_backend_indicator {
     max-height: 18px;
 }
 
-/* Progress Bar */
-QProgressBar {
+/* Progress Bar - SCOPED to FilterMate */
+#dockWidgetContents QProgressBar {
     border: 2px solid {color_2};
     border-radius: 4px;
     background-color: {color_1};
@@ -881,7 +907,7 @@ QProgressBar {
     height: 20px;
 }
 
-QProgressBar::chunk {
+#dockWidgetContents QProgressBar::chunk {
     background-color: {color_accent};
     border-radius: 2px;
 }
@@ -897,14 +923,6 @@ QWidget#widget_exporting_keys {
     padding: 3px 3px;
     margin: 0px 0px;
     /* Smooth transitions for responsive behavior */
-}
-
-/* Ensure proper vertical alignment within key widgets */
-QWidget#widget_exploring_keys QVBoxLayout,
-QWidget#widget_filtering_keys QVBoxLayout,
-QWidget#widget_exporting_keys QVBoxLayout {
-    spacing: 2px;
-    margin: 0px;
 }
 
 /* Buttons inside widget_exploring_keys - Non-checkable - Responsive sizing */
@@ -1166,9 +1184,9 @@ QFrame#frame_actions QSpacerItem {
     min-width: 12px;
 }
 
-/* TreeView & ListWidget - Harmonized backgrounds */
-QTreeView,
-QListWidget {
+/* TreeView & ListWidget - Harmonized backgrounds - SCOPED to FilterMate */
+#dockWidgetContents QTreeView,
+#dockWidgetContents QListWidget {
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 3px;
@@ -1176,35 +1194,35 @@ QListWidget {
     padding: 2px;
 }
 
-QTreeView:focus,
-QListWidget:focus {
+#dockWidgetContents QTreeView:focus,
+#dockWidgetContents QListWidget:focus {
     border: 2px solid {color_accent};
     padding: 1px;
 }
 
-QTreeView::item {
+#dockWidgetContents QTreeView::item {
     min-height: 24px;
     padding: 4px 2px;
 }
 
-QTreeView::item:hover {
+#dockWidgetContents QTreeView::item:hover {
     background-color: {color_accent_light_bg};
 }
 
-QTreeView::item:selected {
+#dockWidgetContents QTreeView::item:selected {
     background-color: {color_accent};
     color: white;
 }
 
-/* Labels - Hierarchical typography */
-QLabel {
+/* Labels - Hierarchical typography - SCOPED to FilterMate */
+#dockWidgetContents QLabel {
     color: {color_font_0};
     padding: 2px;
 }
 
 /* Primary labels (section titles) */
-QLabel[objectName*="label_title"],
-QLabel[objectName*="label_section"] {
+#dockWidgetContents QLabel[objectName*="label_title"],
+#dockWidgetContents QLabel[objectName*="label_section"] {
     color: {color_font_0};
     font-weight: 600;
     font-size: 11pt;
@@ -1212,8 +1230,8 @@ QLabel[objectName*="label_section"] {
 }
 
 /* Secondary labels (descriptions) */
-QLabel[objectName*="label_info"],
-QLabel[objectName*="label_description"] {
+#dockWidgetContents QLabel[objectName*="label_info"],
+#dockWidgetContents QLabel[objectName*="label_description"] {
     color: {color_font_1};
     font-weight: normal;
     font-size: 9pt;
@@ -1221,7 +1239,7 @@ QLabel[objectName*="label_description"] {
 }
 
 /* Labels inside GroupBox */
-QGroupBox QLabel {
+#dockWidgetContents QGroupBox QLabel {
     color: {color_font_0};
     font-weight: normal;
 }

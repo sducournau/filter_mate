@@ -94,8 +94,8 @@ class FilterParameterBuilder:
     Example:
         builder = FilterParameterBuilder()
         params = builder.build(context)
-        print(f"Provider: {params.provider_type}")
-        print(f"Table: {params.table_name}")
+        # print(f"Provider: {params.provider_type}")  # DEBUG REMOVED
+        # print(f"Table: {params.table_name}")  # DEBUG REMOVED
     """
     
     def build(self, context: ParameterBuilderContext) -> FilterParameters:
@@ -171,7 +171,7 @@ class FilterParameterBuilder:
             if context.detect_provider_fn:
                 detected_type = context.detect_provider_fn(context.source_layer)
                 infos["layer_provider_type"] = detected_type
-                logger.info(f"Auto-filled layer_provider_type='{detected_type}'")
+                logger.debug(f"Auto-filled layer_provider_type='{detected_type}'")
             else:
                 infos["layer_provider_type"] = 'unknown'
         
@@ -256,7 +256,7 @@ class FilterParameterBuilder:
         forced = forced_backends.get(source_layer_id) if source_layer_id else None
         
         if forced:
-            logger.info(f"🔒 Source layer: Using FORCED backend '{forced}'")
+            logger.debug(f"🔒 Source layer: Using FORCED backend '{forced}'")
             return {
                 'provider_type': forced,
                 'forced_backend': True,

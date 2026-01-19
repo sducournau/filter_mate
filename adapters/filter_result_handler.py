@@ -569,7 +569,7 @@ class FilterResultHandler:
             self._force_combobox_restoration(current_layer_id_before_filter)
             
             # v3.0.19: CRITICAL - Keep combobox signals BLOCKED during 5s protection
-            logger.info("v3.0.19: ⏳ Keeping current_layer signal DISCONNECTED during 5s protection")
+            logger.debug("v3.0.19: ⏳ Keeping current_layer signal DISCONNECTED during 5s protection")
             
             # v2.9.27: Reconnect LAYER_TREE_VIEW signal (if legend link enabled)
             self._reconnect_layer_tree_view_signal()
@@ -652,7 +652,7 @@ class FilterResultHandler:
             if link_enabled and hasattr(dockwidget, 'manageSignal'):
                 try:
                     dockwidget.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect')
-                    logger.info("v2.9.27: ✅ FINALLY - Reconnected LAYER_TREE_VIEW signal after filtering")
+                    logger.debug("v2.9.27: ✅ FINALLY - Reconnected LAYER_TREE_VIEW signal after filtering")
                 except Exception as e:
                     logger.debug(f"Could not reconnect LAYER_TREE_VIEW signal: {e}")
     
@@ -774,7 +774,7 @@ class FilterResultHandler:
                 # v3.0.19: CRITICAL FIX - Reset _filtering_in_progress HERE, not earlier
                 dockwidget._filtering_in_progress = False
                 
-                logger.info("v3.0.19: ✅ Unblocked combobox, reconnected handler, and reset filtering flag after protection")
+                logger.debug("v3.0.19: ✅ Unblocked combobox, reconnected handler, and reset filtering flag after protection")
                 QgsMessageLog.logMessage(
                     "v3.0.19: ✅ Combobox protection ENDED - signals reconnected, filtering flag reset",
                     "FilterMate", Qgis.Info

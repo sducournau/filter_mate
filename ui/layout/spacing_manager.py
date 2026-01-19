@@ -127,6 +127,10 @@ class SpacingManager(LayoutManagerBase):
             key_button_config = UIConfig.get_config('key_button')
             button_spacing = key_button_config.get('spacing', 2) if key_button_config else 2
             
+            # CRITICAL: Keys and values layouts MUST use the SAME spacing for alignment
+            # Use button_spacing (2) for both columns to ensure proper horizontal alignment
+            keys_values_spacing = button_spacing
+            
             # Apply main container spacing for better responsiveness
             if hasattr(self.dockwidget, 'verticalLayout_main_content'):
                 self.dockwidget.verticalLayout_main_content.setSpacing(main_spacing)
@@ -141,17 +145,17 @@ class SpacingManager(LayoutManagerBase):
                 if hasattr(self.dockwidget, layout_name):
                     getattr(self.dockwidget, layout_name).setSpacing(layout_spacing)
             
-            # Apply spacing to filtering layouts
+            # Apply spacing to filtering layouts - SAME spacing for alignment
             if hasattr(self.dockwidget, 'verticalLayout_filtering_keys'):
-                self.dockwidget.verticalLayout_filtering_keys.setSpacing(button_spacing)
+                self.dockwidget.verticalLayout_filtering_keys.setSpacing(keys_values_spacing)
             if hasattr(self.dockwidget, 'verticalLayout_filtering_values'):
-                self.dockwidget.verticalLayout_filtering_values.setSpacing(content_spacing)
+                self.dockwidget.verticalLayout_filtering_values.setSpacing(keys_values_spacing)
             
-            # Apply spacing to exporting layouts
+            # Apply spacing to exporting layouts - SAME spacing for alignment
             if hasattr(self.dockwidget, 'verticalLayout_exporting_keys'):
-                self.dockwidget.verticalLayout_exporting_keys.setSpacing(button_spacing)
+                self.dockwidget.verticalLayout_exporting_keys.setSpacing(keys_values_spacing)
             if hasattr(self.dockwidget, 'verticalLayout_exporting_values'):
-                self.dockwidget.verticalLayout_exporting_values.setSpacing(content_spacing)
+                self.dockwidget.verticalLayout_exporting_values.setSpacing(keys_values_spacing)
             
             # Apply spacing to exploring key layout
             if hasattr(self.dockwidget, 'verticalLayout_exploring_content'):
@@ -313,7 +317,10 @@ class SpacingManager(LayoutManagerBase):
             
             # Get compact mode status and spacer sizes
             is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
-            layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 4
+            
+            # CRITICAL: Use same spacing as keys layout for alignment
+            key_button_config = UIConfig.get_config('key_button')
+            keys_values_spacing = key_button_config.get('spacing', 2) if key_button_config else 2
             
             spacer_sizes = {
                 'filtering': get_spacer_size('verticalSpacer_filtering_keys_field_top', is_compact),
@@ -335,7 +342,8 @@ class SpacingManager(LayoutManagerBase):
                             item.sizePolicy().verticalPolicy()
                         )
                 
-                self.dockwidget.verticalLayout_filtering_values.setSpacing(layout_spacing)
+                # Use keys_values_spacing for alignment (not layout_spacing)
+                self.dockwidget.verticalLayout_filtering_values.setSpacing(keys_values_spacing)
             
             # Adjust spacers in exporting values layout to match keys layout
             if hasattr(self.dockwidget, 'verticalLayout_exporting_values'):
@@ -352,9 +360,10 @@ class SpacingManager(LayoutManagerBase):
                             item.sizePolicy().verticalPolicy()
                         )
                 
-                self.dockwidget.verticalLayout_exporting_values.setSpacing(layout_spacing)
+                # Use keys_values_spacing for alignment (not layout_spacing)
+                self.dockwidget.verticalLayout_exporting_values.setSpacing(keys_values_spacing)
             
-            logger.debug(f"Adjusted row spacing: filtering/exporting aligned with {layout_spacing}px spacing")
+            logger.debug(f"Adjusted row spacing: filtering/exporting aligned with {keys_values_spacing}px spacing")
             
         except Exception as e:
             logger.warning(f"Could not adjust row spacing: {e}")

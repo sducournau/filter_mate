@@ -128,18 +128,19 @@ def test_all_themes(json_view):
     from qgis.PyQt.QtWidgets import QApplication
     
     themes = json_view.get_available_themes()
-    print(f"Testing {len(themes)} themes...")
+    # print(f"Testing {len(themes)} themes...")  # DEBUG REMOVED
     
     for key, name in themes.items():
-        print(f"Applying theme: {name} ({key})")
+        # print(f"Applying theme: {name} ({key})")  # DEBUG REMOVED
         json_view.set_theme(key)
         QApplication.processEvents()  # Update UI
         time.sleep(1)  # Wait 1 second
     
-    print("Theme testing complete!")
+    # print("Theme testing complete!")  # DEBUG REMOVED
 
 
 if __name__ == "__main__":
+    pass  # block was empty
     # This won't work standalone, but shows the pattern
-    print("This example requires QGIS environment")
-    print("Use: show_json_viewer_with_themes() from within QGIS Python console")
+    # print("This example requires QGIS environment")  # DEBUG REMOVED
+    # print("Use: show_json_viewer_with_themes() from within QGIS Python console")  # DEBUG REMOVED

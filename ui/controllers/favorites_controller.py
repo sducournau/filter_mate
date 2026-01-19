@@ -101,9 +101,9 @@ class FavoritesController(BaseController):
 
         Initializes the favorites manager and connects to indicator.
         """
-        print("🔧 FavoritesController.setup() START")
+        # print("🔧 FavoritesController.setup() START")  # DEBUG REMOVED
         self._find_indicator_label()
-        print(f"🔧 _indicator_label = {self._indicator_label}")
+        # print(f"🔧 _indicator_label = {self._indicator_label}")  # DEBUG REMOVED
         self._init_favorites_manager()
         
         # CRITICAL FIX 2026-01-18: Connect to favorites_changed signal from FavoritesService
@@ -113,7 +113,7 @@ class FavoritesController(BaseController):
             logger.debug("✓ Connected to FavoritesService.favorites_changed signal")
         
         self._initialized = True
-        print(f"🔧 FavoritesController.setup() END - _initialized={self._initialized}, _favorites_manager={self._favorites_manager}")
+        # print(f"🔧 FavoritesController.setup() END - _initialized={self._initialized}, _favorites_manager={self._favorites_manager}")  # DEBUG REMOVED
         logger.debug("FavoritesController setup complete")
 
     def teardown(self) -> None:
@@ -208,13 +208,13 @@ class FavoritesController(BaseController):
 
         Shows the favorites context menu.
         """
-        print(f"🔧 handle_indicator_clicked() - _favorites_manager={self._favorites_manager}, _initialized={self._initialized}")
+        # print(f"🔧 handle_indicator_clicked() - _favorites_manager={self._favorites_manager}, _initialized={self._initialized}")  # DEBUG REMOVED
         
         # Lazy initialization fallback - if setup() was never called, do it now
         if not self._initialized:
-            print("🔧 handle_indicator_clicked: setup() was never called - performing lazy initialization...")
+            # print("🔧 handle_indicator_clicked: setup() was never called - performing lazy initialization...")  # DEBUG REMOVED
             self.setup()
-            print(f"🔧 After lazy setup: _favorites_manager={self._favorites_manager}, _initialized={self._initialized}")
+            # print(f"🔧 After lazy setup: _favorites_manager={self._favorites_manager}, _initialized={self._initialized}")  # DEBUG REMOVED
         
         self._show_favorites_menu()
 
@@ -508,13 +508,13 @@ class FavoritesController(BaseController):
         If _favorites_manager is not available yet, we create a temporary empty one
         and wait for sync_with_dockwidget_manager() to be called later.
         """
-        print("🔧 _init_favorites_manager() START")
+        # print("🔧 _init_favorites_manager() START")  # DEBUG REMOVED
         
         # PRIORITY 1: Check if already initialized on dockwidget (from FilterMateApp)
         if hasattr(self.dockwidget, '_favorites_manager') and self.dockwidget._favorites_manager:
             self._favorites_manager = self.dockwidget._favorites_manager
-            print(f"🔧 Re-using existing _favorites_manager from dockwidget: {self._favorites_manager}")
-            print(f"🔧 Favorites count: {self._favorites_manager.count if hasattr(self._favorites_manager, 'count') else 'N/A'}")
+            # print(f"🔧 Re-using existing _favorites_manager from dockwidget: {self._favorites_manager}")  # DEBUG REMOVED
+            # print(f"🔧 Favorites count: {self._favorites_manager.count if hasattr(self._favorites_manager, 'count') else 'N/A'}")  # DEBUG REMOVED
             return
 
         # PRIORITY 2: Try to read project_uuid from QGIS project variables
@@ -526,7 +526,7 @@ class FavoritesController(BaseController):
         if project:
             scope = QgsExpressionContextUtils.projectScope(project)
             project_uuid = scope.variable('filterMate_db_project_uuid')
-            print(f"🔧 project_uuid from project variables: {project_uuid}")
+            # print(f"🔧 project_uuid from project variables: {project_uuid}")  # DEBUG REMOVED
             
             if project_uuid:
                 from ...config.config import ENV_VARS
@@ -535,36 +535,37 @@ class FavoritesController(BaseController):
                     ENV_VARS.get("PLUGIN_CONFIG_DIRECTORY", "") + os.sep + 'filterMate_db.sqlite'
                 )
                 if not os.path.exists(db_path):
-                    print(f"🔧 Database file does not exist yet: {db_path}")
+                    # print(f"🔧 Database file does not exist yet: {db_path}")  # DEBUG REMOVED
                     db_path = None
         
         # PRIORITY 3: Create FavoritesService and configure if possible
         try:
             from ...core.services.favorites_service import FavoritesService
             self._favorites_manager = FavoritesService()
-            print(f"🔧 FavoritesService created: {self._favorites_manager}")
+            # print(f"🔧 FavoritesService created: {self._favorites_manager}")  # DEBUG REMOVED
             
             # Configure with database if available
             if project_uuid and db_path:
-                print(f"🔧 Configuring FavoritesService with db_path={db_path}, project_uuid={project_uuid}")
+                # print(f"🔧 Configuring FavoritesService with db_path={db_path}, project_uuid={project_uuid}")  # DEBUG REMOVED
                 self._favorites_manager.set_database(db_path, str(project_uuid))
-                print(f"🔧 FavoritesService configured - count: {self._favorites_manager.count}")
+                # print(f"🔧 FavoritesService configured - count: {self._favorites_manager.count}")  # DEBUG REMOVED
             else:
-                print("🔧 FavoritesService created but NOT configured (no project_uuid or db_path)")
-                print("🔧 Will be synced later via sync_with_dockwidget_manager()")
+                pass  # block was empty
+                # print("🔧 FavoritesService created but NOT configured (no project_uuid or db_path)")  # DEBUG REMOVED
+                # print("🔧 Will be synced later via sync_with_dockwidget_manager()")  # DEBUG REMOVED
 
             # Store reference on dockwidget (may be overwritten by FilterMateApp later)
             self.dockwidget._favorites_manager = self._favorites_manager
             logger.debug(f"FavoritesManager initialized with {self.count} favorites")
 
         except Exception as e:
-            print(f"🔧 ERROR in _init_favorites_manager: {e}")
+            # print(f"🔧 ERROR in _init_favorites_manager: {e}")  # DEBUG REMOVED
             import traceback
-            print(f"🔧 Traceback: {traceback.format_exc()}")
+            # print(f"🔧 Traceback: {traceback.format_exc()}")  # DEBUG REMOVED
             logger.error(f"Failed to initialize FavoritesManager: {e}")
             self._favorites_manager = None
         
-        print(f"🔧 _init_favorites_manager() END - count={self.count if self._favorites_manager else 0}")
+        # print(f"🔧 _init_favorites_manager() END - count={self.count if self._favorites_manager else 0}")  # DEBUG REMOVED
 
     def _restore_spatial_config(self, favorite: 'FilterFavorite') -> bool:
         """
@@ -653,7 +654,7 @@ class FavoritesController(BaseController):
 
     def _show_favorites_menu(self) -> None:
         """Show context menu with favorites options."""
-        print(f"🔧 _show_favorites_menu() START - _favorites_manager={self._favorites_manager}")
+        # print(f"🔧 _show_favorites_menu() START - _favorites_manager={self._favorites_manager}")  # DEBUG REMOVED
         menu = QMenu(self.dockwidget)
         menu.setStyleSheet("""
             QMenu {
@@ -777,19 +778,19 @@ class FavoritesController(BaseController):
         stats_action.setData('__SHOW_STATS__')
 
         # Show menu
-        print(f"🔧 About to show menu.exec_() at position {QCursor.pos()}")
+        # print(f"🔧 About to show menu.exec_() at position {QCursor.pos()}")  # DEBUG REMOVED
         selected_action = menu.exec_(QCursor.pos())
-        print(f"🔧 menu.exec_() returned: {selected_action}")
+        # print(f"🔧 menu.exec_() returned: {selected_action}")  # DEBUG REMOVED
 
         if selected_action:
             action_data = selected_action.data()
-            print(f"🔧 Selected action data: {action_data}")
+            # print(f"🔧 Selected action data: {action_data}")  # DEBUG REMOVED
             self._handle_menu_action(action_data)
-        print("🔧 _show_favorites_menu() END")
+        # print("🔧 _show_favorites_menu() END")  # DEBUG REMOVED
 
     def _handle_menu_action(self, action_data: Any) -> None:
         """Handle favorites menu action."""
-        print(f"🔧 _handle_menu_action() called with: {action_data}")
+        # print(f"🔧 _handle_menu_action() called with: {action_data}")  # DEBUG REMOVED
         if action_data == '__ADD_FAVORITE__':
             self.add_current_to_favorites()
         elif action_data == '__MANAGE__':

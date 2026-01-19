@@ -233,7 +233,7 @@ class BackendFactory:
             provider_type = provider_type_or_layer_info
             
             if force_ogr:
-                logger.info(f"🔄 Force OGR mode: Returning OGR backend for '{layer.name() if layer else 'unknown'}' (bypassing auto-selection)")
+                logger.debug(f"🔄 Force OGR mode: Returning OGR backend for '{layer.name() if layer else 'unknown'}' (bypassing auto-selection)")
                 return OGRExpressionBuilder(task_params or {})
             
             # Check for forced backend in task_params
@@ -241,18 +241,18 @@ class BackendFactory:
             forced_backend = forced_backends.get(layer.id()) if layer and forced_backends else None
             
             if forced_backend:
-                logger.info(f"🔒 Using forced backend '{forced_backend.upper()}' for layer '{layer.name() if layer else 'unknown'}'")
+                logger.debug(f"🔒 Using forced backend '{forced_backend.upper()}' for layer '{layer.name() if layer else 'unknown'}'")
                 provider_type = forced_backend
             
-            logger.info(f"🔧 BackendFactory.get_backend() called for '{layer.name() if layer else 'unknown'}'")
-            logger.info(f"   → provider_type (effective): '{provider_type}'")
+            logger.debug(f"🔧 BackendFactory.get_backend() called for '{layer.name() if layer else 'unknown'}'")
+            logger.debug(f"   → provider_type (effective): '{provider_type}'")
             
             # v4.2.0: ALWAYS use LegacyAdapters for hexagonal architecture support
             # The adapters delegate to new ExpressionBuilders (v4.1.0)
             # This enables progressive migration via set_new_backend_enabled()
             if USE_LEGACY_ADAPTERS:
                 new_backend_active = is_new_backend_enabled(provider_type)
-                logger.info(f"   → Using LegacyAdapter (hexagonal: {'enabled' if new_backend_active else 'delegating to expression builder'})")
+                logger.debug(f"   → Using LegacyAdapter (hexagonal: {'enabled' if new_backend_active else 'delegating to expression builder'})")
                 try:
                     return get_legacy_adapter(provider_type, task_params or {})
                 except Exception as e:

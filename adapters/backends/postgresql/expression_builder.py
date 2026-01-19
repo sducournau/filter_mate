@@ -198,10 +198,10 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             geom_field = self._detect_geometry_column(layer_props)
         
         # DIAGNOSTIC: Print extracted values
-        print(f"📋 Layer props extraction:")
-        print(f"   schema: {schema}")
-        print(f"   table: {table}")
-        print(f"   geom_field: {geom_field}")
+        # print(f"📋 Layer props extraction:")  # DEBUG REMOVED
+        # print(f"   schema: {schema}")  # DEBUG REMOVED
+        # print(f"   table: {table}")  # DEBUG REMOVED
+        # print(f"   geom_field: {geom_field}")  # DEBUG REMOVED
         
         # FIX 2026-01-19: Build geometry expression with TABLE.GEOM (not schema)
         # For PostgreSQL setSubsetString, the schema is implicit in the layer context
@@ -217,7 +217,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             geom_expr = self._apply_dynamic_buffer(geom_expr, buffer_expression)
         
         # DIAGNOSTIC 2026-01-19: Log the fully qualified geom_expr
-        print(f"🎯 PostgreSQL geom_expr (fully qualified): {geom_expr}")
+        # print(f"🎯 PostgreSQL geom_expr (fully qualified): {geom_expr}")  # DEBUG REMOVED
         
         # Determine strategy
         wkt_length = len(source_wkt) if source_wkt else 0
@@ -276,11 +276,11 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             final_expr = f"({' OR '.join(predicate_expressions)})"
         
         # DIAGNOSTIC: Log the final expression
-        print("=" * 80)
-        print(f"🔍 PostgreSQLExpressionBuilder.build_expression() RESULT:")
-        print(f"   Expression length: {len(final_expr)} chars")
-        print(f"   Expression preview: {final_expr[:300]}...")
-        print("=" * 80)
+        # print("=" * 80)  # DEBUG REMOVED
+        # print(f"🔍 PostgreSQLExpressionBuilder.build_expression() RESULT:")  # DEBUG REMOVED
+        # print(f"   Expression length: {len(final_expr)} chars")  # DEBUG REMOVED
+        # print(f"   Expression preview: {final_expr[:300]}...")  # DEBUG REMOVED
+        # print("=" * 80)  # DEBUG REMOVED
         self.log_info(f"✅ PostgreSQL expression built: {final_expr[:200]}...")
         
         return final_expr
@@ -305,19 +305,19 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             True if filter applied successfully
         """
         # DIAGNOSTIC 2026-01-19: Trace apply_filter execution
-        print("=" * 80)
-        print(f"🎯 PostgreSQLExpressionBuilder.apply_filter() CALLED!")
-        print(f"   layer: {layer.name() if layer else 'None'}")
-        print(f"   expression length: {len(expression) if expression else 0}")
-        print(f"   expression preview: {expression[:150] if expression else 'None'}...")
-        print(f"   old_subset: {old_subset[:100] if old_subset else 'None'}...")
-        print(f"   combine_operator: {combine_operator}")
-        print("=" * 80)
+        # print("=" * 80)  # DEBUG REMOVED
+        # print(f"🎯 PostgreSQLExpressionBuilder.apply_filter() CALLED!")  # DEBUG REMOVED
+        # print(f"   layer: {layer.name() if layer else 'None'}")  # DEBUG REMOVED
+        # print(f"   expression length: {len(expression) if expression else 0}")  # DEBUG REMOVED
+        # print(f"   expression preview: {expression[:150] if expression else 'None'}...")  # DEBUG REMOVED
+        # print(f"   old_subset: {old_subset[:100] if old_subset else 'None'}...")  # DEBUG REMOVED
+        # print(f"   combine_operator: {combine_operator}")  # DEBUG REMOVED
+        # print("=" * 80)  # DEBUG REMOVED
         
         try:
             if not expression:
                 self.log_warning("Empty expression, skipping filter")
-                print("⚠️ Empty expression - returning False")
+                # print("⚠️ Empty expression - returning False")  # DEBUG REMOVED
                 return False
             
             # Normalize column case and apply type casting
@@ -342,21 +342,21 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                 final_expression = expression
             
             # DIAGNOSTIC: Print final expression before applying
-            print(f"📝 Final expression to apply: {final_expression[:200]}...")
-            print(f"   Calling safe_set_subset_string(layer={layer.name()}, expr_len={len(final_expression)})...")
+            # print(f"📝 Final expression to apply: {final_expression[:200]}...")  # DEBUG REMOVED
+            # print(f"   Calling safe_set_subset_string(layer={layer.name()}, expr_len={len(final_expression)})...")  # DEBUG REMOVED
             
             # Apply filter
             success = safe_set_subset_string(layer, final_expression)
             
-            print(f"   safe_set_subset_string returned: {success}")
+            # print(f"   safe_set_subset_string returned: {success}")  # DEBUG REMOVED
             
             if success:
                 self.log_info(f"✓ Filter applied successfully")
-                print(f"✅ Filter applied successfully to {layer.name()}")
+                # print(f"✅ Filter applied successfully to {layer.name()}")  # DEBUG REMOVED
             else:
                 self.log_error(f"✗ Failed to apply filter")
-                print(f"❌ FAILED to apply filter to {layer.name()}!")
-                print(f"   Expression that failed: {final_expression[:300]}...")
+                # print(f"❌ FAILED to apply filter to {layer.name()}!")  # DEBUG REMOVED
+                # print(f"   Expression that failed: {final_expression[:300]}...")  # DEBUG REMOVED
             
             return success
             
@@ -542,17 +542,17 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         )
         
         # DIAGNOSTIC: Log EXISTS expression details
-        print(f"🔍 _build_exists_expression() GENERATED:")
-        print(f"   source_schema: {source_schema}")
-        print(f"   source_table: {source_table}")
-        print(f"   source_geom_field: {source_geom_field}")
-        print(f"   predicate_func: {predicate_func}")
-        print(f"   geom_expr: {geom_expr}")
-        print(f"   source_filter (original): {source_filter[:100] if source_filter else 'None'}...")
+        # print(f"🔍 _build_exists_expression() GENERATED:")  # DEBUG REMOVED
+        # print(f"   source_schema: {source_schema}")  # DEBUG REMOVED
+        # print(f"   source_table: {source_table}")  # DEBUG REMOVED
+        # print(f"   source_geom_field: {source_geom_field}")  # DEBUG REMOVED
+        # print(f"   predicate_func: {predicate_func}")  # DEBUG REMOVED
+        # print(f"   geom_expr: {geom_expr}")  # DEBUG REMOVED
+        # print(f"   source_filter (original): {source_filter[:100] if source_filter else 'None'}...")  # DEBUG REMOVED
         if source_filter:
             aliased_filter = source_filter.replace(f'"{source_table}".', '__source.')
-            print(f"   source_filter (aliased): {aliased_filter[:100]}...")
-        print(f"   EXISTS expression: {exists_expr[:300]}...")
+            # print(f"   source_filter (aliased): {aliased_filter[:100]}...")  # DEBUG REMOVED
+        # print(f"   EXISTS expression: {exists_expr[:300]}...")  # DEBUG REMOVED
         
         return exists_expr
     

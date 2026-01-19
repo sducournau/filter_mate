@@ -387,7 +387,7 @@ class ExpressionEvaluationManager:
         manager = ExpressionEvaluationManager()
         
         def on_complete(features, expression, layer_id):
-            print(f"Got {len(features)} features")
+            # print(f"Got {len(features)} features")  # DEBUG REMOVED
         
         manager.evaluate(
             layer=my_layer,

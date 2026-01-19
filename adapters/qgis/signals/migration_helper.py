@@ -448,7 +448,7 @@ class SignalMigrationHelper:
         success = actual >= expected * 0.8  # 80% threshold
         
         if success:
-            logger.info(f"Signal migration validated: {actual}/{expected}")
+            logger.debug(f"Signal migration validated: {actual}/{expected}")
         else:
             logger.warning(f"Signal migration incomplete: {actual}/{expected}")
         

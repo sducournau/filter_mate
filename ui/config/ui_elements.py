@@ -180,20 +180,21 @@ def get_spacer_size(spacer_name: str, compact_mode: bool = True) -> int:
     Returns:
         Recommended size in pixels
     """
-    # Default sizes based on mode
-    base_size = 8 if compact_mode else 14
+    # Default sizes based on mode - REDUCED for better alignment
+    # Keys and values columns need matching spacer sizes
+    base_size = 4 if compact_mode else 6
     
-    # Section-specific adjustments
+    # Section-specific adjustments - minimal to maintain alignment
     if "main" in spacer_name:
         return base_size + 2
     elif "config" in spacer_name:
-        return base_size + 4
+        return base_size + 2
     elif "exploring" in spacer_name:
-        return base_size - 2
+        return base_size
     elif "filtering" in spacer_name:
-        return base_size
+        return base_size  # Must match between keys and values
     elif "exporting" in spacer_name:
-        return base_size
+        return base_size  # Must match between keys and values
     
     return base_size
 

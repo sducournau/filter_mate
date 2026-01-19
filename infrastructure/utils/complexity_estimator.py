@@ -181,8 +181,8 @@ class QueryComplexityEstimator:
         estimator = QueryComplexityEstimator()
         
         breakdown = estimator.analyze(expression, feature_count=100000)
-        print(f"Complexity: {breakdown.complexity_level.value}")
-        print(f"Score: {breakdown.total_score}")
+        # print(f"Complexity: {breakdown.complexity_level.value}")  # DEBUG REMOVED
+        # print(f"Score: {breakdown.total_score}")  # DEBUG REMOVED
         
         strategy = estimator.recommend_strategy(breakdown.total_score)
     """

@@ -53,7 +53,7 @@ def enable_backend(provider_type: str) -> bool:
     try:
         from .legacy_adapter import set_new_backend_enabled
         set_new_backend_enabled(provider_type, True)
-        logger.info(f"✅ Hexagonal backend ENABLED for: {provider_type.upper()}")
+        logger.debug(f"✅ Hexagonal backend ENABLED for: {provider_type.upper()}")
         return True
     except Exception as e:
         logger.error(f"❌ Failed to enable {provider_type}: {e}")
@@ -73,7 +73,7 @@ def disable_backend(provider_type: str) -> bool:
     try:
         from .legacy_adapter import set_new_backend_enabled
         set_new_backend_enabled(provider_type, False)
-        logger.info(f"🔙 Hexagonal backend DISABLED for: {provider_type.upper()} (using legacy)")
+        logger.debug(f"🔙 Hexagonal backend DISABLED for: {provider_type.upper()} (using legacy)")
         return True
     except Exception as e:
         logger.error(f"❌ Failed to disable {provider_type}: {e}")
@@ -106,7 +106,7 @@ def enable_hexagonal_architecture(providers: Optional[List[str]] = None) -> Dict
         results[provider] = enable_backend(provider)
     
     enabled_count = sum(1 for v in results.values() if v)
-    logger.info(f"🚀 Hexagonal architecture enabled for {enabled_count}/{len(target_providers)} backends")
+    logger.debug(f"🚀 Hexagonal architecture enabled for {enabled_count}/{len(target_providers)} backends")
     
     return results
 
@@ -121,7 +121,7 @@ def disable_hexagonal_architecture() -> Dict[str, bool]:
     try:
         from .legacy_adapter import disable_all_new_backends
         disable_all_new_backends()
-        logger.info("🔙 Hexagonal architecture DISABLED - all backends using legacy")
+        logger.debug("🔙 Hexagonal architecture DISABLED - all backends using legacy")
         return {'postgresql': True, 'spatialite': True, 'ogr': True, 'memory': True}
     except Exception as e:
         logger.error(f"❌ Failed to disable hexagonal architecture: {e}")
@@ -175,7 +175,7 @@ def enable_progressive_migration():
     
     This is the recommended starting point for testing the hexagonal architecture.
     """
-    logger.info("🧪 Starting progressive migration (OGR + Memory first)")
+    logger.debug("🧪 Starting progressive migration (OGR + Memory first)")
     enable_backend('ogr')
     enable_backend('memory')
     
@@ -191,7 +191,7 @@ def complete_migration():
     
     ⚠️ Only use after testing with progressive_migration!
     """
-    logger.info("🚀 Completing migration (all backends)")
+    logger.debug("🚀 Completing migration (all backends)")
     return enable_hexagonal_architecture()
 
 
@@ -210,8 +210,8 @@ def status():
            memory: legacy
     """
     current = get_architecture_status()
-    print("🔧 FilterMate Architecture Status:")
+    # print("🔧 FilterMate Architecture Status:")  # DEBUG REMOVED
     for provider, state in current.items():
         icon = "🆕" if state == 'hexagonal' else "📦"
-        print(f"   {icon} {provider}: {state}")
+        # print(f"   {icon} {provider}: {state}")  # DEBUG REMOVED
     return current

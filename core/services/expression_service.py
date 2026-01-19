@@ -115,11 +115,11 @@ class ExpressionService:
         if result.is_valid:
             # Parse for analysis
             parsed = service.parse("\"name\" = 'test'")
-            print(f"Fields: {parsed.fields}")
+            # print(f"Fields: {parsed.fields}")  # DEBUG REMOVED
             
             # Convert to SQL
             sql = service.to_sql("intersects($geometry, @g)", ProviderType.POSTGRESQL)
-            print(f"SQL: {sql}")
+            # print(f"SQL: {sql}")  # DEBUG REMOVED
     """
 
     # Patterns for expression parsing

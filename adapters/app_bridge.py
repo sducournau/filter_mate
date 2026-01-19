@@ -129,7 +129,7 @@ def initialize_services(config: Optional[Dict[str, Any]] = None) -> None:
         )
         
         _initialized = True
-        logger.info("FilterMate services initialized successfully")
+        logger.debug("FilterMate services initialized successfully")
         
     except Exception as e:
         logger.error(f"Failed to initialize services: {e}")
@@ -147,7 +147,7 @@ def cleanup_services() -> None:
         # CRITICAL v4.0: Reset QGIS factory
         from ..core.ports.qgis_port import set_qgis_factory
         set_qgis_factory(None)
-        logger.info("QGIS factory reset")
+        logger.debug("QGIS factory reset")
         
         if _backend_factory:
             _backend_factory.cleanup()
@@ -161,7 +161,7 @@ def cleanup_services() -> None:
         _backend_factory = None
         _initialized = False
         
-        logger.info("FilterMate services cleaned up")
+        logger.debug("FilterMate services cleaned up")
         
     except Exception as e:
         logger.warning(f"Error during service cleanup: {e}")

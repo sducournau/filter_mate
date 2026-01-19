@@ -153,7 +153,7 @@ class AttributeFilterExecutor:
                 logger.info(f"✅ V3 TaskBridge SUCCESS")
                 logger.info(f"   Backend used: {bridge_result.backend_used}")
                 logger.info(f"   Feature count: {bridge_result.feature_count}")
-                logger.info(f"   Execution time: {bridge_result.execution_time_ms:.1f}ms")
+                logger.debug(f"   Execution time: {bridge_result.execution_time_ms:.1f}ms")
                 
                 # Build filter expression from feature IDs
                 filter_expr = expression

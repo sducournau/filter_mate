@@ -138,7 +138,7 @@ class SourceFeatureResolver:
         result = resolver.resolve_features(config)
         if result.success:
             features = result.features
-            print(f"Resolved {result.feature_count} features via {result.mode_used.value}")
+            # print(f"Resolved {result.feature_count} features via {result.mode_used.value}")  # DEBUG REMOVED
     """
     
     def __init__(self):
@@ -325,7 +325,7 @@ class SourceFeatureResolver:
                     if recovered:
                         valid_features = recovered
                         result.mode_used = FeatureSourceMode.FID_RECOVERY
-                        logger.info(f"  ✓ Recovered {len(recovered)} features using FIDs")
+                        logger.debug(f"  ✓ Recovered {len(recovered)} features using FIDs")
                 except Exception as e:
                     logger.error(f"  ❌ FID recovery failed: {e}")
             
@@ -340,7 +340,7 @@ class SourceFeatureResolver:
                         if recovered:
                             valid_features = recovered
                             result.mode_used = FeatureSourceMode.SELECTION
-                            logger.info(f"  ✓ Recovered {len(recovered)} features from selection")
+                            logger.debug(f"  ✓ Recovered {len(recovered)} features from selection")
                 except Exception as e:
                     logger.error(f"  ❌ Selection recovery failed: {e}")
             

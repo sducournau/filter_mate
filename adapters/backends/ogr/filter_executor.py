@@ -78,7 +78,7 @@ def cleanup_ogr_temp_layers() -> int:
             logger.warning(f"[OGR] Failed to cleanup temp layer {layer_id}: {e}")
     
     if removed_count > 0:
-        logger.info(f"[OGR] Cleaned up {removed_count} temporary OGR layers")
+        logger.debug(f"[OGR] Cleaned up {removed_count} temporary OGR layers")
     
     return removed_count
 
@@ -375,7 +375,7 @@ def execute_reset_action_ogr(
         if cleanup_temp_layers:
             cleaned = cleanup_ogr_temp_layers()
             if cleaned > 0:
-                logger.info(f"[OGR] Reset: Cleaned up {cleaned} temporary OGR layers")
+                logger.debug(f"[OGR] Reset: Cleaned up {cleaned} temporary OGR layers")
         
         # Clear the subset string
         if queue_subset_func:
@@ -387,7 +387,7 @@ def execute_reset_action_ogr(
             layer.setSubsetString('')
             logger.debug(f"[OGR] Reset: Applied empty subset directly for {layer.name()}")
         
-        logger.info(f"[OGR] OGR Reset completed for layer: {layer.name()}")
+        logger.debug(f"[OGR] OGR Reset completed for layer: {layer.name()}")
         return True
         
     except Exception as e:
@@ -437,9 +437,9 @@ def execute_unfilter_action_ogr(
             )
         
         if previous_subset:
-            logger.info(f"[OGR] OGR Unfilter: Restored previous state for {layer.name()}")
+            logger.debug(f"[OGR] OGR Unfilter: Restored previous state for {layer.name()}")
         else:
-            logger.info(f"[OGR] OGR Unfilter: Cleared filter for {layer.name()} (no previous state)")
+            logger.debug(f"[OGR] OGR Unfilter: Cleared filter for {layer.name()} (no previous state)")
         
         return True
         
@@ -570,7 +570,7 @@ def recover_features_from_fids(
         request = QgsFeatureRequest().setFilterFids(feature_fids)
         recovered_features = list(layer.getFeatures(request))
         if recovered_features:
-            logger.info(f"[OGR]   ✓ Recovered {len(recovered_features)} features using FIDs")
+            logger.debug(f"[OGR]   ✓ Recovered {len(recovered_features)} features using FIDs")
         return recovered_features
     except Exception as e:
         logger.error(f"[OGR]   ❌ FID recovery failed: {e}")
@@ -729,7 +729,7 @@ def prepare_ogr_source_geom(
     # Step 0: Determine mode and prepare layer
     mode, mode_data = determine_source_mode(context)
     
-    logger.info(f"[OGR] === prepare_ogr_source_geom ({mode} MODE) ===")
+    logger.debug(f"[OGR] === prepare_ogr_source_geom ({mode} MODE) ===")
     logger.info(f"[OGR]   Source layer: {layer.name()}")
     logger.info(f"[OGR]   Feature count: {layer.featureCount()}")
     
@@ -746,7 +746,7 @@ def prepare_ogr_source_geom(
                 valid_features, layer.crs(), "source_from_task"
             )
             if layer:
-                logger.info(f"[OGR]   ✓ Memory layer created with {layer.featureCount()} features")
+                logger.debug(f"[OGR]   ✓ Memory layer created with {layer.featureCount()} features")
             else:
                 logger.error(f"[OGR]   ✗ Failed to create memory layer")
                 layer = context.source_layer

@@ -64,13 +64,13 @@ class ConfigMigration:
                 logger.debug("Configuration is up to date, no migration needed")
                 return True, []
             
-            logger.info("Configuration migration started")
+            logger.debug("Configuration migration started")
             
             # Perform migration
             success = self._migrate_config()
             
             if success:
-                logger.info("Configuration migration completed successfully")
+                logger.debug("Configuration migration completed successfully")
             else:
                 logger.warning("Configuration migration completed with issues")
             

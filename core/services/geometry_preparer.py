@@ -384,19 +384,19 @@ def prepare_geometries_by_provider(
             - 'spatialite_fallback_mode': bool flag
     """
     # FIX 2026-01-16: CRITICAL - Use print() to force console output
-    print("=" * 80)
-    print("🚀 prepare_geometries_by_provider CALLED")
-    print(f"   provider_list: {provider_list}")
-    print(f"   param_source_provider_type: {param_source_provider_type}")
-    print(f"   postgresql_available: {postgresql_available}")
-    print(f"   layers_dict keys: {list(layers_dict.keys()) if layers_dict else 'None'}")
-    print("=" * 80)
+    # print("=" * 80)  # DEBUG REMOVED
+    # print("🚀 prepare_geometries_by_provider CALLED")  # DEBUG REMOVED
+    # print(f"   provider_list: {provider_list}")  # DEBUG REMOVED
+    # print(f"   param_source_provider_type: {param_source_provider_type}")  # DEBUG REMOVED
+    # print(f"   postgresql_available: {postgresql_available}")  # DEBUG REMOVED
+    # print(f"   layers_dict keys: {list(layers_dict.keys()) if layers_dict else 'None'}")  # DEBUG REMOVED
+    # print("=" * 80)  # DEBUG REMOVED
     
     # Also log normally
     if logger:
         logger.info(f"🚀 prepare_geometries_by_provider CALLED")
         logger.info(f"  → provider_list: {provider_list}")
-        logger.info(f"  → param_source_provider_type: {param_source_provider_type}")
+        logger.debug(f"  → param_source_provider_type: {param_source_provider_type}")
         logger.info(f"  → postgresql_available: {postgresql_available}")
         logger.info(f"  → layers_dict keys: {list(layers_dict.keys()) if layers_dict else 'None'}")
     
@@ -471,26 +471,26 @@ def prepare_geometries_by_provider(
     has_postgresql_fallback_layers = False
     
     # FIX 2026-01-16: Log diagnostic for PostgreSQL geometry preparation
-    print(f"🔍 PostgreSQL geometry preparation check:")
-    print(f"  - 'postgresql' in provider_list: {'postgresql' in provider_list}")
-    print(f"  - postgresql_available (module-level): {postgresql_available}")
+    # print(f"🔍 PostgreSQL geometry preparation check:")  # DEBUG REMOVED
+    # print(f"  - 'postgresql' in provider_list: {'postgresql' in provider_list}")  # DEBUG REMOVED
+    # print(f"  - postgresql_available (module-level): {postgresql_available}")  # DEBUG REMOVED
     
     if 'postgresql' in provider_list and postgresql_available:
-        print(f"  ✓ PostgreSQL block ENTERED")
+        # print(f"  ✓ PostgreSQL block ENTERED")  # DEBUG REMOVED
         
         # CRITICAL FIX v4.0.3 (2026-01-16): IGNORE stored postgresql_connection_available - may be stale!
         # The module-level postgresql_available flag is the source of truth (psycopg2 actually importable)
         stored_pg_conn = task_parameters.get('infos', {}).get('postgresql_connection_available', 'NOT_SET')
-        print(f"  - stored postgresql_connection_available: {stored_pg_conn} (IGNORED - may be stale)")
+        # print(f"  - stored postgresql_connection_available: {stored_pg_conn} (IGNORED - may be stale)")  # DEBUG REMOVED
         
         # Trust module-level flag, not stored config
         source_is_postgresql_with_connection = (
             param_source_provider_type == PROVIDER_POSTGRES and
             postgresql_available  # Module-level flag, NOT stored config
         )
-        print(f"  - source_is_postgresql_with_connection: {source_is_postgresql_with_connection}")
-        print(f"  - param_source_provider_type: {param_source_provider_type}")
-        print(f"  - PROVIDER_POSTGRES constant: {PROVIDER_POSTGRES}")
+        # print(f"  - source_is_postgresql_with_connection: {source_is_postgresql_with_connection}")  # DEBUG REMOVED
+        # print(f"  - param_source_provider_type: {param_source_provider_type}")  # DEBUG REMOVED
+        # print(f"  - PROVIDER_POSTGRES constant: {PROVIDER_POSTGRES}")  # DEBUG REMOVED
         
         has_distant_postgresql_with_connection = False
         if layers_dict and 'postgresql' in layers_dict:
@@ -500,29 +500,33 @@ def prepare_geometries_by_provider(
                     has_distant_postgresql_with_connection = True
                 if layer_props.get('_postgresql_fallback', False):
                     has_postgresql_fallback_layers = True
-                    print(f"  → Layer '{layer.name()}' is PostgreSQL with OGR fallback")
+                    # print(f"  → Layer '{layer.name()}' is PostgreSQL with OGR fallback")  # DEBUG REMOVED
         
-        print(f"  - has_distant_postgresql_with_connection: {has_distant_postgresql_with_connection}")
+        # print(f"  - has_distant_postgresql_with_connection: {has_distant_postgresql_with_connection}")  # DEBUG REMOVED
         
         # CRITICAL FIX v2.7.2: ONLY prepare postgresql_source_geom if SOURCE is PostgreSQL
         if source_is_postgresql_with_connection:
-            print(f"  ✓ PREPARING PostgreSQL source geometry...")
+            # print(f"  ✓ PREPARING PostgreSQL source geometry...")  # DEBUG REMOVED
             result['postgresql_source_geom'] = prepare_postgresql_geom_callback()
             pg_geom = result['postgresql_source_geom']
-            print(f"  ✓ PostgreSQL source geometry result: {pg_geom is not None}")
+            # print(f"  ✓ PostgreSQL source geometry result: {pg_geom is not None}")  # DEBUG REMOVED
             if pg_geom:
-                print(f"  ✓ PostgreSQL source geometry VALUE: '{str(pg_geom)[:150]}...'")
+                pass  # block was empty
+                # print(f"  ✓ PostgreSQL source geometry VALUE: '{str(pg_geom)[:150]}...'")  # DEBUG REMOVED
             else:
-                print(f"  ❌ PostgreSQL source geometry is None/empty!")
+                pass  # block was empty
+                # print(f"  ❌ PostgreSQL source geometry is None/empty!")  # DEBUG REMOVED
         elif has_distant_postgresql_with_connection:
-            print(f"  ⚠️ PostgreSQL distant layers detected but source is NOT PostgreSQL")
-            print(f"  → Will use WKT mode (ST_GeomFromText) for PostgreSQL filtering")
+            pass  # block was empty
+            # print(f"  ⚠️ PostgreSQL distant layers detected but source is NOT PostgreSQL")  # DEBUG REMOVED
+            # print(f"  → Will use WKT mode (ST_GeomFromText) for PostgreSQL filtering")  # DEBUG REMOVED
         else:
-            print(f"  ❌ PostgreSQL in provider list but no layers have connection - will use OGR fallback")
+            # print(f"  ❌ PostgreSQL in provider list but no layers have connection - will use OGR fallback")  # DEBUG REMOVED
             if 'ogr' not in provider_list:
                 provider_list.append('ogr')
     else:
-        print(f"  ❌ PostgreSQL block NOT entered")
+        pass  # block was empty
+        # print(f"  ❌ PostgreSQL block NOT entered")  # DEBUG REMOVED
     
     # CRITICAL FIX: If any PostgreSQL layer uses OGR fallback, we MUST prepare ogr_source_geom
     if has_postgresql_fallback_layers and 'ogr' not in provider_list:

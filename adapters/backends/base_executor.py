@@ -88,10 +88,10 @@ class BaseExecutor(ABC):
             return True
         
         try:
-            logger.info(f"[{self._backend_name}] Connecting - Params: {self._get_connection_summary()}")
+            logger.debug(f"[{self._backend_name}] Connecting - Params: {self._get_connection_summary()}")
             self._connection = self._connect()
             self._is_connected = True
-            logger.info(f"[{self._backend_name}] Connection Established Successfully")
+            logger.debug(f"[{self._backend_name}] Connection Established Successfully")
             return True
             
         except Exception as e:
@@ -130,7 +130,7 @@ class BaseExecutor(ABC):
             self._disconnect()
             self._connection = None
             self._is_connected = False
-            logger.info(f"[{self._backend_name}] Disconnected Successfully")
+            logger.debug(f"[{self._backend_name}] Disconnected Successfully")
             return True
             
         except Exception as e:
@@ -156,7 +156,7 @@ class BaseExecutor(ABC):
         Returns:
             bool: True if reconnected successfully
         """
-        logger.info(f"[{self._backend_name}] Reconnecting - Closing and reopening connection")
+        logger.debug(f"[{self._backend_name}] Reconnecting - Closing and reopening connection")
         self.disconnect()
         return self.connect()
     

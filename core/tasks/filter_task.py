@@ -1484,7 +1484,7 @@ class FilterEngineTask(QgsTask):
             # FIX 2026-01-16: Log source geometry diagnostic
             logger.info("=" * 70)
             logger.info("🔍 MULTI-STEP SOURCE GEOMETRY DIAGNOSTIC")
-            logger.info(f"   Source layer: {self.source_layer.name()} (provider: {self.param_source_provider_type})")
+            logger.debug(f"   Source layer: {self.source_layer.name()} (provider: {self.param_source_provider_type})")
             logger.info(f"   Source feature count: {self.source_layer.featureCount()}")
             logger.info(f"   Source CRS: {self.source_layer.crs().authid() if self.source_layer.crs() else 'UNKNOWN'}")
             logger.info(f"   Target layers: {len(steps)}")
@@ -1516,7 +1516,7 @@ class FilterEngineTask(QgsTask):
                 logger.info(f"✅ V3 TaskBridge MULTI-STEP SUCCESS")
                 logger.info(f"   Backend used: {bridge_result.backend_used}")
                 logger.info(f"   Final feature count: {bridge_result.feature_count}")
-                logger.info(f"   Total execution time: {bridge_result.execution_time_ms:.1f}ms")
+                logger.debug(f"   Total execution time: {bridge_result.execution_time_ms:.1f}ms")
                 logger.info("=" * 70)
                 
                 # Store metrics
@@ -1575,7 +1575,7 @@ class FilterEngineTask(QgsTask):
             if bridge_result.status == BridgeStatus.SUCCESS and bridge_result.success:
                 logger.info(f"✅ V3 TaskBridge EXPORT SUCCESS")
                 logger.info(f"   Features exported: {bridge_result.feature_count}")
-                logger.info(f"   Execution time: {bridge_result.execution_time_ms:.1f}ms")
+                logger.debug(f"   Execution time: {bridge_result.execution_time_ms:.1f}ms")
                 
                 # Store in task_parameters for metrics
                 if 'actual_backends' not in self.task_parameters:
@@ -1953,7 +1953,7 @@ class FilterEngineTask(QgsTask):
         layer_names_list = []
         for provider_type in self.layers:
             layer_list = self.layers[provider_type]
-            logger.info(f"  Provider: {provider_type} → {len(layer_list)} couche(s)")
+            logger.debug(f"  Provider: {provider_type} → {len(layer_list)} couche(s)")
             for idx, (layer, layer_props) in enumerate(layer_list, 1):
                 logger.info(f"    {idx}. {layer.name()} (id={layer.id()[:8]}...)")
                 layer_names_list.append(layer.name())
@@ -2124,7 +2124,7 @@ class FilterEngineTask(QgsTask):
                 self.setDescription(f"Filtering layer {i}/{self.layers_count}: {layer_name}")
                 
                 logger.info("")
-                logger.info(f"🔄 FILTRAGE {i}/{self.layers_count}: {layer_name} ({layer_provider_type})")
+                logger.debug(f"🔄 FILTRAGE {i}/{self.layers_count}: {layer_name} ({layer_provider_type})")
                 logger.info(f"   Features avant filtre: {layer_feature_count}")
                 
                 result = self.execute_geometric_filtering(layer_provider_type, layer, layer_props)
@@ -2206,7 +2206,7 @@ class FilterEngineTask(QgsTask):
         forced_backends = self.task_parameters.get('forced_backends', {})
         for layer_id, forced_backend in forced_backends.items():
             if forced_backend and forced_backend not in provider_list:
-                logger.info(f"  → Adding forced backend '{forced_backend}' to provider_list")
+                logger.debug(f"  → Adding forced backend '{forced_backend}' to provider_list")
                 provider_list.append(forced_backend)
         
         provider_list = list(dict.fromkeys(provider_list))
@@ -3029,7 +3029,7 @@ class FilterEngineTask(QgsTask):
         # DIAGNOSTIC DÉTAILLÉ - ARCHITECTURE FIX 2026-01-16
         logger.info("=" * 70)
         logger.info(f"🎯 execute_geometric_filtering: {layer.name()}")
-        logger.info(f"   Provider: {layer_provider_type}")
+        logger.debug(f"   Provider: {layer_provider_type}")
         logger.info(f"   Predicates in task: {bool(getattr(self, 'current_predicates', None))}")
         
         if hasattr(self, 'current_predicates') and self.current_predicates:
@@ -3240,7 +3240,7 @@ class FilterEngineTask(QgsTask):
                 # Source is NOT PostgreSQL (OGR, Spatialite, etc.)
                 # Must use WKT mode - DO NOT use postgresql_source_geom even if set
                 # because it would contain invalid table references
-                logger.info(f"PostgreSQL target but source is {self.param_source_provider_type} - using WKT mode")
+                logger.debug(f"PostgreSQL target but source is {self.param_source_provider_type} - using WKT mode")
             
             # Fallback: try WKT for PostgreSQL (works with ST_GeomFromText)
             if hasattr(self, 'spatialite_source_geom') and self.spatialite_source_geom:
@@ -3390,23 +3390,21 @@ class FilterEngineTask(QgsTask):
         # ═══════════════════════════════════════════════════════════════
         
         # FIX 2026-01-17: Enhanced console diagnostic for distant layers filtering
-        print("=" * 80)
-        print("📋 ÉTAPE 2: DIAGNOSTIC FILTRAGE COUCHES DISTANTES")
-        print("=" * 80)
+        # print("=" * 80)  # DEBUG REMOVED
+        # print("📋 ÉTAPE 2: DIAGNOSTIC FILTRAGE COUCHES DISTANTES")  # DEBUG REMOVED
+        # print("=" * 80)  # DEBUG REMOVED
         
         has_geom_predicates = self.task_parameters["filtering"]["has_geometric_predicates"]
-        print(f"  has_geometric_predicates: {has_geom_predicates}")
+        # print(f"  has_geometric_predicates: {has_geom_predicates}")  # DEBUG REMOVED
         has_layers_to_filter = self.task_parameters["filtering"]["has_layers_to_filter"]
-        print(f"  has_layers_to_filter: {has_layers_to_filter}")
+        # print(f"  has_layers_to_filter: {has_layers_to_filter}")  # DEBUG REMOVED
         has_layers_in_params = len(self.task_parameters['task'].get('layers', [])) > 0
-        print(f"  has_layers_in_params: {has_layers_in_params}")
-        print(f"  self.layers_count: {self.layers_count}")
-        print(f"  self.layers keys: {list(self.layers.keys()) if self.layers else 'None'}")
+        # print(f"  has_layers_in_params: {has_layers_in_params}")  # DEBUG REMOVED
+        # print(f"  self.layers_count: {self.layers_count}")  # DEBUG REMOVED
+        # print(f"  self.layers keys: {list(self.layers.keys()) if self.layers else 'None'}")  # DEBUG REMOVED
         for prov_type, layer_list in (self.layers or {}).items():
-            print(f"    {prov_type}: {len(layer_list)} layer(s)")
-            for lyr, lyr_props in layer_list[:3]:  # Show first 3
-                print(f"      - {lyr.name()}")
-        print("=" * 80)
+            pass  # print statements removed
+        # print("=" * 80)  # DEBUG REMOVED
         
         # FIX v3.0.7: Log to QGIS message panel for visibility
         from qgis.core import QgsMessageLog, Qgis as QgisLevel
@@ -3570,7 +3568,7 @@ class FilterEngineTask(QgsTask):
             self.setProgress((i/self.layers_count)*100)
         
         for layer_provider_type in self.layers:
-            logger.info(f"  → Processing {len(self.layers[layer_provider_type])} {layer_provider_type} layer(s)")
+            logger.debug(f"  → Processing {len(self.layers[layer_provider_type])} {layer_provider_type} layer(s)")
             for layer, layer_props in self.layers[layer_provider_type]:
                 self._queue_subset_string(layer, '')
                 logger.info(f"    → Queued clear on: {layer.name()}")
@@ -3607,7 +3605,7 @@ class FilterEngineTask(QgsTask):
 
         
         for layer_provider_type in self.layers:
-            logger.info(f"  → Processing {len(self.layers[layer_provider_type])} {layer_provider_type} layer(s)")
+            logger.debug(f"  → Processing {len(self.layers[layer_provider_type])} {layer_provider_type} layer(s)")
             for layer, layer_props in self.layers[layer_provider_type]:
                 logger.info(f"    → Resetting: {layer.name()}")
                 self.manage_layer_subset_strings(layer)
@@ -4860,7 +4858,7 @@ class FilterEngineTask(QgsTask):
                 # Use Spatialite backend for local layers
                 if use_spatialite:
                     backend_name = "Spatialite" if provider_type == PROVIDER_SPATIALITE else "Local (OGR)"
-                    logger.info(f"Using {backend_name} backend")
+                    logger.debug(f"Using {backend_name} backend")
                     success = self._manage_spatialite_subset(
                         layer, sql_subset_string, primary_key_name, geom_key_name,
                         name, custom, cur, conn, current_seq_order
@@ -5342,7 +5340,7 @@ class FilterEngineTask(QgsTask):
             if layers_to_remove:
                 # Remove layers from project (not from legend - they were never added to legend)
                 project.removeMapLayers(layers_to_remove)
-                print(f"🧹 Cleaned up {len(layers_to_remove)} temporary layer(s)")
-                logger.info(f"Cleaned up {len(layers_to_remove)} temporary safe_intersect layers")
+                # print(f"🧹 Cleaned up {len(layers_to_remove)} temporary layer(s)")  # DEBUG REMOVED
+                logger.debug(f"Cleaned up {len(layers_to_remove)} temporary safe_intersect layers")
         except Exception as e:
             logger.debug(f"safe_intersect cleanup failed (non-critical): {e}")

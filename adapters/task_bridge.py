@@ -647,7 +647,7 @@ class TaskBridge:
                 logger.info(f"✅ V3 TaskBridge EXPORT SUCCESS")
                 logger.info(f"   Features exported: {result.get('features_exported', 0)}")
                 logger.info(f"   File size: {result.get('bytes_written', 0)} bytes")
-                logger.info(f"   Execution time: {elapsed_ms:.1f}ms")
+                logger.debug(f"   Execution time: {elapsed_ms:.1f}ms")
                 
                 return BridgeResult(
                     status=BridgeStatus.SUCCESS,

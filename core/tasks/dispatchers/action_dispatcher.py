@@ -185,7 +185,7 @@ class ActionDispatcher:
         # Dispatch action
         result = dispatcher.dispatch('filter', context)
         if result.success:
-            print(f"Filtered {result.feature_count} features")
+            # print(f"Filtered {result.feature_count} features")  # DEBUG REMOVED
     """
     
     def __init__(self):
@@ -359,7 +359,7 @@ class ActionDispatcher:
             except Exception as e:
                 logger.warning(f"Post-dispatch hook failed: {e}")
         
-        logger.info(f"Action {action} completed: success={result.success}, time={result.elapsed_time:.2f}s")
+        logger.debug(f"Action {action} completed: success={result.success}, time={result.elapsed_time:.2f}s")
         return result
     
     def get_supported_actions(self) -> List[str]:

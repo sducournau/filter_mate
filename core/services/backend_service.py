@@ -243,10 +243,10 @@ class BackendService(QObject):
             # Remove forced backend (use auto)
             if layer_id in self._forced_backends:
                 del self._forced_backends[layer_id]
-                logger.info(f"Removed forced backend for layer {layer_id}")
+                logger.debug(f"Removed forced backend for layer {layer_id}")
         else:
             self._forced_backends[layer_id] = backend_type
-            logger.info(f"Forced backend {backend_type.value} for layer {layer_id}")
+            logger.debug(f"Forced backend {backend_type.value} for layer {layer_id}")
         
         self.backend_changed.emit(layer_id, backend_type.value if backend_type else "auto")
     
@@ -310,7 +310,7 @@ class BackendService(QObject):
         for layer_id in layer_ids:
             self.backend_changed.emit(layer_id, "auto")
         
-        logger.info(f"Cleared forced backends for {len(layer_ids)} layers")
+        logger.debug(f"Cleared forced backends for {len(layer_ids)} layers")
     
     # ─────────────────────────────────────────────────────────────────
     # Force All Layers
@@ -338,7 +338,7 @@ class BackendService(QObject):
             layers = [l for l in all_layers if isinstance(l, QgsVectorLayer)]
         
         logger.info("=" * 60)
-        logger.info(f"FORCING {backend_type.value.upper()} BACKEND FOR ALL LAYERS")
+        logger.debug(f"FORCING {backend_type.value.upper()} BACKEND FOR ALL LAYERS")
         logger.info("=" * 60)
         
         forced_count = 0
@@ -359,7 +359,7 @@ class BackendService(QObject):
             if is_compatible and not warn:
                 self.force_backend(layer.id(), backend_type)
                 forced_count += 1
-                logger.info(f"  ✓ Forced backend to: {backend_type.value.upper()}")
+                logger.debug(f"  ✓ Forced backend to: {backend_type.value.upper()}")
             elif is_compatible and warn:
                 # Compatible with warning (e.g., Spatialite on GeoPackage)
                 self.force_backend(layer.id(), backend_type)
@@ -730,6 +730,6 @@ class BackendService(QObject):
             del self._forced_backends[layer_id]
         
         if to_remove:
-            logger.info(f"Cleaned up {len(to_remove)} forced backend entries")
+            logger.debug(f"Cleaned up {len(to_remove)} forced backend entries")
         
         return len(to_remove)

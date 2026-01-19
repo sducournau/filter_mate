@@ -170,7 +170,7 @@ class SpatialFilterExecutor:
                 logger.info(f"✅ V3 TaskBridge SPATIAL SUCCESS")
                 logger.info(f"   Backend used: {bridge_result.backend_used}")
                 logger.info(f"   Feature count: {bridge_result.feature_count}")
-                logger.info(f"   Execution time: {bridge_result.execution_time_ms:.1f}ms")
+                logger.debug(f"   Execution time: {bridge_result.execution_time_ms:.1f}ms")
                 return True
             
             elif bridge_result.status == 'FALLBACK':
@@ -381,7 +381,7 @@ class SpatialFilterExecutor:
             )
             
             if geometry_data:
-                logger.info(f"✓ Geometry prepared for {provider_type}")
+                logger.debug(f"✓ Geometry prepared for {provider_type}")
                 success_count += 1
             elif error:
                 logger.warning(f"✗ Failed to prepare geometry for {provider_type}: {error}")

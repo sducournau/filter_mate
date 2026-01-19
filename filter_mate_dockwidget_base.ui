@@ -15,8 +15,8 @@
   </property>
   <property name="minimumSize">
    <size>
-    <width>280</width>
-    <height>280</height>
+    <width>314</width>
+    <height>316</height>
    </size>
   </property>
   <property name="baseSize">
@@ -394,8 +394,8 @@
               <rect>
                <x>0</x>
                <y>0</y>
-               <width>402</width>
-               <height>337</height>
+               <width>433</width>
+               <height>247</height>
               </rect>
              </property>
              <layout class="QGridLayout" name="gridLayout_main_header">
@@ -1501,8 +1501,8 @@
                 <rect>
                  <x>0</x>
                  <y>0</y>
-                 <width>415</width>
-                 <height>366</height>
+                 <width>429</width>
+                 <height>380</height>
                 </rect>
                </property>
                <attribute name="icon">
@@ -1558,26 +1558,29 @@
                     </property>
                     <layout class="QVBoxLayout" name="verticalLayout_filtering_keys_container">
                      <property name="spacing">
-                      <number>2</number>
+                      <number>0</number>
                      </property>
                      <property name="leftMargin">
-                      <number>2</number>
+                      <number>4</number>
                      </property>
                      <property name="topMargin">
-                      <number>2</number>
+                      <number>4</number>
                      </property>
                      <property name="rightMargin">
-                      <number>2</number>
+                      <number>4</number>
                      </property>
                      <property name="bottomMargin">
-                      <number>2</number>
+                      <number>4</number>
                      </property>
                      <item>
-                      <layout class="QVBoxLayout" name="verticalLayout_filtering_keys" stretch="0,0,0,0,0,0,0,0,0,0,0">
+                      <layout class="QVBoxLayout" name="verticalLayout_filtering_keys" stretch="0,0,0,0,0,0,0,0,0,0,0,0">
+                       <property name="spacing">
+                        <number>2</number>
+                       </property>
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_filtering_auto_current_layer">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -1590,14 +1593,14 @@
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="baseSize">
                           <size>
-                           <width>0</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
@@ -1661,7 +1664,7 @@
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_filtering_layers_to_filter">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -1674,14 +1677,14 @@
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="baseSize">
                           <size>
-                           <width>0</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
@@ -1748,7 +1751,7 @@
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_filtering_current_layer_combine_operator">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -1761,14 +1764,14 @@
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="baseSize">
                           <size>
-                           <width>0</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
@@ -1835,7 +1838,7 @@
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_filtering_geometric_predicates">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -1848,14 +1851,14 @@
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="baseSize">
                           <size>
-                           <width>0</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="palette">
@@ -2124,7 +2127,7 @@
                           <bool>false</bool>
                          </property>
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -2137,14 +2140,14 @@
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="baseSize">
                           <size>
-                           <width>0</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
@@ -2210,6 +2213,24 @@
                        </item>
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_filtering_buffer_type">
+                         <property name="sizePolicy">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                           <horstretch>0</horstretch>
+                           <verstretch>0</verstretch>
+                          </sizepolicy>
+                         </property>
+                         <property name="minimumSize">
+                          <size>
+                           <width>32</width>
+                           <height>32</height>
+                          </size>
+                         </property>
+                         <property name="maximumSize">
+                          <size>
+                           <width>32</width>
+                           <height>32</height>
+                          </size>
+                         </property>
                          <property name="text">
                           <string/>
                          </property>
@@ -2226,6 +2247,22 @@
                           <bool>true</bool>
                          </property>
                         </widget>
+                       </item>
+                       <item>
+                        <spacer name="verticalSpacer_filtering_keys_field_end">
+                         <property name="orientation">
+                          <enum>Qt::Vertical</enum>
+                         </property>
+                         <property name="sizeType">
+                          <enum>QSizePolicy::Expanding</enum>
+                         </property>
+                         <property name="sizeHint" stdset="0">
+                          <size>
+                           <width>20</width>
+                           <height>0</height>
+                          </size>
+                         </property>
+                        </spacer>
                        </item>
                       </layout>
                      </item>
@@ -2588,6 +2625,12 @@
                         <property name="layoutDirection">
                          <enum>Qt::RightToLeft</enum>
                         </property>
+                        <property name="iconSize">
+                         <size>
+                          <width>15</width>
+                          <height>15</height>
+                         </size>
+                        </property>
                         <property name="popupMode">
                          <enum>QToolButton::InstantPopup</enum>
                         </property>
@@ -2747,8 +2790,8 @@
                 <rect>
                  <x>0</x>
                  <y>0</y>
-                 <width>415</width>
-                 <height>366</height>
+                 <width>429</width>
+                 <height>380</height>
                 </rect>
                </property>
                <attribute name="icon">
@@ -3609,8 +3652,8 @@
                 <rect>
                  <x>0</x>
                  <y>0</y>
-                 <width>415</width>
-                 <height>366</height>
+                 <width>429</width>
+                 <height>380</height>
                 </rect>
                </property>
                <attribute name="icon">

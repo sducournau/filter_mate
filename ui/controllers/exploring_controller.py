@@ -2161,7 +2161,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 try:
                     # Block the selectionChanged signal temporarily
                     dw.current_layer.blockSignals(True)
-                    logger.info(f"🔒 handle_exploring_features_result: Blocked layer signals")
+                    logger.debug(f"🔒 handle_exploring_features_result: Blocked layer signals")
                     dw.current_layer.removeSelection()
                     dw.current_layer.select([f.id() for f in features])
                     logger.debug(f"handle_exploring_features_result: Synced QGIS selection ({len(features)} features)")
@@ -2170,7 +2170,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 finally:
                     # Always unblock signals
                     dw.current_layer.blockSignals(False)
-                    logger.info(f"🔓 handle_exploring_features_result: Unblocked layer signals")
+                    logger.debug(f"🔓 handle_exploring_features_result: Unblocked layer signals")
         
         # FIX v4: Zoom if is_tracking is active - trust BUTTON state over PROJECT_LAYERS
         is_tracking_from_props = layer_props.get("exploring", {}).get("is_tracking", False)
@@ -2799,7 +2799,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
             # fieldChanged signals are lost during widget reload - reconnect them
             if hasattr(self._dockwidget, '_setup_expression_widget_direct_connections'):
                 self._dockwidget._setup_expression_widget_direct_connections()
-                logger.info("✓ Reconnected expression widget fieldChanged signals")
+                logger.debug("✓ Reconnected expression widget fieldChanged signals")
             else:
                 logger.warning("_setup_expression_widget_direct_connections not available!")
                 
@@ -2841,12 +2841,12 @@ class ExploringController(BaseController, LayerSelectionMixin):
             skip_count = getattr(self._dockwidget, '_skip_selection_changed_count', 0)
             if skip_count > 0:
                 self._dockwidget._skip_selection_changed_count = skip_count - 1
-                logger.info(f"🔓 handle_layer_selection_changed: SKIPPING (widget-initiated, remaining={skip_count-1})")
+                logger.debug(f"🔓 handle_layer_selection_changed: SKIPPING (widget-initiated, remaining={skip_count-1})")
                 return True
             
             # Also check the old boolean flag for backwards compatibility
             if getattr(self._dockwidget, '_updating_qgis_selection_from_widget', False):
-                logger.info("🔓 handle_layer_selection_changed: SKIPPING (selection from widget flag) - resetting flag")
+                logger.debug("🔓 handle_layer_selection_changed: SKIPPING (selection from widget flag) - resetting flag")
                 self._dockwidget._updating_qgis_selection_from_widget = False
                 return True
             
@@ -2855,7 +2855,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 try:
                     self._dockwidget.current_layer.selectionChanged.connect(self._dockwidget.on_layer_selection_changed)
                     self._dockwidget.current_layer_selection_connection = True
-                    logger.info("handle_layer_selection_changed: Re-connected selectionChanged (self-healing)")
+                    logger.debug("handle_layer_selection_changed: Re-connected selectionChanged (self-healing)")
                 except (TypeError, RuntimeError):
                     pass
             # Check recursion prevention flag
@@ -3018,7 +3018,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 # This must be done AFTER _syncing_from_qgis is reset to avoid immediate triggering
                 try:
                     self._dockwidget.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect')
-                    logger.info("  🔌 Reconnected MULTIPLE_SELECTION_FEATURES signals")
+                    logger.debug("  🔌 Reconnected MULTIPLE_SELECTION_FEATURES signals")
                 except Exception as conn_err:
                     logger.debug(f"  Could not reconnect signals: {conn_err}")
             

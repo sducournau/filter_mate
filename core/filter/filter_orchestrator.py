@@ -134,7 +134,7 @@ class FilterOrchestrator:
             
             # DIAGNOSTIC LOGS 2026-01-15: Trace predicates et backend selection
             logger.info(f"🔍 orchestrate_geometric_filter: {layer.name()}")
-            logger.info(f"   effective_provider_type: {effective_provider_type}")
+            logger.debug(f"   effective_provider_type: {effective_provider_type}")
             logger.info(f"   is_postgresql_fallback: {is_postgresql_fallback}")
             logger.info(f"   source_geometries keys: {list(source_geometries.keys())}")
             
@@ -154,7 +154,7 @@ class FilterOrchestrator:
             if is_postgresql_fallback:
                 logger.info(f"Executing geometric filtering for {layer.name()} (PostgreSQL → OGR fallback)")
             else:
-                logger.info(f"Executing geometric filtering for {layer.name()} ({effective_provider_type})")
+                logger.debug(f"Executing geometric filtering for {layer.name()} ({effective_provider_type})")
             
             # Check for forced backend
             backend, backend_name, geometry_provider = self._select_backend(
@@ -236,25 +236,25 @@ class FilterOrchestrator:
             logger.info(f"  → Expression preview: {expression[:200]}...")
             
             # DIAGNOSTIC 2026-01-19: Print expression for console visibility
-            print("=" * 80)
-            print(f"🏗️ FilterOrchestrator: Expression built for {layer.name()}")
-            print(f"   Length: {len(expression)} chars")
-            print(f"   Preview: {expression[:150]}...")
-            print("=" * 80)
+            # print("=" * 80)  # DEBUG REMOVED
+            # print(f"🏗️ FilterOrchestrator: Expression built for {layer.name()}")  # DEBUG REMOVED
+            # print(f"   Length: {len(expression)} chars")  # DEBUG REMOVED
+            # print(f"   Preview: {expression[:150]}...")  # DEBUG REMOVED
+            # print("=" * 80)  # DEBUG REMOVED
             
             # ==========================================
             # 6. SUBSET STRING STRATEGY
             # ==========================================
             old_subset, combine_operator = self._determine_subset_strategy(layer)
             
-            print(f"📋 Subset strategy: old_subset={bool(old_subset)}, combine_operator={combine_operator}")
+            # print(f"📋 Subset strategy: old_subset={bool(old_subset)}, combine_operator={combine_operator}")  # DEBUG REMOVED
             
             # ==========================================
             # 7. BACKEND EXECUTION
             # ==========================================
-            print(f"🎯 Calling backend.apply_filter() for {layer.name()}...")
+            # print(f"🎯 Calling backend.apply_filter() for {layer.name()}...")  # DEBUG REMOVED
             result = backend.apply_filter(layer, expression, old_subset, combine_operator)
-            print(f"   backend.apply_filter() returned: {result}")
+            # print(f"   backend.apply_filter() returned: {result}")  # DEBUG REMOVED
             
             # Collect warnings from backend
             self._collect_backend_warnings(backend)
@@ -345,7 +345,7 @@ class FilterOrchestrator:
         forced_backend = forced_backends.get(layer.id())
         
         if forced_backend:
-            logger.info(f"  ⚡ Using FORCED backend '{forced_backend}' for layer '{layer.name()}'")
+            logger.debug(f"  ⚡ Using FORCED backend '{forced_backend}' for layer '{layer.name()}'")
             effective_provider_type = forced_backend
         
         # Get backend from factory
@@ -361,7 +361,7 @@ class FilterOrchestrator:
                 f"(backend may not support layer)"
             )
         else:
-            logger.info(f"  ✓ Using backend: {backend_name.upper()}")
+            logger.debug(f"  ✓ Using backend: {backend_name.upper()}")
         
         # Store actual backend for UI indicator
         if 'actual_backends' not in self.task_parameters:
@@ -383,7 +383,7 @@ class FilterOrchestrator:
             logger.info("  → Backend is PostgreSQL - using SQL expression geometry format")
         elif backend_name == 'memory':
             geometry_provider = PROVIDER_OGR
-            logger.info("  → Backend is Memory - using OGR geometry format (QgsVectorLayer)")
+            logger.debug("  → Backend is Memory - using OGR geometry format (QgsVectorLayer)")
         else:
             geometry_provider = effective_provider_type
             logger.warning(f"  → Unknown backend '{backend_name}' - using provider type {effective_provider_type}")

@@ -92,7 +92,7 @@ class TaskRunOrchestrator:
         orchestrator = TaskRunOrchestrator()
         result = orchestrator.run(context)
         if result.success:
-            print(f"Task completed in {result.elapsed_time:.2f}s")
+            # print(f"Task completed in {result.elapsed_time:.2f}s")  # DEBUG REMOVED
     """
     
     def run(self, context: TaskRunContext) -> TaskRunResult:

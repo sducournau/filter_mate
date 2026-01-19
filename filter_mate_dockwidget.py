@@ -88,6 +88,12 @@ from .infrastructure.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PR
 from .ui.styles import StyleLoader, QGISThemeWatcher
 from .infrastructure.feedback import show_info, show_warning, show_error, show_success
 
+# Feedback level control
+try:
+    from .config.feedback_config import should_show_message
+except ImportError:
+    def should_show_message(category): return True
+
 # Config helpers (migrated to config/)
 from .config.config import get_optimization_thresholds
 from .infrastructure.config import set_config_value
@@ -120,17 +126,16 @@ try:
     from .ui.controllers.integration import ControllerIntegration
     from .adapters.app_bridge import get_filter_service, is_initialized as is_hexagonal_initialized
     CONTROLLERS_AVAILABLE = True
-    print(f"[IMPORT] Controllers imported successfully: CONTROLLERS_AVAILABLE = True")
 except ImportError as e:
     CONTROLLERS_AVAILABLE = False
     get_filter_service = None
     is_hexagonal_initialized = lambda: False
-    print(f"[IMPORT ERROR] Failed to import controllers: {e}")
+    logger.debug(f"Controllers import failed: {e}")
 except Exception as e:
     CONTROLLERS_AVAILABLE = False
     get_filter_service = None
     is_hexagonal_initialized = lambda: False
-    print(f"[IMPORT ERROR] Unexpected error importing controllers: {e}")
+    logger.debug(f"Unexpected error importing controllers: {e}")
 
 # Layout Managers
 try: from .ui.layout import SplitterManager, DimensionsManager, SpacingManager, ActionBarManager; LAYOUT_MANAGERS_AVAILABLE = True
@@ -158,15 +163,12 @@ class ClickableLabel(QtWidgets.QLabel):
     
     def mousePressEvent(self, event):
         """Handle mouse press events."""
-        # Debug log
-        print(f"ClickableLabel.mousePressEvent triggered! handler={self._click_handler is not None}")
-        
         if self._click_handler:
             # Call the handler with the event
             try:
                 self._click_handler(event)
             except Exception as e:
-                print(f"Error in click handler: {e}")
+                logger.debug(f"Error in click handler: {e}")
         
         # Always emit the signal
         self.clicked.emit(event)
@@ -176,7 +178,7 @@ class ClickableLabel(QtWidgets.QLabel):
     
     def mouseReleaseEvent(self, event):
         """Handle mouse release - some widgets need this."""
-        print(f"ClickableLabel.mouseReleaseEvent triggered!")
+        # print(f"ClickableLabel.mouseReleaseEvent triggered!")  # DEBUG REMOVED
         event.accept()
 
 
@@ -1131,36 +1133,36 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _on_backend_indicator_clicked(self, event):
         """v4.0 Sprint 19: → BackendController."""
-        print("🎯 _on_backend_indicator_clicked CALLED")
+        # print("🎯 _on_backend_indicator_clicked CALLED")  # DEBUG REMOVED
         logger.debug("_on_backend_indicator_clicked called")
         
         if self._controller_integration and self._controller_integration.backend_controller:
-            print("🎯 Using QTimer to defer backend menu display...")
+            # print("🎯 Using QTimer to defer backend menu display...")  # DEBUG REMOVED
             # Use QTimer to defer menu display after mouse event completes
             # This prevents issues with QMenu.exec_() during mousePressEvent
             from qgis.PyQt.QtCore import QTimer
             QTimer.singleShot(0, self._controller_integration.delegate_handle_backend_click)
-            print("🎯 QTimer.singleShot scheduled for backend")
+            # print("🎯 QTimer.singleShot scheduled for backend")  # DEBUG REMOVED
         else:
-            print("🎯 WARNING: Backend controller unavailable")
+            # print("🎯 WARNING: Backend controller unavailable")  # DEBUG REMOVED
             logger.warning("Backend controller unavailable")
 
     def _on_favorite_indicator_clicked(self, event):
         """v4.0 S16: → FavoritesController."""
-        print("🎯 _on_favorite_indicator_clicked CALLED")
+        # print("🎯 _on_favorite_indicator_clicked CALLED")  # DEBUG REMOVED
         logger.debug("_on_favorite_indicator_clicked called")
-        print(f"🎯 _favorites_ctrl = {self._favorites_ctrl}")
+        # print(f"🎯 _favorites_ctrl = {self._favorites_ctrl}")  # DEBUG REMOVED
         logger.debug(f"_favorites_ctrl = {self._favorites_ctrl}")
         
         if self._favorites_ctrl:
-            print("🎯 Using QTimer to defer menu display...")
+            # print("🎯 Using QTimer to defer menu display...")  # DEBUG REMOVED
             # Use QTimer to defer menu display after mouse event completes
             # This prevents issues with QMenu.exec_() during mousePressEvent
             from qgis.PyQt.QtCore import QTimer
             QTimer.singleShot(0, self._favorites_ctrl.handle_indicator_clicked)
-            print("🎯 QTimer.singleShot scheduled")
+            # print("🎯 QTimer.singleShot scheduled")  # DEBUG REMOVED
         else:
-            print("🎯 WARNING: Favorites controller unavailable")
+            # print("🎯 WARNING: Favorites controller unavailable")  # DEBUG REMOVED
             logger.warning("Favorites controller unavailable")
     
     def _add_current_to_favorites(self):
@@ -1533,7 +1535,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except (TypeError, RuntimeError):
             pass
         self.mFieldExpressionWidget_exploring_single_selection.fieldChanged.connect(on_single_field_changed)
-        logger.info("✓ Connected mFieldExpressionWidget_exploring_single_selection.fieldChanged DIRECTLY")
+        logger.debug("✓ Connected mFieldExpressionWidget_exploring_single_selection.fieldChanged DIRECTLY")
         
         # MULTIPLE SELECTION: mFieldExpressionWidget -> checkableComboBoxFeaturesListPickerWidget
         def on_multiple_field_changed(field_name):
@@ -1546,7 +1548,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except (TypeError, RuntimeError):
             pass
         self.mFieldExpressionWidget_exploring_multiple_selection.fieldChanged.connect(on_multiple_field_changed)
-        logger.info("✓ Connected mFieldExpressionWidget_exploring_multiple_selection.fieldChanged DIRECTLY")
+        logger.debug("✓ Connected mFieldExpressionWidget_exploring_multiple_selection.fieldChanged DIRECTLY")
         
         # CUSTOM SELECTION: mFieldExpressionWidget (no FeaturePicker to update, but may have other uses)
         def on_custom_field_changed(field_name):
@@ -1559,7 +1561,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except (TypeError, RuntimeError):
             pass
         self.mFieldExpressionWidget_exploring_custom_selection.fieldChanged.connect(on_custom_field_changed)
-        logger.info("✓ Connected mFieldExpressionWidget_exploring_custom_selection.fieldChanged DIRECTLY")
+        logger.debug("✓ Connected mFieldExpressionWidget_exploring_custom_selection.fieldChanged DIRECTLY")
 
     def _on_expression_field_changed(self, groupbox: str, field_or_expression: str):
         """
@@ -1858,7 +1860,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def dockwidget_widgets_configuration(self):
         """Configure widgets via ConfigurationManager and setup controllers."""
-        print("🔧 dockwidget_widgets_configuration() START")
+        # print("🔧 dockwidget_widgets_configuration() START")  # DEBUG REMOVED
         if self._configuration_manager is None: self._configuration_manager = ConfigurationManager(self)
         self.layer_properties_tuples_dict = self._configuration_manager.get_layer_properties_tuples_dict()
         self.export_properties_tuples_dict = self._configuration_manager.get_export_properties_tuples_dict()
@@ -1871,18 +1873,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._connect_initial_widget_signals()
         
         # v4.0 Sprint 16: Setup controller integration (Strangler Fig pattern)
-        print(f"🔧 About to setup controllers - _controller_integration = {self._controller_integration}")
+        # print(f"🔧 About to setup controllers - _controller_integration = {self._controller_integration}")  # DEBUG REMOVED
         if self._controller_integration:
             try:
                 logger.info("Setting up controller integration...")
-                print("🔧 Calling _controller_integration.setup()...")
+                # print("🔧 Calling _controller_integration.setup()...")  # DEBUG REMOVED
                 setup_success = self._controller_integration.setup()
-                print(f"🔧 _controller_integration.setup() returned: {setup_success}")
+                # print(f"🔧 _controller_integration.setup() returned: {setup_success}")  # DEBUG REMOVED
                 
                 if setup_success:
                     # Validate all controllers are properly initialized
                     validation = self._controller_integration.validate_controllers()
-                    print(f"🔧 Controller validation: {validation}")
+                    # print(f"🔧 Controller validation: {validation}")  # DEBUG REMOVED
                     
                     if validation['all_valid']:
                         logger.info(f"✓ Controller integration validated: {validation['registry_count']} controllers operational")
@@ -1897,7 +1899,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     logger.debug("  Initial state synchronized to controllers")
                     
                     # Log delegation readiness
-                    logger.info("✓ Strangler Fig pattern active: filter operations will try hexagonal path first")
+                    logger.debug("✓ Strangler Fig pattern active: filter operations will try hexagonal path first")
                 else:
                     logger.warning("⚠️ Controller integration setup returned False - using legacy code paths")
                     
@@ -1947,16 +1949,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Connect comboBox_filtering_current_layer.layerChanged signal
             # This is CRITICAL for exploring widgets to update when current layer changes
             self.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
-            logger.info("✓ Connected FILTERING.CURRENT_LAYER.layerChanged signal via manageSignal")
+            logger.debug("✓ Connected FILTERING.CURRENT_LAYER.layerChanged signal via manageSignal")
         except Exception as e:
             logger.warning(f"Could not connect CURRENT_LAYER signal: {e}")
         
         # FIX 2026-01-16: CRITICAL - Connect ACTION button signals at startup
         # These must be connected ALWAYS, not just when layers are loaded
         try:
-            logger.info("🔌 Connecting ACTION button signals at startup...")
+            logger.debug("🔌 Connecting ACTION button signals at startup...")
             self.force_reconnect_action_signals()
-            logger.info("✓ ACTION button signals connected at startup")
+            logger.debug("✓ ACTION button signals connected at startup")
         except Exception as e:
             logger.warning(f"Could not connect ACTION signals at startup: {e}")
         
@@ -1972,7 +1974,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     del self._signal_connection_states[cache_key]
                 
                 self.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect', 'currentLayerChanged')
-                logger.info("✓ Connected QGIS.LAYER_TREE_VIEW.currentLayerChanged signal (AUTO_CURRENT_LAYER enabled)")
+                logger.debug("✓ Connected QGIS.LAYER_TREE_VIEW.currentLayerChanged signal (AUTO_CURRENT_LAYER enabled)")
             else:
                 logger.debug("QGIS.LAYER_TREE_VIEW signal not connected (AUTO_CURRENT_LAYER disabled)")
         except Exception as e:
@@ -2155,12 +2157,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.config_changes_pending = False
 
     def cancel_pending_config_changes(self):
-        """Cancel pending configuration changes."""
+        """Cancel pending configuration changes.
+        
+        v4.0.7 FIX: Refactored to disconnect signal before recreating model
+        to prevent multiple signal connections.
+        """
         if not self.config_changes_pending or not self.pending_config_changes: return
         try:
-            with open(ENV_VARS.get('CONFIG_JSON_PATH', self.plugin_dir + '/config/config.json'), 'r') as f: self.CONFIG_DATA = json.load(f)
+            # FIX #3: Disconnect signal before replacing model to prevent multiple connections
+            self._disconnect_config_model_signal()
+            
+            with open(ENV_VARS.get('CONFIG_JSON_PATH', self.plugin_dir + '/config/config.json'), 'r') as f: 
+                self.CONFIG_DATA = json.load(f)
             self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=False, editable_values=True, plugin_dir=self.plugin_dir)
-            if hasattr(self, 'config_view') and self.config_view: self.config_view.setModel(self.config_model); self.config_view.model = self.config_model
+            if hasattr(self, 'config_view') and self.config_view: 
+                self.config_view.setModel(self.config_model)
+                self.config_view.model = self.config_model
+            
+            # Reconnect signal to new model
+            self._connect_config_model_signal()
+            
             self.pending_config_changes, self.config_changes_pending = [], False
             if hasattr(self, 'buttonBox'): self.buttonBox.setEnabled(False)
         except Exception as e: show_error("FilterMate", f"Error cancelling changes: {str(e)}")
@@ -2192,15 +2208,74 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.CONFIG_DATA = self.config_model.serialize()
         with open(ENV_VARS.get('CONFIG_JSON_PATH', self.plugin_dir + '/config/config.json'), 'w') as f: f.write(json.dumps(self.CONFIG_DATA, indent=4))
 
-    def manage_configuration_model(self):
-        """Setup config model, view, and signals."""
+    def _disconnect_config_model_signal(self):
+        """Disconnect itemChanged signal from config_model to prevent multiple connections.
+        
+        v4.0.7 FIX: Prevents signal accumulation when model is recreated.
+        """
         try:
+            if hasattr(self, 'config_model') and self.config_model is not None:
+                try:
+                    self.config_model.itemChanged.disconnect(self.data_changed_configuration_model)
+                    logger.debug("Config model itemChanged signal disconnected")
+                except (TypeError, RuntimeError):
+                    # Signal was not connected or already disconnected
+                    pass
+        except Exception as e:
+            logger.debug(f"Could not disconnect config_model signal: {e}")
+
+    def _connect_config_model_signal(self):
+        """Connect itemChanged signal to config_model.
+        
+        v4.0.7 FIX: Centralized connection method for consistency.
+        """
+        try:
+            if hasattr(self, 'config_model') and self.config_model is not None:
+                self.config_model.itemChanged.connect(self.data_changed_configuration_model)
+                logger.debug("Config model itemChanged signal connected")
+        except Exception as e:
+            logger.error(f"Could not connect config_model signal: {e}")
+
+    def manage_configuration_model(self):
+        """Setup config model, view, and signals.
+        
+        v4.0.7 FIX: Uses centralized signal connection methods.
+        v4.0.7 NEW: Uses SearchableJsonView with integrated search bar.
+        """
+        try:
+            # Disconnect any existing signal first
+            self._disconnect_config_model_signal()
+            
             self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=False, editable_values=True, plugin_dir=self.plugin_dir)
-            self.config_view = JsonView(self.config_model, self.plugin_dir)
-            self.CONFIGURATION.layout().insertWidget(0, self.config_view); self.config_view.setAnimated(True); self.config_view.setEnabled(True); self.config_view.show()
-            self.config_model.itemChanged.connect(self.data_changed_configuration_model); self._setup_reload_button()
+            
+            # v4.0.7: Use SearchableJsonView with integrated search bar
+            try:
+                from ui.widgets.json_view import SearchableJsonView
+                self.config_view_container = SearchableJsonView(self.config_model, self.plugin_dir)
+                self.config_view = self.config_view_container.json_view  # For backward compatibility
+                self.CONFIGURATION.layout().insertWidget(0, self.config_view_container)
+                self.config_view_container.setAnimated(True)
+                self.config_view_container.setEnabled(True)
+                self.config_view_container.show()
+                logger.debug("Using SearchableJsonView with search bar")
+            except ImportError:
+                # Fallback to standard JsonView
+                self.config_view = JsonView(self.config_model, self.plugin_dir)
+                self.config_view_container = None
+                self.CONFIGURATION.layout().insertWidget(0, self.config_view)
+                self.config_view.setAnimated(True)
+                self.config_view.setEnabled(True)
+                self.config_view.show()
+                logger.debug("Using standard JsonView (SearchableJsonView not available)")
+            
+            # Connect signal using centralized method
+            self._connect_config_model_signal()
+            self._setup_reload_button()
+            
             if hasattr(self, 'buttonBox'):
-                self.buttonBox.setEnabled(False); self.buttonBox.accepted.connect(self.on_config_buttonbox_accepted); self.buttonBox.rejected.connect(self.on_config_buttonbox_rejected)
+                self.buttonBox.setEnabled(False)
+                self.buttonBox.accepted.connect(self.on_config_buttonbox_accepted)
+                self.buttonBox.rejected.connect(self.on_config_buttonbox_rejected)
         except Exception as e: logger.error(f"Error creating configuration model: {e}")
 
     def _setup_reload_button(self):
@@ -2864,7 +2939,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         when widgets dict is recreated. By using direct method wrappers, we ensure
         the connection is always to the current dockwidget instance.
         """
-        print("🔄 force_reconnect_action_signals CALLED (v4 - direct handlers)")
+        # print("🔄 force_reconnect_action_signals CALLED (v4 - direct handlers)")  # DEBUG REMOVED
         
         # Map button names to their task names and widgets
         # Use direct attribute access to widgets (more reliable than widgets dict)
@@ -2879,7 +2954,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         connected_count = 0
         for btn_name, (task_name, widget) in action_buttons.items():
             if not widget:
-                print(f"⚠️ force_reconnect_action_signals: {btn_name} widget not found")
+                # print(f"⚠️ force_reconnect_action_signals: {btn_name} widget not found")  # DEBUG REMOVED
                 continue
             
             key = f"ACTION.{btn_name}.clicked"
@@ -2889,7 +2964,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # FIX 2026-01-17 v4: Disconnect ALL receivers to ensure clean state
                 try:
                     widget.clicked.disconnect()
-                    print(f"   Disconnected all receivers from {btn_name}.clicked")
+                    # print(f"   Disconnected all receivers from {btn_name}.clicked")  # DEBUG REMOVED
                 except TypeError:
                     pass  # No receivers connected, which is fine
                 
@@ -2898,7 +2973,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 def make_handler(task):
                     """Factory function to create handler with properly captured task name."""
                     def handler(state=False):
-                        print(f"🎯 ACTION handler triggered: task={task}, state={state}")
+                        # print(f"🎯 ACTION handler triggered: task={task}, state={state}")  # DEBUG REMOVED
                         self.launchTaskEvent(state, task)
                     return handler
                 
@@ -2906,11 +2981,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 widget.clicked.connect(handler)
                 self._signal_connection_states[key] = True
                 connected_count += 1
-                print(f"✅ force_reconnect_action_signals: Connected {btn_name}.clicked → launchTaskEvent(_, '{task_name}')")
+                # print(f"✅ force_reconnect_action_signals: Connected {btn_name}.clicked → launchTaskEvent(_, '{task_name}')")  # DEBUG REMOVED
             except Exception as e:
-                print(f"❌ force_reconnect_action_signals: Failed to connect {btn_name}.clicked: {e}")
+                pass  # print(f"❌ force_reconnect_action_signals: Failed to connect {btn_name}.clicked: {e}")  # DEBUG REMOVED
         
-        print(f"🔄 force_reconnect_action_signals COMPLETED: {connected_count}/5 signals connected")
+        # print(f"🔄 force_reconnect_action_signals COMPLETED: {connected_count}/5 signals connected")  # DEBUG REMOVED
     
     def diagnose_action_buttons(self):
         """
@@ -2921,54 +2996,54 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             dw = iface.mainWindow().findChild(FilterMateDockWidget)
             dw.diagnose_action_buttons()
         """
-        print("=" * 60)
-        print("🔍 DIAGNOSTIC: Action button signal analysis")
-        print("=" * 60)
+        # print("=" * 60)  # DEBUG REMOVED
+        # print("🔍 DIAGNOSTIC: Action button signal analysis")  # DEBUG REMOVED
+        # print("=" * 60)  # DEBUG REMOVED
         
         if 'ACTION' not in self.widgets:
-            print("ACTION category not in widgets!")
+            # print("ACTION category not in widgets!")  # DEBUG REMOVED
             return
         
         for btn_name in ['FILTER', 'UNFILTER', 'UNDO_FILTER', 'REDO_FILTER']:
             if btn_name not in self.widgets['ACTION']:
-                print(f"  {btn_name}: NOT FOUND in widgets['ACTION']")
+                # print(f"  {btn_name}: NOT FOUND in widgets['ACTION']")  # DEBUG REMOVED
                 continue
             
             widget_info = self.widgets['ACTION'][btn_name]
             widget = widget_info.get("WIDGET")
             
-            print(f"  {btn_name}:")
-            print(f"    - Widget exists: {widget is not None}")
+            # print(f"  {btn_name}:")  # DEBUG REMOVED
+            # print(f"    - Widget exists: {widget is not None}")  # DEBUG REMOVED
             
             if widget:
-                print(f"    - isEnabled: {widget.isEnabled()}")
-                print(f"    - isVisible: {widget.isVisible()}")
-                print(f"    - receivers('clicked'): {widget.receivers(widget.clicked)}")
+                # print(f"    - isEnabled: {widget.isEnabled()}")  # DEBUG REMOVED
+                # print(f"    - isVisible: {widget.isVisible()}")  # DEBUG REMOVED
+                # print(f"    - receivers('clicked'): {widget.receivers(widget.clicked)}")  # DEBUG REMOVED
                 
                 # Check signal tuple
                 signals = widget_info.get("SIGNALS", [])
                 for s_tuple in signals:
                     signal_name = s_tuple[0] if s_tuple else "?"
                     handler = s_tuple[-1] if s_tuple else None
-                    print(f"    - Signal tuple: {signal_name}, handler={handler is not None}")
+                    # print(f"    - Signal tuple: {signal_name}, handler={handler is not None}")  # DEBUG REMOVED
                     
                     if handler:
                         # Try to manually call the handler to see what happens
-                        print(f"    - Testing handler call for {btn_name}...")
+                        # print(f"    - Testing handler call for {btn_name}...")  # DEBUG REMOVED
                         try:
                             handler(False)  # Simulate unchecked button click
-                            print(f"    ✅ Handler executed successfully for {btn_name}")
+                            # print(f"    ✅ Handler executed successfully for {btn_name}")  # DEBUG REMOVED
                         except Exception as e:
-                            print(f"    ❌ Handler execution FAILED for {btn_name}: {e}")
+                            pass  # print(f"    ❌ Handler execution FAILED for {btn_name}: {e}")  # DEBUG REMOVED
         
-        print("=" * 60)
-        print("Current state:")
-        print(f"  widgets_initialized: {self.widgets_initialized}")
-        print(f"  _filtering_in_progress: {getattr(self, '_filtering_in_progress', False)}")
-        print(f"  current_layer: {self.current_layer.name() if self.current_layer else 'None'}")
+        # print("=" * 60)  # DEBUG REMOVED
+        # print("Current state:")  # DEBUG REMOVED
+        # print(f"  widgets_initialized: {self.widgets_initialized}")  # DEBUG REMOVED
+        # print(f"  _filtering_in_progress: {getattr(self, '_filtering_in_progress', False)}")  # DEBUG REMOVED
+        # print(f"  current_layer: {self.current_layer.name() if self.current_layer else 'None'}")  # DEBUG REMOVED
         if self.current_layer:
-            print(f"  in_PROJECT_LAYERS: {self.current_layer.id() in self.PROJECT_LAYERS}")
-        print("=" * 60)
+            pass  # print(f"  in_PROJECT_LAYERS: {self.current_layer.id() in self.PROJECT_LAYERS}")  # DEBUG REMOVED
+        # print("=" * 60)  # DEBUG REMOVED
 
     def force_reconnect_exploring_signals(self):
         """v4.0 S18: Force reconnect EXPLORING signals bypassing cache."""
@@ -3029,14 +3104,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except (TypeError, RuntimeError):
             pass
         self.pushButton_exploring_identify.clicked.connect(self.exploring_identify_clicked)
-        logger.info("✓ Connected pushButton_exploring_identify.clicked DIRECTLY")
+        logger.debug("✓ Connected pushButton_exploring_identify.clicked DIRECTLY")
         
         try:
             self.pushButton_exploring_zoom.clicked.disconnect()
         except (TypeError, RuntimeError):
             pass
         self.pushButton_exploring_zoom.clicked.connect(self.exploring_zoom_clicked)
-        logger.info("✓ Connected pushButton_exploring_zoom.clicked DIRECTLY")
+        logger.debug("✓ Connected pushButton_exploring_zoom.clicked DIRECTLY")
         
         try:
             self.pushButton_exploring_reset_layer_properties.clicked.disconnect()
@@ -3045,7 +3120,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.pushButton_exploring_reset_layer_properties.clicked.connect(
             lambda: self.resetLayerVariableEvent()
         )
-        logger.info("✓ Connected pushButton_exploring_reset_layer_properties.clicked DIRECTLY")
+        logger.debug("✓ Connected pushButton_exploring_reset_layer_properties.clicked DIRECTLY")
         
         # IS_SELECTING: Activate selection tool on canvas + sync features
         btn_selecting = self.pushButton_checkable_exploring_selecting
@@ -3085,7 +3160,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.exploring_deselect_features()
         
         btn_selecting.toggled.connect(_on_selecting_toggled)
-        logger.info("✓ Connected IS_SELECTING.toggled DIRECTLY to _on_selecting_toggled()")
+        logger.debug("✓ Connected IS_SELECTING.toggled DIRECTLY to _on_selecting_toggled()")
         
         # IS_TRACKING: Enable auto-zoom on selection change
         btn_tracking = self.pushButton_checkable_exploring_tracking
@@ -3120,7 +3195,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.exploring_zoom_clicked()
         
         btn_tracking.toggled.connect(_on_tracking_toggled)
-        logger.info("✓ Connected IS_TRACKING.toggled DIRECTLY to _on_tracking_toggled()")
+        logger.debug("✓ Connected IS_TRACKING.toggled DIRECTLY to _on_tracking_toggled()")
         
         # IS_LINKING: Synchronize single/multiple selection expressions
         btn_linking = self.pushButton_checkable_exploring_linking_widgets
@@ -3159,7 +3234,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.exploring_link_widgets()
         
         btn_linking.toggled.connect(_on_linking_toggled)
-        logger.info("✓ Connected IS_LINKING.toggled DIRECTLY to _on_linking_toggled()")
+        logger.debug("✓ Connected IS_LINKING.toggled DIRECTLY to _on_linking_toggled()")
 
     def manage_interactions(self):
         """v4.0 Sprint 8: Optimized - initialize widget interactions and default values."""
@@ -3195,9 +3270,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._setup_expression_widget_direct_connections()
             # FIX 2026-01-15 v10: CRITICAL - Force reconnect ACTION button signals (FILTER, UNFILTER, etc.)
             # Without this, clicking filter button won't trigger launchTaskEvent
-            logger.info("🔌 Force reconnecting ACTION button signals...")
+            logger.debug("🔌 Force reconnecting ACTION button signals...")
             self.force_reconnect_action_signals()
-            logger.info("✓ ACTION button signals reconnected")
+            logger.debug("✓ ACTION button signals reconnected")
         else:
             self.set_widgets_enabled_state(False)
             for sp in [["DOCK", "SINGLE_SELECTION"], ["DOCK", "MULTIPLE_SELECTION"], ["DOCK", "CUSTOM_SELECTION"]]:
@@ -4452,7 +4527,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         This is called when IS_TRACKING or IS_SELECTING are activated to ensure
         the signal remains connected for auto-zoom/sync functionality.
         """
-        logger.info(f"🔌 _ensure_selection_changed_connected CALLED: current_layer={self.current_layer.name() if self.current_layer else 'None'}, connection_flag={self.current_layer_selection_connection}")
+        logger.debug(f"🔌 _ensure_selection_changed_connected CALLED: current_layer={self.current_layer.name() if self.current_layer else 'None'}, connection_flag={self.current_layer_selection_connection}")
         
         if not self.current_layer:
             logger.warning("⚠️ _ensure_selection_changed_connected: No current layer")
@@ -4463,9 +4538,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if not self.current_layer_selection_connection:
                 self.current_layer.selectionChanged.connect(self.on_layer_selection_changed)
                 self.current_layer_selection_connection = True
-                logger.info(f"✅ _ensure_selection_changed_connected: Connected selectionChanged signal for layer '{self.current_layer.name()}'")
+                logger.debug(f"✅ _ensure_selection_changed_connected: Connected selectionChanged signal for layer '{self.current_layer.name()}'")
             else:
-                logger.info(f"ℹ️ _ensure_selection_changed_connected: Signal already connected for layer '{self.current_layer.name()}'")
+                logger.debug(f"ℹ️ _ensure_selection_changed_connected: Signal already connected for layer '{self.current_layer.name()}'")
         except (TypeError, RuntimeError) as e:
             # Signal might already be connected, or layer deleted
             logger.warning(f"⚠️ _ensure_selection_changed_connected error: {e}")
@@ -4486,7 +4561,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             try:
                 self.current_layer.selectionChanged.connect(self.on_layer_selection_changed)
                 self.current_layer_selection_connection = True
-                logger.info("on_layer_selection_changed: Re-connected selectionChanged signal (self-healing)")
+                logger.debug("on_layer_selection_changed: Re-connected selectionChanged signal (self-healing)")
             except (TypeError, RuntimeError):
                 pass
         
@@ -5451,7 +5526,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.info("✓ Step 5: Exploring buttons state updated")
             
             self._reconnect_layer_signals(widgets, layer_props)
-            logger.info("✓ Step 6: Layer signals reconnected")
+            logger.debug("✓ Step 6: Layer signals reconnected")
             
             logger.info(f"=== current_layer_changed SUCCESS === layer: {validated_layer.name()}")
         except Exception as e:
@@ -6174,7 +6249,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             for cat, props in defaults.items(): layer_props[cat].update(props); props_to_save.extend((cat, k) for k in props)
             self.settingLayerVariable.emit(layer, props_to_save); self._synchronize_layer_widgets(layer, layer_props)
             self._update_buffer_spinbox_style(0.0); self._reset_exploring_button_states(layer_props); self._reset_filtering_button_states(layer_props)
-            self.iface.messageBar().pushSuccess("FilterMate", self.tr("Layer properties reset to defaults"))
+            if should_show_message('layer_reset'):
+                self.iface.messageBar().pushSuccess("FilterMate", self.tr("Layer properties reset to defaults"))
         except Exception as e: self.iface.messageBar().pushCritical("FilterMate", self.tr("Error resetting layer properties: {}").format(str(e)))
 
     def _reset_exploring_button_states(self, layer_props):
@@ -6320,16 +6396,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         is_user_action = task_name in user_action_tasks
         
         # FIX 2026-01-17 v2: Enhanced diagnostic logging - USE PRINT for visibility!
-        print(f"{'='*60}")
-        print(f"🎯 launchTaskEvent CALLED: state={state}, task_name={task_name}")
-        print(f"   widgets_initialized={self.widgets_initialized}")
-        print(f"   _filtering_in_progress={getattr(self, '_filtering_in_progress', False)}")
-        print(f"   is_user_action={is_user_action}")
-        print(f"   has_current_layer={self.current_layer is not None}")
+        # print(f"{'='*60}")  # DEBUG REMOVED
+        # print(f"🎯 launchTaskEvent CALLED: state={state}, task_name={task_name}")  # DEBUG REMOVED
+        # print(f"   widgets_initialized={self.widgets_initialized}")  # DEBUG REMOVED
+        # print(f"   _filtering_in_progress={getattr(self, '_filtering_in_progress', False)}")  # DEBUG REMOVED
+        # print(f"   is_user_action={is_user_action}")  # DEBUG REMOVED
+        # print(f"   has_current_layer={self.current_layer is not None}")  # DEBUG REMOVED
         
         # FIX 2026-01-17 v3: For user actions during protection window, try to recover current_layer
         if is_user_action and not self.current_layer:
-            print(f"   ⚠️ User action '{task_name}' but current_layer is None - attempting recovery...")
+            # print(f"   ⚠️ User action '{task_name}' but current_layer is None - attempting recovery...")  # DEBUG REMOVED
             
             # Try 1: Recover from saved layer ID (set during filtering)
             saved_id = getattr(self, '_saved_layer_id_before_filter', None)
@@ -6338,14 +6414,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 recovered_layer = QgsProject.instance().mapLayer(saved_id)
                 if recovered_layer and recovered_layer.isValid():
                     self.current_layer = recovered_layer
-                    print(f"   ✅ RECOVERED current_layer from saved ID: {recovered_layer.name()}")
+                    # print(f"   ✅ RECOVERED current_layer from saved ID: {recovered_layer.name()}")  # DEBUG REMOVED
             
             # Try 2: Recover from combobox current selection
             if not self.current_layer:
                 combo_layer = self.comboBox_filtering_current_layer.currentLayer()
                 if combo_layer and combo_layer.isValid():
                     self.current_layer = combo_layer
-                    print(f"   ✅ RECOVERED current_layer from combobox: {combo_layer.name()}")
+                    # print(f"   ✅ RECOVERED current_layer from combobox: {combo_layer.name()}")  # DEBUG REMOVED
             
             # Try 3: Use first layer in PROJECT_LAYERS
             if not self.current_layer and self.PROJECT_LAYERS:
@@ -6354,31 +6430,31 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 first_layer = QgsProject.instance().mapLayer(first_id)
                 if first_layer and first_layer.isValid():
                     self.current_layer = first_layer
-                    print(f"   ✅ RECOVERED current_layer from PROJECT_LAYERS: {first_layer.name()}")
+                    # print(f"   ✅ RECOVERED current_layer from PROJECT_LAYERS: {first_layer.name()}")  # DEBUG REMOVED
         
         if self.current_layer:
-            print(f"   current_layer.name={self.current_layer.name()}")
-            print(f"   current_layer.id={self.current_layer.id()}")
-            print(f"   PROJECT_LAYERS keys count={len(self.PROJECT_LAYERS)}")
-            print(f"   in_PROJECT_LAYERS={self.current_layer.id() in self.PROJECT_LAYERS}")
+            pass  # print(f"   current_layer.name={self.current_layer.name()}")  # DEBUG REMOVED
+            # print(f"   current_layer.id={self.current_layer.id()}")  # DEBUG REMOVED
+            # print(f"   PROJECT_LAYERS keys count={len(self.PROJECT_LAYERS)}")  # DEBUG REMOVED
+            # print(f"   in_PROJECT_LAYERS={self.current_layer.id() in self.PROJECT_LAYERS}")  # DEBUG REMOVED
         else:
-            print(f"   current_layer is None!")
-            print(f"   PROJECT_LAYERS keys={list(self.PROJECT_LAYERS.keys())[:3]}...")
-        print(f"{'='*60}")
+            pass  # print(f"   current_layer is None!")  # DEBUG REMOVED
+            # print(f"   PROJECT_LAYERS keys={list(self.PROJECT_LAYERS.keys())[:3]}...")  # DEBUG REMOVED
+        # print(f"{'='*60}")  # DEBUG REMOVED
         
         # FIX 2026-01-17 v3: For user actions, reset _filtering_in_progress immediately
         # This allows the action to proceed without waiting for the 1.5s protection window
         if is_user_action and getattr(self, '_filtering_in_progress', False):
-            print(f"🔓 FIX 2026-01-17 v3: Resetting _filtering_in_progress for user action '{task_name}'")
+            # print(f"🔓 FIX 2026-01-17 v3: Resetting _filtering_in_progress for user action '{task_name}'")  # DEBUG REMOVED
             self._filtering_in_progress = False
         
         if not self.widgets_initialized or not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS:
-            print(f"❌ launchTaskEvent BLOCKED: widgets_initialized={self.widgets_initialized}, current_layer={self.current_layer}, in_PROJECT_LAYERS={self.current_layer.id() in self.PROJECT_LAYERS if self.current_layer else False}")
+            # print(f"❌ launchTaskEvent BLOCKED: widgets_initialized={self.widgets_initialized}, current_layer={self.current_layer}, in_PROJECT_LAYERS={self.current_layer.id() in self.PROJECT_LAYERS if self.current_layer else False}")  # DEBUG REMOVED
             return
         
         self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = self.get_layers_to_filter()
         self.setLayerVariableEvent(self.current_layer, [("filtering", "layers_to_filter")])
-        print(f"📡 Emitting launchingTask signal: {task_name}")
+        # print(f"📡 Emitting launchingTask signal: {task_name}")  # DEBUG REMOVED
         self.launchingTask.emit(task_name)
     
     def _setup_truncation_tooltips(self):

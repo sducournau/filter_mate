@@ -231,7 +231,7 @@ class ParallelFilterExecutor:
             return self._filter_sequential(layers, filter_func, progress_callback, cancel_check)
         
         logger.info(f"🚀 Starting parallel filtering of {layer_count} layers with {self._max_workers} workers")
-        logger.info(f"   Providers: {provider_types} (all database-backed, parallel OK)")
+        logger.debug(f"   Providers: {provider_types} (all database-backed, parallel OK)")
         start_time = time.time()
         
         # Track completion
@@ -305,7 +305,7 @@ class ParallelFilterExecutor:
         total_time = (time.time() - start_time) * 1000
         success_count = sum(1 for r in self._results if r.success)
         
-        logger.info(f"📊 Parallel filtering complete: {success_count}/{layer_count} succeeded in {total_time:.0f}ms")
+        logger.debug(f"📊 Parallel filtering complete: {success_count}/{layer_count} succeeded in {total_time:.0f}ms")
         
         return self._results
     
@@ -379,7 +379,7 @@ class ParallelFilterExecutor:
         start_time = time.time()
         
         # FIX v3.0.8: Log each layer being filtered
-        logger.info(f"🔄 _filter_single_layer: Filtering '{layer_name}' (provider={provider_type})")
+        logger.debug(f"🔄 _filter_single_layer: Filtering '{layer_name}' (provider={provider_type})")
         from qgis.core import QgsMessageLog, Qgis
         QgsMessageLog.logMessage(
             f"🔄 Filtering: {layer_name} ({provider_type})",

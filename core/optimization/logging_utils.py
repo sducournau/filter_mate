@@ -120,7 +120,7 @@ def log_backend_info(
     elif provider_type == provider_ogr:
         backend_name = "OGR"
     
-    logger.info(f"Using {backend_name} backend for filtering")
+    logger.debug(f"Using {backend_name} backend for filtering")
     
     # Performance warning for large datasets without PostgreSQL
     if large_dataset_threshold > 0 and feature_count > large_dataset_threshold and not (

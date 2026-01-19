@@ -118,7 +118,7 @@ class FilterMate:
             
             factory = QGISFactory()
             set_qgis_factory(factory)
-            logger.info("FilterMate: QGIS factory initialized in __init__")
+            logger.debug("FilterMate: QGIS factory initialized in __init__")
         except Exception as factory_error:
             logger.error(f"FilterMate: CRITICAL - Could not initialize QGIS factory: {factory_error}")
             # This is critical - without factory, hexagonal services won't work
@@ -239,7 +239,7 @@ class FilterMate:
                     from .adapters.qgis.factory import QGISFactory
                     factory = QGISFactory()
                     set_qgis_factory(factory)
-                    logger.info("FilterMate: QGIS factory initialized as fallback in initGui")
+                    logger.debug("FilterMate: QGIS factory initialized as fallback in initGui")
                 except Exception as fallback_error:
                     logger.error(f"FilterMate: Could not initialize QGIS factory: {fallback_error}")
             
@@ -713,7 +713,7 @@ class FilterMate:
             QgsProject.instance().cleared.connect(self._project_cleared_connection)
             
             self._auto_activation_signals_connected = True
-            logger.info("FilterMate: Auto-activation signals connected (projectRead, newProjectCreated, layersAdded, cleared)")
+            logger.debug("FilterMate: Auto-activation signals connected (projectRead, newProjectCreated, layersAdded, cleared)")
 
     def _disconnect_auto_activation_signals(self):
         """Disconnect auto-activation signals if they were connected.
@@ -742,7 +742,7 @@ class FilterMate:
                     self._project_cleared_connection = None
                 
                 self._auto_activation_signals_connected = False
-                logger.info("FilterMate: Auto-activation signals disconnected")
+                logger.debug("FilterMate: Auto-activation signals disconnected")
             except Exception as e:
                 logger.warning(f"FilterMate: Error disconnecting auto-activation signals: {e}")
 

@@ -50,7 +50,7 @@ class RTreeIndexManager:
 
         # Check index status
         if manager.has_index("roads", "geometry"):
-            print("Index ready")
+            # print("Index ready")  # DEBUG REMOVED
     """
 
     def __init__(self, connection):

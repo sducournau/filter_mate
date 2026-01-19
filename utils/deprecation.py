@@ -404,21 +404,23 @@ def print_deprecation_report() -> None:
     registry = DeprecationRegistry.get_instance()
     report = registry.get_usage_report()
     
-    print("\n" + "=" * 60)
-    print("FilterMate Deprecation Report")
-    print("=" * 60)
-    print(f"Total deprecated items: {report['total_deprecated']}")
-    print(f"Items in use: {report['total_used']}")
-    print("-" * 60)
+    # print("\n" + "=" * 60)  # DEBUG REMOVED
+    # print("FilterMate Deprecation Report")  # DEBUG REMOVED
+    # print("=" * 60)  # DEBUG REMOVED
+    # print(f"Total deprecated items: {report['total_deprecated']}")  # DEBUG REMOVED
+    # print(f"Items in use: {report['total_used']}")  # DEBUG REMOVED
+    # print("-" * 60)  # DEBUG REMOVED
     
     for item in report['items']:
         status = "🔴 IN USE" if item['call_count'] > 0 else "⚪ Not used"
-        print(f"\n{status}: {item['name']}")
-        print(f"  Version: {item['version']}")
-        print(f"  Reason: {item['reason']}")
+        # print(f"\n{status}: {item['name']}")  # DEBUG REMOVED
+        # print(f"  Version: {item['version']}")  # DEBUG REMOVED
+        # print(f"  Reason: {item['reason']}")  # DEBUG REMOVED
         if item['replacement']:
-            print(f"  Replace with: {item['replacement']}")
+            pass  # block was empty
+            # print(f"  Replace with: {item['replacement']}")  # DEBUG REMOVED
         if item['call_count'] > 0:
-            print(f"  Call count: {item['call_count']}")
+            pass  # block was empty
+            # print(f"  Call count: {item['call_count']}")  # DEBUG REMOVED
     
-    print("\n" + "=" * 60)
+    # print("\n" + "=" * 60)  # DEBUG REMOVED

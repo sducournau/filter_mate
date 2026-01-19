@@ -27,11 +27,43 @@ _current_level = FeedbackLevel.NORMAL
 
 # Message category definitions
 MESSAGE_CATEGORIES = {
+    # Generic message types (for infrastructure/feedback functions)
+    'info': {
+        'description': 'Generic informational messages',
+        'minimal': False,
+        'normal': False,  # Too noisy for normal mode
+        'verbose': True
+    },
+    'success': {
+        'description': 'Generic success messages',
+        'minimal': False,
+        'normal': True,  # Important feedback for user
+        'verbose': True
+    },
+    'warning': {
+        'description': 'Generic warning messages',
+        'minimal': True,  # Warnings always visible
+        'normal': True,
+        'verbose': True
+    },
+    'error': {
+        'description': 'Generic error messages',
+        'minimal': True,  # Errors always visible
+        'normal': True,
+        'verbose': True
+    },
+    
     # Operation results
     'filter_count': {
         'description': 'Show feature count after filtering',
         'minimal': False,
-        'normal': True,
+        'normal': False,  # Visual feedback in UI is sufficient
+        'verbose': True
+    },
+    'filter_success': {
+        'description': 'Show filter success confirmation',
+        'minimal': False,
+        'normal': False,  # Visual feedback in layers panel is sufficient
         'verbose': True
     },
     'undo_redo': {
@@ -51,13 +83,13 @@ MESSAGE_CATEGORIES = {
     'backend_info': {
         'description': 'Show which backend is being used',
         'minimal': False,
-        'normal': False,  # Show once at startup only
+        'normal': False,  # Too technical for normal users
         'verbose': True
     },
     'backend_startup': {
         'description': 'Show backend info at plugin startup',
         'minimal': False,
-        'normal': True,
+        'normal': False,  # Reduced noise - only verbose
         'verbose': True
     },
     
@@ -66,6 +98,20 @@ MESSAGE_CATEGORIES = {
         'description': 'Show UI configuration change confirmations',
         'minimal': False,
         'normal': False,  # Changes visible in UI
+        'verbose': True
+    },
+    
+    # Layer operations
+    'layer_loaded': {
+        'description': 'Show layer loading confirmation',
+        'minimal': False,
+        'normal': False,  # Layers panel shows this
+        'verbose': True
+    },
+    'layer_reset': {
+        'description': 'Show layer reset confirmation',
+        'minimal': False,
+        'normal': False,  # Visual feedback in layers panel
         'verbose': True
     },
     
@@ -81,7 +127,7 @@ MESSAGE_CATEGORIES = {
     'progress_info': {
         'description': 'Show progress during long operations',
         'minimal': False,
-        'normal': True,
+        'normal': False,  # Progress bar is sufficient
         'verbose': True
     },
     
@@ -90,6 +136,14 @@ MESSAGE_CATEGORIES = {
         'description': 'Show "no more history" warnings',
         'minimal': False,
         'normal': False,  # Buttons already disabled
+        'verbose': True
+    },
+    
+    # Initialization messages
+    'init_info': {
+        'description': 'Show initialization/startup messages',
+        'minimal': False,
+        'normal': False,  # Developer info only
         'verbose': True
     },
     

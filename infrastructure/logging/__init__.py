@@ -141,7 +141,8 @@ def safe_log(logger, level: int, message: str, exc_info: bool = False):
         logger.log(level, message, exc_info=exc_info)
     except (OSError, ValueError, AttributeError):
         try:
-            print(f"[FilterMate] {message}")
+            pass  # block was empty
+            # print(f"[FilterMate] {message}")  # DEBUG REMOVED
         except (OSError, UnicodeError):
             pass
 

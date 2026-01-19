@@ -75,7 +75,7 @@ class SourceLayerFilterExecutor:
         executor = SourceLayerFilterExecutor()
         result = executor.execute(context)
         if result.success:
-            print(f"Filter applied: {result.expression}")
+            # print(f"Filter applied: {result.expression}")  # DEBUG REMOVED
     """
     
     def execute(self, context: FilterExecutionContext) -> FilterExecutionResult:

@@ -235,7 +235,7 @@ def recover_spatialite_features_from_fids(
         request = QgsFeatureRequest().setFilterFids(feature_fids)
         recovered = list(layer.getFeatures(request))
         if recovered:
-            logger.info(f"[Spatialite]   ✓ Recovered {len(recovered)} features using FIDs")
+            logger.debug(f"[Spatialite]   ✓ Recovered {len(recovered)} features using FIDs")
         return recovered
     except Exception as e:
         logger.error(f"[Spatialite]   ❌ FID recovery failed: {e}")
@@ -304,7 +304,7 @@ def resolve_spatialite_features(
                     if selected_fids:
                         request = QgsFeatureRequest().setFilterFids(selected_fids)
                         features = list(source_layer.getFeatures(request))
-                        logger.info(f"[Spatialite]   ✓ Recovered {len(features)} from selection")
+                        logger.debug(f"[Spatialite]   ✓ Recovered {len(features)} from selection")
                 except Exception as e:
                     logger.error(f"[Spatialite]   ❌ Selection recovery failed: {e}")
                     
