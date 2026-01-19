@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 4.1.1** | January 2026 | **Production-Ready** 🎉
+**Version 4.2.5** | January 2026 | **Production-Ready** 🎉
 
 > 🚀 The ultimate spatial filtering plugin! Explore, filter & export vector data with lightning-fast performance on ANY data source.
 

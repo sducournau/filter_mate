@@ -2,6 +2,165 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [4.2.5] - 2026-01-19 🔧 Release Consolidation
+
+### Summary
+- Consolidated release including all 4.2.x fixes
+- Multiple Feature Picker checkbox preservation (definitive fix)
+- Auto-switch groupbox based on canvas selection
+- QGIS selection synchronization improvements
+
+---
+
+## [4.2.4] - 2026-01-19 🐛 Multiple Feature Picker - DEFINITIVE Checkbox Fix
+
+### Fixed
+
+#### Multiple Selection Feature Picker - Checked Items Automatically Unchecked (DEFINITIVE Fix)
+- **FIX 2026-01-19 v4**: Complete fix for checkbox auto-uncheck by preserving checked state during ALL list operations
+- **Root Cause Analysis**: The issue had multiple causes:
+  1. `_populate_features_sync()` was always clearing the list with `list_widget.clear()` and recreating items with `Qt.Unchecked`
+  2. `setDisplayExpression()` was also calling `clear()` before `_populate_features_sync()`
+  3. `exploring_link_widgets()` called `setDisplayExpression()` without `preserve_checked=True`
+  4. `_sync_widgets_from_qgis_selection()` called `_configure_multiple_selection_groupbox()` even when already on multiple_selection
+  5. `setFilterExpression()` called `setDisplayExpression()` without `preserve_checked=True`
+  6. `_configure_groupbox_common()` and `exploring_source_params_changed()` also called without preserve
+- **Solution**: Comprehensive preserve_checked mechanism across ALL code paths:
+  1. **`_populate_features_sync()`**: Added `preserve_checked` parameter - saves checked FIDs before clear, restores after population
+  2. **`setDisplayExpression()`**: Removed redundant `clear()` call, passes `preserve_checked` to `_populate_features_sync()`
+  3. **`setLayer()`**: Now calls `_populate_features_sync()` with `preserve_checked=True`
+  4. **`setFilterExpression()`**: Now uses `preserve_checked=True` when calling `setDisplayExpression()`
+  5. **`exploring_link_widgets()`**: ALWAYS uses `preserve_checked=True`
+  6. **`_sync_widgets_from_qgis_selection()`**: Removed unnecessary call to `_configure_multiple_selection_groupbox()`
+  7. **`_configure_groupbox_common()`**: Uses `preserve_checked=True` for MULTIPLE_SELECTION_FEATURES
+  8. **`exploring_source_params_changed()`**: Uses `preserve_checked=True` for multiple_selection
+  9. **`filter_items()`**: Added visual refresh after filtering
+- **Files Modified**:
+  - `ui/widgets/custom_widgets.py`
+  - `ui/controllers/exploring_controller.py`
+  - `filter_mate_dockwidget.py`
+- **Impact**: Checkboxes are now 100% preserved during any operation - filtering, expression change, QGIS sync, etc.
+
+#### Auto-Switch Groupbox from Canvas Selection
+- **FIX 2026-01-19 v5**: Bidirectional auto-switch of groupbox based on canvas selection count
+- **Behavior**:
+  - 1 feature selected from canvas → auto-switch to `single_selection` groupbox
+  - 2+ features selected from canvas → auto-switch to `multiple_selection` groupbox
+- **File**: `ui/controllers/exploring_controller.py`
+- **Impact**: UI now automatically adapts to selection mode based on canvas selection
+
+### Technical Details
+
+```python
+# In _populate_features_sync() - Save and restore checked items
+def _populate_features_sync(self, expression, preserve_checked=False):
+    # Save checked FIDs BEFORE clearing
+    saved_checked_fids = []
+    if preserve_checked:
+        saved_checked_fids = self.getCheckedFeatureIds()
+    
+    list_widget.clear()
+    
+    # Build set for O(1) lookup
+    checked_fid_set = set(saved_checked_fids)
+    
+    # Populate with preserved check state
+    for display_value, fid in features_data:
+        item = QListWidgetItem(display_value)
+        is_checked = fid in checked_fid_set
+        item.setCheckState(Qt.Checked if is_checked else Qt.Unchecked)
+        # ... styling based on is_checked ...
+
+# In exploring_link_widgets() - ALWAYS preserve checked
+self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(
+    single_display_expression, 
+    preserve_checked=True  # FIX v4: ALWAYS preserve, not just during QGIS sync
+)
+```
+
+---
+
+## [4.2.3] - 2026-01-19 🐛 Multiple Feature Picker - Checkbox Auto-Uncheck Fix
+
+### Fixed
+
+#### Multiple Selection Feature Picker - Checked Items Automatically Unchecked
+- **FIX 2026-01-19**: Fixed bug where checked items would automatically uncheck immediately after clicking
+- **Root Cause**: Feedback loop via QGIS selection synchronization:
+  1. User clicks checkbox → `_emit_checked_items_update()` emits signal
+  2. `exploring_features_changed()` → `handle_exploring_features_result()`
+  3. If IS_SELECTING button active: calls `layer.select([f.id() for f in features])`
+  4. This triggers `selectionChanged` signal → `handle_layer_selection_changed()`
+  5. Which calls `_sync_widgets_from_qgis_selection()` → resetting checkboxes
+- **Solution**: Added `_updating_qgis_selection_from_widget` flag to prevent feedback loop:
+  1. **`handle_exploring_features_result()`**: Set flag before calling `select()`, reset after 100ms
+  2. **`handle_layer_selection_changed()`**: Skip if flag is True (selection came from widget)
+  3. **Dockwidget `__init__`**: Initialize both `_updating_qgis_selection_from_widget` and `_configuring_groupbox` flags
+- **Files Modified**:
+  - `ui/controllers/exploring_controller.py`
+  - `filter_mate_dockwidget.py`
+- **Impact**: Checkboxes now stay checked when user clicks them (no more auto-uncheck)
+
+### Technical Details
+
+```python
+# In handle_exploring_features_result() - Set flag to prevent feedback
+if is_selecting:
+    dw._updating_qgis_selection_from_widget = True
+    try:
+        dw.current_layer.select([f.id() for f in features])
+    finally:
+        # Reset after 100ms to allow selectionChanged to be ignored
+        QTimer.singleShot(100, lambda: setattr(dw, '_updating_qgis_selection_from_widget', False))
+
+# In handle_layer_selection_changed() - Skip if widget-initiated
+if getattr(self._dockwidget, '_updating_qgis_selection_from_widget', False):
+    logger.debug("handle_layer_selection_changed: Skipping (selection from widget)")
+    return True
+```
+
+---
+
+## [4.2.2] - 2026-01-19 🐛 Multiple Feature Picker - Selection List Refresh Fix
+
+### Fixed
+
+#### Multiple Selection Feature Picker - List Clearing on Item Click
+- **FIX 2026-01-19**: Fixed critical bug where clicking on an item in Multiple Selection Feature Picker would clear/refresh the entire list
+- **Root Cause**: Feedback loop where:
+  1. User clicks checkbox → `_emit_checked_items_update()` emits signal
+  2. `exploring_features_changed()` is called → triggers `handle_exploring_features_result()`
+  3. Which could call `_configure_multiple_selection_groupbox()` → calling `setLayer()` → clearing and repopulating the list
+- **Solution**: Multi-layered protection against unnecessary widget reconfiguration:
+  1. **`setLayer()` in custom_widgets.py**: Skip reconfiguration if same layer AND list already populated
+  2. **`_configure_groupbox_common()` in dockwidget**: Skip `setLayer()` for MULTIPLE_SELECTION_FEATURES if widget already has same layer with items
+  3. **`handle_exploring_features_result()` in exploring_controller**: Skip groupbox reconfigure when already on multiple_selection
+  4. **`exploring_features_changed()` in exploring_controller**: Skip when `_configuring_groupbox=True` (prevent recursion)
+  5. **`_configure_multiple_selection_groupbox()` in dockwidget**: Use `_configuring_groupbox` flag to prevent nested calls
+- **Files Modified**:
+  - `ui/widgets/custom_widgets.py`
+  - `filter_mate_dockwidget.py`  
+  - `ui/controllers/exploring_controller.py`
+- **Impact**: Users can now click checkboxes without the list being cleared and repopulated
+
+### Technical Details
+
+```python
+# In setLayer() - Skip if same layer with populated list
+if is_layer_valid(self.layer) and self.layer.id() == layer.id():
+    if self.layer.id() in self.list_widgets:
+        if self.list_widgets[self.layer.id()].count() > 0:
+            logger.debug(f"setLayer: Same layer with items, skipping reconfigure")
+            return  # Don't clear/repopulate
+
+# In exploring_features_changed() - Prevent recursion
+if getattr(self._dockwidget, '_configuring_groupbox', False):
+    logger.debug("exploring_features_changed: SKIPPED (_configuring_groupbox=True)")
+    return []
+```
+
+---
+
 ## [4.2.1] - 2026-01-19 🐛 Multiple Feature Picker List Visibility Fix
 
 ### Fixed
