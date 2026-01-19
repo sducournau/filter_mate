@@ -243,9 +243,19 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             return "1 = 0"  # No results
         
         if len(predicate_expressions) == 1:
-            return predicate_expressions[0]
+            final_expr = predicate_expressions[0]
         else:
-            return f"({' OR '.join(predicate_expressions)})"
+            final_expr = f"({' OR '.join(predicate_expressions)})"
+        
+        # DIAGNOSTIC: Log the final expression
+        print("=" * 80)
+        print(f"🔍 PostgreSQLExpressionBuilder.build_expression() RESULT:")
+        print(f"   Expression length: {len(final_expr)} chars")
+        print(f"   Expression preview: {final_expr[:300]}...")
+        print("=" * 80)
+        self.log_info(f"✅ PostgreSQL expression built: {final_expr[:200]}...")
+        
+        return final_expr
     
     def apply_filter(
         self,
@@ -474,6 +484,16 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             f'WHERE {where_clause}'
             f')'
         )
+        
+        # DIAGNOSTIC: Log EXISTS expression details
+        print(f"🔍 _build_exists_expression() GENERATED:")
+        print(f"   source_schema: {source_schema}")
+        print(f"   source_table: {source_table}")
+        print(f"   source_geom_field: {source_geom_field}")
+        print(f"   predicate_func: {predicate_func}")
+        print(f"   geom_expr: {geom_expr}")
+        print(f"   source_filter: {source_filter[:100] if source_filter else 'None'}...")
+        print(f"   EXISTS expression: {exists_expr[:300]}...")
         
         return exists_expr
     
