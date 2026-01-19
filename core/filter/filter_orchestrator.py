@@ -235,15 +235,26 @@ class FilterOrchestrator:
             logger.info(f"  ✓ Expression built: {len(expression)} chars")
             logger.info(f"  → Expression preview: {expression[:200]}...")
             
+            # DIAGNOSTIC 2026-01-19: Print expression for console visibility
+            print("=" * 80)
+            print(f"🏗️ FilterOrchestrator: Expression built for {layer.name()}")
+            print(f"   Length: {len(expression)} chars")
+            print(f"   Preview: {expression[:150]}...")
+            print("=" * 80)
+            
             # ==========================================
             # 6. SUBSET STRING STRATEGY
             # ==========================================
             old_subset, combine_operator = self._determine_subset_strategy(layer)
             
+            print(f"📋 Subset strategy: old_subset={bool(old_subset)}, combine_operator={combine_operator}")
+            
             # ==========================================
             # 7. BACKEND EXECUTION
             # ==========================================
+            print(f"🎯 Calling backend.apply_filter() for {layer.name()}...")
             result = backend.apply_filter(layer, expression, old_subset, combine_operator)
+            print(f"   backend.apply_filter() returned: {result}")
             
             # Collect warnings from backend
             self._collect_backend_warnings(backend)

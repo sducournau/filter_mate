@@ -361,10 +361,28 @@ class AppInitializer:
             # Note: This creates a weak circular reference but is necessary for some features
             # dockwidget._app_ref = self (cannot do here since this is a service, not the app)
             
-            # Pass favorites manager to dockwidget
+            # Pass favorites manager to dockwidget and update FavoritesController
             favorites_manager = self._get_favorites_manager() if self._get_favorites_manager else None
             if favorites_manager:
                 dockwidget._favorites_manager = favorites_manager
+                
+                # CRITICAL FIX: Update FavoritesController with the correctly initialized manager
+                # The controller was setup in dockwidget_widgets_configuration() BEFORE we could
+                # attach the favorites_manager, so it may have created its own uninitialized instance
+                if hasattr(dockwidget, 'favorites_controller') and dockwidget.favorites_controller:
+                    controller = dockwidget.favorites_controller
+                    controller._favorites_manager = favorites_manager
+                    # Connect to favorites_changed signal for UI updates
+                    if hasattr(favorites_manager, 'favorites_changed'):
+                        try:
+                            favorites_manager.favorites_changed.disconnect(controller._on_favorites_loaded)
+                        except (TypeError, RuntimeError):
+                            pass  # Signal wasn't connected
+                        favorites_manager.favorites_changed.connect(controller._on_favorites_loaded)
+                    # Trigger initial UI update with loaded favorites
+                    controller.update_indicator()
+                    logger.info(f"✓ FavoritesController synchronized with FavoritesManager ({favorites_manager.count} favorites)")
+                
                 if hasattr(dockwidget, '_update_favorite_indicator'):
                     dockwidget._update_favorite_indicator()
                 logger.debug("FavoritesManager attached to DockWidget")

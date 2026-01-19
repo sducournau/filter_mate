@@ -2135,6 +2135,26 @@ class FilterMateApp:
                 logger.info(f"✓ FavoritesService configured ({favorites_count} favorites loaded)")
                 if favorites_count == 0:
                     logger.debug("  → No favorites found for this project (new project or no favorites saved yet)")
+                
+                # CRITICAL FIX: Sync favorites_manager to dockwidget and notify FavoritesController
+                # This ensures the controller uses the correctly initialized manager with loaded favorites
+                if self.dockwidget is not None:
+                    self.dockwidget._favorites_manager = self.favorites_manager
+                    logger.debug("✓ FavoritesManager synchronized to dockwidget")
+                    
+                    # Notify FavoritesController to update UI with loaded favorites
+                    if hasattr(self.dockwidget, 'favorites_controller') and self.dockwidget.favorites_controller:
+                        controller = self.dockwidget.favorites_controller
+                        controller._favorites_manager = self.favorites_manager
+                        # Reconnect signal if needed
+                        if hasattr(self.favorites_manager, 'favorites_changed'):
+                            try:
+                                self.favorites_manager.favorites_changed.disconnect(controller._on_favorites_loaded)
+                            except (TypeError, RuntimeError):
+                                pass  # Signal wasn't connected
+                            self.favorites_manager.favorites_changed.connect(controller._on_favorites_loaded)
+                        controller.update_indicator()
+                        logger.info(f"✓ FavoritesController notified and UI updated ({favorites_count} favorites)")
 
     def add_project_datasource(self, layer):
         """Add PostgreSQL datasource and create temp schema via DatasourceManager."""

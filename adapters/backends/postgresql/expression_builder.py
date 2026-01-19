@@ -171,13 +171,42 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         source_feature_count = kwargs.get('source_feature_count')
         
         # Extract layer properties
-        schema = layer_props.get("layer_schema", "public")
-        table = layer_props.get("layer_table_name") or layer_props.get("layer_name")
-        geom_field = self._detect_geometry_column(layer_props)
         layer = layer_props.get("layer")
         
-        # Build geometry expression for target layer (unqualified for setSubsetString)
-        geom_expr = f'"{geom_field}"'
+        # FIX 2026-01-19: Extract schema/table/geom from layer's URI (most reliable source)
+        schema = None
+        table = None
+        geom_field = None
+        
+        if layer:
+            try:
+                from qgis.core import QgsDataSourceUri
+                uri = QgsDataSourceUri(layer.dataProvider().dataSourceUri())
+                schema = uri.schema() or "public"
+                table = uri.table()
+                geom_field = uri.geometryColumn() or "geom"
+                self.log_debug(f"Extracted from URI: schema={schema}, table={table}, geom={geom_field}")
+            except Exception as e:
+                self.log_warning(f"Failed to extract from URI: {e}")
+        
+        # Fallback to layer_props if URI extraction failed
+        if not schema:
+            schema = layer_props.get("layer_schema") or "public"
+        if not table:
+            table = layer_props.get("layer_table_name") or layer_props.get("layer_name")
+        if not geom_field:
+            geom_field = self._detect_geometry_column(layer_props)
+        
+        # DIAGNOSTIC: Print extracted values
+        print(f"📋 Layer props extraction:")
+        print(f"   schema: {schema}")
+        print(f"   table: {table}")
+        print(f"   geom_field: {geom_field}")
+        
+        # FIX 2026-01-19: Build geometry expression with TABLE.GEOM (not schema)
+        # For PostgreSQL setSubsetString, the schema is implicit in the layer context
+        # Format: "table"."geom" - NOT "schema"."table"."geom"
+        geom_expr = f'"{table}"."{geom_field}"'
         
         # Apply centroid optimization if enabled
         if use_centroids:
@@ -187,9 +216,8 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         if buffer_expression:
             geom_expr = self._apply_dynamic_buffer(geom_expr, buffer_expression)
         
-        # NOTE: geom_expr stays UNQUALIFIED (e.g., "geom" not "table"."geom")
-        # because setSubsetString is applied to a single table context
-        # EXISTS subqueries reference the main table implicitly
+        # DIAGNOSTIC 2026-01-19: Log the fully qualified geom_expr
+        print(f"🎯 PostgreSQL geom_expr (fully qualified): {geom_expr}")
         
         # Determine strategy
         wkt_length = len(source_wkt) if source_wkt else 0
@@ -276,9 +304,20 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         Returns:
             True if filter applied successfully
         """
+        # DIAGNOSTIC 2026-01-19: Trace apply_filter execution
+        print("=" * 80)
+        print(f"🎯 PostgreSQLExpressionBuilder.apply_filter() CALLED!")
+        print(f"   layer: {layer.name() if layer else 'None'}")
+        print(f"   expression length: {len(expression) if expression else 0}")
+        print(f"   expression preview: {expression[:150] if expression else 'None'}...")
+        print(f"   old_subset: {old_subset[:100] if old_subset else 'None'}...")
+        print(f"   combine_operator: {combine_operator}")
+        print("=" * 80)
+        
         try:
             if not expression:
                 self.log_warning("Empty expression, skipping filter")
+                print("⚠️ Empty expression - returning False")
                 return False
             
             # Normalize column case and apply type casting
@@ -302,13 +341,22 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             else:
                 final_expression = expression
             
+            # DIAGNOSTIC: Print final expression before applying
+            print(f"📝 Final expression to apply: {final_expression[:200]}...")
+            print(f"   Calling safe_set_subset_string(layer={layer.name()}, expr_len={len(final_expression)})...")
+            
             # Apply filter
             success = safe_set_subset_string(layer, final_expression)
             
+            print(f"   safe_set_subset_string returned: {success}")
+            
             if success:
                 self.log_info(f"✓ Filter applied successfully")
+                print(f"✅ Filter applied successfully to {layer.name()}")
             else:
                 self.log_error(f"✗ Failed to apply filter")
+                print(f"❌ FAILED to apply filter to {layer.name()}!")
+                print(f"   Expression that failed: {final_expression[:300]}...")
             
             return success
             

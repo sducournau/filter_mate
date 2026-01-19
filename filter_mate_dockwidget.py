@@ -221,6 +221,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._async_expression_threshold = thresholds['async_expression_threshold']
         self._expression_manager = get_expression_manager() if ASYNC_EXPRESSION_AVAILABLE else None
         self._pending_async_evaluation, self._expression_loading, self._configuration_manager = None, False, None
+        # FIX 2026-01-19: Track layer connections for QgsFeaturePickerWidget crash prevention
+        # When a layer is deleted, its QgsFeaturePickerWidget must be cleared BEFORE
+        # the internal QTimer triggers scheduledReload, which would cause access violation
+        self._feature_picker_layer_connection = None  # Stores (layer, connection) tuple
         self._initialize_layer_state()
     
     def _safe_get_layer_props(self, layer):
@@ -298,6 +302,76 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.current_layer_selection_connection = False
             return False
     
+    def _connect_feature_picker_layer_deletion(self, layer):
+        """
+        FIX 2026-01-19: Connect willBeDeleted signal to clear QgsFeaturePickerWidget immediately.
+        
+        CRITICAL: QgsFeaturePickerWidget has an internal QTimer that triggers scheduledReload.
+        If the layer is deleted while this timer is pending, it causes a Windows fatal exception
+        (access violation) when QgsVectorLayerFeatureSource tries to access the deleted layer.
+        
+        Stack trace of the crash:
+        - QgsFeaturePickerModelBase::scheduledReload
+        - QgsVectorLayerFeatureSource::QgsVectorLayerFeatureSource  
+        - QgsExpressionContextUtils::layerScope
+        - QgsMapLayer::customProperty (CRASH - layer deleted)
+        
+        Solution: Connect to layer.willBeDeleted signal to clear the widget BEFORE deletion.
+        
+        Args:
+            layer: QgsVectorLayer being set on the FeaturePickerWidget
+        """
+        # Disconnect previous connection if any
+        self._disconnect_feature_picker_layer_deletion()
+        
+        if not layer or not layer.isValid():
+            return
+        
+        try:
+            # Connect to willBeDeleted signal with direct connection for immediate execution
+            layer.willBeDeleted.connect(self._on_feature_picker_layer_deleted)
+            self._feature_picker_layer_connection = layer
+            logger.debug(f"FIX-2026-01-19: Connected willBeDeleted for FeaturePickerWidget layer '{layer.name()}'")
+        except Exception as e:
+            logger.warning(f"Failed to connect willBeDeleted for FeaturePickerWidget: {e}")
+            self._feature_picker_layer_connection = None
+    
+    def _disconnect_feature_picker_layer_deletion(self):
+        """
+        FIX 2026-01-19: Disconnect willBeDeleted signal from previous layer.
+        """
+        if self._feature_picker_layer_connection is not None:
+            try:
+                layer = self._feature_picker_layer_connection
+                # Check if layer is still valid before disconnecting
+                if layer and not sip.isdeleted(layer) and layer.isValid():
+                    layer.willBeDeleted.disconnect(self._on_feature_picker_layer_deleted)
+                    logger.debug(f"FIX-2026-01-19: Disconnected willBeDeleted for FeaturePickerWidget")
+            except (TypeError, RuntimeError) as e:
+                # Already disconnected or layer destroyed - ignore
+                logger.debug(f"willBeDeleted already disconnected or layer gone: {e}")
+            finally:
+                self._feature_picker_layer_connection = None
+    
+    def _on_feature_picker_layer_deleted(self):
+        """
+        FIX 2026-01-19: Called when the FeaturePickerWidget's layer is about to be deleted.
+        
+        CRITICAL: This MUST clear the widget IMMEDIATELY (synchronously) before the layer
+        is actually destroyed, otherwise the internal timer will cause access violation.
+        """
+        logger.info("FIX-2026-01-19: 🛡️ Layer deletion detected - clearing FeaturePickerWidget to prevent crash")
+        try:
+            if hasattr(self, 'mFeaturePickerWidget_exploring_single_selection'):
+                # Set to None IMMEDIATELY - do NOT defer this!
+                self.mFeaturePickerWidget_exploring_single_selection.setLayer(None)
+                logger.debug("FIX-2026-01-19: FeaturePickerWidget cleared successfully before layer deletion")
+        except Exception as e:
+            logger.warning(f"FIX-2026-01-19: Error clearing FeaturePickerWidget on layer deletion: {e}")
+        finally:
+            # Clear the connection reference (layer is being deleted anyway)
+            self._feature_picker_layer_connection = None
+
     def _initialize_layer_state(self):
         """v4.0 Sprint 15: Initialize layers, managers, controllers, and UI."""
         self.init_layer, self.has_loaded_layers = None, False
@@ -1983,6 +2057,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     logger.debug(f"  Updating SINGLE_SELECTION_FEATURES with layer {layer.name()}")
                     widget.setLayer(None)  # Force refresh
                     widget.setLayer(layer)
+                    # FIX 2026-01-19: Connect willBeDeleted to prevent crash on layer deletion
+                    self._connect_feature_picker_layer_deletion(layer)
                     if single_expr:
                         widget.setDisplayExpression(single_expr)
                     widget.setFetchGeometry(True)
@@ -6101,6 +6177,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             event.accept()
             return
         
+        # FIX 2026-01-19: Disconnect willBeDeleted signal before cleanup
+        try: self._disconnect_feature_picker_layer_deletion() if hasattr(self, '_disconnect_feature_picker_layer_deletion') else None
+        except Exception:  # May already be disconnected - expected
+            pass
         try: self.comboBox_filtering_current_layer.setLayer(None) if hasattr(self, 'comboBox_filtering_current_layer') else None
         except RuntimeError:  # Widget may already be deleted - expected during shutdown
             pass

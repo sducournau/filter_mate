@@ -2623,6 +2623,9 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 picker_widget = self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
                 picker_widget.setLayer(None)
                 picker_widget.setLayer(layer)
+                # FIX 2026-01-19: Connect willBeDeleted to prevent crash on layer deletion
+                if hasattr(self._dockwidget, '_connect_feature_picker_layer_deletion'):
+                    self._dockwidget._connect_feature_picker_layer_deletion(layer)
                 picker_widget.setDisplayExpression(single_expr)
                 picker_widget.setFetchGeometry(True)
                 picker_widget.setShowBrowserButtons(True)

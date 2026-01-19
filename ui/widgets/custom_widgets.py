@@ -87,7 +87,7 @@ from qgis.gui import (
 from qgis.utils import iface
 
 # Import safe iteration utilities for OGR/GeoPackage error handling
-from ...infrastructure.utils import safe_iterate_features, get_feature_attribute
+from ...infrastructure.utils import safe_iterate_features, get_feature_attribute, is_layer_valid
 
 logger = logging.getLogger('FilterMate.UI.Widgets.CustomWidgets')
 
@@ -731,7 +731,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         self._sort_field = field
         logger.debug(f"QgsCheckableComboBoxFeaturesListPickerWidget.setSortOrder: order={order}, field={field}")
         
-        if self.layer is not None and self.layer.id() in self.list_widgets:
+        if is_layer_valid(self.layer) and self.layer.id() in self.list_widgets:
             expression = self.list_widgets[self.layer.id()].getDisplayExpression()
             if expression:
                 self.setDisplayExpression(expression)
@@ -743,7 +743,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
     def checkedItems(self):
         """Get list of checked items with their data."""
         selection = []
-        if self.layer is None or self.layer.id() not in self.list_widgets:
+        if not is_layer_valid(self.layer) or self.layer.id() not in self.list_widgets:
             return selection
             
         for i in range(self.list_widgets[self.layer.id()].count()):
@@ -755,19 +755,19 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
     def displayExpression(self):
         """Get current display expression."""
-        if self.layer is not None and self.layer.id() in self.list_widgets:
+        if is_layer_valid(self.layer) and self.layer.id() in self.list_widgets:
             return self.list_widgets[self.layer.id()].getDisplayExpression()
         return False
       
     def currentLayer(self):
         """Get current layer or False if none."""
-        if self.layer is not None:
+        if is_layer_valid(self.layer):
             return self.layer
         return False
     
     def currentSelectedFeatures(self):
         """Get currently selected features list or False if none."""
-        if self.layer is not None:
+        if is_layer_valid(self.layer):
             if self.layer.id() not in self.list_widgets:
                 return False
             current_selected_features = self.list_widgets[self.layer.id()].getSelectedFeaturesList()
@@ -776,7 +776,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         
     def currentVisibleFeatures(self):
         """Get currently visible features list or False if none."""
-        if self.layer is not None:
+        if is_layer_valid(self.layer):
             if self.layer.id() not in self.list_widgets:
                 return False
             visible_features_list = self.list_widgets[self.layer.id()].getVisibleFeaturesList()
@@ -801,7 +801,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         try:
             if layer is not None:
                 # Cancel all tasks for the OLD layer BEFORE changing to new layer
-                if self.layer is not None:
+                if is_layer_valid(self.layer):
                     old_layer_id = self.layer.id()
                     self._filter_debounce_timer.stop()
                     for task_type in self.tasks:
@@ -890,7 +890,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
     def setFilterExpression(self, filter_expression, layer_props):
         """Set the filter expression for the current layer."""
-        if self.layer is not None:
+        if is_layer_valid(self.layer):
             if self.layer.id() not in self.list_widgets:
                 self.manage_list_widgets(layer_props)
             if self.layer.id() in self.list_widgets:  
@@ -919,7 +919,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         """
         logger.debug(f"QgsCheckableComboBoxFeaturesListPickerWidget.setDisplayExpression: {expression}, skip_task={skip_task}, preserve_checked={preserve_checked}")
         
-        if self.layer is not None:
+        if is_layer_valid(self.layer):
             if self.layer.id() not in self.list_widgets:
                 logger.warning(f"No list widget found for layer {self.layer.id()}")
                 return
@@ -1005,7 +1005,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
     def _populate_features_sync(self, expression):
         """Populate features list synchronously."""
-        if self.layer is None or self.layer.id() not in self.list_widgets:
+        if not is_layer_valid(self.layer) or self.layer.id() not in self.list_widgets:
             return
             
         list_widget = self.list_widgets[self.layer.id()]
@@ -1066,7 +1066,10 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
     def eventFilter(self, obj, event):
         """Handle mouse events for feature selection and context menu."""
-        if self.layer is None or self.layer.id() not in self.list_widgets:
+        # Use is_layer_valid to check both None and deleted C++ object
+        if not is_layer_valid(self.layer):
+            return False
+        if self.layer.id() not in self.list_widgets:
             return False
         
         if event.type() == QEvent.MouseButtonPress and obj == self.list_widgets[self.layer.id()].viewport():
@@ -1162,7 +1165,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
     def connect_filter_lineEdit(self):
         """Connect filter line edit to appropriate signal."""
-        if self.layer is not None and self.layer.id() in self.list_widgets:
+        if is_layer_valid(self.layer) and self.layer.id() in self.list_widgets:
             if self.list_widgets[self.layer.id()].getTotalFeaturesListCount() == self.list_widgets[self.layer.id()].count():
                 try:
                     self.filter_le.editingFinished.disconnect()
@@ -1191,6 +1194,9 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         for key in self.list_widgets.keys():
             self.list_widgets[key].setVisible(False)
 
+        if not is_layer_valid(self.layer):
+            return
+        
         if self.layer.id() in self.list_widgets:
             self.list_widgets[self.layer.id()].setVisible(True)
         else:
@@ -1256,7 +1262,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         if pk_name is None:
             logger.warning("primary_key_name is None, attempting fallback")
             
-            if self.layer is not None:
+            if is_layer_valid(self.layer):
                 fields = self.layer.fields()
                 fallback_names = ['fid', 'id', 'ID', 'FID', 'ogc_fid', 'gid']
                 for fallback_name in fallback_names:
@@ -1285,7 +1291,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
     def select_all(self, x):
         """Select all items based on action type."""
-        if self.layer is None or self.layer.id() not in self.list_widgets:
+        if not is_layer_valid(self.layer) or self.layer.id() not in self.list_widgets:
             return
         
         list_widget = self.list_widgets[self.layer.id()]
@@ -1303,7 +1309,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
     def deselect_all(self, x):
         """Deselect all items based on action type."""
-        if self.layer is None or self.layer.id() not in self.list_widgets:
+        if not is_layer_valid(self.layer) or self.layer.id() not in self.list_widgets:
             return
         
         list_widget = self.list_widgets[self.layer.id()]
@@ -1330,7 +1336,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         else:
             self.filter_txt = filter_txt
         
-        if self.layer is None or self.layer.id() not in self.list_widgets:
+        if not is_layer_valid(self.layer) or self.layer.id() not in self.list_widgets:
             return
             
         list_widget = self.list_widgets[self.layer.id()]
@@ -1374,7 +1380,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         Returns:
             int: Number of items that were successfully checked
         """
-        if self.layer is None or self.layer.id() not in self.list_widgets:
+        if not is_layer_valid(self.layer) or self.layer.id() not in self.list_widgets:
             logger.warning("setCheckedFeatureIds: No layer or list_widget available")
             return 0
         
@@ -1431,7 +1437,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         Returns:
             list: List of feature IDs (from item.data(3)) for checked items
         """
-        if self.layer is None or self.layer.id() not in self.list_widgets:
+        if not is_layer_valid(self.layer) or self.layer.id() not in self.list_widgets:
             return []
         
         feature_ids = []
