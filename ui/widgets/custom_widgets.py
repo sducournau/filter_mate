@@ -994,6 +994,18 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             # Build features list synchronously (unless skipped)
             if not skip_task:
                 self._populate_features_sync(working_expression)
+            else:
+                # FIX 2026-01-19: Even when skipping task, ensure list widget is visible
+                # This prevents the list from disappearing when skip_task=True
+                list_widget = self.list_widgets[self.layer.id()]
+                if not list_widget.isVisible():
+                    logger.debug(f"setDisplayExpression: List widget hidden, making visible (skip_task=True)")
+                    list_widget.setVisible(True)
+                    list_widget.show()
+                    list_widget.viewport().update()
+                    if self.layout:
+                        self.layout.invalidate()
+                        self.layout.activate()
             
             # FIX 2026-01-18 v10: Restore checked items after populate if preserve_checked is True
             if preserve_checked and saved_checked_fids:
@@ -1004,7 +1016,11 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                     logger.warning(f"Could not restore checked items: {restore_err}")
 
     def _populate_features_sync(self, expression):
-        """Populate features list synchronously."""
+        """Populate features list synchronously.
+        
+        FIX 2026-01-19: Added explicit visual refresh after population to ensure
+        the list is displayed correctly.
+        """
         if not is_layer_valid(self.layer) or self.layer.id() not in self.list_widgets:
             return
             
@@ -1061,8 +1077,20 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         list_widget.setFeaturesList(features_data)
         list_widget.setTotalFeaturesListCount(len(features_data))
         
+        # FIX 2026-01-19: Force visual refresh after population
+        # This ensures the list is displayed correctly, especially after layer changes
+        list_widget.setVisible(True)
+        list_widget.show()
+        list_widget.viewport().update()
+        list_widget.update()
+        
+        # Force layout update
+        if self.layout:
+            self.layout.invalidate()
+            self.layout.activate()
+        
         self.connect_filter_lineEdit()
-        logger.debug(f"Populated {len(features_data)} features")
+        logger.debug(f"Populated {len(features_data)} features, list visible={list_widget.isVisible()}")
 
     def eventFilter(self, obj, event):
         """Handle mouse events for feature selection and context menu."""
@@ -1190,15 +1218,36 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             self.filter_items(self._pending_filter_text)
 
     def manage_list_widgets(self, layer_props):
-        """Manage visibility and creation of list widgets."""
+        """Manage visibility and creation of list widgets.
+        
+        FIX 2026-01-19: Enhanced visibility management to prevent list disappearing bug.
+        The issue was that setVisible(True) alone doesn't always properly show widgets
+        in QVBoxLayout. We now call show() explicitly and force layout updates.
+        """
+        # Hide all list widgets first
         for key in self.list_widgets.keys():
             self.list_widgets[key].setVisible(False)
+            self.list_widgets[key].hide()  # FIX: Also call hide() for consistency
 
         if not is_layer_valid(self.layer):
             return
         
         if self.layer.id() in self.list_widgets:
-            self.list_widgets[self.layer.id()].setVisible(True)
+            list_widget = self.list_widgets[self.layer.id()]
+            # FIX 2026-01-19: Proper widget showing sequence
+            list_widget.setVisible(True)
+            list_widget.show()  # Explicit show() is more reliable than setVisible alone
+            
+            # FIX 2026-01-19: Force layout update to ensure widget is properly displayed
+            if self.layout:
+                self.layout.invalidate()
+                self.layout.activate()
+            
+            # Force repaint to ensure visual update
+            list_widget.viewport().update()
+            list_widget.update()
+            
+            logger.debug(f"manage_list_widgets: Showed list widget for layer {self.layer.id()}, visible={list_widget.isVisible()}, count={list_widget.count()}")
         else:
             self.add_list_widget(layer_props)
 

@@ -2,6 +2,37 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [4.2.1] - 2026-01-19 🐛 Multiple Feature Picker List Visibility Fix
+
+### Fixed
+
+#### Multiple Selection Feature Picker - List Disappearing Bug
+- **FIX 2026-01-19**: Fixed critical bug where the feature list in Multiple Selection Feature Picker would disappear
+- **Root Cause**: `setVisible(True)` alone was insufficient to properly show widgets in QVBoxLayout after hiding
+- **Solution**: Enhanced visibility management in 3 key functions:
+  1. **`manage_list_widgets()`**: Now calls both `setVisible(True)` and `show()`, plus forces layout invalidation/activation
+  2. **`_populate_features_sync()`**: Added explicit visual refresh after populating features
+  3. **`setDisplayExpression()`**: Added visibility check even when `skip_task=True`
+- **File**: `ui/widgets/custom_widgets.py` (+35 lines)
+- **Impact**: Feature list now reliably displays after layer changes and expression updates
+
+### Technical Details
+
+```python
+# Before (bug): Only setVisible() which could fail silently
+self.list_widgets[self.layer.id()].setVisible(True)
+
+# After (fix): Complete visibility sequence
+list_widget.setVisible(True)
+list_widget.show()  # Explicit show() for reliability
+list_widget.viewport().update()
+if self.layout:
+    self.layout.invalidate()
+    self.layout.activate()
+```
+
+---
+
 ## [4.2.0] - 2026-01-19 🧹 Legacy Code Removal & Architecture Cleanup
 
 ### Removed
