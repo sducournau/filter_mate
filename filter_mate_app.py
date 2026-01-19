@@ -61,6 +61,7 @@ from .infrastructure.feedback import (
 )
 from .core.services.history_service import HistoryService
 from .core.services.favorites_service import FavoritesService
+from .core.services.favorites_migration_service import FavoritesMigrationService
 from .ui.config import UIConfig, DisplayProfile
 
 # Config helpers (migrated to config/)
@@ -352,6 +353,10 @@ class FilterMateApp:
             logger.info("FilterMate: UndoRedoHandler initialized (v4.0 migration)")
         self.favorites_manager = FavoritesService()
         logger.info(f"FilterMate: FavoritesService initialized ({self.favorites_manager.get_favorites_count()} favorites)")
+        
+        # v4.0.7: FavoritesMigrationService for orphan favorites handling
+        self._favorites_migration_service = FavoritesMigrationService()
+        logger.info("FilterMate: FavoritesMigrationService initialized")
         
         # Spatialite cache
         try:
@@ -2124,6 +2129,10 @@ class FilterMateApp:
             self.db_file_path = self._database_manager.db_file_path
             self.project_uuid = self._database_manager.project_uuid
             
+            # === AUTO-MIGRATION OF ORPHAN FAVORITES ===
+            # Check and migrate orphan favorites to current project
+            self._auto_migrate_orphan_favorites()
+            
             # Configure FavoritesService with SQLite database
             # Note: set_database() already calls _load_favorites() internally
             if hasattr(self, 'favorites_manager') and self.db_file_path and self.project_uuid:
@@ -2136,25 +2145,72 @@ class FilterMateApp:
                 if favorites_count == 0:
                     logger.debug("  → No favorites found for this project (new project or no favorites saved yet)")
                 
-                # CRITICAL FIX: Sync favorites_manager to dockwidget and notify FavoritesController
+                # CRITICAL FIX 2026-01-19: Sync favorites_manager to dockwidget and notify FavoritesController
                 # This ensures the controller uses the correctly initialized manager with loaded favorites
                 if self.dockwidget is not None:
                     self.dockwidget._favorites_manager = self.favorites_manager
                     logger.debug("✓ FavoritesManager synchronized to dockwidget")
                     
                     # Notify FavoritesController to update UI with loaded favorites
-                    if hasattr(self.dockwidget, 'favorites_controller') and self.dockwidget.favorites_controller:
-                        controller = self.dockwidget.favorites_controller
-                        controller._favorites_manager = self.favorites_manager
-                        # Reconnect signal if needed
-                        if hasattr(self.favorites_manager, 'favorites_changed'):
-                            try:
-                                self.favorites_manager.favorites_changed.disconnect(controller._on_favorites_loaded)
-                            except (TypeError, RuntimeError):
-                                pass  # Signal wasn't connected
-                            self.favorites_manager.favorites_changed.connect(controller._on_favorites_loaded)
-                        controller.update_indicator()
-                        logger.info(f"✓ FavoritesController notified and UI updated ({favorites_count} favorites)")
+                    # Use sync_with_dockwidget_manager() which handles signal reconnection
+                    controller = self.dockwidget.favorites_controller
+                    if controller is not None:
+                        # Use the new sync method for clean signal handling
+                        if hasattr(controller, 'sync_with_dockwidget_manager'):
+                            controller.sync_with_dockwidget_manager()
+                        else:
+                            # Fallback for older controller versions
+                            controller._favorites_manager = self.favorites_manager
+                            if hasattr(self.favorites_manager, 'favorites_changed'):
+                                try:
+                                    self.favorites_manager.favorites_changed.disconnect(controller._on_favorites_loaded)
+                                except (TypeError, RuntimeError):
+                                    pass
+                                self.favorites_manager.favorites_changed.connect(controller._on_favorites_loaded)
+                            controller.update_indicator()
+                        logger.info(f"✓ FavoritesController synced and UI updated ({favorites_count} favorites)")
+                    else:
+                        logger.debug("FavoritesController not yet available - will be notified via signal")
+
+    def _auto_migrate_orphan_favorites(self):
+        """
+        Automatically migrate orphan favorites to the current project.
+        
+        Called during init_filterMate_db() after database initialization.
+        Shows notification if favorites were migrated.
+        """
+        if not self._favorites_migration_service or not self.db_file_path or not self.project_uuid:
+            return
+        
+        try:
+            # Configure migration service with current database
+            self._favorites_migration_service.set_database(self.db_file_path)
+            
+            # Count orphan favorites first
+            orphan_count = self._favorites_migration_service.count_orphan_favorites()
+            
+            if orphan_count == 0:
+                return
+            
+            # Auto-migrate orphans to current project
+            migrated_count, migrated_names = self._favorites_migration_service.auto_migrate_on_project_load(
+                str(self.project_uuid)
+            )
+            
+            # Show notification if favorites were migrated
+            if migrated_count > 0:
+                names_preview = ', '.join(migrated_names[:3])
+                if len(migrated_names) > 3:
+                    names_preview += f" (+{len(migrated_names) - 3} more)"
+                
+                iface.messageBar().pushSuccess(
+                    "FilterMate",
+                    f"Recovered {migrated_count} orphan favorite(s): {names_preview}"
+                )
+                logger.info(f"✓ Auto-migrated {migrated_count} orphan favorites to current project")
+                
+        except Exception as e:
+            logger.warning(f"Orphan favorites migration failed (non-critical): {e}")
 
     def add_project_datasource(self, layer):
         """Add PostgreSQL datasource and create temp schema via DatasourceManager."""
@@ -2195,6 +2251,11 @@ class FilterMateApp:
                 self.favorites_manager.save()
                 count = getattr(self.favorites_manager, 'count', 0)
                 logger.debug(f"Saved {count} favorites to project")
+                
+                # Also backup favorites to .qgz project file
+                if hasattr(self.favorites_manager, 'save_to_project_file'):
+                    self.favorites_manager.save_to_project_file(self.PROJECT)
+                    logger.debug(f"Backed up {count} favorites to project file (.qgz)")
 
     def layer_management_engine_task_completed(self, result_project_layers, task_name):
         """Handle layer management task completion. Delegates to LayerTaskCompletionHandler."""

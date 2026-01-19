@@ -14,7 +14,7 @@
     },
     "DOCKWIDGET": {
       "FEEDBACK_LEVEL": {
-        "value": "verbose",
+        "value": "normal",
         "choices": ["minimal", "normal", "verbose"],
         "description": "User feedback verbosity: 'minimal' (errors only), 'normal' (balanced), 'verbose' (all messages including debug)",
         "categories_affected": [
@@ -237,7 +237,7 @@
       "SMALL_DATASET_OPTIMIZATION": {
         "description": "For PostgreSQL layers with fewer features than threshold, use OGR memory backend for faster filtering (avoids network overhead)",
         "enabled": {
-          "value": false,
+          "value": true,
           "choices": [true, false],
           "description": "Enable/disable optimization"
         },
@@ -254,6 +254,127 @@
           "value": true,
           "choices": [true, false],
           "description": "When all project layers are PostgreSQL, always use PostgreSQL backend even for small datasets (ensures consistent behavior and leverages server-side processing)"
+        }
+      },
+      "AUTO_OPTIMIZATION": {
+        "description": "Intelligent automatic optimization based on layer characteristics (v2.7.0). Recommends and applies optimizations for distant layers, large datasets, and complex geometries.",
+        "enabled": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Enable/disable automatic optimization analysis"
+        },
+        "auto_centroid_for_distant": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Automatically use ST_Centroid() for remote layers (WFS, ArcGIS) with many features. Reduces network data transfer by ~90%."
+        },
+        "centroid_threshold_distant": {
+          "value": 5000,
+          "description": "Feature count threshold for auto-enabling centroid on distant layers"
+        },
+        "centroid_threshold_local": {
+          "value": 50000,
+          "description": "Feature count threshold for auto-enabling centroid on large local layers with complex geometries"
+        },
+        "auto_simplify_geometry": {
+          "value": false,
+          "choices": [true, false],
+          "description": "Automatically simplify complex geometries (LOSSY - may reduce precision). Disabled by default."
+        },
+        "auto_simplify_before_buffer": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Automatically simplify geometries before buffer operations (positive or negative). Improves buffer performance without affecting spatial results."
+        },
+        "auto_simplify_after_buffer": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Automatically simplify the resulting polygon after buffer operations. Reduces vertex count without significantly affecting spatial accuracy. Particularly useful for complex polygons from negative/positive buffer sequences."
+        },
+        "buffer_simplify_after_tolerance": {
+          "value": 0.5,
+          "min": 0.1,
+          "max": 50.0,
+          "description": "Simplification tolerance in meters for post-buffer simplification. Lower values preserve more detail, higher values create smoother polygons with fewer vertices."
+        },
+        "buffer_simplify_vertex_threshold": {
+          "value": 50,
+          "min": 10,
+          "max": 500,
+          "description": "Average vertices per feature threshold for auto-simplifying before buffer"
+        },
+        "buffer_simplify_feature_threshold": {
+          "value": 1000,
+          "min": 100,
+          "max": 100000,
+          "description": "Feature count threshold for auto-simplifying before buffer"
+        },
+        "buffer_simplify_default_tolerance": {
+          "value": 1.0,
+          "min": 0.1,
+          "max": 100.0,
+          "description": "Default simplification tolerance in meters for buffer operations"
+        },
+        "auto_strategy_selection": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Automatically select optimal filtering strategy (attribute-first, bbox-prefilter, progressive chunks)"
+        },
+        "show_optimization_hints": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Show optimization hints in message bar when recommendations are available"
+        }
+      },
+      "PROGRESSIVE_FILTERING": {
+        "description": "Progressive/two-phase filtering for complex queries on large PostgreSQL datasets (v2.5.9 optimization)",
+        "enabled": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Enable/disable progressive filtering for complex expressions"
+        },
+        "two_phase_enabled": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Enable two-phase filtering (bbox pre-filter + full predicate)"
+        },
+        "complexity_threshold": {
+          "value": 100,
+          "description": "Minimum query complexity score to trigger two-phase filtering (higher = more selective)"
+        },
+        "lazy_cursor_threshold": {
+          "value": 50000,
+          "description": "Minimum features to use lazy cursor streaming (memory-efficient)"
+        },
+        "chunk_size": {
+          "value": 5000,
+          "description": "Number of IDs per chunk for streaming results"
+        }
+      },
+      "QUERY_CACHE": {
+        "description": "Expression caching to avoid rebuilding identical queries (v2.5.9 enhancement)",
+        "enabled": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Enable/disable query expression caching"
+        },
+        "max_size": {
+          "value": 100,
+          "description": "Maximum number of cached expressions"
+        },
+        "ttl_seconds": {
+          "value": 0,
+          "description": "Time-to-live for cache entries in seconds (0 = no expiration)"
+        },
+        "cache_result_counts": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Cache result counts to avoid expensive COUNT queries"
+        },
+        "cache_complexity_scores": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Cache complexity scores to avoid re-analysis"
         }
       },
       "PARALLEL_FILTERING": {
@@ -287,43 +408,22 @@
           "value": 5000,
           "description": "Number of features per batch during streaming export"
         }
-      }
-    },
-    "SETTINGS": {
-      "GEOMETRY_SIMPLIFICATION": {
-        "description": "Geometry simplification settings for large WKT expressions",
-        "enabled": {
+      },
+      "PERFORMANCE": {
+        "description": "Performance monitoring and warning settings",
+        "enable_performance_warnings": {
           "value": true,
           "choices": [true, false],
-          "description": "Enable automatic geometry simplification for large WKT expressions"
+          "description": "Show warnings when working with large datasets"
         },
-        "max_wkt_length": {
-          "value": 100000,
-          "min": 10000,
-          "max": 1000000,
-          "description": "Maximum WKT string length (chars) before simplification is applied"
+        "large_dataset_warning_threshold": {
+          "value": 50000,
+          "description": "Number of features above which performance warnings are shown"
         },
-        "preserve_topology": {
+        "show_backend_performance_tips": {
           "value": true,
           "choices": [true, false],
-          "description": "Preserve geometry topology during simplification (prevents self-intersections)"
-        },
-        "min_tolerance_meters": {
-          "value": 1.0,
-          "min": 0.1,
-          "max": 100.0,
-          "description": "Minimum simplification tolerance in meters"
-        },
-        "max_tolerance_meters": {
-          "value": 100.0,
-          "min": 10.0,
-          "max": 1000.0,
-          "description": "Maximum simplification tolerance in meters (prevents excessive distortion)"
-        },
-        "show_simplification_warnings": {
-          "value": true,
-          "choices": [true, false],
-          "description": "Show warning messages when geometry is simplified"
+          "description": "Show tips about optimal backend selection"
         }
       },
       "OPTIMIZATION_THRESHOLDS": {
@@ -375,6 +475,54 @@
           "min": 10,
           "max": 1000,
           "description": "Number of features between progress bar updates (higher = faster but less responsive)"
+        }
+      },
+      "HISTORY": {
+        "description": "Filter history (undo/redo) settings",
+        "max_history_size": {
+          "value": 100,
+          "description": "Maximum number of filter operations to keep in history per layer"
+        },
+        "persist_history": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Save filter history to project file"
+        }
+      },
+      "GEOMETRY_SIMPLIFICATION": {
+        "description": "Geometry simplification settings for large WKT expressions",
+        "enabled": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Enable automatic geometry simplification for large WKT expressions"
+        },
+        "max_wkt_length": {
+          "value": 100000,
+          "min": 10000,
+          "max": 1000000,
+          "description": "Maximum WKT string length (chars) before simplification is applied"
+        },
+        "preserve_topology": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Preserve geometry topology during simplification (prevents self-intersections)"
+        },
+        "min_tolerance_meters": {
+          "value": 1.0,
+          "min": 0.1,
+          "max": 100.0,
+          "description": "Minimum simplification tolerance in meters"
+        },
+        "max_tolerance_meters": {
+          "value": 100.0,
+          "min": 10.0,
+          "max": 1000.0,
+          "description": "Maximum simplification tolerance in meters (prevents excessive distortion)"
+        },
+        "show_simplification_warnings": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Show warning messages when geometry is simplified"
         }
       }
     }

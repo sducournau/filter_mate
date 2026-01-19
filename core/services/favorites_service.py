@@ -859,3 +859,219 @@ class FavoritesService(QObject):
         except Exception as e:
             logger.error(f"Error reloading favorites: {e}")
             return False
+    
+    # ─────────────────────────────────────────────────────────────────
+    # Project File (.qgz) Backup/Restore
+    # ─────────────────────────────────────────────────────────────────
+    
+    def save_to_project_file(self, project: Optional[Any] = None) -> bool:
+        """
+        Save favorites to QGIS project file as custom property.
+        
+        This provides an additional backup in the .qgz file itself,
+        ensuring favorites are bundled with the project.
+        
+        Args:
+            project: QgsProject instance (uses current if None)
+            
+        Returns:
+            bool: True if saved successfully
+        """
+        if not self._favorites_manager:
+            return False
+        
+        try:
+            from qgis.core import QgsProject
+            import json
+            
+            if project is None:
+                project = QgsProject.instance()
+            
+            favorites = self.get_all_favorites()
+            
+            if not favorites:
+                # Clear any existing property
+                project.removeEntry("FilterMate", "favorites_backup")
+                return True
+            
+            # Serialize favorites
+            data = {
+                "version": "1.0",
+                "backup_type": "project_file",
+                "created_at": self._get_timestamp(),
+                "favorites": [f.to_dict() for f in favorites]
+            }
+            
+            json_data = json.dumps(data, ensure_ascii=False)
+            
+            # Store in project custom properties
+            project.writeEntry("FilterMate", "favorites_backup", json_data)
+            
+            logger.info(f"✓ Saved {len(favorites)} favorites to project file")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error saving favorites to project file: {e}")
+            return False
+    
+    def restore_from_project_file(self, project: Optional[Any] = None) -> int:
+        """
+        Restore favorites from QGIS project file backup.
+        
+        This is useful when the SQLite database is lost or corrupted.
+        
+        Args:
+            project: QgsProject instance (uses current if None)
+            
+        Returns:
+            int: Number of favorites restored
+        """
+        if not self._favorites_manager:
+            return 0
+        
+        try:
+            from qgis.core import QgsProject
+            import json
+            
+            if project is None:
+                project = QgsProject.instance()
+            
+            # Read from project custom properties
+            json_data, success = project.readEntry("FilterMate", "favorites_backup", "")
+            
+            if not success or not json_data:
+                logger.debug("No favorites backup found in project file")
+                return 0
+            
+            data = json.loads(json_data)
+            favorites_data = data.get('favorites', [])
+            
+            if not favorites_data:
+                return 0
+            
+            # Import favorites (skip duplicates by name)
+            from ..domain.favorites_manager import FilterFavorite
+            
+            imported = 0
+            for fav_data in favorites_data:
+                name = fav_data.get('name', '')
+                
+                # Check for existing favorite with same name
+                existing = self.get_favorite_by_name(name)
+                if existing:
+                    continue
+                
+                # Create and add favorite
+                favorite = FilterFavorite.from_dict(fav_data)
+                favorite.id = None  # Generate new ID
+                
+                if self._favorites_manager.add_favorite(favorite):
+                    imported += 1
+            
+            if imported > 0:
+                self.favorites_changed.emit()
+                logger.info(f"✓ Restored {imported} favorites from project file")
+            
+            return imported
+            
+        except Exception as e:
+            logger.error(f"Error restoring favorites from project file: {e}")
+            return 0
+    
+    # ─────────────────────────────────────────────────────────────────
+    # Global Favorites Support
+    # ─────────────────────────────────────────────────────────────────
+    
+    def get_global_favorites(self) -> List[Any]:
+        """
+        Get all global favorites (available in all projects).
+        
+        Returns:
+            List of global FilterFavorite objects
+        """
+        if not self._favorites_manager:
+            return []
+        
+        if hasattr(self._favorites_manager, 'get_global_favorites'):
+            return self._favorites_manager.get_global_favorites()
+        
+        return []
+    
+    def get_all_with_global(self) -> List[Any]:
+        """
+        Get all favorites including global ones.
+        
+        Returns:
+            List of FilterFavorite (project-specific + global)
+        """
+        if not self._favorites_manager:
+            return []
+        
+        if hasattr(self._favorites_manager, 'get_all_with_global'):
+            return self._favorites_manager.get_all_with_global()
+        
+        # Fallback: just return project favorites
+        return self.get_all_favorites()
+    
+    def make_favorite_global(self, favorite_id: str) -> bool:
+        """
+        Make a favorite global (available in all projects).
+        
+        Args:
+            favorite_id: ID of favorite to make global
+            
+        Returns:
+            bool: True if successful
+        """
+        if not self._favorites_manager:
+            return False
+        
+        if hasattr(self._favorites_manager, 'make_favorite_global'):
+            success = self._favorites_manager.make_favorite_global(favorite_id)
+            if success:
+                self.favorites_changed.emit()
+            return success
+        
+        return False
+    
+    def copy_to_global(self, favorite_id: str) -> Optional[str]:
+        """
+        Copy a favorite to global (keeps original in project).
+        
+        Args:
+            favorite_id: ID of favorite to copy
+            
+        Returns:
+            New favorite ID if successful, None otherwise
+        """
+        if not self._favorites_manager:
+            return None
+        
+        if hasattr(self._favorites_manager, 'copy_to_global'):
+            new_id = self._favorites_manager.copy_to_global(favorite_id)
+            if new_id:
+                self.favorites_changed.emit()
+            return new_id
+        
+        return None
+    
+    def import_global_to_project(self, global_favorite_id: str) -> Optional[str]:
+        """
+        Import a global favorite to the current project.
+        
+        Args:
+            global_favorite_id: ID of global favorite to import
+            
+        Returns:
+            New favorite ID if successful, None otherwise
+        """
+        if not self._favorites_manager:
+            return None
+        
+        if hasattr(self._favorites_manager, 'import_global_to_project'):
+            new_id = self._favorites_manager.import_global_to_project(global_favorite_id)
+            if new_id:
+                self.favorites_changed.emit()
+            return new_id
+        
+        return None

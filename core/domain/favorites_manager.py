@@ -18,6 +18,9 @@ from dataclasses import dataclass, asdict, field
 
 logger = logging.getLogger('FilterMate.FavoritesManager')
 
+# UUID for global favorites (available in all projects)
+GLOBAL_PROJECT_UUID = "00000000-0000-0000-0000-000000000000"
+
 
 @dataclass
 class FilterFavorite:
@@ -500,3 +503,270 @@ class FavoritesManager:
     def load_from_database(self) -> None:
         """Reload favorites from database."""
         self._load_favorites()
+    
+    # ─────────────────────────────────────────────────────────────────
+    # Global Favorites Support
+    # ─────────────────────────────────────────────────────────────────
+    
+    def get_global_favorites(self) -> List[FilterFavorite]:
+        """
+        Get all global favorites (available in all projects).
+        
+        Returns:
+            List of global FilterFavorite objects
+        """
+        if not self._initialized or not self._db_path:
+            return []
+        
+        try:
+            import sqlite3
+            conn = sqlite3.connect(self._db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT id, name, expression, layer_name, layer_id,
+                       layer_provider, description, tags, created_at, 
+                       updated_at, use_count, last_used_at, 
+                       remote_layers, spatial_config
+                FROM fm_favorites
+                WHERE project_uuid = ?
+                ORDER BY name
+            """, (GLOBAL_PROJECT_UUID,))
+            
+            global_favorites = []
+            for row in cursor.fetchall():
+                data = {
+                    'id': row['id'],
+                    'name': row['name'],
+                    'expression': row['expression'],
+                    'layer_name': row['layer_name'],
+                    'layer_id': row['layer_id'],
+                    'layer_provider': row['layer_provider'],
+                    'description': row['description'],
+                    'tags': json.loads(row['tags']) if row['tags'] else [],
+                    'created_at': row['created_at'],
+                    'updated_at': row['updated_at'],
+                    'use_count': row['use_count'] or 0,
+                    'last_used_at': row['last_used_at'],
+                    'remote_layers': json.loads(row['remote_layers']) if row['remote_layers'] else None,
+                    'spatial_config': json.loads(row['spatial_config']) if row['spatial_config'] else None,
+                }
+                global_favorites.append(FilterFavorite.from_dict(data))
+            
+            conn.close()
+            logger.debug(f"Loaded {len(global_favorites)} global favorites")
+            return global_favorites
+            
+        except Exception as e:
+            logger.error(f"Failed to load global favorites: {e}")
+            return []
+    
+    def get_all_with_global(self) -> List[FilterFavorite]:
+        """
+        Get all favorites including global ones.
+        
+        Returns:
+            List of FilterFavorite (project-specific + global)
+        """
+        project_favorites = self.get_all_favorites()
+        global_favorites = self.get_global_favorites()
+        
+        # Combine and sort by name
+        all_favorites = project_favorites + global_favorites
+        all_favorites.sort(key=lambda f: f.name.lower())
+        
+        return all_favorites
+    
+    def make_favorite_global(self, favorite_id: str) -> bool:
+        """
+        Make a favorite global (available in all projects).
+        
+        Args:
+            favorite_id: ID of favorite to make global
+            
+        Returns:
+            True if successful
+        """
+        if not self._initialized or favorite_id not in self._favorites:
+            return False
+        
+        try:
+            import sqlite3
+            conn = sqlite3.connect(self._db_path)
+            cursor = conn.cursor()
+            
+            # Ensure global project exists
+            cursor.execute(
+                "SELECT project_id FROM fm_projects WHERE project_id = ?",
+                (GLOBAL_PROJECT_UUID,)
+            )
+            if not cursor.fetchone():
+                cursor.execute("""
+                    INSERT INTO fm_projects VALUES(
+                        ?, datetime(), datetime(), 
+                        '__GLOBAL__', '__GLOBAL_FAVORITES__', '{}'
+                    )
+                """, (GLOBAL_PROJECT_UUID,))
+            
+            # Update favorite to global project
+            cursor.execute("""
+                UPDATE fm_favorites 
+                SET project_uuid = ?, updated_at = ?
+                WHERE id = ?
+            """, (GLOBAL_PROJECT_UUID, datetime.now().isoformat(), favorite_id))
+            
+            conn.commit()
+            conn.close()
+            
+            # Remove from local cache
+            del self._favorites[favorite_id]
+            
+            logger.info(f"✓ Made favorite {favorite_id} global")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error making favorite global: {e}")
+            return False
+    
+    def copy_to_global(self, favorite_id: str) -> Optional[str]:
+        """
+        Copy a favorite to global (keeps original in project).
+        
+        Args:
+            favorite_id: ID of favorite to copy
+            
+        Returns:
+            New favorite ID if successful, None otherwise
+        """
+        if favorite_id not in self._favorites:
+            return None
+        
+        favorite = self._favorites[favorite_id]
+        
+        try:
+            import sqlite3
+            conn = sqlite3.connect(self._db_path)
+            cursor = conn.cursor()
+            
+            # Ensure global project exists
+            cursor.execute(
+                "SELECT project_id FROM fm_projects WHERE project_id = ?",
+                (GLOBAL_PROJECT_UUID,)
+            )
+            if not cursor.fetchone():
+                cursor.execute("""
+                    INSERT INTO fm_projects VALUES(
+                        ?, datetime(), datetime(), 
+                        '__GLOBAL__', '__GLOBAL_FAVORITES__', '{}'
+                    )
+                """, (GLOBAL_PROJECT_UUID,))
+            
+            # Create new global favorite
+            new_id = str(uuid.uuid4())
+            now = datetime.now().isoformat()
+            
+            cursor.execute("""
+                INSERT INTO fm_favorites (
+                    id, project_uuid, name, expression, layer_name, layer_id,
+                    layer_provider, description, tags, created_at, updated_at,
+                    use_count, last_used_at, remote_layers, spatial_config
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                new_id,
+                GLOBAL_PROJECT_UUID,
+                f"{favorite.name} (Global)",
+                favorite.expression,
+                favorite.layer_name,
+                favorite.layer_id,
+                favorite.layer_provider,
+                favorite.description,
+                json.dumps(favorite.tags) if favorite.tags else None,
+                now,
+                now,
+                0,
+                None,
+                json.dumps(favorite.remote_layers) if favorite.remote_layers else None,
+                json.dumps(favorite.spatial_config) if favorite.spatial_config else None,
+            ))
+            
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"✓ Copied favorite to global: {new_id}")
+            return new_id
+            
+        except Exception as e:
+            logger.error(f"Error copying favorite to global: {e}")
+            return None
+    
+    def import_global_to_project(self, global_favorite_id: str) -> Optional[str]:
+        """
+        Import a global favorite to the current project.
+        
+        Args:
+            global_favorite_id: ID of global favorite to import
+            
+        Returns:
+            New favorite ID if successful, None otherwise
+        """
+        if not self._initialized or not self._project_uuid:
+            return None
+        
+        try:
+            import sqlite3
+            conn = sqlite3.connect(self._db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            # Get global favorite
+            cursor.execute(
+                "SELECT * FROM fm_favorites WHERE id = ? AND project_uuid = ?",
+                (global_favorite_id, GLOBAL_PROJECT_UUID)
+            )
+            row = cursor.fetchone()
+            
+            if not row:
+                conn.close()
+                return None
+            
+            # Create new project-specific favorite
+            new_id = str(uuid.uuid4())
+            now = datetime.now().isoformat()
+            
+            cursor.execute("""
+                INSERT INTO fm_favorites (
+                    id, project_uuid, name, expression, layer_name, layer_id,
+                    layer_provider, description, tags, created_at, updated_at,
+                    use_count, last_used_at, remote_layers, spatial_config
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                new_id,
+                self._project_uuid,
+                row['name'].replace(' (Global)', ''),
+                row['expression'],
+                row['layer_name'],
+                row['layer_id'],
+                row['layer_provider'],
+                row['description'],
+                row['tags'],
+                now,
+                now,
+                0,
+                None,
+                row['remote_layers'],
+                row['spatial_config'],
+            ))
+            
+            conn.commit()
+            conn.close()
+            
+            # Reload favorites
+            self._load_favorites()
+            
+            logger.info(f"✓ Imported global favorite to project: {new_id}")
+            return new_id
+            
+        except Exception as e:
+            logger.error(f"Error importing global favorite: {e}")
+            return None

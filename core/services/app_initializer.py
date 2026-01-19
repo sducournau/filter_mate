@@ -366,22 +366,28 @@ class AppInitializer:
             if favorites_manager:
                 dockwidget._favorites_manager = favorites_manager
                 
-                # CRITICAL FIX: Update FavoritesController with the correctly initialized manager
+                # CRITICAL FIX 2026-01-19: Update FavoritesController with the correctly initialized manager
                 # The controller was setup in dockwidget_widgets_configuration() BEFORE we could
                 # attach the favorites_manager, so it may have created its own uninitialized instance
                 if hasattr(dockwidget, 'favorites_controller') and dockwidget.favorites_controller:
                     controller = dockwidget.favorites_controller
-                    controller._favorites_manager = favorites_manager
-                    # Connect to favorites_changed signal for UI updates
-                    if hasattr(favorites_manager, 'favorites_changed'):
-                        try:
-                            favorites_manager.favorites_changed.disconnect(controller._on_favorites_loaded)
-                        except (TypeError, RuntimeError):
-                            pass  # Signal wasn't connected
-                        favorites_manager.favorites_changed.connect(controller._on_favorites_loaded)
-                    # Trigger initial UI update with loaded favorites
-                    controller.update_indicator()
-                    logger.info(f"✓ FavoritesController synchronized with FavoritesManager ({favorites_manager.count} favorites)")
+                    # Use the dedicated sync method for clean signal handling
+                    if hasattr(controller, 'sync_with_dockwidget_manager'):
+                        controller.sync_with_dockwidget_manager()
+                        logger.info(f"✓ FavoritesController synced via sync_with_dockwidget_manager() ({favorites_manager.count} favorites)")
+                    else:
+                        # Fallback for older controller versions
+                        controller._favorites_manager = favorites_manager
+                        # Connect to favorites_changed signal for UI updates
+                        if hasattr(favorites_manager, 'favorites_changed'):
+                            try:
+                                favorites_manager.favorites_changed.disconnect(controller._on_favorites_loaded)
+                            except (TypeError, RuntimeError):
+                                pass  # Signal wasn't connected
+                            favorites_manager.favorites_changed.connect(controller._on_favorites_loaded)
+                        # Trigger initial UI update with loaded favorites
+                        controller.update_indicator()
+                        logger.info(f"✓ FavoritesController synchronized (fallback) ({favorites_manager.count} favorites)")
                 
                 if hasattr(dockwidget, '_update_favorite_indicator'):
                     dockwidget._update_favorite_indicator()

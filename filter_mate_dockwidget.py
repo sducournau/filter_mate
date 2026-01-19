@@ -251,6 +251,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return self._controller_integration._favorites_controller if self._controller_integration and self._controller_integration._favorites_controller else None
     
     @property
+    def favorites_controller(self):
+        """FIX 2026-01-19: Public alias for FavoritesController access (used by filter_mate_app)."""
+        return self._favorites_ctrl
+    
+    @property
     def _exploring_ctrl(self):
         """Sprint 18: Helper property for ExploringController access."""
         return self._controller_integration.exploring_controller if self._controller_integration and self._controller_integration.exploring_controller else None
@@ -3471,6 +3476,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         FIX 2026-01-18: Added timeout protection to prevent click blocking if
         _updating_groupbox gets stuck True due to unexpected exception.
         Also ensures signals are always unblocked even if exception occurs.
+        
+        FIX 2026-01-19: Disable saveCheckedState/saveCollapsedState during update
+        to prevent QGIS auto-save from interfering with exclusive behavior.
         """
         if self._updating_groupbox:
             # FIX: Check if stuck for too long (> 500ms) and force reset
@@ -3495,26 +3503,76 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                    "custom": self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"]}
             active_key = active_groupbox.split("_")[0]
             
-            # Block all signals
+            # Block all signals AND disable QGIS state saving during update
             for gb in gbs.values(): 
                 gb.blockSignals(True)
+                # FIX 2026-01-19: Disable QGIS auto-save to prevent interference
+                if hasattr(gb, 'setSaveCheckedState'):
+                    gb.setSaveCheckedState(False)
+                if hasattr(gb, 'setSaveCollapsedState'):
+                    gb.setSaveCollapsedState(False)
             
             # Update states
             for key, gb in gbs.items(): 
                 gb.setChecked(key == active_key)
                 gb.setCollapsed(key != active_key)
+            
+            # FIX 2026-01-19: Force layout update to prevent key widgets from disappearing
+            # When groupboxes collapse/expand, the layout needs to be explicitly updated
+            # to ensure widget_exploring_keys remains visible
+            if hasattr(self, 'widget_exploring_keys') and self.widget_exploring_keys:
+                self.widget_exploring_keys.setVisible(True)
+                self.widget_exploring_keys.updateGeometry()
+                self.widget_exploring_keys.update()
+            
+            # Also update the parent grid layout
+            if hasattr(self, 'gridLayout_main_actions') and self.gridLayout_main_actions:
+                self.gridLayout_main_actions.update()
+                self.gridLayout_main_actions.activate()
                 
         except Exception as e:
             logger.warning(f"_force_exploring_groupbox_exclusive error: {e}")
         finally:
-            # CRITICAL: Always unblock signals and reset flag
+            # CRITICAL: Always unblock signals, re-enable state saving, and reset flag
             if gbs:
                 for gb in gbs.values():
                     try:
                         gb.blockSignals(False)
+                        # FIX 2026-01-19: Re-enable QGIS auto-save
+                        if hasattr(gb, 'setSaveCheckedState'):
+                            gb.setSaveCheckedState(True)
+                        if hasattr(gb, 'setSaveCollapsedState'):
+                            gb.setSaveCollapsedState(True)
                     except:
                         pass
             self._updating_groupbox = False
+            
+            # FIX 2026-01-19: Final visibility check after all updates
+            from qgis.PyQt.QtCore import QTimer
+            QTimer.singleShot(0, self._ensure_key_widgets_visible)
+    
+    def _ensure_key_widgets_visible(self):
+        """FIX 2026-01-19: Ensure key widgets remain visible after groupbox changes.
+        
+        When QgsCollapsibleGroupBox collapse/expand, the layout can get corrupted
+        causing widget_exploring_keys to disappear. This method forces visibility.
+        """
+        try:
+            # Ensure exploring key widgets are visible
+            if hasattr(self, 'widget_exploring_keys') and self.widget_exploring_keys:
+                if not self.widget_exploring_keys.isVisible():
+                    logger.warning("FIX-2026-01-19: widget_exploring_keys was hidden - restoring visibility")
+                self.widget_exploring_keys.setVisible(True)
+                self.widget_exploring_keys.raise_()  # Bring to front
+                self.widget_exploring_keys.updateGeometry()
+                
+            # Force the parent frame to recalculate layout
+            if hasattr(self, 'frame_exploring') and self.frame_exploring:
+                self.frame_exploring.updateGeometry()
+                self.frame_exploring.update()
+                
+        except Exception as e:
+            logger.debug(f"_ensure_key_widgets_visible: {e}")
 
     def _on_groupbox_clicked(self, groupbox, state):
         """v4.0 S18: Handle groupbox toggle for exclusive behavior.

@@ -287,16 +287,17 @@ class DatabaseManager:
         
         self._project_uuid = str(uuid.uuid4())
         
+        # FIX 2026-01-19: Use parameterized query
         cursor.execute("""
             INSERT INTO fm_projects VALUES(
-                '{project_id}', datetime(), datetime(), 
-                '{project_name}', '{project_path}', '{project_settings}'
+                ?, datetime(), datetime(), 
+                ?, ?, ?
             );
-        """.format(
-            project_id=self._project_uuid,
-            project_name=project_file_name,
-            project_path=project_file_path,
-            project_settings=json.dumps(project_settings).replace("'", "''")
+        """, (
+            self._project_uuid,
+            project_file_name,
+            project_file_path,
+            json.dumps(project_settings)
         ))
         
         # Set the project UUID for newly initialized database
@@ -358,37 +359,69 @@ class DatabaseManager:
         project_file_name = os.path.basename(self._project.absoluteFilePath())
         project_file_path = self._project.absolutePath()
         
+        # FIX 2026-01-19: Check if project is actually saved (has a name)
+        # Unsaved projects have empty name/path which causes orphan favorites
+        is_unsaved_project = not project_file_name or project_file_name == '' or not project_file_path
+        
+        if is_unsaved_project:
+            logger.warning("⚠️ Project is not saved yet (no filename). Favorites may become orphaned.")
+            logger.warning("   Save the project to ensure favorites persist correctly.")
+        
+        # FIX 2026-01-19: Use parameterized queries to avoid SQL injection
+        # and handle special characters (apostrophes, etc.) in paths
         cursor.execute("""
             SELECT * FROM fm_projects 
-            WHERE project_name = '{project_name}' AND project_path = '{project_path}' 
+            WHERE project_name = ? AND project_path = ? 
             LIMIT 1;
-        """.format(
-            project_name=project_file_name,
-            project_path=project_file_path
-        ))
+        """, (project_file_name, project_file_path))
         
         results = cursor.fetchall()
+        
+        logger.debug(f"Looking for project: name='{project_file_name}', path='{project_file_path}'")
+        logger.debug(f"Found {len(results)} matching project(s) in database")
         
         if len(results) == 1:
             result = results[0]
             project_settings_str = result[-1].replace("''", "'")
             self._project_uuid = result[0]
+            logger.info(f"✓ Found existing project in database: UUID={self._project_uuid[:8]}...")
             config_data["CURRENT_PROJECT"] = json.loads(project_settings_str)
             QgsExpressionContextUtils.setProjectVariable(
                 self._project, 'filterMate_db_project_uuid', self._project_uuid
             )
         else:
+            # FIX 2026-01-19: For unsaved projects, check if there's already an orphan project
+            # we can reuse instead of creating a new one
+            if is_unsaved_project:
+                cursor.execute("""
+                    SELECT project_id FROM fm_projects 
+                    WHERE (project_name = '' OR project_name IS NULL)
+                      AND (project_path = '' OR project_path IS NULL)
+                    ORDER BY _created_at DESC
+                    LIMIT 1;
+                """)
+                orphan = cursor.fetchone()
+                if orphan:
+                    self._project_uuid = orphan[0]
+                    logger.info(f"✓ Reusing existing orphan project: UUID={self._project_uuid[:8]}...")
+                    QgsExpressionContextUtils.setProjectVariable(
+                        self._project, 'filterMate_db_project_uuid', self._project_uuid
+                    )
+                    return config_data
+            
             self._project_uuid = str(uuid.uuid4())
+            logger.info(f"Creating new project entry in database: UUID={self._project_uuid[:8]}...")
+            # FIX 2026-01-19: Use parameterized query for INSERT as well
             cursor.execute("""
                 INSERT INTO fm_projects VALUES(
-                    '{project_id}', datetime(), datetime(), 
-                    '{project_name}', '{project_path}', '{project_settings}'
+                    ?, datetime(), datetime(), 
+                    ?, ?, ?
                 );
-            """.format(
-                project_id=self._project_uuid,
-                project_name=project_file_name,
-                project_path=project_file_path,
-                project_settings=json.dumps(project_settings).replace("'", "''")
+            """, (
+                self._project_uuid,
+                project_file_name,
+                project_file_path,
+                json.dumps(project_settings)
             ))
             QgsExpressionContextUtils.setProjectVariable(
                 self._project, 'filterMate_db_project_uuid', self._project_uuid
