@@ -2,6 +2,64 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [4.2.6] - 2026-01-19 🔧 Code Quality & UI Polish
+
+### Summary
+- Major cleanup of debug print statements throughout codebase
+- New SearchableJsonView with integrated search bar for configuration
+- QSS stylesheet scoping fix (no longer affects other QGIS panels)
+- UI alignment improvements in filtering section (32x32 button consistency)
+- Config model signal handling improvements
+
+### Added
+
+#### SearchableJsonView Widget
+- **NEW**: `ui/widgets/json_view/searchable_view.py` - Configuration tree view with search bar
+- Real-time search filtering with match count display
+- Keyboard shortcuts (Ctrl+F to focus, Escape to clear)
+- Auto-expand to show matching items
+- Theme-aware styling (light/dark mode support)
+
+#### ConfigValidator
+- **NEW**: `config/config_validator.py` - Configuration validation utility
+- Validates config.json against schema
+- Checks {value, choices} structures for consistency
+- Reports errors and warnings with JSON paths
+
+### Fixed
+
+#### QSS Stylesheet Scoping (Critical)
+- **FIX**: All QSS rules now scoped to `#dockWidgetContents`
+- Previously, generic rules affected other QGIS dockwidgets (Layer Panel, etc.)
+- Affected elements: QSplitter, QScrollBar, QGroupBox, QPushButton, QTreeView, etc.
+
+#### UI Alignment - Filtering Section
+- **FIX**: Keys/values columns now use consistent spacing for proper alignment
+- Button sizes standardized to 32x32px in filtering section
+- SpacingManager now applies same spacing to both columns
+
+#### Config Model Signal Handling
+- **FIX**: `_disconnect_config_model_signal()` and `_connect_config_model_signal()` methods
+- Prevents signal accumulation when config model is recreated
+- Fixes potential multiple signal connections in `cancel_pending_config_changes()`
+
+### Changed
+
+#### Debug Output Cleanup
+- Removed 150+ debug print statements across 68 files
+- Downgraded verbose `logger.info()` calls to `logger.debug()`
+- Cleaner QGIS Python console output during normal operation
+- Debug information still available via log level configuration
+
+#### Files Modified (68 total)
+- Core: filter_task.py, filter_mate_dockwidget.py, filter_mate_app.py
+- Controllers: backend_controller.py, favorites_controller.py, exploring_controller.py
+- Infrastructure: parallel_executor.py, logging/__init__.py, config_migration.py
+- UI: spacing_manager.py, orchestrator.py, registry.py, integration.py
+- Styles: default.qss (complete QSS scoping overhaul)
+
+---
+
 ## [4.2.5] - 2026-01-19 🔧 Release Consolidation
 
 ### Summary

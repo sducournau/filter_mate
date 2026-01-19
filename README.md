@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 4.2.5** | January 2026 | **Production-Ready** 🎉
+**Version 4.2.6** | January 2026 | **Production-Ready** 🎉
 
 > 🚀 The ultimate spatial filtering plugin! Explore, filter & export vector data with lightning-fast performance on ANY data source.
 
@@ -27,16 +27,24 @@
 
 ## 📋 Recent Changes
 
-### � v4.1.1 - PostgreSQL-Only Project Fix (January 2026)
+### 🔧 v4.2.6 - Code Quality & UI Polish (January 2026)
 
-**Smart backend selection** for PostgreSQL-only projects eliminates performance degradation.
+**Major code cleanup** with debug print removal, new searchable config view, and QSS fixes.
 
-- **Fixed:** PostgreSQL layers in PostgreSQL-only projects now consistently use PostgreSQL backend
-- **Hybrid Detection:** Combines smart initialization + dynamic updates
-- **Impact:** Prevents unwanted MEMORY backend fallback for small datasets (<5,000 features)
-- **Enhancement:** Favorites now restore spatial context (task_features, predicates)
-- **Cleanup:** Removed 600+ lines of diagnostic code, integrated into production logging
+- **New:** SearchableJsonView with integrated search bar for configuration
+- **Fixed:** QSS stylesheet scoping - no longer affects other QGIS panels
+- **Fixed:** UI alignment in filtering section (32x32 button consistency)
+- **Cleanup:** Removed 150+ debug print statements across 68 files
+- **Quality:** Config model signal handling improvements
 - See [CHANGELOG.md](CHANGELOG.md) for complete details
+
+### 🐛 v4.2.5 - Multiple Feature Picker Fix (January 2026)
+
+**Definitive fix** for checkbox auto-uncheck in Multiple Selection Feature Picker.
+
+- **Fixed:** Checkboxes no longer automatically uncheck after clicking
+- **Fixed:** Auto-switch groupbox based on canvas selection count
+- **Quality:** QGIS selection synchronization improvements
 
 ### 🚀 v4.1.0 - Performance & Quality Release (January 2026)
 

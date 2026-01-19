@@ -1,12 +1,13 @@
 # This file contains metadata for your plugin.
 
-# This file should be included when you package your plugin.# Mandatory items:
+# This file should be included when you package your plugin.
+# Mandatory items:
 
 [general]
 name=FilterMate
 qgisMinimumVersion=3.0
 description=🚀 The ultimate spatial filtering plugin! Explore, filter & export vector data with lightning-fast performance on ANY data source.
-version=4.2.5
+version=4.2.6
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
