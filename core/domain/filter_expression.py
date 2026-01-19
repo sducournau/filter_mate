@@ -167,6 +167,55 @@ class FilterExpression:
         )
 
     @classmethod
+    def create_spatial(
+        cls,
+        predicates: List['SpatialPredicate'],
+        buffer_value: float = 0.0,
+        provider: ProviderType = ProviderType.OGR,
+        source_layer_id: str = "",
+        target_layer_ids: Optional[List[str]] = None
+    ) -> 'FilterExpression':
+        """
+        Create a spatial filter expression from predicates.
+        
+        This is a convenience method for TaskBridge spatial filtering.
+        
+        Args:
+            predicates: List of SpatialPredicate enum values
+            buffer_value: Buffer distance in layer units
+            provider: Target provider type
+            source_layer_id: Source layer QGIS ID
+            target_layer_ids: Target layer QGIS IDs
+            
+        Returns:
+            FilterExpression configured for spatial filtering
+            
+        Example:
+            >>> expr = FilterExpression.create_spatial(
+            ...     predicates=[SpatialPredicate.INTERSECTS],
+            ...     buffer_value=10.0,
+            ...     provider=ProviderType.OGR
+            ... )
+        """
+        # Build descriptive raw expression (not SQL!)
+        predicate_names = [p.value for p in predicates]
+        raw = f"Spatial filter: {', '.join(predicate_names)}"
+        if buffer_value and buffer_value > 0:
+            raw += f", buffer {buffer_value}m"
+        
+        return cls(
+            raw=raw,
+            sql="",  # Empty SQL - backend MUST build actual SQL
+            provider=provider,
+            is_spatial=True,
+            spatial_predicates=tuple(predicates),
+            source_layer_id=source_layer_id,
+            target_layer_ids=tuple(target_layer_ids or []),
+            buffer_value=buffer_value if buffer_value and buffer_value > 0 else None,
+            buffer_segments=8
+        )
+
+    @classmethod
     def from_spatial_filter(
         cls,
         predicates: Dict,

@@ -1943,6 +1943,14 @@ class ExploringController(BaseController, LayerSelectionMixin):
             logger.info("exploring_features_changed: SKIPPED (syncing from QGIS)")
             return []
         
+        # FIX 2026-01-19: Skip if we're already configuring a groupbox (prevent recursion)
+        # This prevents the feedback loop where:
+        # click checkbox → _emit_checked_items_update → exploring_features_changed 
+        # → handle_exploring_features_result → _configure_multiple_selection_groupbox → exploring_features_changed
+        if getattr(self._dockwidget, '_configuring_groupbox', False):
+            logger.debug("exploring_features_changed: SKIPPED (_configuring_groupbox=True)")
+            return []
+        
         # FIX 2026-01-18 v14: Check sync protection timestamp
         # After QGIS sync completes, there's a protection window to prevent immediate signals from clearing the list
         import time
@@ -2101,6 +2109,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
             # Auto-switch only from single to multiple (not the reverse)
             # FIX 2026-01-18: Don't auto-switch from multiple_selection to single_selection
             # User should stay on multiple_selection even with 1 feature selected
+            # FIX 2026-01-19: Only switch if NOT already on multiple_selection to avoid list refresh
             if feature_count > 1 and current_groupbox == "single_selection":
                 logger.info(f"handle_exploring_features_result: Auto-switching to multiple_selection ({feature_count} features from widget)")
                 try:
@@ -2108,6 +2117,9 @@ class ExploringController(BaseController, LayerSelectionMixin):
                     dw._configure_multiple_selection_groupbox()
                 except Exception as e:
                     logger.warning(f"Auto-switch to multiple_selection failed: {e}")
+            # FIX 2026-01-19: When already on multiple_selection, DON'T reconfigure to avoid clearing list
+            elif current_groupbox == "multiple_selection":
+                logger.debug(f"handle_exploring_features_result: Already on multiple_selection, skipping reconfigure ({feature_count} features)")
         
         # Link widgets if is_linking is enabled
         if layer_props.get("exploring", {}).get("is_linking", False):
@@ -2143,9 +2155,22 @@ class ExploringController(BaseController, LayerSelectionMixin):
         
         if is_selecting:
             if not getattr(dw, '_syncing_from_qgis', False):
-                dw.current_layer.removeSelection()
-                dw.current_layer.select([f.id() for f in features])
-                logger.debug(f"handle_exploring_features_result: Synced QGIS selection ({len(features)} features)")
+                # FIX 2026-01-19 v4: Block selectionChanged signal during our selection update
+                # This prevents feedback loop where select() triggers selectionChanged
+                # which then resets the checkboxes via _sync_widgets_from_qgis_selection
+                try:
+                    # Block the selectionChanged signal temporarily
+                    dw.current_layer.blockSignals(True)
+                    logger.info(f"🔒 handle_exploring_features_result: Blocked layer signals")
+                    dw.current_layer.removeSelection()
+                    dw.current_layer.select([f.id() for f in features])
+                    logger.debug(f"handle_exploring_features_result: Synced QGIS selection ({len(features)} features)")
+                except Exception as e:
+                    logger.warning(f"handle_exploring_features_result: Error syncing selection: {e}")
+                finally:
+                    # Always unblock signals
+                    dw.current_layer.blockSignals(False)
+                    logger.info(f"🔓 handle_exploring_features_result: Unblocked layer signals")
         
         # FIX v4: Zoom if is_tracking is active - trust BUTTON state over PROJECT_LAYERS
         is_tracking_from_props = layer_props.get("exploring", {}).get("is_tracking", False)
@@ -2155,6 +2180,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
         if is_tracking:
             logger.info(f"handle_exploring_features_result: TRACKING {len(features)} features (props={is_tracking_from_props}, btn={is_tracking_from_button})")
             self.zooming_to_features(features)
+        
         
         # Update button states
         dw._update_exploring_buttons_state()
@@ -2244,9 +2270,9 @@ class ExploringController(BaseController, LayerSelectionMixin):
                                     self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(single_display_expression)
                                 finally:
                                     self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].blockSignals(False)
-                                # FIX 2026-01-18 v8: Use preserve_checked if syncing from QGIS
-                                preserve = getattr(self._dockwidget, '_syncing_from_qgis', False)
-                                self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(single_display_expression, preserve_checked=preserve)
+                                # FIX 2026-01-19 v4: ALWAYS preserve_checked to prevent auto-uncheck
+                                # The user's checkbox selections should NEVER be lost due to expression sync
+                                self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(single_display_expression, preserve_checked=True)
 
                     elif change_source == "multiple_selection":
                         if multiple_display_expression != single_display_expression:
@@ -2408,9 +2434,10 @@ class ExploringController(BaseController, LayerSelectionMixin):
                                 except:
                                     pass
                             
-                            picker_widget.setDisplayExpression(expression)
+                            # FIX 2026-01-19 v4: Use preserve_checked=True for multiple_selection
+                            picker_widget.setDisplayExpression(expression, preserve_checked=True)
                             # FIX v4: Call setLayer with layer_props to force full rebuild
-                            picker_widget.setLayer(self._dockwidget.current_layer, layer_props, skip_task=True)
+                            picker_widget.setLayer(self._dockwidget.current_layer, layer_props, skip_task=True, preserve_checked=True)
                             
                             # Restore checked items
                             if saved_checked_fids and hasattr(picker_widget, 'list_widgets') and layer_id in picker_widget.list_widgets:
@@ -2809,6 +2836,20 @@ class ExploringController(BaseController, LayerSelectionMixin):
         logger.info(f"🎯 ExploringController.handle_layer_selection_changed ENTERED: selected={len(selected)}, deselected={len(deselected)}")
         
         try:
+            # FIX 2026-01-19 v3: Skip if selection was triggered by widget checkbox click
+            # Use counter instead of boolean because removeSelection() and select() each emit signal
+            skip_count = getattr(self._dockwidget, '_skip_selection_changed_count', 0)
+            if skip_count > 0:
+                self._dockwidget._skip_selection_changed_count = skip_count - 1
+                logger.info(f"🔓 handle_layer_selection_changed: SKIPPING (widget-initiated, remaining={skip_count-1})")
+                return True
+            
+            # Also check the old boolean flag for backwards compatibility
+            if getattr(self._dockwidget, '_updating_qgis_selection_from_widget', False):
+                logger.info("🔓 handle_layer_selection_changed: SKIPPING (selection from widget flag) - resetting flag")
+                self._dockwidget._updating_qgis_selection_from_widget = False
+                return True
+            
             # FIX v5: Self-healing - ensure signal stays connected
             if self._dockwidget.current_layer and not self._dockwidget.current_layer_selection_connection:
                 try:
@@ -2932,18 +2973,25 @@ class ExploringController(BaseController, LayerSelectionMixin):
             self._dockwidget._syncing_from_qgis = True
             try:
                 # Auto-switch groupbox based on selection count
-                # FIX 2026-01-18: Only auto-switch from single to multiple, NOT the reverse
-                # User should stay on multiple_selection even with 1 feature selected
+                # FIX 2026-01-19 v5: Bidirectional auto-switch based on selection count from canvas
                 if selected_count > 1 and current_groupbox == "single_selection":
+                    # Switch single -> multiple when multiple features selected
                     logger.info(f"  🔀 Auto-switching to multiple_selection groupbox ({selected_count} features)")
                     self._dockwidget._force_exploring_groupbox_exclusive("multiple_selection")
                     self._dockwidget._configure_multiple_selection_groupbox()
                     logger.info("  ✅ Switched to multiple_selection")
+                elif selected_count == 1 and current_groupbox == "multiple_selection":
+                    # FIX 2026-01-19 v5: Switch multiple -> single when only 1 feature selected from canvas
+                    logger.info(f"  🔀 Auto-switching to single_selection groupbox (1 feature from canvas)")
+                    self._dockwidget._force_exploring_groupbox_exclusive("single_selection")
+                    self._dockwidget._configure_single_selection_groupbox()
+                    logger.info("  ✅ Switched to single_selection")
                 else:
                     logger.info(f"  ℹ️ No groupbox switch needed (count={selected_count}, current={current_groupbox})")
-                    # FIX 2026-01-18: Ensure multiple_selection groupbox is configured even without switch
-                    if current_groupbox == "multiple_selection":
-                        self._dockwidget._configure_multiple_selection_groupbox()
+                    # FIX 2026-01-19 v4: Do NOT call _configure_multiple_selection_groupbox when syncing from QGIS
+                    # This was causing the list to be reconfigured via _configure_groupbox_common,
+                    # which could trigger setDisplayExpression and lose checked state.
+                    # The sync is handled by _sync_multiple_selection_from_qgis below.
                 
                 # Sync both widgets (still under _syncing_from_qgis protection)
                 logger.info("  🔧 Syncing single selection widget...")

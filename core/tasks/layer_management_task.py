@@ -1078,15 +1078,28 @@ class LayersManagementEngineTask(QgsTask):
         
         return cleaned_layer_ids
 
+    # Common primary key field names (exact match, case-insensitive)
+    PK_EXACT_NAMES = ['id', 'fid', 'pk', 'gid', 'ogc_fid', 'objectid', 'oid', 'rowid']
+    
+    # UUID field patterns (contains, case-insensitive)
+    UUID_PATTERNS = ['uuid', 'guid']
+    
+    # ID field patterns (contains, case-insensitive) - prioritized for numeric fields
+    ID_PATTERNS = ['_id', 'id_', 'identifier', 'feature_id', 'object_id']
+
     def search_primary_key_from_layer(self, layer):
         """
         Search for a primary key field in the layer.
         
-        Tries in order:
-        1. Layer's declared primary key attributes
-        2. Fields with 'id' in name that have unique values
-        3. Any field with unique values
-        4. Creates a virtual 'virtual_id' field
+        Improved priority for OGR layers (v4.0.7):
+        1. Layer's declared primary key attributes (always trusted)
+        2. Exact match PK names: id, fid, pk, gid, ogc_fid, objectid, oid, rowid
+        3. UUID fields (uuid, guid in name) - preferred for unique identification
+        4. Numeric fields with ID patterns (_id, id_, identifier, etc.)
+        5. First numeric integer field (reliable for unique identification)
+        6. First field as fallback (avoid text fields when possible)
+        
+        For PostgreSQL without PK: falls back to 'ctid'
         
         Args:
             layer (QgsVectorLayer): Layer to search
@@ -1106,6 +1119,7 @@ class LayersManagementEngineTask(QgsTask):
         if feature_count == -1:
             logger.debug(f"Layer {layer.name()} has unknown feature count (-1), using primary key attributes directly")
         
+        # 1. Check provider-declared primary key (always trust)
         primary_key_index = layer.primaryKeyAttributes()
         if len(primary_key_index) > 0:
             for field_id in primary_key_index:
@@ -1126,44 +1140,50 @@ class LayersManagementEngineTask(QgsTask):
                 
                 # CRITICAL FIX: Trust declared primary key without uniqueValues() verification
                 # uniqueValues() is NOT thread-safe and causes access violations in QgsTask
-                # See: https://github.com/qgis/QGIS/issues - layer operations from background threads
                 # If a field is declared as primary key by the provider, trust it
                 logger.debug(f"Trusting declared primary key '{field.name()}' (avoiding thread-unsafe uniqueValues)")
                 return (field.name(), field_id, field.typeName(), field.isNumeric())
         
-        # If no declared primary key, try to find one
-        # For PostgreSQL or unknown feature count, use first 'id' field without verification
-        logger.debug(f"PostgreSQL layer '{layer.name()}': No declared PRIMARY KEY, searching for ID field manually")
+        # No declared primary key - use improved detection for OGR layers
+        logger.debug(f"Layer '{layer.name()}': No declared PRIMARY KEY, searching for suitable ID field")
         logger.debug(f"Available fields: {[f.name() for f in layer.fields()]}")
         
+        # 2. Look for exact match PK names (case-insensitive)
         for field in layer.fields():
             if self.isCanceled():
                 return False
-            field_name_lower = str(field.name()).lower()
-            logger.debug(f"Checking field '{field.name()}' (lowercase: '{field_name_lower}')")
-            
-            # Check if field name contains 'id' or matches common ID patterns
-            if 'id' in field_name_lower:
-                # For PostgreSQL, assume 'id' field is unique (avoid freeze)
-                if is_postgresql:
-                    logger.info(f"PostgreSQL layer '{layer.name()}': Found field with 'id': '{field.name()}', using as primary key")
-                    return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
-                
-                if feature_count == -1:
-                    logger.debug(f"Using field with 'id' in name: {field.name()}")
-                    return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
-                
-                # CRITICAL FIX: Trust 'id' field without uniqueValues() verification
-                # uniqueValues() is NOT thread-safe and causes access violations in QgsTask
-                # Field with 'id' in name is a strong indicator of uniqueness
-                logger.debug(f"Trusting field '{field.name()}' as primary key (avoiding thread-unsafe uniqueValues)")
-                return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
-                
-        # For PostgreSQL without declared PK or 'id' field, use ctid immediately
-        # Don't iterate all fields (would freeze on large tables)
+            if field.name().lower() in self.PK_EXACT_NAMES:
+                field_idx = layer.fields().indexFromName(field.name())
+                logger.info(f"Layer '{layer.name()}': Found exact PK name '{field.name()}', using as primary key")
+                return (field.name(), field_idx, field.typeName(), field.isNumeric())
+        
+        # 3. Look for UUID fields (highest priority for unique identification)
+        for field in layer.fields():
+            if self.isCanceled():
+                return False
+            field_name_lower = field.name().lower()
+            for pattern in self.UUID_PATTERNS:
+                if pattern in field_name_lower:
+                    field_idx = layer.fields().indexFromName(field.name())
+                    logger.info(f"Layer '{layer.name()}': Found UUID field '{field.name()}', using as primary key")
+                    return (field.name(), field_idx, field.typeName(), field.isNumeric())
+        
+        # 4. Look for numeric fields with ID patterns
+        for field in layer.fields():
+            if self.isCanceled():
+                return False
+            field_name_lower = field.name().lower()
+            if field.isNumeric():
+                for pattern in self.ID_PATTERNS:
+                    if pattern in field_name_lower:
+                        field_idx = layer.fields().indexFromName(field.name())
+                        logger.info(f"Layer '{layer.name()}': Found numeric ID field '{field.name()}', using as primary key")
+                        return (field.name(), field_idx, field.typeName(), field.isNumeric())
+        
+        # 5. For PostgreSQL without PK, use ctid immediately
         if is_postgresql:
             logger.warning(
-                f"⚠️ Couche PostgreSQL '{layer.name()}' : Aucune clé primaire ou champ 'id' trouvé.\n"
+                f"⚠️ Couche PostgreSQL '{layer.name()}' : Aucune clé primaire ou champ ID trouvé.\n"
                 f"   FilterMate utilisera 'ctid' (identifiant interne PostgreSQL) avec limitations :\n"
                 f"   - ✅ Filtrage attributaire possible\n"
                 f"   - ✅ Filtrage géométrique basique possible\n"
@@ -1173,31 +1193,25 @@ class LayersManagementEngineTask(QgsTask):
             )
             return ('ctid', -1, 'tid', False)
         
-        # For unknown feature count, use first field
-        if feature_count == -1 and layer.fields().count() > 0:
-            field = layer.fields()[0]
-            logger.debug(f"Using first field as fallback: {field.name()}")
-            return (field.name(), 0, field.typeName(), field.isNumeric())
+        # 6. First numeric integer field (reliable for unique identification)
+        for field in layer.fields():
+            if self.isCanceled():
+                return False
+            if field.isNumeric():
+                field_idx = layer.fields().indexFromName(field.name())
+                logger.debug(f"Layer '{layer.name()}': Using first numeric field '{field.name()}' as primary key")
+                return (field.name(), field_idx, field.typeName(), True)
         
-        # CRITICAL FIX: For non-PostgreSQL layers without declared PK or 'id' field,
-        # use the first field rather than calling uniqueValues() which is NOT thread-safe
-        # and causes access violations when called from QgsTask background thread.
-        # This is a safe fallback - the first field is often a suitable identifier.
+        # 7. First field as fallback (avoid text fields when possible)
         if layer.fields().count() > 0:
             field = layer.fields()[0]
-            logger.debug(f"Using first field as fallback (avoiding thread-unsafe uniqueValues): {field.name()}")
+            logger.warning(f"Layer '{layer.name()}': No suitable ID field found, using first field '{field.name()}' (text fields are less reliable)")
             return (field.name(), 0, field.typeName(), field.isNumeric())
         
-        # Should not reach here for PostgreSQL (already handled above)
-        # But keep as safety fallback
-        if is_postgresql:
-            logger.error(f"Unexpected: PostgreSQL layer '{layer.name()}' reached end of search_primary_key_from_layer")
-            return ('ctid', -1, 'tid', False)
-                
-        # For non-PostgreSQL layers (memory, shapefile, etc.), create virtual ID
+        # 8. Create virtual ID only as last resort (for memory layers without fields)
         new_field = QgsField('virtual_id', QMetaType.Type.LongLong)
         layer.addExpressionField('@row_number', new_field)
-        logger.warning(f"Layer {layer.name()}: No unique field found, created virtual_id (only works for non-database layers)")
+        logger.warning(f"Layer {layer.name()}: No fields available, created virtual_id")
         return ('virtual_id', layer.fields().indexFromName('virtual_id'), new_field.typeName(), True)
 
     def create_spatial_index_for_postgresql_layer(self, layer, layer_props):

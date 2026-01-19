@@ -1432,6 +1432,15 @@ class FilterEngineTask(QgsTask):
             logger.debug("TaskBridge: PostgreSQL spatial filtering - using legacy code (V3 not ready)")
             return None
         
+        # CRITICAL v4.1.2 (2026-01-19): Disable V3 for OGR spatial filtering
+        # Same issue as PostgreSQL: V3 sends "SPATIAL_FILTER(intersects)" placeholder
+        # which is not a valid QGIS expression function, causing:
+        # "La fonction SPATIAL_FILTER est inconnue" error
+        # Use legacy OGRExpressionBuilder.apply_filter() which uses QGIS processing
+        if 'ogr' in layers_dict and len(layers_dict.get('ogr', [])) > 0:
+            logger.debug("TaskBridge: OGR spatial filtering - using legacy code (V3 not ready)")
+            return None
+        
         # Skip multi-step for complex scenarios
         # Check for buffers which require special handling
         buffer_value = self.task_parameters.get("task", {}).get("buffer_value", 0)

@@ -6,6 +6,8 @@ This test validates that FilterMate correctly detects primary keys for:
 - Spatialite layers
 - OGR/Shapefile layers (using FID)
 - Memory layers
+- UUID fields (v4.0.7)
+- Numeric ID fields (v4.0.7)
 """
 
 import unittest
@@ -282,12 +284,12 @@ class TestPrimaryKeyEdgeCases(unittest.TestCase):
     
     def test_field_name_variations_for_id(self):
         """Test that various ID field names are detected."""
-        id_variations = ['id', 'ID', 'Id', 'object_id', 'feature_id', 'gid', 'oid']
+        id_variations = ['id', 'ID', 'Id', 'gid', 'oid', 'fid', 'pk']
         
         for id_name in id_variations:
             with self.subTest(id_name=id_name):
                 mock_layer = Mock()
-                mock_layer.providerType.return_value = 'postgres'
+                mock_layer.providerType.return_value = 'ogr'
                 mock_layer.name.return_value = f"layer_with_{id_name}"
                 mock_layer.featureCount.return_value = 100
                 mock_layer.primaryKeyAttributes.return_value = []
@@ -304,8 +306,217 @@ class TestPrimaryKeyEdgeCases(unittest.TestCase):
                 
                 result = self.task.search_primary_key_from_layer(mock_layer)
                 
-                # Should find ID field (case-insensitive, contains 'id')
+                # Should find exact PK name (case-insensitive)
                 self.assertEqual(result[0], id_name)
+
+
+class TestOGRPrimaryKeyDetection(unittest.TestCase):
+    """Test improved OGR primary key detection (v4.0.7)."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        from filter_mate.core.tasks.layer_management_task import LayersManagementEngineTask
+        self.task = LayersManagementEngineTask("Test Task", {})
+    
+    def test_ogr_uuid_field_priority(self):
+        """OGR layer should prefer UUID field over text fields."""
+        mock_layer = Mock()
+        mock_layer.providerType.return_value = 'ogr'
+        mock_layer.name.return_value = "geopackage_with_uuid"
+        mock_layer.featureCount.return_value = 500
+        mock_layer.primaryKeyAttributes.return_value = []
+        
+        # Fields: name (text), uuid (text), description (text)
+        mock_name_field = Mock()
+        mock_name_field.name.return_value = "name"
+        mock_name_field.typeName.return_value = "String"
+        mock_name_field.isNumeric.return_value = False
+        
+        mock_uuid_field = Mock()
+        mock_uuid_field.name.return_value = "feature_uuid"
+        mock_uuid_field.typeName.return_value = "String"
+        mock_uuid_field.isNumeric.return_value = False
+        
+        mock_desc_field = Mock()
+        mock_desc_field.name.return_value = "description"
+        mock_desc_field.typeName.return_value = "String"
+        mock_desc_field.isNumeric.return_value = False
+        
+        mock_fields = Mock()
+        mock_fields.__iter__ = Mock(return_value=iter([mock_name_field, mock_uuid_field, mock_desc_field]))
+        mock_fields.indexFromName = Mock(return_value=1)  # UUID is at index 1
+        mock_fields.count = Mock(return_value=3)
+        mock_layer.fields.return_value = mock_fields
+        
+        result = self.task.search_primary_key_from_layer(mock_layer)
+        
+        # Should find UUID field
+        self.assertEqual(result[0], "feature_uuid")
+    
+    def test_ogr_guid_field_detection(self):
+        """OGR layer should detect GUID fields."""
+        mock_layer = Mock()
+        mock_layer.providerType.return_value = 'ogr'
+        mock_layer.name.return_value = "layer_with_guid"
+        mock_layer.featureCount.return_value = 100
+        mock_layer.primaryKeyAttributes.return_value = []
+        
+        mock_text_field = Mock()
+        mock_text_field.name.return_value = "label"
+        mock_text_field.typeName.return_value = "String"
+        mock_text_field.isNumeric.return_value = False
+        
+        mock_guid_field = Mock()
+        mock_guid_field.name.return_value = "global_guid"
+        mock_guid_field.typeName.return_value = "String"
+        mock_guid_field.isNumeric.return_value = False
+        
+        mock_fields = Mock()
+        mock_fields.__iter__ = Mock(return_value=iter([mock_text_field, mock_guid_field]))
+        mock_fields.indexFromName = Mock(return_value=1)
+        mock_fields.count = Mock(return_value=2)
+        mock_layer.fields.return_value = mock_fields
+        
+        result = self.task.search_primary_key_from_layer(mock_layer)
+        
+        # Should find GUID field
+        self.assertEqual(result[0], "global_guid")
+    
+    def test_ogr_numeric_id_over_text(self):
+        """OGR layer should prefer numeric ID fields over text fields."""
+        mock_layer = Mock()
+        mock_layer.providerType.return_value = 'ogr'
+        mock_layer.name.return_value = "shapefile_with_numeric_id"
+        mock_layer.featureCount.return_value = 200
+        mock_layer.primaryKeyAttributes.return_value = []
+        
+        # Fields: name (text), feature_id (numeric), category (text)
+        mock_name_field = Mock()
+        mock_name_field.name.return_value = "name"
+        mock_name_field.typeName.return_value = "String"
+        mock_name_field.isNumeric.return_value = False
+        
+        mock_feature_id_field = Mock()
+        mock_feature_id_field.name.return_value = "feature_id"
+        mock_feature_id_field.typeName.return_value = "Integer64"
+        mock_feature_id_field.isNumeric.return_value = True
+        
+        mock_category_field = Mock()
+        mock_category_field.name.return_value = "category"
+        mock_category_field.typeName.return_value = "String"
+        mock_category_field.isNumeric.return_value = False
+        
+        mock_fields = Mock()
+        mock_fields.__iter__ = Mock(return_value=iter([mock_name_field, mock_feature_id_field, mock_category_field]))
+        mock_fields.indexFromName = Mock(return_value=1)  # feature_id at index 1
+        mock_fields.count = Mock(return_value=3)
+        mock_layer.fields.return_value = mock_fields
+        
+        result = self.task.search_primary_key_from_layer(mock_layer)
+        
+        # Should find numeric ID field
+        self.assertEqual(result[0], "feature_id")
+        self.assertTrue(result[3])  # is numeric
+    
+    def test_ogr_exact_pk_name_priority(self):
+        """OGR layer should prioritize exact PK names (fid, objectid, etc.)."""
+        mock_layer = Mock()
+        mock_layer.providerType.return_value = 'ogr'
+        mock_layer.name.return_value = "layer_with_objectid"
+        mock_layer.featureCount.return_value = 100
+        mock_layer.primaryKeyAttributes.return_value = []
+        
+        # Fields: name (text), objectid (numeric), feature_uuid (text)
+        mock_name_field = Mock()
+        mock_name_field.name.return_value = "name"
+        mock_name_field.typeName.return_value = "String"
+        mock_name_field.isNumeric.return_value = False
+        
+        mock_objectid_field = Mock()
+        mock_objectid_field.name.return_value = "objectid"
+        mock_objectid_field.typeName.return_value = "Integer"
+        mock_objectid_field.isNumeric.return_value = True
+        
+        mock_uuid_field = Mock()
+        mock_uuid_field.name.return_value = "feature_uuid"
+        mock_uuid_field.typeName.return_value = "String"
+        mock_uuid_field.isNumeric.return_value = False
+        
+        mock_fields = Mock()
+        mock_fields.__iter__ = Mock(return_value=iter([mock_name_field, mock_objectid_field, mock_uuid_field]))
+        mock_fields.indexFromName = Mock(return_value=1)  # objectid at index 1
+        mock_fields.count = Mock(return_value=3)
+        mock_layer.fields.return_value = mock_fields
+        
+        result = self.task.search_primary_key_from_layer(mock_layer)
+        
+        # Should find objectid (exact PK name) before UUID
+        self.assertEqual(result[0], "objectid")
+    
+    def test_ogr_first_numeric_fallback(self):
+        """OGR layer without PK names should use first numeric field."""
+        mock_layer = Mock()
+        mock_layer.providerType.return_value = 'ogr'
+        mock_layer.name.return_value = "layer_no_pk_names"
+        mock_layer.featureCount.return_value = 100
+        mock_layer.primaryKeyAttributes.return_value = []
+        
+        # Fields: name (text), count (numeric), category (text)
+        mock_name_field = Mock()
+        mock_name_field.name.return_value = "name"
+        mock_name_field.typeName.return_value = "String"
+        mock_name_field.isNumeric.return_value = False
+        
+        mock_count_field = Mock()
+        mock_count_field.name.return_value = "count"
+        mock_count_field.typeName.return_value = "Integer"
+        mock_count_field.isNumeric.return_value = True
+        
+        mock_category_field = Mock()
+        mock_category_field.name.return_value = "category"
+        mock_category_field.typeName.return_value = "String"
+        mock_category_field.isNumeric.return_value = False
+        
+        mock_fields = Mock()
+        mock_fields.__iter__ = Mock(return_value=iter([mock_name_field, mock_count_field, mock_category_field]))
+        mock_fields.indexFromName = Mock(return_value=1)  # count at index 1
+        mock_fields.count = Mock(return_value=3)
+        mock_layer.fields.return_value = mock_fields
+        
+        result = self.task.search_primary_key_from_layer(mock_layer)
+        
+        # Should use first numeric field
+        self.assertEqual(result[0], "count")
+        self.assertTrue(result[3])  # is numeric
+    
+    def test_ogr_rowid_exact_name(self):
+        """OGR layer should detect 'rowid' as exact PK name."""
+        mock_layer = Mock()
+        mock_layer.providerType.return_value = 'ogr'
+        mock_layer.name.return_value = "sqlite_layer"
+        mock_layer.featureCount.return_value = 50
+        mock_layer.primaryKeyAttributes.return_value = []
+        
+        mock_rowid_field = Mock()
+        mock_rowid_field.name.return_value = "rowid"
+        mock_rowid_field.typeName.return_value = "Integer64"
+        mock_rowid_field.isNumeric.return_value = True
+        
+        mock_data_field = Mock()
+        mock_data_field.name.return_value = "data"
+        mock_data_field.typeName.return_value = "String"
+        mock_data_field.isNumeric.return_value = False
+        
+        mock_fields = Mock()
+        mock_fields.__iter__ = Mock(return_value=iter([mock_rowid_field, mock_data_field]))
+        mock_fields.indexFromName = Mock(return_value=0)
+        mock_fields.count = Mock(return_value=2)
+        mock_layer.fields.return_value = mock_fields
+        
+        result = self.task.search_primary_key_from_layer(mock_layer)
+        
+        # Should find rowid
+        self.assertEqual(result[0], "rowid")
 
 
 if __name__ == '__main__':

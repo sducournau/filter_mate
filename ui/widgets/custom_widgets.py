@@ -800,8 +800,22 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         """
         try:
             if layer is not None:
+                # FIX 2026-01-19: Skip reconfiguration if SAME layer AND list is already populated
+                # This prevents unnecessary list clearing when user selects items in multiple_selection
+                if is_layer_valid(self.layer) and self.layer.id() == layer.id():
+                    # Same layer - check if we already have a populated list
+                    if self.layer.id() in self.list_widgets:
+                        list_widget = self.list_widgets[self.layer.id()]
+                        if list_widget.count() > 0:
+                            logger.debug(f"setLayer: Same layer {layer.name()} with {list_widget.count()} items, skipping reconfigure")
+                            # Still ensure visibility
+                            list_widget.setVisible(True)
+                            list_widget.show()
+                            self.manage_list_widgets(layer_props)
+                            return
+                
                 # Cancel all tasks for the OLD layer BEFORE changing to new layer
-                if is_layer_valid(self.layer):
+                if is_layer_valid(self.layer) and self.layer.id() != layer.id():
                     old_layer_id = self.layer.id()
                     self._filter_debounce_timer.stop()
                     for task_type in self.tasks:
@@ -877,7 +891,8 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                         self.setDisplayExpression(expected_expression, skip_task=(skip_task and not force_task), preserve_checked=preserve_checked)
                     elif not skip_task:
                         # Only launch task if not skipped and expression already correct
-                        self._populate_features_sync(expected_expression)
+                        # FIX 2026-01-19 v4: Always preserve checked when sync-populating
+                        self._populate_features_sync(expected_expression, preserve_checked=True)
                 else:
                     logger.error(f"Failed to create list widget for layer {self.layer.id()}")
 
@@ -889,7 +904,11 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                 pass
 
     def setFilterExpression(self, filter_expression, layer_props):
-        """Set the filter expression for the current layer."""
+        """Set the filter expression for the current layer.
+        
+        FIX 2026-01-19 v4: Added preserve_checked=True to preserve checked items
+        when the display expression is rebuilt after filter change.
+        """
         if is_layer_valid(self.layer):
             if self.layer.id() not in self.list_widgets:
                 self.manage_list_widgets(layer_props)
@@ -898,7 +917,8 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                     if QgsExpression(filter_expression).isField() is False:
                         self.list_widgets[self.layer.id()].setFilterExpression(filter_expression)
                         expression = self.list_widgets[self.layer.id()].getDisplayExpression()
-                        self.setDisplayExpression(expression)
+                        # FIX 2026-01-19 v4: Always preserve checked items during filter change
+                        self.setDisplayExpression(expression, preserve_checked=True)
 
     def setDisplayExpression(self, expression, skip_task=False, preserve_checked=False):
         """Set the display expression and rebuild the features list.
@@ -982,18 +1002,19 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                 except Exception as save_err:
                     logger.warning(f"Could not save checked items: {save_err}")
 
-            # Clear widget before rebuilding
+            # FIX 2026-01-19 v4: Don't clear here - _populate_features_sync will do it
+            # and can preserve checked items. Just update visuals.
             try:
-                self.list_widgets[self.layer.id()].clear()
                 self.list_widgets[self.layer.id()].viewport().update()
                 from qgis.PyQt.QtCore import QCoreApplication
                 QCoreApplication.processEvents()
             except Exception as clear_err:
-                logger.debug(f"Could not clear widget: {clear_err}")
+                logger.debug(f"Could not update widget: {clear_err}")
 
             # Build features list synchronously (unless skipped)
+            # FIX 2026-01-19 v4: Pass preserve_checked to _populate_features_sync
             if not skip_task:
-                self._populate_features_sync(working_expression)
+                self._populate_features_sync(working_expression, preserve_checked=preserve_checked)
             else:
                 # FIX 2026-01-19: Even when skipping task, ensure list widget is visible
                 # This prevents the list from disappearing when skip_task=True
@@ -1015,16 +1036,31 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                 except Exception as restore_err:
                     logger.warning(f"Could not restore checked items: {restore_err}")
 
-    def _populate_features_sync(self, expression):
+    def _populate_features_sync(self, expression, preserve_checked=False):
         """Populate features list synchronously.
         
         FIX 2026-01-19: Added explicit visual refresh after population to ensure
         the list is displayed correctly.
+        
+        FIX 2026-01-19 v4: Added preserve_checked parameter to maintain checkbox state
+        during repopulation. This prevents the auto-uncheck issue.
+        
+        Args:
+            expression: The display expression to use
+            preserve_checked: If True, save and restore checked items after population
         """
         if not is_layer_valid(self.layer) or self.layer.id() not in self.list_widgets:
             return
             
         list_widget = self.list_widgets[self.layer.id()]
+        
+        # FIX 2026-01-19 v4: Save checked items BEFORE clearing
+        saved_checked_fids = []
+        if preserve_checked:
+            saved_checked_fids = self.getCheckedFeatureIds()
+            if saved_checked_fids:
+                logger.debug(f"_populate_features_sync: Preserving {len(saved_checked_fids)} checked items")
+        
         list_widget.clear()
         
         # Build expression
@@ -1062,16 +1098,34 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         reverse = self._sort_order == 'DESC'
         features_data.sort(key=lambda x: (x[0] if x[0] is not None else ""), reverse=reverse)
         
+        # FIX 2026-01-19 v4: Build set of checked FIDs for O(1) lookup
+        checked_fid_set = set()
+        if saved_checked_fids:
+            for fid in saved_checked_fids:
+                checked_fid_set.add(fid)
+                # Also add string version for comparison
+                if not isinstance(fid, str):
+                    checked_fid_set.add(str(fid))
+        
         # Populate list widget
         for display_value, fid in features_data:
             item = QListWidgetItem(display_value)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(Qt.Unchecked)
+            
+            # FIX 2026-01-19 v4: Restore checked state if in saved list
+            is_checked = fid in checked_fid_set
+            item.setCheckState(Qt.Checked if is_checked else Qt.Unchecked)
+            
             item.setData(0, display_value)
             item.setData(3, fid)
             item.setData(4, "True")
-            item.setData(6, self.font_by_state['unChecked'][0])
-            item.setData(9, QBrush(self.font_by_state['unChecked'][1]))
+            # Set font/color based on checked state
+            if is_checked:
+                item.setData(6, self.font_by_state['checked'][0])
+                item.setData(9, QBrush(self.font_by_state['checked'][1]))
+            else:
+                item.setData(6, self.font_by_state['unChecked'][0])
+                item.setData(9, QBrush(self.font_by_state['unChecked'][1]))
             list_widget.addItem(item)
         
         list_widget.setFeaturesList(features_data)
@@ -1090,7 +1144,9 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             self.layout.activate()
         
         self.connect_filter_lineEdit()
-        logger.debug(f"Populated {len(features_data)} features, list visible={list_widget.isVisible()}")
+        
+        restored_count = len([fid for fid in saved_checked_fids if fid in checked_fid_set]) if saved_checked_fids else 0
+        logger.debug(f"Populated {len(features_data)} features (restored {restored_count} checked), visible={list_widget.isVisible()}")
 
     def eventFilter(self, obj, event):
         """Handle mouse events for feature selection and context menu."""
@@ -1411,6 +1467,11 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                 visible_features.append([item.data(0), item.data(3)])
         
         list_widget.setVisibleFeaturesList(visible_features)
+        
+        # FIX 2026-01-19 v4: Force visual refresh after filtering
+        list_widget.viewport().update()
+        list_widget.update()
+        
         self.filteringCheckedItemList.emit()
 
 

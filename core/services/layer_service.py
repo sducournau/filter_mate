@@ -315,15 +315,26 @@ class LayerService(QObject):
     # Primary Key Detection
     # ─────────────────────────────────────────────────────────────────
     
+    # Common primary key field names (exact match, case-insensitive)
+    PK_EXACT_NAMES = ['id', 'fid', 'pk', 'gid', 'ogc_fid', 'objectid', 'oid', 'rowid']
+    
+    # UUID field patterns (contains, case-insensitive)
+    UUID_PATTERNS = ['uuid', 'guid']
+    
+    # ID field patterns (contains, case-insensitive) - for numeric fields
+    ID_PATTERNS = ['_id', 'id_', 'identifier', 'feature_id', 'object_id']
+    
     def _detect_primary_key(self, layer: "QgsVectorLayer") -> Optional[str]:
         """
         Detect the primary key field for a layer.
         
-        Priority:
-        1. Provider-defined primary key
-        2. Field named 'id', 'fid', 'pk', etc.
-        3. First integer field
-        4. First field
+        Improved priority for OGR layers (v4.0.7):
+        1. Provider-defined primary key (trusted)
+        2. Exact match PK names: id, fid, pk, gid, ogc_fid, objectid, oid, rowid
+        3. UUID fields (uuid, guid in name) - preferred for unique identification
+        4. Numeric fields with ID patterns (_id, id_, identifier, etc.)
+        5. First numeric integer field (Int, LongLong, Int64)
+        6. First field as fallback (avoid text fields when possible)
         
         Args:
             layer: Layer to detect PK for
@@ -335,30 +346,49 @@ class LayerService(QObject):
             return None
         
         try:
-            fields = layer.fields()
+            from qgis.PyQt.QtCore import QVariant
             
-            # Try to get from provider
+            fields = layer.fields()
+            if not fields:
+                return None
+            
+            # 1. Try to get from provider (always trust declared PK)
             pk_indexes = layer.primaryKeyAttributes()
             if pk_indexes:
                 return fields[pk_indexes[0]].name()
             
-            # Look for common PK names
-            pk_names = ['id', 'fid', 'pk', 'gid', 'ogc_fid', 'objectid']
+            # 2. Look for exact match PK names (case-insensitive)
             for field in fields:
-                if field.name().lower() in pk_names:
+                if field.name().lower() in self.PK_EXACT_NAMES:
+                    logger.debug(f"Found exact PK name: {field.name()}")
                     return field.name()
             
-            # First integer field
-            from qgis.PyQt.QtCore import QVariant
+            # 3. Look for UUID fields (highest priority for unique identification)
             for field in fields:
-                if field.type() in (QVariant.Int, QVariant.LongLong):
+                field_name_lower = field.name().lower()
+                for pattern in self.UUID_PATTERNS:
+                    if pattern in field_name_lower:
+                        logger.debug(f"Found UUID field: {field.name()}")
+                        return field.name()
+            
+            # 4. Look for numeric fields with ID patterns
+            numeric_types = (QVariant.Int, QVariant.LongLong, QVariant.UInt, QVariant.ULongLong)
+            for field in fields:
+                field_name_lower = field.name().lower()
+                for pattern in self.ID_PATTERNS:
+                    if pattern in field_name_lower and field.type() in numeric_types:
+                        logger.debug(f"Found numeric ID field: {field.name()}")
+                        return field.name()
+            
+            # 5. First numeric integer field (reliable for unique identification)
+            for field in fields:
+                if field.type() in numeric_types:
+                    logger.debug(f"Using first numeric field: {field.name()}")
                     return field.name()
             
-            # First field as fallback
-            if fields:
-                return fields[0].name()
-            
-            return None
+            # 6. First field as fallback (avoid if possible - text fields are less suitable)
+            logger.debug(f"Falling back to first field: {fields[0].name()}")
+            return fields[0].name()
             
         except Exception as e:
             logger.debug(f"Error detecting primary key: {e}")

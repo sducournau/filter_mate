@@ -212,6 +212,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._pending_layers_update = self._plugin_busy = self._syncing_from_qgis = False
         self._filtering_in_progress, self._filter_completed_time, self._saved_layer_id_before_filter = False, 0, None
         self._layer_tree_view_signal_connected, self._signal_connection_states, self._theme_watcher = False, {}, None
+        # FIX 2026-01-19: Flag to prevent feedback loop when widget updates QGIS selection
+        self._updating_qgis_selection_from_widget = False
+        self._configuring_groupbox = False  # FIX 2026-01-19: Prevent nested groupbox config
+        # FIX 2026-01-19 v3: Counter for skipping selectionChanged signals (2 = removeSelection + select)
+        self._skip_selection_changed_count = 0
         self._expression_debounce_timer = QTimer()
         self._expression_debounce_timer.setSingleShot(True); self._expression_debounce_timer.setInterval(450)
         self._expression_debounce_timer.timeout.connect(self._execute_debounced_expression_change)
@@ -3698,8 +3703,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         widget.setEnabled(True)
                         if should_set_layer and hasattr(widget, 'setLayer'):
                             try:
+                                # FIX 2026-01-19: Skip setLayer if widget already has the same layer
+                                # with populated list to avoid clearing checked items
+                                skip_set_layer = False
                                 if widget_key == 'MULTIPLE_SELECTION_FEATURES':
-                                    widget.setLayer(self.current_layer, layer_props if layer_props else {})
+                                    if hasattr(widget, 'layer') and widget.layer and widget.layer.id() == self.current_layer.id():
+                                        if hasattr(widget, 'list_widgets') and self.current_layer.id() in widget.list_widgets:
+                                            if widget.list_widgets[self.current_layer.id()].count() > 0:
+                                                logger.debug(f"_configure_groupbox_common: Skipping setLayer for {widget_key} - same layer with items")
+                                                skip_set_layer = True
+                                    if not skip_set_layer:
+                                        widget.setLayer(self.current_layer, layer_props if layer_props else {})
                                 else:
                                     widget.setLayer(self.current_layer)
                             except Exception as e:
@@ -3713,9 +3727,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             }.get(widget_key)
                             if expr_key and hasattr(widget, 'setDisplayExpression'):
                                 expr = layer_props.get("exploring", {}).get(expr_key, "") if layer_props else ""
+                                # FIX 2026-01-19: Only set display expression if different
+                                if expr and widget_key == 'MULTIPLE_SELECTION_FEATURES':
+                                    current_expr = widget.displayExpression() if hasattr(widget, 'displayExpression') else ""
+                                    if current_expr == expr:
+                                        logger.debug(f"_configure_groupbox_common: Skipping setDisplayExpression for {widget_key} - same expression")
+                                        continue
                                 if expr:
                                     try:
-                                        widget.setDisplayExpression(expr)
+                                        # FIX 2026-01-19 v4: Always preserve checked for MULTIPLE_SELECTION
+                                        if widget_key == 'MULTIPLE_SELECTION_FEATURES':
+                                            widget.setDisplayExpression(expr, preserve_checked=True)
+                                        else:
+                                            widget.setDisplayExpression(expr)
                                     except Exception as e:
                                         logger.debug(f"Could not setDisplayExpression on {widget_key}: {e}")
                         
@@ -3816,10 +3840,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # FIX 2026-01-18 v7: Don't call exploring_link_widgets during QGIS sync
         # exploring_link_widgets can trigger setDisplayExpression which clears the list,
         # causing checked items to disappear immediately after being set
+        # FIX 2026-01-19: Also skip if we're being called from exploring_features_changed
+        # to prevent feedback loop that clears the list
         if not self._syncing_from_qgis:
             self.exploring_link_widgets()
-            features = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures()
-            if features: self.exploring_features_changed(features, True)
+            # FIX 2026-01-19: Only call exploring_features_changed if NOT from a selection event
+            # The call to currentSelectedFeatures() + exploring_features_changed() was causing
+            # the list to be cleared because it triggered _configure_multiple_selection_groupbox again
+            # Check if we're in a nested call by looking at stack or use a flag
+            if not getattr(self, '_configuring_groupbox', False):
+                self._configuring_groupbox = True
+                try:
+                    features = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures()
+                    if features: 
+                        self.exploring_features_changed(features, True)
+                finally:
+                    self._configuring_groupbox = False
         
         self._update_exploring_buttons_state()
         # FIX 2026-01-15: Force visual refresh of multiple selection widget
