@@ -473,7 +473,15 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         where_clauses = [f"{predicate_func}({geom_expr}, {source_geom_in_subquery})"]
         
         if source_filter:
-            where_clauses.append(f"({source_filter})")
+            # CRITICAL FIX: Replace table name with __source alias in source_filter
+            # The source_filter uses "table"."column" format but in EXISTS subquery
+            # the table is aliased as __source, so we need "__source"."column"
+            aliased_source_filter = source_filter.replace(
+                f'"{source_table}".',
+                '__source.'
+            )
+            self.log_debug(f"Aliased source_filter: {aliased_source_filter[:100]}...")
+            where_clauses.append(f"({aliased_source_filter})")
         
         where_clause = " AND ".join(where_clauses)
         
@@ -492,7 +500,10 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         print(f"   source_geom_field: {source_geom_field}")
         print(f"   predicate_func: {predicate_func}")
         print(f"   geom_expr: {geom_expr}")
-        print(f"   source_filter: {source_filter[:100] if source_filter else 'None'}...")
+        print(f"   source_filter (original): {source_filter[:100] if source_filter else 'None'}...")
+        if source_filter:
+            aliased_filter = source_filter.replace(f'"{source_table}".', '__source.')
+            print(f"   source_filter (aliased): {aliased_filter[:100]}...")
         print(f"   EXISTS expression: {exists_expr[:300]}...")
         
         return exists_expr
