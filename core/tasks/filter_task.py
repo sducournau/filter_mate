@@ -1442,10 +1442,12 @@ class FilterEngineTask(QgsTask):
             return None
         
         # Skip multi-step for complex scenarios
-        # Check for buffers which require special handling
+        # Check for buffers which require special handling (both positive and negative)
+        # v4.0.7: FIX - Handle negative buffers (erosion) as well as positive buffers
         buffer_value = self.task_parameters.get("task", {}).get("buffer_value", 0)
-        if buffer_value and buffer_value > 0:
-            logger.debug("TaskBridge: buffer active - using legacy multi-step code")
+        if buffer_value and buffer_value != 0:
+            buffer_type = "expansion" if buffer_value > 0 else "erosion"
+            logger.debug(f"TaskBridge: buffer active ({buffer_value}m {buffer_type}) - using legacy multi-step code")
             return None
         
         # Count total layers

@@ -1067,13 +1067,18 @@ class LayerSyncController(BaseController):
             )
 
     def _sync_state_dependent_widgets(self) -> None:
-        """Synchronize state-dependent widgets."""
+        """Synchronize state-dependent widgets.
+        
+        v4.0.7: Added filtering_buffer_value_state_changed to ensure buffer widgets
+                (spinbox and property button) are properly enabled/disabled.
+        """
         dw = self.dockwidget
         
         method_names = [
             'filtering_layers_to_filter_state_changed',
             'filtering_combine_operator_state_changed',
             'filtering_geometric_predicates_state_changed',
+            'filtering_buffer_value_state_changed',  # v4.0.7: Added - enables/disables buffer widgets
             'filtering_buffer_property_changed',
             'filtering_buffer_type_state_changed'
         ]

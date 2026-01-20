@@ -1867,6 +1867,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.widgets = self._configuration_manager.configure_widgets(); self.widgets_initialized = True
         logger.info(f"✅ Widgets configured: FILTERING keys = {list(self.widgets.get('FILTERING', {}).keys())}")
         
+        # v4.0.7: FIX - Enable all filtering checkable buttons that were disabled in UI
+        # pushButton_checkable_filtering_buffer_value is disabled by default in .ui file
+        self._enable_filtering_checkable_buttons()
+        
         # FIX 2026-01-14: Connect initial widget signals after configuration
         # CRITICAL: comboBox_filtering_current_layer.layerChanged must be connected
         # to update exploring widgets when the current layer changes
@@ -5758,15 +5762,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 widget.setEnabled(state)
 
     def filtering_init_buffer_property(self):
-        """v4.0 S18: Init buffer property override widget."""
-        if not self.widgets_initialized or not self.has_loaded_layers or not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS: return
+        """v4.0 S18: Init buffer property override widget.
+        
+        v4.0.7: FIX - Use widget state (isChecked) as source of truth for has_buffer,
+                not just the stored value in PROJECT_LAYERS which may be out of sync.
+        v4.0.8: FIX - Removed has_loaded_layers guard as this is called during sync
+                before layers are fully ready, and we need to set enabled states.
+        """
+        if not self.widgets_initialized or not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS: return
         lp, lid = self.PROJECT_LAYERS[self.current_layer.id()], self.current_layer.id()
         prop_def = QgsPropertyDefinition(f"{lid}_buffer_property_definition", QgsPropertyDefinition.DataTypeNumeric, f"Replace buffer with expression for {lid}", 'Expression must return numeric values (meters)')
         buf_expr = lp["filtering"]["buffer_value_expression"]
         if not isinstance(buf_expr, str): buf_expr = str(buf_expr) if buf_expr else ''; lp["filtering"]["buffer_value_expression"] = buf_expr
         prop = QgsProperty.fromExpression(buf_expr) if buf_expr and buf_expr.strip() else QgsProperty()
         self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].init(0, prop, prop_def, self.current_layer)
-        has_buf, is_active, has_expr = lp["filtering"].get("has_buffer_value", False), lp["filtering"]["buffer_value_property"], bool(buf_expr and buf_expr.strip())
+        
+        # v4.0.7: Use widget isChecked() as source of truth - the stored value may lag behind
+        has_buf_widget = self.widgets["FILTERING"]["HAS_BUFFER_VALUE"]["WIDGET"].isChecked()
+        has_buf_stored = lp["filtering"].get("has_buffer_value", False)
+        # Use widget state if available, fallback to stored value
+        has_buf = has_buf_widget if self.widgets["FILTERING"]["HAS_BUFFER_VALUE"]["WIDGET"].isEnabled() else has_buf_stored
+        
+        is_active, has_expr = lp["filtering"]["buffer_value_property"], bool(buf_expr and buf_expr.strip())
         self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(has_buf and not (is_active and has_expr))
         self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setEnabled(has_buf)
 
@@ -5776,8 +5793,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         v4.0.3: Do NOT disable layout - this is triggered by property button, not checkable pushbutton.
         The HAS_BUFFER_VALUE pushbutton controls the layout state.
+        v4.0.8: FIX - Replaced _is_ui_ready() guard with widgets_initialized only guard
+                to allow execution during layer sync before has_loaded_layers is True.
         """
-        if not self._is_ui_ready(): return
+        if not self.widgets_initialized or not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS: return
 
         self.manageSignal(["FILTERING","BUFFER_VALUE_PROPERTY"], 'disconnect')
 
@@ -5911,25 +5930,48 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         When unchecked (False): Disable these widgets
         
         v4.0.3: NEW - Separate from filtering_buffer_property_changed()
+        v4.0.7: FIX - Property override button logic: when buffer is enabled,
+                the spinbox is disabled if property override is active with valid expression.
+                Property override button should be enabled when buffer is enabled.
+        v4.0.8: FIX - Removed has_loaded_layers guard as this method is called during
+                layer synchronization before layers are fully ready.
         """
-        # Guard: Only process after full initialization
-        if not (self.widgets_initialized is True and self.has_loaded_layers is True):
+        # Guard: Only process after widgets are initialized
+        if not self.widgets_initialized:
             return
             
         is_checked = self.widgets["FILTERING"]["HAS_BUFFER_VALUE"]["WIDGET"].isChecked()
         
-        # v4.0.3: Disable entire row layout
+        # v4.0.7: Get property override state to determine spinbox enabled state
+        is_property_active = False
+        has_valid_expr = False
+        
+        if is_checked and self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
+            lf = self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]
+            is_property_active = lf.get("buffer_value_property", False)
+            buf_expr = lf.get("buffer_value_expression", "")
+            has_valid_expr = bool(buf_expr and str(buf_expr).strip())
+        
+        # v4.0.7: Spinbox logic - disabled when:
+        # 1. Buffer not checked (is_checked=False), OR
+        # 2. Buffer checked BUT property override is active with valid expression
+        spinbox_enabled = is_checked and not (is_property_active and has_valid_expr)
+        
+        # Property button is simply enabled when buffer is checked
+        property_button_enabled = is_checked
+        
+        # v4.0.3: Set layout widgets - but we need to fine-tune individual widgets after
         self._set_layout_widgets_enabled('horizontalLayout_filtering_values_buttons', is_checked)
         
-        # Also set individual widgets
-        self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(is_checked)
-        self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setEnabled(is_checked)
+        # v4.0.7: Override with correct logic for spinbox (may need to be disabled even when is_checked=True)
+        self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(spinbox_enabled)
+        self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setEnabled(property_button_enabled)
         
         # Optional controller delegation
         if self._controller_integration and hasattr(self._controller_integration, 'delegate_filtering_buffer_value_state_changed'):
             self._controller_integration.delegate_filtering_buffer_value_state_changed(is_checked)
         
-        logger.debug(f"filtering_buffer_value_state_changed: is_checked={is_checked}")
+        logger.debug(f"filtering_buffer_value_state_changed: is_checked={is_checked}, spinbox_enabled={spinbox_enabled}, property_button_enabled={property_button_enabled}")
 
     def filtering_buffer_type_state_changed(self):
         """Handle changes to the has_buffer_type checkable button.
@@ -5965,6 +6007,37 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if (combo := self.widgets.get("FILTERING", {}).get("CURRENT_LAYER", {}).get("WIDGET")) and \
            (checkbox := self.widgets.get("FILTERING", {}).get("USE_CENTROIDS_SOURCE_LAYER", {}).get("WIDGET")):
             checkbox.setEnabled(combo.currentLayer() is not None and combo.isEnabled())
+
+    def _enable_filtering_checkable_buttons(self):
+        """v4.0.7: Enable all filtering checkable buttons.
+        
+        CRITICAL FIX: The pushButton_checkable_filtering_buffer_value widget is disabled 
+        by default in the .ui file. This method enables all filtering checkable buttons 
+        so they can be interacted with when a layer is selected.
+        
+        The checkable buttons control the visibility/enabled state of their associated
+        widgets (spinbox, combobox, property button, etc.).
+        """
+        if not self.widgets_initialized:
+            return
+        
+        # List of all filtering checkable button keys
+        checkable_button_keys = [
+            "HAS_LAYERS_TO_FILTER",
+            "HAS_COMBINE_OPERATOR", 
+            "HAS_GEOMETRIC_PREDICATES",
+            "HAS_BUFFER_VALUE",
+            "HAS_BUFFER_TYPE"
+        ]
+        
+        filtering_widgets = self.widgets.get("FILTERING", {})
+        for key in checkable_button_keys:
+            widget_config = filtering_widgets.get(key, {})
+            widget = widget_config.get("WIDGET")
+            if widget:
+                # Enable the checkable button itself
+                widget.setEnabled(True)
+                logger.debug(f"✓ Enabled filtering checkable button: {key}")
 
     def _set_layout_widgets_enabled(self, layout_name: str, enabled: bool):
         """v4.0.3: Enable/disable all widgets in a horizontal layout.
