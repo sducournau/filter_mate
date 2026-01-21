@@ -14,7 +14,7 @@ Location: core/tasks/collectors/feature_collector.py
 """
 
 import logging
-from typing import Optional, List, Dict, Any, Tuple, Union
+from typing import Optional, List, Dict, Any, Tuple, Union, Callable
 from dataclasses import dataclass, field
 
 from qgis.core import QgsVectorLayer, QgsFeature, QgsFeatureRequest
@@ -48,6 +48,7 @@ class FeatureCollector:
     - Extract IDs from expression filter
     - Cache results for performance
     - Support batch processing for large datasets
+    - Support cancellation via cancel_check callback (v4.2.8)
     
     Consolidated from:
     - core/filter/source_filter_builder.py::extract_feature_ids()
@@ -56,7 +57,8 @@ class FeatureCollector:
     Example:
         collector = FeatureCollector(
             layer=source_layer,
-            primary_key_field="id"
+            primary_key_field="id",
+            cancel_check=lambda: task.isCanceled()
         )
         
         # From selection
@@ -72,12 +74,16 @@ class FeatureCollector:
         ids = collector.get_cached_ids()
     """
     
+    # v4.2.8: Interval for cancel checks during iteration
+    CANCEL_CHECK_INTERVAL = 100
+    
     def __init__(
         self,
         layer: Optional[QgsVectorLayer] = None,
         primary_key_field: Optional[str] = None,
         is_pk_numeric: bool = True,
-        cache_enabled: bool = True
+        cache_enabled: bool = True,
+        cancel_check: Optional[Callable[[], bool]] = None
     ):
         """
         Initialize FeatureCollector.
@@ -87,11 +93,13 @@ class FeatureCollector:
             primary_key_field: Name of the primary key field
             is_pk_numeric: Whether the primary key is numeric
             cache_enabled: Whether to cache collection results
+            cancel_check: Optional callback to check for cancellation (v4.2.8)
         """
         self.layer = layer
         self.primary_key_field = primary_key_field
         self.is_pk_numeric = is_pk_numeric
         self.cache_enabled = cache_enabled
+        self._cancel_check = cancel_check
         
         # Cache for collected IDs
         self._cached_ids: Optional[List[Any]] = None
@@ -99,8 +107,14 @@ class FeatureCollector:
         
         logger.debug(
             f"FeatureCollector initialized: pk={primary_key_field}, "
-            f"numeric={is_pk_numeric}, cache={cache_enabled}"
+            f"numeric={is_pk_numeric}, cache={cache_enabled}, cancel_check={cancel_check is not None}"
         )
+    
+    def is_canceled(self) -> bool:
+        """Check if operation should be canceled (v4.2.8)."""
+        if self._cancel_check:
+            return self._cancel_check()
+        return False
     
     def collect_from_selection(self) -> CollectionResult:
         """
@@ -332,16 +346,25 @@ class FeatureCollector:
         Uses attribute(pk_field) for proper DB primary key extraction,
         NOT f.id() which returns QGIS internal FID.
         
+        v4.2.8: Checks for cancellation every CANCEL_CHECK_INTERVAL features.
+        
         Args:
             features: List of features
             
         Returns:
-            List of primary key values
+            List of primary key values (may be partial if canceled)
         """
         ids = []
         pk_field = self.primary_key_field
+        check_interval = self.CANCEL_CHECK_INTERVAL
         
-        for f in features:
+        for i, f in enumerate(features):
+            # v4.2.8: Periodic cancellation check
+            if i > 0 and i % check_interval == 0:
+                if self.is_canceled():
+                    logger.info(f"Feature extraction canceled at {i}/{len(features)} features")
+                    break
+            
             try:
                 if hasattr(f, 'attribute') and pk_field:
                     # Use attribute() for DB primary key

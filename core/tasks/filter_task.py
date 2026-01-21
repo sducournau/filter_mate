@@ -3626,7 +3626,14 @@ class FilterEngineTask(QgsTask):
                 try:
                     if isinstance(self.ogr_source_geom, QgsVectorLayer):
                         all_geoms = []
-                        for feature in self.ogr_source_geom.getFeatures():
+                        # v4.2.8: Add cancellation check during feature iteration
+                        cancel_check_interval = 100
+                        for i, feature in enumerate(self.ogr_source_geom.getFeatures()):
+                            # Periodic cancellation check
+                            if i > 0 and i % cancel_check_interval == 0:
+                                if self.isCanceled():
+                                    logger.info(f"WKT generation canceled at {i} features")
+                                    return None
                             geom = feature.geometry()
                             if geom and not geom.isEmpty():
                                 all_geoms.append(geom)

@@ -265,6 +265,10 @@ class ExpressionBuilder:
         Returns:
             Optional[str]: Source filter SQL or None
         """
+        # FIX 2026-01-21: Import re locally to avoid UnboundLocalError
+        # (Python 3.12 scoping issue with nested imports)
+        import re as regex_module
+        
         # CONSOLE-VISIBLE DIAGNOSTIC
         # print("=" * 80)  # DEBUG REMOVED
         # print("🔍 ExpressionBuilder._prepare_source_filter() CALLED")  # DEBUG REMOVED
@@ -310,10 +314,10 @@ class ExpressionBuilder:
             logger.info(f"   Contains __SOURCE/EXISTS patterns: {skip_source_subset}")
             if not skip_source_subset:
                 # Also check for MV references (except source selection MVs)
-                skip_source_subset = bool(re.search(
+                skip_source_subset = bool(regex_module.search(
                     r'IN\s*\(\s*SELECT.*FROM\s+["\']?filter_mate_temp["\']?\s*\.\s*["\']?.*mv_(?!.*src_sel_)',
                     source_subset,
-                    re.IGNORECASE | re.DOTALL
+                    regex_module.IGNORECASE | regex_module.DOTALL
                 ))
                 logger.info(f"   Contains MV reference pattern: {skip_source_subset}")
             
@@ -615,7 +619,7 @@ class ExpressionBuilder:
                     # Example: WHERE ST_Intersects(..., __source.geom) with __source=zone_pop
                     #          cannot be reused when __source=ducts in distant layer filter
                     
-                    where_match = re.search(r'WHERE\s+(.+)', source_subset, re.IGNORECASE | re.DOTALL)
+                    where_match = regex_module.search(r'WHERE\s+(.+)', source_subset, regex_module.IGNORECASE | regex_module.DOTALL)
                     if where_match:
                         where_clause = where_match.group(1).strip()
                         
@@ -677,8 +681,7 @@ class ExpressionBuilder:
                                 if has_exists_keyword:
                                     logger.warning(f"   ⚠️ EXISTS keyword found but not extracted - possible parsing bug!")
                                     # Log position of first EXISTS for debug
-                                    import re
-                                    exists_pos = re.search(r'exists\s*\(', where_clause, re.IGNORECASE)
+                                    exists_pos = regex_module.search(r'exists\s*\(', where_clause, regex_module.IGNORECASE)
                                     if exists_pos:
                                         logger.debug(f"   → First EXISTS at position {exists_pos.start()}: "
                                                     f"'{where_clause[exists_pos.start():exists_pos.start()+50]}...'")
@@ -797,8 +800,6 @@ class ExpressionBuilder:
         Returns:
             dict: Parsed components with optimization strategy
         """
-        import re
-        
         result = {
             'exists_subqueries': [],
             'field_conditions': [],

@@ -503,16 +503,23 @@ class OGRSourceContext:
     get_buffer_distance_parameter: Optional[Callable] = None
 
 
-def validate_task_features(task_features: list, layer: Any = None) -> tuple:
+def validate_task_features(
+    task_features: list,
+    layer: Any = None,
+    cancel_check: Optional[Callable[[], bool]] = None
+) -> tuple:
     """
     Validate QgsFeature objects from task parameters.
     
     EPIC-1 Phase E4-S7: Extracted validation logic from prepare_ogr_source_geom().
     Handles thread-safety issues where QgsFeature objects become invalid.
     
+    v4.2.8: Added cancel_check parameter for cancellation support.
+    
     Args:
         task_features: List of QgsFeature objects or feature-like objects
         layer: Source layer for FID recovery fallback
+        cancel_check: Optional callback to check for cancellation (v4.2.8)
         
     Returns:
         tuple: (valid_features: list, invalid_count: int, recovered_via_fids: bool)
@@ -520,8 +527,15 @@ def validate_task_features(task_features: list, layer: Any = None) -> tuple:
     valid_features = []
     invalid_count = 0
     recovered_via_fids = False
+    cancel_check_interval = 100  # v4.2.8: Check every 100 features
     
-    for f in task_features:
+    for i, f in enumerate(task_features):
+        # v4.2.8: Periodic cancellation check
+        if cancel_check and i > 0 and i % cancel_check_interval == 0:
+            if cancel_check():
+                logger.info(f"[OGR] Feature validation canceled at {i}/{len(task_features)} features")
+                break
+        
         if f is None or f == "":
             continue
         try:

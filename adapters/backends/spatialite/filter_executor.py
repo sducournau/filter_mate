@@ -167,16 +167,23 @@ def determine_spatialite_source_mode(context: SpatialiteSourceContext) -> Tuple[
         return SourceMode.FALLBACK, metadata
 
 
-def validate_spatialite_features(task_features: List, layer: Any = None) -> Tuple[List, int, int]:
+def validate_spatialite_features(
+    task_features: List,
+    layer: Any = None,
+    cancel_check: Optional[Callable[[], bool]] = None
+) -> Tuple[List, int, int]:
     """
     Validate QgsFeature objects from task parameters.
     
     EPIC-1 Phase E4-S8: Extracted validation logic.
     Handles thread-safety issues where QgsFeature objects become invalid.
     
+    v4.2.8: Added cancel_check parameter for cancellation support.
+    
     Args:
         task_features: List of QgsFeature objects
         layer: Source layer for fallback info
+        cancel_check: Optional callback to check for cancellation
         
     Returns:
         tuple: (valid_features: list, validation_errors: int, skipped_no_geometry: int)
@@ -184,8 +191,15 @@ def validate_spatialite_features(task_features: List, layer: Any = None) -> Tupl
     valid_features = []
     validation_errors = 0
     skipped_no_geometry = 0
+    cancel_check_interval = 100  # v4.2.8: Check every 100 features
     
     for i, f in enumerate(task_features):
+        # v4.2.8: Periodic cancellation check
+        if cancel_check and i > 0 and i % cancel_check_interval == 0:
+            if cancel_check():
+                logger.info(f"[Spatialite] Feature validation canceled at {i}/{len(task_features)} features")
+                break
+        
         try:
             if f is None or f == "":
                 continue
@@ -344,7 +358,8 @@ def resolve_spatialite_features(
 
 def process_spatialite_geometries(
     features: List,
-    context: SpatialiteSourceContext
+    context: SpatialiteSourceContext,
+    cancel_check: Optional[Callable[[], bool]] = None
 ) -> Optional[str]:
     """
     Process geometries from features into WKT for Spatialite.
@@ -352,12 +367,15 @@ def process_spatialite_geometries(
     EPIC-1 Phase E4-S8: Extracted geometry processing logic.
     Handles reprojection, centroid conversion, union, simplification.
     
+    v4.2.8: Added cancel_check parameter for cancellation support.
+    
     Args:
         features: List of QgsFeature objects
         context: SpatialiteSourceContext with processing parameters
+        cancel_check: Optional callback to check for cancellation
         
     Returns:
-        str: WKT string or None if processing failed
+        str: WKT string or None if processing failed or canceled
     """
     from qgis.core import QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsGeometry, QgsWkbTypes
     
@@ -388,7 +406,16 @@ def process_spatialite_geometries(
         transform = QgsCoordinateTransform(source_crs_obj, target_crs, context.PROJECT)
         logger.debug(f"[Spatialite] Will reproject from {context.source_crs.authid()} to {context.source_layer_crs_authid}")
     
-    for geometry in raw_geometries:
+    # v4.2.8: Cancel check interval for geometry processing loop
+    cancel_check_interval = 100
+    
+    for i, geometry in enumerate(raw_geometries):
+        # v4.2.8: Periodic cancellation check
+        if cancel_check and i > 0 and i % cancel_check_interval == 0:
+            if cancel_check():
+                logger.info(f"[Spatialite] Geometry processing canceled at {i}/{len(raw_geometries)} geometries")
+                return None
+        
         if geometry.isEmpty():
             continue
             

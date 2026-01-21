@@ -502,6 +502,12 @@ class ParallelFilterExecutor:
                 db_layer_counts[db_path] = db_layer_counts.get(db_path, 0) + 1
         
         for i, (layer, layer_props) in enumerate(layers):
+            # v4.2.8: Check for cancellation at the start of each layer processing
+            # This ensures quicker response to user cancellation requests
+            if cancel_check and cancel_check():
+                logger.info(f"⚠️ Sequential filtering canceled before layer {i+1}/{len(layers)}")
+                break
+            
             # FIX v3.0.9: DISABLED cancel_check during distant layer filtering
             # RATIONALE: Once distant layer filtering has started, we MUST complete all layers.
             # The cancel_check (which calls QgsTask.isCanceled()) can return True spuriously when:
