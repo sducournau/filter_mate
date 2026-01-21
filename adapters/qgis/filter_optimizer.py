@@ -17,6 +17,7 @@ from qgis.core import (
     QgsVectorLayer,
     QgsFeature,
     QgsFeatureRequest,
+    QgsFeatureSource,
     QgsGeometry,
     QgsRectangle,
     QgsSpatialIndex,
@@ -129,9 +130,11 @@ class QgisSelectivityEstimator(ISelectivityEstimator):
             )
         
         # Check spatial index
+        # NOTE: hasSpatialIndex() returns QgsFeatureSource.SpatialIndexPresence enum:
+        #   0 = SpatialIndexUnknown, 1 = SpatialIndexNotPresent, 2 = SpatialIndexPresent
         has_spatial_index = False
         if hasattr(layer, 'hasSpatialIndex'):
-            has_spatial_index = layer.hasSpatialIndex()
+            has_spatial_index = layer.hasSpatialIndex() == QgsFeatureSource.SpatialIndexPresent
         
         stats = LayerStatistics(
             feature_count=feature_count,

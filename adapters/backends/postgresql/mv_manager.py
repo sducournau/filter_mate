@@ -5,12 +5,16 @@ FilterMate Materialized View Manager - ARCH-036
 Manages materialized views for PostgreSQL filter optimization.
 Extracted from monolithic postgresql_backend.py as part of Phase 4.
 
+v4.2: Now implements MaterializedViewPort interface for unified API
+across PostgreSQL (materialized views) and Spatialite (temp tables).
+
 Features:
 - MV creation with proper naming conventions
 - MV refresh strategies (full, incremental)
 - MV lifecycle management
 - Session-scoped MV tracking
 - Statistics and monitoring
+- Unified interface with Spatialite
 
 Author: FilterMate Team
 Date: January 2026
@@ -18,16 +22,28 @@ Date: January 2026
 
 import logging
 import hashlib
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Tuple, Any
 from dataclasses import dataclass
 from datetime import datetime
+
+# Import port interface
+from ....core.ports.materialized_view_port import (
+    MaterializedViewPort,
+    ViewType,
+    ViewInfo,
+    ViewConfig
+)
 
 logger = logging.getLogger('FilterMate.PostgreSQL.MVManager')
 
 
 @dataclass
 class MVInfo:
-    """Information about a materialized view."""
+    """
+    Information about a materialized view.
+    
+    Note: Kept for backwards compatibility. New code should use ViewInfo.
+    """
     name: str
     schema: str
     created_at: datetime
@@ -37,24 +53,62 @@ class MVInfo:
     is_populated: bool
     definition: str
     session_id: Optional[str] = None
+    
+    def to_view_info(self) -> ViewInfo:
+        """Convert to unified ViewInfo."""
+        return ViewInfo(
+            name=self.name,
+            view_type=ViewType.MATERIALIZED_VIEW,
+            schema=self.schema,
+            created_at=self.created_at,
+            last_refresh=self.last_refresh,
+            row_count=self.row_count,
+            size_bytes=self.size_bytes,
+            is_populated=self.is_populated,
+            definition=self.definition,
+            session_id=self.session_id
+        )
 
 
 @dataclass
 class MVConfig:
-    """Configuration for materialized view creation."""
-    feature_threshold: int = 10000
-    complexity_threshold: int = 3
+    """
+    Configuration for materialized view creation.
+    
+    v4.2.12: Increased thresholds - MV only for very large/complex cases.
+    
+    Note: Kept for backwards compatibility. New code should use ViewConfig.
+    """
+    feature_threshold: int = 100000  # v4.2.12: Increased from 10k to 100k
+    complexity_threshold: int = 5     # v4.2.12: Increased from 3 to 5
     auto_refresh: bool = True
     refresh_on_change: bool = True
     concurrent_refresh: bool = True
     with_data: bool = True
     create_spatial_index: bool = True
     create_btree_indexes: bool = True
+    
+    def to_view_config(self) -> ViewConfig:
+        """Convert to unified ViewConfig."""
+        return ViewConfig(
+            feature_threshold=self.feature_threshold,
+            complexity_threshold=self.complexity_threshold,
+            with_data=self.with_data,
+            create_spatial_index=self.create_spatial_index,
+            create_btree_indexes=self.create_btree_indexes,
+            auto_refresh=self.auto_refresh,
+            refresh_on_change=self.refresh_on_change,
+            concurrent_refresh=self.concurrent_refresh,
+            prefix="fm_mv_",
+            schema="filtermate_temp"
+        )
 
 
-class MaterializedViewManager:
+class MaterializedViewManager(MaterializedViewPort):
     """
     Manages materialized views for PostgreSQL filter optimization.
+    
+    Implements MaterializedViewPort interface for unified API with Spatialite.
 
     Materialized views are used to pre-compute expensive filter
     results for large datasets or complex expressions.
@@ -63,17 +117,20 @@ class MaterializedViewManager:
         mv_manager = MaterializedViewManager(connection_pool)
 
         # Create MV for expensive filter
-        mv_name = mv_manager.create_mv(
+        mv_name = mv_manager.create_view(
             query="SELECT * FROM roads WHERE type = 'highway'",
             source_table="roads",
             geometry_column="geom"
         )
 
         # Query using MV
-        results = mv_manager.query_mv(mv_name, additional_filter)
+        results = mv_manager.query_view(mv_name)
 
         # Refresh when source data changes
-        mv_manager.refresh_mv(mv_name)
+        mv_manager.refresh_view(mv_name)
+        
+        # Get feature IDs
+        fids = mv_manager.get_feature_ids(mv_name, "id")
     """
 
     # Naming conventions
@@ -96,7 +153,8 @@ class MaterializedViewManager:
             session_id: Unique session ID for session-scoped MVs
         """
         self._pool = connection_pool
-        self._config = config or MVConfig()
+        self._mv_config = config or MVConfig()
+        self._view_config = self._mv_config.to_view_config()
         self._session_id = session_id or self._generate_session_id()
         self._created_mvs: Dict[str, MVInfo] = {}
         self._metrics = {
@@ -107,8 +165,17 @@ class MaterializedViewManager:
         }
 
         logger.debug(
-            f"MaterializedViewManager initialized: session={self._session_id[:8]}"
+            f"[PostgreSQL] MaterializedViewManager initialized: session={self._session_id[:8]}"
         )
+    
+    # ==========================================================================
+    # MaterializedViewPort Implementation
+    # ==========================================================================
+    
+    @property
+    def view_type(self) -> ViewType:
+        """Return the type of view this manager creates."""
+        return ViewType.MATERIALIZED_VIEW
 
     @property
     def session_id(self) -> str:
@@ -116,20 +183,25 @@ class MaterializedViewManager:
         return self._session_id
 
     @property
-    def config(self) -> MVConfig:
+    def config(self) -> ViewConfig:
         """Get current configuration."""
-        return self._config
+        return self._view_config
+    
+    @property
+    def mv_config(self) -> MVConfig:
+        """Get legacy MVConfig (for backwards compatibility)."""
+        return self._mv_config
 
     @property
     def metrics(self) -> Dict[str, int]:
         """Get metrics."""
         return self._metrics.copy()
 
-    def should_use_mv(
+    def should_use_view(
         self,
         feature_count: int,
-        expression_complexity: int,
-        is_spatial: bool
+        expression_complexity: int = 1,
+        is_spatial: bool = False
     ) -> bool:
         """
         Determine if materialized view should be used.
@@ -143,18 +215,52 @@ class MaterializedViewManager:
             True if MV would be beneficial
         """
         # Large datasets benefit from MV
-        if feature_count >= self._config.feature_threshold:
+        if feature_count >= self._mv_config.feature_threshold:
             return True
 
         # Complex expressions benefit from MV
-        if expression_complexity >= self._config.complexity_threshold:
+        if expression_complexity >= self._mv_config.complexity_threshold:
             return True
 
         # Spatial queries on medium datasets benefit
-        if is_spatial and feature_count >= self._config.feature_threshold // 2:
+        if is_spatial and feature_count >= self._mv_config.feature_threshold // 2:
             return True
 
         return False
+    
+    # Alias for backwards compatibility
+    should_use_mv = should_use_view
+
+    def create_view(
+        self,
+        query: str,
+        source_table: str,
+        geometry_column: str = "geometry",
+        srid: int = 4326,
+        indexes: Optional[List[str]] = None,
+        session_scoped: bool = True
+    ) -> str:
+        """
+        Create a materialized view (implements MaterializedViewPort).
+
+        Args:
+            query: SELECT query for MV definition
+            source_table: Source table name
+            geometry_column: Geometry column for spatial index
+            srid: Spatial reference ID (not used for PostgreSQL)
+            indexes: Additional columns to index
+            session_scoped: Whether MV is session-scoped
+
+        Returns:
+            Name of created materialized view
+        """
+        return self.create_mv(
+            query=query,
+            source_table=source_table,
+            geometry_column=geometry_column,
+            indexes=indexes,
+            session_scoped=session_scoped
+        )
 
     def create_mv(
         self,
@@ -500,6 +606,85 @@ class MaterializedViewManager:
         except Exception as e:
             logger.error(f"[PostgreSQL] Failed to query MV {mv_name}: {e}")
             return []
+    
+    # ==========================================================================
+    # MaterializedViewPort Interface Methods (remaining)
+    # ==========================================================================
+    
+    def refresh_view(self, view_name: str) -> bool:
+        """Refresh a materialized view (interface implementation)."""
+        return self.refresh_mv(view_name)
+    
+    def drop_view(self, view_name: str, if_exists: bool = True) -> bool:
+        """Drop a materialized view (interface implementation)."""
+        return self.drop_mv(view_name, if_exists=if_exists)
+    
+    def view_exists(self, view_name: str) -> bool:
+        """Check if MV exists (interface implementation)."""
+        return self.mv_exists(view_name)
+    
+    def get_view_info(self, view_name: str) -> Optional[ViewInfo]:
+        """Get view info (interface implementation)."""
+        mv_info = self.get_mv_info(view_name)
+        if mv_info:
+            return mv_info.to_view_info()
+        return None
+    
+    def list_session_views(self) -> List[ViewInfo]:
+        """List all MVs created in current session."""
+        return [
+            info.to_view_info() for info in self._created_mvs.values()
+            if info.session_id == self._session_id
+        ]
+    
+    def cleanup_session_views(self) -> int:
+        """Clean up all session MVs (interface implementation)."""
+        return self.cleanup_session_mvs()
+    
+    def query_view(
+        self,
+        view_name: str,
+        columns: Optional[List[str]] = None,
+        where_clause: Optional[str] = None,
+        limit: Optional[int] = None
+    ) -> List[Any]:
+        """
+        Query a materialized view (interface implementation).
+        
+        Args:
+            view_name: View to query
+            columns: Columns to select (default: all)
+            where_clause: Additional WHERE clause
+            limit: Maximum rows to return
+            
+        Returns:
+            List of result rows
+        """
+        cols = ", ".join(f'"{c}"' for c in columns) if columns else "*"
+        
+        full_where = where_clause or ""
+        if limit:
+            full_where = f"{full_where} LIMIT {limit}" if full_where else f"1=1 LIMIT {limit}"
+        
+        return self.query_mv(view_name, columns=cols, where_clause=full_where if full_where else None)
+    
+    def get_feature_ids(
+        self,
+        view_name: str,
+        primary_key: str = "id"
+    ) -> List[int]:
+        """
+        Get feature IDs from materialized view.
+        
+        Args:
+            view_name: MV to query
+            primary_key: Primary key column name
+            
+        Returns:
+            List of feature IDs
+        """
+        results = self.query_mv(view_name, columns=f'"{primary_key}"')
+        return [row[0] for row in results if row[0] is not None]
 
     # === Private Methods ===
 

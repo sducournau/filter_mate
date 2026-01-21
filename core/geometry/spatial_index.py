@@ -12,6 +12,8 @@ Date: January 2026
 import logging
 from typing import Optional
 
+from qgis.core import QgsFeatureSource
+
 logger = logging.getLogger('FilterMate.Core.Geometry.SpatialIndex')
 
 
@@ -37,7 +39,11 @@ def verify_and_create_spatial_index(layer, layer_name: Optional[str] = None) -> 
     display_name = layer_name or layer.name()
     
     # Check if layer already has spatial index
-    if layer.hasSpatialIndex():
+    # NOTE: hasSpatialIndex() returns an enum QgsFeatureSource.SpatialIndexPresence:
+    #   0 = SpatialIndexUnknown
+    #   1 = SpatialIndexNotPresent
+    #   2 = SpatialIndexPresent
+    if layer.hasSpatialIndex() == QgsFeatureSource.SpatialIndexPresent:
         logger.debug(f"Spatial index already exists for layer: {display_name}")
         return True
     
@@ -67,16 +73,21 @@ def has_spatial_index(layer) -> bool:
     """
     Check if a layer has a spatial index.
     
+    Note: hasSpatialIndex() returns an enum QgsFeatureSource.SpatialIndexPresence:
+        - 0 = SpatialIndexUnknown
+        - 1 = SpatialIndexNotPresent  
+        - 2 = SpatialIndexPresent
+    
     Args:
         layer: QgsVectorLayer to check
         
     Returns:
-        bool: True if index exists, False otherwise
+        bool: True if index is confirmed present, False otherwise
     """
     if not layer or not layer.isValid():
         return False
     
     try:
-        return layer.hasSpatialIndex()
+        return layer.hasSpatialIndex() == QgsFeatureSource.SpatialIndexPresent
     except Exception:
         return False

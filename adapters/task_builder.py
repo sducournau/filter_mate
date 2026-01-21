@@ -213,8 +213,14 @@ class TaskParameterBuilder:
                 dw.mQgsDoubleSpinBox_filtering_buffer_value.value()
             )
         
-        if hasattr(dw, 'mQgsSpinBox_filtering_buffer_segments'):
+        # Buffer segments: only use spinbox value if buffer_type button is checked and spinbox is valid
+        if (hasattr(dw, 'pushButton_checkable_filtering_buffer_type') and 
+            dw.pushButton_checkable_filtering_buffer_type.isChecked() and
+            hasattr(dw, 'mQgsSpinBox_filtering_buffer_segments') and
+            dw.mQgsSpinBox_filtering_buffer_segments.value() >= 1):
             config.buffer_segments = dw.mQgsSpinBox_filtering_buffer_segments.value()
+        else:
+            config.buffer_segments = 5  # Default value
         
         if hasattr(dw, 'comboBox_filtering_buffer_type'):
             config.buffer_type = dw.comboBox_filtering_buffer_type.currentText()
@@ -568,14 +574,24 @@ class TaskParameterBuilder:
                 task_parameters["filtering"]["buffer_value"] = current_val
                 self._project_layers[layer_id]["filtering"]["buffer_value"] = current_val
         
-        # SYNC buffer_segments
-        if hasattr(dw, 'mQgsSpinBox_filtering_buffer_segments'):
-            current_val = dw.mQgsSpinBox_filtering_buffer_segments.value()
-            stored_val = task_parameters["filtering"].get("buffer_segments", 5)
-            if current_val != stored_val:
-                logger.info(f"SYNC buffer_segments: {stored_val} → {current_val}")
-                task_parameters["filtering"]["buffer_segments"] = current_val
-                self._project_layers[layer_id]["filtering"]["buffer_segments"] = current_val
+        # SYNC buffer_segments (only if buffer_type button is checked and spinbox is valid)
+        buffer_type_checked = (
+            hasattr(dw, 'pushButton_checkable_filtering_buffer_type') and
+            dw.pushButton_checkable_filtering_buffer_type.isChecked()
+        )
+        if buffer_type_checked and hasattr(dw, 'mQgsSpinBox_filtering_buffer_segments'):
+            spinbox_val = dw.mQgsSpinBox_filtering_buffer_segments.value()
+            if spinbox_val >= 1:
+                current_val = spinbox_val
+            else:
+                current_val = 5  # Default value
+        else:
+            current_val = 5  # Default value when not checked
+        stored_val = task_parameters["filtering"].get("buffer_segments", 5)
+        if current_val != stored_val:
+            logger.info(f"SYNC buffer_segments: {stored_val} → {current_val}")
+            task_parameters["filtering"]["buffer_segments"] = current_val
+            self._project_layers[layer_id]["filtering"]["buffer_segments"] = current_val
         
         # SYNC buffer_type
         if hasattr(dw, 'comboBox_filtering_buffer_type'):

@@ -58,6 +58,14 @@ from .backend_services import (
     PostgreSQLAvailability,
 )
 
+# Materialized View Port (v4.2 - unified MV/temp table interface)
+from .materialized_view_port import (
+    MaterializedViewPort,
+    ViewType,
+    ViewInfo,
+    ViewConfig,
+)
+
 __all__ = [
     # Backend
     'BackendPort',
@@ -89,4 +97,9 @@ __all__ = [
     'get_backend_services',
     'get_postgresql_available',
     'PostgreSQLAvailability',
+    # Materialized View Port (v4.2)
+    'MaterializedViewPort',
+    'ViewType',
+    'ViewInfo',
+    'ViewConfig',
 ]

@@ -252,9 +252,30 @@ class FilterOrchestrator:
             # ==========================================
             # 7. BACKEND EXECUTION
             # ==========================================
-            # print(f"🎯 Calling backend.apply_filter() for {layer.name()}...")  # DEBUG REMOVED
+            # FIX v4.2.13: Enhanced logging before apply_filter for debugging PostgreSQL failures
+            logger.info("=" * 80)
+            logger.info("🎯 STEP 7: BACKEND EXECUTION")
+            logger.info("=" * 80)
+            logger.info(f"   Backend: {backend_name.upper()}")
+            logger.info(f"   Layer: {layer.name()}")
+            logger.info(f"   Expression length: {len(expression)} chars")
+            logger.info(f"   Old subset: {bool(old_subset)}")
+            logger.info(f"   Combine operator: {combine_operator}")
+            
+            # Log full expression for PostgreSQL debugging
+            if backend_name == 'postgresql':
+                logger.info(f"   📝 Full PostgreSQL expression:")
+                logger.info(f"   {expression}")
+            
             result = backend.apply_filter(layer, expression, old_subset, combine_operator)
-            # print(f"   backend.apply_filter() returned: {result}")  # DEBUG REMOVED
+            
+            logger.info(f"   → apply_filter() result: {result}")
+            if not result:
+                logger.warning(f"   ❌ Backend {backend_name.upper()} FAILED for {layer.name()}")
+            else:
+                logger.info(f"   ✓ Backend {backend_name.upper()} succeeded for {layer.name()}")
+            
+            logger.info("=" * 80)
             
             # Collect warnings from backend
             self._collect_backend_warnings(backend)

@@ -25,6 +25,8 @@ import logging
 import threading
 from typing import Dict, Optional, Any
 
+from qgis.core import QgsVectorLayer, QgsExpression
+
 logger = logging.getLogger('FilterMate.Backend.OGR.ExpressionBuilder')
 
 # Import the port interface
@@ -288,6 +290,7 @@ class OGRExpressionBuilder(GeometricFilterPort):
             params = json.loads(expression) if expression else {}
             predicates = params.get('predicates', ['intersects'])
             buffer_value = params.get('buffer_value')
+            buffer_expression = params.get('buffer_expression')
             
             # Get source layer
             source_layer = self.source_geom
@@ -302,6 +305,22 @@ class OGRExpressionBuilder(GeometricFilterPort):
             
             self.log_info(f"📍 Applying OGR filter to {layer.name()}")
             self.log_info(f"  - Source: {source_layer.name()} ({source_layer.featureCount()} features)")
+            
+            # FIX v4.2.11: Apply buffer to source layer if needed (static or dynamic)
+            if buffer_expression and buffer_expression.strip():
+                self.log_info(f"  - Applying dynamic buffer expression: {buffer_expression[:50]}...")
+                source_layer = self._apply_buffer_expression_to_layer(source_layer, buffer_expression)
+                if source_layer is None:
+                    self.log_error("Failed to apply buffer expression")
+                    return False
+                self.log_info(f"  - Buffered source: {source_layer.featureCount()} features")
+            elif buffer_value is not None and buffer_value != 0:
+                self.log_info(f"  - Applying static buffer: {buffer_value}m")
+                source_layer = self._apply_buffer_to_layer(source_layer, buffer_value)
+                if source_layer is None:
+                    self.log_error("Failed to apply buffer")
+                    return False
+                self.log_info(f"  - Buffered source: {source_layer.featureCount()} features")
             
             # Map predicates to QGIS codes
             predicate_codes = []
@@ -587,6 +606,217 @@ class OGRExpressionBuilder(GeometricFilterPort):
         # Always use quoted field name for PostgreSQL
         return f'"{pk_field}" IN ({value_list})'
     
+    def _apply_buffer_to_layer(
+        self,
+        layer: 'QgsVectorLayer',
+        buffer_value: float
+    ) -> Optional['QgsVectorLayer']:
+        """
+        Apply static buffer to source layer using QGIS processing.
+        
+        FIX v4.2.11: Add support for static buffer via processing.
+        
+        Args:
+            layer: Source layer to buffer
+            buffer_value: Buffer distance in layer units
+            
+        Returns:
+            Buffered memory layer, or None on failure
+        """
+        try:
+            from qgis import processing
+            
+            result = processing.run(
+                'native:buffer',
+                {
+                    'INPUT': layer,
+                    'DISTANCE': buffer_value,
+                    'SEGMENTS': 8,
+                    'END_CAP_STYLE': 0,  # Round
+                    'JOIN_STYLE': 0,  # Round
+                    'MITER_LIMIT': 2,
+                    'DISSOLVE': False,
+                    'OUTPUT': 'memory:'
+                },
+                feedback=self._feedback if hasattr(self, '_feedback') else None
+            )
+            
+            buffered_layer = result.get('OUTPUT')
+            if buffered_layer and isinstance(buffered_layer, QgsVectorLayer):
+                self._source_layer_keep_alive.append(buffered_layer)
+                return buffered_layer
+                
+            self.log_error("Buffer processing returned no valid layer")
+            return None
+            
+        except Exception as e:
+            self.log_error(f"Failed to apply static buffer: {e}")
+            return None
+    
+    def _apply_buffer_expression_to_layer(
+        self,
+        layer: 'QgsVectorLayer',
+        buffer_expression: str
+    ) -> Optional['QgsVectorLayer']:
+        """
+        Apply dynamic buffer expression to source layer.
+        
+        FIX v4.2.12: Support QGIS expressions for dynamic buffer values.
+        Strategy:
+        1. Try native:bufferbym if expression is a simple field reference
+        2. Fallback to computing average buffer and using static buffer
+        3. Last resort: extract numeric default from expression
+        
+        Args:
+            layer: Source layer to buffer
+            buffer_expression: QGIS expression returning buffer distance
+            
+        Returns:
+            Buffered memory layer, or None on failure
+        """
+        try:
+            from qgis import processing
+            from qgis.core import QgsExpressionContext, QgsExpressionContextUtils
+            import re
+            
+            self.log_debug(f"Dynamic buffer expression: {buffer_expression}")
+            
+            # Strategy 1: Check if it's a simple field reference - use bufferbym
+            field_match = re.match(r'^"?(\w+)"?$', buffer_expression.strip())
+            if field_match:
+                field_name = field_match.group(1)
+                if field_name in [f.name() for f in layer.fields()]:
+                    self.log_info(f"  Using native:bufferbym with field '{field_name}'")
+                    try:
+                        result = processing.run(
+                            'native:bufferbym',
+                            {
+                                'INPUT': layer,
+                                'FIELD': field_name,
+                                'SEGMENTS': 8,
+                                'END_CAP_STYLE': 0,
+                                'JOIN_STYLE': 0,
+                                'MITER_LIMIT': 2,
+                                'OUTPUT': 'memory:'
+                            },
+                            feedback=self._feedback if hasattr(self, '_feedback') else None
+                        )
+                        buffered_layer = result.get('OUTPUT')
+                        if buffered_layer and isinstance(buffered_layer, QgsVectorLayer):
+                            self._source_layer_keep_alive.append(buffered_layer)
+                            self.log_info(f"  ✅ Dynamic buffer (field) applied successfully")
+                            return buffered_layer
+                    except Exception as e:
+                        self.log_warning(f"  bufferbym failed: {e}, trying alternatives")
+            
+            # Strategy 2: Compute average buffer value from expression and use static buffer
+            self.log_info(f"  Computing average buffer from expression...")
+            avg_buffer = self._compute_average_buffer(layer, buffer_expression)
+            
+            if avg_buffer is not None and avg_buffer > 0:
+                self.log_info(f"  Using computed average buffer: {avg_buffer:.2f}m")
+                return self._apply_buffer_to_layer(layer, avg_buffer)
+            
+            # Strategy 3: Fallback to extracting numeric default
+            return self._fallback_buffer_from_expression(layer, buffer_expression)
+            
+        except Exception as e:
+            self.log_error(f"Failed to apply dynamic buffer: {e}")
+            return self._fallback_buffer_from_expression(layer, buffer_expression)
+    
+    def _compute_average_buffer(
+        self,
+        layer: 'QgsVectorLayer',
+        buffer_expression: str
+    ) -> Optional[float]:
+        """
+        Compute average buffer value by evaluating expression on sample features.
+        
+        Args:
+            layer: Source layer
+            buffer_expression: QGIS expression returning buffer distance
+            
+        Returns:
+            Average buffer value, or None if cannot compute
+        """
+        try:
+            from qgis.core import (
+                QgsExpression, QgsExpressionContext, 
+                QgsExpressionContextUtils, QgsFeatureRequest
+            )
+            
+            expr = QgsExpression(buffer_expression)
+            if expr.hasParserError():
+                self.log_warning(f"  Expression parse error: {expr.parserErrorString()}")
+                return None
+            
+            # Sample up to 100 features for average
+            context = QgsExpressionContext()
+            context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(layer))
+            
+            buffer_values = []
+            request = QgsFeatureRequest().setLimit(100)
+            
+            for feature in layer.getFeatures(request):
+                context.setFeature(feature)
+                result = expr.evaluate(context)
+                if result is not None:
+                    try:
+                        val = float(result)
+                        if val > 0:  # Only positive buffers
+                            buffer_values.append(val)
+                    except (TypeError, ValueError):
+                        pass
+            
+            if buffer_values:
+                avg = sum(buffer_values) / len(buffer_values)
+                self.log_debug(f"  Computed average buffer from {len(buffer_values)} features: {avg:.2f}")
+                return avg
+            
+            return None
+            
+        except Exception as e:
+            self.log_warning(f"  Could not compute average buffer: {e}")
+            return None
+    
+    def _fallback_buffer_from_expression(
+        self,
+        layer: 'QgsVectorLayer',
+        buffer_expression: str
+    ) -> Optional['QgsVectorLayer']:
+        """
+        Fallback: extract numeric default from expression and apply static buffer.
+        
+        Handles expressions like 'if("field" > 100, 50, 10)' by extracting
+        the else value (10) as a safe default.
+        
+        Args:
+            layer: Source layer
+            buffer_expression: Original expression that failed
+            
+        Returns:
+            Statically buffered layer, or original layer
+        """
+        import re
+        
+        self.log_warning(f"Using fallback for expression: {buffer_expression}")
+        
+        # Try to extract a default numeric value
+        # Pattern: if(..., ..., DEFAULT) - get the last number
+        numbers = re.findall(r'[-+]?\d*\.?\d+', buffer_expression)
+        
+        if numbers:
+            try:
+                # Use the last number as default (else clause)
+                default_buffer = float(numbers[-1])
+                self.log_info(f"  Fallback buffer value: {default_buffer}")
+                return self._apply_buffer_to_layer(layer, default_buffer)
+            except ValueError:
+                pass
+        
+        self.log_warning("Could not extract default buffer, using original layer")
+        return layer
+
     def _get_primary_key(self, layer) -> str:
         """
         Get primary key field name with improved detection (v4.0.7).

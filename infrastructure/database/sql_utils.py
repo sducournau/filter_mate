@@ -76,15 +76,47 @@ def safe_set_subset_string(layer, subset_expression: str) -> bool:
     
     try:
         if hasattr(layer, 'setSubsetString'):
+            # FIX v4.2.13: Enhanced diagnostics for setSubsetString failures
+            logger.debug(f"[SQL] Applying subset to layer '{layer.name()}':")
+            logger.debug(f"[SQL]   Provider: {layer.providerType()}")
+            logger.debug(f"[SQL]   Expression length: {len(subset_expression) if subset_expression else 0} chars")
+            if subset_expression:
+                # Log first 500 chars of expression for debugging
+                preview = subset_expression[:500]
+                if len(subset_expression) > 500:
+                    preview += f"... ({len(subset_expression) - 500} more chars)"
+                logger.debug(f"[SQL]   Expression: {preview}")
+            
             result = layer.setSubsetString(subset_expression)
+            
             if not result:
                 logger.warning(f"setSubsetString returned False for layer {layer.name()}")
+                # Additional diagnostics for failure
+                logger.warning(f"[SQL] ❌ FAILED - Diagnostics:")
+                logger.warning(f"[SQL]   Layer source: {layer.source()[:200]}...")
+                logger.warning(f"[SQL]   Feature count before: {layer.featureCount()}")
+                logger.warning(f"[SQL]   Current subset: {layer.subsetString()[:200] if layer.subsetString() else 'None'}...")
+                
+                # Try to get provider error
+                try:
+                    provider = layer.dataProvider()
+                    if provider and hasattr(provider, 'error') and provider.error():
+                        logger.warning(f"[SQL]   Provider error: {provider.error().message()}")
+                except Exception as diag_e:
+                    logger.debug(f"[SQL]   Could not get provider error: {diag_e}")
+                
+                # Log the full expression to a separate line for easy copy/paste
+                logger.warning(f"[SQL] Full expression that FAILED:\n{subset_expression}")
+            else:
+                logger.debug(f"[SQL] ✓ Success - {layer.featureCount()} features after filter")
+            
             return result
         else:
             logger.error(f"Layer {layer.name()} does not have setSubsetString method")
             return False
     except Exception as e:
         logger.error(f"Error setting subset string on layer {layer.name()}: {e}")
+        logger.error(f"[SQL] Exception details - Expression:\n{subset_expression}")
         return False
 
 

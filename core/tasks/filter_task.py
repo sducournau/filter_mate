@@ -1639,6 +1639,12 @@ class FilterEngineTask(QgsTask):
         self.param_source_old_subset = params.old_subset
         self.source_layer_fields_names = params.field_names
         
+        # FIX v4.2.12 (2026-01-21): Update task_parameters with source table info
+        # This is critical for ExpressionBuilder to access param_source_table
+        # which is needed for adapting EXISTS clauses when filtering distant layers
+        self.task_parameters['param_source_table'] = params.table_name
+        self.task_parameters['param_source_schema'] = params.schema
+        
         logger.debug(
             f"Filtering layer: {self.param_source_layer_name} "
             f"(table: {self.param_source_table}, Provider: {self.param_source_provider_type})"

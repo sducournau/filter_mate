@@ -205,8 +205,9 @@ class SpatialiteExpressionBuilder(GeometricFilterPort):
         self.log_debug(f"SRIDs: source={source_srid}, target={target_srid}")
         
         # Build source geometry SQL
+        # FIX v4.2.11: Pass buffer_expression for dynamic buffer support
         source_geom_sql = self._build_source_geometry_sql(
-            source_geom, source_srid, target_srid, buffer_value
+            source_geom, source_srid, target_srid, buffer_value, buffer_expression
         )
         
         # Build predicate expressions
@@ -377,9 +378,21 @@ class SpatialiteExpressionBuilder(GeometricFilterPort):
         source_wkt: str,
         source_srid: int,
         target_srid: int,
-        buffer_value: Optional[float]
+        buffer_value: Optional[float],
+        buffer_expression: Optional[str] = None
     ) -> str:
-        """Build SQL for source geometry."""
+        """
+        Build SQL for source geometry.
+        
+        FIX v4.2.11: Added buffer_expression support for dynamic buffer.
+        
+        Args:
+            source_wkt: WKT string of source geometry
+            source_srid: Source SRID
+            target_srid: Target SRID for transformation
+            buffer_value: Static buffer value
+            buffer_expression: Dynamic buffer expression (QGIS syntax)
+        """
         # Escape single quotes in WKT
         escaped_wkt = source_wkt.replace("'", "''")
         
@@ -394,8 +407,18 @@ class SpatialiteExpressionBuilder(GeometricFilterPort):
             source_geom_sql = f"Transform({source_geom_sql}, {target_srid})"
             self.log_info(f"Applying CRS transform: {source_srid} → {target_srid}")
         
-        # Apply buffer
-        if buffer_value is not None and buffer_value != 0:
+        # FIX v4.2.11: Support dynamic buffer expressions
+        # Priority: buffer_expression (dynamic) > buffer_value (static)
+        if buffer_expression and buffer_expression.strip():
+            # Convert QGIS expression to Spatialite SQL
+            from .filter_executor import qgis_expression_to_spatialite
+            buffer_expr_sql = qgis_expression_to_spatialite(buffer_expression)
+            
+            self.log_info(f"🔧 Applying dynamic buffer expression: {buffer_expr_sql[:100]}...")
+            source_geom_sql = f"Buffer({source_geom_sql}, {buffer_expr_sql})"
+            
+        # Apply static buffer
+        elif buffer_value is not None and buffer_value != 0:
             source_geom_sql = f"Buffer({source_geom_sql}, {buffer_value})"
             self.log_info(f"Applying buffer: {buffer_value}")
             

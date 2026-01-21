@@ -256,6 +256,124 @@ class BackendServices:
             logger.debug(f"OGR filter actions not available: {e}")
             return None
     
+    # ==================== Materialized View Services ====================
+    
+    def get_view_manager_for_layer(self, layer, session_id: Optional[str] = None) -> Optional[Any]:
+        """
+        Get appropriate view manager for a layer.
+        
+        v4.2: Unified API for PostgreSQL MVs and Spatialite temp tables.
+        
+        Args:
+            layer: QgsVectorLayer
+            session_id: Session ID for scoping
+            
+        Returns:
+            MaterializedViewPort implementation or None
+        """
+        try:
+            from ...adapters.view_manager_factory import create_view_manager_for_layer
+            return create_view_manager_for_layer(layer, session_id=session_id)
+        except ImportError as e:
+            logger.debug(f"View manager factory not available: {e}")
+            return None
+    
+    def get_postgresql_mv_manager(
+        self,
+        connection_pool: Any = None,
+        session_id: Optional[str] = None
+    ) -> Optional[Any]:
+        """
+        Get PostgreSQL MaterializedViewManager.
+        
+        Args:
+            connection_pool: Database connection pool
+            session_id: Session ID for scoping
+            
+        Returns:
+            MaterializedViewManager or None
+        """
+        try:
+            from ...adapters.backends.postgresql.mv_manager import (
+                MaterializedViewManager,
+                create_mv_manager
+            )
+            return create_mv_manager(
+                connection_pool=connection_pool,
+                session_id=session_id
+            )
+        except ImportError as e:
+            logger.debug(f"PostgreSQL MV manager not available: {e}")
+            return None
+    
+    def get_spatialite_temp_table_manager(
+        self,
+        db_path: Optional[str] = None,
+        connection: Any = None,
+        session_id: Optional[str] = None
+    ) -> Optional[Any]:
+        """
+        Get Spatialite TempTableManager.
+        
+        v4.2: Spatialite equivalent to PostgreSQL materialized views.
+        
+        Args:
+            db_path: Path to Spatialite database
+            connection: Existing connection
+            session_id: Session ID for scoping
+            
+        Returns:
+            SpatialiteTempTableManager or None
+        """
+        try:
+            from ...adapters.backends.spatialite.temp_table_manager import (
+                SpatialiteTempTableManager,
+                create_temp_table_manager
+            )
+            return create_temp_table_manager(
+                db_path=db_path,
+                connection=connection,
+                session_id=session_id
+            )
+        except ImportError as e:
+            logger.debug(f"Spatialite temp table manager not available: {e}")
+            return None
+    
+    def create_view_manager(
+        self,
+        backend_type: str,
+        connection: Any = None,
+        db_path: Optional[str] = None,
+        session_id: Optional[str] = None
+    ) -> Optional[Any]:
+        """
+        Create a view manager for the specified backend.
+        
+        v4.2: Factory method for unified view management.
+        
+        Args:
+            backend_type: 'postgresql' or 'spatialite'
+            connection: Database connection
+            db_path: Database path (Spatialite only)
+            session_id: Session ID for scoping
+            
+        Returns:
+            MaterializedViewPort implementation or None
+        """
+        try:
+            from ...adapters.view_manager_factory import create_view_manager
+            return create_view_manager(
+                backend_type=backend_type,
+                connection=connection,
+                db_path=db_path,
+                session_id=session_id
+            )
+        except (ImportError, ValueError) as e:
+            logger.debug(f"View manager creation failed: {e}")
+            return None
+    
+    # ==================== OGR Services (continued) ====================
+    
     def cleanup_ogr_temp_layers(self) -> int:
         """
         Cleanup OGR temporary layers.

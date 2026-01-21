@@ -30,7 +30,13 @@ logger = logging.getLogger('FilterMate.Adapters.Backends.PostgreSQL.FilterAction
 # Constants
 # =============================================================================
 
-MATERIALIZED_VIEW_THRESHOLD = 10000  # Features threshold for using materialized views
+# v4.2.12: Increased threshold - MV only for very large datasets
+# MV adds overhead, prefer direct setSubsetString for most cases
+MATERIALIZED_VIEW_THRESHOLD = 100000  # Features threshold for using materialized views
+
+# v4.2.12: Secondary threshold for complex chaining scenarios
+# When filter involves multiple spatial joins (chaining), use lower threshold
+CHAINED_FILTER_MV_THRESHOLD = 50000
 
 # Spatial predicates that indicate expensive expressions requiring materialization
 SPATIAL_PREDICATES = [
@@ -67,6 +73,99 @@ def has_expensive_spatial_expression(sql_string: str) -> bool:
     """
     from ....core.optimization.query_analyzer import has_expensive_spatial_expression as canonical_check
     return canonical_check(sql_string)
+
+
+def _is_chained_spatial_filter(sql_string: str) -> bool:
+    """
+    Check if SQL contains chained spatial filters (multiple EXISTS with spatial predicates).
+    
+    v4.2.12: Detects filter chaining scenarios where MV optimization is beneficial.
+    
+    Patterns detected:
+    - Multiple EXISTS clauses with spatial predicates
+    - JOIN between multiple spatial tables
+    - Nested spatial subqueries
+    
+    Args:
+        sql_string: SQL expression to check
+        
+    Returns:
+        bool: True if filter involves chaining multiple spatial operations
+    """
+    if not sql_string:
+        return False
+    
+    sql_upper = sql_string.upper()
+    
+    # Count EXISTS clauses with spatial predicates
+    exists_count = sql_upper.count('EXISTS (') + sql_upper.count('EXISTS(')
+    
+    # Multiple EXISTS = chaining
+    if exists_count >= 2:
+        logger.debug(f"Detected chained filter: {exists_count} EXISTS clauses")
+        return True
+    
+    # Multiple spatial predicates in different subqueries
+    spatial_predicates = ['ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_DWITHIN']
+    spatial_count = sum(sql_upper.count(pred) for pred in spatial_predicates)
+    
+    if spatial_count >= 2 and exists_count >= 1:
+        logger.debug(f"Detected chained filter: {spatial_count} spatial predicates")
+        return True
+    
+    return False
+
+
+def _is_very_complex_expression(sql_string: str) -> bool:
+    """
+    Check if SQL is very complex, warranting MV even for smaller datasets.
+    
+    v4.2.12: Only returns True for truly expensive patterns that would
+    cause significant slowdown during map rendering.
+    
+    Very complex patterns:
+    - EXISTS + ST_Buffer (buffer computed per row in subquery)
+    - Multiple nested EXISTS
+    - EXISTS with IN clause containing many IDs
+    
+    Args:
+        sql_string: SQL expression to check
+        
+    Returns:
+        bool: True if expression is very complex
+    """
+    if not sql_string:
+        return False
+    
+    sql_upper = sql_string.upper()
+    
+    # Pattern 1: EXISTS + ST_Buffer - very expensive (buffer per row)
+    has_exists = 'EXISTS' in sql_upper
+    has_buffer = 'ST_BUFFER' in sql_upper
+    
+    if has_exists and has_buffer:
+        logger.debug("Very complex: EXISTS + ST_Buffer")
+        return True
+    
+    # Pattern 2: Multiple nested EXISTS (3+)
+    exists_count = sql_upper.count('EXISTS (') + sql_upper.count('EXISTS(')
+    if exists_count >= 3:
+        logger.debug(f"Very complex: {exists_count} nested EXISTS")
+        return True
+    
+    # Pattern 3: EXISTS combined with large IN clause (>500 IDs)
+    if has_exists and ' IN (' in sql_upper:
+        # Rough estimate of IN clause size
+        in_pos = sql_upper.find(' IN (')
+        if in_pos > 0:
+            # Count commas in IN clause (rough approximation)
+            remaining = sql_upper[in_pos:in_pos + 5000]  # Check first 5000 chars
+            comma_count = remaining.count(',')
+            if comma_count > 500:
+                logger.debug(f"Very complex: EXISTS + large IN clause ({comma_count}+ items)")
+                return True
+    
+    return False
 
 
 def should_combine_filters(old_subset: str) -> Tuple[bool, str]:
@@ -192,11 +291,13 @@ def execute_filter_action_postgresql(
     """
     Execute filter action using PostgreSQL backend.
     
+    v4.2.12: Conservative MV usage - direct setSubsetString is preferred.
+    
     Adapts filtering strategy based on dataset size and expression complexity:
-    - Small datasets (< 10k features) with simple expressions: Uses direct setSubsetString
-    - Large datasets (≥ 10k features): Uses materialized views for performance
-    - Custom buffer expressions: Always uses materialized views
-    - Complex expressions (EXISTS + ST_Buffer + ST_Intersects): Always uses materialized views
+    - Most cases: Uses direct setSubsetString (fast, no overhead)
+    - Very large datasets (≥100k features): Uses materialized views
+    - Chained filters (≥50k features): Uses materialized views
+    - Very complex expressions (EXISTS+Buffer, ≥10k): Uses materialized views
     
     Args:
         layer: QgsVectorLayer to filter
@@ -233,31 +334,46 @@ def execute_filter_action_postgresql(
     # Get feature count to determine strategy
     feature_count = layer.featureCount()
     
-    # Check if expression contains complex spatial predicates
-    has_complex_expression = has_expensive_spatial_expression(sql_subset_string)
+    # v4.2.12: More conservative MV usage - only for truly complex cases
+    # MV adds overhead (creation time, cleanup), prefer direct setSubsetString
     
-    # Decide on strategy
-    use_materialized_view = custom or feature_count >= MATERIALIZED_VIEW_THRESHOLD or has_complex_expression
+    # Check complexity indicators
+    has_complex_expression = has_expensive_spatial_expression(sql_subset_string)
+    is_chained_filter = _is_chained_spatial_filter(sql_subset_string)
+    is_very_complex = _is_very_complex_expression(sql_subset_string)
+    
+    # v4.2.12: Decision matrix for MV usage
+    # MV only when: (1) very large dataset, (2) complex chaining, (3) very complex expression
+    use_materialized_view = False
+    mv_reason = ""
+    
+    # Case 1: Very large dataset (>100k) - always use MV
+    if feature_count >= MATERIALIZED_VIEW_THRESHOLD:
+        use_materialized_view = True
+        mv_reason = f"very large dataset ({feature_count:,} features ≥ {MATERIALIZED_VIEW_THRESHOLD:,})"
+    
+    # Case 2: Chained spatial filter with large-ish dataset (>50k)
+    elif is_chained_filter and feature_count >= CHAINED_FILTER_MV_THRESHOLD:
+        use_materialized_view = True
+        mv_reason = f"chained filter with {feature_count:,} features"
+    
+    # Case 3: Very complex expression (multiple EXISTS + buffer + spatial)
+    # Only if dataset is not tiny (>10k) to justify MV overhead
+    elif is_very_complex and feature_count >= 10000:
+        use_materialized_view = True
+        mv_reason = "very complex expression with spatial predicates"
+    
+    # Case 4: Custom buffer expression - evaluate based on complexity
+    # v4.2.12: Don't automatically use MV for custom, only if dataset large enough
+    elif custom and feature_count >= CHAINED_FILTER_MV_THRESHOLD:
+        use_materialized_view = True
+        mv_reason = f"custom buffer expression with {feature_count:,} features"
     
     if use_materialized_view:
         # Log strategy decision
-        if custom:
-            logger.info(f"[PostgreSQL] PostgreSQL: Using materialized views for custom buffer expression")
-        elif has_complex_expression:
-            logger.info(
-                "PostgreSQL: Complex spatial expression detected (EXISTS/ST_Buffer/ST_Intersects). "
-                "Using materialized views to cache result and prevent slow canvas rendering."
-            )
-        elif feature_count >= 100000:
-            logger.info(
-                f"PostgreSQL: Very large dataset ({feature_count:,} features). "
-                "Using materialized views with spatial index for optimal performance."
-            )
-        else:
-            logger.info(
-                f"PostgreSQL: Large dataset ({feature_count:,} features ≥ {MATERIALIZED_VIEW_THRESHOLD:,}). "
-                "Using materialized views for better performance."
-            )
+        logger.info(
+            f"[PostgreSQL] Using materialized view: {mv_reason}"
+        )
         
         return execute_filter_action_postgresql_materialized(
             layer=layer,

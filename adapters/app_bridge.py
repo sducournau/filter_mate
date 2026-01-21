@@ -309,11 +309,18 @@ def layer_info_from_qgis_layer(layer: 'QgsVectorLayer') -> LayerInfo:
 
 
 def _check_spatial_index(layer: 'QgsVectorLayer') -> bool:
-    """Check if layer has spatial index."""
+    """Check if layer has spatial index.
+    
+    Note: hasSpatialIndex() returns QgsFeatureSource.SpatialIndexPresence enum:
+        - 0 = SpatialIndexUnknown
+        - 1 = SpatialIndexNotPresent
+        - 2 = SpatialIndexPresent
+    """
     try:
+        from qgis.core import QgsFeatureSource
         provider = layer.dataProvider()
         if hasattr(provider, 'hasSpatialIndex'):
-            return provider.hasSpatialIndex() in [1, True]
+            return provider.hasSpatialIndex() == QgsFeatureSource.SpatialIndexPresent
     except Exception:
         pass
     return False

@@ -289,7 +289,7 @@ class FilterChainOptimizer:
         # Build source geometry reference (with buffer if needed)
         source_geom = f'__source."{context.source_geom_column}"'
         if context.buffer_value:
-            source_geom = f"ST_Buffer({source_geom}, {context.buffer_value}, 'quad_segs=8')"
+            source_geom = f"ST_Buffer({source_geom}, {context.buffer_value}, 'quad_segs=5')"
         
         # Build optimized EXISTS
         expression = f'''EXISTS (
@@ -425,7 +425,7 @@ class FilterChainOptimizer:
             # Build filter geometry reference
             filter_geom_ref = f'f."{filter_geom}"'
             if filter_buffer:
-                filter_geom_ref = f"ST_Buffer({filter_geom_ref}, {filter_buffer}, 'quad_segs=8')"
+                filter_geom_ref = f"ST_Buffer({filter_geom_ref}, {filter_buffer}, 'quad_segs=5')"
             
             # Build EXISTS subquery
             exists_clause = f'''EXISTS (
@@ -472,7 +472,7 @@ WITH DATA
             # Build source geometry in EXISTS
             src_geom = f'__source."{filter_geom}"'
             if filter_buffer:
-                src_geom = f"ST_Buffer({src_geom}, {filter_buffer}, 'quad_segs=8')"
+                src_geom = f"ST_Buffer({src_geom}, {filter_buffer}, 'quad_segs=5')"
             
             # Build EXISTS
             exists_sql = f'''EXISTS (SELECT 1 FROM "{filter_schema}"."{filter_table}" AS __source WHERE {predicate}("{distant_table}"."{distant_geom_column}", {src_geom})'''

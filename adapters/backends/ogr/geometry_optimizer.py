@@ -79,9 +79,35 @@ def simplify_source_for_ogr_fallback(source_layer, logger=None):
             return source_layer
         
         # Create new memory layer with simplified geometries
+        # FIX v4.2.13: Detect actual geometry type from source layer
+        # to avoid "Cannot add Polygon to Point layer" errors
         crs_authid = source_layer.crs().authid()
+        
+        # Detect geometry type from source layer
+        source_wkb_type = source_layer.wkbType()
+        source_geom_type = QgsWkbTypes.geometryType(source_wkb_type)
+        
+        # Map geometry type to appropriate layer definition
+        # Note: For Point/Line sources, buffers will convert to Polygons
+        # so we check if simplification is for buffered output or raw geometry
+        if source_geom_type == QgsWkbTypes.PointGeometry:
+            # Points - if we expect buffering, use Polygon; else use Point
+            # For OGR fallback with buffer, the result will be polygons
+            layer_type = "MultiPolygon"  # Buffer output is always polygon
+            log_info(f"  Point source detected - using MultiPolygon for buffer output")
+        elif source_geom_type == QgsWkbTypes.LineGeometry:
+            # Lines - buffer output will be polygons
+            layer_type = "MultiPolygon"
+            log_info(f"  Line source detected - using MultiPolygon for buffer output")
+        elif source_geom_type == QgsWkbTypes.PolygonGeometry:
+            layer_type = "MultiPolygon"
+        else:
+            # Unknown or NoGeometry - try MultiPolygon as default
+            layer_type = "MultiPolygon"
+            log_warning(f"  Unknown geometry type {source_wkb_type}, defaulting to MultiPolygon")
+        
         simplified_layer = QgsVectorLayer(
-            f"MultiPolygon?crs={crs_authid}",
+            f"{layer_type}?crs={crs_authid}",
             "ogr_fallback_simplified",
             "memory"
         )
@@ -91,6 +117,14 @@ def simplify_source_for_ogr_fallback(source_layer, logger=None):
             return source_layer
         
         simplified_features = []
+        
+        # FIX v4.2.13: For Point/Line sources, simplification is not applicable
+        # These geometry types should be buffered FIRST, then the buffer result 
+        # (which is a Polygon) can be simplified if needed
+        if source_geom_type != QgsWkbTypes.PolygonGeometry:
+            log_info(f"  Source is not Polygon type (type={source_geom_type}), skipping simplification")
+            log_info(f"  → Buffer should be applied first to create Polygon geometries")
+            return source_layer
         
         for feat in source_layer.getFeatures():
             geom = feat.geometry()

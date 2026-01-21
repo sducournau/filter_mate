@@ -55,6 +55,12 @@ from .interruptible_query import (
 # v4.1.0: Expression Builder (migrated from before_migration)
 from .expression_builder import SpatialiteExpressionBuilder
 
+# v4.2: Temp Table Manager (Spatialite equivalent to PostgreSQL materialized views)
+from .temp_table_manager import (
+    SpatialiteTempTableManager,
+    create_temp_table_manager,
+)
+
 __all__ = [
     # Main backend
     'SpatialiteBackend',
@@ -68,6 +74,9 @@ __all__ = [
     'RTreeIndexManager',
     'IndexInfo',
     'create_index_manager',
+    # v4.2: Temp Table Manager (MV equivalent)
+    'SpatialiteTempTableManager',
+    'create_temp_table_manager',
     # EPIC-1 Phase E4-S8: Source geometry preparation
     'SpatialiteSourceContext',
     'SpatialiteSourceResult',

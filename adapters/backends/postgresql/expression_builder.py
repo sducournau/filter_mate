@@ -282,10 +282,45 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         
         if source_filter and 'EXISTS' in source_filter.upper():
             # Extract EXISTS clauses to combine at the top level
-            from core.filter.expression_combiner import extract_exists_clauses
+            try:
+                from ....core.filter.expression_combiner import extract_exists_clauses, adapt_exists_for_nested_context
+            except ImportError:
+                from core.filter.expression_combiner import extract_exists_clauses, adapt_exists_for_nested_context
             extracted = extract_exists_clauses(source_filter)
             if extracted:
-                exists_clauses_to_combine = [c['sql'] for c in extracted]
+                # FIX v4.2.12 (2026-01-21): Adapt EXISTS clauses for distant layer context
+                # 
+                # Problem: EXISTS clauses extracted from source layer (e.g., demand_points) contain
+                # references to that source table (e.g., "demand_points"."geom"). When these
+                # EXISTS are applied to a distant layer (e.g., ducts), the table reference is invalid
+                # because "demand_points" is not in the FROM clause of the distant layer query.
+                #
+                # Solution: Replace source table references with the distant (target) table name.
+                # Example: ST_PointOnSurface("demand_points"."geom") → ST_PointOnSurface("ducts"."geom")
+                #
+                # The `table` variable contains the distant layer's table name (e.g., "ducts")
+                # The `original_source_table` contains the source layer's table name (e.g., "demand_points")
+                
+                adapted_exists = []
+                for clause_info in extracted:
+                    clause_sql = clause_info['sql']
+                    
+                    # Adapt the EXISTS clause for the distant layer context
+                    if original_source_table and table:
+                        adapted_sql = adapt_exists_for_nested_context(
+                            exists_sql=clause_sql,
+                            original_table=original_source_table,
+                            new_alias=f'"{table}"',  # Replace with target table reference
+                            original_schema=None  # Schema is handled by pattern matching
+                        )
+                        if adapted_sql != clause_sql:
+                            self.log_info(f"🔄 Adapted EXISTS for distant layer: '{original_source_table}' → '{table}'")
+                        adapted_exists.append(adapted_sql)
+                    else:
+                        # No adaptation needed or possible
+                        adapted_exists.append(clause_sql)
+                
+                exists_clauses_to_combine = adapted_exists
                 self.log_info(f"🔗 Filter chaining: Found {len(exists_clauses_to_combine)} EXISTS clause(s) to chain at top level")
                 # Don't pass EXISTS to _build_exists_expression (they go at top level)
                 simple_source_filter = None
@@ -310,7 +345,8 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                     source_filter=simple_source_filter,  # FIX: Only simple filters, not EXISTS
                     buffer_value=buffer_value,
                     layer_props=layer_props,
-                    original_source_table=original_source_table
+                    original_source_table=original_source_table,
+                    buffer_expression=buffer_expression  # FIX v4.2.11: Pass dynamic buffer expression
                 )
             
             if expr:
@@ -565,17 +601,21 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             # print(f"   Calling safe_set_subset_string(layer={layer.name()}, expr_len={len(final_expression)})...")  # DEBUG REMOVED
             
             # Apply filter
+            # FIX v4.2.13: Enhanced logging for debugging failures
+            self.log_info(f"📝 Applying PostgreSQL filter to {layer.name()}:")
+            self.log_info(f"   Expression length: {len(final_expression)} chars")
+            self.log_debug(f"   Expression preview: {final_expression[:300]}...")
+            
             success = safe_set_subset_string(layer, final_expression)
             
-            # print(f"   safe_set_subset_string returned: {success}")  # DEBUG REMOVED
-            
             if success:
-                self.log_info(f"✓ Filter applied successfully")
-                # print(f"✅ Filter applied successfully to {layer.name()}")  # DEBUG REMOVED
+                self.log_info(f"✓ Filter applied successfully to {layer.name()}")
+                self.log_info(f"   → Feature count after filter: {layer.featureCount()}")
             else:
-                self.log_error(f"✗ Failed to apply filter")
-                # print(f"❌ FAILED to apply filter to {layer.name()}!")  # DEBUG REMOVED
-                # print(f"   Expression that failed: {final_expression[:300]}...")  # DEBUG REMOVED
+                self.log_error(f"✗ FAILED to apply filter to {layer.name()}!")
+                self.log_error(f"   → This triggers OGR fallback")
+                # Log the FULL expression for debugging (not truncated)
+                self.log_error(f"   Expression that FAILED:\n{final_expression}")
             
             return success
             
@@ -756,7 +796,8 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         source_filter: Optional[str],
         buffer_value: Optional[float],
         layer_props: Dict,
-        original_source_table: Optional[str] = None
+        original_source_table: Optional[str] = None,
+        buffer_expression: Optional[str] = None
     ) -> str:
         """
         Build EXISTS subquery expression.
@@ -769,9 +810,10 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             predicate_func: PostGIS predicate (ST_Intersects, etc.)
             source_geom: Source geometry reference ("schema"."table"."geom")
             source_filter: Optional source filter (e.g., id IN (...) or "field" = 'value')
-            buffer_value: Optional buffer distance
+            buffer_value: Optional buffer distance (static)
             layer_props: Layer properties
             original_source_table: Original source table name for aliasing (v4.2.7)
+            buffer_expression: Optional dynamic buffer expression (QGIS syntax)
             
         Returns:
             EXISTS subquery expression
@@ -794,8 +836,29 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         # Build source geometry in subquery
         source_geom_in_subquery = f'__source."{source_geom_field}"'
         
-        # Apply buffer
-        if buffer_value is not None and buffer_value != 0:
+        # FIX v4.2.11 (2026-01-21): Support dynamic buffer expressions (QGIS syntax)
+        # Priority: buffer_expression (dynamic) > buffer_value (static)
+        if buffer_expression and buffer_expression.strip():
+            # Convert QGIS expression to PostGIS SQL
+            from .filter_executor import qgis_expression_to_postgis
+            buffer_expr_sql = qgis_expression_to_postgis(buffer_expression)
+            
+            # Prefix field references with __source. for subquery context
+            # Pattern: "field" -> __source."field"
+            # Note: 're' module is already imported at module level (line 22)
+            # Only prefix unqualified field references (not already prefixed with table/alias)
+            buffer_expr_sql = re.sub(
+                r'(?<![.\w])"([^"]+)"(?!\s*\.)',
+                r'__source."\1"',
+                buffer_expr_sql
+            )
+            
+            self.log_info(f"🔧 Using dynamic buffer expression: {buffer_expr_sql[:100]}...")
+            source_geom_in_subquery = self._build_st_buffer_with_dynamic_expr(
+                source_geom_in_subquery, buffer_expr_sql
+            )
+        # Apply static buffer
+        elif buffer_value is not None and buffer_value != 0:
             source_geom_in_subquery = self._build_st_buffer_with_style(
                 source_geom_in_subquery, buffer_value
             )
@@ -891,16 +954,16 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             f')'
         )
         
-        # DIAGNOSTIC: Log EXISTS expression details
-        # print(f"🔍 _build_exists_expression() GENERATED:")  # DEBUG REMOVED
-        # print(f"   source_schema: {source_schema}")  # DEBUG REMOVED
-        # print(f"   source_table: {source_table}")  # DEBUG REMOVED
-        # print(f"   source_geom_field: {source_geom_field}")  # DEBUG REMOVED
-        # print(f"   predicate_func: {predicate_func}")  # DEBUG REMOVED
-        # print(f"   geom_expr: {geom_expr}")  # DEBUG REMOVED
-        # print(f"   source_filter (original): {source_filter[:100] if source_filter else 'None'}...")  # DEBUG REMOVED
-        # (aliased_source_filter is now computed in the if block above)
-        # print(f"   EXISTS expression: {exists_expr[:300]}...")  # DEBUG REMOVED
+        # FIX v4.2.13: Enhanced diagnostics for EXISTS expression
+        self.log_info(f"📝 EXISTS expression built:")
+        self.log_info(f"   Source: \"{source_schema}\".\"{source_table}\"")
+        self.log_info(f"   Predicate: {predicate_func}")
+        self.log_info(f"   Has buffer: {bool(buffer_expression or buffer_value)}")
+        if buffer_expression:
+            self.log_info(f"   Buffer expression: {buffer_expression[:80]}...")
+        elif buffer_value:
+            self.log_info(f"   Buffer value: {buffer_value}m")
+        self.log_debug(f"   Full EXISTS: {exists_expr[:500]}...")
         
         return exists_expr
     
@@ -947,7 +1010,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
     def _build_st_buffer_with_style(self, geom_expr: str, buffer_value: float) -> str:
         """Build ST_Buffer expression with endcap style."""
         endcap_style = self._get_buffer_endcap_style()
-        quad_segs = self.task_params.get('buffer_segments', 8)
+        quad_segs = self.task_params.get('buffer_segments', 5)
         
         style_params = f"quad_segs={quad_segs}"
         if endcap_style != 'round':
@@ -961,6 +1024,31 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             return f"CASE WHEN ST_IsEmpty({validated}) THEN NULL ELSE {validated} END"
         
         return buffer_expr
+    
+    def _build_st_buffer_with_dynamic_expr(self, geom_expr: str, buffer_expr_sql: str) -> str:
+        """
+        Build ST_Buffer expression with dynamic buffer expression (SQL).
+        
+        FIX v4.2.11 (2026-01-21): Support QGIS expressions converted to SQL.
+        Example: if("homecount" > 100, 50, 1) -> CASE WHEN "homecount" > 100 THEN 50 ELSE 1 END
+        
+        Args:
+            geom_expr: Geometry expression (e.g., __source."geom")
+            buffer_expr_sql: SQL expression for buffer distance (already converted from QGIS)
+            
+        Returns:
+            ST_Buffer expression with dynamic buffer
+        """
+        endcap_style = self._get_buffer_endcap_style()
+        quad_segs = self.task_params.get('buffer_segments', 5)
+        
+        style_params = f"quad_segs={quad_segs}"
+        if endcap_style != 'round':
+            style_params += f" endcap={endcap_style}"
+        
+        # For dynamic expressions, we can't know if it's negative at build time
+        # PostgreSQL will handle empty geometries gracefully with ST_IsEmpty check
+        return f"ST_Buffer({geom_expr}, {buffer_expr_sql}, '{style_params}')"
     
     def _build_geographic_buffer(
         self,

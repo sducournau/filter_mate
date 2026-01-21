@@ -355,14 +355,18 @@ class SourceSubsetBufferBuilder:
         Resolve final buffer value and expression.
         
         Priority:
-        1. buffer_value_expression (if valid)
-        2. buffer_value (spinbox)
+        1. buffer_value_expression (ONLY if buffer_property is True/active)
+        2. buffer_value (spinbox) - always used if property not active
         
         Returns:
             Tuple of (value, expression)
+            
+        FIX v4.2.10: Only use buffer_expression when buffer_property is True.
+        Previously, the expression was used even when the property override
+        button was inactive, causing the spinbox value to be ignored.
         """
-        # Check expression first (property override)
-        if buffer_expr and buffer_expr.strip():
+        # FIX v4.2.10: Check buffer_property FIRST - expression is only valid when property is active
+        if buffer_property and buffer_expr and buffer_expr.strip():
             try:
                 # Try to convert to float - if successful, it's static
                 numeric_value = clean_buffer_value(float(buffer_expr))
@@ -373,13 +377,13 @@ class SourceSubsetBufferBuilder:
                 # It's a dynamic expression (field reference or complex expression)
                 logger.info(f"  ✓ Buffer from property override (DYNAMIC): {buffer_expr}")
                 logger.info(f"  ℹ️  Will evaluate expression per feature")
-                
-                if buffer_property:
-                    logger.info(f"  ✓ Property override button confirmed ACTIVE")
-                else:
-                    logger.warning(f"  ⚠️  Expression found but property=False")
-                
+                logger.info(f"  ✓ Property override button confirmed ACTIVE")
                 return 0.0, buffer_expr
+        
+        # FIX v4.2.10: Log when expression exists but property is inactive
+        if buffer_expr and buffer_expr.strip() and not buffer_property:
+            logger.info(f"  ℹ️  Buffer expression exists ('{buffer_expr[:50]}...') but property override is INACTIVE")
+            logger.info(f"  ℹ️  Using spinbox value instead")
         
         # Fallback to spinbox value
         if buffer_val is not None and buffer_val != 0:

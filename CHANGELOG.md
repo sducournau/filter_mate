@@ -2,6 +2,131 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [4.2.12] - 2026-01-21 🔧 Fix Filter Chain Table References for Distant Layers
+
+### Issue
+- **SQL Error**: `missing FROM-clause entry for table "demand_points"` when filtering distant layers
+- **Scenario**: Filter 1 applied to `demand_points` (zone_pop spatial selection), then Filter 2 (buffer) 
+  propagated to distant layers (`ducts`, `sheaths`, `subducts`, etc.)
+- **Impact**: All distant layer queries failed with PostgreSQL errors
+
+### Root Cause
+When chaining EXISTS filters for distant layers:
+1. Source layer `demand_points` has filter: `EXISTS (... WHERE ST_PointOnSurface("demand_points"."geom")...)`
+2. This filter is propagated to distant layer `ducts` 
+3. **BUG**: The reference `"demand_points"."geom"` remains unchanged
+4. **Result**: Invalid SQL because `demand_points` is not in the distant layer's FROM clause
+
+### Fix
+- **FILE**: `adapters/backends/postgresql/expression_builder.py`
+- **FUNCTION**: `build_expression()` around line 278-320
+- **CHANGE**: Call `adapt_exists_for_nested_context()` when extracting EXISTS clauses from `source_filter`
+- **ACTION**: Replace source table references with target table name
+
+### Example
+```sql
+-- BEFORE (INVALID - "demand_points" not in FROM):
+EXISTS (SELECT 1 FROM "ref"."demand_points" AS __source WHERE ST_Intersects("ducts"."geom", ...))
+AND EXISTS (SELECT 1 FROM "ref"."zone_pop" AS __source 
+  WHERE ST_Intersects(ST_PointOnSurface("demand_points"."geom"), __source."geom") ...)
+                                          ^^^^^^^^^^^^^^^ ERROR!
+
+-- AFTER (VALID - references adapted to target table "ducts"):
+EXISTS (SELECT 1 FROM "ref"."demand_points" AS __source WHERE ST_Intersects("ducts"."geom", ...))
+AND EXISTS (SELECT 1 FROM "ref"."zone_pop" AS __source 
+  WHERE ST_Intersects(ST_PointOnSurface("ducts"."geom"), __source."geom") ...)
+                                          ^^^^^^^ FIXED!
+```
+
+### Technical Details
+- `adapt_exists_for_nested_context()` now supports table name as `new_alias` (e.g., `"ducts"`)
+- Pattern matching replaces `"source_table"."column"` with `"target_table"."column"`
+- Added unit tests in `tests/core/filter/test_filter_chain_exists.py`:
+  - `test_adapt_for_distant_layer_target_table`
+  - `test_adapt_multiple_exists_for_distant_layer`
+
+### Files Changed
+- `adapters/backends/postgresql/expression_builder.py` (FIX - adapt EXISTS for distant layers)
+- `core/tasks/filter_task.py` (FIX - propagate param_source_table to task_parameters)
+- `tests/core/filter/test_filter_chain_exists.py` (NEW tests)
+
+### Additional Fix: task_parameters propagation
+- **FILE**: `core/tasks/filter_task.py`
+- **FUNCTION**: `_prepare_source_layer()` around line 1640
+- **CHANGE**: Add `param_source_table` and `param_source_schema` to `task_parameters` dict
+- **REASON**: `ExpressionBuilder` needs these values to properly adapt EXISTS clauses
+
+---
+
+## [4.2.11] - 2026-01-21 🔧 Dynamic Buffer Expression Support (ALL BACKENDS)
+
+### Issue
+- **Buffer expression ignored**: When using a QGIS expression for buffer (e.g., `if("homecount" > 100, 50, 1)`), 
+  the expression was not being applied in spatial queries
+- **Spinbox value ignored**: When `buffer_expression` was set but `buffer_property` was inactive, 
+  the spinbox value was incorrectly ignored
+
+### Root Cause
+1. PostgreSQL: `_build_exists_expression()` only supported `buffer_value` (numeric), not `buffer_expression`
+2. Spatialite: `_build_source_geometry_sql()` didn't handle dynamic buffer expressions
+3. OGR: No buffer logic at all in the processing workflow
+
+### Fix - PostgreSQL Backend
+- **NEW**: `_build_exists_expression()` now accepts `buffer_expression` parameter
+- **NEW**: `_build_st_buffer_with_dynamic_expr()` method for handling dynamic buffer expressions
+- **FIX**: QGIS expressions like `if("field" > x, a, b)` are now converted to `CASE WHEN __source."field" > x THEN a ELSE b END`
+- **FIX**: Field references in buffer expressions are prefixed with `__source.` for correct subquery context
+
+### Fix - Spatialite Backend
+- **NEW**: `_build_source_geometry_sql()` now accepts `buffer_expression` parameter
+- **FIX**: Dynamic buffer expressions are converted via `qgis_expression_to_spatialite()`
+- **FIX**: Field references prefixed with `__source.` for subquery context
+
+### Fix - OGR Backend
+- **NEW**: `_apply_buffer_to_layer()` for static buffer via `native:buffer` processing
+- **NEW**: `_apply_buffer_expression_to_layer()` for dynamic buffer via `native:geometrybyexpression`
+- **NEW**: `_fallback_buffer_from_expression()` extracts default value if expression fails
+- **FIX**: Source layer is now buffered BEFORE `native:selectbylocation` when buffer is specified
+
+### Example - PostgreSQL
+```sql
+-- QGIS Expression:
+if("homecount" > 100, 50, 1)
+
+-- Generated PostgreSQL EXISTS:
+EXISTS (SELECT 1 FROM "ref"."demand_points" AS __source 
+  WHERE ST_Intersects("sheaths"."geom", 
+    ST_Buffer(__source."geom", 
+      CASE WHEN __source."homecount" > 100 THEN 50 ELSE 1 END, 
+      'quad_segs=8')))
+```
+
+### Example - OGR (Processing)
+```python
+# Dynamic buffer applied via:
+processing.run('native:geometrybyexpression', {
+    'INPUT': source_layer,
+    'EXPRESSION': 'buffer($geometry, if("homecount" > 100, 50, 1))',
+    'OUTPUT': 'memory:'
+})
+```
+
+### Files Modified
+- `adapters/backends/postgresql/expression_builder.py`:
+  - `_build_exists_expression()`: Added `buffer_expression` parameter
+  - `_build_st_buffer_with_dynamic_expr()`: New method for dynamic buffer SQL
+  - `build_expression()`: Now passes `buffer_expression` to EXISTS builder
+- `adapters/backends/spatialite/expression_builder.py`:
+  - `_build_source_geometry_sql()`: Added `buffer_expression` parameter
+  - `build_expression()`: Now passes `buffer_expression` to geometry builder
+- `adapters/backends/ogr/expression_builder.py`:
+  - `apply_filter()`: Now applies buffer before selectbylocation
+  - `_apply_buffer_to_layer()`: New method for static buffer
+  - `_apply_buffer_expression_to_layer()`: New method for dynamic buffer
+  - `_fallback_buffer_from_expression()`: New method for fallback handling
+
+---
+
 ## [4.2.10b] - 2026-01-21 🛑 MV Optimization DISABLED
 
 ### Issue
