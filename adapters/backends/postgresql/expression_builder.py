@@ -789,9 +789,10 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         source_schema: str,
         source_table: str,
         source_geom_field: str,
-        buffer_expression: str,
+        buffer_expression: Optional[str],
         source_filter: Optional[str],
-        layer_props: Dict
+        layer_props: Dict,
+        buffer_table_name: Optional[str] = None  # FIX v4.2.20: Pre-calculated table name
     ) -> str:
         """
         Build EXISTS expression using pre-calculated buffer temporary table.
@@ -837,13 +838,23 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             self.log_warning("No PostgreSQL connection for buffer table")
             return None
         
-        # FIX v4.2.19 (2026-01-21): Use stable table name based on buffer content, not session
-        # Generate unique temp table name using hash of buffer expression
-        # This ensures the same source + same buffer = same table name
-        # Fixes filter chaining: table created once and reused across all chained filters
-        import hashlib
-        buffer_hash = hashlib.md5(buffer_expression.encode()).hexdigest()[:8]
-        temp_table_name = f"temp_buffered_{source_table}_{buffer_hash}"
+        # FIX v4.2.20 (2026-01-21): Use pre-calculated table name if provided (filter chaining)
+        # When filter chaining, the table name was calculated BEFORE buffer_expression was cleared
+        # This allows intermediate layers to reference the ORIGINAL buffer table
+        if buffer_table_name:
+            temp_table_name = buffer_table_name
+            self.log_debug(f"Using provided buffer table name: {temp_table_name}")
+        elif buffer_expression:
+            # FIX v4.2.19 (2026-01-21): Use stable table name based on buffer content, not session
+            # Generate unique temp table name using hash of buffer expression
+            # This ensures the same source + same buffer = same table name
+            # Fixes filter chaining: table created once and reused across all chained filters
+            import hashlib
+            buffer_hash = hashlib.md5(buffer_expression.encode()).hexdigest()[:8]
+            temp_table_name = f"temp_buffered_{source_table}_{buffer_hash}"
+        else:
+            self.log_error("No buffer_table_name or buffer_expression provided")
+            return None
         
         # FIX v4.2.18 (2026-01-21): Use same schema as source table for QGIS visibility
         # Problem with v4.2.16: filtermate_temp schema not visible to QGIS's connection
@@ -882,9 +893,22 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                 table_exists = cursor.fetchone()[0]
                 if table_exists:
                     self.log_info(f"♻️ Reusing existing buffer table: {temp_schema}.{temp_table_name}")
-                    return f'"{temp_schema}"."{temp_table_name}"'
+                    # FIX v4.2.20: Build EXISTS expression using existing table
+                    exists_expr = f'''EXISTS (
+              SELECT 1 
+              FROM "{temp_schema}"."{temp_table_name}" AS __buffer
+              WHERE {predicate_func}({geom_expr}, __buffer.buffered_geom)
+              )'''
+                    self.log_debug(f"Reuse buffer table expression: {exists_expr}")
+                    return exists_expr
         except Exception as e:
             self.log_warning(f"Could not check table existence: {e}")
+        
+        # FIX v4.2.20: If buffer_expression is None (filter chaining), table should already exist
+        if not buffer_expression:
+            self.log_error(f"Buffer table {temp_schema}.{temp_table_name} does not exist but buffer_expression is None!")
+            self.log_error("This should not happen - table should have been created for original source layer")
+            return None
         
         # Build CREATE TABLE statement (NOT TEMP - must be visible to QGIS connection)
         # FIX v4.2.18: Table name must be unique to avoid conflicts
@@ -1094,6 +1118,25 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         # Build source geometry in subquery
         source_geom_in_subquery = f'__source."{source_geom_field}"'
         
+        # FIX v4.2.20 (2026-01-21): Calculate buffer table name BEFORE filter chaining check
+        # In filter chaining, we need to reference the ORIGINAL buffer table even after clearing buffer_expression
+        # So compute the table name first, then decide whether to create it or reuse it
+        buffer_table_name = None
+        if buffer_expression and buffer_expression.strip():
+            import hashlib
+            buffer_hash = hashlib.md5(buffer_expression.encode()).hexdigest()[:8]
+            # CRITICAL FIX v4.2.20: For buffer table name, use CURRENT source_table (where buffer is defined)
+            # NOT original_source_table (which is the first layer in the filter chain)
+            # Example: zone_pop → demand_points (WITH buffer) → ducts → sheaths
+            #   - At demand_points: source_table="demand_points", buffer_expression set
+            #     → Create table: temp_buffered_demand_points_xxx
+            #   - At ducts: source_table="demand_points" (from source_geom), buffer_expression still set
+            #     → Reuse table: temp_buffered_demand_points_xxx (same name!)
+            #   - At sheaths: source_table="demand_points", buffer_expression still set
+            #     → Reuse table: temp_buffered_demand_points_xxx (same name!)
+            buffer_table_name = f"temp_buffered_{source_table}_{buffer_hash}"
+            self.log_debug(f"Calculated buffer table name: {buffer_table_name} (from {source_table})")
+        
         # FIX v4.2.17 (2026-01-21): Don't apply buffer_expression in filter chaining context
         # When source_filter contains EXISTS (filter chaining: zone_pop → demand_points → ducts → sheaths),
         # the buffer_expression references fields from the ORIGINAL source (demand_points.homecount)
@@ -1107,9 +1150,9 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         is_filter_chaining = source_filter and 'EXISTS' in source_filter.upper()
         
         if is_filter_chaining and buffer_expression:
-            self.log_info(f"⚙️  Filter chaining detected - ignoring buffer_expression for {source_table}")
-            self.log_info(f"   → Buffer was already applied to original source layer")
-            self.log_info(f"   → Using plain geometry from {source_table} (no additional buffer)")
+            self.log_info(f"⚙️  Filter chaining detected - will reuse buffer table: {buffer_table_name}")
+            self.log_info(f"   → Buffer was already applied to source layer: {source_table}")
+            self.log_info(f"   → Clearing buffer_expression to avoid re-applying to intermediate layer")
             buffer_expression = None  # Clear it to avoid applying to wrong table
         
         # FIX v4.2.14 (2026-01-21): ALWAYS use temp table for dynamic buffer expressions
@@ -1117,12 +1160,16 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         # Problem: With 7 distant layers × 974 source features × 50k distant features each = 340M calculations!
         # Solution: Pre-calculate buffers ONCE in temp table, reuse across all EXISTS queries
         # Priority: temp_table (ALWAYS for dynamic) > buffer_value (static)
-        if buffer_expression and buffer_expression.strip():
+        # FIX v4.2.20: Also use temp table if buffer_table_name is set (filter chaining)
+        if buffer_table_name:
             # CRITICAL: Use temp table for ALL dynamic buffer expressions
             # The freeze happens during mapCanvas.refresh() when QGIS renders all 7 layers simultaneously
             # Each layer's setSubsetString contains inline ST_Buffer(CASE WHEN...) that recalculates
             # for every feature during rendering - causes multi-minute freeze even with timeout protection
-            self.log_info("🚀 Using pre-calculated buffer table (prevents freeze on canvas refresh)")
+            if buffer_expression:
+                self.log_info("🚀 Creating pre-calculated buffer table (prevents freeze on canvas refresh)")
+            else:
+                self.log_info("🔗 Reusing existing buffer table from filter chain")
             temp_table_expr = self._build_exists_with_buffer_table(
                 geom_expr=geom_expr,
                 predicate_func=predicate_func,
@@ -1131,7 +1178,8 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                 source_geom_field=source_geom_field,
                 buffer_expression=buffer_expression,
                 source_filter=source_filter,
-                layer_props=layer_props
+                layer_props=layer_props,
+                buffer_table_name=buffer_table_name  # FIX v4.2.20: Pass pre-calculated name
             )
             
             # If temp table creation succeeded, return it
