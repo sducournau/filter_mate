@@ -841,11 +841,12 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         session_id = getattr(self, 'session_id', None) or self.task_params.get('task', {}).get('session_id', 'default')
         temp_table_name = f"temp_buffered_{source_table}_{session_id}"
         
-        # FIX v4.2.16 (2026-01-21): Use filtermate_temp schema instead of pg_temp
-        # Problem: pg_temp tables are session-local and not visible to QGIS's own PostgreSQL connection
-        # QGIS uses a separate connection for setSubsetString(), which can't see pg_temp tables
-        # Solution: Use persistent filtermate_temp schema (same as MVs) so QGIS can access the table
-        temp_schema = "filtermate_temp"
+        # FIX v4.2.18 (2026-01-21): Use same schema as source table for QGIS visibility
+        # Problem with v4.2.16: filtermate_temp schema not visible to QGIS's connection
+        # QGIS rejects queries referencing unknown schemas BEFORE sending to PostgreSQL
+        # Solution: Create buffer table in SAME schema as source table
+        # This ensures QGIS's connection can see the table (schema is already known)
+        temp_schema = source_schema  # Use source schema (e.g., "ref") instead of filtermate_temp
         
         # Convert QGIS buffer expression to PostGIS SQL
         buffer_expr_sql = qgis_expression_to_postgis(buffer_expression)
@@ -860,18 +861,12 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             buffer_expr_sql
         )
         
-        # FIX v4.2.16: Create filtermate_temp schema if needed
-        # This schema persists across sessions so QGIS can access the buffer table
-        try:
-            with connexion.cursor() as cursor:
-                cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{temp_schema}"')
-                connexion.commit()
-                self.log_debug(f"Schema {temp_schema} ready")
-        except Exception as schema_err:
-            self.log_warning(f"Could not create schema {temp_schema}: {schema_err}")
-            # Continue anyway - schema might already exist
+        # FIX v4.2.18: Schema already exists (it's the source table's schema)
+        # No need to create schema - we're using the same schema as the source table
+        self.log_debug(f"Using existing schema {temp_schema} (source table schema)")
         
         # Build CREATE TABLE statement (NOT TEMP - must be visible to QGIS connection)
+        # FIX v4.2.18: Table name must be unique to avoid conflicts
         # Note: Table will be cleaned up by FilterMate's cleanup mechanism (same as MVs)
         sql_create = f"""
             CREATE TABLE IF NOT EXISTS "{temp_schema}"."{temp_table_name}" AS
