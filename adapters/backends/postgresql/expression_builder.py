@@ -840,7 +840,12 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         # Generate unique temp table name
         session_id = getattr(self, 'session_id', None) or self.task_params.get('task', {}).get('session_id', 'default')
         temp_table_name = f"temp_buffered_{source_table}_{session_id}"
-        temp_schema = "pg_temp"  # Use PostgreSQL temporary schema (auto-cleanup)
+        
+        # FIX v4.2.16 (2026-01-21): Use filtermate_temp schema instead of pg_temp
+        # Problem: pg_temp tables are session-local and not visible to QGIS's own PostgreSQL connection
+        # QGIS uses a separate connection for setSubsetString(), which can't see pg_temp tables
+        # Solution: Use persistent filtermate_temp schema (same as MVs) so QGIS can access the table
+        temp_schema = "filtermate_temp"
         
         # Convert QGIS buffer expression to PostGIS SQL
         buffer_expr_sql = qgis_expression_to_postgis(buffer_expression)
@@ -855,10 +860,21 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             buffer_expr_sql
         )
         
-        # Build CREATE TEMP TABLE statement
-        # Note: PostgreSQL temp tables are automatically dropped at session end
+        # FIX v4.2.16: Create filtermate_temp schema if needed
+        # This schema persists across sessions so QGIS can access the buffer table
+        try:
+            with connexion.cursor() as cursor:
+                cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{temp_schema}"')
+                connexion.commit()
+                self.log_debug(f"Schema {temp_schema} ready")
+        except Exception as schema_err:
+            self.log_warning(f"Could not create schema {temp_schema}: {schema_err}")
+            # Continue anyway - schema might already exist
+        
+        # Build CREATE TABLE statement (NOT TEMP - must be visible to QGIS connection)
+        # Note: Table will be cleaned up by FilterMate's cleanup mechanism (same as MVs)
         sql_create = f"""
-            CREATE TEMP TABLE IF NOT EXISTS "{temp_table_name}" AS
+            CREATE TABLE IF NOT EXISTS "{temp_schema}"."{temp_table_name}" AS
             SELECT 
                 "{source_table}"."id" as source_id,
                 ST_Buffer(
@@ -871,16 +887,16 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         """
         
         # Create spatial index
-        sql_index = f'CREATE INDEX IF NOT EXISTS "idx_{temp_table_name}_geom" ON "{temp_table_name}" USING GIST (buffered_geom)'
+        sql_index = f'CREATE INDEX IF NOT EXISTS "idx_{temp_table_name}_geom" ON "{temp_schema}"."{temp_table_name}" USING GIST (buffered_geom)'
         
         # Analyze for query planner
-        sql_analyze = f'ANALYZE "{temp_table_name}"'
+        sql_analyze = f'ANALYZE "{temp_schema}"."{temp_table_name}"'
         
         try:
             with connexion.cursor() as cursor:
-                self.log_info(f"📦 Creating temp buffer table: {temp_table_name}")
+                self.log_info(f"📦 Creating buffer table: {temp_schema}.{temp_table_name}")
                 cursor.execute(sql_create)
-                self.log_debug("✓ Temp table created")
+                self.log_debug("✓ Buffer table created")
                 
                 cursor.execute(sql_index)
                 self.log_debug("✓ Spatial index created")
@@ -889,17 +905,17 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                 self.log_debug("✓ Statistics updated")
                 
                 # Get row count for logging
-                cursor.execute(f'SELECT COUNT(*) FROM "{temp_table_name}"')
+                cursor.execute(f'SELECT COUNT(*) FROM "{temp_schema}"."{temp_table_name}"')
                 row_count = cursor.fetchone()[0]
                 
             elapsed = time.time() - start_time
             self.log_info(f"✅ Buffer table created: {row_count} features in {elapsed:.2f}s")
             self.log_info(f"   → Buffers pre-calculated, will be reused across all distant layers")
             
-            # Build EXISTS using temp table
+            # Build EXISTS using buffer table (with schema prefix for QGIS visibility)
             exists_expr = f"""EXISTS (
                 SELECT 1 
-                FROM "{temp_table_name}" AS __buffer
+                FROM "{temp_schema}"."{temp_table_name}" AS __buffer
                 WHERE {predicate_func}({geom_expr}, __buffer.buffered_geom)
             )"""
             
