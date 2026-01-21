@@ -837,9 +837,13 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             self.log_warning("No PostgreSQL connection for buffer table")
             return None
         
-        # Generate unique temp table name
-        session_id = getattr(self, 'session_id', None) or self.task_params.get('task', {}).get('session_id', 'default')
-        temp_table_name = f"temp_buffered_{source_table}_{session_id}"
+        # FIX v4.2.19 (2026-01-21): Use stable table name based on buffer content, not session
+        # Generate unique temp table name using hash of buffer expression
+        # This ensures the same source + same buffer = same table name
+        # Fixes filter chaining: table created once and reused across all chained filters
+        import hashlib
+        buffer_hash = hashlib.md5(buffer_expression.encode()).hexdigest()[:8]
+        temp_table_name = f"temp_buffered_{source_table}_{buffer_hash}"
         
         # FIX v4.2.18 (2026-01-21): Use same schema as source table for QGIS visibility
         # Problem with v4.2.16: filtermate_temp schema not visible to QGIS's connection
@@ -864,6 +868,23 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         # FIX v4.2.18: Schema already exists (it's the source table's schema)
         # No need to create schema - we're using the same schema as the source table
         self.log_debug(f"Using existing schema {temp_schema} (source table schema)")
+        
+        # FIX v4.2.19: Check if table already exists (for filter chaining)
+        try:
+            with connexion.cursor() as cursor:
+                cursor.execute(f"""
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.tables 
+                        WHERE table_schema = '{temp_schema}' 
+                        AND table_name = '{temp_table_name}'
+                    )
+                """)
+                table_exists = cursor.fetchone()[0]
+                if table_exists:
+                    self.log_info(f"♻️ Reusing existing buffer table: {temp_schema}.{temp_table_name}")
+                    return f'"{temp_schema}"."{temp_table_name}"'
+        except Exception as e:
+            self.log_warning(f"Could not check table existence: {e}")
         
         # Build CREATE TABLE statement (NOT TEMP - must be visible to QGIS connection)
         # FIX v4.2.18: Table name must be unique to avoid conflicts
