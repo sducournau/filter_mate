@@ -2218,11 +2218,23 @@ class FilterEngineTask(QgsTask):
         logger.info(f"  📊 Cached source_feature_count: {self._cached_source_feature_count}")
         
         # FIX v4.2.1 (2026-01-21): Ensure buffer expression MV exists BEFORE prepare_geometries
+        # FIX v4.2.11 (2026-01-21): CRITICAL - Only call MV creation if feature count exceeds threshold
         # When using custom buffer expression with PostgreSQL, the MV must be created BEFORE
         # prepare_postgresql_source_geom() generates the reference to it. Otherwise, the
         # MV won't exist when distant layers try to use it for filtering.
-        if self.param_buffer_expression and self.param_source_provider_type == 'postgresql':
+        # HOWEVER: For small datasets (<= 10000), inline buffer is used, so MV creation is skipped.
+        # This prevents freeze on 2nd filter when source layer is already filtered.
+        from ...adapters.backends.postgresql.filter_executor import BUFFER_EXPR_MV_THRESHOLD
+        if (self.param_buffer_expression and 
+            self.param_source_provider_type == 'postgresql' and
+            self._cached_source_feature_count is not None and
+            self._cached_source_feature_count > BUFFER_EXPR_MV_THRESHOLD):
+            logger.info(f"  🔧 Feature count ({self._cached_source_feature_count}) > threshold ({BUFFER_EXPR_MV_THRESHOLD})")
+            logger.info(f"  → Calling _ensure_buffer_expression_mv_exists()...")
             self._ensure_buffer_expression_mv_exists()
+        elif self.param_buffer_expression and self.param_source_provider_type == 'postgresql':
+            logger.info(f"  ✓ SKIP MV creation: {self._cached_source_feature_count} features <= {BUFFER_EXPR_MV_THRESHOLD} threshold")
+            logger.info(f"  → Buffer expression will be applied INLINE by prepare_postgresql_source_geom()")
         
         # v4.2.10: Try to create optimized filter chain MV for PostgreSQL
         # When multiple spatial filters are chained (zone_pop AND demand_points etc.),
