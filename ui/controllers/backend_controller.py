@@ -404,17 +404,14 @@ class BackendController(BaseController):
         logger.debug(f"  Provider: {provider_type}, Features: {feature_count:,}")
         logger.debug(f"  PostgreSQL available: {POSTGRESQL_AVAILABLE}")
         
-        # PostgreSQL layers
+        # PostgreSQL layers - ALWAYS use PostgreSQL backend (v4.1.4)
+        # FIX v4.1.4: QGIS native API (setSubsetString) works without psycopg2
+        # Never fallback to OGR for PostgreSQL layers
         if provider_type == 'postgresql':
             if not POSTGRESQL_AVAILABLE:
-                logger.debug(f"  → PostgreSQL unavailable - OGR fallback")
-                return 'ogr'
-            
-            if should_use_memory_optimization(layer, provider_type):
-                logger.debug(f"  → Small PostgreSQL ({feature_count}) - OGR memory optimization")
-                return 'ogr'
-            
-            logger.debug(f"  → Large PostgreSQL ({feature_count}) - PostgreSQL optimal")
+                logger.debug(f"  → PostgreSQL (QGIS native API) - psycopg2 not available for advanced features")
+            else:
+                logger.debug(f"  → PostgreSQL ({feature_count:,} features) - Full backend")
             return 'postgresql'
         
         # SQLite/Spatialite layers
@@ -554,19 +551,13 @@ class BackendController(BaseController):
             return self._forced_backends[layer.id()].lower()
 
         # Auto-detection
+        # FIX v4.1.4 (2026-01-21): PostgreSQL layers ALWAYS use PostgreSQL backend.
+        # QGIS native API (setSubsetString) works without psycopg2.
         provider_type = layer.providerType()
-        
-        try:
-            from ...adapters.backends import POSTGRESQL_AVAILABLE
-        except ImportError:
-            POSTGRESQL_AVAILABLE = False
 
-        postgresql_usable = POSTGRESQL_AVAILABLE and (postgresql_available is not False)
-
-        if provider_type == 'postgres' and postgresql_usable:
+        # PostgreSQL layers ALWAYS use PostgreSQL backend
+        if provider_type == 'postgres':
             return 'postgresql'
-        elif provider_type == 'postgres' and not postgresql_usable:
-            return 'ogr_fallback'
         elif provider_type == 'spatialite':
             return 'spatialite'
         elif provider_type == 'ogr':

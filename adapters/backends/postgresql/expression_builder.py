@@ -45,6 +45,19 @@ except ImportError:
         except Exception:
             return False
 
+# v4.2.10: Import filter chain optimizer for MV-based optimization
+try:
+    from .filter_chain_optimizer import (
+        FilterChainOptimizer,
+        FilterChainContext,
+        OptimizationStrategy,
+        OptimizedChain
+    )
+    CHAIN_OPTIMIZER_AVAILABLE = True
+except ImportError:
+    CHAIN_OPTIMIZER_AVAILABLE = False
+    logger.debug("Filter chain optimizer not available")
+
 
 class PostgreSQLExpressionBuilder(GeometricFilterPort):
     """
@@ -212,9 +225,15 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         if use_centroids:
             geom_expr = self._apply_centroid_transform(geom_expr, layer_props)
         
-        # Apply dynamic buffer expression if specified
-        if buffer_expression:
-            geom_expr = self._apply_dynamic_buffer(geom_expr, buffer_expression)
+        # FIX v4.2.7: DO NOT apply buffer_expression to distant layer geometry!
+        # The buffer_expression is for the SOURCE layer and is already applied in the MV.
+        # When source_geom points to a buffer_expr MV (mv_xxx_buffer_expr_dump), the buffer
+        # is already baked into that MV's geometries. Applying it again to the distant layer
+        # would double-buffer and also fail because the CASE WHEN fields belong to the source.
+        #
+        # REMOVED: The buffer_expression should NOT be applied here for distant layers.
+        # if buffer_expression:
+        #     geom_expr = self._apply_dynamic_buffer(geom_expr, buffer_expression)
         
         # DIAGNOSTIC 2026-01-19: Log the fully qualified geom_expr
         # print(f"🎯 PostgreSQL geom_expr (fully qualified): {geom_expr}")  # DEBUG REMOVED
@@ -234,11 +253,42 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         else:
             self.log_info(f"📝 Using EXISTS subquery mode")
         
+        # FIX v4.2.7: Get original source table name for proper aliasing
+        original_source_table = kwargs.get('source_table_name')
+        
+        # v4.2.10: Check for filter chain MV optimization
+        filter_chain_mv_name = kwargs.get('filter_chain_mv_name')
+        if filter_chain_mv_name:
+            self.log_info(f"🚀 FILTER CHAIN MV OPTIMIZATION: Using {filter_chain_mv_name}")
+            # The MV already contains pre-filtered source features satisfying all spatial constraints
+            # Generate a simple EXISTS against the MV instead of multiple chained EXISTS
+            return self._build_optimized_mv_expression(
+                geom_expr=geom_expr,
+                predicates=predicates,
+                mv_name=filter_chain_mv_name,
+                buffer_value=buffer_value
+            )
+        
         # Build predicate expressions
         predicate_expressions = []
         
         # Sort predicates for optimal performance
         sorted_predicates = self._sort_predicates(predicates)
+        
+        # FIX v4.2.9: Separate EXISTS clauses from simple filters
+        # EXISTS clauses should be ANDed at the TOP LEVEL, not inside the new EXISTS
+        exists_clauses_to_combine = []
+        simple_source_filter = source_filter
+        
+        if source_filter and 'EXISTS' in source_filter.upper():
+            # Extract EXISTS clauses to combine at the top level
+            from core.filter.expression_combiner import extract_exists_clauses
+            extracted = extract_exists_clauses(source_filter)
+            if extracted:
+                exists_clauses_to_combine = [c['sql'] for c in extracted]
+                self.log_info(f"🔗 Filter chaining: Found {len(exists_clauses_to_combine)} EXISTS clause(s) to chain at top level")
+                # Don't pass EXISTS to _build_exists_expression (they go at top level)
+                simple_source_filter = None
         
         for predicate_name, predicate_func in sorted_predicates:
             if use_simple_wkt:
@@ -257,9 +307,10 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                     geom_expr=geom_expr,  # Unqualified - no table prefix!
                     predicate_func=predicate_func,
                     source_geom=source_geom,
-                    source_filter=source_filter,
+                    source_filter=simple_source_filter,  # FIX: Only simple filters, not EXISTS
                     buffer_value=buffer_value,
-                    layer_props=layer_props
+                    layer_props=layer_props,
+                    original_source_table=original_source_table
                 )
             
             if expr:
@@ -275,6 +326,14 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         else:
             final_expr = f"({' OR '.join(predicate_expressions)})"
         
+        # FIX v4.2.9: Combine extracted EXISTS clauses at top level
+        # Result: EXISTS(new_source) AND EXISTS(zone_pop) AND EXISTS(other...)
+        if exists_clauses_to_combine:
+            all_exists = [final_expr] + exists_clauses_to_combine
+            final_expr = ' AND '.join(all_exists)
+            self.log_info(f"🔗 Filter chaining: Combined {len(all_exists)} EXISTS clauses at top level")
+            self.log_debug(f"   Final chained expression preview: {final_expr[:300]}...")
+        
         # DIAGNOSTIC: Log the final expression
         # print("=" * 80)  # DEBUG REMOVED
         # print(f"🔍 PostgreSQLExpressionBuilder.build_expression() RESULT:")  # DEBUG REMOVED
@@ -284,6 +343,166 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         self.log_info(f"✅ PostgreSQL expression built: {final_expr[:200]}...")
         
         return final_expr
+    
+    def build_expression_optimized(
+        self,
+        layer_props: Dict[str, Any],
+        predicates: Dict[str, bool],
+        spatial_filters: List[Dict[str, Any]],
+        source_geom: Optional[str] = None,
+        buffer_value: Optional[float] = None,
+        connection=None,
+        session_id: Optional[str] = None,
+        **kwargs
+    ) -> str:
+        """
+        Build optimized expression using materialized views for filter chaining.
+        
+        v4.2.10: Uses MV-based optimization when multiple spatial filters are present.
+        
+        Instead of multiple EXISTS clauses:
+            EXISTS (SELECT 1 FROM demand_points WHERE ST_Intersects(...))
+            AND EXISTS (SELECT 1 FROM zone_pop WHERE ST_Intersects(...))
+        
+        Creates a single MV with pre-filtered source features and uses:
+            EXISTS (SELECT 1 FROM filtermate_temp.fm_chain_xxx AS __source
+                    WHERE ST_Intersects("distant"."geom", __source."geom"))
+        
+        Args:
+            layer_props: Layer properties (schema, table, geometry field)
+            predicates: Spatial predicates to apply
+            spatial_filters: List of spatial filter definitions:
+                [
+                    {'table': 'zone_pop', 'schema': 'ref', 'predicate': 'ST_Intersects'},
+                    {'table': 'demand_points', 'schema': 'ref', 'predicate': 'ST_Intersects', 'buffer': 5.0}
+                ]
+            source_geom: Source geometry expression
+            buffer_value: Buffer distance for source
+            connection: PostgreSQL connection (required for MV creation)
+            session_id: Session ID for MV naming
+            **kwargs: Additional parameters
+            
+        Returns:
+            Optimized PostGIS SQL expression
+        """
+        if not CHAIN_OPTIMIZER_AVAILABLE:
+            self.log_warning("Filter chain optimizer not available, using standard expression")
+            return self.build_expression(
+                layer_props=layer_props,
+                predicates=predicates,
+                source_geom=source_geom,
+                buffer_value=buffer_value,
+                **kwargs
+            )
+        
+        if not connection:
+            self.log_warning("No connection provided for MV optimization, using standard expression")
+            return self.build_expression(
+                layer_props=layer_props,
+                predicates=predicates,
+                source_geom=source_geom,
+                buffer_value=buffer_value,
+                **kwargs
+            )
+        
+        if len(spatial_filters) < 2:
+            self.log_debug("Less than 2 spatial filters, MV optimization not beneficial")
+            return self.build_expression(
+                layer_props=layer_props,
+                predicates=predicates,
+                source_geom=source_geom,
+                buffer_value=buffer_value,
+                **kwargs
+            )
+        
+        # Extract distant layer info
+        layer = layer_props.get("layer")
+        distant_table = layer_props.get("layer_table_name") or layer_props.get("layer_name")
+        distant_schema = layer_props.get("layer_schema") or "public"
+        distant_geom = self._detect_geometry_column(layer_props)
+        
+        if layer:
+            try:
+                from qgis.core import QgsDataSourceUri
+                uri = QgsDataSourceUri(layer.dataProvider().dataSourceUri())
+                distant_schema = uri.schema() or distant_schema
+                distant_table = uri.table() or distant_table
+                distant_geom = uri.geometryColumn() or distant_geom
+            except:
+                pass
+        
+        # Extract source layer info from source_geom
+        source_info = self._parse_source_table_reference(source_geom) if source_geom else {}
+        source_schema = source_info.get('schema', 'public')
+        source_table = source_info.get('table', '')
+        source_geom_column = source_info.get('geom_field', 'geom')
+        
+        if not source_table:
+            self.log_warning("Could not determine source table from source_geom, using standard expression")
+            return self.build_expression(
+                layer_props=layer_props,
+                predicates=predicates,
+                source_geom=source_geom,
+                buffer_value=buffer_value,
+                **kwargs
+            )
+        
+        # Build filter chain context
+        context = FilterChainContext(
+            source_schema=source_schema,
+            source_table=source_table,
+            source_geom_column=source_geom_column,
+            spatial_filters=spatial_filters,
+            buffer_value=buffer_value,
+            session_id=session_id
+        )
+        
+        # Get predicate function
+        predicate_func = "ST_Intersects"  # Default
+        for pred_name, enabled in predicates.items():
+            if enabled and pred_name in self.PREDICATE_FUNCTIONS:
+                predicate_func = self.PREDICATE_FUNCTIONS[pred_name]
+                break
+        
+        # Create optimizer and get optimized expression
+        optimizer = FilterChainOptimizer(connection, session_id)
+        
+        try:
+            result = optimizer.optimize_for_distant_layer(
+                context=context,
+                distant_table=distant_table,
+                distant_schema=distant_schema,
+                distant_geom_column=distant_geom,
+                predicate=predicate_func
+            )
+            
+            if result.strategy != OptimizationStrategy.NONE:
+                self.log_info(f"🚀 MV optimization applied: {result.strategy.value}")
+                self.log_info(f"   MV name: {result.mv_name}")
+                self.log_info(f"   Estimated improvement: {result.estimated_improvement:.0%}")
+                self.log_debug(f"   Expression: {result.expression[:200]}...")
+                
+                # Store cleanup SQL for later
+                if hasattr(self, '_mv_cleanup_sql'):
+                    self._mv_cleanup_sql.append(result.cleanup_sql)
+                else:
+                    self._mv_cleanup_sql = [result.cleanup_sql]
+                
+                return result.expression
+            else:
+                self.log_debug("MV optimization not applied, using standard expression")
+                
+        except Exception as e:
+            self.log_error(f"MV optimization failed: {e}")
+        
+        # Fallback to standard expression
+        return self.build_expression(
+            layer_props=layer_props,
+            predicates=predicates,
+            source_geom=source_geom,
+            buffer_value=buffer_value,
+            **kwargs
+        )
     
     def apply_filter(
         self,
@@ -426,6 +645,68 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         sorted_items.sort(key=lambda x: x[2])
         return [(item[0], item[1]) for item in sorted_items]
     
+    def _build_optimized_mv_expression(
+        self,
+        geom_expr: str,
+        predicates: Dict,
+        mv_name: str,
+        buffer_value: Optional[float] = None
+    ) -> str:
+        """
+        Build optimized expression using filter chain materialized view.
+        
+        v4.2.10: Instead of multiple chained EXISTS clauses like:
+            EXISTS(source + zone_pop) AND EXISTS(source + demand_points)
+            
+        We generate a single EXISTS against the pre-computed MV:
+            EXISTS (SELECT 1 FROM filtermate_temp.mv_chain_xxx AS __chain
+                    WHERE ST_Intersects("distant"."geom", __chain."geom"))
+        
+        Performance: O(N×M) → O(1) EXISTS per distant layer
+        
+        Args:
+            geom_expr: Target geometry expression (e.g., '"table"."geom"')
+            predicates: Spatial predicates to apply (intersects, contains, etc.)
+            mv_name: Fully qualified MV name (e.g., "filtermate_temp"."fm_chain_xxx")
+            buffer_value: Optional buffer distance (already baked into MV typically)
+            
+        Returns:
+            Optimized EXISTS expression against MV
+        """
+        self.log_info(f"🚀 Building OPTIMIZED MV expression")
+        self.log_info(f"   MV: {mv_name}")
+        self.log_info(f"   Target geom: {geom_expr}")
+        
+        # Get primary predicate (usually intersects)
+        sorted_predicates = self._sort_predicates(predicates)
+        if sorted_predicates:
+            predicate_func = sorted_predicates[0][1]
+        else:
+            predicate_func = "ST_Intersects"
+        
+        # Build EXISTS against the MV
+        # The MV contains pre-filtered source features that satisfy all spatial constraints
+        # Each distant layer only needs ONE EXISTS query against this MV
+        
+        # Source geometry in MV (use standard geom column)
+        source_geom_in_mv = '__chain."geom"'
+        
+        # Apply buffer if specified (though usually already baked into MV)
+        if buffer_value is not None and buffer_value != 0:
+            source_geom_in_mv = self._build_st_buffer_with_style(
+                source_geom_in_mv, buffer_value
+            )
+        
+        # Build the optimized EXISTS
+        # Format: EXISTS (SELECT 1 FROM mv AS __chain WHERE ST_Intersects(target, __chain.geom))
+        exists_expr = (
+            f"EXISTS (SELECT 1 FROM {mv_name} AS __chain "
+            f"WHERE {predicate_func}({geom_expr}, {source_geom_in_mv}))"
+        )
+        
+        self.log_info(f"✅ Optimized MV expression: {exists_expr[:150]}...")
+        return exists_expr
+    
     def _build_simple_wkt_expression(
         self,
         geom_expr: str,
@@ -474,7 +755,8 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         source_geom: str,
         source_filter: Optional[str],
         buffer_value: Optional[float],
-        layer_props: Dict
+        layer_props: Dict,
+        original_source_table: Optional[str] = None
     ) -> str:
         """
         Build EXISTS subquery expression.
@@ -486,9 +768,10 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             geom_expr: Target geometry expression (UNQUALIFIED - e.g., "geom")
             predicate_func: PostGIS predicate (ST_Intersects, etc.)
             source_geom: Source geometry reference ("schema"."table"."geom")
-            source_filter: Optional source filter (e.g., id IN (...))
+            source_filter: Optional source filter (e.g., id IN (...) or "field" = 'value')
             buffer_value: Optional buffer distance
             layer_props: Layer properties
+            original_source_table: Original source table name for aliasing (v4.2.7)
             
         Returns:
             EXISTS subquery expression
@@ -518,18 +801,85 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             )
         
         # Build WHERE clause
+        # CRITICAL: The spatial predicate checks intersection between target and source
         where_clauses = [f"{predicate_func}({geom_expr}, {source_geom_in_subquery})"]
         
         if source_filter:
-            # CRITICAL FIX: Replace table name with __source alias in source_filter
-            # The source_filter uses "table"."column" format but in EXISTS subquery
-            # the table is aliased as __source, so we need "__source"."column"
-            aliased_source_filter = source_filter.replace(
-                f'"{source_table}".',
-                '__source.'
-            )
-            self.log_debug(f"Aliased source_filter: {aliased_source_filter[:100]}...")
-            where_clauses.append(f"({aliased_source_filter})")
+            # CRITICAL FIX v4.2.8 (2026-01-21): Handle combined EXISTS filters properly
+            # 
+            # Problem: When source_filter contains combined EXISTS subqueries (zone_pop + buffer),
+            # we need to apply BOTH the spatial intersection AND the source filters.
+            #
+            # Before: Only added source_filter with aliasing (wrong for EXISTS patterns)
+            # After: Detect if source_filter contains EXISTS - if yes, apply AS-IS (no aliasing needed)
+            #        because EXISTS subqueries are ALREADY self-contained with their own aliases.
+            #
+            # Example source_filter from zone_pop + buffer optimization:
+            #   (EXISTS (SELECT 1 FROM zone_pop AS __source WHERE ...)) AND
+            #   (EXISTS (SELECT 1 FROM buffer AS __source WHERE ...))
+            #
+            # This filter should be applied DIRECTLY to verify the source geometry satisfies both constraints!
+            
+            # Check if source_filter contains EXISTS subqueries (combined filters from optimization)
+            contains_exists = 'EXISTS' in source_filter.upper()
+            
+            if contains_exists:
+                # FIX v4.2.8: EXISTS subqueries are self-contained - apply as-is
+                # These are the combined zone_pop + buffer filters from Path 3A optimization
+                # They MUST be applied to ensure source geometry passes all filter constraints
+                self.log_info(f"🎯 source_filter contains EXISTS subqueries (combined filters)")
+                self.log_info(f"   → Applying combined filter directly (no aliasing needed)")
+                self.log_debug(f"   Combined filter preview: {source_filter[:200]}...")
+                
+                # CRITICAL: Add the combined EXISTS filters to WHERE clause
+                # This ensures the source geometry satisfies zone_pop AND buffer constraints
+                where_clauses.append(f"({source_filter})")
+                
+            else:
+                # Original aliasing logic for simple filters (FID IN, field = value, etc.)
+                # CRITICAL FIX v4.2.7 (2026-01-22): Proper aliasing of source_filter
+                # 
+                # Problem: When using buffer_expression (MV), source_table is the MV name
+                # (mv_xxx_table_buffer_expr_dump) but source_filter contains the ORIGINAL 
+                # table name ("ducts"."id" IN ...) or a simple filter ("nom" = 'value').
+                #
+                # Solution: Use original_source_table (passed from task_parameters) for aliasing.
+                # This ensures we replace the correct table name with __source.
+                #
+                # Patterns handled:
+                # 1. "table"."pk" IN (...) → __source."pk" IN (...)
+                # 2. "field" = 'value' → __source."field" = 'value' (when table name known)
+                
+                aliased_source_filter = source_filter
+                
+                # Priority 1: Use original_source_table if provided
+                if original_source_table:
+                    self.log_debug(f"Using original_source_table for aliasing: {original_source_table}")
+                    aliased_source_filter = source_filter.replace(
+                        f'"{original_source_table}".',
+                        '__source.'
+                    )
+                else:
+                    # Priority 2: Extract table name from source_filter pattern: "table"."column" IN (...)
+                    filter_table_match = re.search(r'^"([^"]+)"\."([^"]+)"\s*IN', source_filter)
+                    if filter_table_match:
+                        filter_table_name = filter_table_match.group(1)
+                        self.log_debug(f"Extracted table name from source_filter: {filter_table_name}")
+                        aliased_source_filter = source_filter.replace(
+                            f'"{filter_table_name}".',
+                            '__source.'
+                        )
+                    else:
+                        # Priority 3: Fallback to source_table from parsed source_geom
+                        # This works when source_geom points to original table (no MV)
+                        self.log_debug(f"Fallback: using source_table from source_geom: {source_table}")
+                        aliased_source_filter = source_filter.replace(
+                            f'"{source_table}".',
+                            '__source.'
+                        )
+                
+                self.log_debug(f"Aliased source_filter: {aliased_source_filter[:100]}...")
+                where_clauses.append(f"({aliased_source_filter})")
         
         where_clause = " AND ".join(where_clauses)
         
@@ -549,9 +899,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         # print(f"   predicate_func: {predicate_func}")  # DEBUG REMOVED
         # print(f"   geom_expr: {geom_expr}")  # DEBUG REMOVED
         # print(f"   source_filter (original): {source_filter[:100] if source_filter else 'None'}...")  # DEBUG REMOVED
-        if source_filter:
-            aliased_filter = source_filter.replace(f'"{source_table}".', '__source.')
-            # print(f"   source_filter (aliased): {aliased_filter[:100]}...")  # DEBUG REMOVED
+        # (aliased_source_filter is now computed in the if block above)
         # print(f"   EXISTS expression: {exists_expr[:300]}...")  # DEBUG REMOVED
         
         return exists_expr

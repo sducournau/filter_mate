@@ -1090,6 +1090,12 @@ def execute_ogr_spatial_selection(
     work_layer = safe_current_layer if use_safe_current else current_layer
     verify_index = context.verify_and_create_spatial_index
     
+    # FIX 2026-01-21: Verify spatial index on INTERSECT layer (source geometry)
+    # This prevents QGIS warning "Il n'existe pas d'index spatial pour la couche d'intersection"
+    # and significantly improves spatial query performance (10-100x faster)
+    if verify_index and safe_source_geom:
+        verify_index(safe_source_geom, "intersection layer")
+    
     # Execute selection based on combine operator
     if context.has_combine_operator:
         work_layer.selectAll()

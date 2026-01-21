@@ -353,14 +353,14 @@ class TestLegacyCompatibility:
             raw_expression='"type" = \'residential\'',
             layer=mock_layer,
             buffer_value=50.0,
-            buffer_segments=8
+            buffer_segments=5
         )
         
         assert isinstance(expr, FilterExpression)
         assert expr.raw == '"type" = \'residential\''
         assert expr.source_layer_id == "layer_456"
         assert expr.buffer_value == 50.0
-        assert expr.buffer_segments == 8
+        assert expr.buffer_segments == 5
     
     def test_convert_filter_result_to_legacy(self):
         """Test converting FilterResult to legacy dict."""

@@ -265,7 +265,7 @@ def create_metric_buffer(
     geometry: QgsGeometry,
     distance_meters: float,
     source_crs: QgsCoordinateReferenceSystem,
-    segments: int = 8
+    segments: int = 5
 ) -> Optional[QgsGeometry]:
     """
     Create buffer with metric distance, auto-handling CRS.

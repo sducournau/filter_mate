@@ -94,34 +94,18 @@ class BackendSelector:
         if layer_info.provider_type == ProviderType.MEMORY:
             return ProviderType.MEMORY
         
-        # Priority 3: Small PostgreSQL dataset optimization
-        if (
-            layer_info.provider_type == ProviderType.POSTGRESQL
-            and self._should_use_memory_optimization(layer_info)
-        ):
-            logger.info(
-                f"Small dataset optimization: {layer_info.name} has "
-                f"{layer_info.feature_count} features, using MEMORY backend"
-            )
-            return ProviderType.MEMORY
-        
-        # Priority 4: PostgreSQL with psycopg2
-        if (
-            layer_info.provider_type == ProviderType.POSTGRESQL
-            and self._postgresql_available
-        ):
+        # Priority 3: PostgreSQL layers - ALWAYS use PostgreSQL backend (v4.0.8)
+        # FIX v4.1.4 (2026-01-21): PostgreSQL layers ALWAYS use PostgreSQL backend
+        # QGIS native API (setSubsetString) works without psycopg2.
+        # psycopg2 is only needed for advanced features (materialized views, connection pooling)
+        # but basic filtering always works via QGIS native provider.
+        if layer_info.provider_type == ProviderType.POSTGRESQL:
+            if not self._postgresql_available:
+                logger.info(
+                    f"PostgreSQL layer {layer_info.name}: using QGIS native API "
+                    f"(psycopg2 not available for advanced features)"
+                )
             return ProviderType.POSTGRESQL
-        
-        # Priority 5: PostgreSQL without psycopg2 - fallback to OGR
-        if (
-            layer_info.provider_type == ProviderType.POSTGRESQL
-            and not self._postgresql_available
-        ):
-            logger.info(
-                f"PostgreSQL layer {layer_info.name} but psycopg2 not available, "
-                f"using OGR backend"
-            )
-            return ProviderType.OGR
         
         # Priority 6: Spatialite
         if layer_info.provider_type == ProviderType.SPATIALITE:

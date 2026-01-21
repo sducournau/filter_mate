@@ -338,8 +338,39 @@ class OGRExpressionBuilder(GeometricFilterPort):
                 safe_set_subset_string(layer, "1 = 0")
                 return True
             
-            # Build FID filter
-            fid_filter = self._build_fid_filter(layer, selected_ids)
+            # FIX v4.0.8: For PostgreSQL layers via OGR, we need actual PK values, not QGIS internal FIDs
+            # selectedFeatureIds() returns QGIS internal feature IDs, which don't match PostgreSQL PK values
+            pk_field = self._get_primary_key(layer)
+            storage_type = ""
+            try:
+                storage_type = layer.dataProvider().storageType().lower()
+            except Exception:
+                pass
+            
+            # Check if this is a PostgreSQL layer accessed via OGR
+            is_postgres_via_ogr = 'postgresql' in storage_type or 'postgis' in storage_type
+            
+            if is_postgres_via_ogr and pk_field:
+                # Get actual PK values from selected features
+                self.log_info(f"  - PostgreSQL via OGR detected: fetching actual PK values from '{pk_field}'")
+                pk_values = []
+                for fid in selected_ids:
+                    feature = layer.getFeature(fid)
+                    if feature.isValid():
+                        pk_value = feature[pk_field]
+                        if pk_value is not None:
+                            pk_values.append(pk_value)
+                
+                if pk_values:
+                    self.log_info(f"  - Retrieved {len(pk_values)} actual PK values")
+                    # Build filter with actual PK values
+                    fid_filter = self._build_fid_filter_with_values(layer, pk_values, pk_field)
+                else:
+                    self.log_warning("  - Could not retrieve PK values, falling back to FID-based filter")
+                    fid_filter = self._build_fid_filter(layer, selected_ids)
+            else:
+                # Build FID filter normally for non-PostgreSQL layers
+                fid_filter = self._build_fid_filter(layer, selected_ids)
             
             # Clear selection (filter applied via subset)
             layer.removeSelection()
@@ -460,6 +491,101 @@ class OGRExpressionBuilder(GeometricFilterPort):
         # Default: try lowercase fid (more compatible with QGIS setSubsetString)
         self.log_info(f"  - Unknown format ({storage_type}): using lowercase 'fid' syntax")
         return f'fid IN ({fid_list})'
+    
+    def _build_fid_filter_with_values(self, layer, pk_values: list, pk_field: str) -> str:
+        """
+        Build filter expression using actual PK values (v4.0.8).
+        
+        This method is used for PostgreSQL layers accessed via OGR, where we
+        need to use actual PK column values instead of QGIS internal FIDs.
+        
+        Args:
+            layer: QGIS vector layer
+            pk_values: List of actual primary key values from the PK column
+            pk_field: Name of the primary key field
+            
+        Returns:
+            Filter expression string like "id" IN (1, 2, 3)
+        """
+        if not pk_values:
+            return "1 = 0"
+        
+        # FIX v4.0.9: IMPROVED numeric detection for PostgreSQL via OGR
+        # QGIS OGR provider may return incorrect field types for PostgreSQL.
+        # Use multiple detection strategies with VALUE-BASED priority.
+        is_numeric_pk = None
+        
+        # Strategy 1: Check ACTUAL VALUES first (most reliable)
+        # If all values are Python int/float, they're numeric
+        try:
+            all_numeric_values = all(
+                isinstance(v, (int, float)) and not isinstance(v, bool)
+                for v in pk_values[:10]  # Check first 10 values
+            )
+            if all_numeric_values:
+                is_numeric_pk = True
+                self.log_info(f"  - PK type detected from VALUES: numeric (all values are int/float)")
+        except Exception as val_e:
+            self.log_debug(f"  - Value-based detection failed: {val_e}")
+        
+        # Strategy 2: Check if string values look like integers
+        if is_numeric_pk is None:
+            try:
+                sample_values = pk_values[:10]
+                all_look_numeric = all(
+                    isinstance(v, (int, float)) or 
+                    (isinstance(v, str) and v.lstrip('-').isdigit())
+                    for v in sample_values
+                )
+                if all_look_numeric:
+                    is_numeric_pk = True
+                    self.log_info(f"  - PK type detected from string VALUES: numeric (all values look like integers)")
+            except Exception:
+                pass
+        
+        # Strategy 3: Check field type from layer fields (may be unreliable for OGR)
+        if is_numeric_pk is None:
+            try:
+                fields = layer.fields()
+                pk_idx = fields.indexOf(pk_field)
+                if pk_idx >= 0:
+                    from qgis.PyQt.QtCore import QVariant
+                    field_type = fields.at(pk_idx).type()
+                    numeric_types = (QVariant.Int, QVariant.LongLong, QVariant.UInt, QVariant.ULongLong, QVariant.Double)
+                    is_numeric_pk = field_type in numeric_types
+                    self.log_info(f"  - PK type detected from field schema: {'numeric' if is_numeric_pk else 'text'} (QVariant type={field_type})")
+            except Exception as field_e:
+                self.log_debug(f"  - Field type detection failed: {field_e}")
+        
+        # Default: assume numeric for common PK field names
+        if is_numeric_pk is None:
+            pk_lower = pk_field.lower()
+            common_numeric_names = ('id', 'fid', 'gid', 'pk', 'ogc_fid', 'objectid', 'oid', 'rowid')
+            is_numeric_pk = pk_lower in common_numeric_names
+            self.log_info(f"  - PK type FALLBACK: {'numeric' if is_numeric_pk else 'text'} (based on field name '{pk_field}')")
+        
+        # Build value list based on PK type
+        if is_numeric_pk:
+            # Numeric: no quotes - convert all values to int if possible
+            formatted_values = []
+            for v in pk_values:
+                if isinstance(v, (int, float)) and not isinstance(v, bool):
+                    formatted_values.append(str(int(v)))
+                elif isinstance(v, str) and v.lstrip('-').isdigit():
+                    formatted_values.append(v)  # Already a numeric string
+                else:
+                    formatted_values.append(str(v))  # Best effort
+            value_list = ", ".join(formatted_values)
+            self.log_info(f"  - Building NUMERIC IN clause for '{pk_field}': {len(pk_values)} values")
+            self.log_debug(f"    Sample: {value_list[:100]}...")
+        else:
+            # String/UUID: single quotes
+            value_list = ", ".join(f"'{v}'" for v in pk_values)
+            self.log_info(f"  - Building STRING IN clause for '{pk_field}': {len(pk_values)} values")
+            self.log_debug(f"    Sample: {value_list[:100]}...")
+        
+        # Always use quoted field name for PostgreSQL
+        return f'"{pk_field}" IN ({value_list})'
     
     def _get_primary_key(self, layer) -> str:
         """

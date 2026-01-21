@@ -237,7 +237,7 @@ class TestTaskParametersToLegacy:
         
         filtering_config = FilteringConfig(
             buffer_value=100.0,
-            buffer_segments=8,
+            buffer_segments=5,
             buffer_type="Flat",
             has_geometric_predicates=True,
             geometric_predicates=["intersects", "contains"]

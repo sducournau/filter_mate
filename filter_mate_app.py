@@ -21,12 +21,16 @@ from qgis.core import (
     QgsCoordinateReferenceSystem,
     QgsCoordinateTransformContext,
     QgsExpressionContextUtils,
-    QgsMapLayerProxyModel,
     QgsProject,
     QgsTask,
     QgsVectorFileWriter,
     QgsVectorLayer
 )
+# FIX 2026-01-21: Import from correct location (gui in QGIS 3.30+, core in older versions)
+try:
+    from qgis.gui import QgsMapLayerProxyModel
+except ImportError:
+    from qgis.core import QgsMapLayerProxyModel
 from qgis.utils import iface
 from qgis import processing
 from osgeo import ogr
@@ -1204,9 +1208,10 @@ class FilterMateApp:
     def _show_filter_start_message(self, task_name, task_parameters, layers_props, layers, current_layer):
         """Show informational message about filtering operation starting."""
         # Determine dominant backend from distant layers
+        # PRIORITY v4.0.8: PostgreSQL > Spatialite > OGR (PostgreSQL first for performance)
         distant_types = [lp.get("layer_provider_type", "unknown") for lp in layers_props]
-        provider_type = ('spatialite' if 'spatialite' in distant_types else
-                        'postgresql' if 'postgresql' in distant_types else
+        provider_type = ('postgresql' if 'postgresql' in distant_types else
+                        'spatialite' if 'spatialite' in distant_types else
                         distant_types[0] if distant_types else
                         task_parameters["infos"].get("layer_provider_type", "unknown"))
         
@@ -2323,7 +2328,9 @@ class FilterMateApp:
         if hasattr(self.dockwidget, 'set_widgets_enabled_state'): self.dockwidget.set_widgets_enabled_state(True)
         try:
             if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
-                self.dockwidget.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
+                # v4.2: Filter to show only vector layers WITH geometry (exclude non-spatial tables)
+                # HasGeometry = PointLayer | LineLayer | PolygonLayer (excludes NoGeometry tables)
+                self.dockwidget.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.HasGeometry)
         except Exception as e: logger.debug(f"ComboBox filter setup (non-critical): {e}")
         
         # Trigger layer change with active or first layer

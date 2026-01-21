@@ -527,6 +527,38 @@ class TaskParameterBuilder:
         if "filtering" not in task_parameters:
             task_parameters["filtering"] = {}
         
+        # SYNC has_buffer_value (CRITICAL - must be synced for buffer to work!)
+        if hasattr(dw, 'pushButton_checkable_filtering_buffer_value'):
+            current_val = dw.pushButton_checkable_filtering_buffer_value.isChecked()
+            stored_val = task_parameters["filtering"].get("has_buffer_value", False)
+            # FIX 2026-01-21: ALWAYS log this critical value
+            logger.info(f"📌 has_buffer_value: button.isChecked()={current_val}, stored={stored_val}")
+            if current_val != stored_val:
+                logger.info(f"SYNC has_buffer_value: {stored_val} → {current_val}")
+                task_parameters["filtering"]["has_buffer_value"] = current_val
+                self._project_layers[layer_id]["filtering"]["has_buffer_value"] = current_val
+        
+        # SYNC buffer_value_property (property override active state)
+        if hasattr(dw, 'mPropertyOverrideButton_filtering_buffer_value_property'):
+            current_val = dw.mPropertyOverrideButton_filtering_buffer_value_property.isActive()
+            stored_val = task_parameters["filtering"].get("buffer_value_property", False)
+            if current_val != stored_val:
+                logger.info(f"SYNC buffer_value_property: {stored_val} → {current_val}")
+                task_parameters["filtering"]["buffer_value_property"] = current_val
+                self._project_layers[layer_id]["filtering"]["buffer_value_property"] = current_val
+            
+            # Also sync buffer_value_expression if property is active
+            if current_val:
+                from qgis.core import QgsProperty
+                qgs_prop = dw.mPropertyOverrideButton_filtering_buffer_value_property.toProperty()
+                if qgs_prop.propertyType() == QgsProperty.ExpressionBasedProperty:
+                    expr = qgs_prop.asExpression()
+                    stored_expr = task_parameters["filtering"].get("buffer_value_expression", "")
+                    if expr != stored_expr:
+                        logger.info(f"SYNC buffer_value_expression: '{stored_expr}' → '{expr}'")
+                        task_parameters["filtering"]["buffer_value_expression"] = expr
+                        self._project_layers[layer_id]["filtering"]["buffer_value_expression"] = expr
+        
         # SYNC buffer_value
         if hasattr(dw, 'mQgsDoubleSpinBox_filtering_buffer_value'):
             current_val = self._clean_buffer_value(dw.mQgsDoubleSpinBox_filtering_buffer_value.value())
@@ -632,7 +664,10 @@ class TaskParameterBuilder:
             f"  geometric_predicates: {filtering.get('geometric_predicates', [])}\n"
             f"  has_layers_to_filter: {filtering.get('has_layers_to_filter', False)}\n"
             f"  layers_to_filter: {len(filtering.get('layers_to_filter', []))} layers\n"
+            f"  has_buffer_value: {filtering.get('has_buffer_value', False)}\n"
             f"  buffer_value: {filtering.get('buffer_value', 0.0)}\n"
+            f"  buffer_value_property: {filtering.get('buffer_value_property', False)}\n"
+            f"  buffer_value_expression: '{filtering.get('buffer_value_expression', '')}'\n"
             f"  use_centroids_source: {filtering.get('use_centroids_source_layer', False)}\n"
             f"  use_centroids_distant: {filtering.get('use_centroids_distant_layers', False)}",
             "FilterMate", Qgis.Info
@@ -878,6 +913,12 @@ class TaskParameterBuilder:
         
         v4.7: Extracted from FilterMateApp.get_task_parameters() for God Class reduction.
         
+        FIX 2026-01-21: For custom_selection:
+        - Skip if expression is empty (no filter expression)
+        - Skip if expression is a SIMPLE FIELD (e.g., "drop_ID") without comparison operators
+        - DO NOT skip if expression contains comparison operators (=, >, <, etc.)
+        - DO NOT skip if we have features from a valid filter expression
+        
         Args:
             task_name: Type of task ('filter', 'unfilter', 'reset')
             task_parameters: Task parameters dict with task section
@@ -898,11 +939,38 @@ class TaskParameterBuilder:
         if current_groupbox != "custom_selection":
             return False
         
-        # Check if validated expression is empty (non-filter expression)
+        # FIX 2026-01-21: Check if expression is a SIMPLE FIELD (no comparison operators)
+        # A simple field like "drop_ID" or "name" should NOT filter the source layer
+        # because it's just a display field, not a filter condition
+        if expression and expression.strip():
+            expr_upper = expression.upper().strip()
+            # Check for comparison operators - if present, it's a filter expression
+            comparison_operators = ['=', '>', '<', '!', ' IN ', ' LIKE ', ' AND ', ' OR ', ' IS ', ' NOT ', ' BETWEEN ']
+            has_comparison = any(op in expr_upper for op in comparison_operators)
+            
+            if not has_comparison:
+                # Expression has no comparison operators - it's a simple field name
+                logger.info(
+                    f"FilterMate: Custom selection with simple field '{expression}' (no operators) - "
+                    "will NOT filter source layer (skip_source_filter=True)"
+                )
+                return True
+        
+        # FIX 2026-01-21: Check if we have FEATURES - features take priority
+        # If custom_selection returned features from a filter expression, use them
+        features = task_parameters.get("task", {}).get("features", [])
+        if features and len(features) > 0:
+            logger.info(
+                f"FilterMate: Custom selection has {len(features)} features from filter expression - "
+                "will use them for source layer filtering"
+            )
+            return False  # DO filter source layer using these features
+        
+        # No features and no valid expression - skip source filter
         validated_expr = task_parameters.get("task", {}).get("expression", "")
         if not validated_expr or not validated_expr.strip():
             logger.info(
-                f"FilterMate: Custom selection with non-filter expression '{expression}' - "
+                f"FilterMate: Custom selection with empty expression and no features - "
                 "will use ALL features from source layer"
             )
             return True

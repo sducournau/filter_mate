@@ -63,7 +63,24 @@ try: from qgis.gui import QgsMapLayerProxyModel
 except ImportError:
     try: from qgis.core import QgsMapLayerProxyModel
     except ImportError:
-        class QgsMapLayerProxyModel: VectorLayer = 1
+        # Fallback with proper flag values (from QGIS 3.x API)
+        class QgsMapLayerProxyModel:
+            NoFilter = 0
+            RasterLayer = 1
+            NoGeometry = 2
+            PointLayer = 4
+            LineLayer = 8
+            PolygonLayer = 16
+            HasGeometry = PointLayer | LineLayer | PolygonLayer  # 28
+            VectorLayer = NoGeometry | HasGeometry  # 30
+            PluginLayer = 32
+            WritableLayer = 64
+            MeshLayer = 128
+            VectorTileLayer = 256
+            PointCloudLayer = 512
+            AnnotationLayer = 1024
+            TiledSceneLayer = 2048
+            All = -1
 
 try: from qgis.gui import QgsFieldProxyModel
 except ImportError:
@@ -451,6 +468,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             try: IconThemeManager.set_theme(StyleLoader.detect_qgis_theme())
             except Exception as e: logger.debug(f"IconThemeManager init (non-critical): {e}")
         self.setupUi(self)
+        
+        # FIX 2026-01-21: Prevent style propagation to child dialogs
+        # Set Qt attribute to prevent FilterMate styles from affecting QGIS dialogs
+        # opened as children (e.g., QgsExpressionBuilderDialog)
+        self.setAttribute(Qt.WA_StyledBackground, False)
+        
+        # FIX 2026-01-21: The transparent palette issue has been fixed at source.
+        # The palette with alpha=0 colors was removed from filter_mate_dockwidget_base.ui/.py
+        # No need to reset palette here anymore - dockwidget now inherits QGIS default palette.
+        
         self.setupUiCustom()
         self.manage_ui_style()
         try: 
@@ -1198,11 +1225,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if cnt > 0:
             self.favorites_indicator_label.setText(f"★ {cnt}")
             self.favorites_indicator_label.setToolTip(f"★ {cnt} Favorites saved\nClick to apply or manage")
-            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:white;font-size:9pt;font-weight:600;padding:3px 10px;border-radius:12px;border:none;background-color:#f39c12;}QLabel#label_favorites_indicator:hover{background-color:#d68910;}")
+            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:white;font-size:8pt;font-weight:500;padding:2px 8px;border-radius:10px;border:none;background-color:#f39c12;}QLabel#label_favorites_indicator:hover{background-color:#d68910;}")
         else:
             self.favorites_indicator_label.setText("★")
             self.favorites_indicator_label.setToolTip("★ No favorites saved\nClick to add current filter")
-            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:#95a5a6;font-size:9pt;font-weight:600;padding:3px 10px;border-radius:12px;border:none;background-color:#ecf0f1;}QLabel#label_favorites_indicator:hover{background-color:#d5dbdb;}")
+            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:#95a5a6;font-size:8pt;font-weight:500;padding:2px 8px;border-radius:10px;border:none;background-color:#ecf0f1;}QLabel#label_favorites_indicator:hover{background-color:#d5dbdb;}")
         self.favorites_indicator_label.adjustSize()
 
     def _get_available_backends_for_layer(self, layer):
@@ -2790,6 +2817,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 layer_obj = project.mapLayer(layer_id)
                 if not layer_obj or not isinstance(layer_obj, QgsVectorLayer):
                     continue
+                # v4.2: Skip non-spatial tables (tables without geometry)
+                if not layer_obj.isSpatial():
+                    continue
                 if not is_layer_source_available(layer_obj, require_psycopg2=False):
                     continue
                 
@@ -2817,8 +2847,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return ui_utils.auto_configure_from_environment(self.CONFIG_DATA) if UI_CONFIG_AVAILABLE else {}
 
     def _apply_stylesheet(self):
-        """Apply stylesheet using StyleLoader."""
-        StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA)
+        """
+        DISABLED 2026-01-21: Testing without stylesheet to isolate display issue.
+        If expression builder displays correctly without this, the CSS is the problem.
+        """
+        logger.info("Stylesheet application DISABLED for testing")
+        # StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA)
 
     def _configure_pushbuttons(self, pushButton_config, icons_sizes, font):
         """Delegate to ConfigurationManager."""
@@ -2840,6 +2874,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._apply_auto_configuration()
             self._apply_stylesheet()
             self._setup_theme_watcher()
+            # FIX 2026-01-21: Install child dialog filter for legacy path
+            self._install_legacy_child_dialog_filter()
         
         if self._icon_manager:
             self._icon_manager.setup()
@@ -2848,6 +2884,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         if self._button_styler:
             self._button_styler.setup()
+    
+    def _install_legacy_child_dialog_filter(self):
+        """
+        Install child dialog filter for legacy code path.
+        
+        This prevents FilterMate styles from affecting QGIS dialogs
+        when ThemeManager is not available.
+        
+        FIX 2026-01-21: DISABLED - Testing if the issue comes from FilterMate or QGIS itself.
+        The global filter was causing more problems than it solved.
+        """
+        # DISABLED 2026-01-21: Testing without filter to isolate the root cause
+        pass
+        # try:
+        #     from ui.styles.theme_manager import GlobalDialogStyleFilter
+        #     # Install global filter on QApplication (singleton pattern)
+        #     GlobalDialogStyleFilter.install()
+        #     logger.debug("Global dialog style filter installed")
+        # except Exception as e:
+        #     logger.debug(f"Could not install global dialog filter: {e}")
     
     def _setup_theme_watcher(self):
         """Setup QGIS theme watcher for dark/light mode switching."""
@@ -3334,7 +3390,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 'comboBox_filtering_geometric_predicates'  # FIX: was checkableComboBox_
             ],
             'pushButton_checkable_filtering_buffer_value': [
-                'mQgsDoubleSpinBox_filtering_buffer_value'
+                'mQgsDoubleSpinBox_filtering_buffer_value',
+                'mPropertyOverrideButton_filtering_buffer_value_property'
             ],
             'pushButton_checkable_filtering_buffer_type': [
                 'comboBox_filtering_buffer_type',
@@ -4760,16 +4817,53 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def exploring_custom_selection(self):
-        """v4.0 S18: Get features matching custom expression."""
-        if not self.widgets_initialized or not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS: return [], ''
+        """
+        v4.0 S18: Get features matching custom expression.
+        
+        FIX 2026-01-21: Load features directly instead of going through
+        exploring_features_changed which has guards that can block feature retrieval
+        (e.g., _syncing_from_qgis, _configuring_groupbox, sync_protection_until).
+        
+        This ensures custom_selection always returns the features matching the expression
+        for use in source layer filtering.
+        """
+        if not self.widgets_initialized or not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS:
+            return [], ''
+        
         expression = self.PROJECT_LAYERS[self.current_layer.id()]["exploring"].get("custom_selection_expression", "")
-        if not expression: return [], expression
+        if not expression:
+            return [], expression
+        
         qgs_expr = QgsExpression(expression)
-        if qgs_expr.isField() and not any(op in expression.upper() for op in ['=','>','<','!','IN','LIKE','AND','OR']): return [], expression
-        layer_id, cached = self.current_layer.id(), self._get_cached_expression_result(self.current_layer.id(), expression)
-        if cached is not None: return cached, expression
-        features = self.exploring_features_changed([], False, expression)
-        if features: self._set_cached_expression_result(layer_id, expression, features)
+        
+        # If expression is just a field name without operators, return empty features
+        # (field-only expressions are for display, not filtering)
+        if qgs_expr.isField() and not any(op in expression.upper() for op in ['=','>','<','!','IN','LIKE','AND','OR']):
+            logger.debug(f"exploring_custom_selection: Field-only expression '{expression}' - returning empty features")
+            return [], expression
+        
+        # Check cache first
+        layer_id = self.current_layer.id()
+        cached = self._get_cached_expression_result(layer_id, expression)
+        if cached is not None:
+            logger.debug(f"exploring_custom_selection: Cache HIT - {len(cached)} features")
+            return cached, expression
+        
+        # FIX 2026-01-21: Load features DIRECTLY instead of via exploring_features_changed
+        # This bypasses the guards that can prevent features from being returned
+        features = []
+        try:
+            from qgis.core import QgsFeatureRequest
+            request = QgsFeatureRequest().setFilterExpression(expression)
+            features = list(self.current_layer.getFeatures(request))
+            logger.info(f"exploring_custom_selection: Loaded {len(features)} features matching expression '{expression[:50]}...'")
+        except Exception as e:
+            logger.error(f"exploring_custom_selection: Error loading features: {e}")
+        
+        # Cache the result
+        if features:
+            self._set_cached_expression_result(layer_id, expression, features)
+        
         return features, expression
 
     def exploring_deselect_features(self):

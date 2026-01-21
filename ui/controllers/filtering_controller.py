@@ -502,6 +502,10 @@ class FilteringController(BaseController, LayerSelectionMixin):
                 if not isinstance(layer_obj, QgsVectorLayer):
                     skipped_reasons.append(f"{layer_name}: not QgsVectorLayer")
                     continue
+                # v4.2: Skip non-spatial tables (tables without geometry)
+                if not layer_obj.isSpatial():
+                    skipped_reasons.append(f"{layer_name}: non-spatial table (no geometry)")
+                    continue
                 if not is_layer_source_available(layer_obj, require_psycopg2=False):
                     skipped_reasons.append(f"{layer_name}: source not available")
                     continue
@@ -529,7 +533,8 @@ class FilteringController(BaseController, LayerSelectionMixin):
             from ...infrastructure.utils import geometry_type_to_string
             
             for missing_layer in missing:
-                if missing_layer.isValid() and is_layer_source_available(missing_layer, require_psycopg2=False):
+                # v4.2: Skip non-spatial tables (tables without geometry)
+                if missing_layer.isValid() and missing_layer.isSpatial() and is_layer_source_available(missing_layer, require_psycopg2=False):
                     display_name = f"{missing_layer.name()} [{missing_layer.crs().authid()}]"
                     geom_type_str = geometry_type_to_string(missing_layer)
                     layer_icon = dockwidget.icon_per_geometry_type(geom_type_str)

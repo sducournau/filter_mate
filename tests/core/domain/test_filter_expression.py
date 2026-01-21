@@ -140,7 +140,7 @@ class TestFilterExpressionCreation:
         )
         assert expr.has_buffer
         assert expr.buffer_value == 100.0
-        assert expr.buffer_segments == 8  # default
+        assert expr.buffer_segments == 5  # default
 
     def test_create_with_custom_buffer_segments(self):
         """Test creating expression with custom buffer segments."""

@@ -197,10 +197,22 @@ class BackendExpressionBuilder:
             # print(f"   ✅ Using visible features → source_filter: {source_filter[:100] if source_filter else 'None'}...")  # DEBUG REMOVED
             logger.info(f"   ✅ Using visible features → source_filter: {source_filter[:100] if source_filter else 'None'}...")
         else:
-            # print(f"   ⚠️ NO SOURCE FILTER! Source layer has no subsetString and no selection")  # DEBUG REMOVED
-            # print(f"   → EXISTS will match ALL source features!")  # DEBUG REMOVED
-            logger.warning(f"   ⚠️ NO SOURCE FILTER! Source layer has no subsetString and no selection")
-            logger.warning(f"   → EXISTS will match ALL source features!")
+            # FIX 2026-01-21: Handle buffer_expression case without selection/subset
+            # When buffer_expression is active but no features selected, use ALL source features
+            has_buffer_expression = self.param_buffer_expression and str(self.param_buffer_expression).strip()
+            if has_buffer_expression and self.source_layer:
+                logger.info(f"   📋 Buffer expression active without selection - using ALL source features")
+                logger.info(f"      Buffer expression: {self.param_buffer_expression[:50]}...")
+                source_filter = self._build_filter_from_all_source_features()
+                if source_filter:
+                    logger.info(f"   ✅ Using ALL source features → source_filter: {source_filter[:100] if source_filter else 'None'}...")
+                else:
+                    logger.warning(f"   ⚠️ Failed to build filter from all source features")
+            else:
+                # print(f"   ⚠️ NO SOURCE FILTER! Source layer has no subsetString and no selection")  # DEBUG REMOVED
+                # print(f"   → EXISTS will match ALL source features!")  # DEBUG REMOVED
+                logger.warning(f"   ⚠️ NO SOURCE FILTER! Source layer has no subsetString and no selection")
+                logger.warning(f"   → EXISTS will match ALL source features!")
         
         # print(f"   FINAL source_filter: '{source_filter[:100] if source_filter else 'None'}...'")  # DEBUG REMOVED
         # print("=" * 80)  # DEBUG REMOVED
@@ -291,8 +303,15 @@ class BackendExpressionBuilder:
             from ..ports import get_backend_services
             PostgreSQLGeometricFilter = get_backend_services().get_postgresql_geometric_filter()
             if not PostgreSQLGeometricFilter:
-                raise ImportError("PostgreSQLGeometricFilter not available")
+                logger.warning("   ⚠️ PostgreSQL backend not available, using inline IN clause")
+                # Continue to fallback below
+                raise RuntimeError("PostgreSQL backend not available")
             pg_backend = PostgreSQLGeometricFilter(self.task_parameters)
+            
+            # Check if the backend has create_source_selection_mv method
+            if not hasattr(pg_backend, 'create_source_selection_mv'):
+                logger.warning("   ⚠️ create_source_selection_mv not implemented, using inline IN clause")
+                raise RuntimeError("Method not implemented")
             
             mv_ref = pg_backend.create_source_selection_mv(
                 layer=self.source_layer,
@@ -371,6 +390,86 @@ class BackendExpressionBuilder:
             
         except Exception as e:
             logger.error(f"   ❌ Failed to generate filter from visible features: {e}")
+            import traceback
+            logger.debug(f"   Traceback: {traceback.format_exc()}")
+            return None
+    
+    def _build_filter_from_all_source_features(self) -> Optional[str]:
+        """
+        Build filter from features in source layer's CURRENT STATE.
+        
+        FIX 2026-01-21: Used when buffer_expression is active but no selection/subset.
+        This ensures PostgreSQL EXISTS queries use the source features in their
+        current filtered state (respecting any active subsetString).
+        
+        NOTE: QgsVectorLayer.getFeatures() automatically respects the layer's
+        subsetString, so if the layer is already filtered, only those features
+        are returned.
+        
+        Returns:
+            str or None: The source filter expression
+        """
+        current_filter = self.source_layer.subsetString() if self.source_layer else None
+        if current_filter:
+            logger.info(f"🔄 PostgreSQL EXISTS: Generating filter from source layer (filtered state)")
+            logger.info(f"   → Respecting existing filter: {current_filter[:80]}...")
+        else:
+            logger.info(f"🔄 PostgreSQL EXISTS: Generating filter from ALL source features")
+            logger.info(f"   → No existing filter - using all features")
+        
+        try:
+            pk_field = sfb_get_primary_key_field(self.source_layer)
+            if not pk_field:
+                logger.warning(f"   ⚠️ Could not determine primary key field for source layer")
+                return None
+            
+            # Get feature IDs from source layer (respects active subsetString)
+            all_fids = []
+            for feature in self.source_layer.getFeatures():
+                try:
+                    fid = feature[pk_field]
+                    if fid is not None:
+                        all_fids.append(fid)
+                except Exception:
+                    # Try feature.id() as fallback
+                    try:
+                        all_fids.append(feature.id())
+                    except Exception:
+                        pass
+            
+            if not all_fids:
+                logger.warning(f"   ⚠️ No features found in source layer!")
+                return None
+            
+            logger.info(f"   ✅ Extracted {len(all_fids)} feature IDs from source layer (current state)")
+            
+            source_table_name = sfb_get_source_table_name(
+                self.source_layer,
+                self.param_source_table
+            )
+            
+            # Check if we should use MV
+            thresholds = self._get_optimization_thresholds()
+            source_mv_fid_threshold = thresholds.get('source_mv_fid_threshold', 500)
+            
+            if len(all_fids) > source_mv_fid_threshold:
+                source_filter = self._build_filter_with_mv(
+                    all_fids, pk_field, source_table_name, source_mv_fid_threshold
+                )
+            else:
+                source_filter = build_source_filter_inline(
+                    all_fids, pk_field, source_table_name,
+                    lambda vals: self._format_pk_values_for_sql(vals, layer=self.source_layer, pk_field=pk_field)
+                )
+            
+            if source_filter:
+                logger.info(f"   ✓ Generated source_filter from {len(all_fids)} features")
+                logger.debug(f"   → Filter preview: '{source_filter[:100]}...'")
+            
+            return source_filter
+            
+        except Exception as e:
+            logger.error(f"   ❌ Failed to generate filter from source features: {e}")
             import traceback
             logger.debug(f"   Traceback: {traceback.format_exc()}")
             return None

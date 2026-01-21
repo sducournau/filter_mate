@@ -23,6 +23,12 @@ import logging
 logger = logging.getLogger('FilterMate.Adapters.Backends.PostgreSQL.FilterExecutor')
 
 
+# Threshold for using inline buffer expression vs MV (in feature count)
+# Below this threshold, buffer expression is used inline in SQL
+# Above this threshold, a materialized view is created for better performance
+BUFFER_EXPR_MV_THRESHOLD = 10000
+
+
 def prepare_postgresql_source_geom(
     source_table: str,
     source_schema: str,
@@ -32,7 +38,10 @@ def prepare_postgresql_source_geom(
     use_centroids: bool = False,
     buffer_segments: int = 5,
     buffer_type: str = "Round",
-    primary_key_name: str = None
+    primary_key_name: str = None,
+    session_id: str = None,
+    mv_schema: str = "filter_mate_temp",
+    source_feature_count: int = None
 ) -> tuple:
     """
     Prepare PostgreSQL source geometry with buffer/centroid transformations.
@@ -55,9 +64,17 @@ def prepare_postgresql_source_geom(
         buffer_type: "Round", "Flat", or "Square"
         use_centroids: Apply ST_Centroid to source geometry
         primary_key_name: Primary key column (for materialized views)
+        session_id: Session identifier for MV name prefix (multi-client isolation)
+        mv_schema: Schema for materialized views (default: filter_mate_temp)
+        source_feature_count: Number of features in source layer (for MV threshold decision)
         
     Returns:
         tuple: (postgresql_source_geom_expr, materialized_view_name or None)
+        
+    Note:
+        For buffer_expression with few features (< BUFFER_EXPR_MV_THRESHOLD), the buffer
+        is applied inline in SQL without creating a materialized view. This is faster
+        for small datasets and avoids the overhead of MV creation.
     """
     import re
     from ....infrastructure.database.sql_utils import sanitize_sql_identifier
@@ -84,37 +101,92 @@ def prepare_postgresql_source_geom(
     if buffer_expression is not None and buffer_expression != '':
         # Buffer expression mode (dynamic buffer from field/expression)
         
-        # Adjust field references to include table name
-        if buffer_expression.find('"') == 0 and buffer_expression.find(source_table) != 1:
-            buffer_expression = '"{source_table}".'.format(source_table=source_table) + buffer_expression
+        # Convert QGIS expression to PostGIS FIRST (before any modifications)
+        buffer_expr_postgis = qgis_expression_to_postgis(buffer_expression)
         
-        buffer_expression = re.sub(' "', ' "mv_{source_table}"."'.format(source_table=source_table), buffer_expression)
-        
-        buffer_expression = qgis_expression_to_postgis(buffer_expression)
-        
-        # NOTE: Materialized view creation is handled by the caller
-        # This function only prepares the geometry expression
-        
-        # Use sanitize_sql_identifier to handle all special chars (em-dash, etc.)
-        materialized_view_name = sanitize_sql_identifier(source_table + '_buffer_expr')
-        
-        postgresql_source_geom = '"mv_{materialized_view_name}_dump"."{source_geom}"'.format(
-            source_geom=source_geom,
-            materialized_view_name=materialized_view_name
+        # FIX v4.2.7: Use inline buffer expression for small datasets (no MV)
+        # This avoids the overhead of creating a materialized view for few features
+        logger.info(f"[PostgreSQL] 🔍 THRESHOLD CHECK: source_feature_count={source_feature_count}, threshold={BUFFER_EXPR_MV_THRESHOLD}")
+        use_inline_buffer = (
+            source_feature_count is not None and 
+            source_feature_count <= BUFFER_EXPR_MV_THRESHOLD
         )
+        logger.info(f"[PostgreSQL] 🔍 use_inline_buffer={use_inline_buffer}")
         
-        # NOTE: Centroids are not supported with buffer expressions (materialized views)
-        # because the view already contains buffered geometries
-        # ORDER OF APPLICATION: Buffer expression creates MV first, centroid cannot be applied after
-        if use_centroids:
-            logger.warning(f"[PostgreSQL] ⚠️ PostgreSQL: Centroid option ignored when using buffer expression (materialized view)")
-            # v4.1.3: Notify user via QGIS message log for visibility
-            from qgis.core import QgsMessageLog, Qgis
-            QgsMessageLog.logMessage(
-                "⚠️ Centroid optimization was requested but is incompatible with buffer expressions. "
-                "The centroid option has been ignored. Consider using a static buffer value instead.",
-                "FilterMate", Qgis.Warning
+        if use_inline_buffer:
+            # INLINE MODE: Apply buffer expression directly in SQL
+            logger.info(f"[PostgreSQL] 📝 Using INLINE buffer expression ({source_feature_count} features <= {BUFFER_EXPR_MV_THRESHOLD} threshold)")
+            
+            # Adjust field references to include schema.table
+            adjusted_buffer_expr = buffer_expr_postgis
+            if adjusted_buffer_expr.find('"') == 0 and source_table not in adjusted_buffer_expr[:50]:
+                adjusted_buffer_expr = f'"{source_table}".' + adjusted_buffer_expr
+            
+            # Build ST_Buffer style parameters
+            buffer_type_mapping = {"Round": "round", "Flat": "flat", "Square": "square"}
+            endcap_style = buffer_type_mapping.get(buffer_type, "round")
+            style_params = f"quad_segs={buffer_segments}"
+            if endcap_style != 'round':
+                style_params += f" endcap={endcap_style}"
+            
+            # Build inline buffer expression
+            postgresql_source_geom = f'ST_Buffer({base_geom}, {adjusted_buffer_expr}, \'{style_params}\')'
+            
+            # Centroids can be applied with inline buffer
+            if use_centroids:
+                # Apply centroid BEFORE buffer for efficiency
+                postgresql_source_geom = f'ST_Buffer(ST_Centroid({base_geom}), {adjusted_buffer_expr}, \'{style_params}\')'
+                logger.info(f"[PostgreSQL] ✓ Using ST_Centroid + inline ST_Buffer")
+            
+            logger.info(f"[PostgreSQL] ✓ Inline buffer expression: {postgresql_source_geom[:100]}...")
+            # No MV created in inline mode
+            materialized_view_name = None
+            
+        else:
+            # MV MODE: Create materialized view for large datasets
+            logger.info(f"[PostgreSQL] 📦 Using MV for buffer expression ({source_feature_count or 'unknown'} features > {BUFFER_EXPR_MV_THRESHOLD} threshold)")
+            
+            # Adjust field references to include table name for MV
+            if buffer_expression.find('"') == 0 and buffer_expression.find(source_table) != 1:
+                buffer_expression = '"{source_table}".'.format(source_table=source_table) + buffer_expression
+            
+            buffer_expression = re.sub(' "', ' "mv_{source_table}"."'.format(source_table=source_table), buffer_expression)
+            
+            buffer_expression = qgis_expression_to_postgis(buffer_expression)
+            
+            # NOTE: Materialized view creation is handled by the caller
+            # This function only prepares the geometry expression
+            
+            # Use sanitize_sql_identifier to handle all special chars (em-dash, etc.)
+            # FIX v4.2.0: Apply session_id prefix to MV name for multi-client isolation
+            # The MV is created with session prefix in filter_actions.py, so we must use the same name here
+            base_mv_name = sanitize_sql_identifier(source_table + '_buffer_expr')
+            if session_id:
+                materialized_view_name = f"{session_id}_{base_mv_name}"
+                logger.debug(f"[PostgreSQL] Using session-prefixed MV name: {materialized_view_name}")
+            else:
+                materialized_view_name = base_mv_name
+                logger.warning(f"[PostgreSQL] No session_id provided, using base MV name: {materialized_view_name}")
+            
+            # FIX v4.2.0: Include schema in MV reference to avoid PostgreSQL using default 'public' schema
+            postgresql_source_geom = '"{mv_schema}"."mv_{materialized_view_name}_dump"."{source_geom}"'.format(
+                mv_schema=mv_schema,
+                source_geom=source_geom,
+                materialized_view_name=materialized_view_name
             )
+            
+            # NOTE: Centroids are not supported with buffer expressions (materialized views)
+            # because the view already contains buffered geometries
+            # ORDER OF APPLICATION: Buffer expression creates MV first, centroid cannot be applied after
+            if use_centroids:
+                logger.warning(f"[PostgreSQL] ⚠️ PostgreSQL: Centroid option ignored when using buffer expression (materialized view)")
+                # v4.1.3: Notify user via QGIS message log for visibility
+                from qgis.core import QgsMessageLog, Qgis
+                QgsMessageLog.logMessage(
+                    "⚠️ Centroid optimization was requested but is incompatible with buffer expressions. "
+                    "The centroid option has been ignored. Consider using a static buffer value instead.",
+                    "FilterMate", Qgis.Warning
+                )
     
     elif buffer_value is not None and buffer_value != 0:
         # Static buffer value mode

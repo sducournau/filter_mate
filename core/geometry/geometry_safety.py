@@ -222,7 +222,7 @@ def extract_polygons_from_collection(geom: Optional[QgsGeometry]) -> List[QgsGeo
 def safe_buffer(
     geom: Optional[QgsGeometry],
     distance: float,
-    segments: int = 8
+    segments: int = 5
 ) -> Optional[QgsGeometry]:
     """
     Safely create a buffer around geometry.
@@ -257,7 +257,7 @@ def safe_buffer_metric(
     geom: Optional[QgsGeometry],
     distance_meters: float,
     source_crs: QgsCoordinateReferenceSystem,
-    segments: int = 8
+    segments: int = 5
 ) -> Optional[QgsGeometry]:
     """
     Create buffer with metric distance, handling CRS conversion.
@@ -306,7 +306,7 @@ def safe_buffer_with_crs_check(
     geom: Optional[QgsGeometry],
     distance: float,
     crs: Optional[QgsCoordinateReferenceSystem] = None,
-    segments: int = 8
+    segments: int = 5
 ) -> Optional[QgsGeometry]:
     """
     Create buffer with automatic CRS handling.

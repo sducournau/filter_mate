@@ -455,10 +455,10 @@ class FavoritesWidget(QLabel if HAS_QGIS else object):
             style = """
                 QLabel#label_favorites_indicator {
                     color: white;
-                    font-size: 9pt;
-                    font-weight: 600;
-                    padding: 3px 10px;
-                    border-radius: 12px;
+                    font-size: 8pt;
+                    font-weight: 500;
+                    padding: 2px 8px;
+                    border-radius: 10px;
                     border: none;
                     background-color: #f39c12;
                 }
@@ -472,10 +472,10 @@ class FavoritesWidget(QLabel if HAS_QGIS else object):
             style = """
                 QLabel#label_favorites_indicator {
                     color: #95a5a6;
-                    font-size: 9pt;
-                    font-weight: 600;
-                    padding: 3px 10px;
-                    border-radius: 12px;
+                    font-size: 8pt;
+                    font-weight: 500;
+                    padding: 2px 8px;
+                    border-radius: 10px;
                     border: none;
                     background-color: #ecf0f1;
                 }

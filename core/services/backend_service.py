@@ -196,6 +196,9 @@ class BackendService(QObject):
         """
         Auto-detect optimal backend based on layer provider.
         
+        FIX v4.1.4 (2026-01-21): PostgreSQL layers ALWAYS use PostgreSQL backend.
+        QGIS native API (setSubsetString) works without psycopg2.
+        
         Args:
             layer: QgsVectorLayer instance
             
@@ -204,7 +207,8 @@ class BackendService(QObject):
         """
         provider_type = layer.providerType()
         
-        if provider_type == 'postgres' and self.is_postgresql_available:
+        # PostgreSQL layers ALWAYS use PostgreSQL backend (QGIS native API)
+        if provider_type == 'postgres':
             return BackendType.POSTGRESQL
         elif provider_type == 'spatialite':
             return BackendType.SPATIALITE
@@ -527,8 +531,8 @@ class BackendService(QObject):
         provider_type = layer.providerType()
         source = layer.source().lower()
         
-        # PostgreSQL
-        if provider_type == 'postgres' and self.is_postgresql_available:
+        # PostgreSQL - FIX v4.1.4: ALWAYS available for postgres layers (QGIS native API)
+        if provider_type == 'postgres':
             available.append(BackendInfo(
                 type=BackendType.POSTGRESQL,
                 name="PostgreSQL",
@@ -603,12 +607,12 @@ class BackendService(QObject):
         feature_count = layer.featureCount()
         available = self.get_available_backends_for_layer(layer)
         
-        # PostgreSQL is optimal for postgres layers
-        if provider_type == 'postgres' and self.is_postgresql_available:
+        # PostgreSQL is optimal for postgres layers - FIX v4.1.4: ALWAYS use PostgreSQL
+        if provider_type == 'postgres':
             return BackendRecommendation(
                 recommended=BackendType.POSTGRESQL,
                 available_backends=available,
-                reason="Native PostgreSQL layer",
+                reason="Native PostgreSQL layer (QGIS native API)",
                 feature_count=feature_count,
                 provider_type=provider_type
             )

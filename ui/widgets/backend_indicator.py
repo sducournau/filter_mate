@@ -423,8 +423,8 @@ def get_available_backends_for_layer(layer, postgresql_available: bool = False) 
     except (RuntimeError, AttributeError):
         return [('ogr', 'OGR', '📁')]
     
-    # PostgreSQL backend
-    if provider_type == 'postgres' and postgresql_available:
+    # PostgreSQL backend - FIX v4.1.4: ALWAYS available for postgres layers
+    if provider_type == 'postgres':
         available.append(('postgresql', 'PostgreSQL', '🐘'))
     
     # Spatialite backend
@@ -445,10 +445,13 @@ def detect_backend_for_layer(layer, forced_backends: Dict[str, str] = None,
     
     This is a standalone helper function.
     
+    FIX v4.1.4 (2026-01-21): PostgreSQL layers ALWAYS use PostgreSQL backend.
+    QGIS native API (setSubsetString) works without psycopg2.
+    
     Args:
         layer: QGIS vector layer
         forced_backends: Dict of layer_id -> forced backend
-        postgresql_available: Whether psycopg2 is available
+        postgresql_available: Whether psycopg2 is available (ignored for postgres layers)
     
     Returns:
         Backend type string
@@ -466,8 +469,8 @@ def detect_backend_for_layer(layer, forced_backends: Dict[str, str] = None,
     if forced_backends and layer_id in forced_backends:
         return forced_backends[layer_id]
     
-    # Auto-detection
-    if provider_type == 'postgres' and postgresql_available:
+    # Auto-detection - PostgreSQL layers ALWAYS use PostgreSQL backend
+    if provider_type == 'postgres':
         return 'postgresql'
     elif provider_type == 'spatialite':
         return 'spatialite'

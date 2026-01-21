@@ -275,7 +275,7 @@ class TestCompleteFilteringWorkflow:
         )
         
         assert expression.buffer_value == 100.0
-        assert expression.buffer_segments == 8  # default value
+        assert expression.buffer_segments == 5  # default value
     
     def test_filter_error_recovery(
         self,

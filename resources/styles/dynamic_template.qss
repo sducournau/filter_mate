@@ -4,6 +4,9 @@
  * This stylesheet uses placeholders that are automatically replaced with values
  * from the active UI profile (compact or normal).
  * 
+ * CRITICAL: All styles are scoped to #dockWidgetContents to avoid affecting
+ * other QGIS windows (Expression Builder, Processing dialogs, etc.)
+ * 
  * Color placeholders (from theme system):
  * - {color_bg_0}, {color_1}, {color_2}, {color_bg_3}
  * - {color_font_0}, {color_font_1}, {color_font_2}
@@ -18,33 +21,19 @@
  */
 
 /* ========================================================================
-   DOCKWIDGET - Base styling for docked and floating modes
+   DOCKWIDGET CONTENTS - Base styling (SCOPED)
    ======================================================================== */
-
-QDockWidget {
-    background-color: {color_bg_0};
-    color: {color_font_0};
-}
-
-QDockWidget::title {
-    background-color: {color_1};
-    color: {color_font_0};
-    padding: 4px;
-}
-
-QDockWidget > QWidget {
-    background-color: {color_bg_0};
-}
 
 #dockWidgetContents {
     background-color: {color_bg_0};
+    color: {color_font_0};
 }
 
 /* ========================================================================
-   BUTTONS - Dynamic dimensions based on profile
+   BUTTONS - Dynamic dimensions (SCOPED to FilterMate)
    ======================================================================== */
 
-QPushButton {
+#dockWidgetContents QPushButton {
     background-color: {color_1};
     color: {color_font_0};
     border: 1px solid {color_2};
@@ -53,22 +42,22 @@ QPushButton {
     min-height: {button_height};
 }
 
-QPushButton:hover {
+#dockWidgetContents QPushButton:hover {
     background-color: {color_2};
     border-color: {color_accent};
 }
 
-QPushButton:pressed {
+#dockWidgetContents QPushButton:pressed {
     background-color: {color_accent_pressed};
     color: {color_1};
 }
 
 /* Action buttons (Filter, Export, etc.) */
-QPushButton#pushButton_action_filter,
-QPushButton#pushButton_action_export,
-QPushButton#pushButton_action_reset,
-QPushButton#pushButton_action_undo_filter,
-QPushButton#pushButton_action_about {
+#dockWidgetContents QPushButton#pushButton_action_filter,
+#dockWidgetContents QPushButton#pushButton_action_export,
+#dockWidgetContents QPushButton#pushButton_action_reset,
+#dockWidgetContents QPushButton#pushButton_action_undo_filter,
+#dockWidgetContents QPushButton#pushButton_action_about {
     min-height: {action_button_height};
     icon-size: {action_button_icon_size};
     padding: {action_button_padding};
@@ -76,24 +65,24 @@ QPushButton#pushButton_action_about {
 }
 
 /* Tool buttons (Zoom, Identify, etc.) */
-QPushButton#pushButton_exploring_identify,
-QPushButton#pushButton_exploring_zoom,
-QPushButton#pushButton_checkable_exploring_selecting,
-QPushButton#pushButton_checkable_exploring_tracking,
-QPushButton#pushButton_checkable_exploring_linking_widgets,
-QPushButton#pushButton_exploring_reset_layer_properties,
-QPushButton#pushButton_checkable_filtering_auto_current_layer,
-QPushButton#pushButton_checkable_filtering_layers_to_filter,
-QPushButton#pushButton_checkable_filtering_current_layer_combine_operator,
-QPushButton#pushButton_checkable_filtering_geometric_predicates,
-QPushButton#pushButton_checkable_filtering_buffer_value,
-QPushButton#pushButton_checkable_filtering_buffer_type,
-QPushButton#pushButton_checkable_exporting_layers,
-QPushButton#pushButton_checkable_exporting_projection,
-QPushButton#pushButton_checkable_exporting_styles,
-QPushButton#pushButton_checkable_exporting_datatype,
-QPushButton#pushButton_checkable_exporting_output_folder,
-QPushButton#pushButton_checkable_exporting_zip {
+#dockWidgetContents QPushButton#pushButton_exploring_identify,
+#dockWidgetContents QPushButton#pushButton_exploring_zoom,
+#dockWidgetContents QPushButton#pushButton_checkable_exploring_selecting,
+#dockWidgetContents QPushButton#pushButton_checkable_exploring_tracking,
+#dockWidgetContents QPushButton#pushButton_checkable_exploring_linking_widgets,
+#dockWidgetContents QPushButton#pushButton_exploring_reset_layer_properties,
+#dockWidgetContents QPushButton#pushButton_checkable_filtering_auto_current_layer,
+#dockWidgetContents QPushButton#pushButton_checkable_filtering_layers_to_filter,
+#dockWidgetContents QPushButton#pushButton_checkable_filtering_current_layer_combine_operator,
+#dockWidgetContents QPushButton#pushButton_checkable_filtering_geometric_predicates,
+#dockWidgetContents QPushButton#pushButton_checkable_filtering_buffer_value,
+#dockWidgetContents QPushButton#pushButton_checkable_filtering_buffer_type,
+#dockWidgetContents QPushButton#pushButton_checkable_exporting_layers,
+#dockWidgetContents QPushButton#pushButton_checkable_exporting_projection,
+#dockWidgetContents QPushButton#pushButton_checkable_exporting_styles,
+#dockWidgetContents QPushButton#pushButton_checkable_exporting_datatype,
+#dockWidgetContents QPushButton#pushButton_checkable_exporting_output_folder,
+#dockWidgetContents QPushButton#pushButton_checkable_exporting_zip {
     min-height: {tool_button_height};
     max-height: {tool_button_height};
     min-width: {tool_button_height};
@@ -106,25 +95,25 @@ QPushButton#pushButton_checkable_exporting_zip {
 }
 
 /* Checkable button states */
-QPushButton:checked {
+#dockWidgetContents QPushButton:checked {
     background-color: {color_accent};
     color: {color_1};
     border: 1px solid {color_accent_dark};
 }
 
-QPushButton:disabled {
+#dockWidgetContents QPushButton:disabled {
     background-color: {color_bg_0};
     color: {color_font_2};
     border-color: {color_2};
 }
 
 /* ========================================================================
-   INPUT FIELDS - Dynamic dimensions
+   INPUT FIELDS - Dynamic dimensions (SCOPED to FilterMate)
    ======================================================================== */
 
-QLineEdit,
-QSpinBox,
-QDoubleSpinBox {
+#dockWidgetContents QLineEdit,
+#dockWidgetContents QSpinBox,
+#dockWidgetContents QDoubleSpinBox {
     background-color: {color_1};
     color: {color_font_0};
     border: 1px solid {color_2};
@@ -134,24 +123,24 @@ QDoubleSpinBox {
     max-height: {input_height};
 }
 
-QLineEdit:focus,
-QSpinBox:focus,
-QDoubleSpinBox:focus {
+#dockWidgetContents QLineEdit:focus,
+#dockWidgetContents QSpinBox:focus,
+#dockWidgetContents QDoubleSpinBox:focus {
     border: 2px solid {color_accent};
 }
 
-QLineEdit:disabled,
-QSpinBox:disabled,
-QDoubleSpinBox:disabled {
+#dockWidgetContents QLineEdit:disabled,
+#dockWidgetContents QSpinBox:disabled,
+#dockWidgetContents QDoubleSpinBox:disabled {
     background-color: {color_bg_0};
     color: {color_font_2};
 }
 
 /* ========================================================================
-   COMBOBOX - Dynamic dimensions
+   COMBOBOX - Dynamic dimensions (SCOPED to FilterMate)
    ======================================================================== */
 
-QComboBox {
+#dockWidgetContents QComboBox {
     background-color: {color_1};
     color: {color_font_0};
     border: 1px solid {color_2};
@@ -160,26 +149,26 @@ QComboBox {
     max-height: {combobox_height};
 }
 
-QComboBox:hover {
+#dockWidgetContents QComboBox:hover {
     border-color: {color_accent};
 }
 
-QComboBox:focus {
+#dockWidgetContents QComboBox:focus {
     border: 2px solid {color_accent};
 }
 
-QComboBox::drop-down {
+#dockWidgetContents QComboBox::drop-down {
     border: none;
     width: {combobox_height};  /* Square drop-down button */
 }
 
-QComboBox::down-arrow {
+#dockWidgetContents QComboBox::down-arrow {
     image: url(:/icons/down_arrow.png);
     width: {spacing_medium};
     height: {spacing_medium};
 }
 
-QComboBox QAbstractItemView {
+#dockWidgetContents QComboBox QAbstractItemView {
     background-color: {color_1};
     color: {color_font_0};
     selection-background-color: {color_accent_light_bg};
@@ -187,21 +176,21 @@ QComboBox QAbstractItemView {
     border: 1px solid {color_2};
 }
 
-QComboBox QAbstractItemView::item {
+#dockWidgetContents QComboBox QAbstractItemView::item {
     min-height: {combobox_item_height};
     padding-left: {spacing_small};
 }
 
-QComboBox:disabled {
+#dockWidgetContents QComboBox:disabled {
     background-color: {color_bg_0};
     color: {color_font_2};
 }
 
 /* ========================================================================
-   FRAMES AND CONTAINERS - Dynamic spacing
+   FRAMES AND CONTAINERS - Dynamic spacing (SCOPED to FilterMate)
    ======================================================================== */
 
-QFrame {
+#dockWidgetContents QFrame {
     background-color: {color_bg_0};
     border: none;
 }
@@ -209,7 +198,7 @@ QFrame {
 /* ========================================================================
    HEADER BAR - Backend indicator only (minimal, transparent)
    ======================================================================== */
-QFrame#frame_header {
+#dockWidgetContents QFrame#frame_header {
     background-color: transparent;
     border: none;
     border-radius: 0px;
@@ -221,7 +210,18 @@ QFrame#frame_header {
 
 /* label_plugin_title removed - title no longer displayed */
 
-QLabel#label_backend_indicator {
+/* Favorites indicator - Harmonized style (matches backend indicator) */
+#dockWidgetContents QLabel#label_favorites_indicator {
+    font-size: 8pt;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid {color_2};
+    color: {color_font_1};
+    background-color: {color_1};
+}
+
+#dockWidgetContents QLabel#label_backend_indicator {
     font-size: 8pt;
     font-weight: 500;
     padding: 2px 8px;
@@ -232,7 +232,7 @@ QLabel#label_backend_indicator {
 }
 
 /* ACTION BAR - Bottom action buttons */
-QFrame#frame_actions {
+#dockWidgetContents QFrame#frame_actions {
     min-height: {action_frame_height};
     padding: 6px 8px 4px 8px;
     border-top: 1px solid {color_2};
@@ -240,10 +240,10 @@ QFrame#frame_actions {
 }
 
 /* ========================================================================
-   GROUPBOX - Dynamic spacing
+   GROUPBOX - Dynamic spacing (SCOPED to FilterMate)
    ======================================================================== */
 
-QGroupBox {
+#dockWidgetContents QGroupBox {
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 5px;
@@ -253,7 +253,7 @@ QGroupBox {
     color: {color_font_0};
 }
 
-QGroupBox::title {
+#dockWidgetContents QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
     padding: {spacing_small} {spacing_medium};
@@ -262,41 +262,48 @@ QGroupBox::title {
     color: {color_accent_dark};
 }
 
-QGroupBox:disabled {
+#dockWidgetContents QGroupBox:disabled {
     color: {color_font_2};
 }
 
 /* ========================================================================
-   LABELS - Dynamic font size
+   LABELS - Dynamic font size (SCOPED to FilterMate)
    ======================================================================== */
 
-QLabel {
+#dockWidgetContents QLabel {
     color: {color_font_0};
     font-size: {label_font_size}pt;
     padding: {spacing_small};
 }
 
-QLabel:disabled {
+#dockWidgetContents QLabel:disabled {
     color: {color_font_2};
 }
 
 /* Backend indicator label */
-QLabel#label_backend_indicator {
+#dockWidgetContents QLabel#label_backend_indicator {
+    color: {color_font_1};
+    font-size: 8pt;
+    padding: 1px 4px;
+}
+
+/* Favorites indicator label - Harmonized style */
+#dockWidgetContents QLabel#label_favorites_indicator {
     color: {color_font_1};
     font-size: 8pt;
     padding: 1px 4px;
 }
 
 /* ========================================================================
-   TABS - Dynamic dimensions
+   TABS - Dynamic dimensions (SCOPED to FilterMate)
    ======================================================================== */
 
-QTabWidget::pane {
+#dockWidgetContents QTabWidget::pane {
     border: 1px solid {color_2};
     background-color: {color_1};
 }
 
-QTabBar::tab {
+#dockWidgetContents QTabBar::tab {
     background-color: {color_bg_0};
     color: {color_font_1};
     border: 1px solid {color_2};
@@ -305,33 +312,33 @@ QTabBar::tab {
     font-size: {tab_font_size}pt;
 }
 
-QTabBar::tab:selected {
+#dockWidgetContents QTabBar::tab:selected {
     background-color: {color_accent};
     color: {color_1};
     font-weight: bold;
 }
 
-QTabBar::tab:hover:!selected {
+#dockWidgetContents QTabBar::tab:hover:!selected {
     background-color: {color_2};
 }
 
 /* ========================================================================
-   TOOLBOX - Dynamic spacing
+   TOOLBOX - Dynamic spacing (SCOPED to FilterMate)
    ======================================================================== */
 
-QToolBox::tab {
+#dockWidgetContents QToolBox::tab {
     background-color: {color_bg_0};
     border: 1px solid {color_2};
     padding: {spacing_medium};
     color: {color_font_0};
 }
 
-QToolBox::tab:hover:!selected {
+#dockWidgetContents QToolBox::tab:hover:!selected {
     background-color: {color_2};
     border: 1px solid {color_accent};
 }
 
-QToolBox::tab:selected {
+#dockWidgetContents QToolBox::tab:selected {
     background-color: {color_accent};
     border: 2px solid {color_accent};
     font-weight: bold;
@@ -339,64 +346,64 @@ QToolBox::tab:selected {
 }
 
 /* ========================================================================
-   SCROLLBAR - Dynamic width
+   SCROLLBAR - Dynamic width (SCOPED to FilterMate)
    ======================================================================== */
 
-QScrollBar {
+#dockWidgetContents QScrollBar {
     cursor: pointer;
 }
 
-QScrollBar:vertical {
+#dockWidgetContents QScrollBar:vertical {
     background-color: {color_bg_0};
     width: {scrollbar_width};
     border: none;
 }
 
-QScrollBar::handle:vertical {
+#dockWidgetContents QScrollBar::handle:vertical {
     background-color: {color_2};
     min-height: 20px;
     border-radius: 2px;
     cursor: pointer;
 }
 
-QScrollBar::handle:vertical:hover {
+#dockWidgetContents QScrollBar::handle:vertical:hover {
     background-color: {color_accent};
     cursor: pointer;
 }
 
-QScrollBar::add-line:vertical,
-QScrollBar::sub-line:vertical {
+#dockWidgetContents QScrollBar::add-line:vertical,
+#dockWidgetContents QScrollBar::sub-line:vertical {
     height: 0px;
 }
 
-QScrollBar:horizontal {
+#dockWidgetContents QScrollBar:horizontal {
     background-color: {color_bg_0};
     height: {scrollbar_width};
     border: none;
 }
 
-QScrollBar::handle:horizontal {
+#dockWidgetContents QScrollBar::handle:horizontal {
     background-color: {color_2};
     min-width: 20px;
     border-radius: 2px;
     cursor: pointer;
 }
 
-QScrollBar::handle:horizontal:hover {
+#dockWidgetContents QScrollBar::handle:horizontal:hover {
     background-color: {color_accent};
     cursor: pointer;
 }
 
-QScrollBar::add-line:horizontal,
-QScrollBar::sub-line:horizontal {
+#dockWidgetContents QScrollBar::add-line:horizontal,
+#dockWidgetContents QScrollBar::sub-line:horizontal {
     width: 0px;
 }
 
 /* ========================================================================
-   TREE VIEW - Dynamic item height
+   TREE VIEW - Dynamic item height (SCOPED to FilterMate)
    ======================================================================== */
 
-QTreeView {
+#dockWidgetContents QTreeView {
     background-color: {color_1};
     color: {color_font_0};
     border: 1px solid {color_2};
@@ -404,134 +411,90 @@ QTreeView {
     selection-color: {color_accent_dark};
 }
 
-QTreeView::item {
+#dockWidgetContents QTreeView::item {
     min-height: {tree_item_height};
     padding: {spacing_small};
 }
 
-QTreeView::item:hover {
+#dockWidgetContents QTreeView::item:hover {
     background-color: {color_2};
 }
 
-QTreeView::item:selected {
+#dockWidgetContents QTreeView::item:selected {
     background-color: {color_accent};
     color: {color_1};
 }
 
-QTreeView::branch {
+#dockWidgetContents QTreeView::branch {
     background-color: {color_1};
 }
 
 /* ========================================================================
-   DOCKWIDGET - Dynamic width
+   CHECKBOXES AND RADIO BUTTONS - Dynamic spacing (SCOPED to FilterMate)
    ======================================================================== */
 
-QDockWidget {
-    color: {color_font_0};
-    font-weight: bold;
-}
-
-QDockWidget::title {
-    background-color: {color_accent};
-    color: {color_1};
-    padding: {spacing_medium};
-    text-align: left;
-}
-
-QDockWidget::close-button,
-QDockWidget::float-button {
-    background-color: transparent;
-    border: none;
-    icon-size: {spacing_large};
-}
-
-QDockWidget::close-button:hover,
-QDockWidget::float-button:hover {
-    background-color: {color_accent_hover};
-}
-
-/* ========================================================================
-   CHECKBOXES AND RADIO BUTTONS - Dynamic spacing
-   ======================================================================== */
-
-QCheckBox,
-QRadioButton {
+#dockWidgetContents QCheckBox,
+#dockWidgetContents QRadioButton {
     color: {color_font_0};
     spacing: {spacing_medium};
 }
 
-QCheckBox::indicator,
-QRadioButton::indicator {
+#dockWidgetContents QCheckBox::indicator,
+#dockWidgetContents QRadioButton::indicator {
     width: {spacing_large};
     height: {spacing_large};
     border: 1px solid {color_2};
     background-color: {color_1};
 }
 
-QCheckBox::indicator:checked,
-QRadioButton::indicator:checked {
+#dockWidgetContents QCheckBox::indicator:checked,
+#dockWidgetContents QRadioButton::indicator:checked {
     background-color: {color_accent};
     border-color: {color_accent_dark};
 }
 
-QCheckBox::indicator:hover,
-QRadioButton::indicator:hover {
+#dockWidgetContents QCheckBox::indicator:hover,
+#dockWidgetContents QRadioButton::indicator:hover {
     border-color: {color_accent};
 }
 
-QCheckBox:disabled,
-QRadioButton:disabled {
+#dockWidgetContents QCheckBox:disabled,
+#dockWidgetContents QRadioButton:disabled {
     color: {color_font_2};
 }
 
 /* ========================================================================
-   TOOLTIPS - Dynamic padding and font - Improved height and readability
+   MENUS - Dynamic spacing (SCOPED to FilterMate)
    ======================================================================== */
 
-QToolTip {
-    background-color: {color_accent_light_bg};
-    color: {color_accent_dark};
-    border: 2px solid {color_accent};
-    padding: 8px 12px;
-    font-size: {label_font_size}pt;
-    font-weight: 500;
-    border-radius: 4px;
-    min-height: 24px;
-    line-height: 1.4;
-}
-
-/* ========================================================================
-   MENUS - Dynamic spacing
-   ======================================================================== */
-
-QMenu {
+#dockWidgetContents QMenu {
     background-color: {color_1};
     color: {color_font_0};
     border: 1px solid {color_2};
     padding: {spacing_small};
 }
 
-QMenu::item {
+#dockWidgetContents QMenu::item {
     padding: {spacing_small} {spacing_large};
     min-height: {combobox_item_height};
 }
 
-QMenu::item:selected {
+#dockWidgetContents QMenu::item:selected {
     background-color: {color_accent};
     color: {color_1};
 }
 
-QMenu::separator {
+#dockWidgetContents QMenu::separator {
     height: 1px;
     background-color: {color_2};
     margin: {spacing_small} {spacing_medium};
 }
 
 /* ========================================================================
-   PROGRESS BAR - Dynamic height
+   PROGRESS BAR - Dynamic height (SCOPED to FilterMate)
    ======================================================================== */
 
-QProgressBar {
+#dockWidgetContents QProgressBar {
     background-color: {color_bg_0};
     border: 1px solid {color_2};
     border-radius: {input_border_radius};
@@ -540,7 +503,7 @@ QProgressBar {
     min-height: {input_height};
 }
 
-QProgressBar::chunk {
+#dockWidgetContents QProgressBar::chunk {
     background-color: {color_accent};
     border-radius: {input_border_radius};
 }

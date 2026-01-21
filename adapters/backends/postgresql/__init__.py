@@ -5,6 +5,7 @@ PostgreSQL/PostGIS specific implementations including:
 - Main backend with BackendPort interface
 - Materialized view management
 - Query optimization
+- Filter chain optimization (v4.2.10)
 - Session cleanup
 - Source geometry preparation (EPIC-1 Phase E4-S9)
 
@@ -43,9 +44,25 @@ from .filter_actions import (
 # v4.1.0: Expression Builder (migrated from before_migration)
 from .expression_builder import PostgreSQLExpressionBuilder
 
+# v4.2.10: Filter Chain Optimizer (MV-based optimization)
+from .filter_chain_optimizer import (
+    FilterChainOptimizer,
+    FilterChainContext,
+    OptimizationStrategy,
+    OptimizedChain,
+    create_filter_chain_optimizer,
+    optimize_filter_chain,
+)
+
+# v4.1.1: Backward compatibility alias (legacy name from modules/)
+# This alias allows code that imports PostgreSQLGeometricFilter to work
+# with the renamed PostgreSQLBackend class
+PostgreSQLGeometricFilter = PostgreSQLBackend
+
 __all__ = [
     # Main backend
     'PostgreSQLBackend',
+    'PostgreSQLGeometricFilter',  # Legacy alias for backward compatibility
     'create_postgresql_backend',
     # MV Manager
     'MaterializedViewManager',
@@ -57,6 +74,13 @@ __all__ = [
     'QueryAnalysis',
     'OptimizationResult',
     'create_optimizer',
+    # v4.2.10: Filter Chain Optimizer
+    'FilterChainOptimizer',
+    'FilterChainContext',
+    'OptimizationStrategy',
+    'OptimizedChain',
+    'create_filter_chain_optimizer',
+    'optimize_filter_chain',
     # Cleanup
     'PostgreSQLCleanupService',
     'create_cleanup_service',

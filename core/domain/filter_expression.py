@@ -104,7 +104,7 @@ class FilterExpression:
     source_layer_id: str = ""
     target_layer_ids: Tuple[str, ...] = field(default_factory=tuple)
     buffer_value: Optional[float] = None
-    buffer_segments: int = 8
+    buffer_segments: int = 5
 
     def __post_init__(self) -> None:
         """Validate expression after initialization."""
@@ -125,7 +125,7 @@ class FilterExpression:
         source_layer_id: str,
         target_layer_ids: Optional[List[str]] = None,
         buffer_value: Optional[float] = None,
-        buffer_segments: int = 8,
+        buffer_segments: int = 5,
         sql: Optional[str] = None
     ) -> 'FilterExpression':
         """
@@ -212,7 +212,7 @@ class FilterExpression:
             source_layer_id=source_layer_id,
             target_layer_ids=tuple(target_layer_ids or []),
             buffer_value=buffer_value if buffer_value and buffer_value > 0 else None,
-            buffer_segments=8
+            buffer_segments=5
         )
 
     @classmethod
@@ -282,7 +282,7 @@ class FilterExpression:
             source_layer_id=source_layer_id,
             target_layer_ids=(),
             buffer_value=buffer_distance if buffer_distance and buffer_distance > 0 else None,
-            buffer_segments=8
+            buffer_segments=5
         )
 
     @staticmethod
@@ -325,7 +325,7 @@ class FilterExpression:
             buffer_segments=self.buffer_segments
         )
 
-    def with_buffer(self, value: float, segments: int = 8) -> 'FilterExpression':
+    def with_buffer(self, value: float, segments: int = 5) -> 'FilterExpression':
         """
         Return new expression with buffer applied.
         

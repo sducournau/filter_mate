@@ -512,10 +512,19 @@ def execute_filter_action_postgresql_materialized(
     Returns:
         bool: True if successful
     """
+    from ....infrastructure.database.sql_utils import sanitize_sql_identifier
+    
     start_time = time.time()
     
     # Generate session-unique view name for multi-client isolation
-    session_name = get_session_name_fn(name)
+    # FIX v4.2.0: For custom buffer expressions, use source_table + '_buffer_expr' as base name
+    # This must match the name generated in filter_executor.prepare_postgresql_source_geom()
+    if custom and param_buffer_expression:
+        base_name = sanitize_sql_identifier(source_table + '_buffer_expr')
+        session_name = get_session_name_fn(base_name)
+        logger.debug(f"[PostgreSQL] Using session-prefixed MV name for buffer expr: {session_name}")
+    else:
+        session_name = get_session_name_fn(name)
     logger.debug(f"[PostgreSQL] Using session-prefixed view name: {session_name} (session_id: {session_id})")
     
     # Ensure temp schema exists before creating materialized views

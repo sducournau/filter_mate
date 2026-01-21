@@ -831,10 +831,24 @@ class ConfigurationManager(QObject):
         """v4.0 Sprint 16: Configure widgets for Filtering tab (migrated from dockwidget)."""
         import os
         from qgis.PyQt import QtGui, QtCore, QtWidgets
-        from qgis.core import QgsMapLayerProxyModel
+        
+        # FIX 2026-01-21: Import from correct location (gui in QGIS 3.30+, core in older versions)
+        try:
+            from qgis.gui import QgsMapLayerProxyModel
+        except ImportError:
+            from qgis.core import QgsMapLayerProxyModel
         
         d = self.dockwidget
-        d.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
+        # v4.2: Filter to show only vector layers WITH geometry (exclude non-spatial tables)
+        # HasGeometry = PointLayer | LineLayer | PolygonLayer = 4 | 8 | 16 = 28
+        # This excludes tables without geometry (NoGeometry = 2)
+        try:
+            d.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.HasGeometry)
+            logger.info("comboBox_filtering_current_layer: Filter set to HasGeometry (exclude non-spatial tables)")
+        except Exception as e:
+            logger.warning(f"Could not set HasGeometry filter: {e}")
+            # Fallback to VectorLayer only
+            d.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
         
         # Apply themed icon to centroids checkbox
         try:
