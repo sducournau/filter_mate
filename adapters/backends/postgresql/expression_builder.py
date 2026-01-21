@@ -1078,6 +1078,24 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         # Build source geometry in subquery
         source_geom_in_subquery = f'__source."{source_geom_field}"'
         
+        # FIX v4.2.17 (2026-01-21): Don't apply buffer_expression in filter chaining context
+        # When source_filter contains EXISTS (filter chaining: zone_pop → demand_points → ducts → sheaths),
+        # the buffer_expression references fields from the ORIGINAL source (demand_points.homecount)
+        # but is being applied to INTERMEDIATE sources (ducts, sheaths) that don't have those fields!
+        # 
+        # Example error: "ducts → sheaths" tries to use CASE WHEN ducts.homecount > 100
+        # but "homecount" only exists in demand_points, not ducts!
+        #
+        # Solution: In filter chaining, the buffer was ALREADY applied when creating the temp table
+        # for the original source (demand_points). Intermediate layers should use plain geometry.
+        is_filter_chaining = source_filter and 'EXISTS' in source_filter.upper()
+        
+        if is_filter_chaining and buffer_expression:
+            self.log_info(f"⚙️  Filter chaining detected - ignoring buffer_expression for {source_table}")
+            self.log_info(f"   → Buffer was already applied to original source layer")
+            self.log_info(f"   → Using plain geometry from {source_table} (no additional buffer)")
+            buffer_expression = None  # Clear it to avoid applying to wrong table
+        
         # FIX v4.2.14 (2026-01-21): ALWAYS use temp table for dynamic buffer expressions
         # Dynamic buffers (CASE WHEN) recalculate for EVERY feature pair - causes freeze on mapCanvas.refresh()
         # Problem: With 7 distant layers × 974 source features × 50k distant features each = 340M calculations!
