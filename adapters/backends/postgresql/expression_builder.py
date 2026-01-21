@@ -866,15 +866,11 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         # Convert QGIS buffer expression to PostGIS SQL
         buffer_expr_sql = qgis_expression_to_postgis(buffer_expression)
         
-        # FIX v4.2.15 (2026-01-21): Prefix field references with table name
-        # The buffer expression contains field names like "homecount" that must be qualified
-        # with the source table name in the CREATE TEMP TABLE context
-        # Pattern: "field" -> "{source_table}"."field"
-        buffer_expr_sql = re.sub(
-            r'(?<![.\w])"([^"]+)"(?!\s*\.)',
-            rf'"{source_table}"."\1"',
-            buffer_expr_sql
-        )
+        # FIX v4.2.21 (2026-01-21): DO NOT prefix field references in CREATE TABLE context
+        # In "SELECT ... FROM table", field references should be unqualified
+        # Previous regex was incorrectly adding table prefix, causing "table.field does not exist"
+        # The fields are already implicitly scoped to the source table in the FROM clause
+        # buffer_expr_sql is used as-is (e.g., "homecount" stays as "homecount")
         
         # FIX v4.2.18: Schema already exists (it's the source table's schema)
         # No need to create schema - we're using the same schema as the source table

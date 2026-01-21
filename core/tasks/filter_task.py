@@ -2962,12 +2962,28 @@ class FilterEngineTask(QgsTask):
             
             self._execute_postgresql_commands(connexion, commands)
             
+            # FIX v4.2.8: Register MV references to prevent premature cleanup
+            from ...adapters.backends.postgresql.mv_reference_tracker import get_mv_reference_tracker
+            tracker = get_mv_reference_tracker()
+            
+            # Register references for source layer and all distant layers
+            if hasattr(self, 'source_layer') and self.source_layer:
+                tracker.add_reference(view_name, self.source_layer.id())
+            
+            # Register for all distant layers that will use this source MV
+            if hasattr(self, 'param_all_layers'):
+                for layer in self.param_all_layers:
+                    if layer and hasattr(layer, 'id'):
+                        if not self.source_layer or layer.id() != self.source_layer.id():
+                            tracker.add_reference(view_name, layer.id())
+            
             elapsed = time.time() - start_time
             fid_count = len(source_mv_info.fid_list)
             logger.info(
                 f"✓ v2.9.0: Source MV '{view_name}' created in {elapsed:.2f}s "
                 f"({fid_count} FIDs with pre-computed buffer)"
             )
+            logger.info(f"   FIX v4.2.8: Registered references for multiple layers")
             return True
             
         except Exception as e:
@@ -3108,9 +3124,26 @@ class FilterEngineTask(QgsTask):
             commands = [sql_drop, sql_drop_main, sql_create_main, sql_index, sql_create_dump]
             self._execute_postgresql_commands(connexion, commands)
             
+            # FIX v4.2.8: Register MV references to prevent premature cleanup
+            from ...adapters.backends.postgresql.mv_reference_tracker import get_mv_reference_tracker
+            tracker = get_mv_reference_tracker()
+            
+            # Register references for source layer and all distant layers
+            if self.source_layer:
+                tracker.add_reference(f"mv_{mv_name}", self.source_layer.id())
+                tracker.add_reference(f"mv_{mv_name}_dump", self.source_layer.id())
+            
+            # Register for all distant layers that will use this MV
+            if hasattr(self, 'param_all_layers'):
+                for layer in self.param_all_layers:
+                    if layer and hasattr(layer, 'id') and layer.id() != (self.source_layer.id() if self.source_layer else None):
+                        tracker.add_reference(f"mv_{mv_name}", layer.id())
+                        tracker.add_reference(f"mv_{mv_name}_dump", layer.id())
+            
             elapsed = time.time() - start_time
             logger.info(f"✓ FIX v4.2.1: Buffer expression MVs created in {elapsed:.2f}s")
             logger.info(f"   mv_{mv_name} and mv_{mv_name}_dump ready for distant layer filtering")
+            logger.info(f"   FIX v4.2.8: Registered references for {len(layer_ids) if hasattr(self, 'param_all_layers') else 1} layer(s)")
             
             return True
             
@@ -5417,6 +5450,10 @@ class FilterEngineTask(QgsTask):
         """
         Cleanup PostgreSQL materialized views created during filtering.
         This prevents accumulation of temporary MVs in the database.
+        
+        FIX v4.2.8 (2026-01-21): Use reference tracker to prevent premature MV cleanup.
+        When filtering multiple layers, a shared MV (e.g., temp_buffered_demand_points_xxx)
+        may be referenced by multiple layers. Only drop MVs when no layers reference them.
         """
         if not POSTGRESQL_AVAILABLE:
             return
@@ -5426,27 +5463,74 @@ class FilterEngineTask(QgsTask):
             if self.param_source_provider_type != 'postgresql':
                 return
             
-            # Get source layer from task parameters
-            source_layer = None
-            if 'source_layer' in self.task_parameters:
-                source_layer = self.task_parameters['source_layer']
-            elif hasattr(self, 'source_layer') and self.source_layer:
-                source_layer = self.source_layer
+            # Import reference tracker
+            from ...adapters.backends.postgresql.mv_reference_tracker import get_mv_reference_tracker
             
-            if not source_layer:
-                logger.debug("No source layer available for PostgreSQL MV cleanup")
+            # Get layer IDs from task (layers being filtered)
+            layer_ids = []
+            
+            # Add source layer ID
+            if hasattr(self, 'source_layer') and self.source_layer:
+                layer_ids.append(self.source_layer.id())
+            elif 'source_layer' in self.task_parameters:
+                source_layer = self.task_parameters['source_layer']
+                if source_layer:
+                    layer_ids.append(source_layer.id())
+            
+            # Add distant layer IDs
+            if hasattr(self, 'param_all_layers'):
+                for layer in self.param_all_layers:
+                    if layer and hasattr(layer, 'id'):
+                        layer_ids.append(layer.id())
+            
+            if not layer_ids:
+                logger.debug("No layer IDs available for PostgreSQL MV cleanup")
                 return
             
-            # Import backend and perform cleanup
-            from ..backends.postgresql_backend import PostgreSQLGeometricFilter
+            # Remove references for these layers and get MVs that can be dropped
+            tracker = get_mv_reference_tracker()
+            mvs_to_drop = set()
             
-            backend = PostgreSQLGeometricFilter(self.task_parameters)
-            success = backend.cleanup_materialized_views(source_layer)
+            for layer_id in layer_ids:
+                can_drop = tracker.remove_all_references_for_layer(layer_id)
+                mvs_to_drop.update(can_drop)
             
-            if success:
-                logger.debug("PostgreSQL materialized views cleaned up successfully")
-            else:
-                logger.debug("PostgreSQL MV cleanup completed with warnings")
+            if not mvs_to_drop:
+                logger.debug(
+                    f"PostgreSQL MV cleanup: All MVs still referenced by other layers "
+                    f"(removed references for {len(layer_ids)} layer(s))"
+                )
+                return
+            
+            # Actually drop MVs that have no more references
+            logger.info(
+                f"PostgreSQL MV cleanup: Dropping {len(mvs_to_drop)} MV(s) "
+                f"with no remaining references"
+            )
+            
+            # Get PostgreSQL connection and drop MVs
+            connexion = self._get_valid_postgresql_connection()
+            if not connexion:
+                logger.warning("No PostgreSQL connection for MV cleanup")
+                return
+            
+            cursor = connexion.cursor()
+            schema = getattr(self, 'current_materialized_view_schema', 'filtermate_temp')
+            
+            for mv_name in mvs_to_drop:
+                try:
+                    # Extract just the view name if it's fully qualified
+                    if '.' in mv_name:
+                        mv_name = mv_name.split('.')[-1].strip('"')
+                    
+                    drop_sql = f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."{mv_name}" CASCADE;'
+                    cursor.execute(drop_sql)
+                    logger.debug(f"Dropped MV: {schema}.{mv_name}")
+                except Exception as e:
+                    logger.warning(f"Failed to drop MV {mv_name}: {e}")
+            
+            connexion.commit()
+            logger.debug(f"PostgreSQL MV cleanup completed: dropped {len(mvs_to_drop)} MV(s)")
                 
         except Exception as e:
             # Non-critical error - log but don't fail the task

@@ -2,6 +2,45 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [4.3.1] - 2026-01-21 🐛 Critical Fix: Field Reference Error in Buffer Tables
+
+### Critical Bug Fix
+- **Field Reference Error FIXED**: Buffer table creation no longer fails with "column does not exist"
+- **Root Cause**: Incorrectly prefixing field names in CREATE TABLE context
+- **Impact**: Dynamic buffer expressions with field references (e.g., `if("homecount" >= 10, 50, 1)`) now work correctly
+
+### Issue
+- **Error**: `column ducts.homecount does not exist` when creating buffer tables
+- **Context**: In `CREATE TABLE AS SELECT ST_Buffer(..., CASE WHEN "ducts"."homecount"...)` 
+- **Symptom**: Buffer table creation fails, falls back to slow inline expression
+
+### Root Cause
+The regex at line 871-876 in `expression_builder.py` was incorrectly prefixing ALL field references:
+```python
+# WRONG: Added table prefix in CREATE TABLE context
+buffer_expr_sql = re.sub(r'(?<![.\w])"([^"]+)"(?!\s*\.)', rf'"{source_table}"."\1"', buffer_expr_sql)
+# Transformed: "homecount" → "ducts"."homecount"
+```
+
+But in SQL context:
+```sql
+CREATE TABLE ... AS SELECT ... ST_Buffer(..., CASE WHEN "ducts"."homecount" ...) FROM "infra"."ducts"
+                                                              ^^^ WRONG - field already scoped to table in FROM
+```
+
+### Solution
+Remove the field prefixing in CREATE TABLE context:
+```python
+# CORRECT: Fields implicitly scoped by FROM clause
+buffer_expr_sql = qgis_expression_to_postgis(buffer_expression)
+# "homecount" stays as "homecount" - correct in "SELECT ... FROM table" context
+```
+
+### Files Modified
+- `adapters/backends/postgresql/expression_builder.py` (line 866-868)
+
+---
+
 ## [4.3.0] - 2026-01-21 🚀 PostgreSQL Dynamic Buffer Performance Fix
 
 ### Critical Performance Fix
