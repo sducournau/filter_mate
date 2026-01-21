@@ -845,6 +845,16 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         # Convert QGIS buffer expression to PostGIS SQL
         buffer_expr_sql = qgis_expression_to_postgis(buffer_expression)
         
+        # FIX v4.2.15 (2026-01-21): Prefix field references with table name
+        # The buffer expression contains field names like "homecount" that must be qualified
+        # with the source table name in the CREATE TEMP TABLE context
+        # Pattern: "field" -> "{source_table}"."field"
+        buffer_expr_sql = re.sub(
+            r'(?<![.\w])"([^"]+)"(?!\s*\.)',
+            rf'"{source_table}"."\1"',
+            buffer_expr_sql
+        )
+        
         # Build CREATE TEMP TABLE statement
         # Note: PostgreSQL temp tables are automatically dropped at session end
         sql_create = f"""
