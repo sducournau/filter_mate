@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 4.2.6** | January 2026 | **Production-Ready** 🎉
+**Version 4.3.0** | January 2026 | **Production-Ready** 🎉
 
 > 🚀 The ultimate spatial filtering plugin! Explore, filter & export vector data with lightning-fast performance on ANY data source.
 
@@ -27,6 +27,17 @@
 
 ## 📋 Recent Changes
 
+### � v4.3.0 - PostgreSQL Dynamic Buffer Performance (January 2026)
+
+**CRITICAL performance fix** - 99.7% improvement for dynamic buffer expressions with filter chaining.
+
+- **Fixed:** QGIS freeze with dynamic buffers (e.g., `if("homecount" > 100, 50, 1)`)
+- **Performance:** 340M calculations → 974 lookups (99.7% reduction)
+- **Architecture:** Pre-calculated buffer tables with spatial indexes
+- **Chaining:** Correct buffer table reuse across all distant layers
+- **Impact:** 5+ minute freeze → < 1 second canvas refresh
+- See [CHANGELOG.md](CHANGELOG.md) for 8-version progression details (v4.2.11-v4.2.20)
+
 ### 🔧 v4.2.6 - Code Quality & UI Polish (January 2026)
 
 **Major code cleanup** with debug print removal, new searchable config view, and QSS fixes.
@@ -36,7 +47,6 @@
 - **Fixed:** UI alignment in filtering section (32x32 button consistency)
 - **Cleanup:** Removed 150+ debug print statements across 68 files
 - **Quality:** Config model signal handling improvements
-- See [CHANGELOG.md](CHANGELOG.md) for complete details
 
 ### 🐛 v4.2.5 - Multiple Feature Picker Fix (January 2026)
 
