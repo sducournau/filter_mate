@@ -1052,25 +1052,34 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         # Build source geometry in subquery
         source_geom_in_subquery = f'__source."{source_geom_field}"'
         
-        # FIX v4.2.13 (2026-01-21): Pre-calculate buffers in temp table for complex queries
-        # Priority: temp_table (complex) > buffer_expression (inline) > buffer_value (static)
+        # FIX v4.2.14 (2026-01-21): ALWAYS use temp table for dynamic buffer expressions
+        # Dynamic buffers (CASE WHEN) recalculate for EVERY feature pair - causes freeze on mapCanvas.refresh()
+        # Problem: With 7 distant layers × 974 source features × 50k distant features each = 340M calculations!
+        # Solution: Pre-calculate buffers ONCE in temp table, reuse across all EXISTS queries
+        # Priority: temp_table (ALWAYS for dynamic) > buffer_value (static)
         if buffer_expression and buffer_expression.strip():
-            # Check if query is complex (chaining + dynamic buffer)
-            is_complex = source_filter and 'EXISTS' in source_filter.upper()
+            # CRITICAL: Use temp table for ALL dynamic buffer expressions
+            # The freeze happens during mapCanvas.refresh() when QGIS renders all 7 layers simultaneously
+            # Each layer's setSubsetString contains inline ST_Buffer(CASE WHEN...) that recalculates
+            # for every feature during rendering - causes multi-minute freeze even with timeout protection
+            self.log_info("🚀 Using pre-calculated buffer table (prevents freeze on canvas refresh)")
+            temp_table_expr = self._build_exists_with_buffer_table(
+                geom_expr=geom_expr,
+                predicate_func=predicate_func,
+                source_schema=source_schema,
+                source_table=source_table,
+                source_geom_field=source_geom_field,
+                buffer_expression=buffer_expression,
+                source_filter=source_filter,
+                layer_props=layer_props
+            )
             
-            if is_complex:
-                # Use pre-calculated buffer table for performance
-                self.log_info("🚀 Using pre-calculated buffer table (complex query optimization)")
-                return self._build_exists_with_buffer_table(
-                    geom_expr=geom_expr,
-                    predicate_func=predicate_func,
-                    source_schema=source_schema,
-                    source_table=source_table,
-                    source_geom_field=source_geom_field,
-                    buffer_expression=buffer_expression,
-                    source_filter=source_filter,
-                    layer_props=layer_props
-                )
+            # If temp table creation succeeded, return it
+            if temp_table_expr:
+                return temp_table_expr
+            
+            # Fallback to inline if temp table failed (logged in _build_exists_with_buffer_table)
+            self.log_warning("⚠️  Temp table creation failed - falling back to inline buffer (may cause freeze)")
             
             # Non-complex: Use inline buffer (existing code)
             from .filter_executor import qgis_expression_to_postgis
