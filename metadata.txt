@@ -43,7 +43,7 @@ repository=https://github.com/sducournau/filter_mate
 
 hasProcessingProvider=no
 
-changelog=v4.3.10 (2026-01-22): CRITICAL FIX series complete - Export workflow 100% functional + Buffer table transaction committed. Fixes: Export button protection, JUST-IN-TIME widget sync, buffer table commit, filter chaining flags, MV creation. See CHANGELOG.md for v4.3.1-v4.3.9 details.
+changelog=v4.3.10 (2026-01-22): CRITICAL FIX series - Export workflow fully functional, buffer table transaction committed. Fixes include export button, widget sync, filter chaining, MV creation.
 
 # Tags are comma separated with spaces allowed
 tags=python,filter,vector,layers,geofilter,search,postgis,ogr,spatialite,data,exploration,subset,export
