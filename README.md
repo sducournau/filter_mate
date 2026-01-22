@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 4.3.10** | January 2026 | **Production-Ready** 🎉
+**Version 4.4.0** | January 2026 | **Production-Ready** 🎉
 
 > 🚀 The ultimate spatial filtering plugin! Explore, filter & export vector data with lightning-fast performance on ANY data source.
 
@@ -26,6 +26,16 @@
 ---
 
 ## 📋 Recent Changes
+
+### 🧪 v4.4.0 - Quality & Test Coverage Release (January 2026)
+
+**Major quality release** with 396 standalone unit tests and architectural improvements.
+
+- **Tests:** 396 standalone unit tests covering services, adapters, infrastructure, core
+- **Architecture:** DockwidgetSignalManager extracted (778 lines) from God Class
+- **Cleanup:** modules/ imports updated to hexagonal architecture paths
+- **Coverage:** Services, TaskBridge, CircuitBreaker, StateManager, BackendPort, FilterExpression
+- **Quality:** Test coverage target 80% achieved
 
 ### 🐛 v4.3.1 - Buffer Field Reference Fix (January 2026)
 

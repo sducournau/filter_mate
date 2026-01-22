@@ -2,6 +2,40 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [4.4.0] - 2026-01-22 🧪 Quality & Test Coverage Release
+
+### Major Quality Release
+
+This release focuses on code quality, test coverage, and architectural improvements.
+
+#### Test Coverage - 396 Standalone Unit Tests
+
+| Category | Tests | Description |
+|----------|-------|-------------|
+| **Services** | 226 | filter_application, export, buffer, task_run_orchestrator, app_initializer, datasource_manager, layer_service, canvas_refresh |
+| **Adapters** | 41 | TaskBridge adapter with metrics and filter execution |
+| **Infrastructure** | 70 | CircuitBreaker pattern, StateManager (Layer/Project) |
+| **Core** | 59 | BackendPort interface, FilterExpression domain model |
+
+#### Architecture Improvements
+
+- **DockwidgetSignalManager**: Extracted 778 lines from God Class for signal handling
+- **Hexagonal Architecture**: Updated all imports from legacy modules/ to new paths
+- **Test Patterns**: Standalone logic tests that don't require QGIS runtime
+
+#### Key Components Tested
+
+- `FilterApplicationService`: Subset filter application and handling
+- `ExportService`: Validation, format handling, batch export
+- `BufferService`: Configuration, tolerance calculations, simplification
+- `TaskRunOrchestrator`: Context/result structures, progress, cancellation
+- `CircuitBreaker`: State transitions (CLOSED/OPEN/HALF_OPEN), registry
+- `StateManager`: Layer/Project CRUD operations, singleton patterns
+- `BackendPort`: Interface contract, capabilities, validation
+- `FilterExpression`: Domain model, spatial predicates, provider types
+
+---
+
 ## [4.2.13] - 2026-01-22 🔧 FIX: Spatialite dynamic buffer expression fails with "SPATIAL_FILTER unknown"
 
 ### Bug Fix - Dynamic Buffer Expression Causes SQL Error in Spatialite
