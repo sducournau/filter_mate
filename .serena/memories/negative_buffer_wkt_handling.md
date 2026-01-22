@@ -116,6 +116,17 @@ layer.setSubsetString(expression)
 
 ## Version History
 
+### v4.2.12 (January 22, 2026) - CRITICAL FIX ⭐ NEW
+- **Spatialite**: Fixed `qgis_expression_to_spatialite()` missing critical conversions
+  - Added spatial function conversions (`$area`, `buffer`, etc.)
+  - Added IF → CASE WHEN conversion
+  - Added numeric type casting (`"field" * 2` → `CAST("field" AS REAL) * 2`)
+- **PostgreSQL**: Fixed `qgis_expression_to_postgis()` missing operators
+  - Added `*` and `/` operators for numeric type casting
+  - Added `END` keyword normalization
+  - Added multiple spaces cleanup
+- **OGR**: Already OK - uses native `QgsExpression` evaluator
+
 ### v2.9.6 (January 6, 2026) - CRITICAL FIX ⭐ NEW
 - **Spatialite/PostgreSQL**: Added `MakeValid()` wrapper to ALL source geometry expressions
 - Invalid source geometries (self-intersecting, duplicate points) now handled automatically

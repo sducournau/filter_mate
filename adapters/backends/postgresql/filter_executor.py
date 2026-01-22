@@ -260,6 +260,7 @@ def qgis_expression_to_postgis(expression: str, geom_col: str = 'geometry') -> s
     Convert QGIS expression to PostGIS SQL.
     
     EPIC-1 Phase E4-S1: Extracted from filter_task.py line 3451 (68 lines)
+    FIX v4.2.12: Added END keyword, * and / operators, multiple spaces cleanup
     
     Converts QGIS expression syntax to PostgreSQL/PostGIS SQL:
     - Spatial functions ($area, $length, etc.) → ST_Area, ST_Length
@@ -309,10 +310,13 @@ def qgis_expression_to_postgis(expression: str, geom_col: str = 'geometry') -> s
         logger.debug(f"[PostgreSQL] Expression after IF conversion: {expression}")
 
     # 3. Add type casting for numeric operations
+    # FIX v4.2.12: Added * and / operators
     expression = expression.replace('" >', '"::numeric >').replace('">', '"::numeric >')
     expression = expression.replace('" <', '"::numeric <').replace('"<', '"::numeric <')
     expression = expression.replace('" +', '"::numeric +').replace('"+', '"::numeric +')
     expression = expression.replace('" -', '"::numeric -').replace('"-', '"::numeric -')
+    expression = expression.replace('" *', '"::numeric *').replace('"*', '"::numeric *')
+    expression = expression.replace('" /', '"::numeric /').replace('"/', '"::numeric /')
 
     # 4. Normalize SQL keywords (case-insensitive replacements)
     expression = re.sub(r'\bcase\b', ' CASE ', expression, flags=re.IGNORECASE)
@@ -320,6 +324,7 @@ def qgis_expression_to_postgis(expression: str, geom_col: str = 'geometry') -> s
     expression = re.sub(r'\bis\b', ' IS ', expression, flags=re.IGNORECASE)
     expression = re.sub(r'\bthen\b', ' THEN ', expression, flags=re.IGNORECASE)
     expression = re.sub(r'\belse\b', ' ELSE ', expression, flags=re.IGNORECASE)
+    expression = re.sub(r'\bend\b', ' END ', expression, flags=re.IGNORECASE)  # FIX v4.2.12: Added END
     expression = re.sub(r'\bilike\b', ' ILIKE ', expression, flags=re.IGNORECASE)
     expression = re.sub(r'\blike\b', ' LIKE ', expression, flags=re.IGNORECASE)
     expression = re.sub(r'\bnot\b', ' NOT ', expression, flags=re.IGNORECASE)
@@ -327,6 +332,9 @@ def qgis_expression_to_postgis(expression: str, geom_col: str = 'geometry') -> s
     # 5. Add type casting for text operations
     expression = expression.replace('" NOT ILIKE', '"::text NOT ILIKE').replace('" ILIKE', '"::text ILIKE')
     expression = expression.replace('" NOT LIKE', '"::text NOT LIKE').replace('" LIKE', '"::text LIKE')
+
+    # 6. Clean up multiple spaces (FIX v4.2.12)
+    expression = re.sub(r'\s+', ' ', expression).strip()
 
     return expression
 

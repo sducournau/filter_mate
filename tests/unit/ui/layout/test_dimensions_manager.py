@@ -46,7 +46,9 @@ sys.modules['qgis.core'] = MagicMock()
 # Mock ui.config before import
 sys.modules['modules'] = MagicMock()
 sys.modules['ui.config'] = MagicMock()
+sys.modules['ui.config.ui_config'] = MagicMock()
 sys.modules['ui.elements'] = MagicMock()
+sys.modules['ui.elements.elements'] = MagicMock()
 
 
 class TestDimensionsManager:

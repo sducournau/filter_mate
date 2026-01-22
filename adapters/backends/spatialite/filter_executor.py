@@ -726,11 +726,13 @@ def qgis_expression_to_spatialite(expression: str, geom_col: str = 'geometry') -
     Convert QGIS expression to Spatialite SQL.
     
     EPIC-1 Phase E4-S1: Extracted from filter_task.py line 3526 (58 lines)
+    FIX v4.2.12: Aligned with qgis_expression_to_postgis() for full buffer expression support
     
     Spatialite spatial functions are ~90% compatible with PostGIS, but differences:
     - Type casting: PostgreSQL uses :: operator, Spatialite uses CAST() function
     - String comparison is case-sensitive by default
     - No ILIKE operator (use LOWER() + LIKE instead)
+    - Spatial functions: ST_Buffer (same), ST_Area (same), etc.
     
     Args:
         expression: QGIS expression string
@@ -747,14 +749,50 @@ def qgis_expression_to_spatialite(expression: str, geom_col: str = 'geometry') -
     if not expression:
         return expression
     
-    # Handle CASE expressions
-    expression = re.sub('case', ' CASE ', expression, flags=re.IGNORECASE)
-    expression = re.sub('when', ' WHEN ', expression, flags=re.IGNORECASE)
-    expression = re.sub(' is ', ' IS ', expression, flags=re.IGNORECASE)
-    expression = re.sub('then', ' THEN ', expression, flags=re.IGNORECASE)
-    expression = re.sub('else', ' ELSE ', expression, flags=re.IGNORECASE)
+    # 1. Convert QGIS spatial functions to Spatialite
+    # FIX v4.2.12: Added spatial function conversions (missing in previous version)
+    spatial_conversions = {
+        '$area': f'ST_Area("{geom_col}")',
+        '$length': f'ST_Length("{geom_col}")',
+        '$perimeter': f'ST_Perimeter("{geom_col}")',
+        '$x': f'ST_X("{geom_col}")',
+        '$y': f'ST_Y("{geom_col}")',
+        '$geometry': f'"{geom_col}"',
+        'buffer': 'Buffer',  # Spatialite uses Buffer() not ST_Buffer()
+        'area': 'ST_Area',
+        'length': 'ST_Length',
+        'perimeter': 'ST_Perimeter',
+    }
     
-    # Handle LIKE/ILIKE - Spatialite doesn't have ILIKE, use LIKE with LOWER()
+    for qgis_func, spatialite_func in spatial_conversions.items():
+        expression = expression.replace(qgis_func, spatialite_func)
+    
+    # 2. Convert IF statements to CASE WHEN
+    # FIX v4.2.12: Added IF conversion (missing in previous version)
+    if expression.find('if') >= 0:
+        expression = re.sub(
+            r'if\s*\(\s*([^,]+),\s*([^,]+),\s*([^)]+)\)',
+            r'CASE WHEN \1 THEN \2 ELSE \3 END',
+            expression,
+            flags=re.IGNORECASE
+        )
+        logger.debug(f"[Spatialite] Expression after IF conversion: {expression}")
+    
+    # 3. Add type casting for numeric operations
+    # FIX v4.2.12: Spatialite uses CAST() instead of :: operator
+    # Pattern: "field" > value → CAST("field" AS REAL) > value
+    expression = re.sub(r'("[^"]+")(\s*[><]=?\s*)', r'CAST(\1 AS REAL)\2', expression)
+    expression = re.sub(r'("[^"]+")(\s*[+\-*/]\s*)', r'CAST(\1 AS REAL)\2', expression)
+    
+    # 4. Handle CASE expressions
+    expression = re.sub(r'\bcase\b', ' CASE ', expression, flags=re.IGNORECASE)
+    expression = re.sub(r'\bwhen\b', ' WHEN ', expression, flags=re.IGNORECASE)
+    expression = re.sub(r'\bis\b', ' IS ', expression, flags=re.IGNORECASE)
+    expression = re.sub(r'\bthen\b', ' THEN ', expression, flags=re.IGNORECASE)
+    expression = re.sub(r'\belse\b', ' ELSE ', expression, flags=re.IGNORECASE)
+    expression = re.sub(r'\bend\b', ' END ', expression, flags=re.IGNORECASE)
+    
+    # 5. Handle LIKE/ILIKE - Spatialite doesn't have ILIKE, use LIKE with LOWER()
     # IMPORTANT: Process ILIKE first, before processing LIKE, to avoid double-replacement
     expression = re.sub(
         r'(\w+)\s+ILIKE\s+',
@@ -765,11 +803,14 @@ def qgis_expression_to_spatialite(expression: str, geom_col: str = 'geometry') -
     expression = re.sub(r'\bNOT\b', ' NOT ', expression, flags=re.IGNORECASE)
     expression = re.sub(r'\bLIKE\b', ' LIKE ', expression, flags=re.IGNORECASE)
     
-    # Convert PostgreSQL :: type casting to Spatialite CAST() function
-    expression = re.sub(r'(["\w]+)::numeric', r'CAST(\1 AS REAL)', expression)
-    expression = re.sub(r'(["\w]+)::integer', r'CAST(\1 AS INTEGER)', expression)
-    expression = re.sub(r'(["\w]+)::text', r'CAST(\1 AS TEXT)', expression)
-    expression = re.sub(r'(["\w]+)::double', r'CAST(\1 AS REAL)', expression)
+    # 6. Convert PostgreSQL :: type casting to Spatialite CAST() function (if any remaining)
+    expression = re.sub(r'(["\\w]+)::numeric', r'CAST(\1 AS REAL)', expression)
+    expression = re.sub(r'(["\\w]+)::integer', r'CAST(\1 AS INTEGER)', expression)
+    expression = re.sub(r'(["\\w]+)::text', r'CAST(\1 AS TEXT)', expression)
+    expression = re.sub(r'(["\\w]+)::double', r'CAST(\1 AS REAL)', expression)
+    
+    # 7. Clean up multiple spaces
+    expression = re.sub(r'\s+', ' ', expression).strip()
     
     return expression
 

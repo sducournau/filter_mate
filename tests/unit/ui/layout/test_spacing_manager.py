@@ -46,7 +46,9 @@ sys.modules['qgis.core'] = MagicMock()
 # Mock modules before import
 sys.modules['modules'] = MagicMock()
 sys.modules['ui.config'] = MagicMock()
+sys.modules['ui.config.ui_config'] = MagicMock()
 sys.modules['ui.elements'] = MagicMock()
+sys.modules['ui.elements.elements'] = MagicMock()
 
 
 class TestSpacingManager:
@@ -227,7 +229,7 @@ class TestSpacingManager:
             with patch('ui.config.DisplayProfile') as mock_profile:
                 mock_profile.COMPACT = 'COMPACT'
                 
-                with patch('ui.elements.get_spacer_size', return_value=4):
+                with patch('ui.config.ui_elements.get_spacer_size', return_value=4):
                     manager = SpacingManager(mock_dockwidget)
                     manager.adjust_row_spacing()
                     
@@ -302,7 +304,7 @@ class TestSpacingManagerSpacerHarmonization:
             with patch('ui.config.DisplayProfile') as mock_profile:
                 mock_profile.COMPACT = 'COMPACT'
                 
-                with patch('ui.elements.get_spacer_size', return_value=6):
+                with patch('ui.config.ui_elements.get_spacer_size', return_value=6):
                     manager = SpacingManager(dockwidget)
                     manager.harmonize_spacers()
                     

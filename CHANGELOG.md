@@ -2,6 +2,61 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [4.2.12] - 2026-01-22 🔧 FIX: Buffer expression conversion incomplete (PostgreSQL + Spatialite)
+
+### Bug Fix - Dynamic Buffer Expressions Fail with Multiple Backends
+
+**Symptom**: Buffer expressions like `"homecount" * 10` or `if("type" = 'A', 50, 10)` don't work correctly  
+**Root Cause**: Expression converters missing critical conversions
+
+#### Backends Analysis
+
+| Backend | Function | Status |
+|---------|----------|--------|
+| **PostgreSQL** | `qgis_expression_to_postgis()` | ✅ Fixed |
+| **Spatialite** | `qgis_expression_to_spatialite()` | ✅ Fixed |
+| **OGR** | Native `QgsExpression` | ✅ Already OK |
+
+#### PostgreSQL Fixes
+
+**File**: `adapters/backends/postgresql/filter_executor.py`
+
+| Fix | Before | After |
+|-----|--------|-------|
+| `*` operator | ❌ Missing | ✅ `"field"::numeric *` |
+| `/` operator | ❌ Missing | ✅ `"field"::numeric /` |
+| `END` keyword | ❌ Missing | ✅ Normalized |
+| Multiple spaces | ❌ Not cleaned | ✅ Cleaned |
+
+#### Spatialite Fixes
+
+**File**: `adapters/backends/spatialite/filter_executor.py`
+
+| Fix | Before | After |
+|-----|--------|-------|
+| Spatial functions | ❌ Missing | ✅ `$area`, `buffer`, etc. |
+| IF → CASE WHEN | ❌ Missing | ✅ Converted |
+| Numeric casting | ❌ Missing | ✅ `CAST("field" AS REAL)` |
+| `END` keyword | ❌ Missing | ✅ Added |
+
+#### Examples Now Working
+
+```python
+# Multiplication (PostgreSQL)
+"homecount" * 10
+→ "homecount"::numeric * 10
+
+# Multiplication (Spatialite)
+"homecount" * 10
+→ CAST("homecount" AS REAL) * 10
+
+# Conditional (Both)
+if("type" = 'A', 50, 10)
+→ CASE WHEN "type" = 'A' THEN 50 ELSE 10 END
+```
+
+---
+
 ## [4.3.10] - 2026-01-22 📦 Release: Export & Buffer Table Complete Fix Series
 
 ### Summary
