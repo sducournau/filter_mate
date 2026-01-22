@@ -1233,14 +1233,11 @@ class PropertyController(BaseController):
                     
                     # FIX 2026-01-16: Auto-enable HAS_LAYERS_TO_EXPORT when layers are selected
                     if input_property == 'layers_to_export' and isinstance(new_value, list):
-                        print(f"🔍 DEBUG: layers_to_export changed, count={len(new_value)}")  # TEMP DEBUG
                         has_layers = len(new_value) > 0
                         current_has_layers = project_props.get('EXPORTING', {}).get('HAS_LAYERS_TO_EXPORT')
-                        print(f"   Current HAS_LAYERS_TO_EXPORT={current_has_layers}, New={has_layers}")  # TEMP DEBUG
                         if current_has_layers != has_layers:
                             project_props['EXPORTING']['HAS_LAYERS_TO_EXPORT'] = has_layers
-                            print(f"✅ Auto-set HAS_LAYERS_TO_EXPORT = {has_layers} (based on {len(new_value)} selected layers)")
-                            logger.info(f"✅ Auto-set HAS_LAYERS_TO_EXPORT = {has_layers} (based on {len(new_value)} selected layers)")
+                            logger.info(f"Auto-set HAS_LAYERS_TO_EXPORT = {has_layers} (based on {len(new_value)} selected layers)")
                             
                             # Update the button widget state
                             has_layers_widget = widgets.get('EXPORTING', {}).get('HAS_LAYERS_TO_EXPORT', {}).get('WIDGET')
@@ -1248,9 +1245,6 @@ class PropertyController(BaseController):
                                 has_layers_widget.blockSignals(True)
                                 has_layers_widget.setChecked(has_layers)
                                 has_layers_widget.blockSignals(False)
-                                print(f"   Updated button widget to checked={has_layers}")  # TEMP DEBUG
-                        else:
-                            print(f"   HAS_LAYERS_TO_EXPORT already correct, no update needed")  # TEMP DEBUG
                     
                     if new_value and "ON_TRUE" in custom_functions:
                         custom_functions["ON_TRUE"](0)
