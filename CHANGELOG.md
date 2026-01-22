@@ -2,7 +2,7 @@
 
 All notable changes to FilterMate will be documented in this file.
 
-## [4.4.0] - 2026-01-22 🧪 Quality & Test Coverage Release
+## [3.4.0] - 2026-01-22 🧪 Quality & Test Coverage Release
 
 ### Major Quality Release
 
