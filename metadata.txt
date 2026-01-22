@@ -43,7 +43,7 @@ repository=https://github.com/sducournau/filter_mate
 
 hasProcessingProvider=no
 
-changelog=v3.4.0 (2026-01-22): Major quality release - 396 standalone unit tests, DockwidgetSignalManager extraction (778 lines), hexagonal architecture improvements. Test coverage target 80%.
+changelog=v3.4.0 (2026-01-22): Major quality release - 396 standalone unit tests, DockwidgetSignalManager extraction (778 lines), hexagonal architecture improvements. Test coverage target 80%%.
 
 # Tags are comma separated with spaces allowed
 tags=python,filter,vector,layers,geofilter,search,postgis,ogr,spatialite,data,exploration,subset,export
