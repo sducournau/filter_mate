@@ -80,22 +80,29 @@ def sanitize_subset_string(subset_string: str) -> str:
     
     # Pattern to match AND/OR followed by coalesce display expressions
     # CRITICAL: These patterns must match display expressions that return values, not booleans
-    # Example: AND (coalesce("cleabs",'<NULL>')) - returns text, not boolean
-    # Note: The outer ( ) wraps coalesce(...) so we have )) at the end
+    # Example: AND ( COALESCE( "LABEL", '<NULL>' ) ) - returns text, not boolean
+    # Note: The outer ( ) wraps coalesce(...) with possible spaces
+    # 
+    # FIX v2.5.13: Handle spaces INSIDE COALESCE( ... ) and around parentheses
+    # Real-world example that FAILED: AND ( COALESCE( "LABEL", '<NULL>' ) )
     coalesce_patterns = [
+        # Match coalesce with spaces everywhere: AND ( COALESCE( "field", '<NULL>' ) )
+        # This handles the PostgreSQL-generated format with spaces
+        r'(?:^|\s+)AND\s+\(\s*COALESCE\s*\(\s*"[^"]+"\s*,\s*\'[^\']*\'\s*\)\s*\)',
+        r'(?:^|\s+)OR\s+\(\s*COALESCE\s*\(\s*"[^"]+"\s*,\s*\'[^\']*\'\s*\)\s*\)',
         # Match coalesce with quoted string containing special chars like '<NULL>'
-        # Pattern: AND (coalesce("field",'<NULL>'))  - note TWO closing parens
-        r'(?:^|\s+)AND\s+\(coalesce\("[^"]+"\s*,\s*\'[^\']*\'\s*\)\)',
-        r'(?:^|\s+)OR\s+\(coalesce\("[^"]+"\s*,\s*\'[^\']*\'\s*\)\)',
+        # Pattern: AND (coalesce("field",'<NULL>'))  - compact format
+        r'(?:^|\s+)AND\s+\(\s*coalesce\s*\(\s*"[^"]+"\s*,\s*\'[^\']*\'\s*\)\s*\)',
+        r'(?:^|\s+)OR\s+\(\s*coalesce\s*\(\s*"[^"]+"\s*,\s*\'[^\']*\'\s*\)\s*\)',
         # Match AND/OR followed by coalesce expression with nested content
-        r'(?:^|\s+)AND\s+\(coalesce\([^)]*(?:\([^)]*\)[^)]*)*\)\)',
-        r'(?:^|\s+)OR\s+\(coalesce\([^)]*(?:\([^)]*\)[^)]*)*\)\)',
-        # Simpler patterns for common cases (TWO closing parens)
-        r'(?:^|\s+)AND\s+\(coalesce\([^)]+\)\)',
-        r'(?:^|\s+)OR\s+\(coalesce\([^)]+\)\)',
+        r'(?:^|\s+)AND\s+\(\s*coalesce\s*\([^)]*(?:\([^)]*\)[^)]*)*\)\s*\)',
+        r'(?:^|\s+)OR\s+\(\s*coalesce\s*\([^)]*(?:\([^)]*\)[^)]*)*\)\s*\)',
+        # Simpler patterns for common cases
+        r'(?:^|\s+)AND\s+\(\s*coalesce\s*\([^)]+\)\s*\)',
+        r'(?:^|\s+)OR\s+\(\s*coalesce\s*\([^)]+\)\s*\)',
         # Match table.field syntax
-        r'(?:^|\s+)AND\s+\(coalesce\("[^"]+"\s*\.\s*"[^"]+"\s*,\s*\'[^\']*\'\s*\)\)',
-        r'(?:^|\s+)OR\s+\(coalesce\("[^"]+"\s*\.\s*"[^"]+"\s*,\s*\'[^\']*\'\s*\)\)',
+        r'(?:^|\s+)AND\s+\(\s*coalesce\s*\(\s*"[^"]+"\s*\.\s*"[^"]+"\s*,\s*\'[^\']*\'\s*\)\s*\)',
+        r'(?:^|\s+)OR\s+\(\s*coalesce\s*\(\s*"[^"]+"\s*\.\s*"[^"]+"\s*,\s*\'[^\']*\'\s*\)\s*\)',
     ]
     
     for pattern in coalesce_patterns:
@@ -163,7 +170,8 @@ def sanitize_subset_string(subset_string: str) -> str:
                 sanitized = re.sub(pattern, '', sanitized, flags=re.IGNORECASE | re.DOTALL)
     
     # Remove standalone coalesce expressions at start
-    standalone_coalesce = r'^\s*\(coalesce\([^)]*(?:\([^)]*\)[^)]*)*\)\)\s*(?:AND|OR)?'
+    # FIX v2.5.13: Handle spaces inside coalesce expressions
+    standalone_coalesce = r'^\s*\(\s*coalesce\s*\([^)]*(?:\([^)]*\)[^)]*)*\)\s*\)\s*(?:AND|OR)?'
     if re.match(standalone_coalesce, sanitized, re.IGNORECASE):
         match = re.match(standalone_coalesce, sanitized, re.IGNORECASE)
         logger.info(f"FilterMate: Removing standalone coalesce: '{match.group()[:60]}...'")
@@ -368,7 +376,8 @@ def extract_spatial_clauses_for_exists(filter_expr: str, source_table: Optional[
     cleaned = re.sub(case_pattern, '', cleaned, flags=re.IGNORECASE | re.DOTALL)
     
     # Remove coalesce display expressions
-    coalesce_pattern = r'\s*(?:AND|OR)\s+\(coalesce\([^)]*(?:\([^)]*\)[^)]*)*\)\)'
+    # FIX v2.5.13: Handle spaces inside COALESCE( ... )
+    coalesce_pattern = r'\s*(?:AND|OR)\s+\(\s*coalesce\s*\([^)]*(?:\([^)]*\)[^)]*)*\)\s*\)'
     cleaned = re.sub(coalesce_pattern, '', cleaned, flags=re.IGNORECASE)
     
     # Clean up whitespace and operators
