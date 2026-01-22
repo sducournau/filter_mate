@@ -126,12 +126,8 @@ class ExpressionBuilder:
         """
         try:
             # CONSOLE-VISIBLE DIAGNOSTIC
-            # print("=" * 80)  # DEBUG REMOVED
-            # print("🔧 ExpressionBuilder.build_backend_expression() CALLED!")  # DEBUG REMOVED
-            # print("=" * 80)  # DEBUG REMOVED
             
             backend_name = backend.get_backend_name()
-            # print(f"   backend_name: {backend_name}")  # DEBUG REMOVED
             
             # DIAGNOSTIC LOGS 2026-01-16: ULTRA-DETAILED TRACE for source_filter debugging
             logger.info("=" * 80)
@@ -270,10 +266,6 @@ class ExpressionBuilder:
         import re as regex_module
         
         # CONSOLE-VISIBLE DIAGNOSTIC
-        # print("=" * 80)  # DEBUG REMOVED
-        # print("🔍 ExpressionBuilder._prepare_source_filter() CALLED")  # DEBUG REMOVED
-        # print("=" * 80)  # DEBUG REMOVED
-        # print(f"   backend_name: {backend_name}")  # DEBUG REMOVED
         logger.info("   🔍 _prepare_source_filter() ENTERED")
         logger.info(f"      backend_name: {backend_name}")
         
@@ -282,20 +274,13 @@ class ExpressionBuilder:
         # PostgreSQL EXISTS mode needs source filter
         # FIX 2026-01-17: Case-insensitive comparison (backend returns 'Postgresql', not 'PostgreSQL')
         if backend_name.lower() != 'postgresql':
-            # print(f"   ↩️ Returning None - backend '{backend_name}' doesn't need source_filter")  # DEBUG REMOVED
             logger.info(f"      ↩️ Returning None - backend '{backend_name}' doesn't need source_filter")
             return None
         
-        # print("   ✓ PostgreSQL backend detected - preparing source_filter...")  # DEBUG REMOVED
         logger.info("      ✓ PostgreSQL backend detected - preparing source_filter...")
         
         # Get source layer's existing subset string
         source_subset = self.source_layer.subsetString() if self.source_layer else None
-        # print("=" * 80)  # DEBUG REMOVED
-        # print("🔍 _prepare_source_filter: ANALYZING source_subset")  # DEBUG REMOVED
-        # print("=" * 80)  # DEBUG REMOVED
-        # print(f"   self.source_layer: {self.source_layer.name() if self.source_layer else 'None'}")  # DEBUG REMOVED
-        # print(f"   source_subset: '{source_subset}'" if source_subset else "   source_subset: None (EMPTY!)")  # DEBUG REMOVED
         logger.info("=" * 80)
         logger.info("🔍 _prepare_source_filter: ANALYZING source_subset")
         logger.info("=" * 80)
@@ -442,8 +427,6 @@ class ExpressionBuilder:
         # with the subsetString filter applied by PostgreSQL automatically.
         
         use_task_features = task_features and len(task_features) > 0
-        # print(f"   use_task_features: {use_task_features}")  # DEBUG REMOVED
-        # print(f"   skip_source_subset: {skip_source_subset}")  # DEBUG REMOVED
         
         # FIX v4.2.9 (2026-01-21): Enhanced filter chaining for sequential spatial filtering.
         # 
@@ -579,8 +562,6 @@ class ExpressionBuilder:
                 logger.error(f"   ❌ ERROR: Filter generation returned None!")
         elif source_subset and not skip_source_subset:
             # FALLBACK: Use source layer's subset string
-            # print(f"🎯 PATH 2: Using source_subset as source_filter")  # DEBUG REMOVED
-            # print(f"   source_filter = '{source_subset}'")  # DEBUG REMOVED
             logger.debug("🎯 PostgreSQL EXISTS: PATH 2 - Using source layer subsetString as source_filter")
             source_filter = source_subset
         else:
@@ -765,14 +746,11 @@ class ExpressionBuilder:
                         source_filter = None
             else:
                 # NO FILTER: Will match all source features (this is NORMAL when source layer already filtered)
-                # print(f"❌ PATH 3: NO SOURCE FILTER - EXISTS will match ALL source features!")  # DEBUG REMOVED
                 logger.debug("🎯 PostgreSQL EXISTS: PATH 3B - No source_filter (will use all source features)")
                 if source_subset:
                     logger.debug(f"   → Source has subset but not usable: '{source_subset[:100]}...'")
 
         
-        # print(f"   FINAL RETURN: source_filter = '{source_filter[:100] if source_filter else 'None'}'...")  # DEBUG REMOVED
-        # print("=" * 80)  # DEBUG REMOVED
         
         return source_filter
     

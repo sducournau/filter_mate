@@ -3809,21 +3809,12 @@ class FilterEngineTask(QgsTask):
         # ═══════════════════════════════════════════════════════════════
         
         # FIX 2026-01-17: Enhanced console diagnostic for distant layers filtering
-        # print("=" * 80)  # DEBUG REMOVED
-        # print("📋 ÉTAPE 2: DIAGNOSTIC FILTRAGE COUCHES DISTANTES")  # DEBUG REMOVED
-        # print("=" * 80)  # DEBUG REMOVED
         
         has_geom_predicates = self.task_parameters["filtering"]["has_geometric_predicates"]
-        # print(f"  has_geometric_predicates: {has_geom_predicates}")  # DEBUG REMOVED
         has_layers_to_filter = self.task_parameters["filtering"]["has_layers_to_filter"]
-        # print(f"  has_layers_to_filter: {has_layers_to_filter}")  # DEBUG REMOVED
         has_layers_in_params = len(self.task_parameters['task'].get('layers', [])) > 0
-        # print(f"  has_layers_in_params: {has_layers_in_params}")  # DEBUG REMOVED
-        # print(f"  self.layers_count: {self.layers_count}")  # DEBUG REMOVED
-        # print(f"  self.layers keys: {list(self.layers.keys()) if self.layers else 'None'}")  # DEBUG REMOVED
         for prov_type, layer_list in (self.layers or {}).items():
             pass  # print statements removed
-        # print("=" * 80)  # DEBUG REMOVED
         
         # FIX v3.0.7: Log to QGIS message panel for visibility
         from qgis.core import QgsMessageLog, Qgis as QgisLevel
@@ -5845,7 +5836,6 @@ class FilterEngineTask(QgsTask):
             if layers_to_remove:
                 # Remove layers from project (not from legend - they were never added to legend)
                 project.removeMapLayers(layers_to_remove)
-                # print(f"🧹 Cleaned up {len(layers_to_remove)} temporary layer(s)")  # DEBUG REMOVED
                 logger.debug(f"Cleaned up {len(layers_to_remove)} temporary safe_intersect layers")
         except Exception as e:
             logger.debug(f"safe_intersect cleanup failed (non-critical): {e}")

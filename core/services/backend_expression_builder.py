@@ -139,11 +139,6 @@ class BackendExpressionBuilder:
         source_subset = self.source_layer.subsetString() if self.source_layer else None
         
         # DIAGNOSTIC 2026-01-17: Log source_subset value - USING PRINT FOR QGIS CONSOLE VISIBILITY
-        # print("=" * 80)  # DEBUG REMOVED
-        # print("🔍 _get_source_filter_for_postgresql CALLED")  # DEBUG REMOVED
-        # print("=" * 80)  # DEBUG REMOVED
-        # print(f"   source_layer: {self.source_layer.name() if self.source_layer else 'None'}")  # DEBUG REMOVED
-        # print(f"   source_subset: '{source_subset}'" if source_subset else "   source_subset: EMPTY/None")  # DEBUG REMOVED
         logger.info("=" * 80)
         logger.info("🔍 _get_source_filter_for_postgresql CALLED")
         logger.info("=" * 80)
@@ -152,49 +147,37 @@ class BackendExpressionBuilder:
         
         # Check if source_subset should be skipped
         skip_source_subset = should_skip_source_subset(source_subset)
-        # print(f"   skip_source_subset: {skip_source_subset}")  # DEBUG REMOVED
         logger.info(f"   skip_source_subset: {skip_source_subset}")
         
         if skip_source_subset:
-            # print(f"⚠️ PostgreSQL EXISTS: Source subset contains patterns that would be skipped")  # DEBUG REMOVED
             logger.info(f"⚠️ PostgreSQL EXISTS: Source subset contains patterns that would be skipped")
             if source_subset:
-                # print(f"   Subset preview: '{source_subset[:100]}...'")  # DEBUG REMOVED
                 logger.info(f"   Subset preview: '{source_subset[:100]}...'")
-            # print(f"   → Falling through to generate filter from task_features instead")  # DEBUG REMOVED
             logger.info(f"   → Falling through to generate filter from task_features instead")
         
         # Check for task_features (user selection)
         task_features = self.task_parameters.get("task", {}).get("features", [])
-        # print(f"   task_features count: {len(task_features) if task_features else 0}")  # DEBUG REMOVED
         logger.info(f"   task_features count: {len(task_features) if task_features else 0}")
         if task_features:
             # Check if they are real QgsFeature objects
             first_feat = task_features[0]
             is_qgs_feature = hasattr(first_feat, 'id') and hasattr(first_feat, 'geometry')
-            # print(f"   task_features[0] type: {type(first_feat).__name__}")  # DEBUG REMOVED
-            # print(f"   is QgsFeature: {is_qgs_feature}")  # DEBUG REMOVED
             logger.info(f"   task_features[0] type: {type(first_feat).__name__}")
             logger.info(f"   is QgsFeature: {is_qgs_feature}")
             if is_qgs_feature:
-                # print(f"   task_features[0].id(): {first_feat.id()}")  # DEBUG REMOVED
                 logger.info(f"   task_features[0].id(): {first_feat.id()}")
         
         use_task_features = task_features and len(task_features) > 0
         
         if use_task_features:
             source_filter = self._build_filter_from_task_features(task_features)
-            # print(f"   ✅ Using task_features → source_filter: {source_filter[:100] if source_filter else 'None'}...")  # DEBUG REMOVED
             logger.info(f"   ✅ Using task_features → source_filter: {source_filter[:100] if source_filter else 'None'}...")
         elif source_subset and not skip_source_subset:
             source_filter = source_subset
-            # print(f"🎯 PostgreSQL EXISTS: Using full source filter ({len(source_filter)} chars)")  # DEBUG REMOVED
-            # print(f"   Source filter = '{source_filter}'")  # DEBUG REMOVED
             logger.info(f"🎯 PostgreSQL EXISTS: Using full source filter ({len(source_filter)} chars)")
             logger.debug(f"   Source filter preview: '{source_filter[:100]}...'")
         elif skip_source_subset and source_subset and self.source_layer:
             source_filter = self._build_filter_from_visible_features()
-            # print(f"   ✅ Using visible features → source_filter: {source_filter[:100] if source_filter else 'None'}...")  # DEBUG REMOVED
             logger.info(f"   ✅ Using visible features → source_filter: {source_filter[:100] if source_filter else 'None'}...")
         else:
             # FIX 2026-01-21: Handle buffer_expression case without selection/subset
@@ -209,13 +192,9 @@ class BackendExpressionBuilder:
                 else:
                     logger.warning(f"   ⚠️ Failed to build filter from all source features")
             else:
-                # print(f"   ⚠️ NO SOURCE FILTER! Source layer has no subsetString and no selection")  # DEBUG REMOVED
-                # print(f"   → EXISTS will match ALL source features!")  # DEBUG REMOVED
                 logger.warning(f"   ⚠️ NO SOURCE FILTER! Source layer has no subsetString and no selection")
                 logger.warning(f"   → EXISTS will match ALL source features!")
         
-        # print(f"   FINAL source_filter: '{source_filter[:100] if source_filter else 'None'}...'")  # DEBUG REMOVED
-        # print("=" * 80)  # DEBUG REMOVED
         logger.info("=" * 80)
         return source_filter
     

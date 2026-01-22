@@ -196,7 +196,6 @@ class ClickableLabel(QtWidgets.QLabel):
     
     def mouseReleaseEvent(self, event):
         """Handle mouse release - some widgets need this."""
-        # print(f"ClickableLabel.mouseReleaseEvent triggered!")  # DEBUG REMOVED
         event.accept()
 
 
@@ -1178,36 +1177,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _on_backend_indicator_clicked(self, event):
         """v4.0 Sprint 19: → BackendController."""
-        # print("🎯 _on_backend_indicator_clicked CALLED")  # DEBUG REMOVED
         logger.debug("_on_backend_indicator_clicked called")
         
         if self._controller_integration and self._controller_integration.backend_controller:
-            # print("🎯 Using QTimer to defer backend menu display...")  # DEBUG REMOVED
             # Use QTimer to defer menu display after mouse event completes
             # This prevents issues with QMenu.exec_() during mousePressEvent
             from qgis.PyQt.QtCore import QTimer
             QTimer.singleShot(0, self._controller_integration.delegate_handle_backend_click)
-            # print("🎯 QTimer.singleShot scheduled for backend")  # DEBUG REMOVED
         else:
-            # print("🎯 WARNING: Backend controller unavailable")  # DEBUG REMOVED
             logger.warning("Backend controller unavailable")
 
     def _on_favorite_indicator_clicked(self, event):
         """v4.0 S16: → FavoritesController."""
-        # print("🎯 _on_favorite_indicator_clicked CALLED")  # DEBUG REMOVED
         logger.debug("_on_favorite_indicator_clicked called")
-        # print(f"🎯 _favorites_ctrl = {self._favorites_ctrl}")  # DEBUG REMOVED
         logger.debug(f"_favorites_ctrl = {self._favorites_ctrl}")
         
         if self._favorites_ctrl:
-            # print("🎯 Using QTimer to defer menu display...")  # DEBUG REMOVED
             # Use QTimer to defer menu display after mouse event completes
             # This prevents issues with QMenu.exec_() during mousePressEvent
             from qgis.PyQt.QtCore import QTimer
             QTimer.singleShot(0, self._favorites_ctrl.handle_indicator_clicked)
-            # print("🎯 QTimer.singleShot scheduled")  # DEBUG REMOVED
         else:
-            # print("🎯 WARNING: Favorites controller unavailable")  # DEBUG REMOVED
             logger.warning("Favorites controller unavailable")
     
     def _add_current_to_favorites(self):
@@ -1907,7 +1897,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def dockwidget_widgets_configuration(self):
         """Configure widgets via ConfigurationManager and setup controllers."""
-        # print("🔧 dockwidget_widgets_configuration() START")  # DEBUG REMOVED
         if self._configuration_manager is None: self._configuration_manager = ConfigurationManager(self)
         self.layer_properties_tuples_dict = self._configuration_manager.get_layer_properties_tuples_dict()
         self.export_properties_tuples_dict = self._configuration_manager.get_export_properties_tuples_dict()
@@ -1924,18 +1913,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._connect_initial_widget_signals()
         
         # v4.0 Sprint 16: Setup controller integration (Strangler Fig pattern)
-        # print(f"🔧 About to setup controllers - _controller_integration = {self._controller_integration}")  # DEBUG REMOVED
         if self._controller_integration:
             try:
                 logger.info("Setting up controller integration...")
-                # print("🔧 Calling _controller_integration.setup()...")  # DEBUG REMOVED
                 setup_success = self._controller_integration.setup()
-                # print(f"🔧 _controller_integration.setup() returned: {setup_success}")  # DEBUG REMOVED
                 
                 if setup_success:
                     # Validate all controllers are properly initialized
                     validation = self._controller_integration.validate_controllers()
-                    # print(f"🔧 Controller validation: {validation}")  # DEBUG REMOVED
                     
                     if validation['all_valid']:
                         logger.info(f"✓ Controller integration validated: {validation['registry_count']} controllers operational")
@@ -3052,7 +3037,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         when widgets dict is recreated. By using direct method wrappers, we ensure
         the connection is always to the current dockwidget instance.
         """
-        # print("🔄 force_reconnect_action_signals CALLED (v4 - direct handlers)")  # DEBUG REMOVED
         
         # Map button names to their task names and widgets
         # Use direct attribute access to widgets (more reliable than widgets dict)
@@ -3067,7 +3051,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         connected_count = 0
         for btn_name, (task_name, widget) in action_buttons.items():
             if not widget:
-                # print(f"⚠️ force_reconnect_action_signals: {btn_name} widget not found")  # DEBUG REMOVED
                 continue
             
             key = f"ACTION.{btn_name}.clicked"
@@ -3077,7 +3060,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # FIX 2026-01-17 v4: Disconnect ALL receivers to ensure clean state
                 try:
                     widget.clicked.disconnect()
-                    # print(f"   Disconnected all receivers from {btn_name}.clicked")  # DEBUG REMOVED
                 except TypeError:
                     pass  # No receivers connected, which is fine
                 
@@ -3086,7 +3068,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 def make_handler(task):
                     """Factory function to create handler with properly captured task name."""
                     def handler(state=False):
-                        # print(f"🎯 ACTION handler triggered: task={task}, state={state}")  # DEBUG REMOVED
                         self.launchTaskEvent(state, task)
                     return handler
                 
@@ -3094,11 +3075,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 widget.clicked.connect(handler)
                 self._signal_connection_states[key] = True
                 connected_count += 1
-                # print(f"✅ force_reconnect_action_signals: Connected {btn_name}.clicked → launchTaskEvent(_, '{task_name}')")  # DEBUG REMOVED
             except Exception as e:
                 pass  # print(f"❌ force_reconnect_action_signals: Failed to connect {btn_name}.clicked: {e}")  # DEBUG REMOVED
         
-        # print(f"🔄 force_reconnect_action_signals COMPLETED: {connected_count}/5 signals connected")  # DEBUG REMOVED
     
     def force_reconnect_exporting_signals(self):
         """
@@ -3175,54 +3154,35 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             dw = iface.mainWindow().findChild(FilterMateDockWidget)
             dw.diagnose_action_buttons()
         """
-        # print("=" * 60)  # DEBUG REMOVED
-        # print("🔍 DIAGNOSTIC: Action button signal analysis")  # DEBUG REMOVED
-        # print("=" * 60)  # DEBUG REMOVED
         
         if 'ACTION' not in self.widgets:
-            # print("ACTION category not in widgets!")  # DEBUG REMOVED
             return
         
         for btn_name in ['FILTER', 'UNFILTER', 'UNDO_FILTER', 'REDO_FILTER']:
             if btn_name not in self.widgets['ACTION']:
-                # print(f"  {btn_name}: NOT FOUND in widgets['ACTION']")  # DEBUG REMOVED
                 continue
             
             widget_info = self.widgets['ACTION'][btn_name]
             widget = widget_info.get("WIDGET")
             
-            # print(f"  {btn_name}:")  # DEBUG REMOVED
-            # print(f"    - Widget exists: {widget is not None}")  # DEBUG REMOVED
             
             if widget:
-                # print(f"    - isEnabled: {widget.isEnabled()}")  # DEBUG REMOVED
-                # print(f"    - isVisible: {widget.isVisible()}")  # DEBUG REMOVED
-                # print(f"    - receivers('clicked'): {widget.receivers(widget.clicked)}")  # DEBUG REMOVED
                 
                 # Check signal tuple
                 signals = widget_info.get("SIGNALS", [])
                 for s_tuple in signals:
                     signal_name = s_tuple[0] if s_tuple else "?"
                     handler = s_tuple[-1] if s_tuple else None
-                    # print(f"    - Signal tuple: {signal_name}, handler={handler is not None}")  # DEBUG REMOVED
                     
                     if handler:
                         # Try to manually call the handler to see what happens
-                        # print(f"    - Testing handler call for {btn_name}...")  # DEBUG REMOVED
                         try:
                             handler(False)  # Simulate unchecked button click
-                            # print(f"    ✅ Handler executed successfully for {btn_name}")  # DEBUG REMOVED
                         except Exception as e:
                             pass  # print(f"    ❌ Handler execution FAILED for {btn_name}: {e}")  # DEBUG REMOVED
         
-        # print("=" * 60)  # DEBUG REMOVED
-        # print("Current state:")  # DEBUG REMOVED
-        # print(f"  widgets_initialized: {self.widgets_initialized}")  # DEBUG REMOVED
-        # print(f"  _filtering_in_progress: {getattr(self, '_filtering_in_progress', False)}")  # DEBUG REMOVED
-        # print(f"  current_layer: {self.current_layer.name() if self.current_layer else 'None'}")  # DEBUG REMOVED
         if self.current_layer:
             pass  # print(f"  in_PROJECT_LAYERS: {self.current_layer.id() in self.PROJECT_LAYERS}")  # DEBUG REMOVED
-        # print("=" * 60)  # DEBUG REMOVED
 
     def force_reconnect_exploring_signals(self):
         """v4.0 S18: Force reconnect EXPLORING signals bypassing cache."""
@@ -6756,7 +6716,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # FIX 2026-01-17 v3: For user actions during protection window, try to recover current_layer
         if is_user_action and not self.current_layer:
-            # print(f"   ⚠️ User action '{task_name}' but current_layer is None - attempting recovery...")  # DEBUG REMOVED
             
             # Try 1: Recover from saved layer ID (set during filtering)
             saved_id = getattr(self, '_saved_layer_id_before_filter', None)
@@ -6765,14 +6724,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 recovered_layer = QgsProject.instance().mapLayer(saved_id)
                 if recovered_layer and recovered_layer.isValid():
                     self.current_layer = recovered_layer
-                    # print(f"   ✅ RECOVERED current_layer from saved ID: {recovered_layer.name()}")  # DEBUG REMOVED
             
             # Try 2: Recover from combobox current selection
             if not self.current_layer:
                 combo_layer = self.comboBox_filtering_current_layer.currentLayer()
                 if combo_layer and combo_layer.isValid():
                     self.current_layer = combo_layer
-                    # print(f"   ✅ RECOVERED current_layer from combobox: {combo_layer.name()}")  # DEBUG REMOVED
             
             # Try 3: Use first layer in PROJECT_LAYERS
             if not self.current_layer and self.PROJECT_LAYERS:
@@ -6781,7 +6738,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 first_layer = QgsProject.instance().mapLayer(first_id)
                 if first_layer and first_layer.isValid():
                     self.current_layer = first_layer
-                    # print(f"   ✅ RECOVERED current_layer from PROJECT_LAYERS: {first_layer.name()}")  # DEBUG REMOVED
         
         # FIX 2026-01-17 v3: For user actions, reset _filtering_in_progress immediately
         # This allows the action to proceed without waiting for the 1.5s protection window

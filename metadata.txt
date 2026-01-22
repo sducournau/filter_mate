@@ -11,7 +11,7 @@ version=4.4.0
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=🎯 FilterMate 4.2 - Your Swiss Army Knife for Spatial Data!
+about=🎯 FilterMate 4.4 - Your Swiss Army Knife for Spatial Data!
     
     Stop struggling with complex filters. FilterMate makes spatial queries intuitive, fast, and powerful.
     
@@ -29,9 +29,10 @@ about=🎯 FilterMate 4.2 - Your Swiss Army Knife for Spatial Data!
     ⭐ Save & share your favorite filter configurations with spatial context
     📦 One-click export with styles to GeoPackage
     🎨 Beautiful UI that adapts to your QGIS theme
+    ⚡ Filter chaining with dynamic buffer expressions
     
-    💡 v4.1.1: Smart PostgreSQL backend selection for PostgreSQL-only projects!
-    💡 v4.1.0: Major performance release! 2-8× faster, 85%% test coverage, 106 tests.
+    💡 v4.4.0: Quality release - 396 unit tests, hexagonal architecture, 75%% coverage!
+    💡 v4.3.10: Export & buffer table fixes, filter chaining with dynamic buffers.
     
     📖 Full docs: https://sducournau.github.io/filter_mate
 
@@ -43,7 +44,7 @@ repository=https://github.com/sducournau/filter_mate
 
 hasProcessingProvider=no
 
-changelog=v3.4.0 (2026-01-22): Major quality release - 396 standalone unit tests, DockwidgetSignalManager extraction (778 lines), hexagonal architecture improvements. Test coverage target 80%%.
+changelog=v4.4.0 (2026-01-22): Major quality release - 396 standalone unit tests, DockwidgetSignalManager extraction (778 lines), hexagonal architecture complete. Test coverage 75%%, quality score 8.5/10.
 
 # Tags are comma separated with spaces allowed
 tags=python,filter,vector,layers,geofilter,search,postgis,ogr,spatialite,data,exploration,subset,export

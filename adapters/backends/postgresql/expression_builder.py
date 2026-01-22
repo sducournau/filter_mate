@@ -221,10 +221,6 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             geom_field = self._detect_geometry_column(layer_props)
         
         # DIAGNOSTIC: Print extracted values
-        # print(f"📋 Layer props extraction:")  # DEBUG REMOVED
-        # print(f"   schema: {schema}")  # DEBUG REMOVED
-        # print(f"   table: {table}")  # DEBUG REMOVED
-        # print(f"   geom_field: {geom_field}")  # DEBUG REMOVED
         
         # FIX 2026-01-19: Build geometry expression with TABLE.GEOM (not schema)
         # For PostgreSQL setSubsetString, the schema is implicit in the layer context
@@ -246,7 +242,6 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         #     geom_expr = self._apply_dynamic_buffer(geom_expr, buffer_expression)
         
         # DIAGNOSTIC 2026-01-19: Log the fully qualified geom_expr
-        # print(f"🎯 PostgreSQL geom_expr (fully qualified): {geom_expr}")  # DEBUG REMOVED
         
         # Determine strategy
         wkt_length = len(source_wkt) if source_wkt else 0
@@ -398,11 +393,6 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             self.log_debug(f"   Final chained expression preview: {final_expr[:300]}...")
         
         # DIAGNOSTIC: Log the final expression
-        # print("=" * 80)  # DEBUG REMOVED
-        # print(f"🔍 PostgreSQLExpressionBuilder.build_expression() RESULT:")  # DEBUG REMOVED
-        # print(f"   Expression length: {len(final_expr)} chars")  # DEBUG REMOVED
-        # print(f"   Expression preview: {final_expr[:300]}...")  # DEBUG REMOVED
-        # print("=" * 80)  # DEBUG REMOVED
         self.log_info(f"✅ PostgreSQL expression built: {final_expr[:200]}...")
         
         # FIX v4.2.12: Set query timeout if complex query detected
@@ -597,19 +587,10 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             True if filter applied successfully
         """
         # DIAGNOSTIC 2026-01-19: Trace apply_filter execution
-        # print("=" * 80)  # DEBUG REMOVED
-        # print(f"🎯 PostgreSQLExpressionBuilder.apply_filter() CALLED!")  # DEBUG REMOVED
-        # print(f"   layer: {layer.name() if layer else 'None'}")  # DEBUG REMOVED
-        # print(f"   expression length: {len(expression) if expression else 0}")  # DEBUG REMOVED
-        # print(f"   expression preview: {expression[:150] if expression else 'None'}...")  # DEBUG REMOVED
-        # print(f"   old_subset: {old_subset[:100] if old_subset else 'None'}...")  # DEBUG REMOVED
-        # print(f"   combine_operator: {combine_operator}")  # DEBUG REMOVED
-        # print("=" * 80)  # DEBUG REMOVED
         
         try:
             if not expression:
                 self.log_warning("Empty expression, skipping filter")
-                # print("⚠️ Empty expression - returning False")  # DEBUG REMOVED
                 return False
             
             # Normalize column case and apply type casting
@@ -634,8 +615,6 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                 final_expression = expression
             
             # DIAGNOSTIC: Print final expression before applying
-            # print(f"📝 Final expression to apply: {final_expression[:200]}...")  # DEBUG REMOVED
-            # print(f"   Calling safe_set_subset_string(layer={layer.name()}, expr_len={len(final_expression)})...")  # DEBUG REMOVED
             
             # Apply filter
             # FIX v4.2.13: Enhanced logging for debugging failures

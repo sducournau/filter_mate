@@ -170,36 +170,28 @@ class ControllerIntegration:
             return True
         
         try:
-            # print("🔧 ControllerIntegration.setup() START")  # DEBUG REMOVED
             logger.debug("Creating controller registry...")
             self._registry = ControllerRegistry()
             
             logger.debug("Creating controller instances...")
             self._create_controllers()
-            # print(f"🔧 Controllers created: favorites={self._favorites_controller}")  # DEBUG REMOVED
             
             logger.debug("Registering controllers...")
             self._register_controllers()
-            # print(f"🔧 Registry has {len(self._registry)} controllers")  # DEBUG REMOVED
             
             logger.debug("Wiring up signals...")
             self._connect_signals()
             
             logger.debug("Setting up all controllers...")
-            # print("🔧 Calling self._registry.setup_all()...")  # DEBUG REMOVED
             setup_count = self._registry.setup_all()
-            # print(f"🔧 setup_all() returned: {setup_count} controllers initialized")  # DEBUG REMOVED
             logger.debug(f"✓ {setup_count} controllers initialized successfully")
             
             self._is_setup = True
-            # print("🔧 ControllerIntegration.setup() END - SUCCESS")  # DEBUG REMOVED
             logger.info("✓ Controller integration setup complete")
             return True
             
         except Exception as e:
-            # print(f"🔧 ControllerIntegration.setup() FAILED: {e}")  # DEBUG REMOVED
             import traceback
-            # print(f"🔧 Traceback: {traceback.format_exc()}")  # DEBUG REMOVED
             logger.error(f"Failed to setup controller integration: {e}", exc_info=True)
             self._cleanup_on_error()
             return False
@@ -299,29 +291,22 @@ class ControllerIntegration:
     def _register_controllers(self) -> None:
         """Register all controllers with the registry."""
         if not self._registry:
-            # print("🔧 _register_controllers: NO REGISTRY!")  # DEBUG REMOVED
             return
         
         # Register with tab indices
         # Note: TabIndex.FILTERING = 0, but exploring is typically first
         # We register by name, tab index is for tab switching
         
-        # print(f"🔧 _register_controllers START: registry={self._registry}")  # DEBUG REMOVED
         
         def safe_register(name, controller, tab_index):
             """Helper to register with error handling."""
             try:
-                # print(f"🔧   Registering '{name}': {controller}")  # DEBUG REMOVED
                 if controller is None:
-                    # print(f"🔧   ⚠️ Controller '{name}' is None!")  # DEBUG REMOVED
                     return False
                 self._registry.register(name, controller, tab_index=tab_index)
-                # print(f"🔧   ✓ Registered '{name}'")  # DEBUG REMOVED
                 return True
             except Exception as e:
-                # print(f"🔧   ✗ Failed to register '{name}': {e}")  # DEBUG REMOVED
                 import traceback
-                # print(f"🔧   Traceback: {traceback.format_exc()}")  # DEBUG REMOVED
                 return False
         
         safe_register(
@@ -382,7 +367,6 @@ class ControllerIntegration:
             TabIndex.FILTERING  # UI layout controller active on all tabs
         )
         
-        # print(f"🔧 _register_controllers END: registry now has {len(self._registry)} controllers")  # DEBUG REMOVED
         logger.debug("All controllers registered")
     
     def _connect_signals(self) -> None:
