@@ -156,6 +156,17 @@ class SpatialiteExpressionBuilder(GeometricFilterPort):
         """
         self.log_debug(f"Building Spatialite expression for {layer_props.get('layer_name', 'unknown')}")
         
+        # FIX v4.2.13: Spatialite cannot evaluate dynamic buffer expressions with field references
+        # Unlike PostgreSQL which can create temp tables with pre-calculated buffers,
+        # Spatialite's Buffer(GeomFromText(wkt), "field_name" * 2) fails because
+        # the field reference is not valid in the context of a WKT literal.
+        # Solution: Fall back to OGR backend which uses QGIS native expression evaluation.
+        if buffer_expression and buffer_expression.strip():
+            self.log_warning(f"🔄 Dynamic buffer expression detected: {buffer_expression}")
+            self.log_warning("   Spatialite cannot evaluate field references in Buffer()")
+            self.log_warning("   → Falling back to OGR backend for native QGIS expression evaluation")
+            return USE_OGR_FALLBACK
+        
         # Extract layer properties
         table = layer_props.get("layer_table_name") or layer_props.get("layer_name")
         geom_field = self._detect_geometry_column(layer_props)

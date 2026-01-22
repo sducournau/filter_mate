@@ -2,6 +2,49 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [4.2.13] - 2026-01-22 🔧 FIX: Spatialite dynamic buffer expression fails with "SPATIAL_FILTER unknown"
+
+### Bug Fix - Dynamic Buffer Expression Causes SQL Error in Spatialite
+
+**Symptom**: `La fonction SPATIAL_FILTER est inconnue` when using buffer expressions like `"largeur_de_chaussee" * 2`  
+**Root Cause**: Spatialite cannot evaluate field references inside `Buffer(GeomFromText(wkt), expression)`
+
+#### Problem Analysis
+
+Unlike PostgreSQL which creates temp tables with pre-calculated buffers, Spatialite's `Buffer()` function
+cannot reference fields from the target table when applied to a WKT geometry literal:
+
+```sql
+-- PostgreSQL: Creates temp table with pre-calculated buffers (works!)
+CREATE TABLE temp_buffer AS SELECT ST_Buffer(geom, "field" * 2) FROM source;
+
+-- Spatialite: Fails! "field" is not available in Buffer(WKT) context
+Intersects("geom", Buffer(GeomFromText('POLYGON(...)'), "largeur_de_chaussee" * 2))
+```
+
+#### Solution
+
+Detect dynamic buffer expressions early in `build_expression()` and return `USE_OGR_FALLBACK` sentinel.
+The OGR backend uses QGIS native `QgsExpression` evaluation which properly handles field references.
+
+**File**: `adapters/backends/spatialite/expression_builder.py`  
+**Method**: `build_expression()`
+
+```python
+# NEW: Early detection and fallback for dynamic buffer expressions
+if buffer_expression and buffer_expression.strip():
+    self.log_warning("Dynamic buffer expression detected - falling back to OGR")
+    return USE_OGR_FALLBACK
+```
+
+#### User Impact
+
+- Dynamic buffer expressions (`"field" * 2`) now work correctly via OGR fallback
+- Static buffer values continue to use optimized Spatialite path
+- PostgreSQL continues to use optimized temp table approach
+
+---
+
 ## [4.2.12] - 2026-01-22 🔧 FIX: Buffer expression conversion incomplete (PostgreSQL + Spatialite)
 
 ### Bug Fix - Dynamic Buffer Expressions Fail with Multiple Backends
