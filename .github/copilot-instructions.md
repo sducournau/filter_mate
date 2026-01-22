@@ -538,19 +538,19 @@ transformed_geom = geom.transform(transform)
 
 - Phase E9-E11: God classes eliminated (-67% reduction)
 - Phase E12: filter_task.py migrated to core/tasks/
-- **modules/ folder: SHIMS ONLY (~1,978 lines)**
+- **modules/ folder: COMPLETELY REMOVED** ✅
 - All code migrated to hexagonal architecture
 
-### 🔄 Current Phase: v5.0 Preparation
+### ✅ v5.0 Phase 1 Complete
 
-- [ ] Remove modules/ folder entirely
-- [ ] Update all external imports
+- [x] modules/ folder removed
+- [x] All imports updated to new paths
+- [x] DockwidgetSignalManager extracted (778 lines)
 - Target: 80% test coverage (currently ~75%)
 - Focus: Stability, documentation, cleanup
 
 ### 📋 Future Phases
 
-- Phase E13: Remove modules/ folder (v5.0)
 - Phase 14: Performance optimization (caching)
 - Phase 15: Extensibility (plugin API)
 

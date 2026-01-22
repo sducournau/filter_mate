@@ -1030,19 +1030,38 @@ class ExploringController(BaseController, LayerSelectionMixin):
             
             if self._dockwidget.current_exploring_groupbox == "single_selection":
                 # Single selection: get the feature from the picker widget
-                feature_picker = self._dockwidget.widgets.get("EXPLORING", {}).get("SINGLE_SELECTION_FEATURES", {}).get("WIDGET")
-                if feature_picker:
-                    feature = feature_picker.feature()
-                    if feature and feature.isValid():
-                        # Reload feature to ensure geometry is available
-                        try:
-                            reloaded = self._dockwidget.current_layer.getFeature(feature.id())
-                            if reloaded.isValid() and reloaded.hasGeometry() and not reloaded.geometry().isEmpty():
-                                extent = reloaded.geometry().boundingBox()
-                                features_found = 1
-                                logger.debug(f"_compute_zoom_extent_for_mode: Single feature extent computed")
-                        except Exception as e:
-                            logger.warning(f"_compute_zoom_extent_for_mode: Error reloading single feature: {e}")
+                # FIX 2026-01-22: Prefer _last_single_selection_fid over widget.feature()
+                # When layer has a filter (subsetString), widget.feature() may return wrong feature
+                feature = None
+                saved_fid = getattr(self._dockwidget, '_last_single_selection_fid', None)
+                saved_layer_id = getattr(self._dockwidget, '_last_single_selection_layer_id', None)
+                
+                # First try to use saved FID from canvas selection (authoritative source)
+                if saved_fid is not None and saved_layer_id == self._dockwidget.current_layer.id():
+                    try:
+                        feature = self._dockwidget.current_layer.getFeature(saved_fid)
+                        if not feature or not feature.isValid():
+                            feature = None
+                            logger.debug(f"_compute_zoom_extent_for_mode: saved FID {saved_fid} not found, falling back to widget")
+                    except Exception:
+                        feature = None
+                
+                # Fallback to widget.feature()
+                if feature is None:
+                    feature_picker = self._dockwidget.widgets.get("EXPLORING", {}).get("SINGLE_SELECTION_FEATURES", {}).get("WIDGET")
+                    if feature_picker:
+                        feature = feature_picker.feature()
+                
+                if feature and feature.isValid():
+                    # Reload feature to ensure geometry is available
+                    try:
+                        reloaded = self._dockwidget.current_layer.getFeature(feature.id())
+                        if reloaded.isValid() and reloaded.hasGeometry() and not reloaded.geometry().isEmpty():
+                            extent = reloaded.geometry().boundingBox()
+                            features_found = 1
+                            logger.debug(f"_compute_zoom_extent_for_mode: Single feature extent computed")
+                    except Exception as e:
+                        logger.warning(f"_compute_zoom_extent_for_mode: Error reloading single feature: {e}")
                             
             elif self._dockwidget.current_exploring_groupbox == "multiple_selection":
                 # Multiple selection: get checked items and compute combined extent
@@ -1363,27 +1382,59 @@ class ExploringController(BaseController, LayerSelectionMixin):
         """
         Handle single selection feature retrieval with recovery logic.
         
-        FIX 2026-01-15 v8: ALWAYS use widget feature picker as primary source.
-        User requirement: "si pas de selection QGIS, et single selection alors 
-        feature active est la feature active du feature picker single selection 
-        (meme si pushButton_checkable_exploring_selecting est unchecked)"
+        FIX 2026-01-22: Prefer saved FID over widget.feature() when is_selecting is active.
+        When user selects from canvas with IS_SELECTING active, the saved FID is authoritative.
+        widget.feature() may return wrong feature if layer has a filter (subsetString)
+        that excludes the actually selected feature.
         
         Strategy order:
-        1. ALWAYS try widget.feature() first (primary source)
-        2. If widget feature invalid, try saved FID recovery
-        3. Only if still invalid AND groupbox != single_selection, try QGIS canvas
-        4. Return empty only if no feature available
+        1. If is_selecting AND saved FID available → use saved FID (authoritative from canvas)
+        2. Otherwise try widget.feature() (normal picker interaction)
+        3. If widget feature invalid, try saved FID recovery
+        4. Only if still invalid AND groupbox != single_selection, try QGIS canvas
+        5. Return empty only if no feature available
         
         CRITICAL: Always reload feature from layer to ensure geometry is present.
         QgsFeaturePickerWidget.feature() often returns features without geometry.
         """
         dw = self._dockwidget
         widget = dw.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
-        input_feature = widget.feature()
         
-        logger.debug(f"_get_single_selection_features: widget.feature() = {input_feature}")
+        # FIX 2026-01-22: Check if is_selecting is active - if so, saved FID is authoritative
+        layer_props = dw.PROJECT_LAYERS.get(dw.current_layer.id(), {}) if dw.current_layer else {}
+        is_selecting = layer_props.get("exploring", {}).get("is_selecting", False)
+        # Also check button state (more reliable)
+        btn_selecting = getattr(dw, 'pushButton_checkable_exploring_selecting', None)
+        if btn_selecting:
+            is_selecting = is_selecting or btn_selecting.isChecked()
+        
+        saved_fid = getattr(dw, '_last_single_selection_fid', None)
+        saved_layer_id = getattr(dw, '_last_single_selection_layer_id', None)
+        
+        input_feature = None
+        
+        # FIX 2026-01-22: When is_selecting active AND saved FID matches current layer, use it first
+        # This is the authoritative source from canvas selection
+        if is_selecting and saved_fid is not None and dw.current_layer and saved_layer_id == dw.current_layer.id():
+            try:
+                input_feature = dw.current_layer.getFeature(saved_fid)
+                if input_feature and input_feature.isValid():
+                    logger.debug(f"_get_single_selection_features: Using saved FID {saved_fid} (is_selecting=True)")
+                else:
+                    input_feature = None
+                    logger.debug(f"_get_single_selection_features: Saved FID {saved_fid} not found, falling back to widget")
+            except Exception as e:
+                logger.debug(f"_get_single_selection_features: Error loading saved FID: {e}")
+                input_feature = None
+        
+        # If no feature from saved FID, use widget.feature()
+        if input_feature is None:
+            input_feature = widget.feature()
+        
+        logger.debug(f"_get_single_selection_features: input_feature = {input_feature}")
         logger.debug(f"  widget.layer() = {widget.layer().name() if widget.layer() else 'None'}")
         logger.debug(f"  current_exploring_groupbox = {dw.current_exploring_groupbox}")
+        logger.debug(f"  is_selecting = {is_selecting}, saved_fid = {saved_fid}")
         
         # FIX v8: For single_selection mode, widget feature picker is THE source
         # Don't fall back to QGIS canvas - the picker IS the source

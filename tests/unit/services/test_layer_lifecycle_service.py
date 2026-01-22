@@ -62,8 +62,8 @@ class TestLayerLifecycleService:
         
         layers = [layer1, layer2]
         
-        with patch('modules.object_safety.is_valid_layer', return_value=True):
-            with patch('modules.appUtils.is_layer_source_available', return_value=True):
+        with patch('infrastructure.utils.is_layer_valid', return_value=True):
+            with patch('infrastructure.utils.is_layer_source_available', return_value=True):
                 # Act
                 result = service.filter_usable_layers(layers, postgresql_available=True)
                 
@@ -78,8 +78,8 @@ class TestLayerLifecycleService:
         def mock_is_valid(layer):
             return layer.isValid()
         
-        with patch('modules.object_safety.is_valid_layer', side_effect=mock_is_valid):
-            with patch('modules.appUtils.is_layer_source_available', return_value=True):
+        with patch('infrastructure.utils.is_layer_valid', side_effect=mock_is_valid):
+            with patch('infrastructure.utils.is_layer_source_available', return_value=True):
                 # Act
                 result = service.filter_usable_layers(layers, postgresql_available=True)
                 
@@ -108,8 +108,8 @@ class TestLayerLifecycleService:
         # Arrange
         layers = [mock_valid_layer]
         
-        with patch('modules.object_safety.is_valid_layer', return_value=True):
-            with patch('modules.appUtils.is_layer_source_available', return_value=False):
+        with patch('infrastructure.utils.is_layer_valid', return_value=True):
+            with patch('infrastructure.utils.is_layer_source_available', return_value=False):
                 # Act
                 result = service.filter_usable_layers(layers, postgresql_available=False)
                 
@@ -133,8 +133,8 @@ class TestLayerLifecycleService:
         
         layers = [pg_layer, sl_layer, ogr_layer]
         
-        with patch('modules.object_safety.is_valid_layer', return_value=True):
-            with patch('modules.appUtils.is_layer_source_available', return_value=True):
+        with patch('infrastructure.utils.is_layer_valid', return_value=True):
+            with patch('infrastructure.utils.is_layer_source_available', return_value=True):
                 # Act
                 result = service.filter_usable_layers(layers, postgresql_available=True)
                 
@@ -151,8 +151,8 @@ class TestLayerLifecycleService:
         mock_layer.providerType.return_value = "postgres"
         mock_layer.id.return_value = "pg_layer"
         
-        with patch('modules.appUtils.POSTGRESQL_AVAILABLE', True):
-            with patch('modules.appUtils.get_datasource_connexion_from_layer') as mock_conn:
+        with patch('adapters.backends.postgresql_availability.POSTGRESQL_AVAILABLE', True):
+            with patch('infrastructure.utils.get_datasource_connexion_from_layer') as mock_conn:
                 mock_connection = Mock()
                 mock_cursor = Mock()
                 mock_connection.cursor.return_value = mock_cursor
@@ -184,8 +184,8 @@ class TestLayerLifecycleService:
         mock_layer = Mock()
         mock_layer.providerType.return_value = "postgres"
         
-        with patch('modules.appUtils.POSTGRESQL_AVAILABLE', True):
-            with patch('modules.appUtils.get_datasource_connexion_from_layer', side_effect=Exception("Connection failed")):
+        with patch('adapters.backends.postgresql_availability.POSTGRESQL_AVAILABLE', True):
+            with patch('infrastructure.utils.get_datasource_connexion_from_layer', side_effect=Exception("Connection failed")):
                 # Act
                 result = service.cleanup_postgresql_session_views(mock_layer)
                 
@@ -370,8 +370,8 @@ class TestLayerLifecycleService:
         def mock_is_valid(layer):
             return layer.isValid()
         
-        with patch('modules.object_safety.is_valid_layer', side_effect=mock_is_valid):
-            with patch('modules.appUtils.is_layer_source_available', return_value=True):
+        with patch('infrastructure.utils.is_layer_valid', side_effect=mock_is_valid):
+            with patch('infrastructure.utils.is_layer_source_available', return_value=True):
                 # Act
                 service.handle_layers_added(layers, on_usable_layers=callback)
                 
@@ -386,8 +386,8 @@ class TestLayerLifecycleService:
         pg_layer.isValid.return_value = True
         pg_layer.providerType.return_value = "postgres"
         
-        with patch('modules.object_safety.is_valid_layer', return_value=True):
-            with patch('modules.appUtils.is_layer_source_available', return_value=True):
+        with patch('infrastructure.utils.is_layer_valid', return_value=True):
+            with patch('infrastructure.utils.is_layer_source_available', return_value=True):
                 # Act
                 service.handle_layers_added([pg_layer], postgresql_available=True)
                 
@@ -458,8 +458,8 @@ class TestLayerLifecycleService:
             layer.isValid.return_value = True
         
         # Act - Simulate concurrent adds
-        with patch('modules.object_safety.is_valid_layer', return_value=True):
-            with patch('modules.appUtils.is_layer_source_available', return_value=True):
+        with patch('infrastructure.utils.is_layer_valid', return_value=True):
+            with patch('infrastructure.utils.is_layer_source_available', return_value=True):
                 service.handle_layers_added(layers1)
                 service.handle_layers_added(layers2)
         

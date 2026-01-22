@@ -3905,9 +3905,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if self.current_exploring_groupbox == "single_selection":
                 picker = w.get("SINGLE_SELECTION_FEATURES", {}).get("WIDGET")
                 if picker:
-                    f = picker.feature()
-                    has_features = f is not None and (not hasattr(f, 'isValid') or f.isValid())
-                    detection_source = "single_picker" if has_features else "single_picker_empty"
+                    # FIX 2026-01-22: Also check saved FID as authoritative source
+                    # picker.feature() may be invalid if layer has a filter excluding the selected feature
+                    saved_fid = getattr(self, '_last_single_selection_fid', None)
+                    saved_layer_id = getattr(self, '_last_single_selection_layer_id', None)
+                    if saved_fid is not None and self.current_layer and saved_layer_id == self.current_layer.id():
+                        has_features = True
+                        detection_source = "single_picker_saved_fid"
+                    else:
+                        f = picker.feature()
+                        has_features = f is not None and (not hasattr(f, 'isValid') or f.isValid())
+                        detection_source = "single_picker" if has_features else "single_picker_empty"
                     
             elif self.current_exploring_groupbox == "multiple_selection":
                 combo = w.get("MULTIPLE_SELECTION_FEATURES", {}).get("WIDGET")
@@ -4125,7 +4133,25 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # FIX 2026-01-18 v7: Don't call exploring_link_widgets during QGIS sync
         if not self._syncing_from_qgis:
             self.exploring_link_widgets()
-            f = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
+            # FIX 2026-01-22: Prefer _last_single_selection_fid over widget.feature()
+            # When layer has a filter (subsetString), widget.feature() may return wrong feature
+            # if the actual selected feature is excluded by the filter
+            f = None
+            picker = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+            # First try to use saved FID from canvas selection (authoritative source)
+            saved_fid = getattr(self, '_last_single_selection_fid', None)
+            saved_layer_id = getattr(self, '_last_single_selection_layer_id', None)
+            if saved_fid is not None and self.current_layer and saved_layer_id == self.current_layer.id():
+                try:
+                    f = self.current_layer.getFeature(saved_fid)
+                    if not f or not f.isValid():
+                        f = None
+                        logger.debug(f"_configure_single_selection_groupbox: saved FID {saved_fid} not found, falling back to widget")
+                except Exception:
+                    f = None
+            # Fallback to widget.feature() only if no saved FID
+            if f is None:
+                f = picker.feature()
             if f and f.isValid(): self.exploring_features_changed(f)
         
         self._update_exploring_buttons_state()
@@ -4394,6 +4420,29 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if groupbox_type == "single_selection":
                 picker = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
                 logger.info(f"   picker widget: {type(picker).__name__}")
+                
+                # FIX 2026-01-22: When is_selecting is active, check saved FID FIRST
+                # picker.feature() may return wrong feature if layer has a filter (subsetString)
+                # that excludes the actually selected feature from canvas
+                is_selecting_active = self.pushButton_checkable_exploring_selecting.isChecked()
+                saved_fid = getattr(self, '_last_single_selection_fid', None)
+                saved_layer_id = getattr(self, '_last_single_selection_layer_id', None)
+                
+                # Strategy 0 (NEW): If is_selecting AND saved FID available for current layer, use it FIRST
+                if is_selecting_active and saved_fid is not None and saved_layer_id == self.current_layer.id():
+                    logger.info(f"   🎯 is_selecting active, using saved FID {saved_fid} as authoritative source")
+                    try:
+                        reloaded = self.current_layer.getFeature(saved_fid)
+                        if reloaded.isValid():
+                            if reloaded.hasGeometry() and not reloaded.geometry().isEmpty():
+                                logger.info(f"  ✓ Using feature {saved_fid} from saved FID (with geometry)")
+                                return [reloaded], ""
+                            else:
+                                logger.warning(f"  ⚠️ Feature {saved_fid} has NO geometry - flash/zoom will fail")
+                                return [reloaded], ""
+                    except Exception as e:
+                        logger.warning(f"  ⚠️ Could not load saved FID {saved_fid}: {e}, falling back to picker")
+                
                 feature = picker.feature()
                 logger.info(f"   picker.feature(): {feature}")
                 logger.info(f"   feature.isValid(): {feature.isValid() if feature else 'N/A'}")
@@ -4866,6 +4915,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     self._syncing_from_qgis = True
                     try:
                         feature_picker.setFeature(feature_id)
+                        # FIX 2026-01-22: Save FID for recovery (same as in _sync_single_selection_from_qgis)
+                        self._last_single_selection_fid = feature_id
+                        self._last_single_selection_layer_id = self.current_layer.id()
                         # FIX 2026-01-15: Force visual refresh
                         feature_picker.update()
                         feature_picker.repaint()
@@ -6893,10 +6945,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if hasattr(picker, 'displayExpression'):
                 de = picker.displayExpression()
                 if de and len(de) > 30: picker.setToolTip(QCoreApplication.translate("FilterMate", "Display expression: {0}").format(de)); return
-            if hasattr(picker, 'feature'):
+            # FIX 2026-01-22: Also consider saved FID for tooltip accuracy
+            saved_fid = getattr(self, '_last_single_selection_fid', None)
+            saved_layer_id = getattr(self, '_last_single_selection_layer_id', None)
+            f = None
+            if saved_fid is not None and self.current_layer and saved_layer_id == self.current_layer.id():
+                try:
+                    f = self.current_layer.getFeature(saved_fid)
+                    if not f or not f.isValid():
+                        f = None
+                except Exception:
+                    f = None
+            if f is None and hasattr(picker, 'feature'):
                 f = picker.feature()
-                if f and f.isValid() and f.attributes():
-                    picker.setToolTip(QCoreApplication.translate("FilterMate", "Feature ID: {0}\nFirst attribute: {1}").format(f.id(), f.attributes()[0]))
+            if f and f.isValid() and f.attributes():
+                picker.setToolTip(QCoreApplication.translate("FilterMate", "Feature ID: {0}\nFirst attribute: {1}").format(f.id(), f.attributes()[0]))
         except Exception:  # Tooltip update is cosmetic - non-critical
             pass
 

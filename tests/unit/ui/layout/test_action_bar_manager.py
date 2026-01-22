@@ -43,10 +43,10 @@ sys.modules['qgis.PyQt.QtCore'] = _qgis_pyqt_mock.QtCore
 sys.modules['qgis.gui'] = _qgis_gui_mock
 sys.modules['qgis.core'] = MagicMock()
 
-# Mock modules.ui_config before import
+# Mock ui.config before import
 sys.modules['modules'] = MagicMock()
-sys.modules['modules.ui_config'] = MagicMock()
-sys.modules['modules.ui_elements'] = MagicMock()
+sys.modules['ui.config'] = MagicMock()
+sys.modules['ui.elements'] = MagicMock()
 
 
 class TestActionBarManager:

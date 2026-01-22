@@ -42,11 +42,11 @@ class TestPostgreSQLMVCleanup(unittest.TestCase):
         for p in self.qgis_patches:
             p.stop()
     
-    @patch('filter_mate.modules.tasks.filter_task.POSTGRESQL_AVAILABLE', True)
-    @patch('filter_mate.modules.tasks.filter_task.logger')
+    @patch('filter_mate.core.tasks.filter_task.POSTGRESQL_AVAILABLE', True)
+    @patch('filter_mate.core.tasks.filter_task.logger')
     def test_cleanup_called_on_finished_success(self, mock_logger):
         """Test that cleanup is called when task finishes successfully."""
-        from filter_mate.modules.tasks.filter_task import FilterEngineTask
+        from filter_mate.core.tasks.filter_task import FilterEngineTask
         
         # Create mock task
         task = FilterEngineTask("Test Task", "filter", {
@@ -60,18 +60,18 @@ class TestPostgreSQLMVCleanup(unittest.TestCase):
         task._cleanup_postgresql_materialized_views = Mock()
         
         # Call finished with success
-        with patch('filter_mate.modules.tasks.filter_task.MESSAGE_TASKS_CATEGORIES', {'filter': 'FilterLayers'}):
+        with patch('filter_mate.core.tasks.filter_task.MESSAGE_TASKS_CATEGORIES', {'filter': 'FilterLayers'}):
             task.finished(result=True)
         
         # Verify cleanup was called
         task._cleanup_postgresql_materialized_views.assert_called_once()
         mock_logger.debug.assert_any_call("PostgreSQL materialized views cleaned up successfully")
     
-    @patch('filter_mate.modules.tasks.filter_task.POSTGRESQL_AVAILABLE', True)
-    @patch('filter_mate.modules.tasks.filter_task.logger')
+    @patch('filter_mate.core.tasks.filter_task.POSTGRESQL_AVAILABLE', True)
+    @patch('filter_mate.core.tasks.filter_task.logger')
     def test_cleanup_called_on_cancel(self, mock_logger):
         """Test that cleanup is called when task is cancelled."""
-        from filter_mate.modules.tasks.filter_task import FilterEngineTask
+        from filter_mate.core.tasks.filter_task import FilterEngineTask
         
         # Create mock task
         task = FilterEngineTask("Test Task", "filter", {
@@ -90,11 +90,11 @@ class TestPostgreSQLMVCleanup(unittest.TestCase):
         # Verify cleanup was called before connections cleanup
         task._cleanup_postgresql_materialized_views.assert_called_once()
     
-    @patch('filter_mate.modules.tasks.filter_task.POSTGRESQL_AVAILABLE', False)
-    @patch('filter_mate.modules.tasks.filter_task.logger')
+    @patch('filter_mate.core.tasks.filter_task.POSTGRESQL_AVAILABLE', False)
+    @patch('filter_mate.core.tasks.filter_task.logger')
     def test_cleanup_skipped_when_postgresql_unavailable(self, mock_logger):
         """Test that cleanup is skipped gracefully when psycopg2 not available."""
-        from filter_mate.modules.tasks.filter_task import FilterEngineTask
+        from filter_mate.core.tasks.filter_task import FilterEngineTask
         
         # Create mock task
         task = FilterEngineTask("Test Task", "filter", {})
@@ -106,11 +106,11 @@ class TestPostgreSQLMVCleanup(unittest.TestCase):
         # Should return early without errors
         # No specific logger call expected (early return)
     
-    @patch('filter_mate.modules.tasks.filter_task.POSTGRESQL_AVAILABLE', True)
-    @patch('filter_mate.modules.tasks.filter_task.logger')
+    @patch('filter_mate.core.tasks.filter_task.POSTGRESQL_AVAILABLE', True)
+    @patch('filter_mate.core.tasks.filter_task.logger')
     def test_cleanup_skipped_for_non_postgresql_layer(self, mock_logger):
         """Test that cleanup is skipped for non-PostgreSQL layers."""
-        from filter_mate.modules.tasks.filter_task import FilterEngineTask
+        from filter_mate.core.tasks.filter_task import FilterEngineTask
         
         # Create mock task with Spatialite layer
         task = FilterEngineTask("Test Task", "filter", {})
@@ -122,12 +122,12 @@ class TestPostgreSQLMVCleanup(unittest.TestCase):
         # Should return early without attempting cleanup
         # Logger not called for PostgreSQL cleanup
     
-    @patch('filter_mate.modules.tasks.filter_task.POSTGRESQL_AVAILABLE', True)
-    @patch('filter_mate.modules.backends.postgresql_backend.get_datasource_connexion_from_layer')
-    @patch('filter_mate.modules.tasks.filter_task.logger')
+    @patch('filter_mate.core.tasks.filter_task.POSTGRESQL_AVAILABLE', True)
+    @patch('filter_mate.adapters.backends.postgresql.backend.get_datasource_connexion_from_layer')
+    @patch('filter_mate.core.tasks.filter_task.logger')
     def test_cleanup_calls_backend_method(self, mock_logger, mock_get_conn):
         """Test that cleanup properly calls backend cleanup_materialized_views."""
-        from filter_mate.modules.tasks.filter_task import FilterEngineTask
+        from filter_mate.core.tasks.filter_task import FilterEngineTask
         
         # Create mock layer
         mock_layer = Mock()
@@ -144,18 +144,18 @@ class TestPostgreSQLMVCleanup(unittest.TestCase):
         mock_backend = Mock()
         mock_backend.cleanup_materialized_views.return_value = True
         
-        with patch('filter_mate.modules.tasks.filter_task.PostgreSQLGeometricFilter', return_value=mock_backend):
+        with patch('filter_mate.core.tasks.filter_task.PostgreSQLGeometricFilter', return_value=mock_backend):
             task._cleanup_postgresql_materialized_views()
         
         # Verify backend cleanup was called
         mock_backend.cleanup_materialized_views.assert_called_once_with(mock_layer)
         mock_logger.debug.assert_called_with("PostgreSQL materialized views cleaned up successfully")
     
-    @patch('filter_mate.modules.tasks.filter_task.POSTGRESQL_AVAILABLE', True)
-    @patch('filter_mate.modules.tasks.filter_task.logger')
+    @patch('filter_mate.core.tasks.filter_task.POSTGRESQL_AVAILABLE', True)
+    @patch('filter_mate.core.tasks.filter_task.logger')
     def test_cleanup_handles_exceptions_gracefully(self, mock_logger):
         """Test that cleanup exceptions don't crash the task."""
-        from filter_mate.modules.tasks.filter_task import FilterEngineTask
+        from filter_mate.core.tasks.filter_task import FilterEngineTask
         
         # Create mock task
         mock_layer = Mock()
@@ -169,7 +169,7 @@ class TestPostgreSQLMVCleanup(unittest.TestCase):
         mock_backend = Mock()
         mock_backend.cleanup_materialized_views.side_effect = Exception("Connection error")
         
-        with patch('filter_mate.modules.tasks.filter_task.PostgreSQLGeometricFilter', return_value=mock_backend):
+        with patch('filter_mate.core.tasks.filter_task.PostgreSQLGeometricFilter', return_value=mock_backend):
             # Should not raise exception
             task._cleanup_postgresql_materialized_views()
         
@@ -178,12 +178,12 @@ class TestPostgreSQLMVCleanup(unittest.TestCase):
         logged_message = str(mock_logger.debug.call_args)
         self.assertIn("Error during PostgreSQL MV cleanup", logged_message)
     
-    @patch('filter_mate.modules.tasks.filter_task.POSTGRESQL_AVAILABLE', True)
-    @patch('filter_mate.modules.backends.postgresql_backend.get_datasource_connexion_from_layer')
-    @patch('filter_mate.modules.tasks.filter_task.logger')
+    @patch('filter_mate.core.tasks.filter_task.POSTGRESQL_AVAILABLE', True)
+    @patch('filter_mate.adapters.backends.postgresql.backend.get_datasource_connexion_from_layer')
+    @patch('filter_mate.core.tasks.filter_task.logger')
     def test_cleanup_with_source_layer_from_attributes(self, mock_logger, mock_get_conn):
         """Test cleanup retrieves source layer from task attributes."""
-        from filter_mate.modules.tasks.filter_task import FilterEngineTask
+        from filter_mate.core.tasks.filter_task import FilterEngineTask
         
         # Create mock layer
         mock_layer = Mock()
@@ -198,17 +198,17 @@ class TestPostgreSQLMVCleanup(unittest.TestCase):
         mock_backend = Mock()
         mock_backend.cleanup_materialized_views.return_value = True
         
-        with patch('filter_mate.modules.tasks.filter_task.PostgreSQLGeometricFilter', return_value=mock_backend):
+        with patch('filter_mate.core.tasks.filter_task.PostgreSQLGeometricFilter', return_value=mock_backend):
             task._cleanup_postgresql_materialized_views()
         
         # Verify cleanup was performed with source_layer from attribute
         mock_backend.cleanup_materialized_views.assert_called_once_with(mock_layer)
     
-    @patch('filter_mate.modules.tasks.filter_task.POSTGRESQL_AVAILABLE', True)
-    @patch('filter_mate.modules.tasks.filter_task.logger')
+    @patch('filter_mate.core.tasks.filter_task.POSTGRESQL_AVAILABLE', True)
+    @patch('filter_mate.core.tasks.filter_task.logger')
     def test_cleanup_logs_warning_when_no_source_layer(self, mock_logger):
         """Test cleanup logs debug when source layer not available."""
-        from filter_mate.modules.tasks.filter_task import FilterEngineTask
+        from filter_mate.core.tasks.filter_task import FilterEngineTask
         
         # Create task without source layer
         task = FilterEngineTask("Test Task", "filter", {})
@@ -224,11 +224,11 @@ class TestPostgreSQLMVCleanup(unittest.TestCase):
 class TestBackendCleanupIntegration(unittest.TestCase):
     """Test integration with PostgreSQL backend cleanup method."""
     
-    @patch('filter_mate.modules.backends.postgresql_backend.get_datasource_connexion_from_layer')
-    @patch('filter_mate.modules.backends.postgresql_backend.logger')
+    @patch('filter_mate.adapters.backends.postgresql.backend.get_datasource_connexion_from_layer')
+    @patch('filter_mate.adapters.backends.postgresql.backend.logger')
     def test_backend_cleanup_drops_materialized_views(self, mock_logger, mock_get_conn):
         """Test that backend cleanup actually drops materialized views."""
-        from filter_mate.modules.backends.postgresql_backend import PostgreSQLGeometricFilter
+        from filter_mate.adapters.backends.postgresql.backend import PostgreSQLGeometricFilter
         
         # Mock PostgreSQL connection
         mock_conn = Mock()
@@ -271,11 +271,11 @@ class TestBackendCleanupIntegration(unittest.TestCase):
         mock_cursor.close.assert_called_once()
         mock_conn.close.assert_called_once()
     
-    @patch('filter_mate.modules.backends.postgresql_backend.get_datasource_connexion_from_layer')
-    @patch('filter_mate.modules.backends.postgresql_backend.logger')
+    @patch('filter_mate.adapters.backends.postgresql.backend.get_datasource_connexion_from_layer')
+    @patch('filter_mate.adapters.backends.postgresql.backend.logger')
     def test_backend_cleanup_handles_no_views(self, mock_logger, mock_get_conn):
         """Test cleanup when no materialized views exist."""
-        from filter_mate.modules.backends.postgresql_backend import PostgreSQLGeometricFilter
+        from filter_mate.adapters.backends.postgresql.backend import PostgreSQLGeometricFilter
         
         # Mock connection returning empty result
         mock_conn = Mock()
@@ -303,11 +303,11 @@ class TestBackendCleanupIntegration(unittest.TestCase):
 class TestCleanupPerformance(unittest.TestCase):
     """Test cleanup performance and overhead."""
     
-    @patch('filter_mate.modules.tasks.filter_task.POSTGRESQL_AVAILABLE', True)
+    @patch('filter_mate.core.tasks.filter_task.POSTGRESQL_AVAILABLE', True)
     def test_cleanup_overhead_is_minimal(self):
         """Test that cleanup adds minimal overhead to task completion."""
         import time
-        from filter_mate.modules.tasks.filter_task import FilterEngineTask
+        from filter_mate.core.tasks.filter_task import FilterEngineTask
         
         # Create task
         task = FilterEngineTask("Test Task", "filter", {})

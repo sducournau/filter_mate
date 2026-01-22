@@ -21,7 +21,7 @@ if str(plugin_path) not in sys.path:
 # QGIS mocks are configured in conftest.py - do not reconfigure here
 
 # Additional mocks specific to IconManager
-sys.modules['modules.ui_styles'] = MagicMock()
+sys.modules['ui.styles'] = MagicMock()
 
 
 class TestIconManager:

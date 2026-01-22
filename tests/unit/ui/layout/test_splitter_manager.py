@@ -43,7 +43,7 @@ sys.modules['qgis.PyQt.QtCore'] = _qgis_pyqt_mock.QtCore
 sys.modules['qgis.gui'] = _qgis_gui_mock
 sys.modules['qgis.core'] = MagicMock()
 
-# Mock modules.ui_config before import
+# Mock ui.config before import
 _mock_ui_config_module = MagicMock()
 _splitter_config = {
     'handle_width': 6,
@@ -57,7 +57,7 @@ _splitter_config = {
 }
 _mock_ui_config_module.UIConfig.get_config.return_value = _splitter_config
 sys.modules['modules'] = MagicMock()
-sys.modules['modules.ui_config'] = _mock_ui_config_module
+sys.modules['ui.config'] = _mock_ui_config_module
 
 
 class TestSplitterManager:
@@ -88,7 +88,7 @@ class TestSplitterManager:
             'initial_toolset_ratio': 0.50,
         }
         
-        with patch.dict('sys.modules', {'modules.ui_config': Mock()}):
+        with patch.dict('sys.modules', {'ui.config': Mock()}):
             with patch('ui.layout.splitter_manager.UIConfig') as mock_uic:
                 mock_uic.get_config.return_value = mock_config
                 yield mock_uic

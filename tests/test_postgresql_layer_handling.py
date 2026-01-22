@@ -28,11 +28,11 @@ class TestPostgreSQLLayerHandling(unittest.TestCase):
         self.mock_qgs_vector_layer.return_value.providerType.return_value = 'postgres'
         self.mock_qgs_vector_layer.return_value.name.return_value = "Test PostgreSQL Layer"
         
-    @patch('filter_mate.modules.appUtils.POSTGRESQL_AVAILABLE', False)
-    @patch('filter_mate.modules.appUtils.psycopg2', None)
+    @patch('filter_mate.infrastructure.utils.POSTGRESQL_AVAILABLE', False)
+    @patch('filter_mate.infrastructure.utils.psycopg2', None)
     def test_is_layer_source_available_postgres_without_psycopg2(self):
         """Test that PostgreSQL layers are rejected when psycopg2 is not available."""
-        from filter_mate.modules.appUtils import is_layer_source_available, POSTGRESQL_AVAILABLE
+        from filter_mate.infrastructure.utils import is_layer_source_available, POSTGRESQL_AVAILABLE
         
         # Verify psycopg2 is mocked as unavailable
         self.assertFalse(POSTGRESQL_AVAILABLE)
@@ -51,11 +51,11 @@ class TestPostgreSQLLayerHandling(unittest.TestCase):
             "PostgreSQL layer should be rejected when psycopg2 is not available"
         )
     
-    @patch('filter_mate.modules.appUtils.POSTGRESQL_AVAILABLE', True)
-    @patch('filter_mate.modules.appUtils.psycopg2', MagicMock())
+    @patch('filter_mate.infrastructure.utils.POSTGRESQL_AVAILABLE', True)
+    @patch('filter_mate.infrastructure.utils.psycopg2', MagicMock())
     def test_is_layer_source_available_postgres_with_psycopg2(self):
         """Test that PostgreSQL layers are accepted when psycopg2 is available."""
-        from filter_mate.modules.appUtils import is_layer_source_available, POSTGRESQL_AVAILABLE
+        from filter_mate.infrastructure.utils import is_layer_source_available, POSTGRESQL_AVAILABLE
         
         # Verify psycopg2 is mocked as available
         self.assertTrue(POSTGRESQL_AVAILABLE)
@@ -67,7 +67,7 @@ class TestPostgreSQLLayerHandling(unittest.TestCase):
         mock_layer.name.return_value = "Test PostgreSQL Layer"
         
         # Mock detect_layer_provider_type to return 'postgresql'
-        with patch('filter_mate.modules.appUtils.detect_layer_provider_type', return_value='postgresql'):
+        with patch('filter_mate.infrastructure.utils.detect_layer_provider_type', return_value='postgresql'):
             result = is_layer_source_available(mock_layer)
         
         self.assertTrue(
@@ -75,10 +75,10 @@ class TestPostgreSQLLayerHandling(unittest.TestCase):
             "PostgreSQL layer should be accepted when psycopg2 is available"
         )
     
-    @patch('filter_mate.modules.appUtils.POSTGRESQL_AVAILABLE', False)
+    @patch('filter_mate.infrastructure.utils.POSTGRESQL_AVAILABLE', False)
     def test_filter_usable_layers_excludes_postgres_without_psycopg2(self):
         """Test that _filter_usable_layers excludes PostgreSQL layers when psycopg2 is unavailable."""
-        from filter_mate.modules.appUtils import POSTGRESQL_AVAILABLE
+        from filter_mate.infrastructure.utils import POSTGRESQL_AVAILABLE
         
         # Verify psycopg2 is unavailable
         self.assertFalse(POSTGRESQL_AVAILABLE)
@@ -101,7 +101,7 @@ class TestPostgreSQLLayerHandling(unittest.TestCase):
                 return POSTGRESQL_AVAILABLE  # False
             return True
         
-        with patch('filter_mate.modules.appUtils.is_layer_source_available', side_effect=mock_source_available):
+        with patch('filter_mate.infrastructure.utils.is_layer_source_available', side_effect=mock_source_available):
             from filter_mate.filter_mate_app import FilterMateApp
             
             # Create mock app instance
@@ -140,10 +140,10 @@ class TestPostgreSQLLayerHandling(unittest.TestCase):
         self.assertIn("installé", message.lower())
         self.assertIn(layer_names, message)
     
-    @patch('filter_mate.modules.appUtils.POSTGRESQL_AVAILABLE', False)
+    @patch('filter_mate.infrastructure.utils.POSTGRESQL_AVAILABLE', False)
     def test_get_datasource_connexion_returns_none_without_psycopg2(self):
         """Test that get_datasource_connexion_from_layer returns None when psycopg2 unavailable."""
-        from filter_mate.modules.appUtils import get_datasource_connexion_from_layer, POSTGRESQL_AVAILABLE
+        from filter_mate.infrastructure.utils import get_datasource_connexion_from_layer, POSTGRESQL_AVAILABLE
         
         # Verify psycopg2 is unavailable
         self.assertFalse(POSTGRESQL_AVAILABLE)
@@ -169,11 +169,11 @@ class TestPostgreSQLLayerHandling(unittest.TestCase):
 class TestPostgreSQLLayerWarnings(unittest.TestCase):
     """Test warning system for PostgreSQL layers without psycopg2."""
     
-    @patch('filter_mate.modules.appUtils.POSTGRESQL_AVAILABLE', False)
+    @patch('filter_mate.infrastructure.utils.POSTGRESQL_AVAILABLE', False)
     @patch('qgis.utils.iface')
     def test_on_layers_added_shows_warning_for_postgres(self, mock_iface):
         """Test that _on_layers_added shows warning when PostgreSQL layers added without psycopg2."""
-        from filter_mate.modules.appUtils import POSTGRESQL_AVAILABLE
+        from filter_mate.infrastructure.utils import POSTGRESQL_AVAILABLE
         
         # Verify psycopg2 unavailable
         self.assertFalse(POSTGRESQL_AVAILABLE)
@@ -214,7 +214,7 @@ class TestPostgreSQLLayerWarnings(unittest.TestCase):
         self.assertIn("PostgreSQL", message)
         self.assertIn("psycopg2", message)
     
-    @patch('filter_mate.modules.tasks.layer_management_task.POSTGRESQL_AVAILABLE', True)
+    @patch('filter_mate.core.tasks.layer_management_task.POSTGRESQL_AVAILABLE', True)
     def test_postgresql_layer_without_primary_key_rejected(self):
         """
         Test that PostgreSQL layers without a unique field are rejected.
@@ -223,7 +223,7 @@ class TestPostgreSQLLayerWarnings(unittest.TestCase):
         execute on the PostgreSQL server, so layers without a real unique 
         field must be rejected.
         """
-        from filter_mate.modules.tasks.layer_management_task import LayersManagementEngineTask
+        from filter_mate.core.tasks.layer_management_task import LayersManagementEngineTask
         
         # Create mock layer without unique field
         mock_layer = Mock()

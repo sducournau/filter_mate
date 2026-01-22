@@ -114,13 +114,13 @@ def _configure_qgis_mocks():
     sys.modules['qgis.gui'] = MagicMock()
     sys.modules['qgis.utils'] = MagicMock()
     
-    # Mock modules.ui_config
+    # Mock ui.config
     _mock_ui_config = MagicMock()
     _mock_ui_config.UIConfig = MagicMock()
     _mock_ui_config.UIConfig.get_active_profile = MagicMock(return_value='normal')
     sys.modules['modules'] = MagicMock()
-    sys.modules['modules.ui_config'] = _mock_ui_config
-    sys.modules['modules.ui_styles'] = MagicMock()
+    sys.modules['ui.config'] = _mock_ui_config
+    sys.modules['ui.styles'] = MagicMock()
 
 
 # Configure mocks when this conftest is loaded

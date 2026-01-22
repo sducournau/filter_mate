@@ -175,8 +175,26 @@ Semaine 9-10 : PHASE 4 - Documentation & Release v5.0
 - [x] Tests favorites (`tests/unit/services/test_favorites_service.py`) - 21 tests
 - **Total: 62/64 tests passent** (2 échecs liés aux mocks QGIS)
 
+### Sprint 2.1 - DockwidgetSignalManager (COMPLÉTÉ ✅)
+- [x] Extraction DockwidgetSignalManager (778 lignes)
+- [x] 14 tests unitaires (100% passent)
+- [x] Integration avec filter_mate_dockwidget.py
+- **Commit:** `cba8e94`
+
+### Sprint 2.2-2.3 - Analyse (COMPLÉTÉ ✅)
+- [x] Analyse des controllers existants
+- [x] **Découverte:** ExploringController (3,259L), LayerSyncController (1,270L) déjà migrés
+- [x] Les wrappers dans dockwidget délèguent aux controllers
+- [x] modules/ folder supprimé
+
+### Sprint 3.1 - Nettoyage imports modules/ (COMPLÉTÉ ✅)
+- [x] Suppression références obsolètes dans tests
+- [x] Mise à jour imports vers core/tasks/, infrastructure/utils, adapters/backends/
+- [x] Documentation copilot-instructions.md mise à jour
+
 ### Prochaines étapes
-- [ ] Phase 2: Refactoring God Classes (filter_mate_dockwidget.py)
+- [ ] Phase 2: Consolidation fallbacks (optionnel)
+- [ ] Phase 3: Tests couverture 80%
 
 ---
 

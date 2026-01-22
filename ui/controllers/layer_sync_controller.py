@@ -1193,7 +1193,28 @@ class LayerSyncController(BaseController):
             ).get("WIDGET")
             
             if picker:
-                feature = picker.feature()
+                # FIX 2026-01-22: Prefer saved FID over picker.feature() when is_selecting is active
+                # picker.feature() may return wrong feature if layer has a filter (subsetString)
+                feature = None
+                layer_props_exploring = layer_props.get("exploring", {})
+                is_selecting = layer_props_exploring.get("is_selecting", False)
+                saved_fid = getattr(dw, '_last_single_selection_fid', None)
+                saved_layer_id = getattr(dw, '_last_single_selection_layer_id', None)
+                current_layer = getattr(dw, 'current_layer', None)
+                
+                # If is_selecting AND saved FID matches current layer, use it first
+                if is_selecting and saved_fid is not None and current_layer and saved_layer_id == current_layer.id():
+                    try:
+                        feature = current_layer.getFeature(saved_fid)
+                        if not feature or not feature.isValid():
+                            feature = None
+                    except Exception:
+                        feature = None
+                
+                # Fallback to picker.feature()
+                if feature is None:
+                    feature = picker.feature()
+                
                 if feature is not None and feature.isValid():
                     if hasattr(dw, 'exploring_features_changed'):
                         dw.exploring_features_changed(feature)
