@@ -169,10 +169,14 @@ Semaine 9-10 : PHASE 4 - Documentation & Release v5.0
 - [x] TODO 1.3 - Widget updates (`ui/controllers/integration.py`)
 - [x] TODO 1.4 - Buffer widget value (`ui/controllers/favorites_controller.py`)
 
+### Sprint 1.2 - Tests Critiques (COMPLÉTÉ ✅)
+- [x] Tests export workflow (`tests/integration/test_export.py`) - 17 tests
+- [x] Tests filter chaining (`tests/integration/test_filter_chain.py`) - 26 tests  
+- [x] Tests favorites (`tests/unit/services/test_favorites_service.py`) - 21 tests
+- **Total: 62/64 tests passent** (2 échecs liés aux mocks QGIS)
+
 ### Prochaines étapes
-- [ ] Créer tests pour export workflow (Sprint 1.2)
-- [ ] Tests filter chaining
-- [ ] Tests favorites
+- [ ] Phase 2: Refactoring God Classes (filter_mate_dockwidget.py)
 
 ---
 
