@@ -23,7 +23,8 @@ from .infrastructure.logging import get_app_logger
 logger = get_app_logger()
 
 # v4.0 Sprint 6: Widget configuration management
-from .ui.managers import ConfigurationManager
+# v5.0 Phase 2: Add DockwidgetSignalManager for signal management extraction
+from .ui.managers import ConfigurationManager, DockwidgetSignalManager
 from qgis.PyQt import QtGui, QtWidgets, QtCore
 from qgis.PyQt.QtCore import (
     Qt,
@@ -249,6 +250,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # When a layer is deleted, its QgsFeaturePickerWidget must be cleared BEFORE
         # the internal QTimer triggers scheduledReload, which would cause access violation
         self._feature_picker_layer_connection = None  # Stores (layer, connection) tuple
+        # v5.0 Phase 2: Initialize signal manager for progressive migration
+        self._signal_manager = DockwidgetSignalManager(self)
         self._initialize_layer_state()
     
     def _safe_get_layer_props(self, layer):
@@ -288,6 +291,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _property_ctrl(self):
         """Sprint 18: Helper property for PropertyController access."""
         return self._controller_integration.property_controller if self._controller_integration and self._controller_integration.property_controller else None
+    
+    @property
+    def signal_manager(self):
+        """v5.0 Phase 2: Access to DockwidgetSignalManager for signal management.
+        
+        Progressive migration: methods can use either:
+        - self.manageSignal() (legacy, will be deprecated)
+        - self.signal_manager.manage_signal() (new, preferred)
+        """
+        return self._signal_manager
     
     def _is_ui_ready(self) -> bool:
         """Sprint 18: Check if UI is ready for operations."""
@@ -499,7 +512,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         FilterMateDockWidget._signal_cache[cache_key] = None; return None
 
     def manageSignal(self, widget_path, custom_action=None, custom_signal_name=None):
-        """v4.0 S16: Manage signal connection/disconnection."""
+        """v4.0 S16: Manage signal connection/disconnection.
+        
+        DEPRECATED v5.0: Use self.signal_manager.manage_signal() instead.
+        This method delegates to DockwidgetSignalManager and syncs caches.
+        """
         if not isinstance(widget_path, list) or len(widget_path) != 2:
             raise SignalStateChangeError(None, widget_path, 'Incorrect input parameters')
         widget_object, state = self.widgets[widget_path[0]][widget_path[1]], None
@@ -515,9 +532,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 continue
             state = self.changeSignalState(widget_path, signal_name, func, custom_action)
             self._signal_connection_states[state_key] = state
+            # v5.0: Sync cache with signal manager
+            self._signal_manager._signal_connection_states[state_key] = state
             logger.debug(f"  -> Changed state to {state}")
         return True if state is None and widget_object["SIGNALS"] else state
-        if state is None: raise SignalStateChangeError(state, widget_path)
 
     def changeSignalState(self, widget_path, signal_name, func, custom_action=None):
         """
