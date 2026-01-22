@@ -249,7 +249,6 @@ def validate_expression(
     Example:
         valid, error = validate_expression("population > 10000", layer)
         if not valid:
-            # print(f"Invalid expression: {error}")  # DEBUG REMOVED
     """
     # Empty expression is valid (means no filter)
     if not expression or not expression.strip():
@@ -337,7 +336,6 @@ def validate_layers(layers: List[Any]) -> Tuple[List[Any], List[Any]]:
         
     Example:
         valid, invalid = validate_layers(project.mapLayers().values())
-        # print(f"{len(valid)} valid, {len(invalid)} invalid")  # DEBUG REMOVED
     """
     valid = []
     invalid = []
@@ -364,7 +362,6 @@ def get_layer_validation_info(layer: Any) -> dict:
     Example:
         info = get_layer_validation_info(layer)
         if info['is_valid']:
-            # print(f"Layer {info['name']} is ready to use")  # DEBUG REMOVED
     """
     info = {
         'is_valid': False,

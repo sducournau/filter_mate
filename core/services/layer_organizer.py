@@ -76,7 +76,7 @@ class LayerOrganizer:
         organizer = LayerOrganizer()
         result = organizer.organize(context)
         for provider, layers in result.layers_by_provider.items():
-            # print(f"{provider}: {len(layers)} layers")  # DEBUG REMOVED
+          
     """
     
     def __init__(self, log_to_qgis: bool = True):

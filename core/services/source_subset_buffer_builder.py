@@ -110,8 +110,8 @@ class SourceSubsetBufferBuilder:
     Example:
         builder = SourceSubsetBufferBuilder()
         config = builder.build(context)
-        # print(f"Buffer: {config.buffer_value}m")  # DEBUG REMOVED
-        # print(f"Type: {config.buffer_type}")  # DEBUG REMOVED
+      
+      
     """
     
     def build(self, context: SubsetBufferBuilderContext) -> SourceSubsetBufferConfig:

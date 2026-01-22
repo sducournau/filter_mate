@@ -94,8 +94,8 @@ class FilterParameterBuilder:
     Example:
         builder = FilterParameterBuilder()
         params = builder.build(context)
-        # print(f"Provider: {params.provider_type}")  # DEBUG REMOVED
-        # print(f"Table: {params.table_name}")  # DEBUG REMOVED
+      
+      
     """
     
     def build(self, context: ParameterBuilderContext) -> FilterParameters:

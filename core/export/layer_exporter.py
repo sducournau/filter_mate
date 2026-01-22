@@ -134,7 +134,7 @@ class LayerExporter:
         )
         result = exporter.export(config)
         if result.success:
-            # print(f"Exported {result.exported_count} layers")  # DEBUG REMOVED
+          
     """
     
     # Format driver mapping

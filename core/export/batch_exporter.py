@@ -133,7 +133,7 @@ class BatchExporter:
             datatype='SHP',
             progress_callback=lambda p: print(f"Progress: {p}%")
         )
-        # print(result.get_summary())  # DEBUG REMOVED
+      
     """
     
     # File extension mapping

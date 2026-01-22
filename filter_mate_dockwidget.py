@@ -3076,7 +3076,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self._signal_connection_states[key] = True
                 connected_count += 1
             except Exception as e:
-                pass  # print(f"❌ force_reconnect_action_signals: Failed to connect {btn_name}.clicked: {e}")  # DEBUG REMOVED
+                pass
         
     
     def force_reconnect_exporting_signals(self):
@@ -3179,10 +3179,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         try:
                             handler(False)  # Simulate unchecked button click
                         except Exception as e:
-                            pass  # print(f"    ❌ Handler execution FAILED for {btn_name}: {e}")  # DEBUG REMOVED
+                            pass
         
         if self.current_layer:
-            pass  # print(f"  in_PROJECT_LAYERS: {self.current_layer.id() in self.PROJECT_LAYERS}")  # DEBUG REMOVED
+            pass
 
     def force_reconnect_exploring_signals(self):
         """v4.0 S18: Force reconnect EXPLORING signals bypassing cache."""

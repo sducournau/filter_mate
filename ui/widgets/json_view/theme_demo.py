@@ -200,5 +200,3 @@ def show_theme_demo():
 
 if __name__ == "__main__":
     pass  # block was empty
-    # print("This demo requires QGIS environment")  # DEBUG REMOVED
-    # print("Use: show_theme_demo() from within QGIS Python console")  # DEBUG REMOVED

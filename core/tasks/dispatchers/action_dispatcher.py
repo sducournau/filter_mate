@@ -185,7 +185,7 @@ class ActionDispatcher:
         # Dispatch action
         result = dispatcher.dispatch('filter', context)
         if result.success:
-            # print(f"Filtered {result.feature_count} features")  # DEBUG REMOVED
+          
     """
     
     def __init__(self):

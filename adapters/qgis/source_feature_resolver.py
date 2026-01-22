@@ -138,7 +138,7 @@ class SourceFeatureResolver:
         result = resolver.resolve_features(config)
         if result.success:
             features = result.features
-            # print(f"Resolved {result.feature_count} features via {result.mode_used.value}")  # DEBUG REMOVED
+          
     """
     
     def __init__(self):

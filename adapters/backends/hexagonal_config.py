@@ -210,8 +210,8 @@ def status():
            memory: legacy
     """
     current = get_architecture_status()
-    # print("🔧 FilterMate Architecture Status:")  # DEBUG REMOVED
+  
     for provider, state in current.items():
         icon = "🆕" if state == 'hexagonal' else "📦"
-        # print(f"   {icon} {provider}: {state}")  # DEBUG REMOVED
+      
     return current

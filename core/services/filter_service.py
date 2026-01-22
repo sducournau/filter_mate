@@ -229,7 +229,7 @@ class FilterService:
         response = service.apply_filter(request)
         
         for layer_id, result in response.results.items():
-            # print(f"{layer_id}: {result.count} matches")  # DEBUG REMOVED
+          
     """
 
     def __init__(
