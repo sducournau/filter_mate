@@ -1,6 +1,6 @@
 # ![FilterMate](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 3.4.0** | QGIS Plugin | **Production-Ready** 🎉
+**Version 4.4.0** | QGIS Plugin | **Production-Ready** 🎉
 
 > 🚀 Explore, filter & export vector data with lightning-fast performance on ANY data source.
 
