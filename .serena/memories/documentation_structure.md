@@ -1,6 +1,6 @@
-# Documentation Structure - FilterMate v2.9.6
+# Documentation Structure - FilterMate v4.3.10
 
-**Last Updated**: January 6, 2026
+**Last Updated**: January 22, 2026
 
 ## Documentation Organization
 

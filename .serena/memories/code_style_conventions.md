@@ -1,6 +1,6 @@
-# Code Style Conventions - FilterMate v4.0.3
+# Code Style Conventions - FilterMate v4.3.10
 
-**Last Updated:** January 17, 2026
+**Last Updated:** January 22, 2026
 
 ## Python Standards
 
