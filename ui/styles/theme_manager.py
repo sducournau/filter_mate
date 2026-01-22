@@ -224,8 +224,8 @@ class GlobalDialogStyleFilter(QObject):
                         child.setStyleSheet("")
                         child.setPalette(app_palette)
                         child.setAutoFillBackground(True)
-                    except:
-                        pass
+                    except (RuntimeError, AttributeError):
+                        pass  # Child widget may have been deleted
                 widget.update()
         except Exception as e:
             logger.debug(f"Error fixing widget {class_name}: {e}")
@@ -401,8 +401,8 @@ class ChildDialogStyleFilter(QObject):
                     if hasattr(child, 'setPalette'):
                         try:
                             child.setPalette(app_palette)
-                        except:
-                            pass
+                        except (RuntimeError, AttributeError):
+                            pass  # Child widget may have been deleted
                             
                 logger.debug(f"Reset palette for child dialog: {class_name}")
                     
@@ -791,8 +791,8 @@ class ThemeManager(StylerBase):
             try:
                 import filter_mate_dockwidget
                 plugin_dir = os.path.dirname(filter_mate_dockwidget.__file__)
-            except:
-                return ""
+            except (ImportError, AttributeError):
+                return ""  # Cannot determine plugin directory
         
         style_file = os.path.join(plugin_dir, 'resources', 'styles', f'{theme}.qss')
         

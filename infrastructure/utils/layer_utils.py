@@ -247,8 +247,8 @@ def get_datasource_connexion_from_layer(layer) -> Tuple[Optional[Any], Optional[
         layer_name = 'unknown'
         try:
             layer_name = layer.name()
-        except:
-            pass
+        except (RuntimeError, AttributeError):
+            pass  # Layer may have been deleted
         logger.error(f"PostgreSQL connection failed for layer '{layer_name}': {e}")
         connexion = None
 

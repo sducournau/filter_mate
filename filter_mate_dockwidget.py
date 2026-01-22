@@ -1472,7 +1472,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if not AUTO_OPTIMIZER_AVAILABLE or not (analysis := LayerAnalyzer().analyze_layer(layer)): return False
             threshold = getattr(self, '_optimization_thresholds', {}).get('centroid_distant', get_optimization_thresholds(ENV_VARS).get('centroid_optimization_threshold', 1000))
             return analysis.location_type in (LayerLocationType.REMOTE_SERVICE, LayerLocationType.REMOTE_DATABASE) and analysis.feature_count >= threshold
-        except: return False
+        except (ImportError, AttributeError, TypeError) as e:
+            logger.debug(f"_should_use_centroid_for_layer: {e}")
+            return False
     
     def get_optimization_state(self) -> dict:
         """Get current optimization state for storage/restore."""
@@ -1722,8 +1724,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         try:
                             picker.setFeature(current_fid)
                             logger.debug(f"  → Restored feature {current_fid}")
-                        except:
-                            pass
+                        except (RuntimeError, AttributeError, ValueError):
+                            pass  # Feature may not exist anymore
                     
                     logger.info(f"  ✓ Single picker refreshed with new expression")
             
@@ -3702,8 +3704,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             for gb, _ in gbs:
                 try:
                     gb.blockSignals(False)
-                except:
-                    pass
+                except (RuntimeError, AttributeError):
+                    pass  # Widget may have been deleted
 
     def _force_exploring_groupbox_exclusive(self, active_groupbox):
         """v4.0 S18: Force exclusive state for exploring groupboxes.
@@ -3778,8 +3780,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             gb.setSaveCheckedState(True)
                         if hasattr(gb, 'setSaveCollapsedState'):
                             gb.setSaveCollapsedState(True)
-                    except:
-                        pass
+                    except (RuntimeError, AttributeError):
+                        pass  # Widget may have been deleted
             self._updating_groupbox = False
             
             # FIX 2026-01-19: Final visibility check after all updates
@@ -3825,8 +3827,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             gbs = {"single_selection": self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"], 
                    "multiple_selection": self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"], 
                    "custom_selection": self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"]}
-        except: 
-            return
+        except (KeyError, TypeError, AttributeError): 
+            return  # Widgets not yet initialized
         
         # Check if at least one other groupbox is checked
         if not any(gbs[k].isChecked() for k in gbs if k != groupbox):
@@ -3916,8 +3918,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if self.current_layer and len(self.current_layer.selectedFeatureIds()) > 0:
                     has_features = True
                     detection_source = "canvas_fallback"
-            except:
-                pass
+            except (RuntimeError, AttributeError):
+                pass  # Layer may have been deleted
         
         self.pushButton_exploring_identify.setEnabled(has_features)
         self.pushButton_exploring_zoom.setEnabled(has_features)
@@ -4627,7 +4629,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     count += 1
                     if count >= MAX_FEATURES: break
             return layer.extent() if extent.isEmpty() else extent
-        except: return layer.extent()
+        except (RuntimeError, AttributeError, TypeError):
+            return layer.extent()  # Fallback to layer extent on error
 
     def _compute_zoom_extent_for_mode(self):
         """v4.0 Sprint 18: Compute zoom extent - delegates to ExploringController."""
@@ -4666,8 +4669,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             if reloaded.isValid() and reloaded.hasGeometry():
                                 feature_ids.append(reloaded.id())
                                 continue
-                        except:
-                            pass
+                        except (RuntimeError, KeyError, AttributeError):
+                            pass  # Feature reload failed - use original
                     feature_ids.append(f.id())
             
             if feature_ids:
@@ -4868,8 +4871,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                 try:
                                     pk_value = f[pk_name] if pk_name else f.id()
                                     selected_pk_values.add(str(pk_value) if pk_value is not None else str(f.id()))
-                                except:
-                                    selected_pk_values.add(str(f.id()))
+                                except (KeyError, TypeError, AttributeError):
+                                    selected_pk_values.add(str(f.id()))  # Fallback to FID
                             
                             # Sync check states in list widget
                             self._syncing_from_qgis = True
@@ -5196,7 +5199,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if not is_layer_source_available(layer):
                 show_warning("FilterMate", "La couche sélectionnée est invalide ou sa source est introuvable.")
                 return (False, None, None)
-        except: return (False, None, None)
+        except (RuntimeError, AttributeError, OSError):
+            return (False, None, None)  # Layer source check failed
         if self.current_layer is not None and self.current_layer_selection_connection is not None:
             try:
                 self.current_layer.selectionChanged.disconnect(self.on_layer_selection_changed)
@@ -5649,7 +5653,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if self._layer_sync_ctrl: return self._controller_integration.delegate_is_layer_truly_deleted(layer)
             import sip
             return sip.isdeleted(layer)
-        except: return True
+        except (ImportError, RuntimeError, AttributeError):
+            return True  # Assume deleted if we can't check
 
     def current_layer_changed(self, layer, manual_change=False):
         """
@@ -5696,7 +5701,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._defer_layer_change(layer)
             return
         try: _ = layer.id()
-        except:
+        except (RuntimeError, AttributeError):
             logger.warning("current_layer_changed: Layer C++ object deleted")
             return
         self._updating_current_layer = True

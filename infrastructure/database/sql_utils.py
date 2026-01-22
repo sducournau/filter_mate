@@ -162,7 +162,7 @@ def create_temp_spatialite_table(
         # Load Spatialite extension
         try:
             conn.load_extension('mod_spatialite')
-        except:
+        except sqlite3.OperationalError:
             try:
                 conn.load_extension('mod_spatialite.dll')  # Windows fallback
             except Exception as e:

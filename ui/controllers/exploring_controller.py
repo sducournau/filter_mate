@@ -2386,8 +2386,8 @@ class ExploringController(BaseController, LayerSelectionMixin):
                             if current_fid is not None:
                                 try:
                                     picker_widget.setFeature(current_fid)
-                                except:
-                                    pass
+                                except (RuntimeError, KeyError, ValueError):
+                                    pass  # Feature may not exist anymore
                             
                             picker_widget.update()
                             logger.debug("single_selection: Updated display expression with layer rebuild")
@@ -2431,8 +2431,8 @@ class ExploringController(BaseController, LayerSelectionMixin):
                             if hasattr(picker_widget, 'list_widgets') and layer_id in picker_widget.list_widgets:
                                 try:
                                     saved_checked_fids = picker_widget.list_widgets[layer_id].getSelectedFeaturesList()
-                                except:
-                                    pass
+                                except (KeyError, RuntimeError, AttributeError):
+                                    pass  # Widget may not be ready yet
                             
                             # FIX 2026-01-19 v4: Use preserve_checked=True for multiple_selection
                             picker_widget.setDisplayExpression(expression, preserve_checked=True)
@@ -2443,8 +2443,8 @@ class ExploringController(BaseController, LayerSelectionMixin):
                             if saved_checked_fids and hasattr(picker_widget, 'list_widgets') and layer_id in picker_widget.list_widgets:
                                 try:
                                     picker_widget.list_widgets[layer_id].setSelectedFeaturesList(saved_checked_fids)
-                                except:
-                                    pass
+                                except (KeyError, RuntimeError, AttributeError):
+                                    pass  # Restore may fail if widget changed
                             
                             picker_widget.update()
                             logger.debug("multiple_selection: Updated display expression with layer rebuild")

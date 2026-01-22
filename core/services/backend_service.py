@@ -7,12 +7,13 @@ Extracted from filter_mate_dockwidget.py as part of the God Class migration.
 Story: MIG-075
 Phase: 6 - God Class DockWidget Migration
 Pattern: Strangler Fig - Gradual extraction
+
+v4.1.5: BackendType now aliases canonical ProviderType from core.domain.filter_expression
 """
 
 import logging
 from typing import Dict, List, Optional, Tuple, Any, TYPE_CHECKING
 from dataclasses import dataclass
-from enum import Enum
 
 try:
     from qgis.PyQt.QtCore import pyqtSignal, QObject
@@ -22,15 +23,26 @@ except ImportError:
 if TYPE_CHECKING:
     from qgis.core import QgsVectorLayer
 
+from ..domain.filter_expression import ProviderType
+from enum import Enum
+
 logger = logging.getLogger(__name__)
 
 
+# v4.1.5: BackendType uses canonical ProviderType values plus AUTO
 class BackendType(Enum):
-    """Available backend types."""
+    """Available backend types (extends ProviderType with AUTO)."""
     POSTGRESQL = "postgresql"
     SPATIALITE = "spatialite"
     OGR = "ogr"
+    MEMORY = "memory"
     AUTO = "auto"
+    
+    def to_provider_type(self) -> ProviderType:
+        """Convert to ProviderType for domain operations."""
+        if self == BackendType.AUTO:
+            return ProviderType.UNKNOWN
+        return ProviderType(self.value)
 
 
 @dataclass

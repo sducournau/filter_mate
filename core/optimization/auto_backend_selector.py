@@ -4,21 +4,20 @@ Chooses optimal backend based on layer characteristics and filter complexity.
 
 Phase 2 (v4.1.0-beta.2): Restoration from v2.5.10 auto_optimizer.py
 Architecture: Hexagonal Core - Domain Service
+
+v4.1.5: BackendType removed - use canonical ProviderType from core.domain.filter_expression
 """
 
 from dataclasses import dataclass
 from typing import Optional, Dict, List
 import logging
-from enum import Enum
+
+from ..domain.filter_expression import ProviderType
 
 logger = logging.getLogger(__name__)
 
-
-class BackendType(Enum):
-    """Available backend types."""
-    POSTGRESQL = "postgresql"
-    SPATIALITE = "spatialite"
-    OGR = "ogr"
+# Alias for backward compatibility
+BackendType = ProviderType
 
 
 @dataclass

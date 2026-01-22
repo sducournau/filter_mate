@@ -75,8 +75,8 @@ except ImportError:
     def get_source_table_name(layer):
         try:
             return layer.source().split('table=')[1].split(' ')[0].strip('"')
-        except:
-            return layer.name()
+        except (IndexError, AttributeError, TypeError):
+            return layer.name()  # Fallback to layer name
     
     def geometry_type_to_string(geom_type):
         return str(geom_type)

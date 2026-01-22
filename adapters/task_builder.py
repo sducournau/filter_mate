@@ -834,8 +834,8 @@ class TaskParameterBuilder:
                         from qgis.core import QgsDataSourceUri
                         uri = QgsDataSourceUri(layer.source())
                         geom_field = uri.geometryColumn() or "geometry"
-                    except:
-                        geom_field = "geometry"
+                    except (AttributeError, RuntimeError, KeyError):
+                        geom_field = "geometry"  # Fallback default
                     
                     layer_info = {
                         "layer_id": layer.id(),

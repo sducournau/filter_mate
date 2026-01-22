@@ -500,8 +500,8 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                 distant_schema = uri.schema() or distant_schema
                 distant_table = uri.table() or distant_table
                 distant_geom = uri.geometryColumn() or distant_geom
-            except:
-                pass
+            except (AttributeError, RuntimeError, KeyError):
+                pass  # Use default values if URI parsing fails
         
         # Extract source layer info from source_geom
         source_info = self._parse_source_table_reference(source_geom) if source_geom else {}

@@ -19,7 +19,28 @@
 
 ## Previous Update: January 6, 2026
 
-### Bare Except Fixes (17/17 = 100%) ✅ COMPLETED
+### Bare Except Fixes - January 2026 Update ✅ RE-COMPLETED
+
+**Latest Fix Session: January 22, 2026**
+
+24+ bare except clauses were found and fixed across the codebase:
+
+| File | Lines Fixed | Exception Types |
+|------|-------------|-----------------|
+| `filter_mate_dockwidget.py` | 12 | RuntimeError, AttributeError, KeyError, TypeError, etc. |
+| `adapters/task_builder.py` | 1 | AttributeError, RuntimeError, KeyError |
+| `adapters/backends/postgresql/expression_builder.py` | 1 | AttributeError, RuntimeError, KeyError |
+| `adapters/backends/postgresql/filter_chain_optimizer.py` | 2 | Exception |
+| `adapters/qgis/source_feature_resolver.py` | 2 | RuntimeError, AttributeError |
+| `core/tasks/layer_management_task.py` | 1 | IndexError, AttributeError, TypeError |
+| `infrastructure/database/sql_utils.py` | 1 | sqlite3.OperationalError |
+| `infrastructure/utils/layer_utils.py` | 1 | RuntimeError, AttributeError |
+| `ui/controllers/exploring_controller.py` | 3 | RuntimeError, KeyError, ValueError, AttributeError |
+| `ui/styles/theme_manager.py` | 3 | RuntimeError, AttributeError, ImportError |
+
+---
+
+### Previous Bare Except Fixes (17/17 = 100%) ✅ COMPLETED
 
 All 17 bare except clauses have been replaced with specific exception types:
 

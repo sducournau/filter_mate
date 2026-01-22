@@ -3,8 +3,10 @@ FilterMate Provider Utilities.
 
 Consolidated provider detection logic to eliminate duplicate patterns.
 This module replaces 15+ instances of inline provider detection.
+
+v4.1.5: ProviderType is now imported from core.domain.filter_expression
+to ensure a single source of truth.
 """
-from enum import Enum
 from typing import Optional, Dict, Any
 
 try:
@@ -14,21 +16,8 @@ except ImportError:
     HAS_QGIS = False
     QgsVectorLayer = None
 
-
-class ProviderType(Enum):
-    """
-    Enumeration of supported data providers.
-    
-    Values match the canonical names used throughout FilterMate.
-    """
-    POSTGRESQL = "postgresql"
-    SPATIALITE = "spatialite"
-    OGR = "ogr"
-    MEMORY = "memory"
-    UNKNOWN = "unknown"
-    
-    def __str__(self) -> str:
-        return self.value
+# v4.1.5: Import canonical ProviderType from domain layer
+from ...core.domain.filter_expression import ProviderType
 
 
 # Mapping from QGIS provider names to our enum

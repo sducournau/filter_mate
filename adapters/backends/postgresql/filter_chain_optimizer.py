@@ -252,8 +252,8 @@ class FilterChainOptimizer:
             logger.error(f"Failed to create chain MV: {e}")
             try:
                 self._connection.rollback()
-            except:
-                pass
+            except Exception:
+                pass  # Rollback may fail if connection is broken
             return None
     
     def build_optimized_expression(
@@ -539,8 +539,8 @@ WITH DATA
             """, (self.MV_SCHEMA, mv_name))
             result = cursor.fetchone()
             return result[0] if result else False
-        except:
-            return False
+        except Exception:
+            return False  # Assume MV doesn't exist if query fails
     
     def _generate_session_id(self) -> str:
         """Generate unique session ID."""

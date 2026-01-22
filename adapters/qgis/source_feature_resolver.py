@@ -356,8 +356,8 @@ class SourceFeatureResolver:
                         f"v4.0: BLOCKING fallback - would cause incorrect filter!",
                         "FilterMate", Qgis.Warning
                     )
-                except:
-                    pass
+                except (RuntimeError, AttributeError):
+                    pass  # Logging may fail during shutdown
                 return result
         
         result.features = valid_features
@@ -499,8 +499,8 @@ class SourceFeatureResolver:
                 f"   This may cause incorrect filtering! Expected: single feature selected.",
                 "FilterMate", Qgis.Warning
             )
-        except:
-            pass
+        except (RuntimeError, AttributeError):
+            pass  # Logging may fail during shutdown
         
         result.warnings.append(
             f"FALLBACK MODE: Using all {layer.featureCount()} features - may be a bug!"
