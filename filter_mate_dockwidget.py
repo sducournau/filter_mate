@@ -1993,6 +1993,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except Exception as e:
             logger.warning(f"Could not connect ACTION signals at startup: {e}")
         
+        # FIX 2026-01-22: CRITICAL - Connect EXPORTING button signals at startup
+        # pushButton_checkable_exporting_output_folder and pushButton_checkable_exporting_zip
+        # must have their clicked signals connected to open file dialogs
+        try:
+            logger.debug("🔌 Connecting EXPORTING button signals at startup...")
+            self.force_reconnect_exporting_signals()
+            logger.debug("✓ EXPORTING button signals connected at startup")
+        except Exception as e:
+            logger.warning(f"Could not connect EXPORTING signals at startup: {e}")
+        
         # FIX 2026-01-14: Connect LAYER_TREE_VIEW only if AUTO_CURRENT_LAYER is enabled
         # This is also handled by filtering_auto_current_layer_changed() but we need to
         # restore the state at startup based on saved project settings
@@ -2590,6 +2600,29 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     logger.info("✅ Export combobox populated via controller")
                 else:
                     logger.warning("⚠️ Controller populate_export_combobox returned False")
+                
+                # FIX 2026-01-22: Sync HAS_LAYERS_TO_EXPORT after loading project
+                # If layers are already checked in the widget (from saved project state),
+                # we need to update HAS_LAYERS_TO_EXPORT accordingly
+                try:
+                    layers_to_export = self.get_layers_to_export()
+                    current_has_layers = self.project_props.get('EXPORTING', {}).get('HAS_LAYERS_TO_EXPORT', False)
+                    
+                    if layers_to_export:
+                        has_layers = len(layers_to_export) > 0
+                        
+                        if has_layers != current_has_layers:
+                            self.project_props['EXPORTING']['HAS_LAYERS_TO_EXPORT'] = has_layers
+                            # Update button widget
+                            has_layers_widget = self.widgets.get('EXPORTING', {}).get('HAS_LAYERS_TO_EXPORT', {}).get('WIDGET')
+                            if has_layers_widget and hasattr(has_layers_widget, 'setChecked'):
+                                has_layers_widget.blockSignals(True)
+                                has_layers_widget.setChecked(has_layers)
+                                has_layers_widget.blockSignals(False)
+                            logger.info(f"✅ Synced HAS_LAYERS_TO_EXPORT = {has_layers} (found {len(layers_to_export)} checked layers)")
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to sync HAS_LAYERS_TO_EXPORT: {e}")
+                    
             except Exception as e:
                 logger.error(f"❌ Failed to populate export combobox via controller: {e}", exc_info=True)
             
@@ -3046,6 +3079,72 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 pass  # print(f"❌ force_reconnect_action_signals: Failed to connect {btn_name}.clicked: {e}")  # DEBUG REMOVED
         
         # print(f"🔄 force_reconnect_action_signals COMPLETED: {connected_count}/5 signals connected")  # DEBUG REMOVED
+    
+    def force_reconnect_exporting_signals(self):
+        """
+        FIX 2026-01-22: Force reconnect EXPORTING signals for file/folder selection buttons.
+        
+        Connects pushButton_checkable_exporting_output_folder and pushButton_checkable_exporting_zip
+        clicked signals to their respective dialog handlers (dialog_export_output_path, dialog_export_output_pathzip).
+        
+        These buttons were defined in configuration_manager.py but their signals were never connected.
+        This method ensures they are properly wired at startup.
+        """
+        if 'EXPORTING' not in self.widgets:
+            logger.warning("force_reconnect_exporting_signals: EXPORTING category not in widgets")
+            return
+        
+        # Map widget names to their handlers
+        exporting_buttons = {
+            'HAS_OUTPUT_FOLDER_TO_EXPORT': ('dialog_export_output_path', getattr(self, 'pushButton_checkable_exporting_output_folder', None)),
+            'HAS_ZIP_TO_EXPORT': ('dialog_export_output_pathzip', getattr(self, 'pushButton_checkable_exporting_zip', None)),
+        }
+        
+        connected_count = 0
+        for btn_name, (handler_name, widget) in exporting_buttons.items():
+            if not widget:
+                logger.debug(f"force_reconnect_exporting_signals: {btn_name} widget not found")
+                continue
+            
+            # Get handler method
+            handler_method = getattr(self, handler_name, None)
+            if not handler_method:
+                logger.warning(f"force_reconnect_exporting_signals: Handler {handler_name} not found")
+                continue
+            
+            # Clear cache
+            key = f"EXPORTING.{btn_name}.clicked"
+            self._signal_connection_states.pop(key, None)
+            
+            try:
+                # Disconnect all existing receivers
+                try:
+                    widget.clicked.disconnect()
+                    logger.debug(f"  Disconnected all receivers from {btn_name}.clicked")
+                except TypeError:
+                    pass  # No receivers connected, which is fine
+                
+                # FIX 2026-01-22: Connect clicked signal to dialog handler
+                # The lambda gets the widget's checked state and calls the dialog handler
+                # which will call project_property_changed with custom_functions containing ON_CHANGE
+                def make_handler(handler_func, widget_ref, property_name):
+                    """Factory to create handler with proper closure."""
+                    def handler(checked):
+                        logger.debug(f"🎯 EXPORTING handler triggered: {property_name}, checked={checked}")
+                        # Call dialog handler which opens file dialog and updates widget
+                        handler_func()
+                    return handler
+                
+                property_name = 'has_output_folder_to_export' if btn_name == 'HAS_OUTPUT_FOLDER_TO_EXPORT' else 'has_zip_to_export'
+                handler = make_handler(handler_method, widget, property_name)
+                widget.clicked.connect(handler)
+                self._signal_connection_states[key] = True
+                connected_count += 1
+                logger.debug(f"✅ force_reconnect_exporting_signals: Connected {btn_name}.clicked → {handler_name}()")
+            except Exception as e:
+                logger.warning(f"force_reconnect_exporting_signals: Failed to connect {btn_name}: {e}")
+        
+        logger.debug(f"🔄 force_reconnect_exporting_signals COMPLETED: {connected_count}/2 signals connected")
     
     def diagnose_action_buttons(self):
         """
@@ -5058,14 +5157,29 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def get_layers_to_export(self):
         """v4.0 S18: Get checked layer IDs for export.
         FIX 2026-01-16: Removed incorrect _is_layer_valid() check - this list doesn't depend on current_layer.
+        FIX 2026-01-22: Handle dict data format (layer_id is inside dict, not the data itself).
         """
-        if not self.widgets_initialized: return None
-        w, checked = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"], []
+        if not self.widgets_initialized:
+            return None
+            
+        w = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"]
+        checked = []
+        
         for i in range(w.count()):
             if w.itemCheckState(i) == Qt.Checked:
                 d = w.itemData(i, Qt.UserRole)
-                if isinstance(d, str): checked.append(d)
-        if self._controller_integration: self._controller_integration.delegate_export_set_layers_to_export(checked)
+                
+                # FIX 2026-01-22: Handle both dict and string data formats
+                if isinstance(d, dict) and 'layer_id' in d:
+                    # New format: data is a dict with 'layer_id' key
+                    checked.append(d['layer_id'])
+                elif isinstance(d, str):
+                    # Old format: data is directly the layer_id string
+                    checked.append(d)
+        
+        if self._controller_integration:
+            self._controller_integration.delegate_export_set_layers_to_export(checked)
+        
         return checked
 
     def get_current_crs_authid(self):
@@ -6557,18 +6671,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         FIX 2026-01-17 v3: For user action tasks, try to recover current_layer from
         saved ID or combobox if it's None during protection window.
-        """
-        # FIX 2026-01-17 v3: Define user action tasks early (needed for recovery logic)
-        user_action_tasks = ('undo', 'redo', 'unfilter', 'reset')
-        is_user_action = task_name in user_action_tasks
         
-        # FIX 2026-01-17 v2: Enhanced diagnostic logging - USE PRINT for visibility!
-        # print(f"{'='*60}")  # DEBUG REMOVED
-        # print(f"🎯 launchTaskEvent CALLED: state={state}, task_name={task_name}")  # DEBUG REMOVED
-        # print(f"   widgets_initialized={self.widgets_initialized}")  # DEBUG REMOVED
-        # print(f"   _filtering_in_progress={getattr(self, '_filtering_in_progress', False)}")  # DEBUG REMOVED
-        # print(f"   is_user_action={is_user_action}")  # DEBUG REMOVED
-        # print(f"   has_current_layer={self.current_layer is not None}")  # DEBUG REMOVED
+        FIX 2026-01-22: Add 'export' to user_action_tasks - it's an explicit user button click
+        that should not be blocked by protection flags or missing current_layer state.
+        """
+        # FIX 2026-01-17 v3 + 2026-01-22: Define user action tasks early (needed for recovery logic)
+        user_action_tasks = ('undo', 'redo', 'unfilter', 'reset', 'export')
+        is_user_action = task_name in user_action_tasks
         
         # FIX 2026-01-17 v3: For user actions during protection window, try to recover current_layer
         if is_user_action and not self.current_layer:
@@ -6599,29 +6708,102 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     self.current_layer = first_layer
                     # print(f"   ✅ RECOVERED current_layer from PROJECT_LAYERS: {first_layer.name()}")  # DEBUG REMOVED
         
-        if self.current_layer:
-            pass  # print(f"   current_layer.name={self.current_layer.name()}")  # DEBUG REMOVED
-            # print(f"   current_layer.id={self.current_layer.id()}")  # DEBUG REMOVED
-            # print(f"   PROJECT_LAYERS keys count={len(self.PROJECT_LAYERS)}")  # DEBUG REMOVED
-            # print(f"   in_PROJECT_LAYERS={self.current_layer.id() in self.PROJECT_LAYERS}")  # DEBUG REMOVED
-        else:
-            pass  # print(f"   current_layer is None!")  # DEBUG REMOVED
-            # print(f"   PROJECT_LAYERS keys={list(self.PROJECT_LAYERS.keys())[:3]}...")  # DEBUG REMOVED
-        # print(f"{'='*60}")  # DEBUG REMOVED
-        
         # FIX 2026-01-17 v3: For user actions, reset _filtering_in_progress immediately
         # This allows the action to proceed without waiting for the 1.5s protection window
         if is_user_action and getattr(self, '_filtering_in_progress', False):
-            # print(f"🔓 FIX 2026-01-17 v3: Resetting _filtering_in_progress for user action '{task_name}'")  # DEBUG REMOVED
             self._filtering_in_progress = False
         
+        # FIX 2026-01-22 v2: Relaxed validation for export task
+        # Export doesn't require PROJECT_LAYERS sync - it works directly with QGIS layers
+        if task_name == 'export':
+            if not self.widgets_initialized or not self.current_layer:
+                return
+            
+            # FIX 2026-01-22 v4.3.7: Sync HAS_LAYERS_TO_EXPORT JUST-IN-TIME before export
+            # Qt restores widget states without emitting signals - sync flag to match UI
+            try:
+                layers_to_export = self.get_layers_to_export()
+                if layers_to_export:
+                    has_layers = len(layers_to_export) > 0
+                    current_has_layers = self.project_props.get('EXPORTING', {}).get('HAS_LAYERS_TO_EXPORT', False)
+                    if has_layers != current_has_layers:
+                        self.project_props['EXPORTING']['HAS_LAYERS_TO_EXPORT'] = has_layers
+                        has_layers_widget = self.widgets.get('EXPORTING', {}).get('HAS_LAYERS_TO_EXPORT', {}).get('WIDGET')
+                        if has_layers_widget and hasattr(has_layers_widget, 'setChecked'):
+                            has_layers_widget.blockSignals(True)
+                            has_layers_widget.setChecked(has_layers)
+                            has_layers_widget.blockSignals(False)
+            except Exception as e:
+                logger.warning(f"Failed to sync HAS_LAYERS_TO_EXPORT: {e}")
+            
+            # FIX 2026-01-22 v4.3.7: Sync ALL export flags JUST-IN-TIME
+            # Qt restores widget states without emitting signals - sync all flags to match UI
+            try:
+                exporting_props = self.project_props.get('EXPORTING', {})
+                
+                # Sync HAS_DATATYPE_TO_EXPORT
+                datatype_widget = self.widgets.get('EXPORTING', {}).get('DATATYPE_TO_EXPORT', {}).get('WIDGET')
+                if datatype_widget:
+                    current_datatype = datatype_widget.currentText()
+                    if current_datatype and current_datatype.strip() and not exporting_props.get('HAS_DATATYPE_TO_EXPORT', False):
+                        self.project_props['EXPORTING']['HAS_DATATYPE_TO_EXPORT'] = True
+                        self.project_props['EXPORTING']['DATATYPE_TO_EXPORT'] = current_datatype
+                        has_datatype_widget = self.widgets.get('EXPORTING', {}).get('HAS_DATATYPE_TO_EXPORT', {}).get('WIDGET')
+                        if has_datatype_widget and hasattr(has_datatype_widget, 'setChecked'):
+                            has_datatype_widget.blockSignals(True)
+                            has_datatype_widget.setChecked(True)
+                            has_datatype_widget.blockSignals(False)
+                
+                # Sync HAS_OUTPUT_FOLDER_TO_EXPORT
+                output_folder_widget = self.widgets.get('EXPORTING', {}).get('OUTPUT_FOLDER_TO_EXPORT', {}).get('WIDGET')
+                if output_folder_widget:
+                    current_folder = output_folder_widget.text() if hasattr(output_folder_widget, 'text') else ''
+                    if current_folder and current_folder.strip() and not exporting_props.get('HAS_OUTPUT_FOLDER_TO_EXPORT', False):
+                        self.project_props['EXPORTING']['HAS_OUTPUT_FOLDER_TO_EXPORT'] = True
+                        self.project_props['EXPORTING']['OUTPUT_FOLDER_TO_EXPORT'] = current_folder
+                        has_folder_widget = self.widgets.get('EXPORTING', {}).get('HAS_OUTPUT_FOLDER_TO_EXPORT', {}).get('WIDGET')
+                        if has_folder_widget and hasattr(has_folder_widget, 'setChecked'):
+                            has_folder_widget.blockSignals(True)
+                            has_folder_widget.setChecked(True)
+                            has_folder_widget.blockSignals(False)
+                
+                # Sync HAS_PROJECTION_TO_EXPORT
+                projection_widget = self.widgets.get('EXPORTING', {}).get('PROJECTION_TO_EXPORT', {}).get('WIDGET')
+                if projection_widget and hasattr(projection_widget, 'crs'):
+                    crs = projection_widget.crs()
+                    if crs and crs.isValid() and not exporting_props.get('HAS_PROJECTION_TO_EXPORT', False):
+                        self.project_props['EXPORTING']['HAS_PROJECTION_TO_EXPORT'] = True
+                        self.project_props['EXPORTING']['PROJECTION_TO_EXPORT'] = crs.toWkt()
+                        has_proj_widget = self.widgets.get('EXPORTING', {}).get('HAS_PROJECTION_TO_EXPORT', {}).get('WIDGET')
+                        if has_proj_widget and hasattr(has_proj_widget, 'setChecked'):
+                            has_proj_widget.blockSignals(True)
+                            has_proj_widget.setChecked(True)
+                            has_proj_widget.blockSignals(False)
+                
+                # Sync HAS_STYLES_TO_EXPORT
+                styles_widget = self.widgets.get('EXPORTING', {}).get('STYLES_TO_EXPORT', {}).get('WIDGET')
+                if styles_widget:
+                    current_style = styles_widget.currentText() if hasattr(styles_widget, 'currentText') else ''
+                    if current_style and current_style.strip() and not exporting_props.get('HAS_STYLES_TO_EXPORT', False):
+                        self.project_props['EXPORTING']['HAS_STYLES_TO_EXPORT'] = True
+                        self.project_props['EXPORTING']['STYLES_TO_EXPORT'] = current_style
+                        has_styles_widget = self.widgets.get('EXPORTING', {}).get('HAS_STYLES_TO_EXPORT', {}).get('WIDGET')
+                        if has_styles_widget and hasattr(has_styles_widget, 'setChecked'):
+                            has_styles_widget.blockSignals(True)
+                            has_styles_widget.setChecked(True)
+                            has_styles_widget.blockSignals(False)
+            except Exception as e:
+                logger.warning(f"Failed to sync export flags: {e}")
+            self.launchingTask.emit(task_name)
+            return
+        
+        # Standard validation for other tasks (filter, undo, redo, etc.)
         if not self.widgets_initialized or not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS:
-            # print(f"❌ launchTaskEvent BLOCKED: widgets_initialized={self.widgets_initialized}, current_layer={self.current_layer}, in_PROJECT_LAYERS={self.current_layer.id() in self.PROJECT_LAYERS if self.current_layer else False}")  # DEBUG REMOVED
+            logger.warning(f"launchTaskEvent BLOCKED: widgets_initialized={self.widgets_initialized}, current_layer={self.current_layer is not None}, in_PROJECT_LAYERS={self.current_layer.id() in self.PROJECT_LAYERS if self.current_layer else False}")
             return
         
         self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = self.get_layers_to_filter()
         self.setLayerVariableEvent(self.current_layer, [("filtering", "layers_to_filter")])
-        # print(f"📡 Emitting launchingTask signal: {task_name}")  # DEBUG REMOVED
         self.launchingTask.emit(task_name)
     
     def _setup_truncation_tooltips(self):

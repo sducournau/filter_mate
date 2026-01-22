@@ -499,22 +499,23 @@ class ExpressionBuilder:
                     clause_sql = clause['sql']
                     logger.info(f"      #{i+1}: table={clause.get('table', 'unknown')}")
                     
-                    # FIX v4.2.9: Adapt EXISTS for nested context
-                    # The EXISTS from zone_pop contains references to the source table (ducts)
-                    # When used as source_filter in a new EXISTS, these references must be
-                    # changed to __source (the alias of the outer EXISTS)
-                    if source_table_name:
-                        adapted_sql = adapt_exists_for_nested_context(
-                            exists_sql=clause_sql,
-                            original_table=source_table_name,
-                            new_alias='__source',
-                            original_schema=source_schema
-                        )
-                        if adapted_sql != clause_sql:
-                            logger.info(f"         🔄 Adapted table references: '{source_table_name}' → '__source'")
-                        exists_parts.append(adapted_sql)
-                    else:
-                        exists_parts.append(clause_sql)
+                    # FIX v4.3.1 (2026-01-22): DO NOT adapt EXISTS here!
+                    # Problem: Adapting with new_alias='__source' replaces ALL table references,
+                    # including the TARGET table reference (e.g., "demand_points"."geom")
+                    # which should be replaced with the DISTANT table name (e.g., "sheaths"."geom")
+                    # by the backend, not with __source!
+                    #
+                    # Example: EXISTS created on demand_points references zone_pop:
+                    #   EXISTS (... WHERE ST_Intersects("demand_points"."geom", __source."geom"))
+                    #                                   ^^^^^^^^^^^^^^^^^^^^^  TARGET (should become "sheaths")
+                    #                                                           ^^^^^^^^^^^^^^^ SOURCE (zone_pop)
+                    #
+                    # If we adapt here with new_alias='__source', we get:
+                    #   EXISTS (... WHERE ST_Intersects(__source."geom", __source."geom"))  ❌ WRONG!
+                    #
+                    # Solution: Pass EXISTS unchanged. The PostgreSQL backend will adapt it correctly
+                    # in expression_builder.py line 319-328 with the actual distant table name.
+                    exists_parts.append(clause_sql)  # FIX: No adaptation here!
                 
                 # Combine all EXISTS into source_filter
                 # These will be ANDed with the new buffer EXISTS by the backend

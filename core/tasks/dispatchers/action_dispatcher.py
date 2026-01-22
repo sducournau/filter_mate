@@ -470,8 +470,10 @@ class ExportActionHandler(BaseActionHandler):
         exporting = task_params.get("EXPORTING", {})
         
         if not exporting.get("HAS_LAYERS_TO_EXPORT", False):
+            logger.debug("Export validation: HAS_LAYERS_TO_EXPORT is False or missing")
             return False, "No layers selected for export"
         
+        logger.debug(f"Export validation passed: {len(exporting.get('LAYERS_TO_EXPORT', []))} layers")
         return True, ""
     
     def execute(self, context: ActionContext) -> ActionResult:

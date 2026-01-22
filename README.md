@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 4.3.0** | January 2026 | **Production-Ready** 🎉
+**Version 4.3.10** | January 2026 | **Production-Ready** 🎉
 
 > 🚀 The ultimate spatial filtering plugin! Explore, filter & export vector data with lightning-fast performance on ANY data source.
 
@@ -27,7 +27,21 @@
 
 ## 📋 Recent Changes
 
-### � v4.3.0 - PostgreSQL Dynamic Buffer Performance (January 2026)
+### 🐛 v4.3.1 - Buffer Field Reference Fix (January 2026)
+
+**6 CRITICAL bug fixes** for PostgreSQL buffer tables and filter chaining.
+
+- **Fixed #1:** CREATE TABLE field prefixes → "column does not exist" errors
+- **Fixed #2:** Missing buffer table in filter chaining → table not found
+- **Fixed #3:** Inline buffer on intermediate tables → wrong field references
+- **Fixed #4:** MV creation failures → field prefix errors in SELECT
+- **Fixed #5:** EXISTS double-adaptation → target table references lost
+- **Fixed #6:** Filter chaining detection bypass → safety checks skipped
+- **Example:** `if("homecount" >= 10, 50, 1)` on demand_points → ducts → sheaths
+- **Impact:** Dynamic buffers + filter chaining work reliably end-to-end
+- See [docs/fixes/FIX_BUFFER_FIELD_REFERENCE_v4.3.1.md](docs/fixes/FIX_BUFFER_FIELD_REFERENCE_v4.3.1.md)
+
+### 🚀 v4.3.0 - PostgreSQL Dynamic Buffer Performance (January 2026)
 
 **CRITICAL performance fix** - 99.7% improvement for dynamic buffer expressions with filter chaining.
 

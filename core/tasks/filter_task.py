@@ -3278,6 +3278,7 @@ class FilterEngineTask(QgsTask):
                 source_geom_column=self.param_source_geom,
                 spatial_filters=spatial_filters,
                 buffer_value=self.param_buffer_value,
+                buffer_expression=self.param_buffer_expression,  # v4.3.5: Include dynamic expression
                 feature_count_estimate=getattr(self, '_cached_source_feature_count', 0),
                 session_id=self.session_id
             )

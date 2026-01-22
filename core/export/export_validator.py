@@ -86,13 +86,6 @@ def validate_export_parameters(
         
     Returns:
         ExportValidationResult with validated config or error message
-        
-    Example:
-        result = validate_export_parameters(task_params, env_vars)
-        if result.valid:
-            exporter.export(result.layers, result.datatype, result.output_folder)
-        else:
-            logger.error(result.error_message)
     """
     if not QGIS_AVAILABLE:
         return ExportValidationResult(
@@ -123,30 +116,44 @@ def validate_export_parameters(
             error_message="Empty layers list for export"
         )
     
+    print(f"   ✅ Layers validation passed ({len(layers)} layers)")
+    
     # Validate datatype
-    if not config.get("HAS_DATATYPE_TO_EXPORT", False):
+    has_datatype = config.get("HAS_DATATYPE_TO_EXPORT", False)
+    print(f"   HAS_DATATYPE_TO_EXPORT: {has_datatype}")
+    
+    if not has_datatype:
+        print(f"   ❌ No datatype specified")
         return ExportValidationResult(
             valid=False,
             error_message="No export datatype specified"
         )
     
     datatype = config.get("DATATYPE_TO_EXPORT")
+    print(f"   DATATYPE_TO_EXPORT: {datatype}")
+    
     if not datatype:
+        print(f"   ❌ Datatype is empty")
         return ExportValidationResult(
             valid=False,
             error_message="Export datatype is empty"
         )
     
+    print(f"   ✅ Datatype validation passed: {datatype}")
+    
     # Extract optional parameters
     projection = None
     if config.get("HAS_PROJECTION_TO_EXPORT", False):
         proj_wkt = config.get("PROJECTION_TO_EXPORT")
+        print(f"   PROJECTION_TO_EXPORT: {proj_wkt[:50] if proj_wkt else 'None'}...")
         if proj_wkt:
             crs = QgsCoordinateReferenceSystem()
             crs.createFromWkt(proj_wkt)
             if crs.isValid():
                 projection = crs
+                print(f"   ✅ Projection: {crs.authid()}")
             else:
+                print(f"   ⚠️ Invalid CRS from WKT")
                 logger.warning(f"Invalid CRS from WKT: {proj_wkt[:100]}...")
     
     styles = None
@@ -154,30 +161,46 @@ def validate_export_parameters(
         styles_raw = config.get("STYLES_TO_EXPORT")
         if styles_raw:
             styles = styles_raw.lower()
+            print(f"   ✅ Styles: {styles}")
     
     # Default output folder from environment
     output_folder = None
+    print(f"   env_vars available: {env_vars is not None}")
     if env_vars and "PATH_ABSOLUTE_PROJECT" in env_vars:
         output_folder = env_vars["PATH_ABSOLUTE_PROJECT"]
+        print(f"   Default output_folder from env: {output_folder}")
     
-    if config.get("HAS_OUTPUT_FOLDER_TO_EXPORT", False):
+    has_output_folder = config.get("HAS_OUTPUT_FOLDER_TO_EXPORT", False)
+    print(f"   HAS_OUTPUT_FOLDER_TO_EXPORT: {has_output_folder}")
+    
+    if has_output_folder:
         folder = config.get("OUTPUT_FOLDER_TO_EXPORT")
+        print(f"   OUTPUT_FOLDER_TO_EXPORT: {folder}")
         if folder:
             output_folder = folder
     
+    print(f"   Final output_folder: {output_folder}")
+    
     if not output_folder:
+        print(f"   ❌ No output folder specified!")
         return ExportValidationResult(
             valid=False,
             error_message="No output folder specified"
         )
     
+    print(f"   ✅ Output folder validation passed: {output_folder}")
+    
     zip_path = None
     if config.get("HAS_ZIP_TO_EXPORT", False):
         zip_path = config.get("ZIP_TO_EXPORT")
+        print(f"   ZIP_TO_EXPORT: {zip_path}")
     
     # Batch export flags
     batch_output_folder = config.get("BATCH_OUTPUT_FOLDER", False)
     batch_zip = config.get("BATCH_ZIP", False)
+    print(f"   Batch modes - folder: {batch_output_folder}, zip: {batch_zip}")
+    
+    print(f"   ✅✅✅ ALL VALIDATION PASSED! Returning valid=True ✅✅✅")
     
     # Debug logging
     logger.debug(f"Export validation: {len(layers)} layers, {datatype}, {output_folder}")

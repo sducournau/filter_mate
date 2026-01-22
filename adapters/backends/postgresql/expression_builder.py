@@ -290,6 +290,15 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         exists_clauses_to_combine = []
         simple_source_filter = source_filter
         
+        # FIX v4.3.1 (2026-01-22): Initialize is_filter_chaining as local variable BEFORE any usage
+        # This flag will be set to True if EXISTS clauses are extracted from source_filter
+        # CRITICAL: Must be initialized here because it's used in:
+        #   - Line 362: Passed to _build_exists_expression
+        #   - Line 1161: Buffer creation logic
+        #   - Line 1213: Fallback inline buffer logic
+        # If not initialized, Python lookups will fail or use wrong scope
+        is_filter_chaining = False  # Will be set to True if EXISTS extracted
+        
         if source_filter and 'EXISTS' in source_filter.upper():
             # Extract EXISTS clauses to combine at the top level
             try:
@@ -332,6 +341,12 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                 
                 exists_clauses_to_combine = adapted_exists
                 self.log_info(f"🔗 Filter chaining: Found {len(exists_clauses_to_combine)} EXISTS clause(s) to chain at top level")
+                # FIX v4.3.1 (2026-01-22): Set is_filter_chaining = True when EXISTS are extracted
+                # This flag is used throughout build_expression() to:
+                #   - Pass to _build_exists_expression (line 371)
+                #   - Control buffer table creation behavior (line 1161)
+                #   - Block inline buffer fallback in filter chaining (line 1213)
+                is_filter_chaining = True
                 # Don't pass EXISTS to _build_exists_expression (they go at top level)
                 simple_source_filter = None
         
@@ -348,6 +363,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                 # CRITICAL: Use unqualified geom_expr for EXISTS subquery
                 # setSubsetString applies to the main table, so no table prefix needed
                 # Format: EXISTS (SELECT 1 FROM source AS __source WHERE ST_Intersects("geom", __source."geom"))
+                # FIX v4.3.1: Pass is_filter_chaining flag (True if EXISTS were extracted)
                 expr = self._build_exists_expression(
                     geom_expr=geom_expr,  # Unqualified - no table prefix!
                     predicate_func=predicate_func,
@@ -356,7 +372,8 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                     buffer_value=buffer_value,
                     layer_props=layer_props,
                     original_source_table=original_source_table,
-                    buffer_expression=buffer_expression  # FIX v4.2.11: Pass dynamic buffer expression
+                    buffer_expression=buffer_expression,  # FIX v4.2.11: Pass dynamic buffer expression
+                    is_filter_chaining=is_filter_chaining  # FIX v4.3.1: Use local variable instead of recalculating
                 )
             
             if expr:
@@ -401,6 +418,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         spatial_filters: List[Dict[str, Any]],
         source_geom: Optional[str] = None,
         buffer_value: Optional[float] = None,
+        buffer_expression: Optional[str] = None,  # v4.3.5: Dynamic buffer support
         connection=None,
         session_id: Optional[str] = None,
         **kwargs
@@ -428,6 +446,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                 ]
             source_geom: Source geometry expression
             buffer_value: Buffer distance for source
+            buffer_expression: Dynamic buffer expression (v4.3.5)
             connection: PostgreSQL connection (required for MV creation)
             session_id: Session ID for MV naming
             **kwargs: Additional parameters
@@ -442,6 +461,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                 predicates=predicates,
                 source_geom=source_geom,
                 buffer_value=buffer_value,
+                buffer_expression=buffer_expression,  # v4.3.5
                 **kwargs
             )
         
@@ -452,6 +472,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                 predicates=predicates,
                 source_geom=source_geom,
                 buffer_value=buffer_value,
+                buffer_expression=buffer_expression,  # v4.3.5
                 **kwargs
             )
         
@@ -462,6 +483,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                 predicates=predicates,
                 source_geom=source_geom,
                 buffer_value=buffer_value,
+                buffer_expression=buffer_expression,  # v4.3.5
                 **kwargs
             )
         
@@ -504,6 +526,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             source_geom_column=source_geom_column,
             spatial_filters=spatial_filters,
             buffer_value=buffer_value,
+            buffer_expression=buffer_expression,  # v4.3.5
             session_id=session_id
         )
         
@@ -909,12 +932,15 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         # Build CREATE TABLE statement (NOT TEMP - must be visible to QGIS connection)
         # FIX v4.2.18: Table name must be unique to avoid conflicts
         # Note: Table will be cleaned up by FilterMate's cleanup mechanism (same as MVs)
+        # FIX v4.3.1 (2026-01-22): Remove table prefix from fields in CREATE TABLE AS SELECT
+        # In single-table SELECT, field references should be unqualified (implicit scope)
+        # buffer_expr_sql already contains unqualified field names (e.g., "homecount", not "table"."homecount")
         sql_create = f"""
             CREATE TABLE IF NOT EXISTS "{temp_schema}"."{temp_table_name}" AS
             SELECT 
-                "{source_table}"."id" as source_id,
+                "id" as source_id,
                 ST_Buffer(
-                    "{source_table}"."{source_geom_field}",
+                    "{source_geom_field}",
                     {buffer_expr_sql},
                     'quad_segs=5'
                 ) as buffered_geom
@@ -931,6 +957,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         try:
             with connexion.cursor() as cursor:
                 self.log_info(f"📦 Creating buffer table: {temp_schema}.{temp_table_name}")
+                self.log_debug(f"SQL: {sql_create[:500]}...")
                 cursor.execute(sql_create)
                 self.log_debug("✓ Buffer table created")
                 
@@ -943,6 +970,13 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                 # Get row count for logging
                 cursor.execute(f'SELECT COUNT(*) FROM "{temp_schema}"."{temp_table_name}"')
                 row_count = cursor.fetchone()[0]
+            
+            # FIX v4.3.6 (2026-01-22): COMMIT the transaction!
+            # Without commit, the CREATE TABLE is rolled back when the connection
+            # is reused for subsequent operations. This caused "relation does not exist"
+            # errors when filter chaining with dynamic buffer expressions.
+            connexion.commit()
+            self.log_debug("✓ Transaction committed")
                 
             elapsed = time.time() - start_time
             self.log_info(f"✅ Buffer table created: {row_count} features in {elapsed:.2f}s")
@@ -958,7 +992,19 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             return exists_expr
             
         except Exception as e:
+            # FIX v4.3.6 (2026-01-22): Enhanced error logging and explicit rollback
             self.log_error(f"Failed to create buffer table: {e}")
+            self.log_error(f"   SQL that failed: {sql_create[:300]}...")
+            self.log_error(f"   buffer_expression: {buffer_expression}")
+            self.log_error(f"   source_filter: {source_filter[:200] if source_filter else 'None'}...")
+            
+            # Rollback to clean up any partial transaction
+            try:
+                connexion.rollback()
+                self.log_debug("Transaction rolled back")
+            except Exception as rollback_err:
+                self.log_warning(f"Rollback failed: {rollback_err}")
+            
             self.log_warning("Falling back to inline buffer expression")
             # Return None to trigger fallback in caller
             return None
@@ -1075,7 +1121,8 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         buffer_value: Optional[float],
         layer_props: Dict,
         original_source_table: Optional[str] = None,
-        buffer_expression: Optional[str] = None
+        buffer_expression: Optional[str] = None,
+        is_filter_chaining: bool = False  # FIX v4.3.1: Explicit flag
     ) -> str:
         """
         Build EXISTS subquery expression.
@@ -1143,13 +1190,37 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         #
         # Solution: In filter chaining, the buffer was ALREADY applied when creating the temp table
         # for the original source (demand_points). Intermediate layers should use plain geometry.
-        is_filter_chaining = source_filter and 'EXISTS' in source_filter.upper()
+        # FIX v4.3.1: Use explicit is_filter_chaining flag instead of detecting from source_filter
+        # (source_filter may be None if EXISTS were already extracted)
         
-        if is_filter_chaining and buffer_expression:
-            self.log_info(f"⚙️  Filter chaining detected - will reuse buffer table: {buffer_table_name}")
-            self.log_info(f"   → Buffer was already applied to source layer: {source_table}")
-            self.log_info(f"   → Clearing buffer_expression to avoid re-applying to intermediate layer")
-            buffer_expression = None  # Clear it to avoid applying to wrong table
+        self.log_debug(f"🔍 Filter chaining detection: is_filter_chaining={is_filter_chaining}, buffer_expression={'SET' if buffer_expression else 'None'}")
+        self.log_debug(f"   source_filter: {source_filter[:200] if source_filter else 'None'}...")
+        
+        # FIX v4.3.3 (2026-01-22): CRITICAL - Do NOT clear buffer_expression BEFORE creating table!
+        # 
+        # Problem: Previous code (v4.3.2) cleared buffer_expression when is_filter_chaining=True,
+        # BEFORE checking if the buffer table exists. This caused the table to never be created
+        # on the FIRST distant layer, because buffer_expression was None.
+        #
+        # Example scenario: zone_pop → demand_points (buffer) → ducts → sheaths
+        #   - ducts is FIRST distant layer after demand_points
+        #   - source_filter already contains EXISTS from zone_pop
+        #   - is_filter_chaining=True (EXISTS detected)
+        #   - OLD CODE: Cleared buffer_expression → Table never created!
+        #   - sheaths tries to reuse table → ERROR: table doesn't exist!
+        #
+        # Solution: Keep buffer_expression SET for the FIRST layer (to create table),
+        # only clear it for SUBSEQUENT layers (to reuse table).
+        # The table creation logic in _build_exists_with_buffer_table checks if table exists:
+        #   - If exists: Return reuse expression (buffer_expression can be None)
+        #   - If not exists: Create table (buffer_expression MUST be set)
+        #
+        # We DON'T clear buffer_expression here anymore - let _build_exists_with_buffer_table
+        # handle table creation/reuse logic internally.
+        
+        # REMOVED in v4.3.3: Don't clear buffer_expression before creating table
+        # if is_filter_chaining and buffer_expression:
+        #     buffer_expression = None  # WRONG! Table not created yet!
         
         # FIX v4.2.14 (2026-01-21): ALWAYS use temp table for dynamic buffer expressions
         # Dynamic buffers (CASE WHEN) recalculate for EVERY feature pair - causes freeze on mapCanvas.refresh()
@@ -1182,8 +1253,31 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             if temp_table_expr:
                 return temp_table_expr
             
+            # FIX v4.3.1 (2026-01-22): Handle filter chaining failure
+            # If temp table creation failed in filter chaining (buffer_expression was cleared),
+            # we cannot fallback to inline because we don't have the original buffer_expression
+            # This should not happen if the first layer created the table successfully
+            if not buffer_expression:
+                self.log_error("❌ Buffer table creation failed AND buffer_expression is None (filter chaining)")
+                self.log_error("   This means the original buffer table was never created or failed")
+                self.log_error("   Cannot build filter - returning None to skip this filter")
+                return None
+            
             # Fallback to inline if temp table failed (logged in _build_exists_with_buffer_table)
             self.log_warning("⚠️  Temp table creation failed - falling back to inline buffer (may cause freeze)")
+            self.log_warning(f"   🔍 DEBUG: is_filter_chaining={is_filter_chaining}, buffer_expression={'SET' if buffer_expression else 'None'}")
+            
+            # FIX v4.3.1 (2026-01-22): CRITICAL - Do NOT use inline buffer in filter chaining
+            # In filter chaining, buffer_expression contains fields from the ORIGINAL source table
+            # (e.g., demand_points.homecount) but would be applied to INTERMEDIATE tables (ducts, sheaths)
+            # This causes "column __source.homecount does not exist" errors
+            # If we're in filter chaining context, the buffer should ONLY come from the pre-calculated table
+            if is_filter_chaining:
+                self.log_error("❌ CRITICAL: Cannot use inline buffer in filter chaining context")
+                self.log_error("   Buffer expression contains fields from original source, not intermediate table")
+                self.log_error("   Example: if('homecount' >= 10, 50, 1) only valid on demand_points, not ducts")
+                self.log_error("   Returning None to prevent 'column does not exist' SQL error")
+                return None
             
             # Non-complex: Use inline buffer (existing code)
             from .filter_executor import qgis_expression_to_postgis

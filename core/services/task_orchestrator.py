@@ -213,6 +213,18 @@ class TaskOrchestrator:
             self._force_reload_layers()
             return True
         
+        # FIX 2026-01-22: Handle export task explicitly
+        if task_name == 'export':
+            logger.info("TaskOrchestrator: Dispatching export task")
+            # Get task parameters
+            task_parameters = self._get_task_parameters(task_name, data)
+            if task_parameters is None:
+                logger.warning("Export task aborted - no valid parameters")
+                return False
+            # Export is a filter-type task (uses FilterEngineTask)
+            self._handle_filter_task(task_name, task_parameters)
+            return True
+        
         # Check for project initialization skip
         if task_name == 'add_layers' and self._initializing_project:
             logger.debug("Skipping add_layers - project initialization in progress")
@@ -415,8 +427,14 @@ class TaskOrchestrator:
                 logger.debug("  current_layer: <deleted>")
     
     def _is_filter_task(self, task_name: str) -> bool:
-        """Check if task is a filter-type task."""
-        return "layer" not in task_name and task_name not in ('undo', 'redo', 'reload_layers')
+        """
+        Check if task is a filter-type task.
+        
+        FIX 2026-01-22: Use explicit whitelist instead of negative logic.
+        Previous implementation incorrectly classified 'export' as a filter task.
+        """
+        filter_tasks = ('filter', 'unfilter', 'reset')
+        return task_name in filter_tasks
     
     def _try_delegate_to_controller(self, task_name: str, data: Any = None) -> bool:
         """

@@ -7,7 +7,7 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=🚀 The ultimate spatial filtering plugin! Explore, filter & export vector data with lightning-fast performance on ANY data source.
-version=4.3.0
+version=4.3.10
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
@@ -43,7 +43,7 @@ repository=https://github.com/sducournau/filter_mate
 
 hasProcessingProvider=no
 
-changelog=
+changelog=v4.3.10 (2026-01-22): CRITICAL FIX series complete - Export workflow 100% functional + Buffer table transaction committed. Fixes: Export button protection, JUST-IN-TIME widget sync, buffer table commit, filter chaining flags, MV creation. See CHANGELOG.md for v4.3.1-v4.3.9 details.
 
 # Tags are comma separated with spaces allowed
 tags=python,filter,vector,layers,geofilter,search,postgis,ogr,spatialite,data,exploration,subset,export

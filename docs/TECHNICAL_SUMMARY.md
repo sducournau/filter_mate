@@ -1,6 +1,6 @@
 # FilterMate - Documentation Technique et Résumé d'Architecture
 
-**Version**: 4.0.3 | **Date**: Janvier 2026 | **Statut**: Production
+**Version**: 4.3.10 | **Date**: Janvier 2026 | **Statut**: Production
 
 ---
 

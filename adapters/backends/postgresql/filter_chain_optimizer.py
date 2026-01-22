@@ -60,6 +60,7 @@ class FilterChainContext:
     source_geom_column: str
     spatial_filters: List[Dict[str, Any]]  # List of EXISTS clauses info
     buffer_value: Optional[float] = None
+    buffer_expression: Optional[str] = None  # Dynamic buffer expression (v4.3.5)
     feature_count_estimate: int = 0
     session_id: Optional[str] = None
 
@@ -288,7 +289,28 @@ class FilterChainOptimizer:
         """
         # Build source geometry reference (with buffer if needed)
         source_geom = f'__source."{context.source_geom_column}"'
-        if context.buffer_value:
+        
+        # v4.3.5: Handle dynamic buffer expression
+        if context.buffer_expression:
+            # Convert buffer expression to use __source alias instead of table name
+            # Example: "demand_points"."homecount" -> __source."homecount"
+            import re
+            buffer_expr = context.buffer_expression
+            
+            # Replace table-qualified field refs with __source qualified refs
+            # Pattern: "table_name"."field" -> __source."field"
+            buffer_expr = re.sub(
+                rf'"{context.source_table}"\."',
+                '__source."',
+                buffer_expr
+            )
+            
+            # Also handle non-qualified field refs if they appear
+            # This ensures all field references use __source
+            source_geom = f"ST_Buffer({source_geom}, {buffer_expr}, 'quad_segs=5')"
+            
+        elif context.buffer_value:
+            # Static buffer value
             source_geom = f"ST_Buffer({source_geom}, {context.buffer_value}, 'quad_segs=5')"
         
         # Build optimized EXISTS
@@ -494,7 +516,10 @@ WITH DATA
             chain_str += f"{f.get('predicate', '')}|{f.get('buffer', '')}|"
             chain_str += f"{f.get('condition', '')}|"
         
-        if context.buffer_value:
+        # v4.3.5: Include buffer_value OR buffer_expression in hash
+        if context.buffer_expression:
+            chain_str += f"buffer_expr={context.buffer_expression}"
+        elif context.buffer_value:
             chain_str += f"buffer={context.buffer_value}"
         
         return hashlib.md5(chain_str.encode()).hexdigest()
@@ -555,6 +580,7 @@ def optimize_filter_chain(
     distant_schema: str,
     distant_geom_column: str = "geom",
     buffer_value: Optional[float] = None,
+    buffer_expression: Optional[str] = None,  # v4.3.5: Dynamic buffer support
     session_id: Optional[str] = None
 ) -> OptimizedChain:
     """
@@ -570,6 +596,7 @@ def optimize_filter_chain(
         distant_schema: Distant layer schema
         distant_geom_column: Distant layer geometry column
         buffer_value: Optional buffer value
+        buffer_expression: Optional dynamic buffer expression (v4.3.5)
         session_id: Optional session ID
         
     Returns:
@@ -587,7 +614,8 @@ def optimize_filter_chain(
             ],
             distant_table='subducts',
             distant_schema='infra',
-            buffer_value=None
+            buffer_value=None,
+            buffer_expression='CASE WHEN "homecount"::numeric >= 10 THEN 50 ELSE 1 END'
         )
         
         # Use result.expression in setSubsetString
@@ -601,6 +629,7 @@ def optimize_filter_chain(
         source_geom_column=source_geom_column,
         spatial_filters=spatial_filters,
         buffer_value=buffer_value,
+        buffer_expression=buffer_expression,  # v4.3.5
         session_id=session_id
     )
     

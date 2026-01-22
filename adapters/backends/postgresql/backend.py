@@ -347,11 +347,18 @@ class PostgreSQLBackend(BackendPort):
             
             # Build SELECT query for MV
             # Include pk and geometry for spatial indexing
+            # FIX v4.3.1 (2026-01-22): Ensure pk_field and geom_field are simple field names
+            # Strip any table prefixes if present (should be just field names)
+            clean_pk_field = pk_field.split('.')[-1].strip('"')
+            clean_geom_field = geom_field.split('.')[-1].strip('"')
+            
             query = f"""
-                SELECT "{pk_field}", "{geom_field}"
+                SELECT "{clean_pk_field}" as pk, "{clean_geom_field}" as geom
                 FROM {full_table}
-                WHERE "{pk_field}" IN ({formatted_fids})
+                WHERE "{clean_pk_field}" IN ({formatted_fids})
             """
+            
+            logger.debug(f"[PostgreSQL] MV query: {query[:200]}...")
             
             # Generate unique MV name
             import hashlib
@@ -389,9 +396,14 @@ class PostgreSQLBackend(BackendPort):
                     
             except Exception as mv_error:
                 logger.error(f"[PostgreSQL] MV creation failed: {mv_error}")
+                logger.error(f"[PostgreSQL] Query was: {query[:300]}...")
+                logger.error(f"[PostgreSQL] pk_field='{pk_field}', geom_field='{geom_field}'")
+                logger.error(f"[PostgreSQL] Cleaned: pk='{clean_pk_field}', geom='{clean_geom_field}'")
+                import traceback
+                logger.debug(traceback.format_exc())
                 # Try fallback: create temporary table instead
                 return self._create_source_selection_temp_table(
-                    conn, table_name, pk_field, geom_field, fids, formatted_fids
+                    conn, table_name, clean_pk_field, clean_geom_field, fids, formatted_fids
                 )
                 
         except Exception as e:
@@ -499,19 +511,23 @@ class PostgreSQLBackend(BackendPort):
             fid_hash = hashlib.md5(','.join(str(f) for f in fids[:10]).encode()).hexdigest()[:8]
             temp_name = f"fm_temp_src_sel_{fid_hash}"
             
+            # FIX v4.3.1 (2026-01-22): Clean field names (remove table prefixes if present)
+            clean_pk_field = pk_field.split('.')[-1].strip('"')
+            clean_geom_field = geom_field.split('.')[-1].strip('"')
+            
             cursor = conn.cursor()
             
             # Create temp table
             create_sql = f"""
                 CREATE TEMPORARY TABLE IF NOT EXISTS {temp_name} AS
-                SELECT "{pk_field}"
+                SELECT "{clean_pk_field}" as pk
                 FROM "{table_name}"
-                WHERE "{pk_field}" IN ({formatted_fids})
+                WHERE "{clean_pk_field}" IN ({formatted_fids})
             """
             cursor.execute(create_sql)
             
             # Create index for fast lookups
-            cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{temp_name}_pk ON {temp_name} ("{pk_field}")')
+            cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{temp_name}_pk ON {temp_name} (pk)')
             
             conn.commit()
             

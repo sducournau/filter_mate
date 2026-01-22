@@ -306,7 +306,6 @@ class LayerExporter:
         # Collect layer objects
         layer_objects = []
         for layer_item in layer_names:
-            # Handle both dict (layer info) and string (layer name) formats
             layer_name = layer_item['layer_name'] if isinstance(layer_item, dict) else layer_item
             layer = self.get_layer_by_name(layer_name)
             if layer:
@@ -326,7 +325,6 @@ class LayerExporter:
         }
         
         try:
-            # processing.run() is thread-safe for file operations
             output = processing.run("qgis:package", alg_parameters)
             
             if not output or 'OUTPUT' not in output:
@@ -336,6 +334,17 @@ class LayerExporter:
                 )
             
             logger.info(f"GPKG export successful: {output['OUTPUT']}")
+            
+            # Show success message to user
+            try:
+                from qgis.utils import iface
+                iface.messageBar().pushSuccess(
+                    "FilterMate",
+                    f"Export terminé: {len(layer_objects)} couche(s) exportée(s) vers {output_path}"
+                )
+            except Exception:
+                pass  # Don't fail if message bar not available
+            
             return ExportResult(
                 success=True,
                 exported_count=len(layer_objects),

@@ -362,10 +362,18 @@ class TaskRunOrchestrator:
         """
         Check for long query duration and generate warnings.
         
+        Only applies to filter operations, not export (export is expected to be slow).
+        
         Returns:
             List of warning messages
         """
         warnings = []
+        
+        # Skip performance warnings for export operations
+        # Export is expected to take time for large datasets
+        if context.task_action == 'export':
+            logger.info(f"Export completed in {elapsed_time:.1f}s (no performance warning for exports)")
+            return warnings
         
         if elapsed_time >= VERY_LONG_QUERY_WARNING_THRESHOLD:
             # Very long query (>30s): Critical warning
