@@ -2065,12 +2065,44 @@ class ControllerIntegration:
         
         Call this to update UI from controller state,
         for example after loading a configuration.
+        
+        v5.0: Full implementation of widget synchronization.
         """
         if not self._is_setup:
             return
         
-        # TODO: Implement widget updates based on controller state
-        # This would update combo boxes, text fields, etc.
+        dw = self._dockwidget
+        
+        # Sync exploring controller state to widgets
+        if self._exploring_controller and hasattr(self._exploring_controller, 'current_layer'):
+            layer = self._exploring_controller.current_layer
+            if layer and hasattr(dw, 'mMapLayerComboBox_exploring_layer'):
+                dw.mMapLayerComboBox_exploring_layer.setLayer(layer)
+        
+        # Sync filtering controller state to widgets
+        if self._filtering_controller:
+            # Sync source layer
+            if hasattr(self._filtering_controller, 'source_layer'):
+                layer = self._filtering_controller.source_layer
+                if layer and hasattr(dw, 'mMapLayerComboBox_filtering_source_layer'):
+                    dw.mMapLayerComboBox_filtering_source_layer.setLayer(layer)
+            
+            # Sync active expression
+            if hasattr(self._filtering_controller, 'active_expression'):
+                expr = self._filtering_controller.active_expression
+                if expr and hasattr(dw, 'mQgsFieldExpressionWidget_filtering_active_expression'):
+                    widget = dw.mQgsFieldExpressionWidget_filtering_active_expression
+                    if hasattr(widget, 'setExpression'):
+                        widget.setExpression(expr)
+        
+        # Sync exporting controller state to widgets
+        if self._exporting_controller:
+            if hasattr(self._exporting_controller, 'export_format'):
+                fmt = self._exporting_controller.export_format
+                if fmt and hasattr(dw, 'mComboBox_exporting_format'):
+                    index = dw.mComboBox_exporting_format.findText(fmt)
+                    if index >= 0:
+                        dw.mComboBox_exporting_format.setCurrentIndex(index)
         
         logger.debug("Dockwidget synchronized from controller state")
     

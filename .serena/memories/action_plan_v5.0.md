@@ -163,13 +163,16 @@ Semaine 9-10 : PHASE 4 - Documentation & Release v5.0
 - [x] Mise à jour des mémoires Serena
 - [x] Création du plan d'action
 
-### Demain (23 janvier)
-- [ ] Commencer TODO 1.1 (Zip archive creation)
-- [ ] Commencer TODO 1.2 (Internal DB storage)
+### Sprint 1.1 - TODOs P1 (COMPLÉTÉ ✅)
+- [x] TODO 1.1 - Zip archive creation (`core/export/layer_exporter.py`)
+- [x] TODO 1.2 - Internal DB storage (`core/services/favorites_service.py`)
+- [x] TODO 1.3 - Widget updates (`ui/controllers/integration.py`)
+- [x] TODO 1.4 - Buffer widget value (`ui/controllers/favorites_controller.py`)
 
-### Cette semaine
-- [ ] Terminer tous les TODOs P1 (Sprint 1.1)
-- [ ] Créer tests pour export workflow
+### Prochaines étapes
+- [ ] Créer tests pour export workflow (Sprint 1.2)
+- [ ] Tests filter chaining
+- [ ] Tests favorites
 
 ---
 

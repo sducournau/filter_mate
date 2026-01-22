@@ -621,8 +621,12 @@ class FavoritesController(BaseController):
             
             # Restore buffer settings if present
             if 'buffer_value' in config:
-                logger.info(f"Restoring buffer_value: {config['buffer_value']}")
-                # TODO: Set buffer widget value if needed
+                buffer_value = config['buffer_value']
+                logger.info(f"Restoring buffer_value: {buffer_value}")
+                # v5.0: Set buffer widget value
+                if hasattr(self.dockwidget, 'mQgsDoubleSpinBox_filtering_buffer_value'):
+                    self.dockwidget.mQgsDoubleSpinBox_filtering_buffer_value.setValue(float(buffer_value))
+                    logger.info(f"  ✓ Buffer widget set to {buffer_value}")
             
             logger.info(f"✓ Spatial config restored from favorite '{favorite.name}'")
             return True
@@ -945,7 +949,12 @@ class FavoritesController(BaseController):
                         logger.info(f"Captured predicates: {list(predicates.keys())}")
             
             # Capture buffer value if set
-            # TODO: Read from buffer widget when implemented
+            # v5.0: Read buffer value from widget
+            if hasattr(self.dockwidget, 'mQgsDoubleSpinBox_filtering_buffer_value'):
+                buffer_value = self.dockwidget.mQgsDoubleSpinBox_filtering_buffer_value.value()
+                if buffer_value != 0.0:
+                    config['buffer_value'] = buffer_value
+                    logger.info(f"Captured buffer_value: {buffer_value}")
             
             logger.info(f"Spatial config captured: {list(config.keys())}")
             

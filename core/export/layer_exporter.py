@@ -414,10 +414,52 @@ class LayerExporter:
         Returns:
             ExportResult with export statistics
         """
-        # For now, delegate to directory export
-        # TODO: Implement zip archive creation
+        import tempfile
+        import shutil
+        import zipfile
+        
         if config.batch_zip:
-            logger.warning("Batch ZIP export not yet implemented, using directory export")
+            # v5.0: Implement ZIP archive creation
+            # Export to temp directory first, then zip
+            temp_dir = tempfile.mkdtemp(prefix='filtermate_export_')
+            try:
+                # Create temp config pointing to temp directory
+                temp_config = ExportConfig(
+                    layers=config.layers,
+                    output_path=temp_dir,
+                    datatype=config.datatype,
+                    projection=config.projection,
+                    style_format=config.style_format,
+                    save_styles=config.save_styles,
+                    batch_mode=True,
+                    batch_zip=False  # Prevent recursion
+                )
+                
+                # Export to temp directory
+                result = self.export_multiple_to_directory(temp_config)
+                
+                if result.success:
+                    # Create ZIP archive
+                    zip_path = config.output_path
+                    if not zip_path.endswith('.zip'):
+                        zip_path = zip_path + '.zip'
+                    
+                    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                        for root, dirs, files in os.walk(temp_dir):
+                            for file in files:
+                                file_path = os.path.join(root, file)
+                                arcname = os.path.relpath(file_path, temp_dir)
+                                zipf.write(file_path, arcname)
+                    
+                    result.output_path = zip_path
+                    logger.info(f"Created ZIP archive: {zip_path} with {result.exported_count} layers")
+                
+                return result
+                
+            finally:
+                # Clean up temp directory
+                if os.path.exists(temp_dir):
+                    shutil.rmtree(temp_dir, ignore_errors=True)
         
         return self.export_multiple_to_directory(config)
     

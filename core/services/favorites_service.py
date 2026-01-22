@@ -176,8 +176,66 @@ class FavoritesService(QObject):
             self.favorites_changed.emit()
             logger.info(f"✓ Favorites loaded from database and UI notified (count: {self.count})")
         else:
-            # TODO: Implement internal database storage when manager not available
-            logger.debug(f"FavoritesService: Database set to {db_path} (stub - no manager)")
+            # v5.0: Internal database storage when manager not available
+            self._db_path = db_path
+            self._project_uuid = project_uuid
+            self._init_internal_storage()
+            self.favorites_changed.emit()
+            logger.info(f"FavoritesService: Internal database initialized at {db_path}")
+    
+    def _init_internal_storage(self) -> None:
+        """
+        Initialize internal SQLite storage for favorites when manager not available.
+        
+        v5.0: Standalone favorites storage capability.
+        """
+        import sqlite3
+        import os
+        
+        if not hasattr(self, '_db_path') or not self._db_path:
+            return
+        
+        try:
+            # Ensure directory exists
+            db_dir = os.path.dirname(self._db_path)
+            if db_dir and not os.path.exists(db_dir):
+                os.makedirs(db_dir, exist_ok=True)
+            
+            # Create database and tables
+            conn = sqlite3.connect(self._db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS favorites (
+                    id TEXT PRIMARY KEY,
+                    project_uuid TEXT,
+                    name TEXT NOT NULL,
+                    expression TEXT,
+                    layer_name TEXT,
+                    layer_provider TEXT,
+                    spatial_config TEXT,
+                    remote_layers TEXT,
+                    tags TEXT,
+                    description TEXT,
+                    created_at TEXT,
+                    updated_at TEXT,
+                    use_count INTEGER DEFAULT 0,
+                    is_global INTEGER DEFAULT 0
+                )
+            ''')
+            
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_project_uuid 
+                ON favorites(project_uuid)
+            ''')
+            
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"Internal favorites storage initialized: {self._db_path}")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize internal storage: {e}")
     
     def load_from_project(self) -> None:
         """
