@@ -852,7 +852,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             # This ensures the same source + same buffer = same table name
             # Fixes filter chaining: table created once and reused across all chained filters
             # FIX v4.3.7 (2026-01-23): Use standard naming convention fm_buf_*
-            from infrastructure.constants import TABLE_PREFIX_BUFFER
+            from ....infrastructure.constants import TABLE_PREFIX_BUFFER
             import hashlib
             buffer_hash = hashlib.md5(buffer_expression.encode()).hexdigest()[:8]
             temp_table_name = f"{TABLE_PREFIX_BUFFER}{source_table}_{buffer_hash}"
@@ -1148,7 +1148,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         buffer_table_name = None
         if buffer_expression and buffer_expression.strip():
             # FIX v4.3.7 (2026-01-23): Use standard naming convention fm_buf_*
-            from infrastructure.constants import TABLE_PREFIX_BUFFER
+            from ....infrastructure.constants import TABLE_PREFIX_BUFFER
             import hashlib
             buffer_hash = hashlib.md5(buffer_expression.encode()).hexdigest()[:8]
             # CRITICAL FIX v4.2.20: For buffer table name, use CURRENT source_table (where buffer is defined)

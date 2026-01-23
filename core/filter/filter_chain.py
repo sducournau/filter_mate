@@ -14,7 +14,7 @@ from typing import List, Optional, Dict, Tuple
 import re
 from qgis.core import QgsVectorLayer
 
-from infrastructure.logging.logger import get_logger
+from ...infrastructure.logging.logger import get_logger
 
 logger = get_logger(__name__)
 

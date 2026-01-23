@@ -807,6 +807,7 @@ class BackendController(BaseController):
         Get PostgreSQL session context for maintenance operations.
         
         v4.0 Sprint 13: Migrated from dockwidget._get_pg_session_context()
+        v4.3.8 (2026-01-23): Also search QGIS project layers for connection
         
         Returns:
             tuple: (app, session_id, schema, connexion)
@@ -835,6 +836,8 @@ class BackendController(BaseController):
         
         # Find a PostgreSQL connection
         connexion = None
+        
+        # 1. First try PROJECT_LAYERS (registered layers)
         project_layers = getattr(app, 'PROJECT_LAYERS', {}) if app else {}
         for layer_info in project_layers.values():
             layer = layer_info.get('layer')
@@ -842,6 +845,18 @@ class BackendController(BaseController):
                 connexion, _ = get_datasource_connexion_from_layer(layer)
                 if connexion:
                     break
+        
+        # 2. FIX v4.3.8: If no connection found, search ALL QGIS project layers
+        # This handles cases where PostgreSQL layers exist but aren't in PROJECT_LAYERS
+        if not connexion:
+            from qgis.core import QgsProject
+            for layer in QgsProject.instance().mapLayers().values():
+                if hasattr(layer, 'providerType') and layer.providerType() == 'postgres':
+                    if layer.isValid():
+                        connexion, _ = get_datasource_connexion_from_layer(layer)
+                        if connexion:
+                            logger.debug(f"Got PostgreSQL connection from QGIS layer: {layer.name()}")
+                            break
         
         return app, session_id, schema, connexion
 
@@ -1141,15 +1156,15 @@ class BackendController(BaseController):
 
     def _cleanup_postgresql_all_sessions(self) -> int:
         """
-        Clean ALL PostgreSQL materialized views created by FilterMate.
+        Clean ALL PostgreSQL materialized views AND tables created by FilterMate.
         
         Uses unified naming convention - all FilterMate objects start with 'fm_':
         - fm_mv_* (materialized views)
-        - fm_buf_* (buffer geometry tables)
+        - fm_buf_* (buffer geometry tables) 
         - fm_temp_* (temporary tables)
         
         Returns:
-            int: Total number of views dropped
+            int: Total number of objects dropped
         """
         app, session_id, schema, connexion = self.get_pg_session_context()
         
@@ -1161,8 +1176,7 @@ class BackendController(BaseController):
         
         try:
             with connexion.cursor() as cursor:
-                # Find ALL FilterMate views in ANY schema
-                # Standard pattern: fm_* (unified convention)
+                # 1. Find ALL FilterMate materialized views in ANY schema
                 cursor.execute("""
                     SELECT schemaname, matviewname 
                     FROM pg_matviews 
@@ -1171,26 +1185,50 @@ class BackendController(BaseController):
                 """)
                 all_views = cursor.fetchall()
                 
-                if not all_views:
-                    logger.info("No FilterMate materialized views found in any schema")
-                    return 0
-                
-                logger.info(f"Found {len(all_views)} FilterMate view(s) to clean:")
-                for view_schema, view_name in all_views:
-                    logger.debug(f"  - {view_schema}.{view_name}")
-                
-                # Drop each view
-                for view_schema, view_name in all_views:
-                    try:
-                        cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{view_schema}"."{view_name}" CASCADE;')
-                        total_count += 1
-                        logger.debug(f"Dropped: {view_schema}.{view_name}")
-                    except Exception as e:
-                        logger.warning(f"Failed to drop view {view_schema}.{view_name}: {e}")
+                if all_views:
+                    logger.info(f"Found {len(all_views)} FilterMate materialized view(s) to clean:")
+                    for view_schema, view_name in all_views:
+                        logger.debug(f"  - MV: {view_schema}.{view_name}")
+                    
+                    # Drop each materialized view
+                    for view_schema, view_name in all_views:
+                        try:
+                            cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{view_schema}"."{view_name}" CASCADE;')
+                            total_count += 1
+                            logger.debug(f"Dropped MV: {view_schema}.{view_name}")
+                        except Exception as e:
+                            logger.warning(f"Failed to drop MV {view_schema}.{view_name}: {e}")
                 
                 connexion.commit()
                 
-                # Also try to drop the temp schemas if empty
+                # 2. FIX v4.3.8 (2026-01-23): Also clean fm_buf_* and fm_temp_* TABLES
+                # These are regular tables, not materialized views
+                cursor.execute("""
+                    SELECT table_schema, table_name 
+                    FROM information_schema.tables 
+                    WHERE table_type = 'BASE TABLE'
+                    AND (table_name LIKE 'fm\\_buf\\_%' OR table_name LIKE 'fm\\_temp\\_%')
+                    ORDER BY table_schema, table_name
+                """)
+                all_tables = cursor.fetchall()
+                
+                if all_tables:
+                    logger.info(f"Found {len(all_tables)} FilterMate table(s) to clean:")
+                    for table_schema, table_name in all_tables:
+                        logger.debug(f"  - TABLE: {table_schema}.{table_name}")
+                    
+                    # Drop each table
+                    for table_schema, table_name in all_tables:
+                        try:
+                            cursor.execute(f'DROP TABLE IF EXISTS "{table_schema}"."{table_name}" CASCADE;')
+                            total_count += 1
+                            logger.debug(f"Dropped TABLE: {table_schema}.{table_name}")
+                        except Exception as e:
+                            logger.warning(f"Failed to drop TABLE {table_schema}.{table_name}: {e}")
+                
+                connexion.commit()
+                
+                # 3. Also try to drop the temp schemas if empty
                 for temp_schema in ['filter_mate_temp', 'filtermate_temp']:
                     try:
                         cursor.execute(f'DROP SCHEMA IF EXISTS "{temp_schema}" CASCADE;')
@@ -1199,7 +1237,7 @@ class BackendController(BaseController):
                     except Exception as e:
                         logger.debug(f"Could not drop schema {temp_schema}: {e}")
                 
-                logger.info(f"PostgreSQL global cleanup: {total_count} view(s) dropped")
+                logger.info(f"PostgreSQL global cleanup: {total_count} object(s) dropped")
                 return total_count
                 
         except Exception as e:
