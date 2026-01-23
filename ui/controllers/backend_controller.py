@@ -1148,10 +1148,6 @@ class BackendController(BaseController):
         - fm_buf_* (buffer geometry tables)
         - fm_temp_* (temporary tables)
         
-        Also cleans legacy naming patterns for backward compatibility:
-        - mv_* (old materialized views)
-        - temp_* (old temporary tables)
-        
         Returns:
             int: Total number of views dropped
         """
@@ -1167,13 +1163,10 @@ class BackendController(BaseController):
             with connexion.cursor() as cursor:
                 # Find ALL FilterMate views in ANY schema
                 # Standard pattern: fm_* (unified convention)
-                # Legacy patterns: mv_*, temp_* (backward compatibility)
                 cursor.execute("""
                     SELECT schemaname, matviewname 
                     FROM pg_matviews 
                     WHERE matviewname LIKE 'fm\\_%'
-                       OR matviewname LIKE 'mv\\_%'
-                       OR matviewname LIKE 'temp\\_%'
                     ORDER BY schemaname, matviewname
                 """)
                 all_views = cursor.fetchall()
