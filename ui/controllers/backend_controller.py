@@ -1140,32 +1140,76 @@ class BackendController(BaseController):
                 pass
 
     def _cleanup_postgresql_all_sessions(self) -> int:
-        """Clean ALL PostgreSQL materialized views in filter_mate schema."""
+        """
+        Clean ALL PostgreSQL materialized views created by FilterMate.
+        
+        Searches in multiple schemas:
+        - filter_mate_temp (default)
+        - filtermate_temp (alternative)
+        - public (fallback location)
+        - Any schema containing mv_* views
+        
+        Returns:
+            int: Total number of views dropped
+        """
         app, session_id, schema, connexion = self.get_pg_session_context()
         
         if not connexion:
+            logger.warning("No PostgreSQL connection available for global cleanup")
             return 0
+        
+        total_count = 0
         
         try:
             with connexion.cursor() as cursor:
-                # Get ALL views in schema (not just current session)
-                cursor.execute(
-                    "SELECT matviewname FROM pg_matviews WHERE schemaname = %s",
-                    (schema,)
-                )
-                views = [v[0] for v in cursor.fetchall()]
+                # List of schemas to check (configured + alternatives)
+                schemas_to_check = [
+                    schema,  # Configured schema (filter_mate_temp)
+                    'filtermate_temp',  # Alternative naming
+                    'public',  # Fallback location
+                ]
+                # Remove duplicates while preserving order
+                schemas_to_check = list(dict.fromkeys(schemas_to_check))
                 
-                count = 0
-                for view in views:
+                # Find ALL mv_* views in ANY schema
+                cursor.execute("""
+                    SELECT schemaname, matviewname 
+                    FROM pg_matviews 
+                    WHERE matviewname LIKE 'mv\\_%'
+                    ORDER BY schemaname, matviewname
+                """)
+                all_views = cursor.fetchall()
+                
+                if not all_views:
+                    logger.info("No FilterMate materialized views found in any schema")
+                    return 0
+                
+                logger.info(f"Found {len(all_views)} FilterMate view(s) to clean:")
+                for view_schema, view_name in all_views:
+                    logger.debug(f"  - {view_schema}.{view_name}")
+                
+                # Drop each view
+                for view_schema, view_name in all_views:
                     try:
-                        cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."{view}" CASCADE;')
-                        count += 1
+                        cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{view_schema}"."{view_name}" CASCADE;')
+                        total_count += 1
+                        logger.debug(f"Dropped: {view_schema}.{view_name}")
                     except Exception as e:
-                        logger.warning(f"Failed to drop view {view}: {e}")
+                        logger.warning(f"Failed to drop view {view_schema}.{view_name}: {e}")
                 
                 connexion.commit()
-                logger.info(f"PostgreSQL global cleanup: {count} view(s) dropped from schema {schema}")
-                return count
+                
+                # Also try to drop the temp schemas if empty
+                for temp_schema in ['filter_mate_temp', 'filtermate_temp']:
+                    try:
+                        cursor.execute(f'DROP SCHEMA IF EXISTS "{temp_schema}" CASCADE;')
+                        connexion.commit()
+                        logger.debug(f"Dropped empty schema: {temp_schema}")
+                    except Exception as e:
+                        logger.debug(f"Could not drop schema {temp_schema}: {e}")
+                
+                logger.info(f"PostgreSQL global cleanup: {total_count} view(s) dropped")
+                return total_count
                 
         except Exception as e:
             logger.error(f"Error in PostgreSQL global cleanup: {e}")
