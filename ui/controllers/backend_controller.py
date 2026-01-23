@@ -1143,11 +1143,10 @@ class BackendController(BaseController):
         """
         Clean ALL PostgreSQL materialized views created by FilterMate.
         
-        Searches in multiple schemas:
-        - filter_mate_temp (default)
-        - filtermate_temp (alternative)
-        - public (fallback location)
-        - Any schema containing mv_* views
+        Searches in ALL schemas for views matching FilterMate patterns:
+        - mv_* (standard FilterMate views)
+        - temp_* (temporary buffered views)
+        - temp_buffered_* (buffer geometry views)
         
         Returns:
             int: Total number of views dropped
@@ -1162,20 +1161,14 @@ class BackendController(BaseController):
         
         try:
             with connexion.cursor() as cursor:
-                # List of schemas to check (configured + alternatives)
-                schemas_to_check = [
-                    schema,  # Configured schema (filter_mate_temp)
-                    'filtermate_temp',  # Alternative naming
-                    'public',  # Fallback location
-                ]
-                # Remove duplicates while preserving order
-                schemas_to_check = list(dict.fromkeys(schemas_to_check))
-                
-                # Find ALL mv_* views in ANY schema
+                # Find ALL FilterMate views in ANY schema
+                # Patterns: mv_*, temp_*, temp_buffered_*
                 cursor.execute("""
                     SELECT schemaname, matviewname 
                     FROM pg_matviews 
                     WHERE matviewname LIKE 'mv\\_%'
+                       OR matviewname LIKE 'temp\\_%'
+                       OR matviewname LIKE 'temp\\_buffered\\_%'
                     ORDER BY schemaname, matviewname
                 """)
                 all_views = cursor.fetchall()
