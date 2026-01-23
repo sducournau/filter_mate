@@ -811,7 +811,7 @@ class BackendController(BaseController):
         Returns:
             tuple: (app, session_id, schema, connexion)
         """
-        from ..adapters.backends import POSTGRESQL_AVAILABLE
+        from ...adapters.backends import POSTGRESQL_AVAILABLE
         if not POSTGRESQL_AVAILABLE:
             return None, None, None, None
         
