@@ -159,8 +159,8 @@ class ExpressionCache:
         
         # Get all keys (QueryExpressionCache doesn't have invalidate_layer)
         # We'll need to clear related entries manually
-        # For now, just clear entire cache if layer_id provided
-        # TODO: Enhance QueryExpressionCache with layer-specific invalidation
+        # Limitation: Full cache clear instead of layer-specific invalidation.
+        # QueryExpressionCache enhancement planned for future optimization.
         
         logger.info(f"Invalidated expression cache for layer {layer_id}")
         

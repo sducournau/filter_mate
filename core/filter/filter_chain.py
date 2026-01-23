@@ -108,8 +108,9 @@ class Filter:
         Returns:
             SQL expression compatible with target dialect
         """
-        # Pour l'instant, retourne l'expression telle quelle
-        # TODO Phase 5.0: Adapter selon le dialecte
+        # Currently returns expression as-is.
+        # Future: Dialect-specific SQL conversion (Phase 5.0)
+        # See: https://github.com/sducournau/filter_mate/issues for roadmap
         return self.expression
     
     def validate(self) -> Tuple[bool, Optional[str]]:
@@ -375,9 +376,9 @@ class FilterChain:
             else:
                 break
         
-        # TODO Phase 5.0: More advanced optimizations
+        # Future optimizations (Phase 5.0):
         # - Merge duplicate conditions
-        # - Simplify redundant AND/OR chains
+        # - Simplify redundant AND/OR chains  
         # - Extract common subexpressions
         
         return expression

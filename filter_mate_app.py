@@ -184,6 +184,35 @@ STABILITY_CONSTANTS = {
     'POSTGRESQL_EXTRA_DELAY_MS': 1000, 'SPATIALITE_STABILIZATION_MS': 200}
 
 class FilterMateApp:
+    """
+    FilterMate Application Orchestrator (Legacy).
+    
+    .. deprecated:: 3.0.0
+        This class is a legacy God Class (~2,400 lines) being progressively
+        refactored to hexagonal architecture. For new code, use:
+        
+        - ``core/services/filter_service.py`` for filtering logic
+        - ``adapters/qgis/tasks/`` for task management  
+        - ``adapters/backends/`` for backend operations
+        - ``core/tasks/filter_task.py`` for async filtering
+    
+    This class coordinates between the UI (FilterMateDockWidget) and the
+    business logic. It manages layer state, task execution, and QGIS signals.
+    
+    Attributes:
+        PROJECT_LAYERS (Dict[str, dict]): Cache of layer properties by layer ID.
+            Keys are layer IDs, values contain layer metadata and filter state.
+        CONFIG_DATA (dict): Plugin configuration loaded from config.json.
+        dockwidget (FilterMateDockWidget): Reference to the main UI widget.
+    
+    Example:
+        >>> app = FilterMateApp(iface, dockwidget)
+        >>> app.manage_task('filter', parameters)
+    
+    See Also:
+        - docs/ARCHITECTURE.md for the hexagonal architecture overview
+        - core/services/ for the new service layer
+    """
 
     PROJECT_LAYERS = {} 
 

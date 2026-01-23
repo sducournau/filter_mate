@@ -100,9 +100,8 @@ def cleanup_corrupted_layer_filters(layers=None):
             project = QgsProject.instance()
             return canonical_cleanup(project)
         
-        # TODO: Handle explicit layers list
-        # The canonical version expects a project, not a list of layers
-        # For now, fall back to project-wide cleanup
+        # Note: Explicit layers list not yet supported - uses project-wide cleanup.
+        # The canonical version expects a project, not a list of layers.
         logger.warning("cleanup_corrupted_layer_filters: explicit layers list not yet supported, using project-wide cleanup")
         project = QgsProject.instance()
         return canonical_cleanup(project)

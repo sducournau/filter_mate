@@ -248,7 +248,8 @@ class FavoritesService(QObject):
             self.favorites_changed.emit()
             logger.info(f"✓ Favorites reloaded from database and UI notified (count: {self.count})")
         else:
-            # TODO: Implement internal project loading when manager not available
+            # Note: Internal project loading without manager is not implemented.
+            # FavoritesManager is required for full functionality.
             logger.debug("FavoritesService: Loading from project (stub - no manager)")
     
     @property

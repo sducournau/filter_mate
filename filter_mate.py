@@ -102,7 +102,7 @@ class FilterMate:
         # Declare instance attributes
         self.actions = []
         self.menu = self.tr(u'&FilterMate')
-        # TODO: We are going to let the user set this up in a future iteration
+        # Note: Menu name is hardcoded. Custom menu names may be added in future.
 
         self.toolbar = self.iface.addToolBar(u'FilterMate')
         self.toolbar.setObjectName(u'FilterMate')

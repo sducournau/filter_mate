@@ -865,7 +865,8 @@ class ExpressionBuilder:
         # Step 3: Split remaining into individual conditions (NON-EXISTS conditions only)
         if remaining:
             # Simple split by AND/OR (basic implementation)
-            # TODO: More sophisticated parsing for nested conditions
+            # Note: Nested condition parsing is basic. Complex nested expressions
+            # may not parse correctly. Enhancement planned for future versions.
             conditions = re.split(r'\s+(AND|OR)\s+', remaining, flags=re.IGNORECASE)
             
             for part in conditions:
