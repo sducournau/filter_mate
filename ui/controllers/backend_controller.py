@@ -1143,10 +1143,14 @@ class BackendController(BaseController):
         """
         Clean ALL PostgreSQL materialized views created by FilterMate.
         
-        Searches in ALL schemas for views matching FilterMate patterns:
-        - mv_* (standard FilterMate views)
-        - temp_* (temporary buffered views)
-        - temp_buffered_* (buffer geometry views)
+        Uses unified naming convention - all FilterMate objects start with 'fm_':
+        - fm_mv_* (materialized views)
+        - fm_buf_* (buffer geometry tables)
+        - fm_temp_* (temporary tables)
+        
+        Also cleans legacy naming patterns for backward compatibility:
+        - mv_* (old materialized views)
+        - temp_* (old temporary tables)
         
         Returns:
             int: Total number of views dropped
@@ -1162,13 +1166,14 @@ class BackendController(BaseController):
         try:
             with connexion.cursor() as cursor:
                 # Find ALL FilterMate views in ANY schema
-                # Patterns: mv_*, temp_*, temp_buffered_*
+                # Standard pattern: fm_* (unified convention)
+                # Legacy patterns: mv_*, temp_* (backward compatibility)
                 cursor.execute("""
                     SELECT schemaname, matviewname 
                     FROM pg_matviews 
-                    WHERE matviewname LIKE 'mv\\_%'
+                    WHERE matviewname LIKE 'fm\\_%'
+                       OR matviewname LIKE 'mv\\_%'
                        OR matviewname LIKE 'temp\\_%'
-                       OR matviewname LIKE 'temp\\_buffered\\_%'
                     ORDER BY schemaname, matviewname
                 """)
                 all_views = cursor.fetchall()

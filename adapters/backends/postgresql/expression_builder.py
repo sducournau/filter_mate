@@ -851,9 +851,11 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             # Generate unique temp table name using hash of buffer expression
             # This ensures the same source + same buffer = same table name
             # Fixes filter chaining: table created once and reused across all chained filters
+            # FIX v4.3.7 (2026-01-23): Use standard naming convention fm_buf_*
+            from infrastructure.constants import TABLE_PREFIX_BUFFER
             import hashlib
             buffer_hash = hashlib.md5(buffer_expression.encode()).hexdigest()[:8]
-            temp_table_name = f"temp_buffered_{source_table}_{buffer_hash}"
+            temp_table_name = f"{TABLE_PREFIX_BUFFER}{source_table}_{buffer_hash}"
         else:
             self.log_error("No buffer_table_name or buffer_expression provided")
             return None
@@ -1145,18 +1147,20 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         # So compute the table name first, then decide whether to create it or reuse it
         buffer_table_name = None
         if buffer_expression and buffer_expression.strip():
+            # FIX v4.3.7 (2026-01-23): Use standard naming convention fm_buf_*
+            from infrastructure.constants import TABLE_PREFIX_BUFFER
             import hashlib
             buffer_hash = hashlib.md5(buffer_expression.encode()).hexdigest()[:8]
             # CRITICAL FIX v4.2.20: For buffer table name, use CURRENT source_table (where buffer is defined)
             # NOT original_source_table (which is the first layer in the filter chain)
             # Example: zone_pop → demand_points (WITH buffer) → ducts → sheaths
             #   - At demand_points: source_table="demand_points", buffer_expression set
-            #     → Create table: temp_buffered_demand_points_xxx
+            #     → Create table: fm_buf_demand_points_xxx
             #   - At ducts: source_table="demand_points" (from source_geom), buffer_expression still set
-            #     → Reuse table: temp_buffered_demand_points_xxx (same name!)
+            #     → Reuse table: fm_buf_demand_points_xxx (same name!)
             #   - At sheaths: source_table="demand_points", buffer_expression still set
-            #     → Reuse table: temp_buffered_demand_points_xxx (same name!)
-            buffer_table_name = f"temp_buffered_{source_table}_{buffer_hash}"
+            #     → Reuse table: fm_buf_demand_points_xxx (same name!)
+            buffer_table_name = f"{TABLE_PREFIX_BUFFER}{source_table}_{buffer_hash}"
             self.log_debug(f"Calculated buffer table name: {buffer_table_name} (from {source_table})")
         
         # FIX v4.2.17 (2026-01-21): Don't apply buffer_expression in filter chaining context

@@ -263,6 +263,7 @@ DEFAULT_POSTGRES_SCHEMA = 'public'
 DEFAULT_TEMP_SCHEMA = 'filtermate_temp'
 TABLE_PREFIX_TEMP = 'fm_temp_'
 TABLE_PREFIX_MATERIALIZED = 'fm_mv_'
+TABLE_PREFIX_BUFFER = 'fm_buf_'  # Buffer geometry tables
 
 # =============================================================================
 # UI Constants
