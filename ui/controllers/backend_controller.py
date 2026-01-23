@@ -710,6 +710,21 @@ class BackendController(BaseController):
         force_all_action = menu.addAction(f"🔒 Force {current_backend.upper()} for All Layers")
         force_all_action.setData('__FORCE_ALL__')
 
+        menu.addSeparator()
+
+        # Cleanup Temp Tables submenu
+        cleanup_menu = menu.addMenu("🧹 Clear Temp Tables")
+        
+        # Project cleanup
+        project_cleanup_action = cleanup_menu.addAction("📁 Current Project")
+        project_cleanup_action.setData('__CLEANUP_PROJECT__')
+        project_cleanup_action.setToolTip("Clear temporary tables for the current project only")
+        
+        # Global cleanup  
+        global_cleanup_action = cleanup_menu.addAction("🌐 All Projects (Global)")
+        global_cleanup_action.setData('__CLEANUP_GLOBAL__')
+        global_cleanup_action.setToolTip("Clear ALL FilterMate temporary tables from all databases")
+
         # Show menu
         selected_action = menu.exec_(QCursor.pos())
 
@@ -726,6 +741,18 @@ class BackendController(BaseController):
                 show_success("FilterMate", f"Forced {current_backend.upper()} for {count} layers")
                 # Update indicator for current layer after batch operation
                 self._refresh_indicator_for_current_layer()
+            elif data == '__CLEANUP_PROJECT__':
+                count = self.cleanup_temp_tables_project()
+                if count > 0:
+                    show_success("FilterMate", f"Cleared {count} temporary table(s) for current project")
+                else:
+                    show_info("FilterMate", "No temporary tables found for current project")
+            elif data == '__CLEANUP_GLOBAL__':
+                count = self.cleanup_temp_tables_global()
+                if count > 0:
+                    show_success("FilterMate", f"Cleared {count} temporary table(s) globally")
+                else:
+                    show_info("FilterMate", "No temporary tables found")
             else:
                 self.set_forced_backend(layer.id(), data)
                 if data:
@@ -1009,3 +1036,209 @@ class BackendController(BaseController):
                     pass
         
         return info
+
+    # ========================================
+    # TEMP TABLE CLEANUP METHODS (v4.0)
+    # ========================================
+
+    def cleanup_temp_tables_project(self) -> int:
+        """
+        Clean up temporary tables for the current project only.
+        
+        Cleans both PostgreSQL materialized views and Spatialite temp tables
+        associated with the current session/project.
+        
+        Returns:
+            int: Total number of tables cleaned up
+        """
+        total_count = 0
+        
+        # 1. Clean PostgreSQL views for current session
+        pg_count = self._cleanup_postgresql_current_session()
+        total_count += pg_count
+        
+        # 2. Clean Spatialite temp tables for current project databases
+        spatialite_count = self._cleanup_spatialite_project_tables()
+        total_count += spatialite_count
+        
+        logger.info(f"Project cleanup complete: {total_count} table(s) removed "
+                   f"(PostgreSQL: {pg_count}, Spatialite: {spatialite_count})")
+        return total_count
+
+    def cleanup_temp_tables_global(self) -> int:
+        """
+        Clean up ALL FilterMate temporary tables globally.
+        
+        Cleans all FilterMate temp tables from:
+        - PostgreSQL: All sessions in filter_mate_temp schema
+        - Spatialite: All mv_* tables in all known databases
+        
+        Warning: This affects all projects, not just the current one!
+        
+        Returns:
+            int: Total number of tables cleaned up
+        """
+        total_count = 0
+        
+        # 1. Clean ALL PostgreSQL views in schema
+        pg_count = self._cleanup_postgresql_all_sessions()
+        total_count += pg_count
+        
+        # 2. Clean ALL Spatialite temp tables
+        spatialite_count = self._cleanup_spatialite_all_tables()
+        total_count += spatialite_count
+        
+        logger.info(f"Global cleanup complete: {total_count} table(s) removed "
+                   f"(PostgreSQL: {pg_count}, Spatialite: {spatialite_count})")
+        return total_count
+
+    def _cleanup_postgresql_current_session(self) -> int:
+        """Clean PostgreSQL materialized views for current session only."""
+        result = self.cleanup_postgresql_session_views()
+        return 1 if result else 0
+
+    def _cleanup_postgresql_all_sessions(self) -> int:
+        """Clean ALL PostgreSQL materialized views in filter_mate schema."""
+        app, session_id, schema, connexion = self.get_pg_session_context()
+        
+        if not connexion:
+            return 0
+        
+        try:
+            with connexion.cursor() as cursor:
+                # Get ALL views in schema (not just current session)
+                cursor.execute(
+                    "SELECT matviewname FROM pg_matviews WHERE schemaname = %s",
+                    (schema,)
+                )
+                views = [v[0] for v in cursor.fetchall()]
+                
+                count = 0
+                for view in views:
+                    try:
+                        cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."{view}" CASCADE;')
+                        count += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to drop view {view}: {e}")
+                
+                connexion.commit()
+                logger.info(f"PostgreSQL global cleanup: {count} view(s) dropped from schema {schema}")
+                return count
+                
+        except Exception as e:
+            logger.error(f"Error in PostgreSQL global cleanup: {e}")
+            return 0
+        finally:
+            try:
+                connexion.close()
+            except Exception:
+                pass
+
+    def _cleanup_spatialite_project_tables(self) -> int:
+        """Clean Spatialite temp tables for current project databases."""
+        from qgis.core import QgsProject
+        
+        # Get session_id from app
+        app = getattr(self.dockwidget, '_app_ref', None)
+        session_id = getattr(app, 'session_id', None) if app else None
+        
+        if not session_id:
+            logger.debug("No session_id available for Spatialite project cleanup")
+            return 0
+        
+        # Collect unique database paths from project layers
+        db_paths = set()
+        project = QgsProject.instance()
+        for layer in project.mapLayers().values():
+            if hasattr(layer, 'providerType') and layer.providerType() in ('spatialite', 'ogr'):
+                source = layer.source().split('|')[0]
+                if source.lower().endswith(('.gpkg', '.sqlite', '.db')):
+                    db_paths.add(source)
+        
+        total_count = 0
+        for db_path in db_paths:
+            count = self._cleanup_spatialite_db(db_path, session_id)
+            total_count += count
+        
+        return total_count
+
+    def _cleanup_spatialite_all_tables(self) -> int:
+        """Clean ALL FilterMate temp tables from all known Spatialite databases."""
+        from qgis.core import QgsProject
+        
+        # Collect unique database paths from project layers
+        db_paths = set()
+        project = QgsProject.instance()
+        for layer in project.mapLayers().values():
+            if hasattr(layer, 'providerType') and layer.providerType() in ('spatialite', 'ogr'):
+                source = layer.source().split('|')[0]
+                if source.lower().endswith(('.gpkg', '.sqlite', '.db')):
+                    db_paths.add(source)
+        
+        total_count = 0
+        for db_path in db_paths:
+            # Pass None for session_id to clean ALL mv_* tables
+            count = self._cleanup_spatialite_db(db_path, session_id=None)
+            total_count += count
+        
+        return total_count
+
+    def _cleanup_spatialite_db(self, db_path: str, session_id: str = None) -> int:
+        """
+        Clean FilterMate temp tables from a specific Spatialite database.
+        
+        Args:
+            db_path: Path to the SQLite/GeoPackage database
+            session_id: If provided, only clean tables for this session.
+                       If None, clean ALL mv_* tables.
+        
+        Returns:
+            int: Number of tables cleaned up
+        """
+        import sqlite3
+        import os
+        
+        if not db_path or not os.path.exists(db_path):
+            return 0
+        
+        try:
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+            
+            # Build pattern based on session_id
+            if session_id:
+                pattern = f"mv_{session_id}_%"
+            else:
+                pattern = "mv_%"  # All FilterMate temp tables
+            
+            # Find matching tables
+            cur.execute(
+                """SELECT name FROM sqlite_master 
+                   WHERE type='table' AND name LIKE ?""",
+                (pattern,)
+            )
+            tables = cur.fetchall()
+            
+            count = 0
+            for (table_name,) in tables:
+                try:
+                    cur.execute(f'DROP TABLE IF EXISTS "{table_name}";')
+                    # Also drop R-tree index if exists
+                    cur.execute(f'DROP TABLE IF EXISTS "idx_{table_name}_geometry";')
+                    count += 1
+                except Exception as e:
+                    logger.warning(f"Error dropping table {table_name}: {e}")
+            
+            conn.commit()
+            conn.close()
+            
+            if count > 0:
+                db_name = os.path.basename(db_path)
+                scope = f"session {session_id[:8]}" if session_id else "all sessions"
+                logger.info(f"Spatialite cleanup ({db_name}): {count} table(s) for {scope}")
+            
+            return count
+            
+        except Exception as e:
+            logger.error(f"Error cleaning Spatialite database {db_path}: {e}")
+            return 0
