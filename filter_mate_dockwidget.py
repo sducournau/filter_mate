@@ -200,6 +200,32 @@ class ClickableLabel(QtWidgets.QLabel):
 
 
 class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
+    """Main dockwidget UI component for FilterMate QGIS plugin.
+
+    Provides the user interface for:
+    - Exploring: Feature selection, identification, zooming
+    - Filtering: Spatial predicates, buffer operations, layer targeting
+    - Exporting: Multi-format export with style support
+    - Configuration: Plugin settings and optimization options
+
+    Architecture:
+        Progressively migrating to MVC pattern:
+        - Controllers: ui/controllers/ (ExploringController, FilteringController, etc.)
+        - Services: core/services/
+        - Domain: core/domain/
+
+    Attributes:
+        PROJECT_LAYERS: Dict mapping layer IDs to layer properties.
+        current_layer: Currently selected QgsVectorLayer.
+        CONFIG_DATA: Plugin configuration dictionary.
+        widgets: Nested dict of UI widget references organized by tab.
+
+    Signals:
+        closingPlugin: Emitted when plugin is closing.
+        launchingTask: Emitted to request task execution (filter/export/etc.).
+        currentLayerChanged: Emitted when current layer changes.
+        projectLayersReady: Emitted after PROJECT_LAYERS is populated.
+    """
 
     closingPlugin = pyqtSignal()
     launchingTask = pyqtSignal(str)
@@ -582,8 +608,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         else:
             return widget.isSignalConnected(self.getSignal(widget, signal_name))
 
-    def reset_multiple_checkable_combobox(self):
-        """v4.0 S18: Reset and recreate multiple checkable combobox widget."""
+    def reset_multiple_checkable_combobox(self) -> None:
+        """Reset and recreate the multiple selection checkable combobox widget.
+
+        Destroys the existing widget and creates a fresh instance. Used when
+        the current layer changes to ensure the feature list is properly refreshed.
+
+        Note:
+            Handles RuntimeError gracefully if widget is already deleted.
+            Automatically reconnects signals to exploring_features_changed.
+        """
         try:
             layout = self.horizontalLayout_exploring_multiple_feature_picker
             if layout.count() > 0 and (item := layout.itemAt(0)) and item.widget():
@@ -607,8 +641,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if os.path.exists(p): self.toolBox_tabTools.setItemIcon(idx, get_themed_icon(p) if ICON_THEME_AVAILABLE else QtGui.QIcon(p))
 
 
-    def setupUiCustom(self):
-        """v4.0 Sprint 15: Setup custom UI - splitter, dimensions, tabs, icons, tooltips."""
+    def setupUiCustom(self) -> None:
+        """Initialize custom UI components and configuration.
+
+        Sets up components not defined in Qt Designer:
+        - Custom checkable combobox widgets for layers and features
+        - Splitter layout and dynamic dimensions
+        - Tab icons with theme support
+        - ConfigurationManager initialization
+        - MVC controller integration
+
+        Note:
+            Must be called after setupUi() from Qt Designer generated code.
+            Creates widgets before configure_widgets() can reference them.
+        """
         # CRITICAL: Create all custom widgets FIRST (before configure_widgets() references them)
         self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self.CONFIG_DATA, self)
         # FIX 2026-01-18 v14: Set dockwidget reference for sync protection checks
@@ -2905,7 +2951,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self._configuration_manager: self._configuration_manager.configure_key_widgets_sizes(icons_sizes)
 
     def manage_ui_style(self):
-        """v4.0 Sprint 19: Apply stylesheet, icons, and styling via managers."""
+        """Apply UI styling based on QGIS theme.
+
+        Configures visual appearance including:
+        - Stylesheet application via ThemeManager or legacy path
+        - Icon theme setup (light/dark mode support)
+        - Button styling via ButtonStyler
+
+        Note:
+            Uses manager classes if available, falls back to legacy methods.
+            Installs child dialog filter to prevent style bleeding.
+        """
         if self._theme_manager:
             self._theme_manager.setup()
         else:
@@ -3013,7 +3069,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 w.blockSignals(False)
 
     def connect_widgets_signals(self):
-        """v4.0 Sprint 7: Ultra-simplified - connect all widget signals."""
+        """Connect all widget signals to their handlers.
+
+        Iterates through the widgets registry and connects signals defined in
+        widget configuration. Uses manageSignal() for actual connection logic.
+
+        Note:
+            Handles already-connected signals gracefully.
+            Skips 'QGIS' group as those are managed separately.
+        """
         for grp in [g for g in self.widgets if g != 'QGIS']:
             for w in self.widgets[grp]:
                 try: self.manageSignal([grp, w], 'connect')
@@ -3021,7 +3085,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     pass
 
     def disconnect_widgets_signals(self):
-        """v4.0 Sprint 7: Ultra-simplified - safely disconnect all widget signals."""
+        """Disconnect all widget signals from their handlers.
+
+        Safely disconnects all signals connected by connect_widgets_signals().
+        Used during plugin cleanup and when reinitializing widgets.
+
+        Note:
+            Handles already-disconnected signals gracefully.
+            Skips 'QGIS' group as those are managed separately.
+        """
         if not self.widgets: return
         for grp in [g for g in self.widgets if g != 'QGIS']:
             for w in self.widgets[grp]:
@@ -3836,7 +3908,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.exploring_groupbox_changed(groupbox)
 
     def exploring_groupbox_init(self):
-        """v4.0 Sprint 18: Initialize exploring groupbox to default or saved state."""
+        """Initialize the exploring groupbox based on current layer.
+
+        Configures the selection mode groupbox (single/multiple/custom) based on:
+        - Current layer properties from PROJECT_LAYERS
+        - Saved user preferences for groupbox state
+
+        Defaults to 'single_selection' if no saved state exists.
+
+        Note:
+            Called on layer change and plugin initialization.
+            Requires widgets_initialized to be True.
+        """
         if not self.widgets_initialized: return
         self.properties_group_state_enabler(self.layer_properties_tuples_dict["selection_expression"])
         groupbox = self.PROJECT_LAYERS.get(self.current_layer.id(), {}).get("exploring", {}).get("current_exploring_groupbox", "single_selection") if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS else "single_selection"
@@ -4294,12 +4377,24 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.error(f"exploring_identify_clicked error: {e}", exc_info=True)
 
 
-    def get_current_features(self, use_cache: bool = True):
-        """
-        v4.0 Sprint 18: Get selected features based on active groupbox.
-        
-        FIX 2026-01-15 v8: Always try fallback if controller returns empty.
-        User requirement: Feature picker is THE source for single_selection mode.
+    def get_current_features(self, use_cache: bool = True) -> tuple:
+        """Get selected features based on active exploring groupbox.
+
+        Retrieves features from the appropriate widget based on selection mode:
+        - Single selection: From QgsFeaturePickerWidget
+        - Multiple selection: From QgsCheckableComboBoxFeaturesListPickerWidget
+        - Custom expression: From expression widget evaluation
+
+        Args:
+            use_cache: If True, use cached results when available.
+
+        Returns:
+            Tuple of (features_list, expression_string). Features is a list of
+            feature values (IDs or display values), expression is the filter string.
+
+        Note:
+            Falls back to _fallback_get_current_features() if controller returns empty.
+            Feature picker is the primary source for single_selection mode.
         """
         # DIAGNOSTIC 2026-01-16: ULTRA-DETAILED TRACE
         logger.info("=" * 80)
@@ -5171,9 +5266,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 S18: → ExploringController."""
         if self._exploring_ctrl: self._exploring_ctrl.exploring_link_widgets(expression, change_source)
 
-    def get_layers_to_filter(self):
-        """v4.0 S18: Get checked layer IDs from filtering combobox.
-        FIX 2026-01-16: Removed incorrect _is_layer_valid() check - this list doesn't depend on current_layer.
+    def get_layers_to_filter(self) -> list:
+        """Get list of layer IDs selected for geometric filtering.
+
+        Retrieves all checked layers from the filtering combobox widget.
+        These are the "distant layers" that will be filtered based on their
+        spatial relationship with the source layer.
+
+        Returns:
+            List of layer ID strings for checked layers, or empty list if
+            widgets not initialized.
+
+        Note:
+            Also updates controller state via delegate_filtering_set_target_layer_ids().
         """
         if not self.widgets_initialized: return []
         checked = []
@@ -5187,10 +5292,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return checked
 
 
-    def get_layers_to_export(self):
-        """v4.0 S18: Get checked layer IDs for export.
-        FIX 2026-01-16: Removed incorrect _is_layer_valid() check - this list doesn't depend on current_layer.
-        FIX 2026-01-22: Handle dict data format (layer_id is inside dict, not the data itself).
+    def get_layers_to_export(self) -> list:
+        """Get list of layer IDs selected for export.
+
+        Retrieves all checked layers from the exporting combobox widget.
+        These layers will be exported in the selected format.
+
+        Returns:
+            List of layer ID strings for checked layers, or None if widgets
+            not initialized.
+
+        Note:
+            Handles both string and dict data formats from itemData().
         """
         if not self.widgets_initialized:
             return None
@@ -5686,13 +5799,25 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except (ImportError, RuntimeError, AttributeError):
             return True  # Assume deleted if we can't check
 
-    def current_layer_changed(self, layer, manual_change=False):
-        """
-        v4.0 Sprint 18: Handle current layer change event.
-        
+    def current_layer_changed(self, layer: QgsVectorLayer, manual_change: bool = False) -> None:
+        """Handle current layer change event from QGIS or user interaction.
+
+        Updates all UI components when the active layer changes:
+        - Validates layer and retrieves properties from PROJECT_LAYERS
+        - Resets selection tracking and expression cache
+        - Synchronizes filtering/exporting widgets
+        - Reloads exploration widgets (feature picker, combobox)
+        - Reconnects layer-specific signals
+
         Args:
-            layer: New current layer
-            manual_change: True if user manually selected layer from combobox (bypasses protection windows)
+            layer: The new current QgsVectorLayer.
+            manual_change: True if user manually selected layer from combobox.
+                          Bypasses protection windows when True.
+
+        Note:
+            - Ignores layer changes during active filtering (_filtering_in_progress)
+            - Defers changes if plugin is busy (_plugin_busy)
+            - Handles deleted C++ objects gracefully
         """
         import traceback
         logger.info(f"=== current_layer_changed ENTRY === layer: {layer.name() if layer else 'None'}, manual: {manual_change}")
@@ -6658,7 +6783,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.widgets_initialized: self.gettingProjectLayers.emit()
 
     def closeEvent(self, event):
-        """v3.1 Sprint 17: Clean up resources before closing."""
+        """Handle dockwidget close event.
+
+        Performs cleanup operations before closing:
+        - Disconnects layer deletion signals
+        - Clears layer references from widgets
+        - Invalidates exploring cache
+        - Emits closingPlugin signal
+
+        Args:
+            event: Qt close event to accept.
+
+        Note:
+            Always accepts the event after cleanup.
+            Handles RuntimeError gracefully during shutdown.
+        """
         if not self.widgets_initialized:
             event.accept()
             return
@@ -6690,25 +6829,40 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 Sprint 18: Get cache statistics."""
         return (self._controller_integration.delegate_exploring_get_cache_stats() if self._controller_integration else None) or (self._exploring_cache.get_stats() if hasattr(self, '_exploring_cache') else {})
     
-    def invalidate_exploring_cache(self, layer_id=None, groupbox_type=None):
+    def invalidate_exploring_cache(self, layer_id: str = None, groupbox_type: str = None) -> None:
+        """Invalidate cached exploring features data.
+
+        Clears cached feature lists to force fresh retrieval on next access.
+        Called when layer data changes (edit, filter, etc.).
+
+        Args:
+            layer_id: Specific layer ID to invalidate. If None, invalidates all.
+            groupbox_type: Specific groupbox type to invalidate. If None with layer_id,
+                          invalidates all groupboxes for that layer.
+
+        Note:
+            Delegates to controller if available, otherwise uses local cache.
+        """
         """v4.0 Sprint 18: Invalidate exploring cache."""
         if layer_id is None and groupbox_type is None and self._controller_integration and self._controller_integration.delegate_exploring_clear_cache(): return
         if hasattr(self, '_exploring_cache'):
             self._exploring_cache.invalidate_all() if layer_id is None else (self._exploring_cache.invalidate_layer(layer_id) if groupbox_type is None else self._exploring_cache.invalidate(layer_id, groupbox_type))
 
-    def launchTaskEvent(self, state, task_name):
-        """v4.0 S18: Emit signal to launch a task.
-        
-        FIX 2026-01-17: Allow undo/redo/unfilter/reset tasks to run even when
-        _filtering_in_progress is True. These are explicit user actions that should
-        not be blocked by the protection flag. The protection is meant to block
-        automatic signals (like layer change), not user button clicks.
-        
-        FIX 2026-01-17 v3: For user action tasks, try to recover current_layer from
-        saved ID or combobox if it's None during protection window.
-        
-        FIX 2026-01-22: Add 'export' to user_action_tasks - it's an explicit user button click
-        that should not be blocked by protection flags or missing current_layer state.
+    def launchTaskEvent(self, state: str, task_name: str) -> None:
+        """Emit signal to launch a FilterMate task.
+
+        Validates state and emits launchingTask signal for task execution.
+        Handles special cases for user action tasks (undo, redo, unfilter, reset, export)
+        which should not be blocked by protection flags.
+
+        Args:
+            state: Current state identifier.
+            task_name: Task to launch ('filter', 'unfilter', 'reset', 'undo', 'redo', 'export').
+
+        Note:
+            - User action tasks bypass _filtering_in_progress protection
+            - Attempts to recover current_layer from saved ID or combobox if None
+            - Export task syncs HAS_LAYERS_TO_EXPORT flag before execution
         """
         # FIX 2026-01-17 v3 + 2026-01-22: Define user action tasks early (needed for recovery logic)
         user_action_tasks = ('undo', 'redo', 'unfilter', 'reset', 'export')

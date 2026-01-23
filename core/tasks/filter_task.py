@@ -267,7 +267,38 @@ else:
     ogr_cleanup_temp_layers = None
 
 class FilterEngineTask(QgsTask):
-    """Main QgsTask class which filter and unfilter data"""
+    """Main QgsTask for filtering and unfiltering vector data.
+
+    This task orchestrates all filtering operations in FilterMate, supporting:
+    - Source layer filtering (attribute and geometry)
+    - Multi-layer geometric filtering with spatial predicates
+    - Export operations (standard, batch, ZIP, streaming)
+    - Filter history management (undo/redo/reset)
+
+    Supports multiple backends:
+    - PostgreSQL/PostGIS (optimal for large datasets >100k features)
+    - Spatialite (good for medium datasets <100k features)
+    - OGR (fallback for shapefiles, GeoPackage, etc.)
+
+    Thread Safety:
+        All setSubsetString operations are queued via applySubsetRequest signal
+        and applied in finished() on the main Qt thread.
+
+    Attributes:
+        task_action: Action to perform ('filter', 'unfilter', 'reset', 'export').
+        task_parameters: Dict containing task configuration and layer info.
+        warning_messages: List of warnings to display after task completion.
+        layers: Dict of layers organized by provider type.
+        source_layer: The primary layer being filtered.
+
+    Example:
+        >>> task = FilterEngineTask(
+        ...     description="Filter parcels",
+        ...     task_action="filter",
+        ...     task_parameters={"task": {...}, "filtering": {...}}
+        ... )
+        >>> QgsApplication.taskManager().addTask(task)
+    """
     
     # Signal to apply subset string on main thread (THREAD SAFETY FIX v2.3.21)
     # setSubsetString is NOT thread-safe and MUST be called from the main Qt thread.
@@ -282,8 +313,16 @@ class FilterEngineTask(QgsTask):
     _expression_cache = None  # Initialized lazily via get_query_cache()
     
     @classmethod
-    def get_geometry_cache(cls):
-        """Get or create the geometry cache (lazy initialization)."""
+    def get_geometry_cache(cls) -> 'SourceGeometryCache':
+        """Get or create the shared geometry cache.
+
+        Implements lazy initialization of the class-level geometry cache.
+        The cache is shared between all FilterEngineTask instances to avoid
+        redundant geometry preparation across multiple filter operations.
+
+        Returns:
+            SourceGeometryCache: The shared geometry cache instance.
+        """
         if cls._geometry_cache is None:
             cls._geometry_cache = SourceGeometryCache()
         return cls._geometry_cache
@@ -839,8 +878,24 @@ class FilterEngineTask(QgsTask):
         # FIX v4.1.1: Cleanup temporary OGR layers via BackendServices facade
         _backend_services.cleanup_ogr_temp_layers()
 
-    def queue_subset_request(self, layer: QgsVectorLayer, expression: str) -> None:
-        """Queue subset string to be applied on main thread (thread safety v2.3.21)."""
+    def queue_subset_request(self, layer: QgsVectorLayer, expression: str) -> bool:
+        """Queue a subset string request for thread-safe application.
+
+        Subset strings (filter expressions) cannot be applied directly from background
+        threads due to Qt thread safety constraints. This method queues requests to be
+        applied in finished() on the main Qt thread.
+
+        Args:
+            layer: The QgsVectorLayer to apply the filter to.
+            expression: SQL WHERE clause or empty string to clear filter.
+
+        Returns:
+            True if the request was queued successfully.
+
+        Note:
+            The actual setSubsetString call is deferred until finished().
+            Use empty string to clear the layer's filter.
+        """
         if layer and expression is not None:
             self._pending_subset_requests.append((layer, expression))
             expr_preview = (expression[:60] + '...') if len(expression) > 60 else expression
@@ -2191,8 +2246,23 @@ class FilterEngineTask(QgsTask):
             failed_filters=failed_filters, failed_layer_names=failed_layer_names, log_to_qgis=True
         )
 
-    def manage_distant_layers_geometric_filtering(self):
-        """Filter distant layers using source layer geometries. Orchestrates prepare/filter workflow."""
+    def manage_distant_layers_geometric_filtering(self) -> bool:
+        """Filter distant layers using source layer geometries.
+
+        Orchestrates the geometric filtering workflow:
+        1. Initialize buffer parameters and source subset
+        2. Create optimized filter chain MV for PostgreSQL (if applicable)
+        3. Prepare source geometries for each backend type
+        4. Execute filtering on all distant layers with progress tracking
+
+        Returns:
+            True if all distant layers were filtered successfully.
+
+        Note:
+            - Supports buffer expressions with MV optimization for large datasets
+            - Creates filter chain MV when multiple spatial filters are chained
+            - Handles provider-specific geometry preparation (PostgreSQL, Spatialite, OGR)
+        """
         logger.info(f"🔍 manage_distant_layers_geometric_filtering: {self.source_layer.name()} (features: {self.source_layer.featureCount()})")
         logger.info(f"  is_field_expression: {getattr(self, 'is_field_expression', None)}")
         logger.info("=" * 60)
@@ -2274,8 +2344,24 @@ class FilterEngineTask(QgsTask):
         logger.info(f"📊 _filter_all_layers_with_progress() returned: {result}")
         return result
     
-    def qgis_expression_to_postgis(self, expression):
-        """Convert QGIS expression to PostGIS SQL. Delegated to ExpressionService."""
+    def qgis_expression_to_postgis(self, expression: str) -> str:
+        """Convert a QGIS expression to PostGIS-compatible SQL.
+
+        Transforms QGIS expression syntax to PostgreSQL/PostGIS SQL, handling:
+        - Function name mapping (e.g., $area → ST_Area)
+        - Operator conversions
+        - Geometry column references
+
+        Args:
+            expression: QGIS expression string to convert.
+
+        Returns:
+            PostGIS-compatible SQL expression, or original if empty.
+
+        Example:
+            >>> task.qgis_expression_to_postgis('$area > 1000')
+            'ST_Area("geometry") > 1000'
+        """
         if not expression:
             return expression
         geom_col = getattr(self, 'param_source_geom', None) or 'geometry'
@@ -2284,8 +2370,23 @@ class FilterEngineTask(QgsTask):
         return ExpressionService().to_sql(expression, ProviderType.POSTGRESQL, geom_col)
 
 
-    def qgis_expression_to_spatialite(self, expression):
-        """Convert QGIS expression to Spatialite SQL. Delegated to ExpressionService."""
+    def qgis_expression_to_spatialite(self, expression: str) -> str:
+        """Convert a QGIS expression to Spatialite-compatible SQL.
+
+        Transforms QGIS expression syntax to Spatialite SQL, handling:
+        - Function name mapping (e.g., $area → ST_Area)
+        - Operator conversions
+        - Geometry column references
+
+        Args:
+            expression: QGIS expression string to convert.
+
+        Returns:
+            Spatialite-compatible SQL expression, or original if empty.
+
+        Note:
+            Spatialite spatial functions are ~90% compatible with PostGIS.
+        """
         if not expression:
             return expression
         geom_col = getattr(self, 'param_source_geom', None) or 'geometry'
@@ -3422,21 +3523,30 @@ class FilterEngineTask(QgsTask):
             sanitize_fn=self._sanitize_subset_string
         )
 
-    def execute_geometric_filtering(self, layer_provider_type, layer, layer_props):
-        """
-        Execute geometric filtering on layer using spatial predicates.
-        
-        EPIC-1 Phase E12: Delegated to FilterOrchestrator.
-        This method now acts as a thin delegation layer, reducing filter_task.py
-        from 7,015 to ~5,400 lines (-1,615 lines).
-        
+    def execute_geometric_filtering(self, layer_provider_type: str, layer: QgsVectorLayer, layer_props: Dict[str, Any]) -> bool:
+        """Execute geometric filtering on a single layer using spatial predicates.
+
+        Applies spatial predicates (intersects, contains, within, etc.) to filter
+        features based on their geometric relationship with source layer features.
+
         Args:
-            layer_provider_type: Provider type ('postgresql', 'spatialite', 'ogr')
-            layer: QgsVectorLayer to filter
-            layer_props: Dict containing layer info
-            
+            layer_provider_type: Backend type ('postgresql', 'spatialite', 'ogr').
+            layer: The QgsVectorLayer to filter.
+            layer_props: Layer properties dict with keys:
+                - schema: Database schema (PostgreSQL only)
+                - table: Table/layer name
+                - primary_key: Primary key field name
+                - geometry: Geometry column name
+
         Returns:
-            bool: True if filtering succeeded, False otherwise
+            True if filtering succeeded, False otherwise.
+
+        Raises:
+            Logs detailed error to both Python logger and QGIS message panel on failure.
+
+        Note:
+            Delegates to FilterOrchestrator for the actual filtering logic.
+            Uses lazy initialization to ensure orchestrator is available.
         """
         # DIAGNOSTIC DÉTAILLÉ - ARCHITECTURE FIX 2026-01-16
         logger.info("=" * 70)
@@ -3711,11 +3821,25 @@ class FilterEngineTask(QgsTask):
         return None
 
     def execute_filtering(self) -> bool:
-        """
-        Filter source layer first, then distant layers if successful.
-        
+        """Execute the complete filtering workflow.
+
+        Orchestrates filtering in two steps:
+        1. Filter the source layer using attribute/expression criteria
+        2. Filter distant layers using geometric predicates (intersects, within, etc.)
+
+        The source layer filter must succeed before distant layers are processed.
+        If no geometric predicates are configured, only the source layer is filtered.
+
         Returns:
-            bool: True if filtering succeeded, False otherwise
+            True if filtering completed successfully, False otherwise.
+
+        Raises:
+            Sets self.message with user-friendly error description on failure.
+
+        Note:
+            - Initializes current_predicates early for ExpressionBuilder
+            - Supports selection modes: single, multiple, expression, all features
+            - Progress is reported via setProgress()
         """
         # FIX 2026-01-16: Initialize current_predicates EARLY
         # current_predicates must be populated BEFORE execute_source_layer_filtering()
@@ -3948,20 +4072,20 @@ class FilterEngineTask(QgsTask):
      
 
     def execute_unfiltering(self) -> bool:
-        """
-        Remove all filters from source layer and selected remote layers.
-        
-        This clears filters completely (sets subsetString to empty) for:
-        - The current/source layer
+        """Remove all filters from source and selected remote layers.
+
+        Clears filters completely by setting subsetString to empty for:
+        - The source/current layer
         - All selected remote layers (layers_to_filter)
-        
-        NOTE: This is different from undo - it removes filters entirely rather than
-        restoring previous filter state. Use undo button for history navigation.
-        
-        THREAD SAFETY: All subset string operations are queued for application
-        in finished() which runs on the main Qt thread.
-        
-        v4.1.0: Enhanced logging for debugging.
+
+        Returns:
+            True if all filter clears were queued successfully.
+
+        Note:
+            - This is NOT the same as undo - it removes filters entirely
+            - Use the undo button to restore previous filter state
+            - All setSubsetString calls are queued for main thread execution
+            - Progress is reported via setProgress()
         """
         logger.info("=" * 60)
         logger.info("FilterMate: UNFILTERING - Clearing all filters")
@@ -3996,10 +4120,18 @@ class FilterEngineTask(QgsTask):
         return True
     
     def execute_reseting(self) -> bool:
-        """
-        Reset all layers to their original/saved subset state.
-        
-        v4.1.0: Enhanced logging for debugging.
+        """Reset all layers to their original/saved subset state.
+
+        Restores the initial filter state for all configured layers by:
+        - Looking up saved subset strings in the filter history database
+        - Applying the original subset to each layer via manage_layer_subset_strings()
+
+        Returns:
+            True if reset completed successfully, False if canceled.
+
+        Note:
+            - Progress is reported via setProgress()
+            - Can be canceled by user (isCanceled() check)
         """
         logger.info("=" * 60)
         logger.info("FilterMate: RESETTING all layers to saved state")
@@ -4110,11 +4242,22 @@ class FilterEngineTask(QgsTask):
     # =========================================================================
 
     def execute_exporting(self) -> bool:
-        """
-        Export selected layers. Supports standard/batch/ZIP/streaming modes.
-        
-        v4.0 E11.2: MIGRATED to core.export.BatchExporter and LayerExporter.
-        Replaced 191 lines of orchestration code with ~100 lines of clean delegation.
+        """Export selected layers to various formats.
+
+        Supports multiple export modes:
+        - Standard: Single file with all layers (GPKG, GeoJSON)
+        - Batch folder: One file per layer in output folder
+        - Batch ZIP: One ZIP archive per layer
+        - Streaming: Memory-efficient export for large datasets
+
+        Returns:
+            True if export completed successfully, False otherwise.
+
+        Note:
+            - Delegates to BatchExporter and LayerExporter (v4.0 E11.2)
+            - Supports style export in QML/SLD formats
+            - Sets self.message with result summary or error details
+            - Progress is reported via setProgress()
         """
         # Validate and extract export parameters
         export_config = self._validate_export_parameters()
@@ -5528,13 +5671,19 @@ class FilterEngineTask(QgsTask):
             # Non-critical error - log but don't fail the task
             logger.debug(f"Error during PostgreSQL MV cleanup: {e}")
     
-    def cancel(self):
-        """Cancel task and cleanup all active database connections.
-        
-        CRASH FIX (v2.8.7): Removed QgsMessageLog call to prevent Windows fatal
-        exception (access violation) during QGIS shutdown. When QgsTaskManager::cancelAll()
-        is called during QgsApplication destruction, QgsMessageLog may already be
-        destroyed even if QApplication.instance() is still valid. Use Python logger only.
+    def cancel(self) -> None:
+        """Cancel the task and cleanup all resources.
+
+        Performs cleanup in the following order:
+        1. Cleanup PostgreSQL materialized views created during filtering
+        2. Close all active database connections
+        3. Reset prepared statements manager
+        4. Log cancellation (Python logger only, not QgsMessageLog)
+        5. Call parent cancel()
+
+        Note:
+            Uses Python logger instead of QgsMessageLog to prevent Windows
+            access violation during QGIS shutdown (v2.8.7 crash fix).
         """
         # Cleanup PostgreSQL materialized views before closing connections
         self._cleanup_postgresql_materialized_views()
@@ -5591,14 +5740,22 @@ class FilterEngineTask(QgsTask):
             logger.info(f"✓ Restored source layer selection via FeatureCollector: {len(feature_fids)} feature(s)")
 
     def finished(self, result: Optional[bool]) -> None:
-        """
-        Handle task completion - cleanup and result messaging.
-        
-        Called by QGIS task manager when task completes (success, failure, or cancel).
-        Handles subset application, MV cleanup, and user notifications.
-        
+        """Handle task completion with cleanup and user notifications.
+
+        Called by QGIS task manager when task completes. Performs:
+        1. Display warning messages collected during task execution
+        2. Apply pending subset string requests on main Qt thread
+        3. Cleanup PostgreSQL materialized views (for reset/unfilter/export only)
+        4. Show success/error message in QGIS message bar
+        5. Restore source layer selection
+
         Args:
-            result: True if task succeeded, False if failed, None if canceled
+            result: True if task succeeded, False if failed, None if canceled.
+
+        Note:
+            - Subset strings are applied here for thread safety
+            - MVs are NOT cleaned on 'filter' action as they're still referenced
+            - Warning messages are displayed before being cleared
         """
         result_action: Optional[str] = None
         message_category = MESSAGE_TASKS_CATEGORIES[self.task_action]
