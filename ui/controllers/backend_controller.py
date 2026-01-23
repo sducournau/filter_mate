@@ -1093,9 +1093,51 @@ class BackendController(BaseController):
         return total_count
 
     def _cleanup_postgresql_current_session(self) -> int:
-        """Clean PostgreSQL materialized views for current session only."""
-        result = self.cleanup_postgresql_session_views()
-        return 1 if result else 0
+        """
+        Clean PostgreSQL materialized views for current session only.
+        
+        Returns:
+            int: Number of views dropped
+        """
+        app, session_id, schema, connexion = self.get_pg_session_context()
+        
+        if not connexion or not session_id:
+            logger.debug("No PostgreSQL connection or session_id for current session cleanup")
+            return 0
+        
+        try:
+            with connexion.cursor() as cursor:
+                # Find views for this session only
+                cursor.execute(
+                    "SELECT matviewname FROM pg_matviews WHERE schemaname = %s AND matviewname LIKE %s",
+                    (schema, f"mv_{session_id}_%")
+                )
+                views = [v[0] for v in cursor.fetchall()]
+                
+                if not views:
+                    logger.debug(f"No PostgreSQL views found for session {session_id[:8]}")
+                    return 0
+                
+                count = 0
+                for view in views:
+                    try:
+                        cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."{view}" CASCADE;')
+                        count += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to drop PostgreSQL view {view}: {e}")
+                
+                connexion.commit()
+                logger.info(f"PostgreSQL session cleanup: {count} view(s) dropped for session {session_id[:8]}")
+                return count
+                
+        except Exception as e:
+            logger.error(f"Error in PostgreSQL session cleanup: {e}")
+            return 0
+        finally:
+            try:
+                connexion.close()
+            except Exception:
+                pass
 
     def _cleanup_postgresql_all_sessions(self) -> int:
         """Clean ALL PostgreSQL materialized views in filter_mate schema."""
