@@ -385,7 +385,75 @@ class LayerLifecycleService:
             # Record failure for circuit breaker
             pg_breaker.record_failure()
             logger.debug(f"Error during PostgreSQL session cleanup: {e}")
-    
+
+    def cleanup_orphaned_filtermate_views(
+        self,
+        project_layers: Dict[str, Any],
+        postgresql_available: bool,
+        include_public_schema: bool = True
+    ) -> int:
+        """
+        Clean up orphaned FilterMate views from crashed sessions.
+        
+        This method cleans views in both filtermate_temp and public schemas
+        that are no longer associated with an active session.
+        
+        Args:
+            project_layers: Dictionary of project layers (to get connection)
+            postgresql_available: Whether PostgreSQL is available
+            include_public_schema: Also clean views in public schema
+            
+        Returns:
+            Number of views cleaned
+        """
+        if not postgresql_available:
+            return 0
+        
+        from ...infrastructure.utils import get_datasource_connexion_from_layer
+        
+        # Find a PostgreSQL connection
+        connexion = None
+        for layer_id, layer_info in project_layers.items():
+            layer = layer_info.get('layer')
+            if layer and layer.isValid() and layer.providerType() == 'postgres':
+                connexion, _ = get_datasource_connexion_from_layer(layer)
+                if connexion:
+                    break
+        
+        if not connexion:
+            return 0
+        
+        cleaned_count = 0
+        
+        try:
+            from ...adapters.backends.postgresql.cleanup import (
+                PostgreSQLCleanupService
+            )
+            
+            service = PostgreSQLCleanupService(schema='filtermate_temp')
+            count, views = service.cleanup_all_filtermate_objects(
+                connexion,
+                include_public_schema=include_public_schema,
+                dry_run=False
+            )
+            
+            cleaned_count = count
+            if count > 0:
+                logger.info(
+                    f"Cleaned {count} orphaned FilterMate objects: "
+                    f"{', '.join(views[:5])}{'...' if len(views) > 5 else ''}"
+                )
+                
+        except Exception as e:
+            logger.debug(f"Error cleaning orphaned views: {e}")
+        finally:
+            try:
+                connexion.close()
+            except Exception:
+                pass
+        
+        return cleaned_count
+
     def cleanup(
         self,
         session_id: str,

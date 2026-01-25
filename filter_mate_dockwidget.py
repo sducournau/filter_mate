@@ -5051,6 +5051,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         exploring_features_changed which has guards that can block feature retrieval
         (e.g., _syncing_from_qgis, _configuring_groupbox, sync_protection_until).
         
+        FIX 2026-01-22: Use is_filter_expression() to properly detect non-filter expressions
+        like field names, COALESCE, CONCAT, etc. These should not be used as filters.
+        
         This ensures custom_selection always returns the features matching the expression
         for use in source layer filtering.
         """
@@ -5061,12 +5064,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if not expression:
             return [], expression
         
-        qgs_expr = QgsExpression(expression)
+        # FIX 2026-01-22: Use centralized filter expression detection
+        # Expressions that don't return boolean values (field names, COALESCE, CONCAT, etc.)
+        # should not be used as filters - they would cause SQL errors
+        from .infrastructure.utils import should_skip_expression_for_filtering
         
-        # If expression is just a field name without operators, return empty features
-        # (field-only expressions are for display, not filtering)
-        if qgs_expr.isField() and not any(op in expression.upper() for op in ['=','>','<','!','IN','LIKE','AND','OR']):
-            logger.debug(f"exploring_custom_selection: Field-only expression '{expression}' - returning empty features")
+        should_skip, reason = should_skip_expression_for_filtering(expression)
+        if should_skip:
+            logger.debug(f"exploring_custom_selection: Skipping non-filter expression - {reason}")
+            logger.debug(f"  Expression: '{expression}'")
             return [], expression
         
         # Check cache first

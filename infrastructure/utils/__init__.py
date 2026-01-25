@@ -33,6 +33,10 @@ from .validation_utils import (
     safe_get_layer_name,
     safe_get_layer_id,
     safe_get_layer_source,
+    # v4.1.0: Expression type detection for filtering
+    is_filter_expression,
+    is_display_expression,
+    should_skip_expression_for_filtering,
 )
 from .layer_utils import (
     detect_layer_provider_type,

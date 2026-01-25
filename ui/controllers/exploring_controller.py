@@ -1629,6 +1629,14 @@ class ExploringController(BaseController, LayerSelectionMixin):
         # === PHASE 2: CACHE INTEGRATION ===
         # Try cache for custom expressions (most common case for repeated queries)
         if custom_expression is not None and custom_expression.strip():
+            # FIX 2026-01-22: Skip non-filter expressions (field names, COALESCE, etc.)
+            from infrastructure.utils import should_skip_expression_for_filtering
+            
+            should_skip, reason = should_skip_expression_for_filtering(custom_expression)
+            if should_skip:
+                logger.debug(f"get_exploring_features: Skipping non-filter expression - {reason}")
+                return [], custom_expression.strip()
+            
             try:
                 from infrastructure.cache.exploring_cache import ExploringFeaturesCache
                 cache = ExploringFeaturesCache()

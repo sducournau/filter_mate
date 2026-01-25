@@ -479,6 +479,193 @@ class PostgreSQLCleanupService:
             logger.debug(f"[PostgreSQL] Error listing views: {e}")
             return []
 
+    def cleanup_all_filtermate_objects(
+        self,
+        connexion,
+        include_public_schema: bool = True,
+        dry_run: bool = False
+    ) -> Tuple[int, List[str]]:
+        """
+        Clean ALL FilterMate objects across all schemas (nuclear option).
+        
+        This method cleans up:
+        - All filtermate_mv_* views in filtermate_temp schema
+        - All filtermate_mv_* views in public schema (if include_public_schema=True)
+        - All fm_temp_* objects
+        - The filtermate_temp schema itself
+        
+        Use this for complete cleanup after crashes or before uninstall.
+        
+        Args:
+            connexion: Active PostgreSQL connection
+            include_public_schema: Also clean views from public schema
+            dry_run: If True, only list objects without deleting
+        
+        Returns:
+            Tuple of (count of objects cleaned, list of object names)
+        """
+        cleaned_objects = []
+        schemas_to_check = [self._schema]
+        
+        if include_public_schema:
+            schemas_to_check.append('public')
+        
+        # Patterns to match FilterMate objects
+        patterns = [
+            'filtermate_mv_%',      # Main MV pattern
+            'fm_temp_mv_%',         # New temp MV pattern
+            'fm_temp_buf_%',        # Buffer tables
+            'filtermate_temp_%',    # Legacy temp objects
+        ]
+        
+        try:
+            cursor = connexion.cursor()
+            
+            for schema in schemas_to_check:
+                # Check if schema exists
+                cursor.execute("""
+                    SELECT COUNT(*) FROM information_schema.schemata 
+                    WHERE schema_name = %s
+                """, (schema,))
+                
+                if cursor.fetchone()[0] == 0:
+                    continue
+                
+                # Find all matching materialized views
+                for pattern in patterns:
+                    cursor.execute("""
+                        SELECT matviewname 
+                        FROM pg_matviews 
+                        WHERE schemaname = %s AND matviewname LIKE %s
+                    """, (schema, pattern))
+                    
+                    views = [row[0] for row in cursor.fetchall()]
+                    
+                    for view_name in views:
+                        full_name = f'"{schema}"."{view_name}"'
+                        
+                        if dry_run:
+                            cleaned_objects.append(f"[DRY RUN] Would drop MV: {full_name}")
+                            logger.info(f"[DRY RUN] Would drop: {full_name}")
+                        else:
+                            try:
+                                # Use CASCADE to handle dependencies
+                                cursor.execute(
+                                    f'DROP MATERIALIZED VIEW IF EXISTS {full_name} CASCADE;'
+                                )
+                                cleaned_objects.append(f"MV: {full_name}")
+                                self._metrics['views_cleaned'] += 1
+                                logger.debug(f"Dropped MV: {full_name}")
+                            except Exception as e:
+                                logger.warning(f"Error dropping {full_name}: {e}")
+                                self._metrics['errors'] += 1
+                
+                # Also clean regular tables matching patterns
+                for pattern in patterns:
+                    cursor.execute("""
+                        SELECT tablename 
+                        FROM pg_tables 
+                        WHERE schemaname = %s AND tablename LIKE %s
+                    """, (schema, pattern))
+                    
+                    tables = [row[0] for row in cursor.fetchall()]
+                    
+                    for table_name in tables:
+                        full_name = f'"{schema}"."{table_name}"'
+                        
+                        if dry_run:
+                            cleaned_objects.append(f"[DRY RUN] Would drop TABLE: {full_name}")
+                        else:
+                            try:
+                                cursor.execute(
+                                    f'DROP TABLE IF EXISTS {full_name} CASCADE;'
+                                )
+                                cleaned_objects.append(f"TABLE: {full_name}")
+                                logger.debug(f"Dropped TABLE: {full_name}")
+                            except Exception as e:
+                                logger.warning(f"Error dropping table {full_name}: {e}")
+            
+            # Drop filtermate_temp schema if empty or force
+            if not dry_run:
+                try:
+                    cursor.execute(f'DROP SCHEMA IF EXISTS "{self._schema}" CASCADE;')
+                    cleaned_objects.append(f"SCHEMA: {self._schema}")
+                    logger.info(f"Dropped schema: {self._schema}")
+                except Exception as e:
+                    logger.warning(f"Could not drop schema {self._schema}: {e}")
+            
+            connexion.commit()
+            
+            action = "Would clean" if dry_run else "Cleaned"
+            logger.info(f"[PostgreSQL] {action} {len(cleaned_objects)} FilterMate objects")
+            
+            self._metrics['last_cleanup'] = datetime.now().isoformat()
+            return (len(cleaned_objects), cleaned_objects)
+            
+        except Exception as e:
+            logger.error(f"[PostgreSQL] Error during full cleanup: {e}")
+            raise
+
+    def cleanup_src_sel_views(
+        self,
+        connexion,
+        dry_run: bool = False
+    ) -> Tuple[int, List[str]]:
+        """
+        Clean filtermate_mv_src_sel_* views specifically.
+        
+        These are source selection views that can accumulate in the
+        filtermate_temp schema and cause dependency issues.
+        
+        Args:
+            connexion: Active PostgreSQL connection
+            dry_run: If True, only list without deleting
+        
+        Returns:
+            Tuple of (count cleaned, list of view names)
+        """
+        cleaned = []
+        pattern = 'filtermate_mv_src_sel_%'
+        
+        try:
+            cursor = connexion.cursor()
+            
+            # Find in filtermate_temp schema
+            cursor.execute("""
+                SELECT matviewname 
+                FROM pg_matviews 
+                WHERE schemaname = %s AND matviewname LIKE %s
+                ORDER BY matviewname
+            """, (self._schema, pattern))
+            
+            views = [row[0] for row in cursor.fetchall()]
+            
+            logger.info(f"Found {len(views)} src_sel views to clean")
+            
+            for view_name in views:
+                full_name = f'"{self._schema}"."{view_name}"'
+                
+                if dry_run:
+                    cleaned.append(f"[DRY RUN] {view_name}")
+                else:
+                    try:
+                        cursor.execute(
+                            f'DROP MATERIALIZED VIEW IF EXISTS {full_name} CASCADE;'
+                        )
+                        cleaned.append(view_name)
+                        logger.debug(f"Dropped src_sel view: {view_name}")
+                    except Exception as e:
+                        logger.warning(f"Error dropping {view_name}: {e}")
+            
+            if not dry_run:
+                connexion.commit()
+            
+            return (len(cleaned), cleaned)
+            
+        except Exception as e:
+            logger.error(f"Error cleaning src_sel views: {e}")
+            return (0, [])
+
 
 # Factory function for easy instantiation
 

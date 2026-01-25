@@ -411,6 +411,189 @@ def get_layer_validation_info(layer: Any) -> dict:
 
 
 # =============================================================================
+# Expression Type Detection
+# =============================================================================
+
+def is_filter_expression(expression: str) -> bool:
+    """
+    Determine if an expression is a filter expression (returns boolean).
+    
+    A filter expression is one that contains comparison or logical operators
+    that would evaluate to True/False. Non-filter expressions include:
+    - Simple field names (e.g., "nom_collaboratif_gauche")
+    - COALESCE expressions (e.g., "COALESCE(field_a, field_b)")
+    - CONCAT expressions
+    - Aggregate functions (e.g., "count(field)")
+    - Arithmetic expressions (e.g., "field_a + field_b")
+    
+    Args:
+        expression: Expression string to analyze
+        
+    Returns:
+        True if expression is a filter (boolean) expression, False otherwise
+        
+    Examples:
+        >>> is_filter_expression('"field_name"')
+        False
+        >>> is_filter_expression('COALESCE("field_a", "field_b")')
+        False
+        >>> is_filter_expression('"population" > 1000')
+        True
+        >>> is_filter_expression('"status" = 1 AND "active" = true')
+        True
+        >>> is_filter_expression('"name" LIKE \'test%\'')
+        True
+        >>> is_filter_expression('"id" IN (1, 2, 3)')
+        True
+        >>> is_filter_expression('"name" IS NOT NULL')
+        True
+    """
+    if not expression or not expression.strip():
+        return False
+    
+    expr = expression.strip()
+    expr_upper = expr.upper()
+    
+    # List of comparison/logical operators that make an expression a filter
+    # These operators return boolean values
+    filter_operators = [
+        # Comparison operators
+        ' = ', ' != ', ' <> ',
+        ' > ', ' < ', ' >= ', ' <= ',
+        # String comparison operators (with spaces to avoid false positives)
+        ' LIKE ', ' ILIKE ', ' SIMILAR TO ',
+        ' ~ ', ' ~* ', ' !~ ', ' !~* ',  # PostgreSQL regex
+        # NULL checks
+        ' IS NULL', ' IS NOT NULL',
+        ' ISNULL(', ' ISNOTNULL(',  # QGIS functions
+        # Membership tests
+        ' IN ', ' NOT IN ', ' IN(',
+        ' BETWEEN ', ' NOT BETWEEN ',
+        # Logical operators (indicate boolean expression)
+        ' AND ', ' OR ', ' NOT ',
+        # Existence checks
+        'EXISTS ', 'EXISTS(',
+        # Boolean literals (often part of comparisons)
+        '= TRUE', '= FALSE', '= true', '= false',
+        '!= TRUE', '!= FALSE', '!= true', '!= false',
+    ]
+    
+    # Check if any filter operator is present
+    for op in filter_operators:
+        if op in expr_upper or op.strip() in expr_upper:
+            return True
+    
+    # Check for operators without spaces (edge cases)
+    # These patterns indicate comparisons
+    import re
+    
+    # Pattern for comparisons like "field"=value, "field">value, etc.
+    comparison_pattern = r'["\']?\w+["\']?\s*[!=<>]+\s*'
+    if re.search(comparison_pattern, expr):
+        return True
+    
+    # If we get here, it's likely a non-filter expression
+    # (field name, COALESCE, CONCAT, aggregate function, etc.)
+    return False
+
+
+def is_display_expression(expression: str) -> bool:
+    """
+    Determine if an expression is a display expression (returns value, not boolean).
+    
+    Display expressions are used for labeling, formatting, or calculating values
+    but should NOT be used as filter conditions.
+    
+    Common display expressions:
+    - Field names: "field_name"
+    - COALESCE: COALESCE("field_a", "field_b")
+    - CONCAT: CONCAT("first", ' ', "last")
+    - Arithmetic: "field_a" + "field_b"
+    - Format functions: format_date("date_field", 'yyyy-MM-dd')
+    - Aggregate functions: sum("amount"), count("id")
+    
+    Args:
+        expression: Expression string to analyze
+        
+    Returns:
+        True if expression is a display (non-boolean) expression
+    """
+    if not expression or not expression.strip():
+        return False
+    
+    # If it's a filter expression, it's not a display expression
+    if is_filter_expression(expression):
+        return False
+    
+    # It's a display expression
+    return True
+
+
+def should_skip_expression_for_filtering(expression: str) -> Tuple[bool, str]:
+    """
+    Check if an expression should be skipped when building filter queries.
+    
+    Returns True for expressions that:
+    1. Are empty or whitespace
+    2. Are just field names (no filter logic)
+    3. Are display functions like COALESCE, CONCAT
+    4. Are aggregate functions
+    
+    Args:
+        expression: Expression string to analyze
+        
+    Returns:
+        Tuple of (should_skip, reason)
+        
+    Example:
+        skip, reason = should_skip_expression_for_filtering('"field_name"')
+        if skip:
+            logger.info(f"Skipping expression: {reason}")
+    """
+    if not expression or not expression.strip():
+        return True, "Expression is empty"
+    
+    expr = expression.strip()
+    
+    # Check if it's a filter expression
+    if is_filter_expression(expr):
+        return False, ""
+    
+    # Determine the reason for skipping
+    expr_upper = expr.upper()
+    
+    # Common display function patterns
+    display_functions = [
+        'COALESCE(', 'CONCAT(', 'FORMAT(', 'FORMAT_DATE(', 'FORMAT_NUMBER(',
+        'TO_STRING(', 'UPPER(', 'LOWER(', 'TRIM(', 'SUBSTR(', 'REPLACE(',
+        'SUM(', 'COUNT(', 'AVG(', 'MIN(', 'MAX(', 'ARRAY_AGG(',
+        'AGGREGATE(', 'RELATION_AGGREGATE(',
+    ]
+    
+    for func in display_functions:
+        if expr_upper.startswith(func) or f' {func}' in expr_upper:
+            func_name = func.rstrip('(')
+            return True, f"Expression uses display function: {func_name}"
+    
+    # Check if it's just a field reference
+    if QGIS_AVAILABLE:
+        qgs_expr = QgsExpression(expr)
+        if qgs_expr.isField():
+            return True, "Expression is just a field name"
+    else:
+        # Simple heuristic: if it's just quoted text without operators
+        if (expr.startswith('"') and expr.endswith('"')) or \
+           (expr.startswith("'") and expr.endswith("'")):
+            # Could be a field name
+            inner = expr[1:-1]
+            # Field names don't typically contain operators
+            if not any(op in inner for op in ['=', '>', '<', '!', '+', '-', '*', '/']):
+                return True, "Expression appears to be just a field name"
+    
+    return True, "Expression does not contain filter logic"
+
+
+# =============================================================================
 # Safe Access Decorators/Helpers
 # =============================================================================
 
