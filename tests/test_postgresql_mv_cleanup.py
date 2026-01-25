@@ -235,10 +235,10 @@ class TestBackendCleanupIntegration(unittest.TestCase):
         mock_cursor = Mock()
         mock_conn.cursor.return_value = mock_cursor
         
-        # Mock cursor.fetchall to return MV names
+        # Mock cursor.fetchall to return MV names (using new unified prefix)
         mock_cursor.fetchall.return_value = [
-            ('filtermate_mv_abc123',),
-            ('filtermate_mv_def456',),
+            ('fm_temp_mv_abc123',),
+            ('fm_temp_mv_def456',),
         ]
         
         mock_source_uri = Mock()
@@ -264,8 +264,8 @@ class TestBackendCleanupIntegration(unittest.TestCase):
         # Verify DROP statements were called
         drop_calls = [call[0][0] for call in mock_cursor.execute.call_args_list if 'DROP' in call[0][0]]
         self.assertEqual(len(drop_calls), 2)
-        self.assertIn('filtermate_mv_abc123', drop_calls[0])
-        self.assertIn('filtermate_mv_def456', drop_calls[1])
+        self.assertIn('fm_temp_mv_abc123', drop_calls[0])
+        self.assertIn('fm_temp_mv_def456', drop_calls[1])
         
         # Verify connection was closed
         mock_cursor.close.assert_called_once()

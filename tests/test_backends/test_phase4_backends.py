@@ -66,9 +66,9 @@ class TestMaterializedViewManager:
         assert mv_manager._metrics['mvs_dropped'] == 0
 
     def test_naming_conventions(self, mv_manager):
-        """Test naming conventions."""
+        """Test naming conventions (unified fm_temp_* prefix v4.4.3+)."""
         from adapters.backends.postgresql.mv_manager import MaterializedViewManager
-        assert MaterializedViewManager.MV_PREFIX == "fm_mv_"
+        assert MaterializedViewManager.MV_PREFIX == "fm_temp_mv_"
         assert MaterializedViewManager.MV_SCHEMA == "filtermate_temp"
 
 

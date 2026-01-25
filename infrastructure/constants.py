@@ -160,7 +160,7 @@ VERY_LARGE_DATASET_THRESHOLD = PERFORMANCE_THRESHOLD_XLARGE
 # PostgreSQL Materialized View settings
 MV_MAX_AGE_SECONDS = 3600               # Max age before auto-cleanup (1 hour)
 MV_CLEANUP_INTERVAL = 600               # Check for old MVs every 10 minutes
-MV_PREFIX = 'filtermate_mv_'            # Prefix for MV names
+MV_PREFIX = 'fm_temp_mv_'               # Prefix for MV names (unified fm_temp_* prefix)
 
 # Advanced MV Optimization settings
 MV_ENABLE_INDEX_INCLUDE = True          # Use INCLUDE in GIST index (PostgreSQL 11+)
@@ -261,9 +261,13 @@ MAX_PENDING_TASKS = 10                  # Maximum pending async tasks
 # =============================================================================
 DEFAULT_POSTGRES_SCHEMA = 'public'
 DEFAULT_TEMP_SCHEMA = 'filtermate_temp'
-TABLE_PREFIX_TEMP = 'fm_temp_'
-TABLE_PREFIX_MATERIALIZED = 'fm_mv_'
-TABLE_PREFIX_BUFFER = 'fm_buf_'  # Buffer geometry tables
+
+# Unified naming: all FilterMate objects use fm_temp_* prefix for easy cleanup
+TABLE_PREFIX = 'fm_temp_'               # Base prefix for all FilterMate temp objects
+TABLE_PREFIX_TEMP = 'fm_temp_tbl_'      # Temporary tables
+TABLE_PREFIX_MATERIALIZED = 'fm_temp_mv_'  # Materialized views
+TABLE_PREFIX_BUFFER = 'fm_temp_buf_'    # Buffer geometry tables
+TABLE_PREFIX_SOURCE = 'fm_temp_src_'    # Source selection tables/MVs
 
 # =============================================================================
 # UI Constants

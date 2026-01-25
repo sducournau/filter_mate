@@ -1158,10 +1158,15 @@ class BackendController(BaseController):
         """
         Clean ALL PostgreSQL materialized views AND tables created by FilterMate.
         
-        Uses unified naming convention - all FilterMate objects start with 'fm_':
-        - fm_mv_* (materialized views)
-        - fm_buf_* (buffer geometry tables) 
-        - fm_temp_* (temporary tables)
+        Uses unified naming convention (v4.4.3+) - all FilterMate objects start with 'fm_temp_':
+        - fm_temp_mv_* (materialized views)
+        - fm_temp_buf_* (buffer geometry tables) 
+        - fm_temp_tbl_* (temporary tables)
+        - fm_temp_src_* (source selection tables/MVs)
+        - fm_temp_chain_* (filter chain MVs)
+        
+        Also cleans legacy prefixes for backward compatibility:
+        - fm_mv_*, fm_buf_*, filtermate_mv_*, filtermate_src_*
         
         Returns:
             int: Total number of objects dropped
@@ -1177,10 +1182,13 @@ class BackendController(BaseController):
         try:
             with connexion.cursor() as cursor:
                 # 1. Find ALL FilterMate materialized views in ANY schema
+                # Includes both new (fm_temp_*) and legacy (fm_mv_*, filtermate_*) prefixes
                 cursor.execute("""
                     SELECT schemaname, matviewname 
                     FROM pg_matviews 
-                    WHERE matviewname LIKE 'fm\\_%'
+                    WHERE matviewname LIKE 'fm\\_temp\\_%'
+                       OR matviewname LIKE 'fm\\_mv\\_%'
+                       OR matviewname LIKE 'filtermate\\_%'
                     ORDER BY schemaname, matviewname
                 """)
                 all_views = cursor.fetchall()
@@ -1201,13 +1209,15 @@ class BackendController(BaseController):
                 
                 connexion.commit()
                 
-                # 2. FIX v4.3.8 (2026-01-23): Also clean fm_buf_* and fm_temp_* TABLES
-                # These are regular tables, not materialized views
+                # 2. Clean ALL fm_temp_* TABLES (new unified prefix)
+                # Also cleans legacy fm_buf_* tables
                 cursor.execute("""
                     SELECT table_schema, table_name 
                     FROM information_schema.tables 
                     WHERE table_type = 'BASE TABLE'
-                    AND (table_name LIKE 'fm\\_buf\\_%' OR table_name LIKE 'fm\\_temp\\_%')
+                    AND (table_name LIKE 'fm\\_temp\\_%' 
+                         OR table_name LIKE 'fm\\_buf\\_%'
+                         OR table_name LIKE 'filtermate\\_%')
                     ORDER BY table_schema, table_name
                 """)
                 all_tables = cursor.fetchall()

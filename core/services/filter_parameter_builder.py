@@ -178,24 +178,51 @@ class FilterParameterBuilder:
         # Auto-fill layer_geometry_field
         # FIX v4.0.7 (2026-01-16): Use QgsDataSourceUri directly (more reliable)
         # Also check for string "NULL" which may be stored from stale config
+        # FIX v4.2.15 (2026-01-22): Query geometry_columns for PostgreSQL when URI is empty
+        # FIX v4.4.2 (2026-01-25): ALWAYS detect geometry column for PostgreSQL
+        # Don't trust stored values like 'geom' - they may be incorrect defaults
         stored_geom_field = infos.get("layer_geometry_field")
-        if not stored_geom_field or stored_geom_field in ('NULL', 'None', ''):
+        needs_detection = (
+            not stored_geom_field or 
+            stored_geom_field in ('NULL', 'None', '', 'geom', 'geometry')
+        )
+        if needs_detection:
             try:
                 from qgis.core import QgsDataSourceUri
                 uri = QgsDataSourceUri(context.source_layer.source())
                 geom_col = uri.geometryColumn()
                 if geom_col:
                     infos["layer_geometry_field"] = geom_col
+                    logger.info(f"Detected geometry column from URI: '{geom_col}'")
                 else:
-                    # Default based on provider
+                    # FIX v4.2.15: Query PostgreSQL geometry_columns catalog when URI is empty
                     if infos.get("layer_provider_type") == PROVIDER_POSTGRES:
-                        infos["layer_geometry_field"] = 'geom'
+                        pg_geom_col = self._query_postgresql_geometry_column(
+                            context.source_layer,
+                            uri.schema() or 'public',
+                            uri.table()
+                        )
+                        if pg_geom_col:
+                            infos["layer_geometry_field"] = pg_geom_col
+                            logger.info(
+                                f"Detected geometry column from PostgreSQL catalog: "
+                                f"'{pg_geom_col}'"
+                            )
+                        else:
+                            # Last resort: use stored value or hardcoded default
+                            infos["layer_geometry_field"] = stored_geom_field or 'geom'
+                            logger.warning(
+                                "Could not detect geometry column from PostgreSQL "
+                                f"catalog, using '{infos['layer_geometry_field']}'"
+                            )
                     else:
-                        infos["layer_geometry_field"] = 'geometry'
-                logger.info(f"Auto-filled layer_geometry_field='{infos['layer_geometry_field']}'")
+                        infos["layer_geometry_field"] = stored_geom_field or 'geometry'
+                logger.info(
+                    f"Auto-filled layer_geometry_field='{infos['layer_geometry_field']}'"
+                )
             except Exception as e:
-                infos["layer_geometry_field"] = 'geom'
-                logger.warning(f"Could not detect geometry column, using 'geom': {e}")
+                infos["layer_geometry_field"] = stored_geom_field or 'geom'
+                logger.warning(f"Could not detect geometry column: {e}")
         
         # Auto-fill primary_key_name
         if "primary_key_name" not in infos or infos["primary_key_name"] is None:
@@ -222,6 +249,85 @@ class FilterParameterBuilder:
             else:
                 infos["layer_schema"] = ''
             logger.info(f"Auto-filled layer_schema='{infos['layer_schema']}'")
+    
+    def _query_postgresql_geometry_column(
+        self,
+        layer,
+        schema: str,
+        table: str
+    ) -> Optional[str]:
+        """
+        Query PostgreSQL geometry_columns catalog to find the geometry column name.
+        
+        FIX v4.2.15 (2026-01-22): Added to handle cases where
+        QgsDataSourceUri.geometryColumn() returns empty (e.g., for some 
+        PostgreSQL views or layers with non-standard URIs).
+        
+        Args:
+            layer: QGIS vector layer (PostgreSQL)
+            schema: Schema name (e.g., 'public')
+            table: Table name (e.g., 'commune')
+            
+        Returns:
+            str: Geometry column name, or None if not found
+        """
+        try:
+            # Import here to avoid circular imports and optional dependency
+            from ...infrastructure.utils import get_datasource_connexion_from_layer
+            
+            conn, source_uri = get_datasource_connexion_from_layer(layer)
+            if conn is None:
+                logger.debug(
+                    "No PostgreSQL connection for geometry column detection"
+                )
+                return None
+            
+            cursor = None
+            try:
+                cursor = conn.cursor()
+                # Query geometry_columns view (works for tables and views)
+                cursor.execute("""
+                    SELECT f_geometry_column 
+                    FROM geometry_columns 
+                    WHERE f_table_schema = %s AND f_table_name = %s
+                    LIMIT 1
+                """, (schema, table))
+                
+                result = cursor.fetchone()
+                if result and result[0]:
+                    logger.debug(
+                        f"Found geometry column '{result[0]}' from catalog"
+                    )
+                    return result[0]
+                
+                # Fallback: Query geography_columns for geography types
+                cursor.execute("""
+                    SELECT f_geography_column 
+                    FROM geography_columns 
+                    WHERE f_table_schema = %s AND f_table_name = %s
+                    LIMIT 1
+                """, (schema, table))
+                
+                result = cursor.fetchone()
+                if result and result[0]:
+                    logger.debug(
+                        f"Found geography column '{result[0]}' from catalog"
+                    )
+                    return result[0]
+                    
+                logger.debug(
+                    f"No geometry column found in catalog for {schema}.{table}"
+                )
+                return None
+                
+            finally:
+                if cursor:
+                    cursor.close()
+                # Note: Don't close connection - managed by connection pool
+                
+        except Exception as e:
+            logger.debug(f"Error querying PostgreSQL geometry column: {e}")
+            return None
     
     def _validate_required_keys(self, infos: Dict[str, Any]) -> None:
         """Validate that all required keys exist."""

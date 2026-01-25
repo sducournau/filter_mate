@@ -894,11 +894,17 @@ def detect_filtermate_mv_reference(subset_string: str) -> str:
     if not subset_string:
         return ""
     
+    # Unified fm_temp_* prefix patterns (v4.4.3+)
     patterns = [
+        r'FROM\s+["\']?(\w+)["\']?\s*\.\s*["\']?(fm_temp_\w+)["\']?',
+        r'FROM\s+["\']?(fm_temp_\w+)["\']?',
+        # Legacy patterns for backward compatibility
         r'FROM\s+["\']?(\w+)["\']?\s*\.\s*["\']?(filtermate_mv_[a-f0-9]+)["\']?',
         r'FROM\s+["\']?(filtermate_mv_[a-f0-9]+)["\']?',
         r'FROM\s+["\']?(\w+)["\']?\s*\.\s*["\']?(mv_fm_[a-f0-9]+)["\']?',
         r'FROM\s+["\']?(mv_fm_[a-f0-9]+)["\']?',
+        r'FROM\s+["\']?(\w+)["\']?\s*\.\s*["\']?(fm_mv_[a-f0-9_]+)["\']?',
+        r'FROM\s+["\']?(fm_mv_[a-f0-9_]+)["\']?',
     ]
     
     for pattern in patterns:

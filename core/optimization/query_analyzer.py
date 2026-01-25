@@ -69,8 +69,9 @@ def has_expensive_spatial_expression(sql_string: str) -> bool:
         return True
     
     # Pattern 4: MV reference AND EXISTS - this is the multi-step filter case
-    # Example: ("fid" IN (SELECT "pk" FROM "mv_xxx")) AND (EXISTS (...ST_Intersects...))
-    has_mv_reference = 'FILTERMATE_MV_' in sql_upper or 'MV_' in sql_upper
+    # Example: ("fid" IN (SELECT "pk" FROM "fm_temp_mv_xxx")) AND (EXISTS (...ST_Intersects...))
+    # Supports both new (fm_temp_*) and legacy (filtermate_mv_*, mv_*) prefixes
+    has_mv_reference = 'FM_TEMP_' in sql_upper or 'FILTERMATE_MV_' in sql_upper or 'MV_' in sql_upper
     if has_mv_reference and has_exists:
         logger.debug("Detected expensive pattern: MV reference + EXISTS clause")
         return True

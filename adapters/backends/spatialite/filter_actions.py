@@ -52,10 +52,10 @@ def execute_reset_action_spatialite(
         layer.setSubsetString("")
         logger.debug(f"[Spatialite] Subset cleared - Layer: {layer.name()}")
         
-        # Trigger layer refresh
-        layer.triggerRepaint()
-        layer.reload()
-        logger.debug(f"[Spatialite] Layer refreshed - Layer: {layer.name()}")
+        # NOTE: Do NOT call triggerRepaint() or reload() here!
+        # These must be called from the main Qt thread to avoid QGIS freeze/crash.
+        # The FilterEngineTask.finished() method handles canvas refresh safely.
+        logger.debug(f"[Spatialite] Subset applied - Layer: {layer.name()} (refresh handled by main thread)")
         
         # Cleanup temporary session tables
         db_path = datasource_info.get('dbname')
@@ -109,10 +109,10 @@ def execute_unfilter_action_spatialite(
             layer.setSubsetString("")
             logger.info(f"[Spatialite] No Previous State - Layer: {layer.name()} - Filter cleared")
         
-        # Trigger layer refresh
-        layer.triggerRepaint()
-        layer.reload()
-        logger.debug(f"[Spatialite] Layer refreshed - Layer: {layer.name()}")
+        # NOTE: Do NOT call triggerRepaint() or reload() here!
+        # These must be called from the main Qt thread to avoid QGIS freeze/crash.
+        # The FilterEngineTask.finished() method handles canvas refresh safely.
+        logger.debug(f"[Spatialite] Subset applied - Layer: {layer.name()} (refresh handled by main thread)")
         
         message = f"Filter restored for layer '{layer.name()}'"
         return True, message

@@ -269,7 +269,7 @@ class PostgreSQLBackend(BackendPort):
         
         CRITICAL FIX for 212KB expressions with 2862+ UUIDs!
         Instead of: pk IN ('uuid1', 'uuid2', ..., 'uuid2862')  → 212KB
-        We get:     pk IN (SELECT pk FROM fm_mv_src_sel_xxx)   → ~60 bytes
+        We get:     pk IN (SELECT pk FROM fm_temp_src_xxx)   → ~60 bytes
         
         Args:
             layer: QgsVectorLayer source layer
@@ -287,8 +287,8 @@ class PostgreSQLBackend(BackendPort):
                 pk_field='pk',
                 geom_field='geom'
             )
-            # Returns: "fm_mv_src_sel_abc123"
-            # Use in query: pk IN (SELECT pk FROM filtermate_temp.fm_mv_src_sel_abc123)
+            # Returns: "fm_temp_src_abc123"
+            # Use in query: pk IN (SELECT pk FROM filtermate_temp.fm_temp_src_abc123)
         """
         if not fids:
             logger.warning("[PostgreSQL] create_source_selection_mv: No FIDs provided")
@@ -360,10 +360,10 @@ class PostgreSQLBackend(BackendPort):
             
             logger.debug(f"[PostgreSQL] MV query: {query[:200]}...")
             
-            # Generate unique MV name
+            # Generate unique MV name (unified fm_temp_src_ prefix)
             import hashlib
             fid_hash = hashlib.md5(','.join(str(f) for f in fids[:10]).encode()).hexdigest()[:8]
-            mv_name = f"fm_mv_src_sel_{self._session_id[:6]}_{fid_hash}"
+            mv_name = f"fm_temp_src_{self._session_id[:6]}_{fid_hash}"
             
             # Create MV using mv_manager
             try:
@@ -490,10 +490,13 @@ class PostgreSQLBackend(BackendPort):
         formatted_fids: str
     ) -> Optional[str]:
         """
-        Fallback: Create temporary table instead of MV.
+        Fallback: Create persistent temp table instead of MV.
         
         This is used when MV creation fails (e.g., due to permissions).
-        Temp tables are session-scoped and auto-dropped.
+        
+        FIX v4.3.2 (2026-01-25): Use persistent table in filtermate_temp schema
+        instead of TEMPORARY table. TEMPORARY tables are session-scoped and 
+        not visible to QGIS's PostgreSQL connection (different session).
         
         Args:
             conn: Database connection
@@ -504,10 +507,12 @@ class PostgreSQLBackend(BackendPort):
             formatted_fids: Pre-formatted FID string
             
         Returns:
-            Optional[str]: Temp table name or None
+            Optional[str]: Full qualified table name or None
         """
         try:
             import hashlib
+            from ...infrastructure.constants import DEFAULT_TEMP_SCHEMA
+            
             fid_hash = hashlib.md5(','.join(str(f) for f in fids[:10]).encode()).hexdigest()[:8]
             temp_name = f"fm_temp_src_sel_{fid_hash}"
             
@@ -517,9 +522,16 @@ class PostgreSQLBackend(BackendPort):
             
             cursor = conn.cursor()
             
-            # Create temp table
+            # FIX v4.3.2: Ensure filtermate_temp schema exists
+            cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{DEFAULT_TEMP_SCHEMA}"')
+            
+            # FIX v4.3.2: Create persistent table in filtermate_temp schema
+            # (NOT TEMPORARY - QGIS uses a different PostgreSQL session)
+            # Drop existing table first to avoid conflicts
+            cursor.execute(f'DROP TABLE IF EXISTS "{DEFAULT_TEMP_SCHEMA}"."{temp_name}"')
+            
             create_sql = f"""
-                CREATE TEMPORARY TABLE IF NOT EXISTS {temp_name} AS
+                CREATE TABLE "{DEFAULT_TEMP_SCHEMA}"."{temp_name}" AS
                 SELECT "{clean_pk_field}" as pk
                 FROM "{table_name}"
                 WHERE "{clean_pk_field}" IN ({formatted_fids})
@@ -527,12 +539,13 @@ class PostgreSQLBackend(BackendPort):
             cursor.execute(create_sql)
             
             # Create index for fast lookups
-            cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{temp_name}_pk ON {temp_name} (pk)')
+            cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{temp_name}_pk ON "{DEFAULT_TEMP_SCHEMA}"."{temp_name}" (pk)')
             
             conn.commit()
             
-            logger.info(f"[PostgreSQL] ✅ Fallback temp table created: {temp_name}")
-            return temp_name
+            full_name = f'"{DEFAULT_TEMP_SCHEMA}"."{temp_name}"'
+            logger.info(f"[PostgreSQL] ✅ Fallback temp table created: {full_name}")
+            return full_name
             
         except Exception as e:
             logger.error(f"[PostgreSQL] Temp table fallback failed: {e}")

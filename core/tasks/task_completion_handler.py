@@ -141,8 +141,14 @@ def apply_pending_subset_requests(
             
             # Check if filter already applied
             if current_subset.strip() == expression_str.strip():
-                # Filter already applied - force reload for PostgreSQL/Spatialite/OGR layers
-                if layer.providerType() in ('postgres', 'spatialite', 'ogr'):
+                # Filter already applied - force reload for PostgreSQL/OGR layers
+                # FIX 2026-01-24: Skip reload for Spatialite with empty subset (unfilter operation)
+                # layer.reload() on Spatialite with empty subset causes freeze because it tries
+                # to reload from temporary tables that don't exist for unfilter operations.
+                should_reload = (layer.providerType() in ('postgres', 'ogr') or 
+                                (layer.providerType() == 'spatialite' and expression_str.strip() != ''))
+                
+                if should_reload:
                     try:
                         layer.blockSignals(True)
                         layer.reload()
@@ -179,8 +185,14 @@ def apply_pending_subset_requests(
                 success = safe_set_subset_fn(layer, expression_str)
                 
                 if success:
-                    # Force reload for PostgreSQL/Spatialite/OGR layers
-                    if layer.providerType() in ('postgres', 'spatialite', 'ogr'):
+                    # Force reload for PostgreSQL/OGR layers
+                    # FIX 2026-01-24: Skip reload for Spatialite with empty subset (unfilter operation)
+                    # layer.reload() on Spatialite with empty subset causes freeze because it tries
+                    # to reload from temporary tables that don't exist for unfilter operations.
+                    should_reload = (layer.providerType() in ('postgres', 'ogr') or 
+                                    (layer.providerType() == 'spatialite' and expression_str.strip() != ''))
+                    
+                    if should_reload:
                         try:
                             layer.blockSignals(True)
                             layer.reload()

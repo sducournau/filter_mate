@@ -99,7 +99,7 @@ class MVConfig:
             auto_refresh=self.auto_refresh,
             refresh_on_change=self.refresh_on_change,
             concurrent_refresh=self.concurrent_refresh,
-            prefix="fm_mv_",
+            prefix="fm_temp_mv_",
             schema="filtermate_temp"
         )
 
@@ -133,8 +133,8 @@ class MaterializedViewManager(MaterializedViewPort):
         fids = mv_manager.get_feature_ids(mv_name, "id")
     """
 
-    # Naming conventions
-    MV_PREFIX = "fm_mv_"
+    # Naming conventions (unified fm_temp_* prefix for easy cleanup)
+    MV_PREFIX = "fm_temp_mv_"
     MV_SCHEMA = "filtermate_temp"
     SESSION_PREFIX = "session_"
 

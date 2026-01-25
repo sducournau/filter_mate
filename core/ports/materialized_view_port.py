@@ -89,8 +89,8 @@ class ViewConfig:
     refresh_on_change: bool = True
     concurrent_refresh: bool = True
     
-    # Naming
-    prefix: str = "fm_mv_"
+    # Naming (unified fm_temp_* prefix v4.4.4+)
+    prefix: str = "fm_temp_mv_"
     schema: str = "filtermate_temp"
     
     # Spatialite specific

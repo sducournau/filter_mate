@@ -200,9 +200,9 @@ class CombinedQueryOptimizer:
     )
     
     # Pattern for filtermate materialized views specifically
-    # Matches: "fid" IN (SELECT "pk" FROM "public"."filtermate_mv_xxx") or mv_xxx
+    # Matches: "fid" IN (SELECT "pk" FROM "public"."fm_temp_mv_xxx") or fm_temp_*
     FILTERMATE_MV_PATTERN = re.compile(
-        r'"?(\w+)"?\s+IN\s*\(\s*SELECT\s+"?(\w+)"?\s+FROM\s+"?(\w+)"?\s*\.\s*"?((?:filtermate_mv_|mv_)\w+)"?\s*\)',
+        r'"?(\w+)"?\s+IN\s*\(\s*SELECT\s+"?(\w+)"?\s+FROM\s+"?(\w+)"?\s*\.\s*"?((?:fm_temp_|filtermate_)\w+)"?\s*\)',
         re.IGNORECASE
     )
     
@@ -673,9 +673,9 @@ class CombinedQueryOptimizer:
         
         # v2.9.0: If FID count exceeds threshold, create a source MV with pre-computed buffer
         if fid_count > self.SOURCE_FID_MV_THRESHOLD:
-            # Generate unique source MV name
+            # Generate unique source MV name (unified fm_temp_src_ prefix)
             fid_hash = hashlib.md5(','.join(str(f) for f in sorted(fid_list)).encode()).hexdigest()[:8]
-            src_mv_name = f"filtermate_src_{fid_hash}"
+            src_mv_name = f"fm_temp_src_{fid_hash}"
             
             # Build CREATE MATERIALIZED VIEW SQL for source selection
             # v2.8.8: Use filtermate temp schema instead of source schema

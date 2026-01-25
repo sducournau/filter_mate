@@ -106,9 +106,9 @@ class FilterChainOptimizer:
         # Result.expression will be a single EXISTS against the MV
     """
     
-    # Configuration
+    # Configuration (unified fm_temp_* prefix)
     MV_SCHEMA = "filtermate_temp"
-    MV_PREFIX = "fm_chain_"
+    MV_PREFIX = "fm_temp_chain_"
     
     # Thresholds for optimization decisions
     MIN_FILTERS_FOR_MV = 2          # Minimum filters to justify MV creation

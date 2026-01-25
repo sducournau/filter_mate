@@ -60,9 +60,9 @@ class PostgreSQLCleanupService:
     # Default schema name for FilterMate temp objects
     DEFAULT_SCHEMA = "filtermate_temp"
     
-    # Materialized view prefix patterns
-    MV_PREFIX = "mv_"
-    SESSION_VIEW_PATTERN = "mv_{session_id}_%"
+    # Materialized view prefix patterns (unified fm_temp_* prefix)
+    MV_PREFIX = "fm_temp_mv_"
+    SESSION_VIEW_PATTERN = "fm_temp_mv_{session_id}_%"
     
     def __init__(
         self,
