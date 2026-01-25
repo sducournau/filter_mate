@@ -910,6 +910,52 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             self.log_error("This should not happen - table should have been created for original source layer")
             return None
         
+        # FIX v4.3.11 (2026-01-25): Get actual primary key from PostgreSQL (not hardcoded "id")
+        # Problem: Using "id" as source_id fails when table has different PK name (e.g., "cleabs", "fid", etc.)
+        # Solution: Query PostgreSQL's information_schema to get the actual primary key column name
+        primary_key_column = None
+        try:
+            with connexion.cursor() as cursor:
+                cursor.execute(f"""
+                    SELECT a.attname
+                    FROM pg_index i
+                    JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+                    WHERE i.indrelid = '"{source_schema}"."{source_table}"'::regclass
+                    AND i.indisprimary
+                    LIMIT 1
+                """)
+                result = cursor.fetchone()
+                if result:
+                    primary_key_column = result[0]
+                    self.log_debug(f"Found primary key: {primary_key_column}")
+        except Exception as pk_err:
+            self.log_warning(f"Could not determine primary key: {pk_err}")
+        
+        # Fallback: try common primary key names if query failed
+        if not primary_key_column:
+            self.log_warning("Could not detect PK from PostgreSQL, trying common fallbacks")
+            try:
+                with connexion.cursor() as cursor:
+                    # Check for common PK column names
+                    for candidate in ['id', 'fid', 'ogc_fid', 'cleabs', 'gid', 'objectid']:
+                        cursor.execute(f"""
+                            SELECT column_name FROM information_schema.columns 
+                            WHERE table_schema = '{source_schema}' 
+                            AND table_name = '{source_table}'
+                            AND column_name = '{candidate}'
+                        """)
+                        if cursor.fetchone():
+                            primary_key_column = candidate
+                            self.log_debug(f"Using fallback PK column: {primary_key_column}")
+                            break
+            except Exception as fallback_err:
+                self.log_warning(f"PK fallback detection failed: {fallback_err}")
+        
+        # If still no PK, skip source_id column entirely (buffer table still works for filtering)
+        pk_select = f'"{primary_key_column}" as source_id,' if primary_key_column else ''
+        if not primary_key_column:
+            self.log_warning("No primary key found - creating buffer table without source_id column")
+        
         # Build CREATE TABLE statement (NOT TEMP - must be visible to QGIS connection)
         # FIX v4.2.18: Table name must be unique to avoid conflicts
         # Note: Table will be cleaned up by FilterMate's cleanup mechanism (same as MVs)
@@ -919,7 +965,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         sql_create = f"""
             CREATE TABLE IF NOT EXISTS "{temp_schema}"."{temp_table_name}" AS
             SELECT 
-                "id" as source_id,
+                {pk_select}
                 ST_Buffer(
                     "{source_geom_field}",
                     {buffer_expr_sql},

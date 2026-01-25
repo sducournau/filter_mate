@@ -511,7 +511,7 @@ class PostgreSQLBackend(BackendPort):
         """
         try:
             import hashlib
-            from ...infrastructure.constants import DEFAULT_TEMP_SCHEMA
+            from ....infrastructure.constants import DEFAULT_TEMP_SCHEMA
             
             fid_hash = hashlib.md5(','.join(str(f) for f in fids[:10]).encode()).hexdigest()[:8]
             temp_name = f"fm_temp_src_sel_{fid_hash}"

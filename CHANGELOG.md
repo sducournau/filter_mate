@@ -2,6 +2,55 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [4.4.5] - 2026-01-25 🔧 FIX: Dynamic buffer fails with `1 = 0` when PK is not "id"
+
+### Bug Fix - Buffer table creation fails on tables without `id` column
+
+**Symptom**: Dynamic buffer expression like `"largeur_de_chaussee" * 5` returns `1 = 0` (no features)  
+**Root Cause**: Buffer table creation SQL was hardcoded with `"id" as source_id`, failing on tables with different primary key names (e.g., `cleabs`, `fid`, `ogc_fid`)
+
+#### Problem Analysis
+
+When creating the pre-calculated buffer table for dynamic expressions:
+
+```sql
+-- v4.4.4 (BUG): Hardcoded "id" column
+CREATE TABLE fm_temp_buf_xxx AS
+SELECT "id" as source_id, ST_Buffer(...) ...
+FROM troncon_de_route  -- ERROR: column "id" does not exist!
+```
+
+Tables from BDTopo, OSM, or other sources often use different primary keys:
+
+- `cleabs` (IGN BDTopo)
+- `fid` or `ogc_fid` (OGR/GDAL imports)
+- `gid` (PostGIS default)
+- `objectid` (Esri data)
+
+#### Solution (v4.4.5)
+
+Query PostgreSQL's `pg_index` to find the actual primary key column:
+
+```sql
+SELECT a.attname
+FROM pg_index i
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+WHERE i.indrelid = '"schema"."table"'::regclass
+AND i.indisprimary
+```
+
+If detection fails, try common fallback names (`id`, `fid`, `ogc_fid`, `cleabs`, `gid`, `objectid`).  
+If no PK found at all, create buffer table without `source_id` column (it's only used for reference, not filtering).
+
+#### Files Changed
+
+- `adapters/backends/postgresql/expression_builder.py`:
+  - Added primary key detection from PostgreSQL metadata
+  - Added fallback logic for common PK column names
+  - Graceful handling when no PK is found
+
+---
+
 ## [4.4.4] - 2026-01-25 🏗️ REFACTOR: Unified fm*temp*\* naming convention
 
 ### Harmonized Naming for All Temporary Database Objects

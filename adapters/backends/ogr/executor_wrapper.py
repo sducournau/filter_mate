@@ -141,7 +141,7 @@ class OGRFilterExecutor(FilterExecutorPort):
     ) -> bool:
         """Apply subset string to layer."""
         try:
-            from ...infrastructure.database.sql_utils import safe_set_subset_string
+            from ....infrastructure.database.sql_utils import safe_set_subset_string
             return safe_set_subset_string(layer, expression)
         except Exception as e:
             logger.error(f"[OGR] Failed to apply OGR subset: {e}")

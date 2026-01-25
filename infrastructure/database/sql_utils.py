@@ -57,6 +57,10 @@ def safe_set_subset_string(layer, subset_expression: str) -> bool:
     - setSubsetString method not available (rare)
     - Exception during filter application
     
+    FIX v4.8.1 (2026-01-25): Automatically apply PostgreSQL type casting
+    for PostgreSQL layers to prevent "operator does not exist" errors
+    when comparing varchar fields to numeric literals.
+    
     Args:
         layer: QgsVectorLayer to filter
         subset_expression: SQL WHERE clause (without WHERE keyword)
@@ -80,6 +84,24 @@ def safe_set_subset_string(layer, subset_expression: str) -> bool:
             logger.debug(f"[SQL] Applying subset to layer '{layer.name()}':")
             logger.debug(f"[SQL]   Provider: {layer.providerType()}")
             logger.debug(f"[SQL]   Expression length: {len(subset_expression) if subset_expression else 0} chars")
+            
+            # FIX v4.8.1: Apply PostgreSQL type casting for PostgreSQL layers
+            # This ensures numeric comparisons have ::numeric casting
+            if subset_expression and layer.providerType() == 'postgres':
+                try:
+                    # Import from adapters (infrastructure/database -> adapters/backends)
+                    from filter_mate.adapters.backends.postgresql.filter_executor import apply_postgresql_type_casting
+                    subset_expression = apply_postgresql_type_casting(subset_expression, layer)
+                    logger.debug(f"[SQL]   PostgreSQL type casting applied")
+                except ImportError:
+                    # Fallback: inline type casting if import fails
+                    import re
+                    pattern = r'"([^"]+)"(?!::)(\s*)(<|>|<=|>=|=)(\s*)(\d+(?:\.\d+)?)'
+                    def add_cast(m):
+                        return f'"{m.group(1)}"::numeric{m.group(2)}{m.group(3)}{m.group(4)}{m.group(5)}'
+                    subset_expression = re.sub(pattern, add_cast, subset_expression)
+                    logger.debug(f"[SQL]   PostgreSQL type casting applied (fallback)")
+            
             if subset_expression:
                 # Log first 500 chars of expression for debugging
                 preview = subset_expression[:500]

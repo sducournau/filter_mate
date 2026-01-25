@@ -197,6 +197,54 @@ def sanitize_subset_string(subset_string: str) -> str:
                 logger.info(f"FilterMate: Removed {excess} excess closing parentheses")
     
     # ========================================================================
+    # PHASE 2.5: Remove non-boolean field references
+    # ========================================================================
+    # FIX v4.8.0 (2026-01-25): Handle PostgreSQL type errors
+    # 
+    # Problem: QGIS expressions can generate clauses like:
+    #   1. AND ("field_name") - a text/varchar field used as boolean
+    #   2. AND ("field"::type < value) - comparison without proper type casting
+    # 
+    # Error 1: "argument of AND must be type boolean, not type character varying"
+    # Error 2: "operator does not exist: character varying < integer"
+    #
+    # These typically come from rule-based symbology expressions or display expressions
+    # that return the field value itself rather than a boolean comparison.
+    
+    # Pattern to match: AND ( "field_name" ) - field reference without comparison operator
+    # This matches: AND ( "any_field" ) where there's no =, <, >, IN, LIKE, IS, etc.
+    # 
+    # The pattern looks for:
+    # - AND/OR followed by opening paren
+    # - Optional whitespace
+    # - Quoted field name (with optional table prefix)
+    # - Optional whitespace  
+    # - Closing paren
+    # - NO comparison operators (=, <, >, !, IN, LIKE, IS, BETWEEN, etc.)
+    
+    non_boolean_field_patterns = [
+        # Simple field reference: AND ( "field" )
+        r'\s+AND\s+\(\s*"[^"]+"\s*\)(?!\s*[=<>!])',
+        # Table.field reference: AND ( "table"."field" )
+        r'\s+AND\s+\(\s*"[^"]+"\s*\.\s*"[^"]+"\s*\)(?!\s*[=<>!])',
+        # Field with cast but no comparison: AND ( "field"::type )
+        r'\s+AND\s+\(\s*"[^"]+"(?:::\w+)?\s*\)(?!\s*[=<>!])',
+        # OR variants
+        r'\s+OR\s+\(\s*"[^"]+"\s*\)(?!\s*[=<>!])',
+        r'\s+OR\s+\(\s*"[^"]+"\s*\.\s*"[^"]+"\s*\)(?!\s*[=<>!])',
+    ]
+    
+    for pattern in non_boolean_field_patterns:
+        match = re.search(pattern, sanitized, re.IGNORECASE)
+        if match:
+            matched_text = match.group()
+            logger.info(
+                f"FilterMate: Removing non-boolean field expression (PostgreSQL type error fix): "
+                f"'{matched_text[:60]}'"
+            )
+            sanitized = re.sub(pattern, '', sanitized, flags=re.IGNORECASE)
+    
+    # ========================================================================
     # PHASE 3: Clean up whitespace and orphaned operators
     # ========================================================================
     

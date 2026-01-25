@@ -306,7 +306,7 @@ class MaterializedViewManager(MaterializedViewPort):
             cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{self.MV_SCHEMA}"')
 
             # Create MV
-            with_data = "WITH DATA" if self._config.with_data else "WITH NO DATA"
+            with_data = "WITH DATA" if self._mv_config.with_data else "WITH NO DATA"
             create_sql = f"""
                 CREATE MATERIALIZED VIEW {full_name} AS
                 {query}
@@ -315,11 +315,11 @@ class MaterializedViewManager(MaterializedViewPort):
             cursor.execute(create_sql)
 
             # Create spatial index
-            if self._config.create_spatial_index and geometry_column:
+            if self._mv_config.create_spatial_index and geometry_column:
                 self._create_spatial_index(cursor, full_name, geometry_column)
 
             # Create additional indexes
-            if self._config.create_btree_indexes and indexes:
+            if self._mv_config.create_btree_indexes and indexes:
                 for col in indexes:
                     self._create_index(cursor, full_name, col)
 
@@ -331,10 +331,10 @@ class MaterializedViewManager(MaterializedViewPort):
                 name=mv_name,
                 schema=self.MV_SCHEMA,
                 created_at=datetime.now(),
-                last_refresh=datetime.now() if self._config.with_data else None,
+                last_refresh=datetime.now() if self._mv_config.with_data else None,
                 row_count=-1,
                 size_bytes=0,
-                is_populated=self._config.with_data,
+                is_populated=self._mv_config.with_data,
                 definition=query,
                 session_id=self._session_id if session_scoped else None
             )
@@ -365,7 +365,7 @@ class MaterializedViewManager(MaterializedViewPort):
             True if refresh succeeded
         """
         full_name = f'"{self.MV_SCHEMA}"."{mv_name}"'
-        use_concurrent = concurrent if concurrent is not None else self._config.concurrent_refresh
+        use_concurrent = concurrent if concurrent is not None else self._mv_config.concurrent_refresh
 
         conn = connection or self._get_connection()
         if conn is None:

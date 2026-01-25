@@ -471,6 +471,11 @@ def apply_postgresql_type_casting(expression: str, layer=None) -> str:
     Handles cases like "importance" < 4 where importance is varchar.
     Adds ::numeric type casting for numeric comparisons.
     
+    FIX v4.8.1 (2026-01-25): Apply cast INDIVIDUALLY to each comparison,
+    not globally. This fixes combined expressions where some parts already
+    have ::numeric but others don't. Uses negative lookahead to skip
+    already-casted fields.
+    
     Args:
         expression: SQL expression
         layer: Optional layer to get field type information
@@ -486,9 +491,22 @@ def apply_postgresql_type_casting(expression: str, layer=None) -> str:
     # Add ::numeric type casting for numeric comparisons if not already present
     # This handles cases like "importance" < 4 → "importance"::numeric < 4
     # Pattern: "field" followed by comparison operator and number
-    # Only apply if not already cast (no :: before the operator)
+    # 
+    # FIX v4.8.1: Use negative lookahead (?!::) AFTER the closing quote to ONLY 
+    # match fields that are NOT already casted. This allows the regex to apply
+    # casting individually to each comparison in a combined expression.
+    #
+    # Before: "field"::numeric < 5 AND "field" < 5  → no change (global check failed)
+    # After:  "field"::numeric < 5 AND "field" < 5  → "field"::numeric < 5 AND "field"::numeric < 5
     
-    numeric_comparison_pattern = r'"([^"]+)"(\s*)(<|>|<=|>=)(\s*)(\d+(?:\.\d+)?)'
+    # Pattern explanation:
+    # - "([^"]+)" : quoted field name
+    # - (?!::) : negative lookahead - NOT followed by :: (skip already casted fields)
+    # - (\s*) : optional whitespace
+    # - (<|>|<=|>=|=) : comparison operator (including = for "field" = 5)
+    # - (\s*) : optional whitespace  
+    # - (\d+(?:\.\d+)?) : integer or decimal number
+    numeric_comparison_pattern = r'"([^"]+)"(?!::)(\s*)(<|>|<=|>=|=)(\s*)(\d+(?:\.\d+)?)'
     
     def add_numeric_cast(match):
         field = match.group(1)
@@ -496,12 +514,10 @@ def apply_postgresql_type_casting(expression: str, layer=None) -> str:
         operator = match.group(3)
         space2 = match.group(4)
         number = match.group(5)
-        # Check if already has type casting
         return f'"{field}"::numeric{space1}{operator}{space2}{number}'
     
-    # Only apply if not already cast (check for :: before operator)
-    if '::numeric' not in expression:
-        expression = re.sub(numeric_comparison_pattern, add_numeric_cast, expression)
+    # Apply to ALL numeric comparisons that don't have ::
+    expression = re.sub(numeric_comparison_pattern, add_numeric_cast, expression)
     
     return expression
 
