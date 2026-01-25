@@ -905,10 +905,13 @@ class BackendController(BaseController):
         
         try:
             with connexion.cursor() as cursor:
-                # Find views for this session
+                # Find views for this session (unified fm_temp_* prefix v4.4.4)
+                # Also check legacy mv_ prefix for backward compatibility
                 cursor.execute(
-                    "SELECT matviewname FROM pg_matviews WHERE schemaname = %s AND matviewname LIKE %s",
-                    (schema, f"mv_{session_id}_%")
+                    """SELECT matviewname FROM pg_matviews 
+                       WHERE schemaname = %s 
+                       AND (matviewname LIKE %s OR matviewname LIKE %s)""",
+                    (schema, f"fm_temp_mv_{session_id}_%", f"mv_{session_id}_%")
                 )
                 views = [v[0] for v in cursor.fetchall()]
                 
@@ -972,8 +975,13 @@ class BackendController(BaseController):
                 )
                 views = [v[0] for v in cursor.fetchall()]
                 
-                # Check for views from other sessions
-                other_views = [v for v in views if not (session_id and v.startswith(f"mv_{session_id}_"))]
+                # Check for views from other sessions (handle both new and legacy prefixes)
+                other_views = [v for v in views if not (
+                    session_id and (
+                        v.startswith(f"fm_temp_mv_{session_id}_") or 
+                        v.startswith(f"mv_{session_id}_")
+                    )
+                )]
                 
                 if other_views and not force:
                     logger.warning(f"Schema '{schema}' has {len(other_views)} view(s) from other sessions")
@@ -1019,11 +1027,13 @@ class BackendController(BaseController):
         if connexion:
             try:
                 with connexion.cursor() as cursor:
-                    # Count our views
+                    # Count our views (both new and legacy prefixes)
                     if session_id:
                         cursor.execute(
-                            "SELECT COUNT(*) FROM pg_matviews WHERE schemaname = %s AND matviewname LIKE %s",
-                            (schema, f"mv_{session_id}_%")
+                            """SELECT COUNT(*) FROM pg_matviews 
+                               WHERE schemaname = %s 
+                               AND (matviewname LIKE %s OR matviewname LIKE %s)""",
+                            (schema, f"fm_temp_mv_{session_id}_%", f"mv_{session_id}_%")
                         )
                         info['our_views_count'] = cursor.fetchone()[0]
                     
@@ -1122,10 +1132,13 @@ class BackendController(BaseController):
         
         try:
             with connexion.cursor() as cursor:
-                # Find views for this session only
+                # Find views for this session only (unified fm_temp_* prefix v4.4.4)
+                # Also check legacy mv_ prefix for backward compatibility
                 cursor.execute(
-                    "SELECT matviewname FROM pg_matviews WHERE schemaname = %s AND matviewname LIKE %s",
-                    (schema, f"mv_{session_id}_%")
+                    """SELECT matviewname FROM pg_matviews 
+                       WHERE schemaname = %s 
+                       AND (matviewname LIKE %s OR matviewname LIKE %s)""",
+                    (schema, f"fm_temp_mv_{session_id}_%", f"mv_{session_id}_%")
                 )
                 views = [v[0] for v in cursor.fetchall()]
                 
@@ -1330,17 +1343,19 @@ class BackendController(BaseController):
             conn = sqlite3.connect(db_path)
             cur = conn.cursor()
             
-            # Build pattern based on session_id
+            # Build pattern based on session_id (unified fm_temp_* prefix v4.4.4)
             if session_id:
-                pattern = f"mv_{session_id}_%"
+                pattern_new = f"fm_temp_mv_{session_id}_%"
+                pattern_legacy = f"mv_{session_id}_%"
             else:
-                pattern = "mv_%"  # All FilterMate temp tables
+                pattern_new = "fm_temp_%"  # All FilterMate temp tables (new prefix)
+                pattern_legacy = "mv_%"  # All FilterMate temp tables (legacy prefix)
             
-            # Find matching tables
+            # Find matching tables (both new and legacy prefixes)
             cur.execute(
                 """SELECT name FROM sqlite_master 
-                   WHERE type='table' AND name LIKE ?""",
-                (pattern,)
+                   WHERE type='table' AND (name LIKE ? OR name LIKE ?)""",
+                (pattern_new, pattern_legacy)
             )
             tables = cur.fetchall()
             

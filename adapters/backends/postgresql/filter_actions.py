@@ -650,15 +650,15 @@ def execute_filter_action_postgresql_materialized(
     # Ensure source table has statistics for query optimization
     ensure_stats_fn(connexion, source_schema, source_table, geom_key_name)
     
-    # Build SQL commands using session-prefixed name
+    # Build SQL commands using session-prefixed name (v4.4.4: fm_temp_mv_ prefix)
     sql_drop = (
         f'DROP INDEX IF EXISTS {schema}_{session_name}_cluster CASCADE; '
-        f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{session_name}" CASCADE;'
+        f'DROP MATERIALIZED VIEW IF EXISTS \"{schema}\".\"fm_temp_mv_{session_name}\" CASCADE;'
     )
     
     if custom:
         # Parse custom buffer expression
-        sql_drop += f' DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{session_name}_dump" CASCADE;'
+        sql_drop += f' DROP MATERIALIZED VIEW IF EXISTS \"{schema}\".\"fm_temp_mv_{session_name}_dump\" CASCADE;'
         
         # EPIC-1 E4-S9: Use centralized HistoryRepository instead of direct SQL
         history_repo = HistoryRepository(conn, cur)
@@ -686,13 +686,13 @@ def execute_filter_action_postgresql_materialized(
     
     sql_create_index = (
         f'CREATE INDEX IF NOT EXISTS {schema}_{session_name}_cluster '
-        f'ON "{schema}"."mv_{session_name}" USING GIST ({geom_key_name});'
+        f'ON \"{schema}\".\"fm_temp_mv_{session_name}\" USING GIST ({geom_key_name});'
     )
     sql_cluster = (
-        f'ALTER MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{session_name}" '
+        f'ALTER MATERIALIZED VIEW IF EXISTS \"{schema}\".\"fm_temp_mv_{session_name}\" '
         f'CLUSTER ON {schema}_{session_name}_cluster;'
     )
-    sql_analyze = f'ANALYZE VERBOSE "{schema}"."mv_{session_name}";'
+    sql_analyze = f'ANALYZE VERBOSE \"{schema}\".\"fm_temp_mv_{session_name}\";'
     
     sql_create = sql_create.replace('\n', '').replace('\t', '').replace('  ', ' ').strip()
     logger.debug(f"[PostgreSQL] SQL drop request: {sql_drop}")
@@ -704,9 +704,9 @@ def execute_filter_action_postgresql_materialized(
     
     if custom:
         sql_dump = (
-            f'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{session_name}_dump" '
-            f'as SELECT ST_Union("{geom_key_name}") as {geom_key_name} '
-            f'from "{schema}"."mv_{session_name}";'
+            f'CREATE MATERIALIZED VIEW IF NOT EXISTS \"{schema}\".\"fm_temp_mv_{session_name}_dump\" '
+            f'as SELECT ST_Union(\"{geom_key_name}\") as {geom_key_name} '
+            f'from \"{schema}\".\"fm_temp_mv_{session_name}\";'
         )
         commands.append(sql_dump)
     

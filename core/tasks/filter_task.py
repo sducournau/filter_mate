@@ -2836,7 +2836,8 @@ class FilterEngineTask(QgsTask):
     def _get_source_reference(self, sub_expression):
         """Determine the source reference for spatial joins (MV or direct table)."""
         if self.current_materialized_view_name:
-            return f'"{self.current_materialized_view_schema}"."mv_{self.current_materialized_view_name}_dump"'
+            # v4.4.4: fm_temp_mv_ prefix for new MVs
+            return f'"{self.current_materialized_view_schema}"."fm_temp_mv_{self.current_materialized_view_name}_dump"'
         return sub_expression
 
     def _build_spatial_join_query(self, layer_props, param_postgis_sub_expression, sub_expression):
@@ -3192,13 +3193,13 @@ class FilterEngineTask(QgsTask):
             if source_subset:
                 where_clause = f" WHERE {source_subset}"
             
-            # SQL commands
-            sql_drop = f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{mv_name}_dump" CASCADE;'
-            sql_drop_main = f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{mv_name}" CASCADE;'
+            # SQL commands (v4.4.4: fm_temp_mv_ prefix)
+            sql_drop = f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."fm_temp_mv_{mv_name}_dump" CASCADE;'
+            sql_drop_main = f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."fm_temp_mv_{mv_name}" CASCADE;'
             
             # Create main MV with buffered geometries
             sql_create_main = f'''
-                CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{mv_name}" AS
+                CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."fm_temp_mv_{mv_name}" AS
                 SELECT 
                     "{self.param_source_table}"."{self.primary_key_name}",
                     ST_Buffer({source_geom_ref}, {buffer_expr}, '{style_params}') as {geom_field}
@@ -3209,14 +3210,14 @@ class FilterEngineTask(QgsTask):
             
             # Create dump MV (union of all buffered geometries)
             sql_create_dump = f'''
-                CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{mv_name}_dump" AS
+                CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."fm_temp_mv_{mv_name}_dump" AS
                 SELECT ST_Union("{geom_field}") as {geom_field}
-                FROM "{schema}"."mv_{mv_name}"
+                FROM "{schema}"."fm_temp_mv_{mv_name}"
                 WITH DATA;
             '''
             
             # Index for main MV
-            sql_index = f'CREATE INDEX IF NOT EXISTS idx_{mv_name}_geom ON "{schema}"."mv_{mv_name}" USING GIST ({geom_field});'
+            sql_index = f'CREATE INDEX IF NOT EXISTS idx_{mv_name}_geom ON "{schema}"."fm_temp_mv_{mv_name}" USING GIST ({geom_field});'
             
             # Ensure temp schema exists
             schema = self._ensure_temp_schema_exists(connexion, schema)
@@ -3229,21 +3230,21 @@ class FilterEngineTask(QgsTask):
             from ...adapters.backends.postgresql.mv_reference_tracker import get_mv_reference_tracker
             tracker = get_mv_reference_tracker()
             
-            # Register references for source layer and all distant layers
+            # Register references for source layer and all distant layers (v4.4.4: fm_temp_mv_ prefix)
             if self.source_layer:
-                tracker.add_reference(f"mv_{mv_name}", self.source_layer.id())
-                tracker.add_reference(f"mv_{mv_name}_dump", self.source_layer.id())
+                tracker.add_reference(f"fm_temp_mv_{mv_name}", self.source_layer.id())
+                tracker.add_reference(f"fm_temp_mv_{mv_name}_dump", self.source_layer.id())
             
             # Register for all distant layers that will use this MV
             if hasattr(self, 'param_all_layers'):
                 for layer in self.param_all_layers:
                     if layer and hasattr(layer, 'id') and layer.id() != (self.source_layer.id() if self.source_layer else None):
-                        tracker.add_reference(f"mv_{mv_name}", layer.id())
-                        tracker.add_reference(f"mv_{mv_name}_dump", layer.id())
+                        tracker.add_reference(f"fm_temp_mv_{mv_name}", layer.id())
+                        tracker.add_reference(f"fm_temp_mv_{mv_name}_dump", layer.id())
             
             elapsed = time.time() - start_time
             logger.info(f"✓ FIX v4.2.1: Buffer expression MVs created in {elapsed:.2f}s")
-            logger.info(f"   mv_{mv_name} and mv_{mv_name}_dump ready for distant layer filtering")
+            logger.info(f"   fm_temp_mv_{mv_name} and fm_temp_mv_{mv_name}_dump ready for distant layer filtering")
             logger.info(f"   FIX v4.2.8: Registered references for {len(layer_ids) if hasattr(self, 'param_all_layers') else 1} layer(s)")
             
             return True
@@ -4854,7 +4855,7 @@ class FilterEngineTask(QgsTask):
         else:
             logger.debug(f"   Buffer MV: No source layer subset, using sql_subset_string")
         
-        template = '''CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS 
+        template = '''CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."fm_temp_mv_{name}" TABLESPACE pg_default AS 
             SELECT ST_Buffer({postgresql_source_geom}, {param_buffer_expression}, '{style_params}') as {geometry_field}, 
                    "{table_source}"."{primary_key_name}", 
                    {where_clause_fields}, 
@@ -5182,12 +5183,14 @@ class FilterEngineTask(QgsTask):
         finally:
             history_repo.close()
         
-        # Drop temp table from filterMate_db using session-prefixed name
+        # Drop temp table from filterMate_db using session-prefixed name (v4.4.4: fm_temp_ prefix)
         import sqlite3
         session_name = self._get_session_prefixed_name(name)
         try:
             temp_conn = sqlite3.connect(self.db_file_path)
             temp_cur = temp_conn.cursor()
+            # Try to drop both new (fm_temp_) and legacy (mv_) tables
+            temp_cur.execute(f"DROP TABLE IF EXISTS fm_temp_{session_name}")
             temp_cur.execute(f"DROP TABLE IF EXISTS mv_{session_name}")
             temp_conn.commit()
             temp_cur.close()

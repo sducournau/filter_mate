@@ -110,8 +110,8 @@ class PostgresSessionManager(QObject):
     # Default schema name
     DEFAULT_SCHEMA = "filtermate_temp"
     
-    # View prefix pattern
-    VIEW_PREFIX = "mv_"
+    # View prefix pattern (unified fm_temp_mv_ prefix v4.4.4)
+    VIEW_PREFIX = \"fm_temp_mv_\"
     
     def __init__(
         self,
@@ -277,7 +277,8 @@ class PostgresSessionManager(QObject):
         """
         Generate a view name for a layer.
         
-        Format: mv_{session_id}_{layer_id_short}_{suffix}
+        v4.4.4: Uses unified fm_temp_mv_ prefix.
+        Format: fm_temp_mv_{session_id}_{layer_id_short}_{suffix}
         
         Args:
             layer_id: Layer ID
@@ -399,11 +400,13 @@ class PostgresSessionManager(QObject):
         try:
             cursor = connection.cursor()
             
-            # Find all views for this session
+            # Find all views for this session (unified fm_temp_* prefix v4.4.4)
+            # Also check legacy mv_ prefix for backward compatibility
             cursor.execute("""
                 SELECT matviewname FROM pg_matviews 
-                WHERE schemaname = %s AND matviewname LIKE %s
-            """, (self._schema, f"mv_{target_session}_%"))
+                WHERE schemaname = %s 
+                AND (matviewname LIKE %s OR matviewname LIKE %s)
+            """, (self._schema, f"fm_temp_mv_{target_session}_%", f"mv_{target_session}_%"))
             
             views = cursor.fetchall()
             

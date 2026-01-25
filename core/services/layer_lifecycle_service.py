@@ -342,19 +342,24 @@ class LayerLifecycleService:
             
             try:
                 with connexion.cursor() as cursor:
-                    # Find all materialized views for this session
+                    # Find all materialized views for this session (unified fm_temp_* prefix v4.4.4)
+                    # Also check legacy mv_ prefix for backward compatibility
                     cursor.execute("""
                         SELECT matviewname FROM pg_matviews 
-                        WHERE schemaname = %s AND matviewname LIKE %s
-                    """, (temp_schema, f"mv_{session_id}_%"))
+                        WHERE schemaname = %s 
+                        AND (matviewname LIKE %s OR matviewname LIKE %s)
+                    """, (temp_schema, f"fm_temp_mv_{session_id}_%", f"mv_{session_id}_%"))
                     views = cursor.fetchall()
                     
                     if views:
                         count = 0
                         for (view_name,) in views:
                             try:
-                                # Drop associated index first
-                                index_name = f"{temp_schema}_{view_name[3:]}_cluster"  # Remove 'mv_' prefix
+                                # Drop associated index first (handle both new and legacy prefixes)
+                                if view_name.startswith('fm_temp_mv_'):
+                                    index_name = f"{temp_schema}_{view_name[11:]}_cluster"  # Remove 'fm_temp_mv_' prefix
+                                else:
+                                    index_name = f"{temp_schema}_{view_name[3:]}_cluster"  # Remove 'mv_' prefix (legacy)
                                 cursor.execute(f'DROP INDEX IF EXISTS "{index_name}" CASCADE;')
                                 # Drop the view
                                 cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{temp_schema}"."{view_name}" CASCADE;')

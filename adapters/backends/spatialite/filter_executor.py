@@ -929,9 +929,10 @@ def apply_spatialite_subset(
     session_name = f"{session_id}_{name}" if session_id else name
     
     # Apply subset string to layer (reference temp table)
+    # v4.4.4: Use fm_temp_ prefix for new tables
     layer_subsetString = (
         f'"{primary_key_name}" IN '
-        f'(SELECT "{primary_key_name}" FROM mv_{session_name})'
+        f'(SELECT "{primary_key_name}" FROM fm_temp_{session_name})'
     )
     logger.debug(f"[Spatialite] Applying Spatialite subset string: {layer_subsetString}")
     
@@ -1036,10 +1037,10 @@ def manage_spatialite_subset(
         task_parameters=task_parameters
     )
     
-    # Create temporary table with session-prefixed name
+    # Create temporary table with session-prefixed name (v4.4.4: fm_temp_ prefix)
     session_name = f"{session_id}_{name}" if session_id else name
     logger.info(
-        f"Creating Spatialite temp table 'mv_{session_name}' "
+        f"Creating Spatialite temp table 'fm_temp_{session_name}' "
         f"(session: {session_id})"
     )
     
@@ -1157,11 +1158,11 @@ def cleanup_session_temp_tables(
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
         
-        # Find all temp tables for this session
+        # Find all temp tables for this session (both new and legacy prefixes v4.4.4)
         cur.execute(
             """SELECT name FROM sqlite_master 
-               WHERE type='table' AND name LIKE ?""",
-            (f"mv_{session_id}_%",)
+               WHERE type='table' AND (name LIKE ? OR name LIKE ?)""",
+            (f"fm_temp_{session_id}_%", f"mv_{session_id}_%")
         )
         tables = cur.fetchall()
         

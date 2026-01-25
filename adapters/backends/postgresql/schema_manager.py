@@ -253,6 +253,8 @@ def cleanup_orphaned_materialized_views(connexion, schema_name: str, current_ses
     """
     Clean up orphaned materialized views older than max_age_hours.
     
+    v4.4.4: Handles both fm_temp_mv_ (new) and mv_ (legacy) prefixes.
+    
     This is a maintenance function to clean up views from crashed sessions
     or sessions that didn't clean up properly.
     
@@ -267,25 +269,27 @@ def cleanup_orphaned_materialized_views(connexion, schema_name: str, current_ses
     """
     try:
         with connexion.cursor() as cursor:
-            # Find all materialized views in the schema
-            # Note: PostgreSQL doesn't track matview creation time directly,
-            # so we rely on naming convention and periodic cleanup
+            # Find all FilterMate materialized views (both new and legacy prefixes)
             cursor.execute("""
                 SELECT matviewname FROM pg_matviews 
-                WHERE schemaname = %s AND matviewname LIKE 'mv_%'
+                WHERE schemaname = %s 
+                AND (matviewname LIKE 'fm\_temp\_mv\_%' OR matviewname LIKE 'mv\_%')
             """, (schema_name,))
             views = cursor.fetchall()
             
             count = 0
             for (view_name,) in views:
                 try:
-                    # Try to drop views that start with an 8-char hex session prefix
-                    # Format: mv_<session_id>_<layer_id>
-                    parts = view_name[3:].split('_', 1)  # Remove 'mv_' prefix
+                    # Extract session ID based on prefix
+                    # New format: fm_temp_mv_<session_id>_<layer_id>
+                    # Legacy format: mv_<session_id>_<layer_id>
+                    if view_name.startswith('fm_temp_mv_'):
+                        parts = view_name[11:].split('_', 1)  # Remove 'fm_temp_mv_' prefix
+                    else:
+                        parts = view_name[3:].split('_', 1)  # Remove 'mv_' prefix (legacy)
+                    
                     if len(parts) >= 2 and len(parts[0]) == 8:
                         # This looks like a session-prefixed view
-                        # In a real scenario, you might check if the session is still active
-                        # For now, we just log and skip active session views
                         if current_session_id and parts[0] == current_session_id:
                             continue  # Skip our own session's views
                     
@@ -305,6 +309,8 @@ def cleanup_session_materialized_views(connexion, schema_name: str, session_id: 
     """
     Clean up all materialized views for a specific session.
     
+    v4.4.4: Uses unified fm_temp_mv_ prefix with legacy mv_ fallback.
+    
     Args:
         connexion: psycopg2 connection
         schema_name: Schema containing the materialized views
@@ -318,10 +324,12 @@ def cleanup_session_materialized_views(connexion, schema_name: str, session_id: 
     
     try:
         with connexion.cursor() as cursor:
+            # Find views with both new (fm_temp_mv_) and legacy (mv_) prefixes
             cursor.execute("""
                 SELECT matviewname FROM pg_matviews 
-                WHERE schemaname = %s AND matviewname LIKE %s
-            """, (schema_name, f"mv_{session_id}_%"))
+                WHERE schemaname = %s 
+                AND (matviewname LIKE %s OR matviewname LIKE %s)
+            """, (schema_name, f"fm_temp_mv_{session_id}_%", f"mv_{session_id}_%"))
             views = cursor.fetchall()
             
             count = 0
@@ -362,6 +370,8 @@ def create_simple_materialized_view_sql(schema: str, name: str, sql_subset_strin
     """
     Create SQL for simple materialized view (non-custom buffer).
     
+    v4.4.4: Uses unified fm_temp_mv_ prefix.
+    
     Args:
         schema: PostgreSQL schema name
         name: Layer identifier
@@ -377,11 +387,11 @@ def create_simple_materialized_view_sql(schema: str, name: str, sql_subset_strin
     # Empty sql_subset_string causes SQL syntax error: "AS WITH DATA;" without SELECT
     if not sql_subset_string or not sql_subset_string.strip():
         raise ValueError(
-            f"Cannot create materialized view 'mv_{name}': sql_subset_string is empty. "
+            f"Cannot create materialized view 'fm_temp_mv_{name}': sql_subset_string is empty. "
             f"This usually means the filter expression was not properly built."
         )
     
-    return 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS {sql_subset_string} WITH DATA;'.format(
+    return 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."fm_temp_mv_{name}" TABLESPACE pg_default AS {sql_subset_string} WITH DATA;'.format(
         schema=schema,
         name=name,
         sql_subset_string=sql_subset_string

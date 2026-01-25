@@ -308,9 +308,16 @@ class BackendExpressionBuilder:
                 logger.debug(f"   → v2.8.0: Using source selection MV ({len(fids)} features) for EXISTS optimization")
                 return source_filter
             else:
-                logger.warning(f"   ⚠️ MV creation failed, using inline IN clause (may be slow)")
+                # MV creation returned None - check logs above for detailed error
+                # Common causes: no connection, table extraction failed, SQL error
+                logger.warning(
+                    f"   ⚠️ MV creation failed, using inline IN clause (may be slow for {len(fids)} FIDs)"
+                )
+                logger.info(f"   ℹ️ Check ERROR logs above for details (connection, table info, SQL)")
         except Exception as e:
             logger.warning(f"   ⚠️ MV creation failed with error: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
         
         # Fallback to inline IN clause
         return build_source_filter_inline(

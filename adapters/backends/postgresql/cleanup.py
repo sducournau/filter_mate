@@ -186,8 +186,12 @@ class PostgreSQLCleanupService:
             
             for view_name in views:
                 try:
-                    # Drop associated index first (naming convention: schema_viewname[3:]_cluster)
-                    index_name = f"{self._schema}_{view_name[3:]}_cluster"
+                    # Drop associated index first
+                    # Handle both new (fm_temp_mv_) and legacy (mv_) prefixes
+                    if view_name.startswith('fm_temp_mv_'):
+                        index_name = f"{self._schema}_{view_name[11:]}_cluster"  # Remove 'fm_temp_mv_' prefix
+                    else:
+                        index_name = f"{self._schema}_{view_name[3:]}_cluster"  # Remove 'mv_' prefix (legacy)
                     cursor.execute(f'DROP INDEX IF EXISTS "{index_name}" CASCADE;')
                     self._metrics['indexes_cleaned'] += 1
                     
@@ -266,10 +270,16 @@ class PostgreSQLCleanupService:
             
             # Filter to views not belonging to known sessions
             for view_name in all_views:
-                # Extract session ID from view name (format: mv_{session_id}_{...})
-                parts = view_name.split('_')
-                if len(parts) >= 2:
-                    view_session = parts[1]
+                # Extract session ID from view name
+                # New format: fm_temp_mv_{session_id}_{...}
+                # Legacy format: mv_{session_id}_{...}
+                if view_name.startswith('fm_temp_mv_'):
+                    parts = view_name[11:].split('_', 1)  # After 'fm_temp_mv_'
+                else:
+                    parts = view_name[3:].split('_', 1)  # After 'mv_' (legacy)
+                
+                if len(parts) >= 1 and len(parts[0]) >= 6:  # Session IDs are typically 6-8 chars
+                    view_session = parts[0]
                     if view_session not in known_sessions:
                         orphaned_views.append(view_name)
             
