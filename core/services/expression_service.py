@@ -721,6 +721,97 @@ class ExpressionService:
         """
         return f"NOT ({expression})"
 
+    def detect_type_mismatches(
+        self,
+        expression: str,
+        field_types: Optional[dict] = None
+    ) -> List[str]:
+        """
+        Detect potential type mismatches in PostgreSQL expressions.
+        
+        FIX v4.8.2 (2026-01-25): Smart detection for VARCHAR fields 
+        used in numeric comparisons.
+        
+        This prevents the error:
+        "ERROR: operator does not exist: character varying < integer"
+        
+        Args:
+            expression: SQL expression to analyze
+            field_types: Optional dict mapping field names to types
+                        e.g., {'importance': 'varchar', 'fid': 'integer'}
+        
+        Returns:
+            List of warning messages for detected type mismatches
+            
+        Example:
+            >>> service = ExpressionService()
+            >>> warnings = service.detect_type_mismatches(
+            ...     '"importance" < 4',
+            ...     {'importance': 'varchar'}
+            ... )
+            >>> print(warnings[0])
+            'Field "importance" (VARCHAR) used in numeric comparison. Consider: "importance"::integer < 4'
+        """
+        warnings = []
+        
+        if not expression or not field_types:
+            return warnings
+        
+        # Pattern: "field_name" <operator> <number>
+        # Matches: "importance" < 4, "age" >= 18, "count" = 0
+        numeric_comparison_pattern = re.compile(
+            r'"([^"]+)"\s*(<|>|<=|>=|=|!=|<>)\s*(\d+(?:\.\d+)?)',
+            re.IGNORECASE
+        )
+        
+        for match in numeric_comparison_pattern.finditer(expression):
+            field_name = match.group(1)
+            operator = match.group(2)
+            value = match.group(3)
+            
+            # Check if field exists in field_types dict
+            field_type = field_types.get(field_name.lower(), '').lower()
+            
+            # Check for VARCHAR/TEXT fields used in numeric comparisons
+            if field_type in ('varchar', 'character varying', 'text', 'char'):
+                # Check if the field already has ::integer or ::numeric cast
+                # Look backwards from the match to check for existing cast
+                start_pos = max(0, match.start() - 20)
+                context_before = expression[start_pos:match.start()]
+                
+                if '::integer' not in context_before and '::numeric' not in context_before:
+                    warnings.append(
+                        f'Field "{field_name}" (VARCHAR) used in numeric comparison '
+                        f'with operator "{operator}". This may cause PostgreSQL error. '
+                        f'Consider: "{field_name}"::integer {operator} {value}'
+                    )
+        
+        # Pattern: "field_name" LIKE/ILIKE '%pattern%'
+        # Check for numeric fields used in string comparisons
+        string_comparison_pattern = re.compile(
+            r'"([^"]+)"\s+(LIKE|ILIKE|NOT\s+LIKE|NOT\s+ILIKE)\s+',
+            re.IGNORECASE
+        )
+        
+        for match in string_comparison_pattern.finditer(expression):
+            field_name = match.group(1)
+            operator = match.group(2)
+            
+            field_type = field_types.get(field_name.lower(), '').lower()
+            
+            # Check for INTEGER/NUMERIC fields used in LIKE/ILIKE
+            if field_type in ('integer', 'smallint', 'bigint', 'numeric', 'decimal', 'real', 'double precision'):
+                # Check if the field already has ::text cast
+                context_before = expression[max(0, match.start() - 20):match.start()]
+                
+                if '::text' not in context_before:
+                    warnings.append(
+                        f'Field "{field_name}" ({field_type.upper()}) used in string comparison '
+                        f'with {operator}. Consider: "{field_name}"::text {operator} ...'
+                    )
+        
+        return warnings
+
 
 def sanitize_subset_string(subset_string: str, logger=None) -> str:
     """

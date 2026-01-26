@@ -85,6 +85,38 @@ def safe_set_subset_string(layer, subset_expression: str) -> bool:
             logger.debug(f"[SQL]   Provider: {layer.providerType()}")
             logger.debug(f"[SQL]   Expression length: {len(subset_expression) if subset_expression else 0} chars")
             
+            # FIX v4.8.2: Detect type mismatches BEFORE applying to PostgreSQL
+            # Prevents "operator does not exist: character varying < integer" errors
+            if subset_expression and layer.providerType() == 'postgres':
+                try:
+                    from ..database.field_type_detector import get_field_types_from_layer
+                    from ...core.services.expression_service import ExpressionService
+                    
+                    field_types = get_field_types_from_layer(layer)
+                    service = ExpressionService()
+                    warnings = service.detect_type_mismatches(subset_expression, field_types)
+                    
+                    if warnings:
+                        logger.warning("⚠️ Type mismatch detected in PostgreSQL expression:")
+                        for warning in warnings:
+                            logger.warning(f"  - {warning}")
+                        
+                        # Show warning to user via QGIS message bar
+                        try:
+                            from qgis.utils import iface
+                            if iface:
+                                message = f"Type mismatch in filter: {warnings[0][:100]}..."
+                                iface.messageBar().pushWarning(
+                                    "FilterMate - PostgreSQL Type Warning",
+                                    message
+                                )
+                        except (ImportError, AttributeError):
+                            pass  # No UI available (testing environment)
+                        
+                        logger.info("💡 FilterMate will auto-apply type casting to fix this.")
+                except Exception as type_check_err:
+                    logger.debug(f"Type mismatch detection failed (non-critical): {type_check_err}")
+            
             # FIX v4.8.1: Apply PostgreSQL type casting for PostgreSQL layers
             # This ensures numeric comparisons have ::numeric casting
             if subset_expression and layer.providerType() == 'postgres':
