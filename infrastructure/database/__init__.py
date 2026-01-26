@@ -44,6 +44,14 @@ from .postgresql_support import (
     POSTGRESQL_AVAILABLE,
 )
 
+from .style_filter_fixer import (
+    apply_type_casting_to_expression,
+    fix_rule_based_renderer_filters,
+    fix_layer_style_filters,
+    scan_layers_for_type_mismatches,
+    fix_expression_for_postgresql,
+)
+
 __all__ = [
     # Prepared Statements
     'PreparedStatementManager',
@@ -67,4 +75,10 @@ __all__ = [
     'psycopg2',
     'PSYCOPG2_AVAILABLE',
     'POSTGRESQL_AVAILABLE',
+    # Style Filter Fixer (v4.8.3)
+    'apply_type_casting_to_expression',
+    'fix_rule_based_renderer_filters',
+    'fix_layer_style_filters',
+    'scan_layers_for_type_mismatches',
+    'fix_expression_for_postgresql',
 ]
