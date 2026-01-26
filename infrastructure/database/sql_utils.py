@@ -268,8 +268,121 @@ def create_temp_spatialite_table(
         return False
 
 
+def format_pk_values_for_sql(
+    values: list,
+    pk_field: str = None,
+    layer = None,
+    is_numeric: bool = None
+) -> str:
+    """
+    Format primary key values for SQL IN clause.
+    
+    CENTRALIZED v4.3.8: Single implementation for all backends.
+    
+    Handles different data types:
+    - UUID: Quoted strings with ::uuid cast ('uuid-value'::uuid)
+    - Text: Quoted strings ('text-value')
+    - Numeric: Unquoted (123, 456)
+    
+    Detection priority:
+    1. Explicit is_numeric parameter
+    2. Value-based detection (most reliable for OGR layers)
+    3. Field schema detection from layer
+    4. Fallback based on common PK names
+    
+    Args:
+        values: List of feature ID values
+        pk_field: Primary key field name (optional)
+        layer: QgsVectorLayer for schema inspection (optional)
+        is_numeric: Force numeric detection (optional)
+        
+    Returns:
+        str: Comma-separated formatted values for SQL IN clause
+        
+    Examples:
+        >>> format_pk_values_for_sql([1, 2, 3], 'id')
+        '1, 2, 3'
+        >>> format_pk_values_for_sql(['a', 'b'], 'code')
+        "'a', 'b'"
+        >>> format_pk_values_for_sql(['550e8400-e29b-41d4-a716-446655440000'], 'uuid_pk')
+        "'550e8400-e29b-41d4-a716-446655440000'::uuid"
+    """
+    if not values:
+        return ""
+    
+    pk_is_uuid = False
+    pk_is_text = False
+    pk_is_numeric = is_numeric
+    
+    # Strategy 1: Check if ALL values are Python numeric types
+    if pk_is_numeric is None:
+        try:
+            all_numeric_values = all(
+                isinstance(v, (int, float)) and not isinstance(v, bool)
+                for v in values[:10]  # Check first 10 values
+            )
+            if all_numeric_values:
+                pk_is_numeric = True
+                logger.debug(f"PK '{pk_field}' detected as numeric from VALUES (all int/float)")
+        except Exception:
+            pass
+    
+    # Strategy 2: Check if string values look like integers
+    if pk_is_numeric is None:
+        try:
+            all_look_numeric = all(
+                isinstance(v, (int, float)) or 
+                (isinstance(v, str) and v.lstrip('-').isdigit())
+                for v in values[:10]
+            )
+            if all_look_numeric:
+                pk_is_numeric = True
+                logger.debug(f"PK '{pk_field}' detected as numeric from string VALUES")
+        except Exception:
+            pass
+    
+    # Strategy 3: Check field schema (may be unreliable for OGR)
+    if pk_is_numeric is None and layer and pk_field:
+        try:
+            pk_idx = layer.fields().indexOf(pk_field)
+            if pk_idx >= 0:
+                field = layer.fields()[pk_idx]
+                field_type = field.typeName().lower()
+                pk_is_uuid = 'uuid' in field_type
+                pk_is_text = 'char' in field_type or 'text' in field_type or 'string' in field_type
+                pk_is_numeric = field.isNumeric()
+                logger.debug(f"PK '{pk_field}' from schema: uuid={pk_is_uuid}, text={pk_is_text}, numeric={pk_is_numeric}")
+        except Exception as e:
+            logger.debug(f"Could not get field schema: {e}")
+    
+    # Strategy 4: Fallback based on common PK names
+    if pk_is_numeric is None and pk_field:
+        pk_lower = pk_field.lower()
+        common_numeric_names = ('id', 'fid', 'gid', 'pk', 'ogc_fid', 'objectid', 'oid', 'rowid')
+        pk_is_numeric = pk_lower in common_numeric_names
+        logger.debug(f"PK '{pk_field}' fallback based on name: numeric={pk_is_numeric}")
+    
+    # Default to non-numeric if still undetermined
+    if pk_is_numeric is None:
+        pk_is_numeric = False
+    
+    # Format values based on type
+    if pk_is_uuid:
+        # UUID - cast to uuid type (PostgreSQL specific)
+        formatted = ["'" + str(fid).replace("'", "''") + "'::uuid" for fid in values]
+    elif pk_is_text or not pk_is_numeric:
+        # Text/UUID/other non-numeric - quote strings and escape quotes
+        formatted = ["'" + str(fid).replace("'", "''") + "'" for fid in values]
+    else:
+        # Numeric - no quotes
+        formatted = [str(fid) for fid in values]
+    
+    return ", ".join(formatted)
+
+
 __all__ = [
     'sanitize_sql_identifier',
     'safe_set_subset_string',
     'create_temp_spatialite_table',
+    'format_pk_values_for_sql',
 ]

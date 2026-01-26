@@ -1417,12 +1417,7 @@ class ExpressionBuilder:
         """
         Format primary key values for SQL IN clause.
         
-        Handles different data types:
-        - UUID: Quoted strings ('uuid-value'::uuid)
-        - Text: Quoted strings ('text-value')
-        - Numeric: Unquoted (123, 456)
-        
-        CRITICAL FIX v4.0.9: Value-based detection for PostgreSQL via OGR.
+        CENTRALIZED v4.3.8: Delegates to infrastructure.database.sql_utils.format_pk_values_for_sql
         
         Args:
             fids: List of feature ID values
@@ -1431,72 +1426,14 @@ class ExpressionBuilder:
         Returns:
             str: Comma-separated formatted values
         """
-        if not fids:
-            return ""
+        # Import centralized function
+        from ...infrastructure.database.sql_utils import format_pk_values_for_sql
         
-        # FIX v4.0.9: VALUE-BASED detection first (most reliable for OGR layers)
-        # Check actual values before checking field schema
-        pk_is_uuid = False
-        pk_is_text = False
-        pk_is_numeric = None
-        
-        # Strategy 1: Check if ALL values are Python numeric types
-        try:
-            all_numeric_values = all(
-                isinstance(v, (int, float)) and not isinstance(v, bool)
-                for v in fids[:10]  # Check first 10 values
-            )
-            if all_numeric_values:
-                pk_is_numeric = True
-                logger.debug(f"PK '{pk_field}' detected as numeric from VALUES (all int/float)")
-        except Exception:
-            pass
-        
-        # Strategy 2: Check if string values look like integers
-        if pk_is_numeric is None:
-            try:
-                all_look_numeric = all(
-                    isinstance(v, (int, float)) or 
-                    (isinstance(v, str) and v.lstrip('-').isdigit())
-                    for v in fids[:10]
-                )
-                if all_look_numeric:
-                    pk_is_numeric = True
-                    logger.debug(f"PK '{pk_field}' detected as numeric from string VALUES")
-            except Exception:
-                pass
-        
-        # Strategy 3: Check field schema (may be unreliable for OGR)
-        if pk_is_numeric is None and self.source_layer:
-            pk_idx = self.source_layer.fields().indexOf(pk_field)
-            if pk_idx >= 0:
-                field = self.source_layer.fields()[pk_idx]
-                field_type = field.typeName().lower()
-                pk_is_uuid = 'uuid' in field_type
-                pk_is_text = 'char' in field_type or 'text' in field_type or 'string' in field_type
-                pk_is_numeric = field.isNumeric()
-                logger.debug(f"PK '{pk_field}' detected from schema: uuid={pk_is_uuid}, text={pk_is_text}, numeric={pk_is_numeric}")
-        
-        # Strategy 4: Fallback based on common PK names
-        if pk_is_numeric is None:
-            pk_lower = pk_field.lower()
-            common_numeric_names = ('id', 'fid', 'gid', 'pk', 'ogc_fid', 'objectid', 'oid', 'rowid')
-            pk_is_numeric = pk_lower in common_numeric_names
-            logger.debug(f"PK '{pk_field}' fallback based on name: numeric={pk_is_numeric}")
-        
-        # Format values based on type
-        # UUID FIX v4.0: Ensure all non-numeric values are properly quoted
-        if pk_is_uuid:
-            # UUID - cast to uuid type (PostgreSQL specific)
-            formatted = ["'" + str(fid).replace("'", "''") + "'::uuid" for fid in fids]
-        elif pk_is_text or not pk_is_numeric:
-            # Text/UUID/other non-numeric - quote strings and escape quotes
-            formatted = ["'" + str(fid).replace("'", "''") + "'" for fid in fids]
-        else:
-            # Numeric - no quotes
-            formatted = [str(fid) for fid in fids]
-        
-        return ", ".join(formatted)
+        return format_pk_values_for_sql(
+            values=fids,
+            pk_field=pk_field,
+            layer=self.source_layer
+        )
 
 
 # =============================================================================

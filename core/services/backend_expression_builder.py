@@ -117,11 +117,18 @@ class BackendExpressionBuilder:
         self._source_selection_mvs.clear()
     
     def _format_pk_values_for_sql(self, values, layer=None, pk_field=None):
-        """Format PK values for SQL using callback or default implementation."""
+        """
+        Format PK values for SQL using centralized function.
+        
+        CENTRALIZED v4.3.8: Delegates to infrastructure.database.sql_utils.format_pk_values_for_sql
+        """
+        # Try callback first (legacy support)
         if self._format_pk_values_callback:
             return self._format_pk_values_callback(values, layer=layer, pk_field=pk_field)
-        # Default: join as comma-separated values
-        return ','.join(str(v) for v in values)
+        
+        # Use centralized function
+        from ...infrastructure.database.sql_utils import format_pk_values_for_sql
+        return format_pk_values_for_sql(values=values, pk_field=pk_field, layer=layer)
     
     def _get_source_filter_for_postgresql(self) -> Optional[str]:
         """

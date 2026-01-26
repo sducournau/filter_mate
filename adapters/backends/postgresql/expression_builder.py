@@ -663,17 +663,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         
         return geom_field
     
-    def _apply_centroid_transform(self, geom_expr: str, layer_props: Dict) -> str:
-        """Apply centroid transformation for performance."""
-        centroid_mode = self.task_params.get('centroid_mode', 'point_on_surface')
-        geometry_type = layer_props.get("layer_geometry_type")
-        
-        if centroid_mode == 'point_on_surface':
-            self.log_info("✓ Using ST_PointOnSurface for centroid")
-            return f"ST_PointOnSurface({geom_expr})"
-        else:
-            self.log_info("✓ Using ST_Centroid for centroid")
-            return f"ST_Centroid({geom_expr})"
+    # NOTE v4.0.1: _apply_centroid_transform inherited from GeometricFilterPort
     
     def _apply_dynamic_buffer(self, geom_expr: str, buffer_expression: str) -> str:
         """Apply dynamic buffer expression."""

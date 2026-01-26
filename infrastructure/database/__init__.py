@@ -52,6 +52,13 @@ from .style_filter_fixer import (
     fix_expression_for_postgresql,
 )
 
+from .sql_utils import (
+    sanitize_sql_identifier,
+    safe_set_subset_string,
+    create_temp_spatialite_table,
+    format_pk_values_for_sql,
+)
+
 __all__ = [
     # Prepared Statements
     'PreparedStatementManager',
@@ -81,4 +88,9 @@ __all__ = [
     'fix_layer_style_filters',
     'scan_layers_for_type_mismatches',
     'fix_expression_for_postgresql',
+    # SQL Utils (v4.3.8 - centralized)
+    'sanitize_sql_identifier',
+    'safe_set_subset_string',
+    'create_temp_spatialite_table',
+    'format_pk_values_for_sql',
 ]

@@ -269,6 +269,133 @@ class GeometricFilterPort(ABC):
         """
         return self.task_params.get('buffer_mitre_limit', 5.0)
 
+    # =========================================================================
+    # Common Utility Methods (v4.0.1 - Centralized from backend implementations)
+    # =========================================================================
+    
+    def _detect_geometry_column(self, layer_props: Dict[str, Any]) -> str:
+        """
+        Detect geometry column from layer properties.
+        
+        Tries multiple methods in order:
+        1. dataProvider().geometryColumn() (most reliable)
+        2. QgsDataSourceUri.geometryColumn()
+        3. Parse URI for geometryname= parameter
+        4. Fall back to layer_geometry_field from props or 'geom' default
+        
+        Args:
+            layer_props: Layer properties dictionary with 'layer' key
+            
+        Returns:
+            Geometry column name
+        """
+        geom_field = layer_props.get("layer_geometry_field", "geom")
+        layer = layer_props.get("layer")
+        
+        if layer:
+            try:
+                # Method 1: Direct provider API
+                try:
+                    geom_col = layer.dataProvider().geometryColumn()
+                    if geom_col:
+                        self.log_debug(f"Detected geometry column via provider: '{geom_col}'")
+                        return geom_col
+                except (AttributeError, RuntimeError):
+                    pass
+                
+                # Method 2: QgsDataSourceUri parsing
+                try:
+                    from qgis.core import QgsDataSourceUri
+                    uri_string = layer.dataProvider().dataSourceUri()
+                    uri_obj = QgsDataSourceUri(uri_string)
+                    uri_geom_col = uri_obj.geometryColumn()
+                    if uri_geom_col:
+                        self.log_debug(f"Detected geometry column via URI: '{uri_geom_col}'")
+                        return uri_geom_col
+                except (ImportError, AttributeError, RuntimeError):
+                    pass
+                
+                # Method 3: Parse URI for geometryname (GeoPackage style)
+                try:
+                    uri_string = layer.dataProvider().dataSourceUri()
+                    if '|' in uri_string:
+                        for part in uri_string.split('|'):
+                            if part.startswith('geometryname='):
+                                geom_col = part.split('=')[1]
+                                self.log_debug(f"Detected geometry column via URI parse: '{geom_col}'")
+                                return geom_col
+                except Exception:
+                    pass
+                    
+            except Exception as e:
+                self.log_warning(f"Error detecting geometry column: {e}")
+        
+        self.log_debug(f"Using default geometry column: '{geom_field}'")
+        return geom_field
+    
+    def _apply_centroid_transform(self, geom_expr: str, layer_props: Dict[str, Any]) -> str:
+        """
+        Apply centroid transformation for performance optimization.
+        
+        Uses ST_PointOnSurface (guarantees point inside geometry) or
+        ST_Centroid (may be outside for concave shapes).
+        
+        Args:
+            geom_expr: Geometry expression to transform
+            layer_props: Layer properties (unused, for subclass override)
+            
+        Returns:
+            Transformed geometry expression
+        """
+        centroid_mode = self.task_params.get('centroid_mode', 'point_on_surface')
+        
+        if centroid_mode == 'point_on_surface':
+            self.log_info("✓ Using ST_PointOnSurface for centroid")
+            return f"ST_PointOnSurface({geom_expr})"
+        else:
+            self.log_info("✓ Using ST_Centroid for centroid")
+            return f"ST_Centroid({geom_expr})"
+    
+    def _get_layer_srid(self, layer) -> int:
+        """
+        Get SRID from layer CRS.
+        
+        Args:
+            layer: QgsVectorLayer instance
+            
+        Returns:
+            SRID as integer, defaults to 4326
+        """
+        if not layer:
+            return 4326
+        
+        try:
+            crs = layer.crs()
+            if crs and crs.isValid():
+                authid = crs.authid()
+                if ':' in authid:
+                    return int(authid.split(':')[1])
+        except Exception:
+            pass
+        
+        return 4326
+    
+    def _get_source_srid(self) -> int:
+        """
+        Get source SRID from task params.
+        
+        Returns:
+            Source layer SRID, defaults to 4326
+        """
+        if self.task_params:
+            source_crs = self.task_params.get('infos', {}).get('layer_crs_authid', '')
+            if ':' in str(source_crs):
+                try:
+                    return int(str(source_crs).split(':')[1])
+                except (ValueError, IndexError):
+                    pass
+        return 4326
+
 
 # =============================================================================
 # Type hints for QGIS objects (avoid import at module level)

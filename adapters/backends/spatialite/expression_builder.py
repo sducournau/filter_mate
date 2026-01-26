@@ -305,39 +305,8 @@ class SpatialiteExpressionBuilder(GeometricFilterPort):
     # Private Helper Methods
     # =========================================================================
     
-    def _detect_geometry_column(self, layer_props: Dict) -> str:
-        """Detect geometry column from layer properties."""
-        geom_field = layer_props.get("layer_geometry_field", "geom")
-        layer = layer_props.get("layer")
-        
-        if layer:
-            try:
-                # Method 1: dataProvider().geometryColumn()
-                try:
-                    geom_col = layer.dataProvider().geometryColumn()
-                    if geom_col:
-                        return geom_col
-                except (AttributeError, RuntimeError):
-                    pass
-                
-                # Method 2: QgsDataSourceUri
-                from qgis.core import QgsDataSourceUri
-                uri_string = layer.dataProvider().dataSourceUri()
-                uri_obj = QgsDataSourceUri(uri_string)
-                uri_geom_col = uri_obj.geometryColumn()
-                if uri_geom_col:
-                    return uri_geom_col
-                
-                # Method 3: Parse URI for geometryname
-                if '|' in uri_string:
-                    for part in uri_string.split('|'):
-                        if part.startswith('geometryname='):
-                            return part.split('=')[1]
-                
-            except Exception as e:
-                self.log_warning(f"Error detecting geometry column: {e}")
-        
-        return geom_field
+    # NOTE v4.0.1: _detect_geometry_column, _apply_centroid_transform, 
+    # _get_layer_srid, _get_source_srid are inherited from GeometricFilterPort
     
     def _is_geopackage(self, layer) -> bool:
         """Check if layer is from a GeoPackage."""
@@ -345,44 +314,6 @@ class SpatialiteExpressionBuilder(GeometricFilterPort):
             return False
         source = layer.source().lower()
         return '.gpkg' in source or 'gpkg|' in source
-    
-    def _apply_centroid_transform(self, geom_expr: str, layer_props: Dict) -> str:
-        """Apply centroid transformation for performance."""
-        centroid_mode = self.task_params.get('centroid_mode', 'point_on_surface')
-        
-        if centroid_mode == 'point_on_surface':
-            self.log_info("✓ Using ST_PointOnSurface for centroid")
-            return f"ST_PointOnSurface({geom_expr})"
-        else:
-            self.log_info("✓ Using ST_Centroid for centroid")
-            return f"ST_Centroid({geom_expr})"
-    
-    def _get_layer_srid(self, layer) -> int:
-        """Get SRID from layer CRS."""
-        if not layer:
-            return 4326
-        
-        try:
-            crs = layer.crs()
-            if crs and crs.isValid():
-                authid = crs.authid()
-                if ':' in authid:
-                    return int(authid.split(':')[1])
-        except Exception:
-            pass
-        
-        return 4326
-    
-    def _get_source_srid(self) -> int:
-        """Get source SRID from task params."""
-        if self.task_params:
-            source_crs = self.task_params.get('infos', {}).get('layer_crs_authid', '')
-            if ':' in str(source_crs):
-                try:
-                    return int(source_crs.split(':')[1])
-                except (ValueError, IndexError):
-                    pass
-        return 4326
     
     def _build_source_geometry_sql(
         self,

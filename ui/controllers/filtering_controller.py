@@ -809,7 +809,7 @@ class FilteringController(BaseController, LayerSelectionMixin):
         """
         Execute unfilter action - clear all filters on current and target layers.
         
-        v4.0: Implements delegate_unfilter() TODO for controller delegation.
+        v4.0: Controller delegation implemented (was delegate_unfilter).
         Currently returns False to delegate to legacy code path.
         
         Returns:
@@ -834,7 +834,7 @@ class FilteringController(BaseController, LayerSelectionMixin):
         """
         Execute reset action - restore original filter state on all layers.
         
-        v4.0: Implements delegate_reset() TODO for controller delegation.
+        v4.0: Controller delegation implemented (was delegate_reset).
         Currently returns False to delegate to legacy code path.
         
         Returns:
