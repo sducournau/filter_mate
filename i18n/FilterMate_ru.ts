@@ -261,6 +261,294 @@ Please restart QGIS to apply the changes.</source>
 
 Перезапустите QGIS для применения изменений.</translation>
     </message>
+    <message>
+        <source>All layers using auto-selection</source>
+        <translation>Все слои используют автовыбор</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer module not available</source>
+        <translation>Модуль авто-оптимизации недоступен</translation>
+    </message>
+    <message>
+        <source>Backend controller not available</source>
+        <translation>Контроллер бэкенда недоступен</translation>
+    </message>
+    <message>
+        <source>Backend optimization unavailable</source>
+        <translation>Оптимизация бэкенда недоступна</translation>
+    </message>
+    <message>
+        <source>Could not reload plugin automatically.</source>
+        <translation>Не удалось автоматически перезагрузить плагин.</translation>
+    </message>
+    <message>
+        <source>Favorites manager not available</source>
+        <translation>Менеджер избранного недоступен</translation>
+    </message>
+    <message>
+        <source>No PostgreSQL connection available</source>
+        <translation>Нет доступного подключения PostgreSQL</translation>
+    </message>
+    <message>
+        <source>No layer selected. Please select a layer first.</source>
+        <translation>Слой не выбран. Пожалуйста, сначала выберите слой.</translation>
+    </message>
+    <message>
+        <source>No optimizations selected to apply.</source>
+        <translation>Не выбрано оптимизаций для применения.</translation>
+    </message>
+    <message>
+        <source>No views to clean or cleanup failed</source>
+        <translation>Нет представлений для очистки или очистка не удалась</translation>
+    </message>
+    <message>
+        <source>Other Sessions Active</source>
+        <translation>Активны другие сессии</translation>
+    </message>
+    <message>
+        <source>PostgreSQL auto-cleanup disabled</source>
+        <translation>Автоматическая очистка PostgreSQL отключена</translation>
+    </message>
+    <message>
+        <source>PostgreSQL auto-cleanup enabled</source>
+        <translation>Автоматическая очистка PostgreSQL включена</translation>
+    </message>
+    <message>
+        <source>PostgreSQL session views cleaned up</source>
+        <translation>Представления сессии PostgreSQL очищены</translation>
+    </message>
+    <message>
+        <source>Schema cleanup cancelled</source>
+        <translation>Очистка схемы отменена</translation>
+    </message>
+    <message>
+        <source>Schema cleanup failed</source>
+        <translation>Очистка схемы не удалась</translation>
+    </message>
+    <message>
+        <source>UI configuration incomplete - check logs</source>
+        <translation>Конфигурация интерфейса неполная - проверьте логи</translation>
+    </message>
+    <message>
+        <source>disabled</source>
+        <translation>отключено</translation>
+    </message>
+    <message>
+        <source>enabled</source>
+        <translation>включено</translation>
+    </message>
+    <message>
+        <source>★ No favorites saved
+Click to add current filter</source>
+        <translation>★ Нет сохранённых избранных
+Нажмите, чтобы добавить текущий фильтр</translation>
+    </message>
+    <message>
+        <source>★ {0} Favorites saved
+Click to apply or manage</source>
+        <translation>★ {0} избранных сохранено
+Нажмите для применения или управления</translation>
+    </message>
+    <message>
+        <source>Initialization error: {}</source>
+        <translation>Ошибка инициализации: {}</translation>
+    </message>
+    <message>
+        <source>UI dimension error: {}</source>
+        <translation>Ошибка размеров интерфейса: {}</translation>
+    </message>
+    <message>
+        <source>Forced {0} backend for {1} layer(s)</source>
+        <translation>Принудительно установлен бэкенд {0} для {1} слоя/слоёв</translation>
+    </message>
+    <message>
+        <source>Schema has {0} view(s) from other sessions.
+Drop anyway?</source>
+        <translation>Схема имеет {0} представлений из других сессий.
+Удалить в любом случае?</translation>
+    </message>
+    <message>
+        <source>Schema &apos;{0}&apos; dropped successfully</source>
+        <translation>Схема &apos;{0}&apos; успешно удалена</translation>
+    </message>
+    <message>
+        <source>Auto-optimization {0}</source>
+        <translation>Авто-оптимизация {0}</translation>
+    </message>
+    <message>
+        <source>Auto-centroid {0}</source>
+        <translation>Авто-центроид {0}</translation>
+    </message>
+    <message>
+        <source>Confirmation {0}</source>
+        <translation>Подтверждение {0}</translation>
+    </message>
+    <message>
+        <source>Could not analyze layer &apos;{0}&apos;</source>
+        <translation>Не удалось проанализировать слой &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Layer &apos;{0}&apos; is already optimally configured.
+Type: {1}
+Features: {2:,}</source>
+        <translation>Слой &apos;{0}&apos; уже оптимально настроен.
+Тип: {1}
+Объекты: {2:,}</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer not available: {0}</source>
+        <translation>Авто-оптимизатор недоступен: {0}</translation>
+    </message>
+    <message>
+        <source>Error analyzing layer: {0}</source>
+        <translation>Ошибка при анализе слоя: {0}</translation>
+    </message>
+    <message>
+        <source>Applied to &apos;{0}&apos;:
+{1}</source>
+        <translation>Применено к &apos;{0}&apos;:
+{1}</translation>
+    </message>
+    <message>
+        <source>Dialog not available: {0}</source>
+        <translation>Диалог недоступен: {0}</translation>
+    </message>
+    <message>
+        <source>Error: {0}</source>
+        <translation>Ошибка: {0}</translation>
+    </message>
+    <message>
+        <source>Optimized {0} layer(s)</source>
+        <translation>Оптимизировано {0} слоя/слоёв</translation>
+    </message>
+    <message>
+        <source>Error cancelling changes: {0}</source>
+        <translation>Ошибка при отмене изменений: {0}</translation>
+    </message>
+    <message>
+        <source>Error reloading plugin: {0}</source>
+        <translation>Ошибка при перезагрузке плагина: {0}</translation>
+    </message>
+    <message>
+        <source>No alternative backends available for this layer</source>
+        <translation>Нет альтернативных бэкендов для этого слоя</translation>
+    </message>
+    <message>
+        <source>📁 Current Project</source>
+        <translation>📁 Текущий проект</translation>
+    </message>
+    <message>
+        <source>Clear temporary tables for the current project only</source>
+        <translation>Очистить временные таблицы только для текущего проекта</translation>
+    </message>
+    <message>
+        <source>🌐 All Projects (Global)</source>
+        <translation>🌐 Все проекты (Глобально)</translation>
+    </message>
+    <message>
+        <source>Clear ALL FilterMate temporary tables from all databases</source>
+        <translation>Очистить ВСЕ временные таблицы FilterMate из всех баз данных</translation>
+    </message>
+    <message>
+        <source>Auto-selected backends for {0} layer(s)</source>
+        <translation>Автоматически выбраны бэкенды для {0} слоя/слоёв</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) for current project</source>
+        <translation>Очищено {0} временных таблиц для текущего проекта</translation>
+    </message>
+    <message>
+        <source>No temporary tables found for current project</source>
+        <translation>Не найдено временных таблиц для текущего проекта</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) globally</source>
+        <translation>Очищено {0} временных таблиц глобально</translation>
+    </message>
+    <message>
+        <source>No temporary tables found</source>
+        <translation>Временные таблицы не найдены</translation>
+    </message>
+    <message>
+        <source>Backend forced to {0} for &apos;{1}&apos;</source>
+        <translation>Бэкенд принудительно установлен на {0} для &apos;{1}&apos;</translation>
+    </message>
+    <message>
+        <source>Backend set to Auto for &apos;{0}&apos;</source>
+        <translation>Бэкенд установлен на Авто для &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Undo last filter (Ctrl+Z)</source>
+        <translation>Отменить последний фильтр (Ctrl+Z)</translation>
+    </message>
+    <message>
+        <source>Redo filter (Ctrl+Y)</source>
+        <translation>Повторить фильтр (Ctrl+Y)</translation>
+    </message>
+    <message>
+        <source>Filter history position</source>
+        <translation>Позиция в истории фильтров</translation>
+    </message>
+    <message>
+        <source>FilterMate - Add to Favorites</source>
+        <translation>FilterMate - Добавить в избранное</translation>
+    </message>
+    <message>
+        <source>Enter a name for this filter</source>
+        <translation>Введите имя для этого фильтра</translation>
+    </message>
+    <message>
+        <source>Description (auto-generated, you can modify it)</source>
+        <translation>Описание (автоматически сгенерировано, вы можете изменить)</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter to Favorites</source>
+        <translation>⭐ Добавить текущий фильтр в избранное</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter (no filter active)</source>
+        <translation>⭐ Добавить текущий фильтр (нет активного фильтра)</translation>
+    </message>
+    <message>
+        <source>⭐ Add current filter to favorites</source>
+        <translation>⭐ Добавить текущий фильтр в избранное</translation>
+    </message>
+    <message>
+        <source>⭐ Add filter (no active filter)</source>
+        <translation>⭐ Добавить фильтр (нет активного фильтра)</translation>
+    </message>
+    <message>
+        <source>⚙️ Manage favorites...</source>
+        <translation>⚙️ Управление избранным...</translation>
+    </message>
+    <message>
+        <source>📤 Export...</source>
+        <translation>📤 Экспорт...</translation>
+    </message>
+    <message>
+        <source>📥 Import...</source>
+        <translation>📥 Импорт...</translation>
+    </message>
+    <message>
+        <source>The selected layer is invalid or its source cannot be found.</source>
+        <translation>Выбранный слой недействителен или его источник не найден.</translation>
+    </message>
+    <message>
+        <source>Plugin activated with {0} vector layer(s)</source>
+        <translation>Плагин активирован с {0} векторными слоями</translation>
+    </message>
+    <message>
+        <source>Theme adapted: {0}</source>
+        <translation>Тема адаптирована: {0}</translation>
+    </message>
+    <message>
+        <source>Dark mode</source>
+        <translation>Тёмный режим</translation>
+    </message>
+    <message>
+        <source>Light mode</source>
+        <translation>Светлый режим</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

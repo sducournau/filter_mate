@@ -261,6 +261,294 @@ Please restart QGIS to apply the changes.</source>
 
 Start QGIS på nytt for å bruke endringene.</translation>
     </message>
+    <message>
+        <source>All layers using auto-selection</source>
+        <translation>Alle lag bruker automatisk valg</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer module not available</source>
+        <translation>Auto-optimaliseringsmodul ikke tilgjengelig</translation>
+    </message>
+    <message>
+        <source>Backend controller not available</source>
+        <translation>Backend-kontroller ikke tilgjengelig</translation>
+    </message>
+    <message>
+        <source>Backend optimization unavailable</source>
+        <translation>Backend-optimalisering ikke tilgjengelig</translation>
+    </message>
+    <message>
+        <source>Could not reload plugin automatically.</source>
+        <translation>Kunne ikke laste inn plugin automatisk.</translation>
+    </message>
+    <message>
+        <source>Favorites manager not available</source>
+        <translation>Favorittbehandler ikke tilgjengelig</translation>
+    </message>
+    <message>
+        <source>No PostgreSQL connection available</source>
+        <translation>Ingen PostgreSQL-tilkobling tilgjengelig</translation>
+    </message>
+    <message>
+        <source>No layer selected. Please select a layer first.</source>
+        <translation>Ingen lag valgt. Vennligst velg et lag først.</translation>
+    </message>
+    <message>
+        <source>No optimizations selected to apply.</source>
+        <translation>Ingen optimaliseringer valgt å anvende.</translation>
+    </message>
+    <message>
+        <source>No views to clean or cleanup failed</source>
+        <translation>Ingen visninger å rydde eller opprydding mislyktes</translation>
+    </message>
+    <message>
+        <source>Other Sessions Active</source>
+        <translation>Andre økter aktive</translation>
+    </message>
+    <message>
+        <source>PostgreSQL auto-cleanup disabled</source>
+        <translation>PostgreSQL auto-opprydding deaktivert</translation>
+    </message>
+    <message>
+        <source>PostgreSQL auto-cleanup enabled</source>
+        <translation>PostgreSQL auto-opprydding aktivert</translation>
+    </message>
+    <message>
+        <source>PostgreSQL session views cleaned up</source>
+        <translation>PostgreSQL-øktsvisninger ryddet opp</translation>
+    </message>
+    <message>
+        <source>Schema cleanup cancelled</source>
+        <translation>Skjema-opprydding avbrutt</translation>
+    </message>
+    <message>
+        <source>Schema cleanup failed</source>
+        <translation>Skjema-opprydding mislyktes</translation>
+    </message>
+    <message>
+        <source>UI configuration incomplete - check logs</source>
+        <translation>UI-konfigurasjon ufullstendig - sjekk logger</translation>
+    </message>
+    <message>
+        <source>disabled</source>
+        <translation>deaktivert</translation>
+    </message>
+    <message>
+        <source>enabled</source>
+        <translation>aktivert</translation>
+    </message>
+    <message>
+        <source>★ No favorites saved
+Click to add current filter</source>
+        <translation>★ Ingen favoritter lagret
+Klikk for å legge til gjeldende filter</translation>
+    </message>
+    <message>
+        <source>★ {0} Favorites saved
+Click to apply or manage</source>
+        <translation>★ {0} favoritter lagret
+Klikk for å anvende eller administrere</translation>
+    </message>
+    <message>
+        <source>Initialization error: {}</source>
+        <translation>Initialiseringsfeil: {}</translation>
+    </message>
+    <message>
+        <source>UI dimension error: {}</source>
+        <translation>UI-dimensjonsfeil: {}</translation>
+    </message>
+    <message>
+        <source>Forced {0} backend for {1} layer(s)</source>
+        <translation>Tvunget {0} backend for {1} lag</translation>
+    </message>
+    <message>
+        <source>Schema has {0} view(s) from other sessions.
+Drop anyway?</source>
+        <translation>Skjema har {0} visning(er) fra andre økter.
+Fjern likevel?</translation>
+    </message>
+    <message>
+        <source>Schema &apos;{0}&apos; dropped successfully</source>
+        <translation>Skjema &apos;{0}&apos; fjernet vellykket</translation>
+    </message>
+    <message>
+        <source>Auto-optimization {0}</source>
+        <translation>Auto-optimalisering {0}</translation>
+    </message>
+    <message>
+        <source>Auto-centroid {0}</source>
+        <translation>Auto-sentroid {0}</translation>
+    </message>
+    <message>
+        <source>Confirmation {0}</source>
+        <translation>Bekreftelse {0}</translation>
+    </message>
+    <message>
+        <source>Could not analyze layer &apos;{0}&apos;</source>
+        <translation>Kunne ikke analysere lag &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Layer &apos;{0}&apos; is already optimally configured.
+Type: {1}
+Features: {2:,}</source>
+        <translation>Lag &apos;{0}&apos; er allerede optimalt konfigurert.
+Type: {1}
+Funksjoner: {2:,}</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer not available: {0}</source>
+        <translation>Auto-optimalisering ikke tilgjengelig: {0}</translation>
+    </message>
+    <message>
+        <source>Error analyzing layer: {0}</source>
+        <translation>Feil ved analyse av lag: {0}</translation>
+    </message>
+    <message>
+        <source>Applied to &apos;{0}&apos;:
+{1}</source>
+        <translation>Anvendt på &apos;{0}&apos;:
+{1}</translation>
+    </message>
+    <message>
+        <source>Dialog not available: {0}</source>
+        <translation>Dialog ikke tilgjengelig: {0}</translation>
+    </message>
+    <message>
+        <source>Error: {0}</source>
+        <translation>Feil: {0}</translation>
+    </message>
+    <message>
+        <source>Optimized {0} layer(s)</source>
+        <translation>Optimaliserte {0} lag</translation>
+    </message>
+    <message>
+        <source>Error cancelling changes: {0}</source>
+        <translation>Feil ved avbrytelse av endringer: {0}</translation>
+    </message>
+    <message>
+        <source>Error reloading plugin: {0}</source>
+        <translation>Feil ved innlasting av plugin: {0}</translation>
+    </message>
+    <message>
+        <source>No alternative backends available for this layer</source>
+        <translation>Ingen alternative backends tilgjengelige for dette laget</translation>
+    </message>
+    <message>
+        <source>📁 Current Project</source>
+        <translation>📁 Gjeldende prosjekt</translation>
+    </message>
+    <message>
+        <source>Clear temporary tables for the current project only</source>
+        <translation>Fjern midlertidige tabeller kun for gjeldende prosjekt</translation>
+    </message>
+    <message>
+        <source>🌐 All Projects (Global)</source>
+        <translation>🌐 Alle prosjekter (Globalt)</translation>
+    </message>
+    <message>
+        <source>Clear ALL FilterMate temporary tables from all databases</source>
+        <translation>Fjern ALLE FilterMate midlertidige tabeller fra alle databaser</translation>
+    </message>
+    <message>
+        <source>Auto-selected backends for {0} layer(s)</source>
+        <translation>Automatisk valgte backends for {0} lag</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) for current project</source>
+        <translation>Fjernet {0} midlertidig(e) tabell(er) for gjeldende prosjekt</translation>
+    </message>
+    <message>
+        <source>No temporary tables found for current project</source>
+        <translation>Ingen midlertidige tabeller funnet for gjeldende prosjekt</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) globally</source>
+        <translation>Fjernet {0} midlertidig(e) tabell(er) globalt</translation>
+    </message>
+    <message>
+        <source>No temporary tables found</source>
+        <translation>Ingen midlertidige tabeller funnet</translation>
+    </message>
+    <message>
+        <source>Backend forced to {0} for &apos;{1}&apos;</source>
+        <translation>Backend tvunget til {0} for &apos;{1}&apos;</translation>
+    </message>
+    <message>
+        <source>Backend set to Auto for &apos;{0}&apos;</source>
+        <translation>Backend satt til Auto for &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Undo last filter (Ctrl+Z)</source>
+        <translation>Angre siste filter (Ctrl+Z)</translation>
+    </message>
+    <message>
+        <source>Redo filter (Ctrl+Y)</source>
+        <translation>Gjør om filter (Ctrl+Y)</translation>
+    </message>
+    <message>
+        <source>Filter history position</source>
+        <translation>Posisjon i filterhistorikk</translation>
+    </message>
+    <message>
+        <source>FilterMate - Add to Favorites</source>
+        <translation>FilterMate - Legg til i favoritter</translation>
+    </message>
+    <message>
+        <source>Enter a name for this filter</source>
+        <translation>Skriv inn et navn for dette filteret</translation>
+    </message>
+    <message>
+        <source>Description (auto-generated, you can modify it)</source>
+        <translation>Beskrivelse (auto-generert, du kan endre den)</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter to Favorites</source>
+        <translation>⭐ Legg til gjeldende filter i favoritter</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter (no filter active)</source>
+        <translation>⭐ Legg til gjeldende filter (ingen filter aktiv)</translation>
+    </message>
+    <message>
+        <source>⭐ Add current filter to favorites</source>
+        <translation>⭐ Legg til gjeldende filter i favoritter</translation>
+    </message>
+    <message>
+        <source>⭐ Add filter (no active filter)</source>
+        <translation>⭐ Legg til filter (ingen aktiv filter)</translation>
+    </message>
+    <message>
+        <source>⚙️ Manage favorites...</source>
+        <translation>⚙️ Administrer favoritter...</translation>
+    </message>
+    <message>
+        <source>📤 Export...</source>
+        <translation>📤 Eksporter...</translation>
+    </message>
+    <message>
+        <source>📥 Import...</source>
+        <translation>📥 Importer...</translation>
+    </message>
+    <message>
+        <source>The selected layer is invalid or its source cannot be found.</source>
+        <translation>Det valgte laget er ugyldig eller kilden kan ikke finnes.</translation>
+    </message>
+    <message>
+        <source>Plugin activated with {0} vector layer(s)</source>
+        <translation>Plugin aktivert med {0} vektorlag</translation>
+    </message>
+    <message>
+        <source>Theme adapted: {0}</source>
+        <translation>Tema tilpasset: {0}</translation>
+    </message>
+    <message>
+        <source>Dark mode</source>
+        <translation>Mørk modus</translation>
+    </message>
+    <message>
+        <source>Light mode</source>
+        <translation>Lys modus</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

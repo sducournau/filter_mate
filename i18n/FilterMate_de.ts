@@ -261,6 +261,294 @@ Please restart QGIS to apply the changes.</source>
 
 Bitte starten Sie QGIS neu, um die Änderungen anzuwenden.</translation>
     </message>
+    <message>
+        <source>All layers using auto-selection</source>
+        <translation>Alle Layer verwenden Auto-Auswahl</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer module not available</source>
+        <translation>Auto-Optimierungsmodul nicht verfügbar</translation>
+    </message>
+    <message>
+        <source>Backend controller not available</source>
+        <translation>Backend-Controller nicht verfügbar</translation>
+    </message>
+    <message>
+        <source>Backend optimization unavailable</source>
+        <translation>Backend-Optimierung nicht verfügbar</translation>
+    </message>
+    <message>
+        <source>Could not reload plugin automatically.</source>
+        <translation>Plugin konnte nicht automatisch neu geladen werden.</translation>
+    </message>
+    <message>
+        <source>Favorites manager not available</source>
+        <translation>Favoritenverwaltung nicht verfügbar</translation>
+    </message>
+    <message>
+        <source>No PostgreSQL connection available</source>
+        <translation>Keine PostgreSQL-Verbindung verfügbar</translation>
+    </message>
+    <message>
+        <source>No layer selected. Please select a layer first.</source>
+        <translation>Kein Layer ausgewählt. Bitte wählen Sie zuerst einen Layer aus.</translation>
+    </message>
+    <message>
+        <source>No optimizations selected to apply.</source>
+        <translation>Keine Optimierungen zum Anwenden ausgewählt.</translation>
+    </message>
+    <message>
+        <source>No views to clean or cleanup failed</source>
+        <translation>Keine Ansichten zum Bereinigen oder Bereinigung fehlgeschlagen</translation>
+    </message>
+    <message>
+        <source>Other Sessions Active</source>
+        <translation>Andere Sitzungen aktiv</translation>
+    </message>
+    <message>
+        <source>PostgreSQL auto-cleanup disabled</source>
+        <translation>PostgreSQL Auto-Bereinigung deaktiviert</translation>
+    </message>
+    <message>
+        <source>PostgreSQL auto-cleanup enabled</source>
+        <translation>PostgreSQL Auto-Bereinigung aktiviert</translation>
+    </message>
+    <message>
+        <source>PostgreSQL session views cleaned up</source>
+        <translation>PostgreSQL-Sitzungsansichten bereinigt</translation>
+    </message>
+    <message>
+        <source>Schema cleanup cancelled</source>
+        <translation>Schema-Bereinigung abgebrochen</translation>
+    </message>
+    <message>
+        <source>Schema cleanup failed</source>
+        <translation>Schema-Bereinigung fehlgeschlagen</translation>
+    </message>
+    <message>
+        <source>UI configuration incomplete - check logs</source>
+        <translation>UI-Konfiguration unvollständig - Logs prüfen</translation>
+    </message>
+    <message>
+        <source>disabled</source>
+        <translation>deaktiviert</translation>
+    </message>
+    <message>
+        <source>enabled</source>
+        <translation>aktiviert</translation>
+    </message>
+    <message>
+        <source>★ No favorites saved
+Click to add current filter</source>
+        <translation>★ Keine Favoriten gespeichert
+Klicken Sie, um den aktuellen Filter hinzuzufügen</translation>
+    </message>
+    <message>
+        <source>★ {0} Favorites saved
+Click to apply or manage</source>
+        <translation>★ {0} Favoriten gespeichert
+Klicken Sie zum Anwenden oder Verwalten</translation>
+    </message>
+    <message>
+        <source>Initialization error: {}</source>
+        <translation>Initialisierungsfehler: {}</translation>
+    </message>
+    <message>
+        <source>UI dimension error: {}</source>
+        <translation>UI-Dimensionsfehler: {}</translation>
+    </message>
+    <message>
+        <source>Forced {0} backend for {1} layer(s)</source>
+        <translation>{0} Backend erzwungen für {1} Layer</translation>
+    </message>
+    <message>
+        <source>Schema has {0} view(s) from other sessions.
+Drop anyway?</source>
+        <translation>Schema hat {0} Ansicht(en) von anderen Sitzungen.
+Trotzdem löschen?</translation>
+    </message>
+    <message>
+        <source>Schema &apos;{0}&apos; dropped successfully</source>
+        <translation>Schema &apos;{0}&apos; erfolgreich gelöscht</translation>
+    </message>
+    <message>
+        <source>Auto-optimization {0}</source>
+        <translation>Auto-Optimierung {0}</translation>
+    </message>
+    <message>
+        <source>Auto-centroid {0}</source>
+        <translation>Auto-Schwerpunkt {0}</translation>
+    </message>
+    <message>
+        <source>Confirmation {0}</source>
+        <translation>Bestätigung {0}</translation>
+    </message>
+    <message>
+        <source>Could not analyze layer &apos;{0}&apos;</source>
+        <translation>Layer &apos;{0}&apos; konnte nicht analysiert werden</translation>
+    </message>
+    <message>
+        <source>Layer &apos;{0}&apos; is already optimally configured.
+Type: {1}
+Features: {2:,}</source>
+        <translation>Layer &apos;{0}&apos; ist bereits optimal konfiguriert.
+Typ: {1}
+Objekte: {2:,}</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer not available: {0}</source>
+        <translation>Auto-Optimierer nicht verfügbar: {0}</translation>
+    </message>
+    <message>
+        <source>Error analyzing layer: {0}</source>
+        <translation>Fehler beim Analysieren des Layers: {0}</translation>
+    </message>
+    <message>
+        <source>Applied to &apos;{0}&apos;:
+{1}</source>
+        <translation>Angewendet auf &apos;{0}&apos;:
+{1}</translation>
+    </message>
+    <message>
+        <source>Dialog not available: {0}</source>
+        <translation>Dialog nicht verfügbar: {0}</translation>
+    </message>
+    <message>
+        <source>Error: {0}</source>
+        <translation>Fehler: {0}</translation>
+    </message>
+    <message>
+        <source>Optimized {0} layer(s)</source>
+        <translation>{0} Layer optimiert</translation>
+    </message>
+    <message>
+        <source>Error cancelling changes: {0}</source>
+        <translation>Fehler beim Abbrechen der Änderungen: {0}</translation>
+    </message>
+    <message>
+        <source>Error reloading plugin: {0}</source>
+        <translation>Fehler beim Neuladen des Plugins: {0}</translation>
+    </message>
+    <message>
+        <source>No alternative backends available for this layer</source>
+        <translation>Keine alternativen Backends für diesen Layer verfügbar</translation>
+    </message>
+    <message>
+        <source>📁 Current Project</source>
+        <translation>📁 Aktuelles Projekt</translation>
+    </message>
+    <message>
+        <source>Clear temporary tables for the current project only</source>
+        <translation>Temporäre Tabellen nur für das aktuelle Projekt löschen</translation>
+    </message>
+    <message>
+        <source>🌐 All Projects (Global)</source>
+        <translation>🌐 Alle Projekte (Global)</translation>
+    </message>
+    <message>
+        <source>Clear ALL FilterMate temporary tables from all databases</source>
+        <translation>ALLE temporären FilterMate-Tabellen aus allen Datenbanken löschen</translation>
+    </message>
+    <message>
+        <source>Auto-selected backends for {0} layer(s)</source>
+        <translation>Auto-ausgewählte Backends für {0} Layer</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) for current project</source>
+        <translation>{0} temporäre Tabelle(n) für aktuelles Projekt gelöscht</translation>
+    </message>
+    <message>
+        <source>No temporary tables found for current project</source>
+        <translation>Keine temporären Tabellen für aktuelles Projekt gefunden</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) globally</source>
+        <translation>{0} temporäre Tabelle(n) global gelöscht</translation>
+    </message>
+    <message>
+        <source>No temporary tables found</source>
+        <translation>Keine temporären Tabellen gefunden</translation>
+    </message>
+    <message>
+        <source>Backend forced to {0} for &apos;{1}&apos;</source>
+        <translation>Backend erzwungen zu {0} für &apos;{1}&apos;</translation>
+    </message>
+    <message>
+        <source>Backend set to Auto for &apos;{0}&apos;</source>
+        <translation>Backend auf Auto gesetzt für &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Undo last filter (Ctrl+Z)</source>
+        <translation>Letzten Filter rückgängig machen (Strg+Z)</translation>
+    </message>
+    <message>
+        <source>Redo filter (Ctrl+Y)</source>
+        <translation>Filter wiederholen (Strg+Y)</translation>
+    </message>
+    <message>
+        <source>Filter history position</source>
+        <translation>Position in Filterhistorie</translation>
+    </message>
+    <message>
+        <source>FilterMate - Add to Favorites</source>
+        <translation>FilterMate - Zu Favoriten hinzufügen</translation>
+    </message>
+    <message>
+        <source>Enter a name for this filter</source>
+        <translation>Geben Sie einen Namen für diesen Filter ein</translation>
+    </message>
+    <message>
+        <source>Description (auto-generated, you can modify it)</source>
+        <translation>Beschreibung (automatisch generiert, Sie können sie ändern)</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter to Favorites</source>
+        <translation>⭐ Aktuellen Filter zu Favoriten hinzufügen</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter (no filter active)</source>
+        <translation>⭐ Aktuellen Filter hinzufügen (kein Filter aktiv)</translation>
+    </message>
+    <message>
+        <source>⭐ Add current filter to favorites</source>
+        <translation>⭐ Aktuellen Filter zu Favoriten hinzufügen</translation>
+    </message>
+    <message>
+        <source>⭐ Add filter (no active filter)</source>
+        <translation>⭐ Filter hinzufügen (kein aktiver Filter)</translation>
+    </message>
+    <message>
+        <source>⚙️ Manage favorites...</source>
+        <translation>⚙️ Favoriten verwalten...</translation>
+    </message>
+    <message>
+        <source>📤 Export...</source>
+        <translation>📤 Exportieren...</translation>
+    </message>
+    <message>
+        <source>📥 Import...</source>
+        <translation>📥 Importieren...</translation>
+    </message>
+    <message>
+        <source>The selected layer is invalid or its source cannot be found.</source>
+        <translation>Der ausgewählte Layer ist ungültig oder seine Quelle kann nicht gefunden werden.</translation>
+    </message>
+    <message>
+        <source>Plugin activated with {0} vector layer(s)</source>
+        <translation>Plugin aktiviert mit {0} Vektor-Layer(n)</translation>
+    </message>
+    <message>
+        <source>Theme adapted: {0}</source>
+        <translation>Theme angepasst: {0}</translation>
+    </message>
+    <message>
+        <source>Dark mode</source>
+        <translation>Dunkler Modus</translation>
+    </message>
+    <message>
+        <source>Light mode</source>
+        <translation>Heller Modus</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

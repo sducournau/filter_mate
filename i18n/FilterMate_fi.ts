@@ -261,6 +261,294 @@ Please restart QGIS to apply the changes.</source>
 
 Käynnistä QGIS uudelleen ottaaksesi muutokset käyttöön.</translation>
     </message>
+    <message>
+        <source>All layers using auto-selection</source>
+        <translation>Kaikki tasot käyttävät automaattista valintaa</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer module not available</source>
+        <translation>Automaattisen optimoinnin moduuli ei saatavilla</translation>
+    </message>
+    <message>
+        <source>Backend controller not available</source>
+        <translation>Taustaohjelman ohjain ei saatavilla</translation>
+    </message>
+    <message>
+        <source>Backend optimization unavailable</source>
+        <translation>Taustaohjelman optimointi ei saatavilla</translation>
+    </message>
+    <message>
+        <source>Could not reload plugin automatically.</source>
+        <translation>Laajennusta ei voitu ladata automaattisesti uudelleen.</translation>
+    </message>
+    <message>
+        <source>Favorites manager not available</source>
+        <translation>Suosikkien hallinta ei saatavilla</translation>
+    </message>
+    <message>
+        <source>No PostgreSQL connection available</source>
+        <translation>PostgreSQL-yhteyttä ei saatavilla</translation>
+    </message>
+    <message>
+        <source>No layer selected. Please select a layer first.</source>
+        <translation>Tasoa ei valittu. Valitse ensin taso.</translation>
+    </message>
+    <message>
+        <source>No optimizations selected to apply.</source>
+        <translation>Sovellettavia optimointeja ei valittu.</translation>
+    </message>
+    <message>
+        <source>No views to clean or cleanup failed</source>
+        <translation>Ei puhdistettavia näkymiä tai puhdistus epäonnistui</translation>
+    </message>
+    <message>
+        <source>Other Sessions Active</source>
+        <translation>Muut istunnot aktiivisia</translation>
+    </message>
+    <message>
+        <source>PostgreSQL auto-cleanup disabled</source>
+        <translation>PostgreSQL automaattinen puhdistus poistettu käytöstä</translation>
+    </message>
+    <message>
+        <source>PostgreSQL auto-cleanup enabled</source>
+        <translation>PostgreSQL automaattinen puhdistus käytössä</translation>
+    </message>
+    <message>
+        <source>PostgreSQL session views cleaned up</source>
+        <translation>PostgreSQL-istunnon näkymät puhdistettu</translation>
+    </message>
+    <message>
+        <source>Schema cleanup cancelled</source>
+        <translation>Rakenteen puhdistus peruutettu</translation>
+    </message>
+    <message>
+        <source>Schema cleanup failed</source>
+        <translation>Rakenteen puhdistus epäonnistui</translation>
+    </message>
+    <message>
+        <source>UI configuration incomplete - check logs</source>
+        <translation>Käyttöliittymän määritys puutteellinen - tarkista lokit</translation>
+    </message>
+    <message>
+        <source>disabled</source>
+        <translation>poistettu käytöstä</translation>
+    </message>
+    <message>
+        <source>enabled</source>
+        <translation>käytössä</translation>
+    </message>
+    <message>
+        <source>★ No favorites saved
+Click to add current filter</source>
+        <translation>★ Ei tallennettuja suosikkeja
+Napsauta lisätäksesi nykyisen suodattimen</translation>
+    </message>
+    <message>
+        <source>★ {0} Favorites saved
+Click to apply or manage</source>
+        <translation>★ {0} suosikkia tallennettu
+Napsauta soveltaaksesi tai hallitaksesi</translation>
+    </message>
+    <message>
+        <source>Initialization error: {}</source>
+        <translation>Alustusvirhe: {}</translation>
+    </message>
+    <message>
+        <source>UI dimension error: {}</source>
+        <translation>Käyttöliittymän mitta-virhe: {}</translation>
+    </message>
+    <message>
+        <source>Forced {0} backend for {1} layer(s)</source>
+        <translation>Pakotettu {0} taustaohjelma {1} tasolle/tasoille</translation>
+    </message>
+    <message>
+        <source>Schema has {0} view(s) from other sessions.
+Drop anyway?</source>
+        <translation>Rakenteella on {0} näkymää muista istunnoista.
+Poista silti?</translation>
+    </message>
+    <message>
+        <source>Schema &apos;{0}&apos; dropped successfully</source>
+        <translation>Rakenne &apos;{0}&apos; poistettu onnistuneesti</translation>
+    </message>
+    <message>
+        <source>Auto-optimization {0}</source>
+        <translation>Automaattinen optimointi {0}</translation>
+    </message>
+    <message>
+        <source>Auto-centroid {0}</source>
+        <translation>Automaattinen keskipiste {0}</translation>
+    </message>
+    <message>
+        <source>Confirmation {0}</source>
+        <translation>Vahvistus {0}</translation>
+    </message>
+    <message>
+        <source>Could not analyze layer &apos;{0}&apos;</source>
+        <translation>Tasoa &apos;{0}&apos; ei voitu analysoida</translation>
+    </message>
+    <message>
+        <source>Layer &apos;{0}&apos; is already optimally configured.
+Type: {1}
+Features: {2:,}</source>
+        <translation>Taso &apos;{0}&apos; on jo optimaalisesti määritetty.
+Tyyppi: {1}
+Kohteet: {2:,}</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer not available: {0}</source>
+        <translation>Automaattinen optimoija ei saatavilla: {0}</translation>
+    </message>
+    <message>
+        <source>Error analyzing layer: {0}</source>
+        <translation>Virhe analysoitaessa tasoa: {0}</translation>
+    </message>
+    <message>
+        <source>Applied to &apos;{0}&apos;:
+{1}</source>
+        <translation>Sovellettu kohteeseen &apos;{0}&apos;:
+{1}</translation>
+    </message>
+    <message>
+        <source>Dialog not available: {0}</source>
+        <translation>Valintaikkuna ei saatavilla: {0}</translation>
+    </message>
+    <message>
+        <source>Error: {0}</source>
+        <translation>Virhe: {0}</translation>
+    </message>
+    <message>
+        <source>Optimized {0} layer(s)</source>
+        <translation>Optimoitu {0} taso/tasoa</translation>
+    </message>
+    <message>
+        <source>Error cancelling changes: {0}</source>
+        <translation>Virhe peruutettaessa muutoksia: {0}</translation>
+    </message>
+    <message>
+        <source>Error reloading plugin: {0}</source>
+        <translation>Virhe ladattaessa laajennusta uudelleen: {0}</translation>
+    </message>
+    <message>
+        <source>No alternative backends available for this layer</source>
+        <translation>Tälle tasolle ei ole vaihtoehtoisia taustaohjelmia</translation>
+    </message>
+    <message>
+        <source>📁 Current Project</source>
+        <translation>📁 Nykyinen projekti</translation>
+    </message>
+    <message>
+        <source>Clear temporary tables for the current project only</source>
+        <translation>Tyhjennä väliaikaiset taulut vain nykyisestä projektista</translation>
+    </message>
+    <message>
+        <source>🌐 All Projects (Global)</source>
+        <translation>🌐 Kaikki projektit (Globaali)</translation>
+    </message>
+    <message>
+        <source>Clear ALL FilterMate temporary tables from all databases</source>
+        <translation>Tyhjennä KAIKKI FilterMaten väliaikaiset taulut kaikista tietokannoista</translation>
+    </message>
+    <message>
+        <source>Auto-selected backends for {0} layer(s)</source>
+        <translation>Automaattisesti valitut taustaohjelmat {0} tasolle/tasoille</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) for current project</source>
+        <translation>Tyhjennetty {0} väliaikaista taulua nykyisestä projektista</translation>
+    </message>
+    <message>
+        <source>No temporary tables found for current project</source>
+        <translation>Nykyisestä projektista ei löytynyt väliaikaisia tauluja</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) globally</source>
+        <translation>Tyhjennetty {0} väliaikaista taulua globaalisti</translation>
+    </message>
+    <message>
+        <source>No temporary tables found</source>
+        <translation>Väliaikaisia tauluja ei löytynyt</translation>
+    </message>
+    <message>
+        <source>Backend forced to {0} for &apos;{1}&apos;</source>
+        <translation>Taustaohjelma pakotettu tilaan {0} kohteelle &apos;{1}&apos;</translation>
+    </message>
+    <message>
+        <source>Backend set to Auto for &apos;{0}&apos;</source>
+        <translation>Taustaohjelma asetettu tilaan Auto kohteelle &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Undo last filter (Ctrl+Z)</source>
+        <translation>Kumoa viimeisin suodatin (Ctrl+Z)</translation>
+    </message>
+    <message>
+        <source>Redo filter (Ctrl+Y)</source>
+        <translation>Tee suodatin uudelleen (Ctrl+Y)</translation>
+    </message>
+    <message>
+        <source>Filter history position</source>
+        <translation>Sijainti suodatinhistoriassa</translation>
+    </message>
+    <message>
+        <source>FilterMate - Add to Favorites</source>
+        <translation>FilterMate - Lisää suosikkeihin</translation>
+    </message>
+    <message>
+        <source>Enter a name for this filter</source>
+        <translation>Anna tälle suodattimelle nimi</translation>
+    </message>
+    <message>
+        <source>Description (auto-generated, you can modify it)</source>
+        <translation>Kuvaus (automaattisesti luotu, voit muokata sitä)</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter to Favorites</source>
+        <translation>⭐ Lisää nykyinen suodatin suosikkeihin</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter (no filter active)</source>
+        <translation>⭐ Lisää nykyinen suodatin (ei aktiivista suodatinta)</translation>
+    </message>
+    <message>
+        <source>⭐ Add current filter to favorites</source>
+        <translation>⭐ Lisää nykyinen suodatin suosikkeihin</translation>
+    </message>
+    <message>
+        <source>⭐ Add filter (no active filter)</source>
+        <translation>⭐ Lisää suodatin (ei aktiivista suodatinta)</translation>
+    </message>
+    <message>
+        <source>⚙️ Manage favorites...</source>
+        <translation>⚙️ Hallitse suosikkeja...</translation>
+    </message>
+    <message>
+        <source>📤 Export...</source>
+        <translation>📤 Vie...</translation>
+    </message>
+    <message>
+        <source>📥 Import...</source>
+        <translation>📥 Tuo...</translation>
+    </message>
+    <message>
+        <source>The selected layer is invalid or its source cannot be found.</source>
+        <translation>Valittu taso on virheellinen tai sen lähdettä ei löydy.</translation>
+    </message>
+    <message>
+        <source>Plugin activated with {0} vector layer(s)</source>
+        <translation>Laajennus aktivoitu {0} vektoritasolla/tasoilla</translation>
+    </message>
+    <message>
+        <source>Theme adapted: {0}</source>
+        <translation>Teema mukautettu: {0}</translation>
+    </message>
+    <message>
+        <source>Dark mode</source>
+        <translation>Tumma tila</translation>
+    </message>
+    <message>
+        <source>Light mode</source>
+        <translation>Vaalea tila</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

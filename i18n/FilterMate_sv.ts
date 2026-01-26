@@ -261,6 +261,294 @@ Please restart QGIS to apply the changes.</source>
 
 Starta om QGIS för att tillämpa ändringarna.</translation>
     </message>
+    <message>
+        <source>All layers using auto-selection</source>
+        <translation>Alla lager använder automatiskt urval</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer module not available</source>
+        <translation>Auto-optimeringsmodul inte tillgänglig</translation>
+    </message>
+    <message>
+        <source>Backend controller not available</source>
+        <translation>Backend-kontroller inte tillgänglig</translation>
+    </message>
+    <message>
+        <source>Backend optimization unavailable</source>
+        <translation>Backend-optimering inte tillgänglig</translation>
+    </message>
+    <message>
+        <source>Could not reload plugin automatically.</source>
+        <translation>Kunde inte ladda om plugin automatiskt.</translation>
+    </message>
+    <message>
+        <source>Favorites manager not available</source>
+        <translation>Favorithanterare inte tillgänglig</translation>
+    </message>
+    <message>
+        <source>No PostgreSQL connection available</source>
+        <translation>Ingen PostgreSQL-anslutning tillgänglig</translation>
+    </message>
+    <message>
+        <source>No layer selected. Please select a layer first.</source>
+        <translation>Inget lager valt. Vänligen välj ett lager först.</translation>
+    </message>
+    <message>
+        <source>No optimizations selected to apply.</source>
+        <translation>Inga optimeringar valda att tillämpa.</translation>
+    </message>
+    <message>
+        <source>No views to clean or cleanup failed</source>
+        <translation>Inga vyer att rensa eller rensning misslyckades</translation>
+    </message>
+    <message>
+        <source>Other Sessions Active</source>
+        <translation>Andra sessioner aktiva</translation>
+    </message>
+    <message>
+        <source>PostgreSQL auto-cleanup disabled</source>
+        <translation>PostgreSQL auto-rensning inaktiverad</translation>
+    </message>
+    <message>
+        <source>PostgreSQL auto-cleanup enabled</source>
+        <translation>PostgreSQL auto-rensning aktiverad</translation>
+    </message>
+    <message>
+        <source>PostgreSQL session views cleaned up</source>
+        <translation>PostgreSQL sessionsvyer rensade</translation>
+    </message>
+    <message>
+        <source>Schema cleanup cancelled</source>
+        <translation>Schemarensning avbruten</translation>
+    </message>
+    <message>
+        <source>Schema cleanup failed</source>
+        <translation>Schemarensning misslyckades</translation>
+    </message>
+    <message>
+        <source>UI configuration incomplete - check logs</source>
+        <translation>UI-konfiguration ofullständig - kontrollera loggar</translation>
+    </message>
+    <message>
+        <source>disabled</source>
+        <translation>inaktiverad</translation>
+    </message>
+    <message>
+        <source>enabled</source>
+        <translation>aktiverad</translation>
+    </message>
+    <message>
+        <source>★ No favorites saved
+Click to add current filter</source>
+        <translation>★ Inga favoriter sparade
+Klicka för att lägga till aktuellt filter</translation>
+    </message>
+    <message>
+        <source>★ {0} Favorites saved
+Click to apply or manage</source>
+        <translation>★ {0} favoriter sparade
+Klicka för att tillämpa eller hantera</translation>
+    </message>
+    <message>
+        <source>Initialization error: {}</source>
+        <translation>Initieringsfel: {}</translation>
+    </message>
+    <message>
+        <source>UI dimension error: {}</source>
+        <translation>UI-dimensionsfel: {}</translation>
+    </message>
+    <message>
+        <source>Forced {0} backend for {1} layer(s)</source>
+        <translation>Tvingad {0} backend för {1} lager</translation>
+    </message>
+    <message>
+        <source>Schema has {0} view(s) from other sessions.
+Drop anyway?</source>
+        <translation>Schema har {0} vy(er) från andra sessioner.
+Ta bort ändå?</translation>
+    </message>
+    <message>
+        <source>Schema &apos;{0}&apos; dropped successfully</source>
+        <translation>Schema &apos;{0}&apos; togs bort framgångsrikt</translation>
+    </message>
+    <message>
+        <source>Auto-optimization {0}</source>
+        <translation>Auto-optimering {0}</translation>
+    </message>
+    <message>
+        <source>Auto-centroid {0}</source>
+        <translation>Auto-centroid {0}</translation>
+    </message>
+    <message>
+        <source>Confirmation {0}</source>
+        <translation>Bekräftelse {0}</translation>
+    </message>
+    <message>
+        <source>Could not analyze layer &apos;{0}&apos;</source>
+        <translation>Kunde inte analysera lager &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Layer &apos;{0}&apos; is already optimally configured.
+Type: {1}
+Features: {2:,}</source>
+        <translation>Lager &apos;{0}&apos; är redan optimalt konfigurerat.
+Typ: {1}
+Objekt: {2:,}</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer not available: {0}</source>
+        <translation>Auto-optimerare inte tillgänglig: {0}</translation>
+    </message>
+    <message>
+        <source>Error analyzing layer: {0}</source>
+        <translation>Fel vid analys av lager: {0}</translation>
+    </message>
+    <message>
+        <source>Applied to &apos;{0}&apos;:
+{1}</source>
+        <translation>Tillämpat på &apos;{0}&apos;:
+{1}</translation>
+    </message>
+    <message>
+        <source>Dialog not available: {0}</source>
+        <translation>Dialog inte tillgänglig: {0}</translation>
+    </message>
+    <message>
+        <source>Error: {0}</source>
+        <translation>Fel: {0}</translation>
+    </message>
+    <message>
+        <source>Optimized {0} layer(s)</source>
+        <translation>Optimerade {0} lager</translation>
+    </message>
+    <message>
+        <source>Error cancelling changes: {0}</source>
+        <translation>Fel vid avbrytande av ändringar: {0}</translation>
+    </message>
+    <message>
+        <source>Error reloading plugin: {0}</source>
+        <translation>Fel vid omladdning av plugin: {0}</translation>
+    </message>
+    <message>
+        <source>No alternative backends available for this layer</source>
+        <translation>Inga alternativa backends tillgängliga för detta lager</translation>
+    </message>
+    <message>
+        <source>📁 Current Project</source>
+        <translation>📁 Aktuellt projekt</translation>
+    </message>
+    <message>
+        <source>Clear temporary tables for the current project only</source>
+        <translation>Rensa temporära tabeller endast för aktuellt projekt</translation>
+    </message>
+    <message>
+        <source>🌐 All Projects (Global)</source>
+        <translation>🌐 Alla projekt (Globalt)</translation>
+    </message>
+    <message>
+        <source>Clear ALL FilterMate temporary tables from all databases</source>
+        <translation>Rensa ALLA FilterMate temporära tabeller från alla databaser</translation>
+    </message>
+    <message>
+        <source>Auto-selected backends for {0} layer(s)</source>
+        <translation>Automatiskt valda backends för {0} lager</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) for current project</source>
+        <translation>Rensade {0} temporära tabell(er) för aktuellt projekt</translation>
+    </message>
+    <message>
+        <source>No temporary tables found for current project</source>
+        <translation>Inga temporära tabeller hittades för aktuellt projekt</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) globally</source>
+        <translation>Rensade {0} temporära tabell(er) globalt</translation>
+    </message>
+    <message>
+        <source>No temporary tables found</source>
+        <translation>Inga temporära tabeller hittades</translation>
+    </message>
+    <message>
+        <source>Backend forced to {0} for &apos;{1}&apos;</source>
+        <translation>Backend tvingad till {0} för &apos;{1}&apos;</translation>
+    </message>
+    <message>
+        <source>Backend set to Auto for &apos;{0}&apos;</source>
+        <translation>Backend inställd på Auto för &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Undo last filter (Ctrl+Z)</source>
+        <translation>Ångra senaste filter (Ctrl+Z)</translation>
+    </message>
+    <message>
+        <source>Redo filter (Ctrl+Y)</source>
+        <translation>Gör om filter (Ctrl+Y)</translation>
+    </message>
+    <message>
+        <source>Filter history position</source>
+        <translation>Position i filterhistorik</translation>
+    </message>
+    <message>
+        <source>FilterMate - Add to Favorites</source>
+        <translation>FilterMate - Lägg till i favoriter</translation>
+    </message>
+    <message>
+        <source>Enter a name for this filter</source>
+        <translation>Ange ett namn för detta filter</translation>
+    </message>
+    <message>
+        <source>Description (auto-generated, you can modify it)</source>
+        <translation>Beskrivning (automatiskt genererad, du kan ändra den)</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter to Favorites</source>
+        <translation>⭐ Lägg till aktuellt filter i favoriter</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter (no filter active)</source>
+        <translation>⭐ Lägg till aktuellt filter (inget filter aktivt)</translation>
+    </message>
+    <message>
+        <source>⭐ Add current filter to favorites</source>
+        <translation>⭐ Lägg till aktuellt filter i favoriter</translation>
+    </message>
+    <message>
+        <source>⭐ Add filter (no active filter)</source>
+        <translation>⭐ Lägg till filter (inget aktivt filter)</translation>
+    </message>
+    <message>
+        <source>⚙️ Manage favorites...</source>
+        <translation>⚙️ Hantera favoriter...</translation>
+    </message>
+    <message>
+        <source>📤 Export...</source>
+        <translation>📤 Exportera...</translation>
+    </message>
+    <message>
+        <source>📥 Import...</source>
+        <translation>📥 Importera...</translation>
+    </message>
+    <message>
+        <source>The selected layer is invalid or its source cannot be found.</source>
+        <translation>Det valda lagret är ogiltigt eller dess källa kan inte hittas.</translation>
+    </message>
+    <message>
+        <source>Plugin activated with {0} vector layer(s)</source>
+        <translation>Plugin aktiverat med {0} vektorlager</translation>
+    </message>
+    <message>
+        <source>Theme adapted: {0}</source>
+        <translation>Tema anpassat: {0}</translation>
+    </message>
+    <message>
+        <source>Dark mode</source>
+        <translation>Mörkt läge</translation>
+    </message>
+    <message>
+        <source>Light mode</source>
+        <translation>Ljust läge</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

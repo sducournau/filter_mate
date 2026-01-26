@@ -261,6 +261,294 @@ Please restart QGIS to apply the changes.</source>
 
 请重启 QGIS 以应用更改。</translation>
     </message>
+    <message>
+        <source>All layers using auto-selection</source>
+        <translation>所有图层使用自动选择</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer module not available</source>
+        <translation>自动优化模块不可用</translation>
+    </message>
+    <message>
+        <source>Backend controller not available</source>
+        <translation>后端控制器不可用</translation>
+    </message>
+    <message>
+        <source>Backend optimization unavailable</source>
+        <translation>后端优化不可用</translation>
+    </message>
+    <message>
+        <source>Could not reload plugin automatically.</source>
+        <translation>无法自动重新加载插件。</translation>
+    </message>
+    <message>
+        <source>Favorites manager not available</source>
+        <translation>收藏夹管理器不可用</translation>
+    </message>
+    <message>
+        <source>No PostgreSQL connection available</source>
+        <translation>没有可用的 PostgreSQL 连接</translation>
+    </message>
+    <message>
+        <source>No layer selected. Please select a layer first.</source>
+        <translation>未选择图层。请先选择一个图层。</translation>
+    </message>
+    <message>
+        <source>No optimizations selected to apply.</source>
+        <translation>未选择要应用的优化。</translation>
+    </message>
+    <message>
+        <source>No views to clean or cleanup failed</source>
+        <translation>没有要清理的视图或清理失败</translation>
+    </message>
+    <message>
+        <source>Other Sessions Active</source>
+        <translation>其他会话处于活动状态</translation>
+    </message>
+    <message>
+        <source>PostgreSQL auto-cleanup disabled</source>
+        <translation>PostgreSQL 自动清理已禁用</translation>
+    </message>
+    <message>
+        <source>PostgreSQL auto-cleanup enabled</source>
+        <translation>PostgreSQL 自动清理已启用</translation>
+    </message>
+    <message>
+        <source>PostgreSQL session views cleaned up</source>
+        <translation>PostgreSQL 会话视图已清理</translation>
+    </message>
+    <message>
+        <source>Schema cleanup cancelled</source>
+        <translation>模式清理已取消</translation>
+    </message>
+    <message>
+        <source>Schema cleanup failed</source>
+        <translation>模式清理失败</translation>
+    </message>
+    <message>
+        <source>UI configuration incomplete - check logs</source>
+        <translation>UI 配置不完整 - 请检查日志</translation>
+    </message>
+    <message>
+        <source>disabled</source>
+        <translation>已禁用</translation>
+    </message>
+    <message>
+        <source>enabled</source>
+        <translation>已启用</translation>
+    </message>
+    <message>
+        <source>★ No favorites saved
+Click to add current filter</source>
+        <translation>★ 未保存收藏夹
+点击添加当前过滤器</translation>
+    </message>
+    <message>
+        <source>★ {0} Favorites saved
+Click to apply or manage</source>
+        <translation>★ 已保存 {0} 个收藏夹
+点击应用或管理</translation>
+    </message>
+    <message>
+        <source>Initialization error: {}</source>
+        <translation>初始化错误: {}</translation>
+    </message>
+    <message>
+        <source>UI dimension error: {}</source>
+        <translation>UI 尺寸错误: {}</translation>
+    </message>
+    <message>
+        <source>Forced {0} backend for {1} layer(s)</source>
+        <translation>为 {1} 个图层强制使用 {0} 后端</translation>
+    </message>
+    <message>
+        <source>Schema has {0} view(s) from other sessions.
+Drop anyway?</source>
+        <translation>模式有 {0} 个来自其他会话的视图。
+仍要删除吗？</translation>
+    </message>
+    <message>
+        <source>Schema &apos;{0}&apos; dropped successfully</source>
+        <translation>模式 &apos;{0}&apos; 已成功删除</translation>
+    </message>
+    <message>
+        <source>Auto-optimization {0}</source>
+        <translation>自动优化 {0}</translation>
+    </message>
+    <message>
+        <source>Auto-centroid {0}</source>
+        <translation>自动质心 {0}</translation>
+    </message>
+    <message>
+        <source>Confirmation {0}</source>
+        <translation>确认 {0}</translation>
+    </message>
+    <message>
+        <source>Could not analyze layer &apos;{0}&apos;</source>
+        <translation>无法分析图层 &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Layer &apos;{0}&apos; is already optimally configured.
+Type: {1}
+Features: {2:,}</source>
+        <translation>图层 &apos;{0}&apos; 已经是最优配置。
+类型: {1}
+要素: {2:,}</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer not available: {0}</source>
+        <translation>自动优化器不可用: {0}</translation>
+    </message>
+    <message>
+        <source>Error analyzing layer: {0}</source>
+        <translation>分析图层时出错: {0}</translation>
+    </message>
+    <message>
+        <source>Applied to &apos;{0}&apos;:
+{1}</source>
+        <translation>应用于 &apos;{0}&apos;:
+{1}</translation>
+    </message>
+    <message>
+        <source>Dialog not available: {0}</source>
+        <translation>对话框不可用: {0}</translation>
+    </message>
+    <message>
+        <source>Error: {0}</source>
+        <translation>错误: {0}</translation>
+    </message>
+    <message>
+        <source>Optimized {0} layer(s)</source>
+        <translation>已优化 {0} 个图层</translation>
+    </message>
+    <message>
+        <source>Error cancelling changes: {0}</source>
+        <translation>取消更改时出错: {0}</translation>
+    </message>
+    <message>
+        <source>Error reloading plugin: {0}</source>
+        <translation>重新加载插件时出错: {0}</translation>
+    </message>
+    <message>
+        <source>No alternative backends available for this layer</source>
+        <translation>此图层没有可用的替代后端</translation>
+    </message>
+    <message>
+        <source>📁 Current Project</source>
+        <translation>📁 当前项目</translation>
+    </message>
+    <message>
+        <source>Clear temporary tables for the current project only</source>
+        <translation>仅清除当前项目的临时表</translation>
+    </message>
+    <message>
+        <source>🌐 All Projects (Global)</source>
+        <translation>🌐 所有项目（全局）</translation>
+    </message>
+    <message>
+        <source>Clear ALL FilterMate temporary tables from all databases</source>
+        <translation>从所有数据库中清除所有 FilterMate 临时表</translation>
+    </message>
+    <message>
+        <source>Auto-selected backends for {0} layer(s)</source>
+        <translation>为 {0} 个图层自动选择后端</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) for current project</source>
+        <translation>已清除当前项目的 {0} 个临时表</translation>
+    </message>
+    <message>
+        <source>No temporary tables found for current project</source>
+        <translation>未找到当前项目的临时表</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) globally</source>
+        <translation>已全局清除 {0} 个临时表</translation>
+    </message>
+    <message>
+        <source>No temporary tables found</source>
+        <translation>未找到临时表</translation>
+    </message>
+    <message>
+        <source>Backend forced to {0} for &apos;{1}&apos;</source>
+        <translation>&apos;{1}&apos; 的后端强制设为 {0}</translation>
+    </message>
+    <message>
+        <source>Backend set to Auto for &apos;{0}&apos;</source>
+        <translation>&apos;{0}&apos; 的后端设为自动</translation>
+    </message>
+    <message>
+        <source>Undo last filter (Ctrl+Z)</source>
+        <translation>撤消上次过滤器 (Ctrl+Z)</translation>
+    </message>
+    <message>
+        <source>Redo filter (Ctrl+Y)</source>
+        <translation>重做过滤器 (Ctrl+Y)</translation>
+    </message>
+    <message>
+        <source>Filter history position</source>
+        <translation>过滤器历史记录位置</translation>
+    </message>
+    <message>
+        <source>FilterMate - Add to Favorites</source>
+        <translation>FilterMate - 添加到收藏夹</translation>
+    </message>
+    <message>
+        <source>Enter a name for this filter</source>
+        <translation>输入此过滤器的名称</translation>
+    </message>
+    <message>
+        <source>Description (auto-generated, you can modify it)</source>
+        <translation>描述（自动生成，您可以修改）</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter to Favorites</source>
+        <translation>⭐ 将当前过滤器添加到收藏夹</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter (no filter active)</source>
+        <translation>⭐ 添加当前过滤器（无活动过滤器）</translation>
+    </message>
+    <message>
+        <source>⭐ Add current filter to favorites</source>
+        <translation>⭐ 将当前过滤器添加到收藏夹</translation>
+    </message>
+    <message>
+        <source>⭐ Add filter (no active filter)</source>
+        <translation>⭐ 添加过滤器（无活动过滤器）</translation>
+    </message>
+    <message>
+        <source>⚙️ Manage favorites...</source>
+        <translation>⚙️ 管理收藏夹...</translation>
+    </message>
+    <message>
+        <source>📤 Export...</source>
+        <translation>📤 导出...</translation>
+    </message>
+    <message>
+        <source>📥 Import...</source>
+        <translation>📥 导入...</translation>
+    </message>
+    <message>
+        <source>The selected layer is invalid or its source cannot be found.</source>
+        <translation>所选图层无效或找不到其源。</translation>
+    </message>
+    <message>
+        <source>Plugin activated with {0} vector layer(s)</source>
+        <translation>插件已激活，包含 {0} 个矢量图层</translation>
+    </message>
+    <message>
+        <source>Theme adapted: {0}</source>
+        <translation>主题已适配: {0}</translation>
+    </message>
+    <message>
+        <source>Dark mode</source>
+        <translation>深色模式</translation>
+    </message>
+    <message>
+        <source>Light mode</source>
+        <translation>浅色模式</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

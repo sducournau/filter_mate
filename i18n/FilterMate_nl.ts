@@ -261,6 +261,294 @@ Please restart QGIS to apply the changes.</source>
 
 Start QGIS opnieuw op om de wijzigingen toe te passen.</translation>
     </message>
+    <message>
+        <source>All layers using auto-selection</source>
+        <translation>Alle lagen gebruiken auto-selectie</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer module not available</source>
+        <translation>Auto-optimalisatiemodule niet beschikbaar</translation>
+    </message>
+    <message>
+        <source>Backend controller not available</source>
+        <translation>Backend-controller niet beschikbaar</translation>
+    </message>
+    <message>
+        <source>Backend optimization unavailable</source>
+        <translation>Backend-optimalisatie niet beschikbaar</translation>
+    </message>
+    <message>
+        <source>Could not reload plugin automatically.</source>
+        <translation>Kon plugin niet automatisch herladen.</translation>
+    </message>
+    <message>
+        <source>Favorites manager not available</source>
+        <translation>Favoritenbeheerder niet beschikbaar</translation>
+    </message>
+    <message>
+        <source>No PostgreSQL connection available</source>
+        <translation>Geen PostgreSQL-verbinding beschikbaar</translation>
+    </message>
+    <message>
+        <source>No layer selected. Please select a layer first.</source>
+        <translation>Geen laag geselecteerd. Selecteer eerst een laag.</translation>
+    </message>
+    <message>
+        <source>No optimizations selected to apply.</source>
+        <translation>Geen optimalisaties geselecteerd om toe te passen.</translation>
+    </message>
+    <message>
+        <source>No views to clean or cleanup failed</source>
+        <translation>Geen weergaven om op te schonen of opschoning mislukt</translation>
+    </message>
+    <message>
+        <source>Other Sessions Active</source>
+        <translation>Andere sessies actief</translation>
+    </message>
+    <message>
+        <source>PostgreSQL auto-cleanup disabled</source>
+        <translation>PostgreSQL automatische opschoning uitgeschakeld</translation>
+    </message>
+    <message>
+        <source>PostgreSQL auto-cleanup enabled</source>
+        <translation>PostgreSQL automatische opschoning ingeschakeld</translation>
+    </message>
+    <message>
+        <source>PostgreSQL session views cleaned up</source>
+        <translation>PostgreSQL-sessieweergaven opgeschoond</translation>
+    </message>
+    <message>
+        <source>Schema cleanup cancelled</source>
+        <translation>Schema-opschoning geannuleerd</translation>
+    </message>
+    <message>
+        <source>Schema cleanup failed</source>
+        <translation>Schema-opschoning mislukt</translation>
+    </message>
+    <message>
+        <source>UI configuration incomplete - check logs</source>
+        <translation>UI-configuratie incompleet - controleer logs</translation>
+    </message>
+    <message>
+        <source>disabled</source>
+        <translation>uitgeschakeld</translation>
+    </message>
+    <message>
+        <source>enabled</source>
+        <translation>ingeschakeld</translation>
+    </message>
+    <message>
+        <source>★ No favorites saved
+Click to add current filter</source>
+        <translation>★ Geen favorieten opgeslagen
+Klik om huidig filter toe te voegen</translation>
+    </message>
+    <message>
+        <source>★ {0} Favorites saved
+Click to apply or manage</source>
+        <translation>★ {0} favorieten opgeslagen
+Klik om toe te passen of te beheren</translation>
+    </message>
+    <message>
+        <source>Initialization error: {}</source>
+        <translation>Initialisatiefout: {}</translation>
+    </message>
+    <message>
+        <source>UI dimension error: {}</source>
+        <translation>UI-dimensiefout: {}</translation>
+    </message>
+    <message>
+        <source>Forced {0} backend for {1} layer(s)</source>
+        <translation>{0} backend geforceerd voor {1} laag/lagen</translation>
+    </message>
+    <message>
+        <source>Schema has {0} view(s) from other sessions.
+Drop anyway?</source>
+        <translation>Schema heeft {0} weergave(n) van andere sessies.
+Toch verwijderen?</translation>
+    </message>
+    <message>
+        <source>Schema &apos;{0}&apos; dropped successfully</source>
+        <translation>Schema &apos;{0}&apos; succesvol verwijderd</translation>
+    </message>
+    <message>
+        <source>Auto-optimization {0}</source>
+        <translation>Auto-optimalisatie {0}</translation>
+    </message>
+    <message>
+        <source>Auto-centroid {0}</source>
+        <translation>Auto-zwaartepunt {0}</translation>
+    </message>
+    <message>
+        <source>Confirmation {0}</source>
+        <translation>Bevestiging {0}</translation>
+    </message>
+    <message>
+        <source>Could not analyze layer &apos;{0}&apos;</source>
+        <translation>Kon laag &apos;{0}&apos; niet analyseren</translation>
+    </message>
+    <message>
+        <source>Layer &apos;{0}&apos; is already optimally configured.
+Type: {1}
+Features: {2:,}</source>
+        <translation>Laag &apos;{0}&apos; is al optimaal geconfigureerd.
+Type: {1}
+Objecten: {2:,}</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer not available: {0}</source>
+        <translation>Auto-optimizer niet beschikbaar: {0}</translation>
+    </message>
+    <message>
+        <source>Error analyzing layer: {0}</source>
+        <translation>Fout bij analyseren van laag: {0}</translation>
+    </message>
+    <message>
+        <source>Applied to &apos;{0}&apos;:
+{1}</source>
+        <translation>Toegepast op &apos;{0}&apos;:
+{1}</translation>
+    </message>
+    <message>
+        <source>Dialog not available: {0}</source>
+        <translation>Dialoog niet beschikbaar: {0}</translation>
+    </message>
+    <message>
+        <source>Error: {0}</source>
+        <translation>Fout: {0}</translation>
+    </message>
+    <message>
+        <source>Optimized {0} layer(s)</source>
+        <translation>{0} laag/lagen geoptimaliseerd</translation>
+    </message>
+    <message>
+        <source>Error cancelling changes: {0}</source>
+        <translation>Fout bij annuleren van wijzigingen: {0}</translation>
+    </message>
+    <message>
+        <source>Error reloading plugin: {0}</source>
+        <translation>Fout bij herladen van plugin: {0}</translation>
+    </message>
+    <message>
+        <source>No alternative backends available for this layer</source>
+        <translation>Geen alternatieve backends beschikbaar voor deze laag</translation>
+    </message>
+    <message>
+        <source>📁 Current Project</source>
+        <translation>📁 Huidig project</translation>
+    </message>
+    <message>
+        <source>Clear temporary tables for the current project only</source>
+        <translation>Wis tijdelijke tabellen alleen voor het huidige project</translation>
+    </message>
+    <message>
+        <source>🌐 All Projects (Global)</source>
+        <translation>🌐 Alle projecten (Globaal)</translation>
+    </message>
+    <message>
+        <source>Clear ALL FilterMate temporary tables from all databases</source>
+        <translation>Wis ALLE tijdelijke FilterMate-tabellen uit alle databases</translation>
+    </message>
+    <message>
+        <source>Auto-selected backends for {0} layer(s)</source>
+        <translation>Auto-geselecteerde backends voor {0} laag/lagen</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) for current project</source>
+        <translation>{0} tijdelijke tabel(len) gewist voor huidig project</translation>
+    </message>
+    <message>
+        <source>No temporary tables found for current project</source>
+        <translation>Geen tijdelijke tabellen gevonden voor huidig project</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) globally</source>
+        <translation>{0} tijdelijke tabel(len) globaal gewist</translation>
+    </message>
+    <message>
+        <source>No temporary tables found</source>
+        <translation>Geen tijdelijke tabellen gevonden</translation>
+    </message>
+    <message>
+        <source>Backend forced to {0} for &apos;{1}&apos;</source>
+        <translation>Backend geforceerd naar {0} voor &apos;{1}&apos;</translation>
+    </message>
+    <message>
+        <source>Backend set to Auto for &apos;{0}&apos;</source>
+        <translation>Backend ingesteld op Auto voor &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Undo last filter (Ctrl+Z)</source>
+        <translation>Laatste filter ongedaan maken (Ctrl+Z)</translation>
+    </message>
+    <message>
+        <source>Redo filter (Ctrl+Y)</source>
+        <translation>Filter opnieuw toepassen (Ctrl+Y)</translation>
+    </message>
+    <message>
+        <source>Filter history position</source>
+        <translation>Positie in filtergeschiedenis</translation>
+    </message>
+    <message>
+        <source>FilterMate - Add to Favorites</source>
+        <translation>FilterMate - Toevoegen aan favorieten</translation>
+    </message>
+    <message>
+        <source>Enter a name for this filter</source>
+        <translation>Voer een naam in voor dit filter</translation>
+    </message>
+    <message>
+        <source>Description (auto-generated, you can modify it)</source>
+        <translation>Beschrijving (automatisch gegenereerd, u kunt het wijzigen)</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter to Favorites</source>
+        <translation>⭐ Huidig filter toevoegen aan favorieten</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter (no filter active)</source>
+        <translation>⭐ Huidig filter toevoegen (geen filter actief)</translation>
+    </message>
+    <message>
+        <source>⭐ Add current filter to favorites</source>
+        <translation>⭐ Huidig filter toevoegen aan favorieten</translation>
+    </message>
+    <message>
+        <source>⭐ Add filter (no active filter)</source>
+        <translation>⭐ Filter toevoegen (geen actief filter)</translation>
+    </message>
+    <message>
+        <source>⚙️ Manage favorites...</source>
+        <translation>⚙️ Favorieten beheren...</translation>
+    </message>
+    <message>
+        <source>📤 Export...</source>
+        <translation>📤 Exporteren...</translation>
+    </message>
+    <message>
+        <source>📥 Import...</source>
+        <translation>📥 Importeren...</translation>
+    </message>
+    <message>
+        <source>The selected layer is invalid or its source cannot be found.</source>
+        <translation>De geselecteerde laag is ongeldig of de bron kan niet worden gevonden.</translation>
+    </message>
+    <message>
+        <source>Plugin activated with {0} vector layer(s)</source>
+        <translation>Plugin geactiveerd met {0} vectorlaag/lagen</translation>
+    </message>
+    <message>
+        <source>Theme adapted: {0}</source>
+        <translation>Thema aangepast: {0}</translation>
+    </message>
+    <message>
+        <source>Dark mode</source>
+        <translation>Donkere modus</translation>
+    </message>
+    <message>
+        <source>Light mode</source>
+        <translation>Lichte modus</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>
