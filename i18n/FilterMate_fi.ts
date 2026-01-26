@@ -1753,5 +1753,205 @@ Tämä vaikuttaa muihin FilterMate-istuntoihin!</translation>
         <source>Cleanup Failed</source>
         <translation>Puhdistus epäonnistui</translation>
     </message>
+    <message>
+        <source>Allow cancellation of QGIS processing algorithms. Enables stopping long-running operations.</source>
+        <translation>Salli QGIS-käsittelyalgoritmien peruutus. Mahdollistaa pitkäkestoisten operaatioiden pysäyttämisen.</translation>
+    </message>
+    <message>
+        <source>Analyzing your project... Recommendations will appear here.</source>
+        <translation>Analysoidaan projektiasi... Suositukset näkyvät tässä.</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid for Distant Layers</source>
+        <translation>Automaattinen keskipiste etäisille tasoille</translation>
+    </message>
+    <message>
+        <source>Auto-Select Best Strategy</source>
+        <translation>Valitse automaattisesti paras strategia</translation>
+    </message>
+    <message>
+        <source>Auto-Simplify Geometries ⚠️</source>
+        <translation>Automaattinen geometrioiden yksinkertaistaminen ⚠️</translation>
+    </message>
+    <message>
+        <source>Auto-detect mod_spatialite</source>
+        <translation>Tunnista mod_spatialite automaattisesti</translation>
+    </message>
+    <message>
+        <source>Automatic GIST Index Usage</source>
+        <translation>Automaattinen GIST-indeksin käyttö</translation>
+    </message>
+    <message>
+        <source>Automatically analyze layers and suggest optimizations before filtering.</source>
+        <translation>Analysoi tasot automaattisesti ja ehdota optimointeja ennen suodatusta.</translation>
+    </message>
+    <message>
+        <source>Automatically choose optimal filtering strategy based on layer analysis. (attribute-first, bbox-prefilter, progressive chunks)</source>
+        <translation>Valitse automaattisesti optimaalinen suodatusstrategia tasoanalyysin perusteella. (attribuutti-ensin, bbox-esisuodatin, progressiiviset lohkot)</translation>
+    </message>
+    <message>
+        <source>Automatically create spatial index (.qix/.shx) for layers without one. Dramatically improves spatial query speed.</source>
+        <translation>Luo automaattisesti spatiaalinen indeksi (.qix/.shx) tasoille joilla ei ole sitä. Parantaa dramaattisesti spatiaalisten kyselyjen nopeutta.</translation>
+    </message>
+    <message>
+        <source>Automatically find and load the best mod_spatialite extension.</source>
+        <translation>Etsi ja lataa automaattisesti paras mod_spatialite-laajennus.</translation>
+    </message>
+    <message>
+        <source>Automatically simplify complex geometries. WARNING: This is a LOSSY operation that may change polygon shapes.</source>
+        <translation>Yksinkertaista monimutkaiset geometriat automaattisesti. VAROITUS: Tämä on HÄVIÖLLINEN operaatio joka voi muuttaa monikulmioiden muotoja.</translation>
+    </message>
+    <message>
+        <source>Automatically use ST_Centroid() for remote layers (WFS, ArcGIS). Reduces network data transfer by ~90%.</source>
+        <translation>Käytä automaattisesti ST_Centroid() etätasoille (WFS, ArcGIS). Vähentää verkkodata-siirtoa ~90%.</translation>
+    </message>
+    <message>
+        <source>Bypass GDAL layer and execute SQL directly on GeoPackage. Faster for complex spatial queries.</source>
+        <translation>Ohita GDAL-taso ja suorita SQL suoraan GeoPackagessa. Nopeampi monimutkaisille spatiaalisille kyselyille.</translation>
+    </message>
+    <message>
+        <source>Cache built expressions to avoid rebuilding identical queries.</source>
+        <translation>Välimuistiin rakennetut lausekkeet välttääksesi identtisten kyselyjen uudelleenrakentamisen.</translation>
+    </message>
+    <message>
+        <source>Cache converted WKT strings to avoid repeated geometry serialization.</source>
+        <translation>Välimuistiin muunnetut WKT-merkkijonot välttääksesi toistuvan geometrian sarjallistamisen.</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Peruuta</translation>
+    </message>
+    <message>
+        <source>Cancellable Processing</source>
+        <translation>Peruutettava käsittely</translation>
+    </message>
+    <message>
+        <source>Chunk size (features):</source>
+        <translation>Lohkokoko (ominaisuudet):</translation>
+    </message>
+    <message>
+        <source>Confirm Before Applying</source>
+        <translation>Vahvista ennen soveltamista</translation>
+    </message>
+    <message>
+        <source>Connection Pooling</source>
+        <translation>Yhteyksien yhdistäminen</translation>
+    </message>
+    <message>
+        <source>Create Spatial Indexes</source>
+        <translation>Luo spatiaaliset indeksit</translation>
+    </message>
+    <message>
+        <source>Create indexed temporary views for complex spatial queries. Best for large datasets with complex expressions.</source>
+        <translation>Luo indeksoituja väliaikaisia näkymiä monimutkaisille spatiaalisille kyselyille. Paras suurille tietojoukkoille monimutkaisilla lausekkeilla.</translation>
+    </message>
+    <message>
+        <source>Create materialized views for datasets larger than this</source>
+        <translation>Luo materialisoidut näkymät tätä suuremmille tietojoukoille</translation>
+    </message>
+    <message>
+        <source>Create temporary tables with R-tree spatial indexes for complex queries. Best for complex expressions on local files.</source>
+        <translation>Luo väliaikaiset taulukot R-puu spatiaalisilla indekseillä monimutkaisille kyselyille. Paras monimutkaisille lausekkeille paikallisissa tiedostoissa.</translation>
+    </message>
+    <message>
+        <source>Direct SQL access can make GeoPackage filtering 2-5x faster.</source>
+        <translation>Suora SQL-pääsy voi tehdä GeoPackage-suodatuksesta 2-5x nopeampaa.</translation>
+    </message>
+    <message>
+        <source>Direct SQL for GeoPackage</source>
+        <translation>Suora SQL GeoPackagelle</translation>
+    </message>
+    <message>
+        <source>Display optimization hints in message bar when recommendations are available.</source>
+        <translation>Näytä optimointivihjeet viestipalkkissa kun suosituksia on saatavilla.</translation>
+    </message>
+    <message>
+        <source>Distant layer threshold:</source>
+        <translation>Etäisen tason kynnys:</translation>
+    </message>
+    <message>
+        <source>EXISTS Subquery for Large WKT</source>
+        <translation>EXISTS-alikysely suurelle WKT:lle</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Centroid for Remote Layers</source>
+        <translation>Ota käyttöön automaattinen keskipiste etätasoille</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Optimization</source>
+        <translation>Ota käyttöön automaattinen optimointi</translation>
+    </message>
+    <message>
+        <source>Enable Direct SQL for GeoPackage</source>
+        <translation>Ota käyttöön suora SQL GeoPackagelle</translation>
+    </message>
+    <message>
+        <source>Enable Materialized Views</source>
+        <translation>Ota käyttöön materialisoidut näkymät</translation>
+    </message>
+    <message>
+        <source>Error resetting layer properties: {}</source>
+        <translation>Virhe tason ominaisuuksien nollauksessa: {}</translation>
+    </message>
+    <message>
+        <source>Estimated performance improvement</source>
+        <translation>Arvioitu suorituskyvyn parannus</translation>
+    </message>
+    <message>
+        <source>Execute SQLite queries in background thread with cancellation support. Prevents UI freezing.</source>
+        <translation>Suorita SQLite-kyselyt taustasäikeessä peruutustuella. Estää käyttöliittymän jäätymisen.</translation>
+    </message>
+    <message>
+        <source>Filter multiple layers simultaneously using multiple CPU cores.</source>
+        <translation>Suodata useita tasoja samanaikaisesti käyttäen useita CPU-ytimiä.</translation>
+    </message>
+    <message>
+        <source>FilterMate - Backend Optimizations</source>
+        <translation>FilterMate - Backend-optimoinnit</translation>
+    </message>
+    <message>
+        <source>First filter by bounding box, then by exact geometry. Reduces precision calculations on irrelevant features.</source>
+        <translation>Suodata ensin rajauslaatikolla, sitten tarkalla geometrialla. Vähentää tarkkuuslaskentoja epäolennaisille kohteille.</translation>
+    </message>
+    <message>
+        <source>For small PostgreSQL layers, copy to memory for faster filtering. Avoids network latency for small datasets.</source>
+        <translation>Pienille PostgreSQL-tasoille, kopioi muistiin nopeampaa suodatusta varten. Välttää verkon latenssin pienille tietojoukoille.</translation>
+    </message>
+    <message>
+        <source>Force sequential execution for OGR layers to prevent crashes. Safer but slower.</source>
+        <translation>Pakota peräkkäinen suoritus OGR-tasoille kaatumisten estämiseksi. Turvallisempi mutta hitaampi.</translation>
+    </message>
+    <message>
+        <source>GEOS-safe Geometry Handling</source>
+        <translation>GEOS-turvallinen geometrian käsittely</translation>
+    </message>
+    <message>
+        <source>Global</source>
+        <translation>Globaali</translation>
+    </message>
+    <message>
+        <source>Interruptible Queries</source>
+        <translation>Keskeytettävät kyselyt</translation>
+    </message>
+    <message>
+        <source>Lazy cursor threshold:</source>
+        <translation>Laiska osoitinkynnys:</translation>
+    </message>
+    <message>
+        <source>Max workers (0=auto):</source>
+        <translation>Maksimi työntekijät (0=auto):</translation>
+    </message>
+    <message>
+        <source>Optimizations for PostgreSQL databases with PostGIS extension</source>
+        <translation>Optimoinnit PostgreSQL-tietokannoille PostGIS-laajennuksella</translation>
+    </message>
+    <message>
+        <source>Optimizations for Spatialite databases and GeoPackage files</source>
+        <translation>Optimoinnit Spatialite-tietokannoille ja GeoPackage-tiedostoille</translation>
+    </message>
+    <message>
+        <source>Optimizations for file-based formats (Shapefiles, GeoJSON) and memory layers</source>
+        <translation>Optimoinnit tiedostopohjaisille formaateille (Shapefiles, GeoJSON) ja muistitasoille</translation>
+    </message>
 </context>
 </TS>

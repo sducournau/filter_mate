@@ -1469,5 +1469,449 @@ To vpliva na druge FilterMate seje!</translation>
         <source>Cleanup Failed</source>
         <translation>Čiščenje ni uspelo</translation>
     </message>
+    <message>
+        <source>All layers using auto-selection</source>
+        <translation>Vse plasti uporabljajo samodejno izbiro</translation>
+    </message>
+    <message>
+        <source>Applied to &apos;{0}&apos;:</source>
+        <translation>Uporabljeno za &apos;{0}&apos;:</translation>
+    </message>
+    <message>
+        <source>Auto-centroid {0}</source>
+        <translation>Samodejni centroid {0}</translation>
+    </message>
+    <message>
+        <source>Auto-optimization {0}</source>
+        <translation>Samodejna optimizacija {0}</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer module not available</source>
+        <translation>Modul za samodejno optimizacijo ni na voljo</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer not available: {0}</source>
+        <translation>Samodejna optimizacija ni na voljo: {0}</translation>
+    </message>
+    <message>
+        <source>Auto-select best strategy</source>
+        <translation>Samodejno izberi najboljšo strategijo</translation>
+    </message>
+    <message>
+        <source>Auto-selected backends for {0} layer(s)</source>
+        <translation>Samodejno izbrani zaledni sistemi za {0} plast(i)</translation>
+    </message>
+    <message>
+        <source>Auto-simplify geometries</source>
+        <translation>Samodejno poenostavi geometrije</translation>
+    </message>
+    <message>
+        <source>Auto-use centroids for remote layers</source>
+        <translation>Samodejno uporabi centroide za oddaljene plasti</translation>
+    </message>
+    <message>
+        <source>Automatically choose optimal filtering strategy</source>
+        <translation>Samodejno izberi optimalno strategijo filtriranja</translation>
+    </message>
+    <message>
+        <source>BBox pre-filter enabled for &apos;{0}&apos;</source>
+        <translation>BBox predfilter omogočen za &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Backend controller not available</source>
+        <translation>Krmilnik zalednega sistema ni na voljo</translation>
+    </message>
+    <message>
+        <source>Backend forced to {0} for &apos;{1}&apos;</source>
+        <translation>Zaledni sistem prisilno nastavljen na {0} za &apos;{1}&apos;</translation>
+    </message>
+    <message>
+        <source>Backend optimization unavailable</source>
+        <translation>Optimizacija zalednega sistema ni na voljo</translation>
+    </message>
+    <message>
+        <source>Backend set to Auto for &apos;{0}&apos;</source>
+        <translation>Zaledni sistem nastavljen na Samodejno za &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Centroids enabled for &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>Centroidi omogočeni za &apos;{0}&apos; (~{1}x {2})</translation>
+    </message>
+    <message>
+        <source>Clear ALL FilterMate temporary tables from all databases</source>
+        <translation>Počisti VSE FilterMate začasne tabele iz vseh podatkovnih baz</translation>
+    </message>
+    <message>
+        <source>Clear temporary tables for the current project only</source>
+        <translation>Počisti začasne tabele samo za trenutni projekt</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) for current project</source>
+        <translation>Počiščenih {0} začasnih tabel za trenutni projekt</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) globally</source>
+        <translation>Globalno počiščenih {0} začasnih tabel</translation>
+    </message>
+    <message>
+        <source>Confirmation {0}</source>
+        <translation>Potrditev {0}</translation>
+    </message>
+    <message>
+        <source>Could not analyze layer &apos;{0}&apos;</source>
+        <translation>Ni bilo mogoče analizirati plasti &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Could not reload plugin automatically.</source>
+        <translation>Vtičnika ni bilo mogoče samodejno znova naložiti.</translation>
+    </message>
+    <message>
+        <source>Dark mode</source>
+        <translation>Temni način</translation>
+    </message>
+    <message>
+        <source>Description (auto-generated, you can modify it)</source>
+        <translation>Opis (samodejno ustvarjen, lahko ga spremenite)</translation>
+    </message>
+    <message>
+        <source>Dialog not available: {0}</source>
+        <translation>Pogovorno okno ni na voljo: {0}</translation>
+    </message>
+    <message>
+        <source>Enter a name for this filter</source>
+        <translation>Vnesite ime za ta filter</translation>
+    </message>
+    <message>
+        <source>Error analyzing layer: {0}</source>
+        <translation>Napaka pri analiziranju plasti: {0}</translation>
+    </message>
+    <message>
+        <source>Error cancelling changes: {0}</source>
+        <translation>Napaka pri preklicu sprememb: {0}</translation>
+    </message>
+    <message>
+        <source>Error reloading plugin: {0}</source>
+        <translation>Napaka pri ponovnem nalaganju vtičnika: {0}</translation>
+    </message>
+    <message>
+        <source>Error resetting layer properties: {}</source>
+        <translation>Napaka pri ponastavitvi lastnosti plasti: {}</translation>
+    </message>
+    <message>
+        <source>Error: {0}</source>
+        <translation>Napaka: {0}</translation>
+    </message>
+    <message>
+        <source>Favorites manager not available</source>
+        <translation>Upravitelj priljubljenih ni na voljo</translation>
+    </message>
+    <message>
+        <source>Filter history position</source>
+        <translation>Položaj zgodovine filtrov</translation>
+    </message>
+    <message>
+        <source>FilterMate - Add to Favorites</source>
+        <translation>FilterMate - Dodaj med priljubljene</translation>
+    </message>
+    <message>
+        <source>Forced {0} backend for {1} layer(s)</source>
+        <translation>{0} zaledni sistem prisilno nastavljen za {1} plast(i)</translation>
+    </message>
+    <message>
+        <source>Light mode</source>
+        <translation>Svetli način</translation>
+    </message>
+    <message>
+        <source>Memory layer filtering complete for &apos;{0}&apos;</source>
+        <translation>Filtriranje pomnilniške plasti končano za &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>No optimization recommendations at this time.</source>
+        <translation>Trenutno ni priporočil za optimizacijo.</translation>
+    </message>
+    <message>
+        <source>OGR/Memory</source>
+        <translation>OGR/Pomnilnik</translation>
+    </message>
+    <message>
+        <source>Optimization applied to {0} layer(s)</source>
+        <translation>Optimizacija uporabljena za {0} plast(i)</translation>
+    </message>
+    <message>
+        <source>Optimization recommendations</source>
+        <translation>Priporočila za optimizacijo</translation>
+    </message>
+    <message>
+        <source>PostgreSQL</source>
+        <translation>PostgreSQL</translation>
+    </message>
+    <message>
+        <source>Redo filter</source>
+        <translation>Ponovi filter</translation>
+    </message>
+    <message>
+        <source>Redo unavailable</source>
+        <translation>Ponovi ni na voljo</translation>
+    </message>
+    <message>
+        <source>Save current filter</source>
+        <translation>Shrani trenutni filter</translation>
+    </message>
+    <message>
+        <source>Spatialite</source>
+        <translation>Spatialite</translation>
+    </message>
+    <message>
+        <source>Strategy set to {0} for &apos;{1}&apos;</source>
+        <translation>Strategija nastavljena na {0} za &apos;{1}&apos;</translation>
+    </message>
+    <message>
+        <source>Theme changed</source>
+        <translation>Tema spremenjena</translation>
+    </message>
+    <message>
+        <source>Toggle dark/light mode</source>
+        <translation>Preklopi temni/svetli način</translation>
+    </message>
+    <message>
+        <source>Undo filter</source>
+        <translation>Razveljavi filter</translation>
+    </message>
+    <message>
+        <source>Undo unavailable</source>
+        <translation>Razveljavi ni na voljo</translation>
+    </message>
+    <message>
+        <source>Using QGIS expressions for filtering</source>
+        <translation>Uporaba QGIS izrazov za filtriranje</translation>
+    </message>
+    <message>
+        <source>View filter history</source>
+        <translation>Ogled zgodovine filtrov</translation>
+    </message>
+    <message>
+        <source>WKT expression threshold:</source>
+        <translation>Prag WKT izraza:</translation>
+    </message>
+    <message>
+        <source>memory copy</source>
+        <translation>kopija v pomnilniku</translation>
+    </message>
+    <message>
+        <source>pool size</source>
+        <translation>velikost sklada</translation>
+    </message>
+    <message>
+        <source>simplified to {0} vertices</source>
+        <translation>poenostavljeno na {0} oglišč</translation>
+    </message>
+    <message>
+        <source>temp views</source>
+        <translation>začasni pogledi</translation>
+    </message>
+    <message>
+        <source>Allow cancellation of QGIS processing algorithms. Enables stopping long-running operations.</source>
+        <translation>Dovoli preklic algoritmov obdelave QGIS. Omogoča ustavitev dolgotrajnih operacij.</translation>
+    </message>
+    <message>
+        <source>Analyzing your project... Recommendations will appear here.</source>
+        <translation>Analiziranje vašega projekta... Priporočila se bodo pojavila tukaj.</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid for Distant Layers</source>
+        <translation>Samodejna sredina za oddaljene plasti</translation>
+    </message>
+    <message>
+        <source>Auto-Select Best Strategy</source>
+        <translation>Samodejno izberi najboljšo strategijo</translation>
+    </message>
+    <message>
+        <source>Auto-Simplify Geometries ⚠️</source>
+        <translation>Samodejno poenostavi geometrije ⚠️</translation>
+    </message>
+    <message>
+        <source>Auto-detect mod_spatialite</source>
+        <translation>Samodejno zaznaj mod_spatialite</translation>
+    </message>
+    <message>
+        <source>Automatic GIST Index Usage</source>
+        <translation>Samodejna uporaba GIST indeksa</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Prekliči</translation>
+    </message>
+    <message>
+        <source>Cancellable Processing</source>
+        <translation>Prekličljiva obdelava</translation>
+    </message>
+    <message>
+        <source>Chunk size (features):</source>
+        <translation>Velikost kosa (objekti):</translation>
+    </message>
+    <message>
+        <source>Confirm Before Applying</source>
+        <translation>Potrdi pred uporabo</translation>
+    </message>
+    <message>
+        <source>Connection Pooling</source>
+        <translation>Združevanje povezav</translation>
+    </message>
+    <message>
+        <source>Create Spatial Indexes</source>
+        <translation>Ustvari prostorske indekse</translation>
+    </message>
+    <message>
+        <source>Direct SQL for GeoPackage</source>
+        <translation>Neposredni SQL za GeoPackage</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Centroid for Remote Layers</source>
+        <translation>Omogoči samodejno sredino za oddaljene plasti</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Optimization</source>
+        <translation>Omogoči samodejno optimizacijo</translation>
+    </message>
+    <message>
+        <source>Enable Direct SQL for GeoPackage</source>
+        <translation>Omogoči neposredni SQL za GeoPackage</translation>
+    </message>
+    <message>
+        <source>Enable Materialized Views</source>
+        <translation>Omogoči materializirane poglede</translation>
+    </message>
+    <message>
+        <source>Estimated performance improvement</source>
+        <translation>Ocenjeno izboljšanje zmogljivosti</translation>
+    </message>
+    <message>
+        <source>FilterMate - Backend Optimizations</source>
+        <translation>FilterMate - Optimizacije zaledja</translation>
+    </message>
+    <message>
+        <source>GEOS-safe Geometry Handling</source>
+        <translation>GEOS-varna obdelava geometrije</translation>
+    </message>
+    <message>
+        <source>Global</source>
+        <translation>Globalno</translation>
+    </message>
+    <message>
+        <source>Initialization error: {}</source>
+        <translation>Napaka inicializacije: {}</translation>
+    </message>
+    <message>
+        <source>Interruptible Queries</source>
+        <translation>Prekinljive poizvedbe</translation>
+    </message>
+    <message>
+        <source>Lazy cursor threshold:</source>
+        <translation>Prag lenega kazalca:</translation>
+    </message>
+    <message>
+        <source>Max workers (0=auto):</source>
+        <translation>Maks. delavcev (0=samodejno):</translation>
+    </message>
+    <message>
+        <source>No PostgreSQL connection available</source>
+        <translation>Povezava PostgreSQL ni na voljo</translation>
+    </message>
+    <message>
+        <source>No alternative backends available for this layer</source>
+        <translation>Za to plast ni alternativnih zaledij</translation>
+    </message>
+    <message>
+        <source>No layer selected. Please select a layer first.</source>
+        <translation>Nobena plast ni izbrana. Najprej izberite plast.</translation>
+    </message>
+    <message>
+        <source>No optimizations selected to apply.</source>
+        <translation>Za uporabo ni izbrana nobena optimizacija.</translation>
+    </message>
+    <message>
+        <source>No temporary tables found</source>
+        <translation>Začasne tabele niso bile najdene</translation>
+    </message>
+    <message>
+        <source>No temporary tables found for current project</source>
+        <translation>Za trenutni projekt ni začasnih tabel</translation>
+    </message>
+    <message>
+        <source>Save Settings</source>
+        <translation>Shrani nastavitve</translation>
+    </message>
+    <message>
+        <source>Show Optimization Hints</source>
+        <translation>Pokaži namige za optimizacijo</translation>
+    </message>
+    <message>
+        <source>Redo filter (Ctrl+Y)</source>
+        <translation>Ponovi filter (Ctrl+Y)</translation>
+    </message>
+    <message>
+        <source>Undo last filter (Ctrl+Z)</source>
+        <translation>Razveljavi zadnji filter (Ctrl+Z)</translation>
+    </message>
+    <message>
+        <source>disabled</source>
+        <translation>onemogočeno</translation>
+    </message>
+    <message>
+        <source>enabled</source>
+        <translation>omogočeno</translation>
+    </message>
+    <message>
+        <source>★ No favorites saved</source>
+        <translation>★ Ni shranjenih priljubljenih</translation>
+    </message>
+    <message>
+        <source>★ {0} Favorites saved</source>
+        <translation>★ {0} Priljubljenih shranjenih</translation>
+    </message>
+    <message>
+        <source>⚙️ Manage favorites...</source>
+        <translation>⚙️ Upravljaj priljubljene...</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter (no filter active)</source>
+        <translation>⭐ Dodaj trenutni filter (noben filter ni aktiven)</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter to Favorites</source>
+        <translation>⭐ Dodaj trenutni filter med priljubljene</translation>
+    </message>
+    <message>
+        <source>⭐ Add current filter to favorites</source>
+        <translation>⭐ Dodaj trenutni filter med priljubljene</translation>
+    </message>
+    <message>
+        <source>⭐ Add filter (no active filter)</source>
+        <translation>⭐ Dodaj filter (ni aktivnega filtra)</translation>
+    </message>
+    <message>
+        <source>🌐 All Projects (Global)</source>
+        <translation>🌐 Vsi projekti (Globalno)</translation>
+    </message>
+    <message>
+        <source>📁 Current Project</source>
+        <translation>📁 Trenutni projekt</translation>
+    </message>
+    <message>
+        <source>📤 Export...</source>
+        <translation>📤 Izvozi...</translation>
+    </message>
+    <message>
+        <source>📥 Import...</source>
+        <translation>📥 Uvozi...</translation>
+    </message>
+    <message>
+        <source>Restore Defaults</source>
+        <translation>Obnovi privzeto</translation>
+    </message>
+    <message>
+        <source>Use Balanced Profile</source>
+        <translation>Uporabi uravnotežen profil</translation>
+    </message>
 </context>
 </TS>

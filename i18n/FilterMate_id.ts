@@ -1469,5 +1469,449 @@ Ini mempengaruhi sesi FilterMate lain!</translation>
         <source>Cleanup Failed</source>
         <translation>Pembersihan Gagal</translation>
     </message>
+    <message>
+        <source>All layers using auto-selection</source>
+        <translation>Semua lapisan menggunakan pemilihan otomatis</translation>
+    </message>
+    <message>
+        <source>Applied to &apos;{0}&apos;:</source>
+        <translation>Diterapkan ke &apos;{0}&apos;:</translation>
+    </message>
+    <message>
+        <source>Auto-centroid {0}</source>
+        <translation>Centroid otomatis {0}</translation>
+    </message>
+    <message>
+        <source>Auto-optimization {0}</source>
+        <translation>Optimasi otomatis {0}</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer module not available</source>
+        <translation>Modul pengoptimalisasi otomatis tidak tersedia</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer not available: {0}</source>
+        <translation>Pengoptimalisasi otomatis tidak tersedia: {0}</translation>
+    </message>
+    <message>
+        <source>Auto-select best strategy</source>
+        <translation>Pilih strategi terbaik secara otomatis</translation>
+    </message>
+    <message>
+        <source>Auto-selected backends for {0} layer(s)</source>
+        <translation>Backend dipilih otomatis untuk {0} lapisan</translation>
+    </message>
+    <message>
+        <source>Auto-simplify geometries</source>
+        <translation>Sederhanakan geometri secara otomatis</translation>
+    </message>
+    <message>
+        <source>Auto-use centroids for remote layers</source>
+        <translation>Gunakan centroid secara otomatis untuk lapisan jarak jauh</translation>
+    </message>
+    <message>
+        <source>Automatically choose optimal filtering strategy</source>
+        <translation>Pilih strategi pemfilteran optimal secara otomatis</translation>
+    </message>
+    <message>
+        <source>BBox pre-filter enabled for &apos;{0}&apos;</source>
+        <translation>Pra-filter BBox diaktifkan untuk &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Backend controller not available</source>
+        <translation>Pengontrol backend tidak tersedia</translation>
+    </message>
+    <message>
+        <source>Backend forced to {0} for &apos;{1}&apos;</source>
+        <translation>Backend dipaksa ke {0} untuk &apos;{1}&apos;</translation>
+    </message>
+    <message>
+        <source>Backend optimization unavailable</source>
+        <translation>Optimasi backend tidak tersedia</translation>
+    </message>
+    <message>
+        <source>Backend set to Auto for &apos;{0}&apos;</source>
+        <translation>Backend diatur ke Otomatis untuk &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Centroids enabled for &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>Centroid diaktifkan untuk &apos;{0}&apos; (~{1}x {2})</translation>
+    </message>
+    <message>
+        <source>Clear ALL FilterMate temporary tables from all databases</source>
+        <translation>Bersihkan SEMUA tabel sementara FilterMate dari semua database</translation>
+    </message>
+    <message>
+        <source>Clear temporary tables for the current project only</source>
+        <translation>Bersihkan tabel sementara hanya untuk proyek saat ini</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) for current project</source>
+        <translation>{0} tabel sementara dibersihkan untuk proyek saat ini</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) globally</source>
+        <translation>{0} tabel sementara dibersihkan secara global</translation>
+    </message>
+    <message>
+        <source>Confirmation {0}</source>
+        <translation>Konfirmasi {0}</translation>
+    </message>
+    <message>
+        <source>Could not analyze layer &apos;{0}&apos;</source>
+        <translation>Tidak dapat menganalisis lapisan &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Could not reload plugin automatically.</source>
+        <translation>Tidak dapat memuat ulang plugin secara otomatis.</translation>
+    </message>
+    <message>
+        <source>Dark mode</source>
+        <translation>Mode gelap</translation>
+    </message>
+    <message>
+        <source>Description (auto-generated, you can modify it)</source>
+        <translation>Deskripsi (dibuat otomatis, Anda dapat memodifikasinya)</translation>
+    </message>
+    <message>
+        <source>Dialog not available: {0}</source>
+        <translation>Dialog tidak tersedia: {0}</translation>
+    </message>
+    <message>
+        <source>Enter a name for this filter</source>
+        <translation>Masukkan nama untuk filter ini</translation>
+    </message>
+    <message>
+        <source>Error analyzing layer: {0}</source>
+        <translation>Error menganalisis lapisan: {0}</translation>
+    </message>
+    <message>
+        <source>Error cancelling changes: {0}</source>
+        <translation>Error membatalkan perubahan: {0}</translation>
+    </message>
+    <message>
+        <source>Error reloading plugin: {0}</source>
+        <translation>Error memuat ulang plugin: {0}</translation>
+    </message>
+    <message>
+        <source>Error resetting layer properties: {}</source>
+        <translation>Error mereset properti lapisan: {}</translation>
+    </message>
+    <message>
+        <source>Error: {0}</source>
+        <translation>Error: {0}</translation>
+    </message>
+    <message>
+        <source>Favorites manager not available</source>
+        <translation>Manajer favorit tidak tersedia</translation>
+    </message>
+    <message>
+        <source>Filter history position</source>
+        <translation>Posisi riwayat filter</translation>
+    </message>
+    <message>
+        <source>FilterMate - Add to Favorites</source>
+        <translation>FilterMate - Tambah ke Favorit</translation>
+    </message>
+    <message>
+        <source>Forced {0} backend for {1} layer(s)</source>
+        <translation>Backend {0} dipaksa untuk {1} lapisan</translation>
+    </message>
+    <message>
+        <source>Light mode</source>
+        <translation>Mode terang</translation>
+    </message>
+    <message>
+        <source>Memory layer filtering complete for &apos;{0}&apos;</source>
+        <translation>Pemfilteran lapisan memori selesai untuk &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>No optimization recommendations at this time.</source>
+        <translation>Tidak ada rekomendasi optimasi saat ini.</translation>
+    </message>
+    <message>
+        <source>OGR/Memory</source>
+        <translation>OGR/Memori</translation>
+    </message>
+    <message>
+        <source>Optimization applied to {0} layer(s)</source>
+        <translation>Optimasi diterapkan ke {0} lapisan</translation>
+    </message>
+    <message>
+        <source>Optimization recommendations</source>
+        <translation>Rekomendasi optimasi</translation>
+    </message>
+    <message>
+        <source>PostgreSQL</source>
+        <translation>PostgreSQL</translation>
+    </message>
+    <message>
+        <source>Redo filter</source>
+        <translation>Ulangi filter</translation>
+    </message>
+    <message>
+        <source>Redo unavailable</source>
+        <translation>Ulangi tidak tersedia</translation>
+    </message>
+    <message>
+        <source>Save current filter</source>
+        <translation>Simpan filter saat ini</translation>
+    </message>
+    <message>
+        <source>Spatialite</source>
+        <translation>Spatialite</translation>
+    </message>
+    <message>
+        <source>Strategy set to {0} for &apos;{1}&apos;</source>
+        <translation>Strategi diatur ke {0} untuk &apos;{1}&apos;</translation>
+    </message>
+    <message>
+        <source>Theme changed</source>
+        <translation>Tema diubah</translation>
+    </message>
+    <message>
+        <source>Toggle dark/light mode</source>
+        <translation>Beralih mode gelap/terang</translation>
+    </message>
+    <message>
+        <source>Undo filter</source>
+        <translation>Batalkan filter</translation>
+    </message>
+    <message>
+        <source>Undo unavailable</source>
+        <translation>Batalkan tidak tersedia</translation>
+    </message>
+    <message>
+        <source>Using QGIS expressions for filtering</source>
+        <translation>Menggunakan ekspresi QGIS untuk pemfilteran</translation>
+    </message>
+    <message>
+        <source>View filter history</source>
+        <translation>Lihat riwayat filter</translation>
+    </message>
+    <message>
+        <source>WKT expression threshold:</source>
+        <translation>Ambang batas ekspresi WKT:</translation>
+    </message>
+    <message>
+        <source>memory copy</source>
+        <translation>salinan memori</translation>
+    </message>
+    <message>
+        <source>pool size</source>
+        <translation>ukuran pool</translation>
+    </message>
+    <message>
+        <source>simplified to {0} vertices</source>
+        <translation>disederhanakan menjadi {0} titik</translation>
+    </message>
+    <message>
+        <source>temp views</source>
+        <translation>tampilan sementara</translation>
+    </message>
+    <message>
+        <source>Allow cancellation of QGIS processing algorithms. Enables stopping long-running operations.</source>
+        <translation>Izinkan pembatalan algoritma pemrosesan QGIS. Memungkinkan penghentian operasi yang berjalan lama.</translation>
+    </message>
+    <message>
+        <source>Analyzing your project... Recommendations will appear here.</source>
+        <translation>Menganalisis proyek Anda... Rekomendasi akan muncul di sini.</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid for Distant Layers</source>
+        <translation>Auto-Centroid untuk Layer Jauh</translation>
+    </message>
+    <message>
+        <source>Auto-Select Best Strategy</source>
+        <translation>Pilih Strategi Terbaik Otomatis</translation>
+    </message>
+    <message>
+        <source>Auto-Simplify Geometries ⚠️</source>
+        <translation>Sederhanakan Geometri Otomatis ⚠️</translation>
+    </message>
+    <message>
+        <source>Auto-detect mod_spatialite</source>
+        <translation>Deteksi otomatis mod_spatialite</translation>
+    </message>
+    <message>
+        <source>Automatic GIST Index Usage</source>
+        <translation>Penggunaan Indeks GIST Otomatis</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Batal</translation>
+    </message>
+    <message>
+        <source>Cancellable Processing</source>
+        <translation>Pemrosesan yang Dapat Dibatalkan</translation>
+    </message>
+    <message>
+        <source>Chunk size (features):</source>
+        <translation>Ukuran chunk (fitur):</translation>
+    </message>
+    <message>
+        <source>Confirm Before Applying</source>
+        <translation>Konfirmasi Sebelum Menerapkan</translation>
+    </message>
+    <message>
+        <source>Connection Pooling</source>
+        <translation>Connection Pooling</translation>
+    </message>
+    <message>
+        <source>Create Spatial Indexes</source>
+        <translation>Buat Indeks Spasial</translation>
+    </message>
+    <message>
+        <source>Direct SQL for GeoPackage</source>
+        <translation>SQL Langsung untuk GeoPackage</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Centroid for Remote Layers</source>
+        <translation>Aktifkan Auto-Centroid untuk Layer Remote</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Optimization</source>
+        <translation>Aktifkan Optimasi Otomatis</translation>
+    </message>
+    <message>
+        <source>Enable Direct SQL for GeoPackage</source>
+        <translation>Aktifkan SQL Langsung untuk GeoPackage</translation>
+    </message>
+    <message>
+        <source>Enable Materialized Views</source>
+        <translation>Aktifkan Materialized Views</translation>
+    </message>
+    <message>
+        <source>Estimated performance improvement</source>
+        <translation>Perkiraan peningkatan kinerja</translation>
+    </message>
+    <message>
+        <source>FilterMate - Backend Optimizations</source>
+        <translation>FilterMate - Optimasi Backend</translation>
+    </message>
+    <message>
+        <source>GEOS-safe Geometry Handling</source>
+        <translation>Penanganan Geometri GEOS-safe</translation>
+    </message>
+    <message>
+        <source>Global</source>
+        <translation>Global</translation>
+    </message>
+    <message>
+        <source>Initialization error: {}</source>
+        <translation>Error inisialisasi: {}</translation>
+    </message>
+    <message>
+        <source>Interruptible Queries</source>
+        <translation>Query yang Dapat Diinterupsi</translation>
+    </message>
+    <message>
+        <source>Lazy cursor threshold:</source>
+        <translation>Ambang batas kursor malas:</translation>
+    </message>
+    <message>
+        <source>Max workers (0=auto):</source>
+        <translation>Maks pekerja (0=otomatis):</translation>
+    </message>
+    <message>
+        <source>No PostgreSQL connection available</source>
+        <translation>Tidak ada koneksi PostgreSQL yang tersedia</translation>
+    </message>
+    <message>
+        <source>No alternative backends available for this layer</source>
+        <translation>Tidak ada backend alternatif untuk lapisan ini</translation>
+    </message>
+    <message>
+        <source>No layer selected. Please select a layer first.</source>
+        <translation>Tidak ada lapisan yang dipilih. Silakan pilih lapisan terlebih dahulu.</translation>
+    </message>
+    <message>
+        <source>No optimizations selected to apply.</source>
+        <translation>Tidak ada optimasi yang dipilih untuk diterapkan.</translation>
+    </message>
+    <message>
+        <source>No temporary tables found</source>
+        <translation>Tidak ada tabel sementara yang ditemukan</translation>
+    </message>
+    <message>
+        <source>No temporary tables found for current project</source>
+        <translation>Tidak ada tabel sementara untuk proyek saat ini</translation>
+    </message>
+    <message>
+        <source>Save Settings</source>
+        <translation>Simpan Pengaturan</translation>
+    </message>
+    <message>
+        <source>Show Optimization Hints</source>
+        <translation>Tampilkan Petunjuk Optimasi</translation>
+    </message>
+    <message>
+        <source>Redo filter (Ctrl+Y)</source>
+        <translation>Ulangi filter (Ctrl+Y)</translation>
+    </message>
+    <message>
+        <source>Undo last filter (Ctrl+Z)</source>
+        <translation>Batalkan filter terakhir (Ctrl+Z)</translation>
+    </message>
+    <message>
+        <source>disabled</source>
+        <translation>dinonaktifkan</translation>
+    </message>
+    <message>
+        <source>enabled</source>
+        <translation>diaktifkan</translation>
+    </message>
+    <message>
+        <source>★ No favorites saved</source>
+        <translation>★ Tidak ada favorit tersimpan</translation>
+    </message>
+    <message>
+        <source>★ {0} Favorites saved</source>
+        <translation>★ {0} Favorit tersimpan</translation>
+    </message>
+    <message>
+        <source>⚙️ Manage favorites...</source>
+        <translation>⚙️ Kelola favorit...</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter (no filter active)</source>
+        <translation>⭐ Tambah Filter Saat Ini (tidak ada filter aktif)</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter to Favorites</source>
+        <translation>⭐ Tambah Filter Saat Ini ke Favorit</translation>
+    </message>
+    <message>
+        <source>⭐ Add current filter to favorites</source>
+        <translation>⭐ Tambah filter saat ini ke favorit</translation>
+    </message>
+    <message>
+        <source>⭐ Add filter (no active filter)</source>
+        <translation>⭐ Tambah filter (tidak ada filter aktif)</translation>
+    </message>
+    <message>
+        <source>🌐 All Projects (Global)</source>
+        <translation>🌐 Semua Proyek (Global)</translation>
+    </message>
+    <message>
+        <source>📁 Current Project</source>
+        <translation>📁 Proyek Saat Ini</translation>
+    </message>
+    <message>
+        <source>📤 Export...</source>
+        <translation>📤 Ekspor...</translation>
+    </message>
+    <message>
+        <source>📥 Import...</source>
+        <translation>📥 Impor...</translation>
+    </message>
+    <message>
+        <source>Restore Defaults</source>
+        <translation>Kembalikan Default</translation>
+    </message>
+    <message>
+        <source>Use Balanced Profile</source>
+        <translation>Gunakan Profil Seimbang</translation>
+    </message>
 </context>
 </TS>

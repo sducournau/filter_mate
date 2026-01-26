@@ -1753,5 +1753,205 @@ This affects other FilterMate sessions!</source>
         <source>Cleanup Failed</source>
         <translation>清理失败</translation>
     </message>
+    <message>
+        <source>Allow cancellation of QGIS processing algorithms. Enables stopping long-running operations.</source>
+        <translation>允许取消QGIS处理算法。可以停止长时间运行的操作。</translation>
+    </message>
+    <message>
+        <source>Analyzing your project... Recommendations will appear here.</source>
+        <translation>正在分析您的项目...建议将显示在这里。</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid for Distant Layers</source>
+        <translation>远程图层自动质心</translation>
+    </message>
+    <message>
+        <source>Auto-Select Best Strategy</source>
+        <translation>自动选择最佳策略</translation>
+    </message>
+    <message>
+        <source>Auto-Simplify Geometries ⚠️</source>
+        <translation>自动简化几何图形 ⚠️</translation>
+    </message>
+    <message>
+        <source>Auto-detect mod_spatialite</source>
+        <translation>自动检测mod_spatialite</translation>
+    </message>
+    <message>
+        <source>Automatic GIST Index Usage</source>
+        <translation>自动GIST索引使用</translation>
+    </message>
+    <message>
+        <source>Automatically analyze layers and suggest optimizations before filtering.</source>
+        <translation>自动分析图层并在过滤前建议优化。</translation>
+    </message>
+    <message>
+        <source>Automatically choose optimal filtering strategy based on layer analysis. (attribute-first, bbox-prefilter, progressive chunks)</source>
+        <translation>根据图层分析自动选择最佳过滤策略。（属性优先、边界框预过滤、渐进式分块）</translation>
+    </message>
+    <message>
+        <source>Automatically create spatial index (.qix/.shx) for layers without one. Dramatically improves spatial query speed.</source>
+        <translation>自动为没有索引的图层创建空间索引（.qix/.shx）。显著提高空间查询速度。</translation>
+    </message>
+    <message>
+        <source>Automatically find and load the best mod_spatialite extension.</source>
+        <translation>自动查找并加载最佳mod_spatialite扩展。</translation>
+    </message>
+    <message>
+        <source>Automatically simplify complex geometries. WARNING: This is a LOSSY operation that may change polygon shapes.</source>
+        <translation>自动简化复杂几何图形。警告：这是一个有损操作，可能会改变多边形形状。</translation>
+    </message>
+    <message>
+        <source>Automatically use ST_Centroid() for remote layers (WFS, ArcGIS). Reduces network data transfer by ~90%.</source>
+        <translation>自动为远程图层（WFS、ArcGIS）使用ST_Centroid()。减少约90%的网络数据传输。</translation>
+    </message>
+    <message>
+        <source>Bypass GDAL layer and execute SQL directly on GeoPackage. Faster for complex spatial queries.</source>
+        <translation>绕过GDAL图层直接在GeoPackage上执行SQL。对复杂空间查询更快。</translation>
+    </message>
+    <message>
+        <source>Cache built expressions to avoid rebuilding identical queries.</source>
+        <translation>缓存已构建的表达式以避免重建相同的查询。</translation>
+    </message>
+    <message>
+        <source>Cache converted WKT strings to avoid repeated geometry serialization.</source>
+        <translation>缓存转换后的WKT字符串以避免重复的几何序列化。</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>取消</translation>
+    </message>
+    <message>
+        <source>Cancellable Processing</source>
+        <translation>可取消处理</translation>
+    </message>
+    <message>
+        <source>Chunk size (features):</source>
+        <translation>块大小（要素）：</translation>
+    </message>
+    <message>
+        <source>Confirm Before Applying</source>
+        <translation>应用前确认</translation>
+    </message>
+    <message>
+        <source>Connection Pooling</source>
+        <translation>连接池</translation>
+    </message>
+    <message>
+        <source>Create Spatial Indexes</source>
+        <translation>创建空间索引</translation>
+    </message>
+    <message>
+        <source>Create indexed temporary views for complex spatial queries. Best for large datasets with complex expressions.</source>
+        <translation>为复杂空间查询创建索引临时视图。最适合具有复杂表达式的大型数据集。</translation>
+    </message>
+    <message>
+        <source>Create materialized views for datasets larger than this</source>
+        <translation>为大于此大小的数据集创建物化视图</translation>
+    </message>
+    <message>
+        <source>Create temporary tables with R-tree spatial indexes for complex queries. Best for complex expressions on local files.</source>
+        <translation>为复杂查询创建带R树空间索引的临时表。最适合本地文件上的复杂表达式。</translation>
+    </message>
+    <message>
+        <source>Direct SQL access can make GeoPackage filtering 2-5x faster.</source>
+        <translation>直接SQL访问可以使GeoPackage过滤速度提高2-5倍。</translation>
+    </message>
+    <message>
+        <source>Direct SQL for GeoPackage</source>
+        <translation>GeoPackage直接SQL</translation>
+    </message>
+    <message>
+        <source>Display optimization hints in message bar when recommendations are available.</source>
+        <translation>当有建议时在消息栏中显示优化提示。</translation>
+    </message>
+    <message>
+        <source>Distant layer threshold:</source>
+        <translation>远程图层阈值：</translation>
+    </message>
+    <message>
+        <source>EXISTS Subquery for Large WKT</source>
+        <translation>大型WKT的EXISTS子查询</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Centroid for Remote Layers</source>
+        <translation>为远程图层启用自动质心</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Optimization</source>
+        <translation>启用自动优化</translation>
+    </message>
+    <message>
+        <source>Enable Direct SQL for GeoPackage</source>
+        <translation>为GeoPackage启用直接SQL</translation>
+    </message>
+    <message>
+        <source>Enable Materialized Views</source>
+        <translation>启用物化视图</translation>
+    </message>
+    <message>
+        <source>Error resetting layer properties: {}</source>
+        <translation>重置图层属性时出错：{}</translation>
+    </message>
+    <message>
+        <source>Estimated performance improvement</source>
+        <translation>预计性能提升</translation>
+    </message>
+    <message>
+        <source>Execute SQLite queries in background thread with cancellation support. Prevents UI freezing.</source>
+        <translation>在后台线程中执行SQLite查询并支持取消。防止UI冻结。</translation>
+    </message>
+    <message>
+        <source>Filter multiple layers simultaneously using multiple CPU cores.</source>
+        <translation>使用多个CPU核心同时过滤多个图层。</translation>
+    </message>
+    <message>
+        <source>FilterMate - Backend Optimizations</source>
+        <translation>FilterMate - 后端优化</translation>
+    </message>
+    <message>
+        <source>First filter by bounding box, then by exact geometry. Reduces precision calculations on irrelevant features.</source>
+        <translation>先按边界框过滤，再按精确几何过滤。减少对不相关要素的精度计算。</translation>
+    </message>
+    <message>
+        <source>For small PostgreSQL layers, copy to memory for faster filtering. Avoids network latency for small datasets.</source>
+        <translation>对于小型PostgreSQL图层，复制到内存以加快过滤速度。避免小型数据集的网络延迟。</translation>
+    </message>
+    <message>
+        <source>Force sequential execution for OGR layers to prevent crashes. Safer but slower.</source>
+        <translation>强制OGR图层顺序执行以防止崩溃。更安全但更慢。</translation>
+    </message>
+    <message>
+        <source>GEOS-safe Geometry Handling</source>
+        <translation>GEOS安全几何处理</translation>
+    </message>
+    <message>
+        <source>Global</source>
+        <translation>全局</translation>
+    </message>
+    <message>
+        <source>Interruptible Queries</source>
+        <translation>可中断查询</translation>
+    </message>
+    <message>
+        <source>Lazy cursor threshold:</source>
+        <translation>延迟游标阈值：</translation>
+    </message>
+    <message>
+        <source>Max workers (0=auto):</source>
+        <translation>最大工作线程（0=自动）：</translation>
+    </message>
+    <message>
+        <source>Optimizations for PostgreSQL databases with PostGIS extension</source>
+        <translation>带PostGIS扩展的PostgreSQL数据库优化</translation>
+    </message>
+    <message>
+        <source>Optimizations for Spatialite databases and GeoPackage files</source>
+        <translation>Spatialite数据库和GeoPackage文件优化</translation>
+    </message>
+    <message>
+        <source>Optimizations for file-based formats (Shapefiles, GeoJSON) and memory layers</source>
+        <translation>基于文件格式（Shapefiles、GeoJSON）和内存图层的优化</translation>
+    </message>
 </context>
 </TS>

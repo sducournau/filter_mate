@@ -1469,5 +1469,449 @@ This affects other FilterMate sessions!</source>
         <source>Cleanup Failed</source>
         <translation>सफाई विफल</translation>
     </message>
+    <message>
+        <source>All layers using auto-selection</source>
+        <translation>सभी लेयर स्वचालित चयन का उपयोग कर रही हैं</translation>
+    </message>
+    <message>
+        <source>Applied to &apos;{0}&apos;:</source>
+        <translation>&apos;{0}&apos; पर लागू किया गया:</translation>
+    </message>
+    <message>
+        <source>Auto-centroid {0}</source>
+        <translation>ऑटो-सेंट्रॉइड {0}</translation>
+    </message>
+    <message>
+        <source>Auto-optimization {0}</source>
+        <translation>ऑटो-अनुकूलन {0}</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer module not available</source>
+        <translation>ऑटो-ऑप्टिमाइज़र मॉड्यूल उपलब्ध नहीं है</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer not available: {0}</source>
+        <translation>ऑटो-ऑप्टिमाइज़र उपलब्ध नहीं है: {0}</translation>
+    </message>
+    <message>
+        <source>Auto-select best strategy</source>
+        <translation>सर्वोत्तम रणनीति स्वचालित रूप से चुनें</translation>
+    </message>
+    <message>
+        <source>Auto-selected backends for {0} layer(s)</source>
+        <translation>{0} लेयर(ओं) के लिए बैकएंड स्वचालित रूप से चयनित</translation>
+    </message>
+    <message>
+        <source>Auto-simplify geometries</source>
+        <translation>ज्यामितीयों को स्वचालित रूप से सरल करें</translation>
+    </message>
+    <message>
+        <source>Auto-use centroids for remote layers</source>
+        <translation>दूरस्थ लेयर के लिए स्वचालित रूप से सेंट्रॉइड का उपयोग करें</translation>
+    </message>
+    <message>
+        <source>Automatically choose optimal filtering strategy</source>
+        <translation>स्वचालित रूप से इष्टतम फ़िल्टरिंग रणनीति चुनें</translation>
+    </message>
+    <message>
+        <source>BBox pre-filter enabled for &apos;{0}&apos;</source>
+        <translation>&apos;{0}&apos; के लिए BBox प्री-फ़िल्टर सक्षम</translation>
+    </message>
+    <message>
+        <source>Backend controller not available</source>
+        <translation>बैकएंड कंट्रोलर उपलब्ध नहीं है</translation>
+    </message>
+    <message>
+        <source>Backend forced to {0} for &apos;{1}&apos;</source>
+        <translation>&apos;{1}&apos; के लिए बैकएंड {0} पर मजबूर किया गया</translation>
+    </message>
+    <message>
+        <source>Backend optimization unavailable</source>
+        <translation>बैकएंड अनुकूलन उपलब्ध नहीं है</translation>
+    </message>
+    <message>
+        <source>Backend set to Auto for &apos;{0}&apos;</source>
+        <translation>&apos;{0}&apos; के लिए बैकएंड स्वचालित पर सेट किया गया</translation>
+    </message>
+    <message>
+        <source>Centroids enabled for &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>&apos;{0}&apos; के लिए सेंट्रॉइड सक्षम (~{1}x {2})</translation>
+    </message>
+    <message>
+        <source>Clear ALL FilterMate temporary tables from all databases</source>
+        <translation>सभी डेटाबेस से सभी FilterMate अस्थायी तालिकाएं साफ़ करें</translation>
+    </message>
+    <message>
+        <source>Clear temporary tables for the current project only</source>
+        <translation>केवल वर्तमान प्रोजेक्ट के लिए अस्थायी तालिकाएं साफ़ करें</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) for current project</source>
+        <translation>वर्तमान प्रोजेक्ट के लिए {0} अस्थायी तालिका(एं) साफ़ की गईं</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) globally</source>
+        <translation>वैश्विक स्तर पर {0} अस्थायी तालिका(एं) साफ़ की गईं</translation>
+    </message>
+    <message>
+        <source>Confirmation {0}</source>
+        <translation>पुष्टि {0}</translation>
+    </message>
+    <message>
+        <source>Could not analyze layer &apos;{0}&apos;</source>
+        <translation>लेयर &apos;{0}&apos; का विश्लेषण नहीं किया जा सका</translation>
+    </message>
+    <message>
+        <source>Could not reload plugin automatically.</source>
+        <translation>प्लगइन को स्वचालित रूप से पुनः लोड नहीं किया जा सका।</translation>
+    </message>
+    <message>
+        <source>Dark mode</source>
+        <translation>डार्क मोड</translation>
+    </message>
+    <message>
+        <source>Description (auto-generated, you can modify it)</source>
+        <translation>विवरण (स्वचालित रूप से उत्पन्न, आप इसे संशोधित कर सकते हैं)</translation>
+    </message>
+    <message>
+        <source>Dialog not available: {0}</source>
+        <translation>संवाद उपलब्ध नहीं है: {0}</translation>
+    </message>
+    <message>
+        <source>Enter a name for this filter</source>
+        <translation>इस फ़िल्टर के लिए एक नाम दर्ज करें</translation>
+    </message>
+    <message>
+        <source>Error analyzing layer: {0}</source>
+        <translation>लेयर विश्लेषण त्रुटि: {0}</translation>
+    </message>
+    <message>
+        <source>Error cancelling changes: {0}</source>
+        <translation>परिवर्तन रद्द करने में त्रुटि: {0}</translation>
+    </message>
+    <message>
+        <source>Error reloading plugin: {0}</source>
+        <translation>प्लगइन पुनः लोड करने में त्रुटि: {0}</translation>
+    </message>
+    <message>
+        <source>Error resetting layer properties: {}</source>
+        <translation>लेयर गुण रीसेट करने में त्रुटि: {}</translation>
+    </message>
+    <message>
+        <source>Error: {0}</source>
+        <translation>त्रुटि: {0}</translation>
+    </message>
+    <message>
+        <source>Favorites manager not available</source>
+        <translation>पसंदीदा प्रबंधक उपलब्ध नहीं है</translation>
+    </message>
+    <message>
+        <source>Filter history position</source>
+        <translation>फ़िल्टर इतिहास स्थिति</translation>
+    </message>
+    <message>
+        <source>FilterMate - Add to Favorites</source>
+        <translation>FilterMate - पसंदीदा में जोड़ें</translation>
+    </message>
+    <message>
+        <source>Forced {0} backend for {1} layer(s)</source>
+        <translation>{1} लेयर(ओं) के लिए {0} बैकएंड मजबूर किया गया</translation>
+    </message>
+    <message>
+        <source>Light mode</source>
+        <translation>लाइट मोड</translation>
+    </message>
+    <message>
+        <source>Memory layer filtering complete for &apos;{0}&apos;</source>
+        <translation>&apos;{0}&apos; के लिए मेमोरी लेयर फ़िल्टरिंग पूर्ण</translation>
+    </message>
+    <message>
+        <source>No optimization recommendations at this time.</source>
+        <translation>इस समय कोई अनुकूलन अनुशंसाएं नहीं हैं।</translation>
+    </message>
+    <message>
+        <source>OGR/Memory</source>
+        <translation>OGR/मेमोरी</translation>
+    </message>
+    <message>
+        <source>Optimization applied to {0} layer(s)</source>
+        <translation>{0} लेयर(ओं) पर अनुकूलन लागू किया गया</translation>
+    </message>
+    <message>
+        <source>Optimization recommendations</source>
+        <translation>अनुकूलन अनुशंसाएं</translation>
+    </message>
+    <message>
+        <source>PostgreSQL</source>
+        <translation>PostgreSQL</translation>
+    </message>
+    <message>
+        <source>Redo filter</source>
+        <translation>फ़िल्टर फिर से करें</translation>
+    </message>
+    <message>
+        <source>Redo unavailable</source>
+        <translation>फिर से करना अनुपलब्ध</translation>
+    </message>
+    <message>
+        <source>Save current filter</source>
+        <translation>वर्तमान फ़िल्टर सहेजें</translation>
+    </message>
+    <message>
+        <source>Spatialite</source>
+        <translation>Spatialite</translation>
+    </message>
+    <message>
+        <source>Strategy set to {0} for &apos;{1}&apos;</source>
+        <translation>&apos;{1}&apos; के लिए रणनीति {0} पर सेट की गई</translation>
+    </message>
+    <message>
+        <source>Theme changed</source>
+        <translation>थीम बदली गई</translation>
+    </message>
+    <message>
+        <source>Toggle dark/light mode</source>
+        <translation>डार्क/लाइट मोड टॉगल करें</translation>
+    </message>
+    <message>
+        <source>Undo filter</source>
+        <translation>फ़िल्टर पूर्ववत करें</translation>
+    </message>
+    <message>
+        <source>Undo unavailable</source>
+        <translation>पूर्ववत अनुपलब्ध</translation>
+    </message>
+    <message>
+        <source>Using QGIS expressions for filtering</source>
+        <translation>फ़िल्टरिंग के लिए QGIS अभिव्यक्तियों का उपयोग करना</translation>
+    </message>
+    <message>
+        <source>View filter history</source>
+        <translation>फ़िल्टर इतिहास देखें</translation>
+    </message>
+    <message>
+        <source>WKT expression threshold:</source>
+        <translation>WKT अभिव्यक्ति सीमा:</translation>
+    </message>
+    <message>
+        <source>memory copy</source>
+        <translation>मेमोरी कॉपी</translation>
+    </message>
+    <message>
+        <source>pool size</source>
+        <translation>पूल आकार</translation>
+    </message>
+    <message>
+        <source>simplified to {0} vertices</source>
+        <translation>{0} शीर्षों तक सरलीकृत</translation>
+    </message>
+    <message>
+        <source>temp views</source>
+        <translation>अस्थायी दृश्य</translation>
+    </message>
+    <message>
+        <source>Allow cancellation of QGIS processing algorithms. Enables stopping long-running operations.</source>
+        <translation>QGIS प्रसंस्करण एल्गोरिदम को रद्द करने की अनुमति दें। लंबे समय तक चलने वाले ऑपरेशन को रोकने में सक्षम बनाता है।</translation>
+    </message>
+    <message>
+        <source>Analyzing your project... Recommendations will appear here.</source>
+        <translation>आपके प्रोजेक्ट का विश्लेषण हो रहा है... अनुशंसाएं यहां दिखाई देंगी।</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid for Distant Layers</source>
+        <translation>दूरस्थ लेयर के लिए ऑटो-सेंट्रॉइड</translation>
+    </message>
+    <message>
+        <source>Auto-Select Best Strategy</source>
+        <translation>सर्वोत्तम रणनीति स्वचालित रूप से चुनें</translation>
+    </message>
+    <message>
+        <source>Auto-Simplify Geometries ⚠️</source>
+        <translation>ज्यामितीयों को स्वचालित रूप से सरल करें ⚠️</translation>
+    </message>
+    <message>
+        <source>Auto-detect mod_spatialite</source>
+        <translation>mod_spatialite स्वचालित रूप से पता लगाएं</translation>
+    </message>
+    <message>
+        <source>Automatic GIST Index Usage</source>
+        <translation>स्वचालित GIST इंडेक्स उपयोग</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>रद्द करें</translation>
+    </message>
+    <message>
+        <source>Cancellable Processing</source>
+        <translation>रद्द करने योग्य प्रसंस्करण</translation>
+    </message>
+    <message>
+        <source>Chunk size (features):</source>
+        <translation>चंक आकार (फ़ीचर):</translation>
+    </message>
+    <message>
+        <source>Confirm Before Applying</source>
+        <translation>लागू करने से पहले पुष्टि करें</translation>
+    </message>
+    <message>
+        <source>Connection Pooling</source>
+        <translation>कनेक्शन पूलिंग</translation>
+    </message>
+    <message>
+        <source>Create Spatial Indexes</source>
+        <translation>स्थानिक इंडेक्स बनाएं</translation>
+    </message>
+    <message>
+        <source>Direct SQL for GeoPackage</source>
+        <translation>GeoPackage के लिए डायरेक्ट SQL</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Centroid for Remote Layers</source>
+        <translation>दूरस्थ लेयर के लिए ऑटो-सेंट्रॉइड सक्षम करें</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Optimization</source>
+        <translation>ऑटो-ऑप्टिमाइज़ेशन सक्षम करें</translation>
+    </message>
+    <message>
+        <source>Enable Direct SQL for GeoPackage</source>
+        <translation>GeoPackage के लिए डायरेक्ट SQL सक्षम करें</translation>
+    </message>
+    <message>
+        <source>Enable Materialized Views</source>
+        <translation>मटेरियलाइज़्ड व्यू सक्षम करें</translation>
+    </message>
+    <message>
+        <source>Estimated performance improvement</source>
+        <translation>अनुमानित प्रदर्शन सुधार</translation>
+    </message>
+    <message>
+        <source>FilterMate - Backend Optimizations</source>
+        <translation>FilterMate - बैकएंड अनुकूलन</translation>
+    </message>
+    <message>
+        <source>GEOS-safe Geometry Handling</source>
+        <translation>GEOS-सुरक्षित ज्यामिति हैंडलिंग</translation>
+    </message>
+    <message>
+        <source>Global</source>
+        <translation>वैश्विक</translation>
+    </message>
+    <message>
+        <source>Initialization error: {}</source>
+        <translation>आरंभीकरण त्रुटि: {}</translation>
+    </message>
+    <message>
+        <source>Interruptible Queries</source>
+        <translation>बाधित करने योग्य क्वेरी</translation>
+    </message>
+    <message>
+        <source>Lazy cursor threshold:</source>
+        <translation>आलसी कर्सर सीमा:</translation>
+    </message>
+    <message>
+        <source>Max workers (0=auto):</source>
+        <translation>अधिकतम वर्कर (0=स्वचालित):</translation>
+    </message>
+    <message>
+        <source>No PostgreSQL connection available</source>
+        <translation>कोई PostgreSQL कनेक्शन उपलब्ध नहीं</translation>
+    </message>
+    <message>
+        <source>No alternative backends available for this layer</source>
+        <translation>इस लेयर के लिए कोई वैकल्पिक बैकएंड उपलब्ध नहीं</translation>
+    </message>
+    <message>
+        <source>No layer selected. Please select a layer first.</source>
+        <translation>कोई लेयर नहीं चुनी गई। कृपया पहले एक लेयर चुनें।</translation>
+    </message>
+    <message>
+        <source>No optimizations selected to apply.</source>
+        <translation>लागू करने के लिए कोई अनुकूलन नहीं चुना गया।</translation>
+    </message>
+    <message>
+        <source>No temporary tables found</source>
+        <translation>कोई अस्थायी तालिका नहीं मिली</translation>
+    </message>
+    <message>
+        <source>No temporary tables found for current project</source>
+        <translation>वर्तमान प्रोजेक्ट के लिए कोई अस्थायी तालिका नहीं मिली</translation>
+    </message>
+    <message>
+        <source>Save Settings</source>
+        <translation>सेटिंग्स सहेजें</translation>
+    </message>
+    <message>
+        <source>Show Optimization Hints</source>
+        <translation>अनुकूलन संकेत दिखाएं</translation>
+    </message>
+    <message>
+        <source>Redo filter (Ctrl+Y)</source>
+        <translation>फ़िल्टर फिर से करें (Ctrl+Y)</translation>
+    </message>
+    <message>
+        <source>Undo last filter (Ctrl+Z)</source>
+        <translation>अंतिम फ़िल्टर पूर्ववत करें (Ctrl+Z)</translation>
+    </message>
+    <message>
+        <source>disabled</source>
+        <translation>अक्षम</translation>
+    </message>
+    <message>
+        <source>enabled</source>
+        <translation>सक्षम</translation>
+    </message>
+    <message>
+        <source>★ No favorites saved</source>
+        <translation>★ कोई पसंदीदा सहेजा नहीं गया</translation>
+    </message>
+    <message>
+        <source>★ {0} Favorites saved</source>
+        <translation>★ {0} पसंदीदा सहेजे गए</translation>
+    </message>
+    <message>
+        <source>⚙️ Manage favorites...</source>
+        <translation>⚙️ पसंदीदा प्रबंधित करें...</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter (no filter active)</source>
+        <translation>⭐ वर्तमान फ़िल्टर जोड़ें (कोई फ़िल्टर सक्रिय नहीं)</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter to Favorites</source>
+        <translation>⭐ वर्तमान फ़िल्टर को पसंदीदा में जोड़ें</translation>
+    </message>
+    <message>
+        <source>⭐ Add current filter to favorites</source>
+        <translation>⭐ वर्तमान फ़िल्टर को पसंदीदा में जोड़ें</translation>
+    </message>
+    <message>
+        <source>⭐ Add filter (no active filter)</source>
+        <translation>⭐ फ़िल्टर जोड़ें (कोई सक्रिय फ़िल्टर नहीं)</translation>
+    </message>
+    <message>
+        <source>🌐 All Projects (Global)</source>
+        <translation>🌐 सभी प्रोजेक्ट (वैश्विक)</translation>
+    </message>
+    <message>
+        <source>📁 Current Project</source>
+        <translation>📁 वर्तमान प्रोजेक्ट</translation>
+    </message>
+    <message>
+        <source>📤 Export...</source>
+        <translation>📤 निर्यात करें...</translation>
+    </message>
+    <message>
+        <source>📥 Import...</source>
+        <translation>📥 आयात करें...</translation>
+    </message>
+    <message>
+        <source>Restore Defaults</source>
+        <translation>डिफ़ॉल्ट पुनर्स्थापित करें</translation>
+    </message>
+    <message>
+        <source>Use Balanced Profile</source>
+        <translation>संतुलित प्रोफ़ाइल का उपयोग करें</translation>
+    </message>
 </context>
 </TS>

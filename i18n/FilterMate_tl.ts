@@ -1469,5 +1469,449 @@ Nakakaapekto ito sa ibang FilterMate session!</translation>
         <source>Cleanup Failed</source>
         <translation>Nabigo ang Paglilinis</translation>
     </message>
+    <message>
+        <source>All layers using auto-selection</source>
+        <translation>Lahat ng layer ay gumagamit ng awtomatikong pagpili</translation>
+    </message>
+    <message>
+        <source>Applied to &apos;{0}&apos;:</source>
+        <translation>Inilapat sa &apos;{0}&apos;:</translation>
+    </message>
+    <message>
+        <source>Auto-centroid {0}</source>
+        <translation>Awtomatikong centroid {0}</translation>
+    </message>
+    <message>
+        <source>Auto-optimization {0}</source>
+        <translation>Awtomatikong optimisasyon {0}</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer module not available</source>
+        <translation>Hindi available ang auto-optimizer module</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer not available: {0}</source>
+        <translation>Hindi available ang auto-optimizer: {0}</translation>
+    </message>
+    <message>
+        <source>Auto-select best strategy</source>
+        <translation>Awtomatikong piliin ang pinakamahusay na estratehiya</translation>
+    </message>
+    <message>
+        <source>Auto-selected backends for {0} layer(s)</source>
+        <translation>Awtomatikong napiling backend para sa {0} layer</translation>
+    </message>
+    <message>
+        <source>Auto-simplify geometries</source>
+        <translation>Awtomatikong pasimplehin ang mga geometry</translation>
+    </message>
+    <message>
+        <source>Auto-use centroids for remote layers</source>
+        <translation>Awtomatikong gamitin ang mga centroid para sa mga remote na layer</translation>
+    </message>
+    <message>
+        <source>Automatically choose optimal filtering strategy</source>
+        <translation>Awtomatikong piliin ang pinakamahusay na estratehiya ng pag-filter</translation>
+    </message>
+    <message>
+        <source>BBox pre-filter enabled for &apos;{0}&apos;</source>
+        <translation>BBox pre-filter na-enable para sa &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Backend controller not available</source>
+        <translation>Hindi available ang backend controller</translation>
+    </message>
+    <message>
+        <source>Backend forced to {0} for &apos;{1}&apos;</source>
+        <translation>Backend pinilit sa {0} para sa &apos;{1}&apos;</translation>
+    </message>
+    <message>
+        <source>Backend optimization unavailable</source>
+        <translation>Hindi available ang backend optimization</translation>
+    </message>
+    <message>
+        <source>Backend set to Auto for &apos;{0}&apos;</source>
+        <translation>Backend itinakda sa Auto para sa &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Centroids enabled for &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>Mga centroid na-enable para sa &apos;{0}&apos; (~{1}x {2})</translation>
+    </message>
+    <message>
+        <source>Clear ALL FilterMate temporary tables from all databases</source>
+        <translation>I-clear ang LAHAT ng FilterMate temporary tables mula sa lahat ng database</translation>
+    </message>
+    <message>
+        <source>Clear temporary tables for the current project only</source>
+        <translation>I-clear ang temporary tables para sa kasalukuyang proyekto lamang</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) for current project</source>
+        <translation>Na-clear ang {0} temporary table(s) para sa kasalukuyang proyekto</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) globally</source>
+        <translation>Na-clear ang {0} temporary table(s) globally</translation>
+    </message>
+    <message>
+        <source>Confirmation {0}</source>
+        <translation>Kumpirmasyon {0}</translation>
+    </message>
+    <message>
+        <source>Could not analyze layer &apos;{0}&apos;</source>
+        <translation>Hindi ma-analyze ang layer na &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Could not reload plugin automatically.</source>
+        <translation>Hindi ma-reload ang plugin nang awtomatiko.</translation>
+    </message>
+    <message>
+        <source>Dark mode</source>
+        <translation>Dark mode</translation>
+    </message>
+    <message>
+        <source>Description (auto-generated, you can modify it)</source>
+        <translation>Paglalarawan (awtomatikong nalikha, maaari mong baguhin ito)</translation>
+    </message>
+    <message>
+        <source>Dialog not available: {0}</source>
+        <translation>Hindi available ang dialog: {0}</translation>
+    </message>
+    <message>
+        <source>Enter a name for this filter</source>
+        <translation>Maglagay ng pangalan para sa filter na ito</translation>
+    </message>
+    <message>
+        <source>Error analyzing layer: {0}</source>
+        <translation>Error sa pag-analyze ng layer: {0}</translation>
+    </message>
+    <message>
+        <source>Error cancelling changes: {0}</source>
+        <translation>Error sa pagkansela ng mga pagbabago: {0}</translation>
+    </message>
+    <message>
+        <source>Error reloading plugin: {0}</source>
+        <translation>Error sa pag-reload ng plugin: {0}</translation>
+    </message>
+    <message>
+        <source>Error resetting layer properties: {}</source>
+        <translation>Error sa pag-reset ng layer properties: {}</translation>
+    </message>
+    <message>
+        <source>Error: {0}</source>
+        <translation>Error: {0}</translation>
+    </message>
+    <message>
+        <source>Favorites manager not available</source>
+        <translation>Hindi available ang favorites manager</translation>
+    </message>
+    <message>
+        <source>Filter history position</source>
+        <translation>Posisyon ng filter history</translation>
+    </message>
+    <message>
+        <source>FilterMate - Add to Favorites</source>
+        <translation>FilterMate - Idagdag sa Favorites</translation>
+    </message>
+    <message>
+        <source>Forced {0} backend for {1} layer(s)</source>
+        <translation>Pinilit ang {0} backend para sa {1} layer(s)</translation>
+    </message>
+    <message>
+        <source>Light mode</source>
+        <translation>Light mode</translation>
+    </message>
+    <message>
+        <source>Memory layer filtering complete for &apos;{0}&apos;</source>
+        <translation>Kumpleto ang memory layer filtering para sa &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>No optimization recommendations at this time.</source>
+        <translation>Walang optimization recommendations sa ngayon.</translation>
+    </message>
+    <message>
+        <source>OGR/Memory</source>
+        <translation>OGR/Memory</translation>
+    </message>
+    <message>
+        <source>Optimization applied to {0} layer(s)</source>
+        <translation>Optimization inilapat sa {0} layer(s)</translation>
+    </message>
+    <message>
+        <source>Optimization recommendations</source>
+        <translation>Mga rekomendasyon sa optimization</translation>
+    </message>
+    <message>
+        <source>PostgreSQL</source>
+        <translation>PostgreSQL</translation>
+    </message>
+    <message>
+        <source>Redo filter</source>
+        <translation>I-redo ang filter</translation>
+    </message>
+    <message>
+        <source>Redo unavailable</source>
+        <translation>Hindi available ang redo</translation>
+    </message>
+    <message>
+        <source>Save current filter</source>
+        <translation>I-save ang kasalukuyang filter</translation>
+    </message>
+    <message>
+        <source>Spatialite</source>
+        <translation>Spatialite</translation>
+    </message>
+    <message>
+        <source>Strategy set to {0} for &apos;{1}&apos;</source>
+        <translation>Strategy itinakda sa {0} para sa &apos;{1}&apos;</translation>
+    </message>
+    <message>
+        <source>Theme changed</source>
+        <translation>Nabago ang tema</translation>
+    </message>
+    <message>
+        <source>Toggle dark/light mode</source>
+        <translation>I-toggle ang dark/light mode</translation>
+    </message>
+    <message>
+        <source>Undo filter</source>
+        <translation>I-undo ang filter</translation>
+    </message>
+    <message>
+        <source>Undo unavailable</source>
+        <translation>Hindi available ang undo</translation>
+    </message>
+    <message>
+        <source>Using QGIS expressions for filtering</source>
+        <translation>Gumagamit ng QGIS expressions para sa pag-filter</translation>
+    </message>
+    <message>
+        <source>View filter history</source>
+        <translation>Tingnan ang filter history</translation>
+    </message>
+    <message>
+        <source>WKT expression threshold:</source>
+        <translation>WKT expression threshold:</translation>
+    </message>
+    <message>
+        <source>memory copy</source>
+        <translation>memory copy</translation>
+    </message>
+    <message>
+        <source>pool size</source>
+        <translation>pool size</translation>
+    </message>
+    <message>
+        <source>simplified to {0} vertices</source>
+        <translation>pinasimple sa {0} vertices</translation>
+    </message>
+    <message>
+        <source>temp views</source>
+        <translation>temp views</translation>
+    </message>
+    <message>
+        <source>Allow cancellation of QGIS processing algorithms. Enables stopping long-running operations.</source>
+        <translation>Payagan ang pagkansela ng mga QGIS processing algorithm. Pinapagana ang paghinto ng matagalang operasyon.</translation>
+    </message>
+    <message>
+        <source>Analyzing your project... Recommendations will appear here.</source>
+        <translation>Sinusuri ang iyong proyekto... Ang mga rekomendasyon ay lalabas dito.</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid for Distant Layers</source>
+        <translation>Auto-Centroid para sa Malalayong Layer</translation>
+    </message>
+    <message>
+        <source>Auto-Select Best Strategy</source>
+        <translation>Auto-piliin ang Pinakamahusay na Estratehiya</translation>
+    </message>
+    <message>
+        <source>Auto-Simplify Geometries ⚠️</source>
+        <translation>Auto-Simplify Geometries ⚠️</translation>
+    </message>
+    <message>
+        <source>Auto-detect mod_spatialite</source>
+        <translation>Auto-detect mod_spatialite</translation>
+    </message>
+    <message>
+        <source>Automatic GIST Index Usage</source>
+        <translation>Awtomatikong Paggamit ng GIST Index</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Kanselahin</translation>
+    </message>
+    <message>
+        <source>Cancellable Processing</source>
+        <translation>Maaaring Kanselahing Pagproseso</translation>
+    </message>
+    <message>
+        <source>Chunk size (features):</source>
+        <translation>Laki ng chunk (features):</translation>
+    </message>
+    <message>
+        <source>Confirm Before Applying</source>
+        <translation>Kumpirmahin Bago Ilapat</translation>
+    </message>
+    <message>
+        <source>Connection Pooling</source>
+        <translation>Connection Pooling</translation>
+    </message>
+    <message>
+        <source>Create Spatial Indexes</source>
+        <translation>Gumawa ng Spatial Indexes</translation>
+    </message>
+    <message>
+        <source>Direct SQL for GeoPackage</source>
+        <translation>Direct SQL para sa GeoPackage</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Centroid for Remote Layers</source>
+        <translation>I-enable ang Auto-Centroid para sa Remote Layers</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Optimization</source>
+        <translation>I-enable ang Auto-Optimization</translation>
+    </message>
+    <message>
+        <source>Enable Direct SQL for GeoPackage</source>
+        <translation>I-enable ang Direct SQL para sa GeoPackage</translation>
+    </message>
+    <message>
+        <source>Enable Materialized Views</source>
+        <translation>I-enable ang Materialized Views</translation>
+    </message>
+    <message>
+        <source>Estimated performance improvement</source>
+        <translation>Tinatantyang pagpapabuti ng performance</translation>
+    </message>
+    <message>
+        <source>FilterMate - Backend Optimizations</source>
+        <translation>FilterMate - Backend Optimizations</translation>
+    </message>
+    <message>
+        <source>GEOS-safe Geometry Handling</source>
+        <translation>GEOS-safe Geometry Handling</translation>
+    </message>
+    <message>
+        <source>Global</source>
+        <translation>Global</translation>
+    </message>
+    <message>
+        <source>Initialization error: {}</source>
+        <translation>Error sa initialization: {}</translation>
+    </message>
+    <message>
+        <source>Interruptible Queries</source>
+        <translation>Maaaring Maputol na Queries</translation>
+    </message>
+    <message>
+        <source>Lazy cursor threshold:</source>
+        <translation>Lazy cursor threshold:</translation>
+    </message>
+    <message>
+        <source>Max workers (0=auto):</source>
+        <translation>Max workers (0=auto):</translation>
+    </message>
+    <message>
+        <source>No PostgreSQL connection available</source>
+        <translation>Walang PostgreSQL connection na available</translation>
+    </message>
+    <message>
+        <source>No alternative backends available for this layer</source>
+        <translation>Walang alternatibong backend para sa layer na ito</translation>
+    </message>
+    <message>
+        <source>No layer selected. Please select a layer first.</source>
+        <translation>Walang napiling layer. Mangyaring pumili muna ng layer.</translation>
+    </message>
+    <message>
+        <source>No optimizations selected to apply.</source>
+        <translation>Walang napiling optimization para ilapat.</translation>
+    </message>
+    <message>
+        <source>No temporary tables found</source>
+        <translation>Walang nahanap na temporary tables</translation>
+    </message>
+    <message>
+        <source>No temporary tables found for current project</source>
+        <translation>Walang temporary tables para sa kasalukuyang proyekto</translation>
+    </message>
+    <message>
+        <source>Save Settings</source>
+        <translation>I-save ang Settings</translation>
+    </message>
+    <message>
+        <source>Show Optimization Hints</source>
+        <translation>Ipakita ang Optimization Hints</translation>
+    </message>
+    <message>
+        <source>Redo filter (Ctrl+Y)</source>
+        <translation>I-redo ang filter (Ctrl+Y)</translation>
+    </message>
+    <message>
+        <source>Undo last filter (Ctrl+Z)</source>
+        <translation>I-undo ang huling filter (Ctrl+Z)</translation>
+    </message>
+    <message>
+        <source>disabled</source>
+        <translation>hindi pinagana</translation>
+    </message>
+    <message>
+        <source>enabled</source>
+        <translation>pinagana</translation>
+    </message>
+    <message>
+        <source>★ No favorites saved</source>
+        <translation>★ Walang naka-save na favorites</translation>
+    </message>
+    <message>
+        <source>★ {0} Favorites saved</source>
+        <translation>★ {0} Favorites na naka-save</translation>
+    </message>
+    <message>
+        <source>⚙️ Manage favorites...</source>
+        <translation>⚙️ Pamahalaan ang favorites...</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter (no filter active)</source>
+        <translation>⭐ Idagdag ang Current Filter (walang aktibong filter)</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter to Favorites</source>
+        <translation>⭐ Idagdag ang Current Filter sa Favorites</translation>
+    </message>
+    <message>
+        <source>⭐ Add current filter to favorites</source>
+        <translation>⭐ Idagdag ang current filter sa favorites</translation>
+    </message>
+    <message>
+        <source>⭐ Add filter (no active filter)</source>
+        <translation>⭐ Magdagdag ng filter (walang aktibong filter)</translation>
+    </message>
+    <message>
+        <source>🌐 All Projects (Global)</source>
+        <translation>🌐 Lahat ng Projects (Global)</translation>
+    </message>
+    <message>
+        <source>📁 Current Project</source>
+        <translation>📁 Kasalukuyang Proyekto</translation>
+    </message>
+    <message>
+        <source>📤 Export...</source>
+        <translation>📤 I-export...</translation>
+    </message>
+    <message>
+        <source>📥 Import...</source>
+        <translation>📥 I-import...</translation>
+    </message>
+    <message>
+        <source>Restore Defaults</source>
+        <translation>Ibalik ang mga Default</translation>
+    </message>
+    <message>
+        <source>Use Balanced Profile</source>
+        <translation>Gamitin ang Balanced Profile</translation>
+    </message>
 </context>
 </TS>

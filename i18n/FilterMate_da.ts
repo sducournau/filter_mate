@@ -1753,5 +1753,205 @@ Dette påvirker andre FilterMate sessioner!</translation>
         <source>Cleanup Failed</source>
         <translation>Oprydning mislykkedes</translation>
     </message>
+    <message>
+        <source>Allow cancellation of QGIS processing algorithms. Enables stopping long-running operations.</source>
+        <translation>Tillad annullering af QGIS-behandlingsalgoritmer. Muliggør stop af langvarige operationer.</translation>
+    </message>
+    <message>
+        <source>Analyzing your project... Recommendations will appear here.</source>
+        <translation>Analyserer dit projekt... Anbefalinger vil blive vist her.</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid for Distant Layers</source>
+        <translation>Auto-centroid for fjerne lag</translation>
+    </message>
+    <message>
+        <source>Auto-Select Best Strategy</source>
+        <translation>Auto-vælg bedste strategi</translation>
+    </message>
+    <message>
+        <source>Auto-Simplify Geometries ⚠️</source>
+        <translation>Auto-forenkl geometrier ⚠️</translation>
+    </message>
+    <message>
+        <source>Auto-detect mod_spatialite</source>
+        <translation>Auto-detekter mod_spatialite</translation>
+    </message>
+    <message>
+        <source>Automatic GIST Index Usage</source>
+        <translation>Automatisk brug af GIST-indeks</translation>
+    </message>
+    <message>
+        <source>Automatically analyze layers and suggest optimizations before filtering.</source>
+        <translation>Analyser automatisk lag og foreslå optimeringer før filtrering.</translation>
+    </message>
+    <message>
+        <source>Automatically choose optimal filtering strategy based on layer analysis. (attribute-first, bbox-prefilter, progressive chunks)</source>
+        <translation>Vælg automatisk optimal filtreringsstrategi baseret på laganalyse. (attribut-først, bbox-forfilter, progressive chunks)</translation>
+    </message>
+    <message>
+        <source>Automatically create spatial index (.qix/.shx) for layers without one. Dramatically improves spatial query speed.</source>
+        <translation>Opret automatisk rumligt indeks (.qix/.shx) for lag uden et. Forbedrer dramatisk hastigheden af rumlige forespørgsler.</translation>
+    </message>
+    <message>
+        <source>Automatically find and load the best mod_spatialite extension.</source>
+        <translation>Find og indlæs automatisk den bedste mod_spatialite-udvidelse.</translation>
+    </message>
+    <message>
+        <source>Automatically simplify complex geometries. WARNING: This is a LOSSY operation that may change polygon shapes.</source>
+        <translation>Forenkl automatisk komplekse geometrier. ADVARSEL: Dette er en TABENDE operation, der kan ændre polygonformer.</translation>
+    </message>
+    <message>
+        <source>Automatically use ST_Centroid() for remote layers (WFS, ArcGIS). Reduces network data transfer by ~90%.</source>
+        <translation>Brug automatisk ST_Centroid() for fjernlag (WFS, ArcGIS). Reducerer netværksdataoverførsel med ~90%.</translation>
+    </message>
+    <message>
+        <source>Bypass GDAL layer and execute SQL directly on GeoPackage. Faster for complex spatial queries.</source>
+        <translation>Omgå GDAL-lag og udfør SQL direkte på GeoPackage. Hurtigere for komplekse rumlige forespørgsler.</translation>
+    </message>
+    <message>
+        <source>Cache built expressions to avoid rebuilding identical queries.</source>
+        <translation>Cache byggede udtryk for at undgå at genopbygge identiske forespørgsler.</translation>
+    </message>
+    <message>
+        <source>Cache converted WKT strings to avoid repeated geometry serialization.</source>
+        <translation>Cache konverterede WKT-strenge for at undgå gentagen geometriserialisering.</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuller</translation>
+    </message>
+    <message>
+        <source>Cancellable Processing</source>
+        <translation>Annullerbar behandling</translation>
+    </message>
+    <message>
+        <source>Chunk size (features):</source>
+        <translation>Chunk-størrelse (funktioner):</translation>
+    </message>
+    <message>
+        <source>Confirm Before Applying</source>
+        <translation>Bekræft før anvendelse</translation>
+    </message>
+    <message>
+        <source>Connection Pooling</source>
+        <translation>Forbindelsespooling</translation>
+    </message>
+    <message>
+        <source>Create Spatial Indexes</source>
+        <translation>Opret rumlige indekser</translation>
+    </message>
+    <message>
+        <source>Create indexed temporary views for complex spatial queries. Best for large datasets with complex expressions.</source>
+        <translation>Opret indekserede midlertidige visninger for komplekse rumlige forespørgsler. Bedst for store datasæt med komplekse udtryk.</translation>
+    </message>
+    <message>
+        <source>Create materialized views for datasets larger than this</source>
+        <translation>Opret materialiserede visninger for datasæt større end dette</translation>
+    </message>
+    <message>
+        <source>Create temporary tables with R-tree spatial indexes for complex queries. Best for complex expressions on local files.</source>
+        <translation>Opret midlertidige tabeller med R-træ rumlige indekser for komplekse forespørgsler. Bedst for komplekse udtryk på lokale filer.</translation>
+    </message>
+    <message>
+        <source>Direct SQL access can make GeoPackage filtering 2-5x faster.</source>
+        <translation>Direkte SQL-adgang kan gøre GeoPackage-filtrering 2-5x hurtigere.</translation>
+    </message>
+    <message>
+        <source>Direct SQL for GeoPackage</source>
+        <translation>Direkte SQL for GeoPackage</translation>
+    </message>
+    <message>
+        <source>Display optimization hints in message bar when recommendations are available.</source>
+        <translation>Vis optimeringstips i meddelelseslinjen, når anbefalinger er tilgængelige.</translation>
+    </message>
+    <message>
+        <source>Distant layer threshold:</source>
+        <translation>Fjern lag-tærskel:</translation>
+    </message>
+    <message>
+        <source>EXISTS Subquery for Large WKT</source>
+        <translation>EXISTS underforespørgsel for stor WKT</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Centroid for Remote Layers</source>
+        <translation>Aktiver auto-centroid for fjernlag</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Optimization</source>
+        <translation>Aktiver auto-optimering</translation>
+    </message>
+    <message>
+        <source>Enable Direct SQL for GeoPackage</source>
+        <translation>Aktiver direkte SQL for GeoPackage</translation>
+    </message>
+    <message>
+        <source>Enable Materialized Views</source>
+        <translation>Aktiver materialiserede visninger</translation>
+    </message>
+    <message>
+        <source>Error resetting layer properties: {}</source>
+        <translation>Fejl ved nulstilling af lagegenskaber: {}</translation>
+    </message>
+    <message>
+        <source>Estimated performance improvement</source>
+        <translation>Estimeret ydelsesforbedring</translation>
+    </message>
+    <message>
+        <source>Execute SQLite queries in background thread with cancellation support. Prevents UI freezing.</source>
+        <translation>Udfør SQLite-forespørgsler i baggrundstråd med annulleringsstøtte. Forhindrer UI-frysning.</translation>
+    </message>
+    <message>
+        <source>Filter multiple layers simultaneously using multiple CPU cores.</source>
+        <translation>Filtrer flere lag samtidigt ved hjælp af flere CPU-kerner.</translation>
+    </message>
+    <message>
+        <source>FilterMate - Backend Optimizations</source>
+        <translation>FilterMate - Backend-optimeringer</translation>
+    </message>
+    <message>
+        <source>First filter by bounding box, then by exact geometry. Reduces precision calculations on irrelevant features.</source>
+        <translation>Filtrer først efter begrænsingsboks, derefter efter præcis geometri. Reducerer præcisionsberegninger på irrelevante funktioner.</translation>
+    </message>
+    <message>
+        <source>For small PostgreSQL layers, copy to memory for faster filtering. Avoids network latency for small datasets.</source>
+        <translation>For små PostgreSQL-lag, kopier til hukommelse for hurtigere filtrering. Undgår netværksforsinkelse for små datasæt.</translation>
+    </message>
+    <message>
+        <source>Force sequential execution for OGR layers to prevent crashes. Safer but slower.</source>
+        <translation>Tving sekventiel udførelse for OGR-lag for at forhindre nedbrud. Sikrere men langsommere.</translation>
+    </message>
+    <message>
+        <source>GEOS-safe Geometry Handling</source>
+        <translation>GEOS-sikker geometrihåndtering</translation>
+    </message>
+    <message>
+        <source>Global</source>
+        <translation>Global</translation>
+    </message>
+    <message>
+        <source>Interruptible Queries</source>
+        <translation>Afbrydelige forespørgsler</translation>
+    </message>
+    <message>
+        <source>Lazy cursor threshold:</source>
+        <translation>Doven markør-tærskel:</translation>
+    </message>
+    <message>
+        <source>Max workers (0=auto):</source>
+        <translation>Maks arbejdere (0=auto):</translation>
+    </message>
+    <message>
+        <source>Optimizations for PostgreSQL databases with PostGIS extension</source>
+        <translation>Optimeringer for PostgreSQL-databaser med PostGIS-udvidelse</translation>
+    </message>
+    <message>
+        <source>Optimizations for Spatialite databases and GeoPackage files</source>
+        <translation>Optimeringer for Spatialite-databaser og GeoPackage-filer</translation>
+    </message>
+    <message>
+        <source>Optimizations for file-based formats (Shapefiles, GeoJSON) and memory layers</source>
+        <translation>Optimeringer for filbaserede formater (Shapefiles, GeoJSON) og hukommelseslager</translation>
+    </message>
 </context>
 </TS>

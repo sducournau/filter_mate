@@ -1753,5 +1753,205 @@ This affects other FilterMate sessions!</source>
         <source>Cleanup Failed</source>
         <translation>Ошибка очистки</translation>
     </message>
+    <message>
+        <source>Allow cancellation of QGIS processing algorithms. Enables stopping long-running operations.</source>
+        <translation>Разрешить отмену алгоритмов обработки QGIS. Позволяет остановить длительные операции.</translation>
+    </message>
+    <message>
+        <source>Analyzing your project... Recommendations will appear here.</source>
+        <translation>Анализ вашего проекта... Рекомендации появятся здесь.</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid for Distant Layers</source>
+        <translation>Авто-центроид для удаленных слоев</translation>
+    </message>
+    <message>
+        <source>Auto-Select Best Strategy</source>
+        <translation>Автовыбор лучшей стратегии</translation>
+    </message>
+    <message>
+        <source>Auto-Simplify Geometries ⚠️</source>
+        <translation>Авто-упрощение геометрий ⚠️</translation>
+    </message>
+    <message>
+        <source>Auto-detect mod_spatialite</source>
+        <translation>Автообнаружение mod_spatialite</translation>
+    </message>
+    <message>
+        <source>Automatic GIST Index Usage</source>
+        <translation>Автоматическое использование GIST-индекса</translation>
+    </message>
+    <message>
+        <source>Automatically analyze layers and suggest optimizations before filtering.</source>
+        <translation>Автоматически анализировать слои и предлагать оптимизации перед фильтрацией.</translation>
+    </message>
+    <message>
+        <source>Automatically choose optimal filtering strategy based on layer analysis. (attribute-first, bbox-prefilter, progressive chunks)</source>
+        <translation>Автоматически выбирать оптимальную стратегию фильтрации на основе анализа слоя. (атрибут-сначала, bbox-предфильтр, прогрессивные чанки)</translation>
+    </message>
+    <message>
+        <source>Automatically create spatial index (.qix/.shx) for layers without one. Dramatically improves spatial query speed.</source>
+        <translation>Автоматически создавать пространственный индекс (.qix/.shx) для слоев без него. Значительно ускоряет пространственные запросы.</translation>
+    </message>
+    <message>
+        <source>Automatically find and load the best mod_spatialite extension.</source>
+        <translation>Автоматически найти и загрузить лучшее расширение mod_spatialite.</translation>
+    </message>
+    <message>
+        <source>Automatically simplify complex geometries. WARNING: This is a LOSSY operation that may change polygon shapes.</source>
+        <translation>Автоматически упрощать сложные геометрии. ПРЕДУПРЕЖДЕНИЕ: Это операция с ПОТЕРЯМИ, которая может изменить формы полигонов.</translation>
+    </message>
+    <message>
+        <source>Automatically use ST_Centroid() for remote layers (WFS, ArcGIS). Reduces network data transfer by ~90%.</source>
+        <translation>Автоматически использовать ST_Centroid() для удаленных слоев (WFS, ArcGIS). Уменьшает сетевой трафик на ~90%.</translation>
+    </message>
+    <message>
+        <source>Bypass GDAL layer and execute SQL directly on GeoPackage. Faster for complex spatial queries.</source>
+        <translation>Обойти слой GDAL и выполнить SQL напрямую в GeoPackage. Быстрее для сложных пространственных запросов.</translation>
+    </message>
+    <message>
+        <source>Cache built expressions to avoid rebuilding identical queries.</source>
+        <translation>Кэшировать построенные выражения, чтобы избежать повторного построения идентичных запросов.</translation>
+    </message>
+    <message>
+        <source>Cache converted WKT strings to avoid repeated geometry serialization.</source>
+        <translation>Кэшировать преобразованные строки WKT, чтобы избежать повторной сериализации геометрии.</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Отмена</translation>
+    </message>
+    <message>
+        <source>Cancellable Processing</source>
+        <translation>Отменяемая обработка</translation>
+    </message>
+    <message>
+        <source>Chunk size (features):</source>
+        <translation>Размер чанка (объекты):</translation>
+    </message>
+    <message>
+        <source>Confirm Before Applying</source>
+        <translation>Подтвердить перед применением</translation>
+    </message>
+    <message>
+        <source>Connection Pooling</source>
+        <translation>Пул соединений</translation>
+    </message>
+    <message>
+        <source>Create Spatial Indexes</source>
+        <translation>Создать пространственные индексы</translation>
+    </message>
+    <message>
+        <source>Create indexed temporary views for complex spatial queries. Best for large datasets with complex expressions.</source>
+        <translation>Создать индексированные временные представления для сложных пространственных запросов. Лучше всего для больших наборов данных со сложными выражениями.</translation>
+    </message>
+    <message>
+        <source>Create materialized views for datasets larger than this</source>
+        <translation>Создать материализованные представления для наборов данных больше этого</translation>
+    </message>
+    <message>
+        <source>Create temporary tables with R-tree spatial indexes for complex queries. Best for complex expressions on local files.</source>
+        <translation>Создать временные таблицы с пространственными индексами R-tree для сложных запросов. Лучше всего для сложных выражений в локальных файлах.</translation>
+    </message>
+    <message>
+        <source>Direct SQL access can make GeoPackage filtering 2-5x faster.</source>
+        <translation>Прямой доступ к SQL может ускорить фильтрацию GeoPackage в 2-5 раз.</translation>
+    </message>
+    <message>
+        <source>Direct SQL for GeoPackage</source>
+        <translation>Прямой SQL для GeoPackage</translation>
+    </message>
+    <message>
+        <source>Display optimization hints in message bar when recommendations are available.</source>
+        <translation>Отображать подсказки по оптимизации в панели сообщений, когда доступны рекомендации.</translation>
+    </message>
+    <message>
+        <source>Distant layer threshold:</source>
+        <translation>Порог удаленного слоя:</translation>
+    </message>
+    <message>
+        <source>EXISTS Subquery for Large WKT</source>
+        <translation>Подзапрос EXISTS для большого WKT</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Centroid for Remote Layers</source>
+        <translation>Включить авто-центроид для удаленных слоев</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Optimization</source>
+        <translation>Включить авто-оптимизацию</translation>
+    </message>
+    <message>
+        <source>Enable Direct SQL for GeoPackage</source>
+        <translation>Включить прямой SQL для GeoPackage</translation>
+    </message>
+    <message>
+        <source>Enable Materialized Views</source>
+        <translation>Включить материализованные представления</translation>
+    </message>
+    <message>
+        <source>Error resetting layer properties: {}</source>
+        <translation>Ошибка сброса свойств слоя: {}</translation>
+    </message>
+    <message>
+        <source>Estimated performance improvement</source>
+        <translation>Ожидаемое улучшение производительности</translation>
+    </message>
+    <message>
+        <source>Execute SQLite queries in background thread with cancellation support. Prevents UI freezing.</source>
+        <translation>Выполнять запросы SQLite в фоновом потоке с поддержкой отмены. Предотвращает зависание интерфейса.</translation>
+    </message>
+    <message>
+        <source>Filter multiple layers simultaneously using multiple CPU cores.</source>
+        <translation>Фильтровать несколько слоев одновременно, используя несколько ядер процессора.</translation>
+    </message>
+    <message>
+        <source>FilterMate - Backend Optimizations</source>
+        <translation>FilterMate - Оптимизации бэкенда</translation>
+    </message>
+    <message>
+        <source>First filter by bounding box, then by exact geometry. Reduces precision calculations on irrelevant features.</source>
+        <translation>Сначала фильтровать по ограничивающему прямоугольнику, затем по точной геометрии. Уменьшает вычисления точности для нерелевантных объектов.</translation>
+    </message>
+    <message>
+        <source>For small PostgreSQL layers, copy to memory for faster filtering. Avoids network latency for small datasets.</source>
+        <translation>Для небольших слоев PostgreSQL копировать в память для быстрой фильтрации. Избегает сетевой задержки для небольших наборов данных.</translation>
+    </message>
+    <message>
+        <source>Force sequential execution for OGR layers to prevent crashes. Safer but slower.</source>
+        <translation>Принудительное последовательное выполнение для слоев OGR для предотвращения сбоев. Безопаснее, но медленнее.</translation>
+    </message>
+    <message>
+        <source>GEOS-safe Geometry Handling</source>
+        <translation>GEOS-безопасная обработка геометрии</translation>
+    </message>
+    <message>
+        <source>Global</source>
+        <translation>Глобальный</translation>
+    </message>
+    <message>
+        <source>Interruptible Queries</source>
+        <translation>Прерываемые запросы</translation>
+    </message>
+    <message>
+        <source>Lazy cursor threshold:</source>
+        <translation>Порог ленивого курсора:</translation>
+    </message>
+    <message>
+        <source>Max workers (0=auto):</source>
+        <translation>Макс. рабочих (0=авто):</translation>
+    </message>
+    <message>
+        <source>Optimizations for PostgreSQL databases with PostGIS extension</source>
+        <translation>Оптимизации для баз данных PostgreSQL с расширением PostGIS</translation>
+    </message>
+    <message>
+        <source>Optimizations for Spatialite databases and GeoPackage files</source>
+        <translation>Оптимизации для баз данных Spatialite и файлов GeoPackage</translation>
+    </message>
+    <message>
+        <source>Optimizations for file-based formats (Shapefiles, GeoJSON) and memory layers</source>
+        <translation>Оптимизации для файловых форматов (Shapefiles, GeoJSON) и слоев в памяти</translation>
+    </message>
 </context>
 </TS>

@@ -1469,5 +1469,449 @@ This affects other FilterMate sessions!</source>
         <source>Cleanup Failed</source>
         <translation>Dọn dẹp thất bại</translation>
     </message>
+    <message>
+        <source>All layers using auto-selection</source>
+        <translation>Tất cả các lớp đang sử dụng chọn tự động</translation>
+    </message>
+    <message>
+        <source>Applied to &apos;{0}&apos;:</source>
+        <translation>Đã áp dụng cho &apos;{0}&apos;:</translation>
+    </message>
+    <message>
+        <source>Auto-centroid {0}</source>
+        <translation>Tự động tâm {0}</translation>
+    </message>
+    <message>
+        <source>Auto-optimization {0}</source>
+        <translation>Tối ưu hóa tự động {0}</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer module not available</source>
+        <translation>Mô-đun tối ưu hóa tự động không khả dụng</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer not available: {0}</source>
+        <translation>Trình tối ưu hóa tự động không khả dụng: {0}</translation>
+    </message>
+    <message>
+        <source>Auto-select best strategy</source>
+        <translation>Tự động chọn chiến lược tốt nhất</translation>
+    </message>
+    <message>
+        <source>Auto-selected backends for {0} layer(s)</source>
+        <translation>Đã tự động chọn backend cho {0} lớp</translation>
+    </message>
+    <message>
+        <source>Auto-simplify geometries</source>
+        <translation>Tự động đơn giản hóa hình học</translation>
+    </message>
+    <message>
+        <source>Auto-use centroids for remote layers</source>
+        <translation>Tự động sử dụng tâm cho các lớp từ xa</translation>
+    </message>
+    <message>
+        <source>Automatically choose optimal filtering strategy</source>
+        <translation>Tự động chọn chiến lược lọc tối ưu</translation>
+    </message>
+    <message>
+        <source>BBox pre-filter enabled for &apos;{0}&apos;</source>
+        <translation>Đã bật bộ lọc trước BBox cho &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Backend controller not available</source>
+        <translation>Bộ điều khiển backend không khả dụng</translation>
+    </message>
+    <message>
+        <source>Backend forced to {0} for &apos;{1}&apos;</source>
+        <translation>Backend bị buộc thành {0} cho &apos;{1}&apos;</translation>
+    </message>
+    <message>
+        <source>Backend optimization unavailable</source>
+        <translation>Tối ưu hóa backend không khả dụng</translation>
+    </message>
+    <message>
+        <source>Backend set to Auto for &apos;{0}&apos;</source>
+        <translation>Backend được đặt thành Tự động cho &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Centroids enabled for &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>Đã bật tâm cho &apos;{0}&apos; (~{1}x {2})</translation>
+    </message>
+    <message>
+        <source>Clear ALL FilterMate temporary tables from all databases</source>
+        <translation>Xóa TẤT CẢ bảng tạm FilterMate khỏi tất cả cơ sở dữ liệu</translation>
+    </message>
+    <message>
+        <source>Clear temporary tables for the current project only</source>
+        <translation>Xóa bảng tạm chỉ cho dự án hiện tại</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) for current project</source>
+        <translation>Đã xóa {0} bảng tạm cho dự án hiện tại</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) globally</source>
+        <translation>Đã xóa {0} bảng tạm trên toàn cục</translation>
+    </message>
+    <message>
+        <source>Confirmation {0}</source>
+        <translation>Xác nhận {0}</translation>
+    </message>
+    <message>
+        <source>Could not analyze layer &apos;{0}&apos;</source>
+        <translation>Không thể phân tích lớp &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Could not reload plugin automatically.</source>
+        <translation>Không thể tải lại plugin tự động.</translation>
+    </message>
+    <message>
+        <source>Dark mode</source>
+        <translation>Chế độ tối</translation>
+    </message>
+    <message>
+        <source>Description (auto-generated, you can modify it)</source>
+        <translation>Mô tả (tự động tạo, bạn có thể sửa đổi)</translation>
+    </message>
+    <message>
+        <source>Dialog not available: {0}</source>
+        <translation>Hộp thoại không khả dụng: {0}</translation>
+    </message>
+    <message>
+        <source>Enter a name for this filter</source>
+        <translation>Nhập tên cho bộ lọc này</translation>
+    </message>
+    <message>
+        <source>Error analyzing layer: {0}</source>
+        <translation>Lỗi phân tích lớp: {0}</translation>
+    </message>
+    <message>
+        <source>Error cancelling changes: {0}</source>
+        <translation>Lỗi hủy thay đổi: {0}</translation>
+    </message>
+    <message>
+        <source>Error reloading plugin: {0}</source>
+        <translation>Lỗi tải lại plugin: {0}</translation>
+    </message>
+    <message>
+        <source>Error resetting layer properties: {}</source>
+        <translation>Lỗi đặt lại thuộc tính lớp: {}</translation>
+    </message>
+    <message>
+        <source>Error: {0}</source>
+        <translation>Lỗi: {0}</translation>
+    </message>
+    <message>
+        <source>Favorites manager not available</source>
+        <translation>Trình quản lý yêu thích không khả dụng</translation>
+    </message>
+    <message>
+        <source>Filter history position</source>
+        <translation>Vị trí lịch sử bộ lọc</translation>
+    </message>
+    <message>
+        <source>FilterMate - Add to Favorites</source>
+        <translation>FilterMate - Thêm vào Yêu thích</translation>
+    </message>
+    <message>
+        <source>Forced {0} backend for {1} layer(s)</source>
+        <translation>Đã buộc backend {0} cho {1} lớp</translation>
+    </message>
+    <message>
+        <source>Light mode</source>
+        <translation>Chế độ sáng</translation>
+    </message>
+    <message>
+        <source>Memory layer filtering complete for &apos;{0}&apos;</source>
+        <translation>Đã hoàn thành lọc lớp bộ nhớ cho &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>No optimization recommendations at this time.</source>
+        <translation>Không có đề xuất tối ưu hóa vào lúc này.</translation>
+    </message>
+    <message>
+        <source>OGR/Memory</source>
+        <translation>OGR/Bộ nhớ</translation>
+    </message>
+    <message>
+        <source>Optimization applied to {0} layer(s)</source>
+        <translation>Đã áp dụng tối ưu hóa cho {0} lớp</translation>
+    </message>
+    <message>
+        <source>Optimization recommendations</source>
+        <translation>Đề xuất tối ưu hóa</translation>
+    </message>
+    <message>
+        <source>PostgreSQL</source>
+        <translation>PostgreSQL</translation>
+    </message>
+    <message>
+        <source>Redo filter</source>
+        <translation>Làm lại bộ lọc</translation>
+    </message>
+    <message>
+        <source>Redo unavailable</source>
+        <translation>Làm lại không khả dụng</translation>
+    </message>
+    <message>
+        <source>Save current filter</source>
+        <translation>Lưu bộ lọc hiện tại</translation>
+    </message>
+    <message>
+        <source>Spatialite</source>
+        <translation>Spatialite</translation>
+    </message>
+    <message>
+        <source>Strategy set to {0} for &apos;{1}&apos;</source>
+        <translation>Chiến lược được đặt thành {0} cho &apos;{1}&apos;</translation>
+    </message>
+    <message>
+        <source>Theme changed</source>
+        <translation>Đã thay đổi chủ đề</translation>
+    </message>
+    <message>
+        <source>Toggle dark/light mode</source>
+        <translation>Chuyển đổi chế độ tối/sáng</translation>
+    </message>
+    <message>
+        <source>Undo filter</source>
+        <translation>Hoàn tác bộ lọc</translation>
+    </message>
+    <message>
+        <source>Undo unavailable</source>
+        <translation>Hoàn tác không khả dụng</translation>
+    </message>
+    <message>
+        <source>Using QGIS expressions for filtering</source>
+        <translation>Sử dụng biểu thức QGIS để lọc</translation>
+    </message>
+    <message>
+        <source>View filter history</source>
+        <translation>Xem lịch sử bộ lọc</translation>
+    </message>
+    <message>
+        <source>WKT expression threshold:</source>
+        <translation>Ngưỡng biểu thức WKT:</translation>
+    </message>
+    <message>
+        <source>memory copy</source>
+        <translation>sao chép bộ nhớ</translation>
+    </message>
+    <message>
+        <source>pool size</source>
+        <translation>kích thước pool</translation>
+    </message>
+    <message>
+        <source>simplified to {0} vertices</source>
+        <translation>đơn giản hóa thành {0} đỉnh</translation>
+    </message>
+    <message>
+        <source>temp views</source>
+        <translation>chế độ xem tạm</translation>
+    </message>
+    <message>
+        <source>Allow cancellation of QGIS processing algorithms. Enables stopping long-running operations.</source>
+        <translation>Cho phép hủy các thuật toán xử lý QGIS. Cho phép dừng các thao tác chạy lâu.</translation>
+    </message>
+    <message>
+        <source>Analyzing your project... Recommendations will appear here.</source>
+        <translation>Đang phân tích dự án của bạn... Các đề xuất sẽ xuất hiện ở đây.</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid for Distant Layers</source>
+        <translation>Tự động tâm cho các lớp xa</translation>
+    </message>
+    <message>
+        <source>Auto-Select Best Strategy</source>
+        <translation>Tự động chọn chiến lược tốt nhất</translation>
+    </message>
+    <message>
+        <source>Auto-Simplify Geometries ⚠️</source>
+        <translation>Tự động đơn giản hóa hình học ⚠️</translation>
+    </message>
+    <message>
+        <source>Auto-detect mod_spatialite</source>
+        <translation>Tự động phát hiện mod_spatialite</translation>
+    </message>
+    <message>
+        <source>Automatic GIST Index Usage</source>
+        <translation>Sử dụng chỉ mục GIST tự động</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Hủy</translation>
+    </message>
+    <message>
+        <source>Cancellable Processing</source>
+        <translation>Xử lý có thể hủy</translation>
+    </message>
+    <message>
+        <source>Chunk size (features):</source>
+        <translation>Kích thước khối (đối tượng):</translation>
+    </message>
+    <message>
+        <source>Confirm Before Applying</source>
+        <translation>Xác nhận trước khi áp dụng</translation>
+    </message>
+    <message>
+        <source>Connection Pooling</source>
+        <translation>Gộp kết nối</translation>
+    </message>
+    <message>
+        <source>Create Spatial Indexes</source>
+        <translation>Tạo chỉ mục không gian</translation>
+    </message>
+    <message>
+        <source>Direct SQL for GeoPackage</source>
+        <translation>SQL trực tiếp cho GeoPackage</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Centroid for Remote Layers</source>
+        <translation>Bật tự động tâm cho các lớp từ xa</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Optimization</source>
+        <translation>Bật tối ưu hóa tự động</translation>
+    </message>
+    <message>
+        <source>Enable Direct SQL for GeoPackage</source>
+        <translation>Bật SQL trực tiếp cho GeoPackage</translation>
+    </message>
+    <message>
+        <source>Enable Materialized Views</source>
+        <translation>Bật chế độ xem vật chất hóa</translation>
+    </message>
+    <message>
+        <source>Estimated performance improvement</source>
+        <translation>Cải thiện hiệu suất ước tính</translation>
+    </message>
+    <message>
+        <source>FilterMate - Backend Optimizations</source>
+        <translation>FilterMate - Tối ưu hóa Backend</translation>
+    </message>
+    <message>
+        <source>GEOS-safe Geometry Handling</source>
+        <translation>Xử lý hình học an toàn GEOS</translation>
+    </message>
+    <message>
+        <source>Global</source>
+        <translation>Toàn cục</translation>
+    </message>
+    <message>
+        <source>Initialization error: {}</source>
+        <translation>Lỗi khởi tạo: {}</translation>
+    </message>
+    <message>
+        <source>Interruptible Queries</source>
+        <translation>Truy vấn có thể ngắt</translation>
+    </message>
+    <message>
+        <source>Lazy cursor threshold:</source>
+        <translation>Ngưỡng con trỏ lười:</translation>
+    </message>
+    <message>
+        <source>Max workers (0=auto):</source>
+        <translation>Số worker tối đa (0=tự động):</translation>
+    </message>
+    <message>
+        <source>No PostgreSQL connection available</source>
+        <translation>Không có kết nối PostgreSQL khả dụng</translation>
+    </message>
+    <message>
+        <source>No alternative backends available for this layer</source>
+        <translation>Không có backend thay thế cho lớp này</translation>
+    </message>
+    <message>
+        <source>No layer selected. Please select a layer first.</source>
+        <translation>Chưa chọn lớp nào. Vui lòng chọn một lớp trước.</translation>
+    </message>
+    <message>
+        <source>No optimizations selected to apply.</source>
+        <translation>Không có tối ưu hóa nào được chọn để áp dụng.</translation>
+    </message>
+    <message>
+        <source>No temporary tables found</source>
+        <translation>Không tìm thấy bảng tạm</translation>
+    </message>
+    <message>
+        <source>No temporary tables found for current project</source>
+        <translation>Không tìm thấy bảng tạm cho dự án hiện tại</translation>
+    </message>
+    <message>
+        <source>Save Settings</source>
+        <translation>Lưu cài đặt</translation>
+    </message>
+    <message>
+        <source>Show Optimization Hints</source>
+        <translation>Hiển thị gợi ý tối ưu hóa</translation>
+    </message>
+    <message>
+        <source>Redo filter (Ctrl+Y)</source>
+        <translation>Làm lại bộ lọc (Ctrl+Y)</translation>
+    </message>
+    <message>
+        <source>Undo last filter (Ctrl+Z)</source>
+        <translation>Hoàn tác bộ lọc cuối (Ctrl+Z)</translation>
+    </message>
+    <message>
+        <source>disabled</source>
+        <translation>đã tắt</translation>
+    </message>
+    <message>
+        <source>enabled</source>
+        <translation>đã bật</translation>
+    </message>
+    <message>
+        <source>★ No favorites saved</source>
+        <translation>★ Chưa lưu yêu thích nào</translation>
+    </message>
+    <message>
+        <source>★ {0} Favorites saved</source>
+        <translation>★ {0} Yêu thích đã lưu</translation>
+    </message>
+    <message>
+        <source>⚙️ Manage favorites...</source>
+        <translation>⚙️ Quản lý yêu thích...</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter (no filter active)</source>
+        <translation>⭐ Thêm bộ lọc hiện tại (không có bộ lọc đang hoạt động)</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter to Favorites</source>
+        <translation>⭐ Thêm bộ lọc hiện tại vào yêu thích</translation>
+    </message>
+    <message>
+        <source>⭐ Add current filter to favorites</source>
+        <translation>⭐ Thêm bộ lọc hiện tại vào yêu thích</translation>
+    </message>
+    <message>
+        <source>⭐ Add filter (no active filter)</source>
+        <translation>⭐ Thêm bộ lọc (không có bộ lọc đang hoạt động)</translation>
+    </message>
+    <message>
+        <source>🌐 All Projects (Global)</source>
+        <translation>🌐 Tất cả dự án (Toàn cục)</translation>
+    </message>
+    <message>
+        <source>📁 Current Project</source>
+        <translation>📁 Dự án hiện tại</translation>
+    </message>
+    <message>
+        <source>📤 Export...</source>
+        <translation>📤 Xuất...</translation>
+    </message>
+    <message>
+        <source>📥 Import...</source>
+        <translation>📥 Nhập...</translation>
+    </message>
+    <message>
+        <source>Restore Defaults</source>
+        <translation>Khôi phục mặc định</translation>
+    </message>
+    <message>
+        <source>Use Balanced Profile</source>
+        <translation>Sử dụng hồ sơ cân bằng</translation>
+    </message>
 </context>
 </TS>

@@ -1917,5 +1917,9 @@ Dit beïnvloedt andere FilterMate-sessies!</translation>
         <source>Cleanup Failed</source>
         <translation>Opruimen mislukt</translation>
     </message>
+    <message>
+        <source>Error resetting layer properties: {}</source>
+        <translation>Fout bij het resetten van laageigenschappen: {}</translation>
+    </message>
 </context>
 </TS>

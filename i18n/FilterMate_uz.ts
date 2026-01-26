@@ -1469,5 +1469,449 @@ Bu boshqa FilterMate sessiyalariga ta&apos;sir qiladi!</translation>
         <source>Cleanup Failed</source>
         <translation>Tozalash muvaffaqiyatsiz</translation>
     </message>
+    <message>
+        <source>All layers using auto-selection</source>
+        <translation>Barcha qatlamlar avtomatik tanlashdan foydalanmoqda</translation>
+    </message>
+    <message>
+        <source>Applied to &apos;{0}&apos;:</source>
+        <translation>&apos;{0}&apos;ga qo&apos;llanildi:</translation>
+    </message>
+    <message>
+        <source>Auto-centroid {0}</source>
+        <translation>Avto-sentroid {0}</translation>
+    </message>
+    <message>
+        <source>Auto-optimization {0}</source>
+        <translation>Avto-optimizatsiya {0}</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer module not available</source>
+        <translation>Avto-optimizator moduli mavjud emas</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer not available: {0}</source>
+        <translation>Avto-optimizator mavjud emas: {0}</translation>
+    </message>
+    <message>
+        <source>Auto-select best strategy</source>
+        <translation>Eng yaxshi strategiyani avtomatik tanlash</translation>
+    </message>
+    <message>
+        <source>Auto-selected backends for {0} layer(s)</source>
+        <translation>{0} qatlam(lar) uchun backendlar avtomatik tanlandi</translation>
+    </message>
+    <message>
+        <source>Auto-simplify geometries</source>
+        <translation>Geometriyalarni avtomatik soddalashtirish</translation>
+    </message>
+    <message>
+        <source>Auto-use centroids for remote layers</source>
+        <translation>Masofaviy qatlamlar uchun sentroidlarni avtomatik ishlatish</translation>
+    </message>
+    <message>
+        <source>Automatically choose optimal filtering strategy</source>
+        <translation>Optimal filtrlash strategiyasini avtomatik tanlash</translation>
+    </message>
+    <message>
+        <source>BBox pre-filter enabled for &apos;{0}&apos;</source>
+        <translation>&apos;{0}&apos; uchun BBox oldindan filtri yoqildi</translation>
+    </message>
+    <message>
+        <source>Backend controller not available</source>
+        <translation>Backend kontroleri mavjud emas</translation>
+    </message>
+    <message>
+        <source>Backend forced to {0} for &apos;{1}&apos;</source>
+        <translation>&apos;{1}&apos; uchun backend {0}ga majburlandi</translation>
+    </message>
+    <message>
+        <source>Backend optimization unavailable</source>
+        <translation>Backend optimizatsiyasi mavjud emas</translation>
+    </message>
+    <message>
+        <source>Backend set to Auto for &apos;{0}&apos;</source>
+        <translation>&apos;{0}&apos; uchun backend Avtoga o&apos;rnatildi</translation>
+    </message>
+    <message>
+        <source>Centroids enabled for &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>&apos;{0}&apos; uchun sentroidlar yoqildi (~{1}x {2})</translation>
+    </message>
+    <message>
+        <source>Clear ALL FilterMate temporary tables from all databases</source>
+        <translation>Barcha ma&apos;lumotlar bazalaridan BARCHA FilterMate vaqtinchalik jadvallarini tozalash</translation>
+    </message>
+    <message>
+        <source>Clear temporary tables for the current project only</source>
+        <translation>Faqat joriy loyiha uchun vaqtinchalik jadvallarni tozalash</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) for current project</source>
+        <translation>Joriy loyiha uchun {0} ta vaqtinchalik jadval tozalandi</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) globally</source>
+        <translation>Global miqyosda {0} ta vaqtinchalik jadval tozalandi</translation>
+    </message>
+    <message>
+        <source>Confirmation {0}</source>
+        <translation>Tasdiqlash {0}</translation>
+    </message>
+    <message>
+        <source>Could not analyze layer &apos;{0}&apos;</source>
+        <translation>&apos;{0}&apos; qatlamini tahlil qilib bo&apos;lmadi</translation>
+    </message>
+    <message>
+        <source>Could not reload plugin automatically.</source>
+        <translation>Plaginni avtomatik qayta yuklab bo&apos;lmadi.</translation>
+    </message>
+    <message>
+        <source>Dark mode</source>
+        <translation>Qorong&apos;i rejim</translation>
+    </message>
+    <message>
+        <source>Description (auto-generated, you can modify it)</source>
+        <translation>Tavsif (avtomatik yaratilgan, uni o&apos;zgartirishingiz mumkin)</translation>
+    </message>
+    <message>
+        <source>Dialog not available: {0}</source>
+        <translation>Muloqot oynasi mavjud emas: {0}</translation>
+    </message>
+    <message>
+        <source>Enter a name for this filter</source>
+        <translation>Ushbu filtr uchun nom kiriting</translation>
+    </message>
+    <message>
+        <source>Error analyzing layer: {0}</source>
+        <translation>Qatlamni tahlil qilishda xato: {0}</translation>
+    </message>
+    <message>
+        <source>Error cancelling changes: {0}</source>
+        <translation>O&apos;zgarishlarni bekor qilishda xato: {0}</translation>
+    </message>
+    <message>
+        <source>Error reloading plugin: {0}</source>
+        <translation>Plaginni qayta yuklashda xato: {0}</translation>
+    </message>
+    <message>
+        <source>Error resetting layer properties: {}</source>
+        <translation>Qatlam xususiyatlarini tiklashda xato: {}</translation>
+    </message>
+    <message>
+        <source>Error: {0}</source>
+        <translation>Xato: {0}</translation>
+    </message>
+    <message>
+        <source>Favorites manager not available</source>
+        <translation>Sevimlilar menejeri mavjud emas</translation>
+    </message>
+    <message>
+        <source>Filter history position</source>
+        <translation>Filtr tarixi holati</translation>
+    </message>
+    <message>
+        <source>FilterMate - Add to Favorites</source>
+        <translation>FilterMate - Sevimlilarga qo&apos;shish</translation>
+    </message>
+    <message>
+        <source>Forced {0} backend for {1} layer(s)</source>
+        <translation>{1} qatlam(lar) uchun {0} backend majburlandi</translation>
+    </message>
+    <message>
+        <source>Light mode</source>
+        <translation>Yorug&apos; rejim</translation>
+    </message>
+    <message>
+        <source>Memory layer filtering complete for &apos;{0}&apos;</source>
+        <translation>&apos;{0}&apos; uchun xotira qatlami filtrlash tugallandi</translation>
+    </message>
+    <message>
+        <source>No optimization recommendations at this time.</source>
+        <translation>Hozirda optimizatsiya tavsiyalari yo&apos;q.</translation>
+    </message>
+    <message>
+        <source>OGR/Memory</source>
+        <translation>OGR/Xotira</translation>
+    </message>
+    <message>
+        <source>Optimization applied to {0} layer(s)</source>
+        <translation>{0} qatlam(lar)ga optimizatsiya qo&apos;llanildi</translation>
+    </message>
+    <message>
+        <source>Optimization recommendations</source>
+        <translation>Optimizatsiya tavsiyalari</translation>
+    </message>
+    <message>
+        <source>PostgreSQL</source>
+        <translation>PostgreSQL</translation>
+    </message>
+    <message>
+        <source>Redo filter</source>
+        <translation>Filtrni qaytarish</translation>
+    </message>
+    <message>
+        <source>Redo unavailable</source>
+        <translation>Qaytarish mavjud emas</translation>
+    </message>
+    <message>
+        <source>Save current filter</source>
+        <translation>Joriy filtrni saqlash</translation>
+    </message>
+    <message>
+        <source>Spatialite</source>
+        <translation>Spatialite</translation>
+    </message>
+    <message>
+        <source>Strategy set to {0} for &apos;{1}&apos;</source>
+        <translation>&apos;{1}&apos; uchun strategiya {0}ga o&apos;rnatildi</translation>
+    </message>
+    <message>
+        <source>Theme changed</source>
+        <translation>Mavzu o&apos;zgartirildi</translation>
+    </message>
+    <message>
+        <source>Toggle dark/light mode</source>
+        <translation>Qorong&apos;i/yorug&apos; rejimni almashtirish</translation>
+    </message>
+    <message>
+        <source>Undo filter</source>
+        <translation>Filtrni bekor qilish</translation>
+    </message>
+    <message>
+        <source>Undo unavailable</source>
+        <translation>Bekor qilish mavjud emas</translation>
+    </message>
+    <message>
+        <source>Using QGIS expressions for filtering</source>
+        <translation>Filtrlash uchun QGIS ifodalari ishlatilmoqda</translation>
+    </message>
+    <message>
+        <source>View filter history</source>
+        <translation>Filtr tarixini ko&apos;rish</translation>
+    </message>
+    <message>
+        <source>WKT expression threshold:</source>
+        <translation>WKT ifoda chegarasi:</translation>
+    </message>
+    <message>
+        <source>memory copy</source>
+        <translation>xotira nusxasi</translation>
+    </message>
+    <message>
+        <source>pool size</source>
+        <translation>hovuz hajmi</translation>
+    </message>
+    <message>
+        <source>simplified to {0} vertices</source>
+        <translation>{0} ta cho&apos;qqiga soddalashtirildi</translation>
+    </message>
+    <message>
+        <source>temp views</source>
+        <translation>vaqtinchalik ko&apos;rinishlar</translation>
+    </message>
+    <message>
+        <source>Allow cancellation of QGIS processing algorithms. Enables stopping long-running operations.</source>
+        <translation>QGIS ishlov berish algoritmlarini bekor qilishga ruxsat bering. Uzoq davom etadigan operatsiyalarni to&apos;xtatishga imkon beradi.</translation>
+    </message>
+    <message>
+        <source>Analyzing your project... Recommendations will appear here.</source>
+        <translation>Loyihangiz tahlil qilinmoqda... Tavsiyalar bu yerda paydo bo&apos;ladi.</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid for Distant Layers</source>
+        <translation>Uzoq qatlamlar uchun avto-sentroid</translation>
+    </message>
+    <message>
+        <source>Auto-Select Best Strategy</source>
+        <translation>Eng yaxshi strategiyani avtomatik tanlash</translation>
+    </message>
+    <message>
+        <source>Auto-Simplify Geometries ⚠️</source>
+        <translation>Geometriyalarni avtomatik soddalashtirish ⚠️</translation>
+    </message>
+    <message>
+        <source>Auto-detect mod_spatialite</source>
+        <translation>mod_spatialite avtomatik aniqlash</translation>
+    </message>
+    <message>
+        <source>Automatic GIST Index Usage</source>
+        <translation>Avtomatik GIST indeks foydalanish</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Bekor qilish</translation>
+    </message>
+    <message>
+        <source>Cancellable Processing</source>
+        <translation>Bekor qilinadigan ishlov berish</translation>
+    </message>
+    <message>
+        <source>Chunk size (features):</source>
+        <translation>Bo&apos;lak hajmi (xususiyatlar):</translation>
+    </message>
+    <message>
+        <source>Confirm Before Applying</source>
+        <translation>Qo&apos;llashdan oldin tasdiqlang</translation>
+    </message>
+    <message>
+        <source>Connection Pooling</source>
+        <translation>Ulanish havzasi</translation>
+    </message>
+    <message>
+        <source>Create Spatial Indexes</source>
+        <translation>Fazoviy indekslarni yaratish</translation>
+    </message>
+    <message>
+        <source>Direct SQL for GeoPackage</source>
+        <translation>GeoPackage uchun to&apos;g&apos;ridan-to&apos;g&apos;ri SQL</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Centroid for Remote Layers</source>
+        <translation>Masofaviy qatlamlar uchun avto-sentroidni yoqing</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Optimization</source>
+        <translation>Avto-optimizatsiyani yoqing</translation>
+    </message>
+    <message>
+        <source>Enable Direct SQL for GeoPackage</source>
+        <translation>GeoPackage uchun to&apos;g&apos;ridan-to&apos;g&apos;ri SQL yoqing</translation>
+    </message>
+    <message>
+        <source>Enable Materialized Views</source>
+        <translation>Materializatsiya qilingan ko&apos;rinishlarni yoqing</translation>
+    </message>
+    <message>
+        <source>Estimated performance improvement</source>
+        <translation>Taxminiy ishlash yaxshilanishi</translation>
+    </message>
+    <message>
+        <source>FilterMate - Backend Optimizations</source>
+        <translation>FilterMate - Backend optimizatsiyalari</translation>
+    </message>
+    <message>
+        <source>GEOS-safe Geometry Handling</source>
+        <translation>GEOS-xavfsiz geometriya boshqaruvi</translation>
+    </message>
+    <message>
+        <source>Global</source>
+        <translation>Global</translation>
+    </message>
+    <message>
+        <source>Initialization error: {}</source>
+        <translation>Ishga tushirish xatosi: {}</translation>
+    </message>
+    <message>
+        <source>Interruptible Queries</source>
+        <translation>Uzish mumkin bo&apos;lgan so&apos;rovlar</translation>
+    </message>
+    <message>
+        <source>Lazy cursor threshold:</source>
+        <translation>Dangasa kursor chegarasi:</translation>
+    </message>
+    <message>
+        <source>Max workers (0=auto):</source>
+        <translation>Maks ishchilar (0=avto):</translation>
+    </message>
+    <message>
+        <source>No PostgreSQL connection available</source>
+        <translation>PostgreSQL ulanishi mavjud emas</translation>
+    </message>
+    <message>
+        <source>No alternative backends available for this layer</source>
+        <translation>Bu qatlam uchun muqobil backendlar mavjud emas</translation>
+    </message>
+    <message>
+        <source>No layer selected. Please select a layer first.</source>
+        <translation>Hech qanday qatlam tanlanmagan. Iltimos, avval qatlam tanlang.</translation>
+    </message>
+    <message>
+        <source>No optimizations selected to apply.</source>
+        <translation>Qo&apos;llash uchun hech qanday optimizatsiya tanlanmagan.</translation>
+    </message>
+    <message>
+        <source>No temporary tables found</source>
+        <translation>Vaqtinchalik jadvallar topilmadi</translation>
+    </message>
+    <message>
+        <source>No temporary tables found for current project</source>
+        <translation>Joriy loyiha uchun vaqtinchalik jadvallar topilmadi</translation>
+    </message>
+    <message>
+        <source>Save Settings</source>
+        <translation>Sozlamalarni saqlash</translation>
+    </message>
+    <message>
+        <source>Show Optimization Hints</source>
+        <translation>Optimizatsiya maslahatlarini ko&apos;rsatish</translation>
+    </message>
+    <message>
+        <source>Redo filter (Ctrl+Y)</source>
+        <translation>Filtrni qaytarish (Ctrl+Y)</translation>
+    </message>
+    <message>
+        <source>Undo last filter (Ctrl+Z)</source>
+        <translation>Oxirgi filtrni bekor qilish (Ctrl+Z)</translation>
+    </message>
+    <message>
+        <source>disabled</source>
+        <translation>o&apos;chirilgan</translation>
+    </message>
+    <message>
+        <source>enabled</source>
+        <translation>yoqilgan</translation>
+    </message>
+    <message>
+        <source>★ No favorites saved</source>
+        <translation>★ Hech qanday sevimli saqlanmagan</translation>
+    </message>
+    <message>
+        <source>★ {0} Favorites saved</source>
+        <translation>★ {0} Sevimli saqlandi</translation>
+    </message>
+    <message>
+        <source>⚙️ Manage favorites...</source>
+        <translation>⚙️ Sevimlilarni boshqarish...</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter (no filter active)</source>
+        <translation>⭐ Joriy filtrni qo&apos;shish (faol filtr yo&apos;q)</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter to Favorites</source>
+        <translation>⭐ Joriy filtrni sevimlilarga qo&apos;shish</translation>
+    </message>
+    <message>
+        <source>⭐ Add current filter to favorites</source>
+        <translation>⭐ Joriy filtrni sevimlilarga qo&apos;shish</translation>
+    </message>
+    <message>
+        <source>⭐ Add filter (no active filter)</source>
+        <translation>⭐ Filtr qo&apos;shish (faol filtr yo&apos;q)</translation>
+    </message>
+    <message>
+        <source>🌐 All Projects (Global)</source>
+        <translation>🌐 Barcha loyihalar (Global)</translation>
+    </message>
+    <message>
+        <source>📁 Current Project</source>
+        <translation>📁 Joriy loyiha</translation>
+    </message>
+    <message>
+        <source>📤 Export...</source>
+        <translation>📤 Eksport...</translation>
+    </message>
+    <message>
+        <source>📥 Import...</source>
+        <translation>📥 Import...</translation>
+    </message>
+    <message>
+        <source>Restore Defaults</source>
+        <translation>Standartlarni tiklash</translation>
+    </message>
+    <message>
+        <source>Use Balanced Profile</source>
+        <translation>Muvozanatli profildan foydalanish</translation>
+    </message>
 </context>
 </TS>

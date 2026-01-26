@@ -1469,5 +1469,449 @@ Bu diğer FilterMate oturumlarını etkiler!</translation>
         <source>Cleanup Failed</source>
         <translation>Temizlik Başarısız</translation>
     </message>
+    <message>
+        <source>All layers using auto-selection</source>
+        <translation>Tüm katmanlar otomatik seçim kullanıyor</translation>
+    </message>
+    <message>
+        <source>Applied to &apos;{0}&apos;:</source>
+        <translation>&apos;{0}&apos;a uygulandı:</translation>
+    </message>
+    <message>
+        <source>Auto-centroid {0}</source>
+        <translation>Otomatik-centroid {0}</translation>
+    </message>
+    <message>
+        <source>Auto-optimization {0}</source>
+        <translation>Otomatik optimizasyon {0}</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer module not available</source>
+        <translation>Otomatik optimize edici modülü mevcut değil</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer not available: {0}</source>
+        <translation>Otomatik optimize edici mevcut değil: {0}</translation>
+    </message>
+    <message>
+        <source>Auto-select best strategy</source>
+        <translation>En iyi stratejiyi otomatik seç</translation>
+    </message>
+    <message>
+        <source>Auto-selected backends for {0} layer(s)</source>
+        <translation>{0} katman için backend otomatik seçildi</translation>
+    </message>
+    <message>
+        <source>Auto-simplify geometries</source>
+        <translation>Geometrileri otomatik sadeleştir</translation>
+    </message>
+    <message>
+        <source>Auto-use centroids for remote layers</source>
+        <translation>Uzak katmanlar için centroid&apos;leri otomatik kullan</translation>
+    </message>
+    <message>
+        <source>Automatically choose optimal filtering strategy</source>
+        <translation>Optimal filtreleme stratejisini otomatik seç</translation>
+    </message>
+    <message>
+        <source>BBox pre-filter enabled for &apos;{0}&apos;</source>
+        <translation>&apos;{0}&apos; için BBox ön filtresi etkinleştirildi</translation>
+    </message>
+    <message>
+        <source>Backend controller not available</source>
+        <translation>Backend kontrolcüsü mevcut değil</translation>
+    </message>
+    <message>
+        <source>Backend forced to {0} for &apos;{1}&apos;</source>
+        <translation>&apos;{1}&apos; için backend {0}&apos;a zorlandı</translation>
+    </message>
+    <message>
+        <source>Backend optimization unavailable</source>
+        <translation>Backend optimizasyonu mevcut değil</translation>
+    </message>
+    <message>
+        <source>Backend set to Auto for &apos;{0}&apos;</source>
+        <translation>&apos;{0}&apos; için backend Otomatik olarak ayarlandı</translation>
+    </message>
+    <message>
+        <source>Centroids enabled for &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>&apos;{0}&apos; için centroid&apos;ler etkinleştirildi (~{1}x {2})</translation>
+    </message>
+    <message>
+        <source>Clear ALL FilterMate temporary tables from all databases</source>
+        <translation>Tüm veritabanlarından TÜM FilterMate geçici tablolarını temizle</translation>
+    </message>
+    <message>
+        <source>Clear temporary tables for the current project only</source>
+        <translation>Yalnızca geçerli proje için geçici tabloları temizle</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) for current project</source>
+        <translation>Geçerli proje için {0} geçici tablo temizlendi</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) globally</source>
+        <translation>Genel olarak {0} geçici tablo temizlendi</translation>
+    </message>
+    <message>
+        <source>Confirmation {0}</source>
+        <translation>Onay {0}</translation>
+    </message>
+    <message>
+        <source>Could not analyze layer &apos;{0}&apos;</source>
+        <translation>&apos;{0}&apos; katmanı analiz edilemedi</translation>
+    </message>
+    <message>
+        <source>Could not reload plugin automatically.</source>
+        <translation>Plugin otomatik olarak yeniden yüklenemedi.</translation>
+    </message>
+    <message>
+        <source>Dark mode</source>
+        <translation>Koyu mod</translation>
+    </message>
+    <message>
+        <source>Description (auto-generated, you can modify it)</source>
+        <translation>Açıklama (otomatik oluşturuldu, değiştirebilirsiniz)</translation>
+    </message>
+    <message>
+        <source>Dialog not available: {0}</source>
+        <translation>İletişim kutusu mevcut değil: {0}</translation>
+    </message>
+    <message>
+        <source>Enter a name for this filter</source>
+        <translation>Bu filtre için bir ad girin</translation>
+    </message>
+    <message>
+        <source>Error analyzing layer: {0}</source>
+        <translation>Katman analizi hatası: {0}</translation>
+    </message>
+    <message>
+        <source>Error cancelling changes: {0}</source>
+        <translation>Değişiklikleri iptal etme hatası: {0}</translation>
+    </message>
+    <message>
+        <source>Error reloading plugin: {0}</source>
+        <translation>Plugin yeniden yükleme hatası: {0}</translation>
+    </message>
+    <message>
+        <source>Error resetting layer properties: {}</source>
+        <translation>Katman özelliklerini sıfırlama hatası: {}</translation>
+    </message>
+    <message>
+        <source>Error: {0}</source>
+        <translation>Hata: {0}</translation>
+    </message>
+    <message>
+        <source>Favorites manager not available</source>
+        <translation>Favoriler yöneticisi mevcut değil</translation>
+    </message>
+    <message>
+        <source>Filter history position</source>
+        <translation>Filtre geçmişi konumu</translation>
+    </message>
+    <message>
+        <source>FilterMate - Add to Favorites</source>
+        <translation>FilterMate - Favorilere Ekle</translation>
+    </message>
+    <message>
+        <source>Forced {0} backend for {1} layer(s)</source>
+        <translation>{1} katman için {0} backend zorlandı</translation>
+    </message>
+    <message>
+        <source>Light mode</source>
+        <translation>Açık mod</translation>
+    </message>
+    <message>
+        <source>Memory layer filtering complete for &apos;{0}&apos;</source>
+        <translation>&apos;{0}&apos; için bellek katmanı filtreleme tamamlandı</translation>
+    </message>
+    <message>
+        <source>No optimization recommendations at this time.</source>
+        <translation>Şu anda optimizasyon önerisi yok.</translation>
+    </message>
+    <message>
+        <source>OGR/Memory</source>
+        <translation>OGR/Bellek</translation>
+    </message>
+    <message>
+        <source>Optimization applied to {0} layer(s)</source>
+        <translation>{0} katmana optimizasyon uygulandı</translation>
+    </message>
+    <message>
+        <source>Optimization recommendations</source>
+        <translation>Optimizasyon önerileri</translation>
+    </message>
+    <message>
+        <source>PostgreSQL</source>
+        <translation>PostgreSQL</translation>
+    </message>
+    <message>
+        <source>Redo filter</source>
+        <translation>Filtreyi yinele</translation>
+    </message>
+    <message>
+        <source>Redo unavailable</source>
+        <translation>Yineleme mevcut değil</translation>
+    </message>
+    <message>
+        <source>Save current filter</source>
+        <translation>Geçerli filtreyi kaydet</translation>
+    </message>
+    <message>
+        <source>Spatialite</source>
+        <translation>Spatialite</translation>
+    </message>
+    <message>
+        <source>Strategy set to {0} for &apos;{1}&apos;</source>
+        <translation>&apos;{1}&apos; için strateji {0} olarak ayarlandı</translation>
+    </message>
+    <message>
+        <source>Theme changed</source>
+        <translation>Tema değiştirildi</translation>
+    </message>
+    <message>
+        <source>Toggle dark/light mode</source>
+        <translation>Koyu/açık modu değiştir</translation>
+    </message>
+    <message>
+        <source>Undo filter</source>
+        <translation>Filtreyi geri al</translation>
+    </message>
+    <message>
+        <source>Undo unavailable</source>
+        <translation>Geri alma mevcut değil</translation>
+    </message>
+    <message>
+        <source>Using QGIS expressions for filtering</source>
+        <translation>Filtreleme için QGIS ifadeleri kullanılıyor</translation>
+    </message>
+    <message>
+        <source>View filter history</source>
+        <translation>Filtre geçmişini görüntüle</translation>
+    </message>
+    <message>
+        <source>WKT expression threshold:</source>
+        <translation>WKT ifade eşiği:</translation>
+    </message>
+    <message>
+        <source>memory copy</source>
+        <translation>bellek kopyası</translation>
+    </message>
+    <message>
+        <source>pool size</source>
+        <translation>havuz boyutu</translation>
+    </message>
+    <message>
+        <source>simplified to {0} vertices</source>
+        <translation>{0} köşeye sadeleştirildi</translation>
+    </message>
+    <message>
+        <source>temp views</source>
+        <translation>geçici görünümler</translation>
+    </message>
+    <message>
+        <source>Allow cancellation of QGIS processing algorithms. Enables stopping long-running operations.</source>
+        <translation>QGIS işleme algoritmalarının iptal edilmesine izin ver. Uzun süren işlemlerin durdurulmasını sağlar.</translation>
+    </message>
+    <message>
+        <source>Analyzing your project... Recommendations will appear here.</source>
+        <translation>Projeniz analiz ediliyor... Öneriler burada görünecek.</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid for Distant Layers</source>
+        <translation>Uzak Katmanlar için Otomatik Centroid</translation>
+    </message>
+    <message>
+        <source>Auto-Select Best Strategy</source>
+        <translation>En İyi Stratejiyi Otomatik Seç</translation>
+    </message>
+    <message>
+        <source>Auto-Simplify Geometries ⚠️</source>
+        <translation>Geometrileri Otomatik Sadeleştir ⚠️</translation>
+    </message>
+    <message>
+        <source>Auto-detect mod_spatialite</source>
+        <translation>mod_spatialite&apos;ı otomatik algıla</translation>
+    </message>
+    <message>
+        <source>Automatic GIST Index Usage</source>
+        <translation>Otomatik GIST İndeks Kullanımı</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>İptal</translation>
+    </message>
+    <message>
+        <source>Cancellable Processing</source>
+        <translation>İptal Edilebilir İşleme</translation>
+    </message>
+    <message>
+        <source>Chunk size (features):</source>
+        <translation>Parça boyutu (özellikler):</translation>
+    </message>
+    <message>
+        <source>Confirm Before Applying</source>
+        <translation>Uygulamadan Önce Onayla</translation>
+    </message>
+    <message>
+        <source>Connection Pooling</source>
+        <translation>Bağlantı Havuzu</translation>
+    </message>
+    <message>
+        <source>Create Spatial Indexes</source>
+        <translation>Mekansal İndeksler Oluştur</translation>
+    </message>
+    <message>
+        <source>Direct SQL for GeoPackage</source>
+        <translation>GeoPackage için Doğrudan SQL</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Centroid for Remote Layers</source>
+        <translation>Uzak Katmanlar için Otomatik Centroid&apos;i Etkinleştir</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Optimization</source>
+        <translation>Otomatik Optimizasyonu Etkinleştir</translation>
+    </message>
+    <message>
+        <source>Enable Direct SQL for GeoPackage</source>
+        <translation>GeoPackage için Doğrudan SQL&apos;i Etkinleştir</translation>
+    </message>
+    <message>
+        <source>Enable Materialized Views</source>
+        <translation>Materyalize Görünümleri Etkinleştir</translation>
+    </message>
+    <message>
+        <source>Estimated performance improvement</source>
+        <translation>Tahmini performans iyileştirmesi</translation>
+    </message>
+    <message>
+        <source>FilterMate - Backend Optimizations</source>
+        <translation>FilterMate - Backend Optimizasyonları</translation>
+    </message>
+    <message>
+        <source>GEOS-safe Geometry Handling</source>
+        <translation>GEOS-güvenli Geometri İşleme</translation>
+    </message>
+    <message>
+        <source>Global</source>
+        <translation>Global</translation>
+    </message>
+    <message>
+        <source>Initialization error: {}</source>
+        <translation>Başlatma hatası: {}</translation>
+    </message>
+    <message>
+        <source>Interruptible Queries</source>
+        <translation>Kesilebilir Sorgular</translation>
+    </message>
+    <message>
+        <source>Lazy cursor threshold:</source>
+        <translation>Tembel imleç eşiği:</translation>
+    </message>
+    <message>
+        <source>Max workers (0=auto):</source>
+        <translation>Maks çalışan (0=otomatik):</translation>
+    </message>
+    <message>
+        <source>No PostgreSQL connection available</source>
+        <translation>PostgreSQL bağlantısı mevcut değil</translation>
+    </message>
+    <message>
+        <source>No alternative backends available for this layer</source>
+        <translation>Bu katman için alternatif backend mevcut değil</translation>
+    </message>
+    <message>
+        <source>No layer selected. Please select a layer first.</source>
+        <translation>Katman seçilmedi. Lütfen önce bir katman seçin.</translation>
+    </message>
+    <message>
+        <source>No optimizations selected to apply.</source>
+        <translation>Uygulanacak optimizasyon seçilmedi.</translation>
+    </message>
+    <message>
+        <source>No temporary tables found</source>
+        <translation>Geçici tablo bulunamadı</translation>
+    </message>
+    <message>
+        <source>No temporary tables found for current project</source>
+        <translation>Geçerli proje için geçici tablo bulunamadı</translation>
+    </message>
+    <message>
+        <source>Save Settings</source>
+        <translation>Ayarları Kaydet</translation>
+    </message>
+    <message>
+        <source>Show Optimization Hints</source>
+        <translation>Optimizasyon İpuçlarını Göster</translation>
+    </message>
+    <message>
+        <source>Redo filter (Ctrl+Y)</source>
+        <translation>Filtreyi yinele (Ctrl+Y)</translation>
+    </message>
+    <message>
+        <source>Undo last filter (Ctrl+Z)</source>
+        <translation>Son filtreyi geri al (Ctrl+Z)</translation>
+    </message>
+    <message>
+        <source>disabled</source>
+        <translation>devre dışı</translation>
+    </message>
+    <message>
+        <source>enabled</source>
+        <translation>etkin</translation>
+    </message>
+    <message>
+        <source>★ No favorites saved</source>
+        <translation>★ Kaydedilmiş favori yok</translation>
+    </message>
+    <message>
+        <source>★ {0} Favorites saved</source>
+        <translation>★ {0} Favori kaydedildi</translation>
+    </message>
+    <message>
+        <source>⚙️ Manage favorites...</source>
+        <translation>⚙️ Favorileri yönet...</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter (no filter active)</source>
+        <translation>⭐ Geçerli Filtreyi Ekle (aktif filtre yok)</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter to Favorites</source>
+        <translation>⭐ Geçerli Filtreyi Favorilere Ekle</translation>
+    </message>
+    <message>
+        <source>⭐ Add current filter to favorites</source>
+        <translation>⭐ Geçerli filtreyi favorilere ekle</translation>
+    </message>
+    <message>
+        <source>⭐ Add filter (no active filter)</source>
+        <translation>⭐ Filtre ekle (aktif filtre yok)</translation>
+    </message>
+    <message>
+        <source>🌐 All Projects (Global)</source>
+        <translation>🌐 Tüm Projeler (Global)</translation>
+    </message>
+    <message>
+        <source>📁 Current Project</source>
+        <translation>📁 Geçerli Proje</translation>
+    </message>
+    <message>
+        <source>📤 Export...</source>
+        <translation>📤 Dışa Aktar...</translation>
+    </message>
+    <message>
+        <source>📥 Import...</source>
+        <translation>📥 İçe Aktar...</translation>
+    </message>
+    <message>
+        <source>Restore Defaults</source>
+        <translation>Varsayılanları Geri Yükle</translation>
+    </message>
+    <message>
+        <source>Use Balanced Profile</source>
+        <translation>Dengeli Profil Kullan</translation>
+    </message>
 </context>
 </TS>

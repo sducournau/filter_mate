@@ -1917,5 +1917,9 @@ Dies betrifft andere FilterMate-Sitzungen!</translation>
         <source>Cleanup Failed</source>
         <translation>Bereinigung fehlgeschlagen</translation>
     </message>
+    <message>
+        <source>Error resetting layer properties: {}</source>
+        <translation>Fehler beim Zurücksetzen der Layer-Eigenschaften: {}</translation>
+    </message>
 </context>
 </TS>

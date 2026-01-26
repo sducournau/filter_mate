@@ -1469,5 +1469,449 @@ This affects other FilterMate sessions!</source>
         <source>Cleanup Failed</source>
         <translation>ማጽዳት አልተሳካም</translation>
     </message>
+    <message>
+        <source>All layers using auto-selection</source>
+        <translation>ሁሉም ንብርብሮች አውቶማቲክ ምርጫን እየተጠቀሙ ናቸው</translation>
+    </message>
+    <message>
+        <source>Applied to &apos;{0}&apos;:</source>
+        <translation>ወደ &apos;{0}&apos; ተተገብሯል:</translation>
+    </message>
+    <message>
+        <source>Auto-centroid {0}</source>
+        <translation>አውቶ-ሴንትሮይድ {0}</translation>
+    </message>
+    <message>
+        <source>Auto-optimization {0}</source>
+        <translation>አውቶ-ማመቻቸት {0}</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer module not available</source>
+        <translation>አውቶ-ማመቻቻ ሞዱል አይገኝም</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer not available: {0}</source>
+        <translation>አውቶ-ማመቻቻ አይገኝም: {0}</translation>
+    </message>
+    <message>
+        <source>Auto-select best strategy</source>
+        <translation>ምርጥ ስትራቴጂ በራስ-ሰር ምረጥ</translation>
+    </message>
+    <message>
+        <source>Auto-selected backends for {0} layer(s)</source>
+        <translation>ለ{0} ንብርብር(ዎች) ባክኤንዶች በራስ-ሰር ተመርጠዋል</translation>
+    </message>
+    <message>
+        <source>Auto-simplify geometries</source>
+        <translation>ጂኦሜትሪዎችን በራስ-ሰር ቀላል አድርግ</translation>
+    </message>
+    <message>
+        <source>Auto-use centroids for remote layers</source>
+        <translation>ለርቀት ንብርብሮች ሴንትሮይድዎችን በራስ-ሰር ተጠቀም</translation>
+    </message>
+    <message>
+        <source>Automatically choose optimal filtering strategy</source>
+        <translation>ተመቹ የማጣሪያ ስትራቴጂ በራስ-ሰር ይምረጡ</translation>
+    </message>
+    <message>
+        <source>BBox pre-filter enabled for &apos;{0}&apos;</source>
+        <translation>ለ&apos;{0}&apos; BBox ቅድመ-ማጣሪያ ነቅቷል</translation>
+    </message>
+    <message>
+        <source>Backend controller not available</source>
+        <translation>ባክኤንድ ተቆጣጣሪ አይገኝም</translation>
+    </message>
+    <message>
+        <source>Backend forced to {0} for &apos;{1}&apos;</source>
+        <translation>ባክኤንድ ወደ {0} ለ&apos;{1}&apos; ተገድዷል</translation>
+    </message>
+    <message>
+        <source>Backend optimization unavailable</source>
+        <translation>ባክኤንድ ማመቻቸት አይገኝም</translation>
+    </message>
+    <message>
+        <source>Backend set to Auto for &apos;{0}&apos;</source>
+        <translation>ባክኤንድ ለ&apos;{0}&apos; ወደ አውቶ ተቀናበረ</translation>
+    </message>
+    <message>
+        <source>Centroids enabled for &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>ለ&apos;{0}&apos; ሴንትሮይድዎች ነቅተዋል (~{1}x {2})</translation>
+    </message>
+    <message>
+        <source>Clear ALL FilterMate temporary tables from all databases</source>
+        <translation>ከሁሉም ዳታቤዞች ሁሉንም FilterMate ጊዜያዊ ሰንጠረዦች አጽዳ</translation>
+    </message>
+    <message>
+        <source>Clear temporary tables for the current project only</source>
+        <translation>ለአሁኑ ፕሮጀክት ብቻ ጊዜያዊ ሰንጠረዦችን አጽዳ</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) for current project</source>
+        <translation>ለአሁኑ ፕሮጀክት {0} ጊዜያዊ ሰንጠረዥ(ዎች) ተጸዱ</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) globally</source>
+        <translation>በዓለም አቀፍ ደረጃ {0} ጊዜያዊ ሰንጠረዥ(ዎች) ተጸዱ</translation>
+    </message>
+    <message>
+        <source>Confirmation {0}</source>
+        <translation>ማረጋገጫ {0}</translation>
+    </message>
+    <message>
+        <source>Could not analyze layer &apos;{0}&apos;</source>
+        <translation>ንብርብር &apos;{0}&apos; መተንተን አልተቻለም</translation>
+    </message>
+    <message>
+        <source>Could not reload plugin automatically.</source>
+        <translation>ተሰኪውን በራስ-ሰር ዳግም መጫን አልተቻለም።</translation>
+    </message>
+    <message>
+        <source>Dark mode</source>
+        <translation>ጨለማ ሁነታ</translation>
+    </message>
+    <message>
+        <source>Description (auto-generated, you can modify it)</source>
+        <translation>መግለጫ (በራስ-ሰር የተፈጠረ፣ ማሻሻል ይችላሉ)</translation>
+    </message>
+    <message>
+        <source>Dialog not available: {0}</source>
+        <translation>ውይይት አይገኝም: {0}</translation>
+    </message>
+    <message>
+        <source>Enter a name for this filter</source>
+        <translation>ለዚህ ማጣሪያ ስም ያስገቡ</translation>
+    </message>
+    <message>
+        <source>Error analyzing layer: {0}</source>
+        <translation>ንብርብር መተንተን ስህተት: {0}</translation>
+    </message>
+    <message>
+        <source>Error cancelling changes: {0}</source>
+        <translation>ለውጦችን መሰረዝ ስህተት: {0}</translation>
+    </message>
+    <message>
+        <source>Error reloading plugin: {0}</source>
+        <translation>ተሰኪውን ዳግም መጫን ስህተት: {0}</translation>
+    </message>
+    <message>
+        <source>Error resetting layer properties: {}</source>
+        <translation>የንብርብር ባህሪያትን ዳግም ማስጀመር ስህተት: {}</translation>
+    </message>
+    <message>
+        <source>Error: {0}</source>
+        <translation>ስህተት: {0}</translation>
+    </message>
+    <message>
+        <source>Favorites manager not available</source>
+        <translation>የተወዳጆች አስተዳዳሪ አይገኝም</translation>
+    </message>
+    <message>
+        <source>Filter history position</source>
+        <translation>የማጣሪያ ታሪክ አቀማመጥ</translation>
+    </message>
+    <message>
+        <source>FilterMate - Add to Favorites</source>
+        <translation>FilterMate - ወደ ተወዳጆች አክል</translation>
+    </message>
+    <message>
+        <source>Forced {0} backend for {1} layer(s)</source>
+        <translation>ለ{1} ንብርብር(ዎች) {0} ባክኤንድ ተገድዷል</translation>
+    </message>
+    <message>
+        <source>Light mode</source>
+        <translation>ብርሃን ሁነታ</translation>
+    </message>
+    <message>
+        <source>Memory layer filtering complete for &apos;{0}&apos;</source>
+        <translation>ለ&apos;{0}&apos; የማህደረ ትውስታ ንብርብር ማጣሪያ ተጠናቅቋል</translation>
+    </message>
+    <message>
+        <source>No optimization recommendations at this time.</source>
+        <translation>በዚህ ጊዜ የማመቻቸት ምክሮች የሉም።</translation>
+    </message>
+    <message>
+        <source>OGR/Memory</source>
+        <translation>OGR/ማህደረ ትውስታ</translation>
+    </message>
+    <message>
+        <source>Optimization applied to {0} layer(s)</source>
+        <translation>ማመቻቸት በ{0} ንብርብር(ዎች) ላይ ተተግብሯል</translation>
+    </message>
+    <message>
+        <source>Optimization recommendations</source>
+        <translation>የማመቻቸት ምክሮች</translation>
+    </message>
+    <message>
+        <source>PostgreSQL</source>
+        <translation>PostgreSQL</translation>
+    </message>
+    <message>
+        <source>Redo filter</source>
+        <translation>ማጣሪያ ድገም</translation>
+    </message>
+    <message>
+        <source>Redo unavailable</source>
+        <translation>ድገም አይገኝም</translation>
+    </message>
+    <message>
+        <source>Save current filter</source>
+        <translation>የአሁኑን ማጣሪያ አስቀምጥ</translation>
+    </message>
+    <message>
+        <source>Spatialite</source>
+        <translation>Spatialite</translation>
+    </message>
+    <message>
+        <source>Strategy set to {0} for &apos;{1}&apos;</source>
+        <translation>ስትራቴጂ ለ&apos;{1}&apos; ወደ {0} ተቀናበረ</translation>
+    </message>
+    <message>
+        <source>Theme changed</source>
+        <translation>ገጽታ ተቀይሯል</translation>
+    </message>
+    <message>
+        <source>Toggle dark/light mode</source>
+        <translation>ጨለማ/ብርሃን ሁነታ ቀይር</translation>
+    </message>
+    <message>
+        <source>Undo filter</source>
+        <translation>ማጣሪያ ቀልብስ</translation>
+    </message>
+    <message>
+        <source>Undo unavailable</source>
+        <translation>ቀልብስ አይገኝም</translation>
+    </message>
+    <message>
+        <source>Using QGIS expressions for filtering</source>
+        <translation>ለማጣራት የQGIS መግለጫዎችን በመጠቀም</translation>
+    </message>
+    <message>
+        <source>View filter history</source>
+        <translation>የማጣሪያ ታሪክ ይመልከቱ</translation>
+    </message>
+    <message>
+        <source>WKT expression threshold:</source>
+        <translation>የWKT መግለጫ ገደብ:</translation>
+    </message>
+    <message>
+        <source>memory copy</source>
+        <translation>የማህደረ ትውስታ ቅጂ</translation>
+    </message>
+    <message>
+        <source>pool size</source>
+        <translation>የገንዳ መጠን</translation>
+    </message>
+    <message>
+        <source>simplified to {0} vertices</source>
+        <translation>ወደ {0} ጫፎች ቀለል ተደርጓል</translation>
+    </message>
+    <message>
+        <source>temp views</source>
+        <translation>ጊዜያዊ እይታዎች</translation>
+    </message>
+    <message>
+        <source>Allow cancellation of QGIS processing algorithms. Enables stopping long-running operations.</source>
+        <translation>የQGIS ማቀናበሪያ ስልተ ቀመሮች መሰረዝን ይፍቀዱ። ረዥም ጊዜ የሚወስዱ ስራዎችን ለማቆም ያስችላል።</translation>
+    </message>
+    <message>
+        <source>Analyzing your project... Recommendations will appear here.</source>
+        <translation>ፕሮጀክትዎን በመመርመር ላይ... ምክሮች እዚህ ይታያሉ።</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid for Distant Layers</source>
+        <translation>ለርቀት ንብርብሮች አውቶማቲክ ማዕከል</translation>
+    </message>
+    <message>
+        <source>Auto-Select Best Strategy</source>
+        <translation>ምርጥ ስትራቴጂ በራስ-ሰር ምረጥ</translation>
+    </message>
+    <message>
+        <source>Auto-Simplify Geometries ⚠️</source>
+        <translation>ጂኦሜትሪዎችን በራስ-ሰር ቀለል አድርግ ⚠️</translation>
+    </message>
+    <message>
+        <source>Auto-detect mod_spatialite</source>
+        <translation>mod_spatialite በራስ-ሰር ፈልግ</translation>
+    </message>
+    <message>
+        <source>Automatic GIST Index Usage</source>
+        <translation>አውቶማቲክ GIST መረጃ ጠቋሚ አጠቃቀም</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>ሰርዝ</translation>
+    </message>
+    <message>
+        <source>Cancellable Processing</source>
+        <translation>የሚሰረዝ ማቀናበር</translation>
+    </message>
+    <message>
+        <source>Chunk size (features):</source>
+        <translation>የቁራጭ መጠን (ባህሪያት):</translation>
+    </message>
+    <message>
+        <source>Confirm Before Applying</source>
+        <translation>ከመተግበርዎ በፊት ያረጋግጡ</translation>
+    </message>
+    <message>
+        <source>Connection Pooling</source>
+        <translation>የግንኙነት ማሰባሰብ</translation>
+    </message>
+    <message>
+        <source>Create Spatial Indexes</source>
+        <translation>የቦታ መረጃ ጠቋሚዎች ፍጠር</translation>
+    </message>
+    <message>
+        <source>Direct SQL for GeoPackage</source>
+        <translation>ለGeoPackage ቀጥታ SQL</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Centroid for Remote Layers</source>
+        <translation>ለርቀት ንብርብሮች አውቶማቲክ ማዕከል አንቃ</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Optimization</source>
+        <translation>አውቶማቲክ ማመቻቸት አንቃ</translation>
+    </message>
+    <message>
+        <source>Enable Direct SQL for GeoPackage</source>
+        <translation>ለGeoPackage ቀጥታ SQL አንቃ</translation>
+    </message>
+    <message>
+        <source>Enable Materialized Views</source>
+        <translation>የተጨባጭ እይታዎች አንቃ</translation>
+    </message>
+    <message>
+        <source>Estimated performance improvement</source>
+        <translation>የተገመተ የአፈጻጸም መሻሻል</translation>
+    </message>
+    <message>
+        <source>FilterMate - Backend Optimizations</source>
+        <translation>FilterMate - የኋላ ማመቻቸቶች</translation>
+    </message>
+    <message>
+        <source>GEOS-safe Geometry Handling</source>
+        <translation>GEOS-ደህንነቱ የተጠበቀ ጂኦሜትሪ አያያዝ</translation>
+    </message>
+    <message>
+        <source>Global</source>
+        <translation>ዓለም አቀፍ</translation>
+    </message>
+    <message>
+        <source>Initialization error: {}</source>
+        <translation>የማስጀመር ስህተት: {}</translation>
+    </message>
+    <message>
+        <source>Interruptible Queries</source>
+        <translation>ሊቋረጡ የሚችሉ ጥያቄዎች</translation>
+    </message>
+    <message>
+        <source>Lazy cursor threshold:</source>
+        <translation>ሰነፍ ጠቋሚ ገደብ:</translation>
+    </message>
+    <message>
+        <source>Max workers (0=auto):</source>
+        <translation>ከፍተኛ ሰራተኞች (0=አውቶማቲክ):</translation>
+    </message>
+    <message>
+        <source>No PostgreSQL connection available</source>
+        <translation>ምንም PostgreSQL ግንኙነት የለም</translation>
+    </message>
+    <message>
+        <source>No alternative backends available for this layer</source>
+        <translation>ለዚህ ንብርብር ተለዋጭ backends የሉም</translation>
+    </message>
+    <message>
+        <source>No layer selected. Please select a layer first.</source>
+        <translation>ምንም ንብርብር አልተመረጠም። እባክዎ መጀመሪያ ንብርብር ይምረጡ።</translation>
+    </message>
+    <message>
+        <source>No optimizations selected to apply.</source>
+        <translation>ለመተግበር ምንም ማመቻቸቶች አልተመረጡም።</translation>
+    </message>
+    <message>
+        <source>No temporary tables found</source>
+        <translation>ጊዜያዊ ሰንጠረዦች አልተገኙም</translation>
+    </message>
+    <message>
+        <source>No temporary tables found for current project</source>
+        <translation>ለአሁኑ ፕሮጀክት ጊዜያዊ ሰንጠረዦች አልተገኙም</translation>
+    </message>
+    <message>
+        <source>Save Settings</source>
+        <translation>ቅንብሮችን አስቀምጥ</translation>
+    </message>
+    <message>
+        <source>Show Optimization Hints</source>
+        <translation>የማመቻቸት ፍንጮችን አሳይ</translation>
+    </message>
+    <message>
+        <source>Redo filter (Ctrl+Y)</source>
+        <translation>ማጣሪያ ድገም (Ctrl+Y)</translation>
+    </message>
+    <message>
+        <source>Undo last filter (Ctrl+Z)</source>
+        <translation>የመጨረሻውን ማጣሪያ ቀልብስ (Ctrl+Z)</translation>
+    </message>
+    <message>
+        <source>disabled</source>
+        <translation>ተሰናክሏል</translation>
+    </message>
+    <message>
+        <source>enabled</source>
+        <translation>ነቅቷል</translation>
+    </message>
+    <message>
+        <source>★ No favorites saved</source>
+        <translation>★ ምንም ተወዳጆች አልተቀመጡም</translation>
+    </message>
+    <message>
+        <source>★ {0} Favorites saved</source>
+        <translation>★ {0} ተወዳጆች ተቀምጠዋል</translation>
+    </message>
+    <message>
+        <source>⚙️ Manage favorites...</source>
+        <translation>⚙️ ተወዳጆችን ያስተዳድሩ...</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter (no filter active)</source>
+        <translation>⭐ የአሁኑን ማጣሪያ አክል (ምንም ማጣሪያ ንቁ አይደለም)</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter to Favorites</source>
+        <translation>⭐ የአሁኑን ማጣሪያ ወደ ተወዳጆች አክል</translation>
+    </message>
+    <message>
+        <source>⭐ Add current filter to favorites</source>
+        <translation>⭐ የአሁኑን ማጣሪያ ወደ ተወዳጆች አክል</translation>
+    </message>
+    <message>
+        <source>⭐ Add filter (no active filter)</source>
+        <translation>⭐ ማጣሪያ አክል (ንቁ ማጣሪያ የለም)</translation>
+    </message>
+    <message>
+        <source>🌐 All Projects (Global)</source>
+        <translation>🌐 ሁሉም ፕሮጀክቶች (ዓለም አቀፍ)</translation>
+    </message>
+    <message>
+        <source>📁 Current Project</source>
+        <translation>📁 የአሁኑ ፕሮጀክት</translation>
+    </message>
+    <message>
+        <source>📤 Export...</source>
+        <translation>📤 ላክ...</translation>
+    </message>
+    <message>
+        <source>📥 Import...</source>
+        <translation>📥 አስመጣ...</translation>
+    </message>
+    <message>
+        <source>Restore Defaults</source>
+        <translation>ነባሪዎችን መልስ</translation>
+    </message>
+    <message>
+        <source>Use Balanced Profile</source>
+        <translation>ሚዛናዊ መገለጫ ተጠቀም</translation>
+    </message>
 </context>
 </TS>

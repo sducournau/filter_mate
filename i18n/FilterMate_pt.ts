@@ -1917,5 +1917,9 @@ Isso afeta outras sessões do FilterMate!</translation>
         <source>Cleanup Failed</source>
         <translation>Limpeza falhou</translation>
     </message>
+    <message>
+        <source>Error resetting layer properties: {}</source>
+        <translation>Erro ao redefinir propriedades da camada: {}</translation>
+    </message>
 </context>
 </TS>

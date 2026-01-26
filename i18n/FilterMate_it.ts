@@ -1917,5 +1917,9 @@ Questo influisce su altre sessioni FilterMate!</translation>
         <source>Cleanup Failed</source>
         <translation>Pulizia fallita</translation>
     </message>
+    <message>
+        <source>Error resetting layer properties: {}</source>
+        <translation>Errore nel ripristino delle proprietà del layer: {}</translation>
+    </message>
 </context>
 </TS>
