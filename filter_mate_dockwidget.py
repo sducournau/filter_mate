@@ -523,7 +523,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except Exception as e: 
             logger.error(f"Error in manage_interactions: {e}", exc_info=True)
             from qgis.utils import iface
-            iface.messageBar().pushCritical("FilterMate ERROR", f"manage_interactions failed: {e}")
+            iface.messageBar().pushCritical("FilterMate", self.tr("Initialization error: {}").format(str(e)))
 
     def getSignal(self, oObject: QObject, strSignalName: str):
         """v4.0 S16: Get signal from QObject by name with caching."""
@@ -837,11 +837,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 success = self._dimensions_manager.apply()
                 if not success:
                     logger.warning("DimensionsManager.apply() returned False - UI may be misconfigured")
-                    iface.messageBar().pushWarning("FilterMate", "UI configuration incomplete - check logs")
+                    iface.messageBar().pushWarning("FilterMate", self.tr("UI configuration incomplete - check logs"))
                 return
             except Exception as e:
                 logger.error(f"DimensionsManager.apply() FAILED: {e}", exc_info=True)
-                iface.messageBar().pushWarning("FilterMate", f"UI dimension error: {e}")
+                iface.messageBar().pushWarning("FilterMate", self.tr("UI dimension error: {}").format(str(e)))
                 # Fall through to fallback methods
         
         try:
@@ -1259,7 +1259,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _show_favorites_manager_dialog(self):
         """v4.0 S16: → FavoritesController."""
         if not (self._controller_integration and self._controller_integration.delegate_favorites_show_manager_dialog()):
-            show_warning("FilterMate", "Favorites manager not available")
+            show_warning("FilterMate", self.tr("Favorites manager not available"))
     
     def _export_favorites(self):
         """v4.0 S16: → FavoritesController."""
@@ -1278,11 +1278,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         fm, cnt = getattr(self, '_favorites_manager', None), getattr(getattr(self, '_favorites_manager', None), 'count', 0)
         if cnt > 0:
             self.favorites_indicator_label.setText(f"★ {cnt}")
-            self.favorites_indicator_label.setToolTip(f"★ {cnt} Favorites saved\nClick to apply or manage")
+            self.favorites_indicator_label.setToolTip(self.tr("★ {0} Favorites saved\nClick to apply or manage").format(cnt))
             self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:white;font-size:8pt;font-weight:500;padding:2px 8px;border-radius:10px;border:none;background-color:#f39c12;}QLabel#label_favorites_indicator:hover{background-color:#d68910;}")
         else:
             self.favorites_indicator_label.setText("★")
-            self.favorites_indicator_label.setToolTip("★ No favorites saved\nClick to add current filter")
+            self.favorites_indicator_label.setToolTip(self.tr("★ No favorites saved\nClick to add current filter"))
             self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:#95a5a6;font-size:8pt;font-weight:500;padding:2px 8px;border-radius:10px;border:none;background-color:#ecf0f1;}QLabel#label_favorites_indicator:hover{background-color:#d5dbdb;}")
         self.favorites_indicator_label.adjustSize()
 
@@ -1302,9 +1302,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """Sprint 18: → BackendController via _backend_ctrl property."""
         if self._backend_ctrl:
             count = self._backend_ctrl.force_backend_for_all_layers(backend_type)
-            show_success("FilterMate", f"Forced {backend_type.upper()} for {count} layers")
+            show_success("FilterMate", self.tr("Forced {0} backend for {1} layer(s)").format(backend_type.upper(), count))
         else:
-            show_warning("FilterMate", "Backend controller not available")
+            show_warning("FilterMate", self.tr("Backend controller not available"))
 
     def get_forced_backend_for_layer(self, layer_id):
         """Sprint 18: → BackendController via _backend_ctrl property."""
@@ -1326,16 +1326,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """Sprint 18: → BackendController via _backend_ctrl property."""
         if self._backend_ctrl:
             enabled = self._backend_ctrl.toggle_pg_auto_cleanup()
-            msg = "PostgreSQL auto-cleanup enabled" if enabled else "PostgreSQL auto-cleanup disabled"
+            msg = self.tr("PostgreSQL auto-cleanup enabled") if enabled else self.tr("PostgreSQL auto-cleanup disabled")
             (show_success if enabled else show_info)("FilterMate", msg)
     
     def _cleanup_postgresql_session_views(self):
         """Sprint 18: → BackendController via _backend_ctrl property."""
         if self._backend_ctrl:
             success = self._backend_ctrl.cleanup_postgresql_session_views()
-            (show_success if success else show_warning)("FilterMate", "PostgreSQL session views cleaned up" if success else "No views to clean or cleanup failed")
+            (show_success if success else show_warning)("FilterMate", self.tr("PostgreSQL session views cleaned up") if success else self.tr("No views to clean or cleanup failed"))
         else:
-            show_warning("FilterMate", "Backend controller not available")
+            show_warning("FilterMate", self.tr("Backend controller not available"))
     
     def _cleanup_postgresql_schema_if_empty(self):
         """Sprint 18: → BackendController via _backend_ctrl property."""
@@ -1344,25 +1344,25 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             info = self._backend_ctrl.get_postgresql_session_info()
             
             if not info.get('connection_available'):
-                show_warning("FilterMate", "No PostgreSQL connection available")
+                show_warning("FilterMate", self.tr("No PostgreSQL connection available"))
                 return
             
             # Check for other sessions' views
             other_count = info.get('total_views_count', 0) - info.get('our_views_count', 0)
             if other_count > 0:
-                msg = f"Schema has {other_count} view(s) from other sessions.\nDrop anyway?"
-                if QMessageBox.question(self, "Other Sessions Active", msg,
+                msg = self.tr("Schema has {0} view(s) from other sessions.\nDrop anyway?").format(other_count)
+                if QMessageBox.question(self, self.tr("Other Sessions Active"), msg,
                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
-                    show_info("FilterMate", "Schema cleanup cancelled")
+                    show_info("FilterMate", self.tr("Schema cleanup cancelled"))
                     return
             
             success = self._backend_ctrl.cleanup_postgresql_schema_if_empty(force=True)
             if success:
-                show_success("FilterMate", f"Schema '{info.get('schema')}' dropped successfully")
+                show_success("FilterMate", self.tr("Schema '{0}' dropped successfully").format(info.get('schema')))
             else:
-                show_warning("FilterMate", "Schema cleanup failed")
+                show_warning("FilterMate", self.tr("Schema cleanup failed"))
         else:
-            show_warning("FilterMate", "Backend controller not available")
+            show_warning("FilterMate", self.tr("Backend controller not available"))
     
     def _show_postgresql_session_info(self):
         """Sprint 18: → BackendController via _backend_ctrl property."""
@@ -1386,9 +1386,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if 'error' in info:
                 html += f"<b>Error:</b> {info['error']}<br>"
             
-            QMessageBox.information(self, "PostgreSQL Session Info", html)
+            QMessageBox.information(self, self.tr("PostgreSQL Session Info"), html)
         else:
-            show_warning("FilterMate", "Backend controller not available")
+            show_warning("FilterMate", self.tr("Backend controller not available"))
 
     # ========================================
     # OPTIMIZATION SETTINGS METHODS
@@ -1398,40 +1398,40 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 S16: → BackendController."""
         if self._backend_ctrl:
             enabled = self._backend_ctrl.toggle_optimization_enabled()
-            (show_success if enabled else show_info)("FilterMate", f"Auto-optimization {'enabled' if enabled else 'disabled'}")
+            (show_success if enabled else show_info)("FilterMate", self.tr("Auto-optimization {0}").format(self.tr("enabled") if enabled else self.tr("disabled")))
     
     def _toggle_centroid_auto(self):
         """v4.0 S16: → BackendController."""
         if self._backend_ctrl:
             enabled = self._backend_ctrl.toggle_centroid_auto()
-            (show_success if enabled else show_info)("FilterMate", f"Auto-centroid {'enabled' if enabled else 'disabled'}")
+            (show_success if enabled else show_info)("FilterMate", self.tr("Auto-centroid {0}").format(self.tr("enabled") if enabled else self.tr("disabled")))
     
     def _toggle_optimization_ask_before(self):
         """v4.0 S16: Toggle confirmation."""
         self._optimization_ask_before = not getattr(self, '_optimization_ask_before', True)
-        (show_success if self._optimization_ask_before else show_info)("FilterMate", "Confirmation " + ("enabled" if self._optimization_ask_before else "disabled"))
+        (show_success if self._optimization_ask_before else show_info)("FilterMate", self.tr("Confirmation {0}").format(self.tr("enabled") if self._optimization_ask_before else self.tr("disabled")))
     
     def _analyze_layer_optimizations(self):
         """v4.0 S16: Analyze layer optimizations."""
-        if not self.current_layer: show_warning("FilterMate", "No layer selected. Please select a layer first."); return
+        if not self.current_layer: show_warning("FilterMate", self.tr("No layer selected. Please select a layer first.")); return
         try:
             from .core.services.auto_optimizer import LayerAnalyzer, AutoOptimizer, AUTO_OPTIMIZER_AVAILABLE
-            if not AUTO_OPTIMIZER_AVAILABLE: show_warning("FilterMate", "Auto-optimizer module not available"); return
+            if not AUTO_OPTIMIZER_AVAILABLE: show_warning("FilterMate", self.tr("Auto-optimizer module not available")); return
             layer_analysis = LayerAnalyzer().analyze_layer(self.current_layer)
-            if not layer_analysis: show_info("FilterMate", f"Could not analyze layer '{self.current_layer.name()}'"); return
+            if not layer_analysis: show_info("FilterMate", self.tr("Could not analyze layer '{0}'").format(self.current_layer.name())); return
             has_buf = getattr(self,'mQgsDoubleSpinBox_filtering_buffer_value',None) and self.mQgsDoubleSpinBox_filtering_buffer_value.value()!=0.0
             has_buf_type = getattr(self,'checkBox_filtering_buffer_type',None) and self.checkBox_filtering_buffer_type.isChecked()
             recommendations = AutoOptimizer().get_recommendations(layer_analysis, user_centroid_enabled=self._is_centroid_already_enabled(self.current_layer), has_buffer=has_buf, has_buffer_type=has_buf_type, is_source_layer=True)
-            if not recommendations: show_success("FilterMate", f"Layer '{self.current_layer.name()}' is already optimally configured.\nType: {layer_analysis.location_type.value}\nFeatures: {layer_analysis.feature_count:,}"); return
+            if not recommendations: show_success("FilterMate", self.tr("Layer '{0}' is already optimally configured.\nType: {1}\nFeatures: {2:,}").format(self.current_layer.name(), layer_analysis.location_type.value, layer_analysis.feature_count)); return
             from .ui.dialogs.optimization_dialog import RecommendationDialog as OptimizationRecommendationDialog
             dialog = OptimizationRecommendationDialog(layer_name=self.current_layer.name(), recommendations=[r.to_dict() for r in recommendations],
                 feature_count=layer_analysis.feature_count, location_type=layer_analysis.location_type.value, parent=self)
             if dialog.exec_():
                 self._apply_optimization_selections(dialog.get_selected_optimizations(), self.current_layer)
         except ImportError as e:
-            show_warning("FilterMate", f"Auto-optimizer not available: {e}")
+            show_warning("FilterMate", self.tr("Auto-optimizer not available: {0}").format(str(e)))
         except Exception as e:
-            show_warning("FilterMate", f"Error analyzing layer: {str(e)[:50]}")
+            show_warning("FilterMate", self.tr("Error analyzing layer: {0}").format(str(e)[:50]))
 
     def _apply_optimization_selections(self, selected, layer):
         """v3.1 Sprint 15: Apply selected optimization overrides."""
@@ -1447,9 +1447,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     self.mQgsSpinBox_filtering_buffer_segments.setValue(3)
                 applied.append(label)
         if applied:
-            show_success("FilterMate", f"Applied to '{layer.name()}':\n" + "\n".join(f"• {a}" for a in applied))
+            show_success("FilterMate", self.tr("Applied to '{0}':\n{1}").format(layer.name(), "\n".join(f"• {a}" for a in applied)))
         else:
-            show_info("FilterMate", "No optimizations selected to apply.")
+            show_info("FilterMate", self.tr("No optimizations selected to apply."))
     
     def _show_optimization_settings_dialog(self):
         """v3.1 Sprint 15: Show optimization settings dialog."""
@@ -1471,9 +1471,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     self._optimization_thresholds['centroid_distant'] = s.get('centroid_threshold_distant', get_optimization_thresholds(ENV_VARS)['centroid_optimization_threshold'])
                     show_success("FilterMate", self.tr("Optimization settings saved"))
             except ImportError as e:
-                show_warning("FilterMate", f"Dialog not available: {e}")
+                show_warning("FilterMate", self.tr("Dialog not available: {0}").format(str(e)))
         except Exception as e:
-            show_warning("FilterMate", f"Error: {str(e)[:50]}")
+            show_warning("FilterMate", self.tr("Error: {0}").format(str(e)[:50]))
     
     def _apply_optimization_dialog_settings(self, all_settings):
         """v3.1 Sprint 15: Apply settings from optimization dialog."""
@@ -1501,8 +1501,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if not hasattr(self, '_optimization_thresholds'): self._optimization_thresholds = {}
             self._optimization_thresholds.update({'centroid_distant': global_s.get('auto_centroid', {}).get('distant_threshold', 5000), 'mv_threshold': pg_mv.get('threshold', 10000)})
             show_success("FilterMate", self.tr("Backend optimizations configured"))
-        except ImportError as e: show_warning("FilterMate", f"Dialog not available: {e}")
-        except Exception as e: show_warning("FilterMate", f"Error: {str(e)[:50]}")
+        except ImportError as e: show_warning("FilterMate", self.tr("Dialog not available: {0}").format(str(e)))
+        except Exception as e: show_warning("FilterMate", self.tr("Error: {0}").format(str(e)[:50]))
     
     def get_backend_optimization_setting(self, backend: str, setting_path: str, default=None):
         """Get backend optimization setting by path."""
@@ -1547,13 +1547,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self._controller_integration and self._controller_integration.backend_controller:
             try:
                 count = self._controller_integration.backend_controller.auto_select_optimal_backends()
-                (show_success if count > 0 else show_info)("FilterMate", f"Optimized {count} layer(s)" if count > 0 else "All layers using auto-selection")
+                (show_success if count > 0 else show_info)("FilterMate", self.tr("Optimized {0} layer(s)").format(count) if count > 0 else self.tr("All layers using auto-selection"))
                 if self.current_layer:
                     _, _, layer_props = self._validate_and_prepare_layer(self.current_layer)
                     self._synchronize_layer_widgets(self.current_layer, layer_props)
             except Exception as e:
                 logger.warning(f"auto_select_optimal_backends failed: {e}")
-                show_warning("FilterMate", "Backend optimization unavailable")
+                show_warning("FilterMate", self.tr("Backend optimization unavailable"))
 
     def _setup_action_bar_layout(self):
         """v4.0 S16: → ActionBarManager."""
@@ -2271,7 +2271,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             self.pending_config_changes, self.config_changes_pending = [], False
             if hasattr(self, 'buttonBox'): self.buttonBox.setEnabled(False)
-        except Exception as e: show_error("FilterMate", f"Error cancelling changes: {str(e)}")
+        except Exception as e: show_error("FilterMate", self.tr("Error cancelling changes: {0}").format(str(e)))
 
     def on_config_buttonbox_accepted(self):
         """v4.0 S18: → ConfigController."""
@@ -2386,7 +2386,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         from qgis.PyQt.QtWidgets import QMessageBox
         if self.config_changes_pending and self.pending_config_changes: self.apply_pending_config_changes()
         self.save_configuration_model()
-        if QMessageBox.question(self, "Reload Plugin", "Do you want to reload FilterMate to apply all configuration changes?",
+        if QMessageBox.question(self, self.tr("Reload Plugin"), self.tr("Do you want to reload FilterMate to apply all configuration changes?"),
                                 QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes) == QMessageBox.Yes:
             self.reload_plugin()
 
@@ -3015,7 +3015,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if ICON_THEME_AVAILABLE: IconThemeManager.set_theme(new_theme)
             StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA, new_theme); self._refresh_icons_for_theme()
             if hasattr(self, 'config_view') and self.config_view: self.config_view.refresh_theme_stylesheet(force_dark=(new_theme == 'dark'))
-            show_info("FilterMate", f"Thème adapté: {'Mode sombre' if new_theme == 'dark' else 'Mode clair'}")
+            show_info("FilterMate", f"Theme adapted: {'Dark mode' if new_theme == 'dark' else 'Light mode'}")
         except Exception as e: logger.error(f"Error applying theme change: {e}")
     
     def _refresh_icons_for_theme(self):
@@ -5346,7 +5346,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except RuntimeError: return (False, None, None)
         try:
             if not is_layer_source_available(layer):
-                show_warning("FilterMate", "La couche sélectionnée est invalide ou sa source est introuvable.")
+                show_warning("FilterMate", "The selected layer is invalid or its source cannot be found.")
                 return (False, None, None)
         except (RuntimeError, AttributeError, OSError):
             return (False, None, None)  # Layer source check failed
@@ -6583,7 +6583,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self._update_backend_indicator(infos['layer_provider_type'], infos.get('postgresql_connection_available'), actual_backend=forced)
         
         if was_empty and self.PROJECT_LAYERS:
-            show_success("FilterMate", f"Plugin activé avec {len(self.PROJECT_LAYERS)} couche(s) vectorielle(s)")
+            show_success("FilterMate", f"Plugin activated with {len(self.PROJECT_LAYERS)} vector layer(s)")
 
     def _refresh_layer_specific_widgets(self, layer):
         """v3.1 Sprint 12: Simplified - refresh UI widgets for active layer."""
@@ -6661,9 +6661,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try:
             from qgis.utils import plugins; from qgis.PyQt.QtCore import QTimer
             self.save_configuration_model()
-            if 'filter_mate' not in plugins: show_warning("FilterMate", "Could not reload plugin automatically."); return
+            if 'filter_mate' not in plugins: show_warning("FilterMate", self.tr("Could not reload plugin automatically.")); return
             fm = plugins['filter_mate']; self.close(); fm.pluginIsActive, fm.app = False, None; QTimer.singleShot(100, fm.run)
-        except Exception as e: show_error("FilterMate", f"Error reloading plugin: {str(e)}")
+        except Exception as e: show_error("FilterMate", self.tr("Error reloading plugin: {0}").format(str(e)))
 
 
     def setLayerVariableEvent(self, layer=None, properties=None):

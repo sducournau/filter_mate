@@ -68,8 +68,15 @@ class FavoritesWidget(QLabel if HAS_QGIS else object):
         self._favorites_manager = favorites_manager
         self._get_expression = get_current_expression_func
         self._get_layer = get_current_layer_func
+        self._parent = parent
         
         self._setup_ui()
+
+    def _tr(self, text: str) -> str:
+        """Translate text using parent's tr() if available."""
+        if self._parent and hasattr(self._parent, 'tr'):
+            return self._parent.tr(text)
+        return text
     
     def _setup_ui(self):
         """Set up the favorites indicator UI."""
@@ -117,7 +124,7 @@ class FavoritesWidget(QLabel if HAS_QGIS else object):
         """)
         
         # === ADD TO FAVORITES ===
-        add_action = menu.addAction("⭐ Add Current Filter to Favorites")
+        add_action = menu.addAction(self._tr("⭐ Add Current Filter to Favorites"))
         add_action.setData('__ADD_FAVORITE__')
         
         # Check if there's an expression to save
@@ -127,7 +134,7 @@ class FavoritesWidget(QLabel if HAS_QGIS else object):
         
         if not current_expression:
             add_action.setEnabled(False)
-            add_action.setText("⭐ Add Current Filter (no filter active)")
+            add_action.setText(self._tr("⭐ Add Current Filter (no filter active)"))
         
         menu.addSeparator()
         
@@ -288,7 +295,7 @@ class FavoritesWidget(QLabel if HAS_QGIS else object):
             return None
         
         dialog = QDialog(self)
-        dialog.setWindowTitle("FilterMate - Add to Favorites")
+        dialog.setWindowTitle(self._tr("FilterMate - Add to Favorites"))
         dialog.setMinimumSize(380, 200)
         dialog.resize(420, 260)
         layout = QVBoxLayout(dialog)
@@ -300,7 +307,7 @@ class FavoritesWidget(QLabel if HAS_QGIS else object):
         # Name input
         name_edit = QLineEdit()
         name_edit.setText(default_name)
-        name_edit.setPlaceholderText("Enter a name for this filter")
+        name_edit.setPlaceholderText(self._tr("Enter a name for this filter"))
         form_layout.addRow(
             f"Name ({layers_count} layer{'s' if layers_count > 1 else ''}):",
             name_edit
@@ -310,7 +317,7 @@ class FavoritesWidget(QLabel if HAS_QGIS else object):
         desc_edit = QTextEdit()
         desc_edit.setMaximumHeight(120)
         desc_edit.setText(auto_description)
-        desc_edit.setPlaceholderText("Description (auto-generated, you can modify it)")
+        desc_edit.setPlaceholderText(self._tr("Description (auto-generated, you can modify it)"))
         form_layout.addRow("Description:", desc_edit)
         
         layout.addLayout(form_layout)

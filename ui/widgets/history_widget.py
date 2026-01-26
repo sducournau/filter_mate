@@ -206,8 +206,15 @@ class HistoryWidget(QWidget):
         self._undo_btn = None
         self._redo_btn = None
         self._history_label = None
+        self._parent = parent
         self._setup_ui()
         logger.debug("HistoryWidget initialized")
+
+    def _tr(self, text: str) -> str:
+        """Translate text using parent's tr() if available."""
+        if self._parent and hasattr(self._parent, 'tr'):
+            return self._parent.tr(text)
+        return text
     
     def _setup_ui(self):
         """Set up the widget UI components."""
@@ -217,7 +224,7 @@ class HistoryWidget(QWidget):
         
         # Undo button
         self._undo_btn = QPushButton("↶")
-        self._undo_btn.setToolTip("Undo last filter (Ctrl+Z)")
+        self._undo_btn.setToolTip(self._tr("Undo last filter (Ctrl+Z)"))
         self._undo_btn.setFixedSize(28, 28)
         self._undo_btn.setEnabled(False)
         if PYQT_AVAILABLE:
@@ -226,7 +233,7 @@ class HistoryWidget(QWidget):
         
         # Redo button
         self._redo_btn = QPushButton("↷")
-        self._redo_btn.setToolTip("Redo filter (Ctrl+Y)")
+        self._redo_btn.setToolTip(self._tr("Redo filter (Ctrl+Y)"))
         self._redo_btn.setFixedSize(28, 28)
         self._redo_btn.setEnabled(False)
         if PYQT_AVAILABLE:
@@ -235,7 +242,7 @@ class HistoryWidget(QWidget):
         
         # History count label (optional)
         self._history_label = QLabel("")
-        self._history_label.setToolTip("Filter history position")
+        self._history_label.setToolTip(self._tr("Filter history position"))
         self._history_label.setStyleSheet("color: gray; font-size: 10px;")
         layout.addWidget(self._history_label)
         

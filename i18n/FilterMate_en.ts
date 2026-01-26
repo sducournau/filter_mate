@@ -1633,5 +1633,293 @@ This affects other FilterMate sessions!</translation>
         <source>Cleanup Failed</source>
         <translation>Cleanup Failed</translation>
     </message>
+    <message>
+        <source>All layers using auto-selection</source>
+        <translation>All layers using auto-selection</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer module not available</source>
+        <translation>Auto-optimizer module not available</translation>
+    </message>
+    <message>
+        <source>Backend controller not available</source>
+        <translation>Backend controller not available</translation>
+    </message>
+    <message>
+        <source>Backend optimization unavailable</source>
+        <translation>Backend optimization unavailable</translation>
+    </message>
+    <message>
+        <source>Could not reload plugin automatically.</source>
+        <translation>Could not reload plugin automatically.</translation>
+    </message>
+    <message>
+        <source>Favorites manager not available</source>
+        <translation>Favorites manager not available</translation>
+    </message>
+    <message>
+        <source>No PostgreSQL connection available</source>
+        <translation>No PostgreSQL connection available</translation>
+    </message>
+    <message>
+        <source>No layer selected. Please select a layer first.</source>
+        <translation>No layer selected. Please select a layer first.</translation>
+    </message>
+    <message>
+        <source>No optimizations selected to apply.</source>
+        <translation>No optimizations selected to apply.</translation>
+    </message>
+    <message>
+        <source>No views to clean or cleanup failed</source>
+        <translation>No views to clean or cleanup failed</translation>
+    </message>
+    <message>
+        <source>Other Sessions Active</source>
+        <translation>Other Sessions Active</translation>
+    </message>
+    <message>
+        <source>PostgreSQL auto-cleanup disabled</source>
+        <translation>PostgreSQL auto-cleanup disabled</translation>
+    </message>
+    <message>
+        <source>PostgreSQL auto-cleanup enabled</source>
+        <translation>PostgreSQL auto-cleanup enabled</translation>
+    </message>
+    <message>
+        <source>PostgreSQL session views cleaned up</source>
+        <translation>PostgreSQL session views cleaned up</translation>
+    </message>
+    <message>
+        <source>Schema cleanup cancelled</source>
+        <translation>Schema cleanup cancelled</translation>
+    </message>
+    <message>
+        <source>Schema cleanup failed</source>
+        <translation>Schema cleanup failed</translation>
+    </message>
+    <message>
+        <source>UI configuration incomplete - check logs</source>
+        <translation>UI configuration incomplete - check logs</translation>
+    </message>
+    <message>
+        <source>disabled</source>
+        <translation>disabled</translation>
+    </message>
+    <message>
+        <source>enabled</source>
+        <translation>enabled</translation>
+    </message>
+    <message>
+        <source>★ No favorites saved
+Click to add current filter</source>
+        <translation>★ No favorites saved
+Click to add current filter</translation>
+    </message>
+    <message>
+        <source>★ {0} Favorites saved
+Click to apply or manage</source>
+        <translation>★ {0} Favorites saved
+Click to apply or manage</translation>
+    </message>
+    <message>
+        <source>Initialization error: {}</source>
+        <translation>Initialization error: {}</translation>
+    </message>
+    <message>
+        <source>UI dimension error: {}</source>
+        <translation>UI dimension error: {}</translation>
+    </message>
+    <message>
+        <source>Forced {0} backend for {1} layer(s)</source>
+        <translation>Forced {0} backend for {1} layer(s)</translation>
+    </message>
+    <message>
+        <source>Schema has {0} view(s) from other sessions.
+Drop anyway?</source>
+        <translation>Schema has {0} view(s) from other sessions.
+Drop anyway?</translation>
+    </message>
+    <message>
+        <source>Schema &apos;{0}&apos; dropped successfully</source>
+        <translation>Schema &apos;{0}&apos; dropped successfully</translation>
+    </message>
+    <message>
+        <source>Auto-optimization {0}</source>
+        <translation>Auto-optimization {0}</translation>
+    </message>
+    <message>
+        <source>Auto-centroid {0}</source>
+        <translation>Auto-centroid {0}</translation>
+    </message>
+    <message>
+        <source>Confirmation {0}</source>
+        <translation>Confirmation {0}</translation>
+    </message>
+    <message>
+        <source>Could not analyze layer &apos;{0}&apos;</source>
+        <translation>Could not analyze layer &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Layer &apos;{0}&apos; is already optimally configured.
+Type: {1}
+Features: {2:,}</source>
+        <translation>Layer &apos;{0}&apos; is already optimally configured.
+Type: {1}
+Features: {2:,}</translation>
+    </message>
+    <message>
+        <source>Auto-optimizer not available: {0}</source>
+        <translation>Auto-optimizer not available: {0}</translation>
+    </message>
+    <message>
+        <source>Error analyzing layer: {0}</source>
+        <translation>Error analyzing layer: {0}</translation>
+    </message>
+    <message>
+        <source>Applied to &apos;{0}&apos;:
+{1}</source>
+        <translation>Applied to &apos;{0}&apos;:
+{1}</translation>
+    </message>
+    <message>
+        <source>Dialog not available: {0}</source>
+        <translation>Dialog not available: {0}</translation>
+    </message>
+    <message>
+        <source>Error: {0}</source>
+        <translation>Error: {0}</translation>
+    </message>
+    <message>
+        <source>Optimized {0} layer(s)</source>
+        <translation>Optimized {0} layer(s)</translation>
+    </message>
+    <message>
+        <source>Error cancelling changes: {0}</source>
+        <translation>Error cancelling changes: {0}</translation>
+    </message>
+    <message>
+        <source>Error reloading plugin: {0}</source>
+        <translation>Error reloading plugin: {0}</translation>
+    </message>
+    <message>
+        <source>No alternative backends available for this layer</source>
+        <translation>No alternative backends available for this layer</translation>
+    </message>
+    <message>
+        <source>📁 Current Project</source>
+        <translation>📁 Current Project</translation>
+    </message>
+    <message>
+        <source>Clear temporary tables for the current project only</source>
+        <translation>Clear temporary tables for the current project only</translation>
+    </message>
+    <message>
+        <source>🌐 All Projects (Global)</source>
+        <translation>🌐 All Projects (Global)</translation>
+    </message>
+    <message>
+        <source>Clear ALL FilterMate temporary tables from all databases</source>
+        <translation>Clear ALL FilterMate temporary tables from all databases</translation>
+    </message>
+    <message>
+        <source>Auto-selected backends for {0} layer(s)</source>
+        <translation>Auto-selected backends for {0} layer(s)</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) for current project</source>
+        <translation>Cleared {0} temporary table(s) for current project</translation>
+    </message>
+    <message>
+        <source>No temporary tables found for current project</source>
+        <translation>No temporary tables found for current project</translation>
+    </message>
+    <message>
+        <source>Cleared {0} temporary table(s) globally</source>
+        <translation>Cleared {0} temporary table(s) globally</translation>
+    </message>
+    <message>
+        <source>No temporary tables found</source>
+        <translation>No temporary tables found</translation>
+    </message>
+    <message>
+        <source>Backend forced to {0} for &apos;{1}&apos;</source>
+        <translation>Backend forced to {0} for &apos;{1}&apos;</translation>
+    </message>
+    <message>
+        <source>Backend set to Auto for &apos;{0}&apos;</source>
+        <translation>Backend set to Auto for &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Undo last filter (Ctrl+Z)</source>
+        <translation>Undo last filter (Ctrl+Z)</translation>
+    </message>
+    <message>
+        <source>Redo filter (Ctrl+Y)</source>
+        <translation>Redo filter (Ctrl+Y)</translation>
+    </message>
+    <message>
+        <source>Filter history position</source>
+        <translation>Filter history position</translation>
+    </message>
+    <message>
+        <source>FilterMate - Add to Favorites</source>
+        <translation>FilterMate - Add to Favorites</translation>
+    </message>
+    <message>
+        <source>Enter a name for this filter</source>
+        <translation>Enter a name for this filter</translation>
+    </message>
+    <message>
+        <source>Description (auto-generated, you can modify it)</source>
+        <translation>Description (auto-generated, you can modify it)</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter to Favorites</source>
+        <translation>⭐ Add Current Filter to Favorites</translation>
+    </message>
+    <message>
+        <source>⭐ Add Current Filter (no filter active)</source>
+        <translation>⭐ Add Current Filter (no filter active)</translation>
+    </message>
+    <message>
+        <source>⭐ Add current filter to favorites</source>
+        <translation>⭐ Add current filter to favorites</translation>
+    </message>
+    <message>
+        <source>⭐ Add filter (no active filter)</source>
+        <translation>⭐ Add filter (no active filter)</translation>
+    </message>
+    <message>
+        <source>⚙️ Manage favorites...</source>
+        <translation>⚙️ Manage favorites...</translation>
+    </message>
+    <message>
+        <source>📤 Export...</source>
+        <translation>📤 Export...</translation>
+    </message>
+    <message>
+        <source>📥 Import...</source>
+        <translation>📥 Import...</translation>
+    </message>
+    <message>
+        <source>The selected layer is invalid or its source cannot be found.</source>
+        <translation>The selected layer is invalid or its source cannot be found.</translation>
+    </message>
+    <message>
+        <source>Plugin activated with {0} vector layer(s)</source>
+        <translation>Plugin activated with {0} vector layer(s)</translation>
+    </message>
+    <message>
+        <source>Theme adapted: {0}</source>
+        <translation>Theme adapted: {0}</translation>
+    </message>
+    <message>
+        <source>Dark mode</source>
+        <translation>Dark mode</translation>
+    </message>
+    <message>
+        <source>Light mode</source>
+        <translation>Light mode</translation>
+    </message>
 </context>
 </TS>

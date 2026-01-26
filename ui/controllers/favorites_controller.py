@@ -698,22 +698,22 @@ class FavoritesController(BaseController):
 
         # === ADD TO FAVORITES ===
         current_expression = self.get_current_filter_expression()
-        add_action = menu.addAction("⭐ Ajouter filtre actuel aux favoris")
+        add_action = menu.addAction("⭐ Add current filter to favorites")
         add_action.setData('__ADD_FAVORITE__')
         if not current_expression:
             add_action.setEnabled(False)
-            add_action.setText("⭐ Ajouter filtre (aucun filtre actif)")
+            add_action.setText("⭐ Add filter (no active filter)")
 
         menu.addSeparator()
 
         # === MANAGEMENT OPTIONS ===
-        manage_action = menu.addAction("⚙️ Gérer les favoris...")
+        manage_action = menu.addAction("⚙️ Manage favorites...")
         manage_action.setData('__MANAGE__')
 
-        export_action = menu.addAction("📤 Exporter...")
+        export_action = menu.addAction("📤 Export...")
         export_action.setData('__EXPORT__')
 
-        import_action = menu.addAction("📥 Importer...")
+        import_action = menu.addAction("📥 Import...")
         import_action.setData('__IMPORT__')
         
         # === GLOBAL FAVORITES SUBMENU ===

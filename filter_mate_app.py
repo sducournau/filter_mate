@@ -1189,7 +1189,7 @@ class FilterMateApp:
                 logger.warning(f"_legacy_dispatch_task: Unknown task {task_name}")
         except Exception as e:
             logger.error(f"_legacy_dispatch_task failed for {task_name}: {e}", exc_info=True)
-            iface.messageBar().pushCritical("FilterMate", f"Erreur lors de l'exécution de {task_name}: {str(e)}")
+            iface.messageBar().pushCritical("FilterMate", f"Error executing {task_name}: {str(e)}")
     
     def _show_degraded_mode_warning(self):
         """Show one-time warning that plugin is running in degraded mode."""
@@ -1203,8 +1203,8 @@ class FilterMateApp:
         try:
             iface.messageBar().pushWarning(
                 "FilterMate",
-                "Plugin fonctionne en mode dégradé (services hexagonaux indisponibles). "
-                "Performance réduite possible."
+                "Plugin running in degraded mode (hexagonal services unavailable). "
+                "Performance may be reduced."
             )
             logger.warning("FilterMate running in DEGRADED MODE - hexagonal services unavailable")
         except Exception as e:
@@ -2057,7 +2057,7 @@ class FilterMateApp:
         """Handle completion of filtering operations via FilterResultHandler."""
         if not self._filter_result_handler:
             logger.error("FilterResultHandler not available")
-            iface.messageBar().pushCritical("FilterMate", "Erreur: handler de résultats manquant")
+            iface.messageBar().pushCritical("FilterMate", "Error: result handler missing")
             return
         
         try:
@@ -2070,7 +2070,7 @@ class FilterMateApp:
             )
         except Exception as e:
             logger.error(f"FilterResultHandler failed: {e}")
-            iface.messageBar().pushCritical("FilterMate", f"Erreur lors du filtrage: {str(e)}")
+            iface.messageBar().pushCritical("FilterMate", f"Error during filtering: {str(e)}")
 
     def apply_subset_filter(self, task_name, layer):
         """Apply or remove subset filter expression on a layer. Delegates to FilterApplicationService."""
@@ -2376,7 +2376,7 @@ class FilterMateApp:
         # Show success notification if requested
         if show_success and should_show_message('layer_loaded'):
             from qgis.utils import iface
-            iface.messageBar().pushSuccess("FilterMate", f"{len(self.PROJECT_LAYERS)} couche(s) chargée(s) avec succès")
+            iface.messageBar().pushSuccess("FilterMate", f"{len(self.PROJECT_LAYERS)} layer(s) loaded successfully")
 
     def _force_ui_refresh_after_reload(self):
         """Force UI refresh after force_reload_layers."""

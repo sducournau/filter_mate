@@ -122,6 +122,12 @@ class BackendController(BaseController):
         self._centroid_auto_enabled: bool = True
         self._optimization_ask_before: bool = True
 
+    def _tr(self, text: str) -> str:
+        """Translate text using dockwidget's tr() if available."""
+        if self.dockwidget and hasattr(self.dockwidget, 'tr'):
+            return self.dockwidget.tr(text)
+        return text
+
     @property
     def forced_backends(self) -> Dict[str, str]:
         """Get dictionary of forced backends by layer ID."""
@@ -658,7 +664,7 @@ class BackendController(BaseController):
         available = self.get_available_backends_for_layer(layer)
         
         if not available:
-            show_warning("FilterMate", "No alternative backends available for this layer")
+            show_warning("FilterMate", self._tr("No alternative backends available for this layer"))
             return
 
         menu = QMenu(self.dockwidget)
@@ -716,14 +722,14 @@ class BackendController(BaseController):
         cleanup_menu = menu.addMenu("🧹 Clear Temp Tables")
         
         # Project cleanup
-        project_cleanup_action = cleanup_menu.addAction("📁 Current Project")
+        project_cleanup_action = cleanup_menu.addAction(self._tr("📁 Current Project"))
         project_cleanup_action.setData('__CLEANUP_PROJECT__')
-        project_cleanup_action.setToolTip("Clear temporary tables for the current project only")
+        project_cleanup_action.setToolTip(self._tr("Clear temporary tables for the current project only"))
         
         # Global cleanup  
-        global_cleanup_action = cleanup_menu.addAction("🌐 All Projects (Global)")
+        global_cleanup_action = cleanup_menu.addAction(self._tr("🌐 All Projects (Global)"))
         global_cleanup_action.setData('__CLEANUP_GLOBAL__')
-        global_cleanup_action.setToolTip("Clear ALL FilterMate temporary tables from all databases")
+        global_cleanup_action.setToolTip(self._tr("Clear ALL FilterMate temporary tables from all databases"))
 
         # Show menu
         selected_action = menu.exec_(QCursor.pos())
@@ -733,34 +739,34 @@ class BackendController(BaseController):
 
             if data == '__AUTO_ALL__':
                 count = self.auto_select_optimal_backends()
-                show_success("FilterMate", f"Auto-selected backends for {count} layers")
+                show_success("FilterMate", self._tr("Auto-selected backends for {0} layer(s)").format(count))
                 # Update indicator for current layer after batch operation
                 self._refresh_indicator_for_current_layer()
             elif data == '__FORCE_ALL__':
                 count = self.force_backend_for_all_layers(current_backend)
-                show_success("FilterMate", f"Forced {current_backend.upper()} for {count} layers")
+                show_success("FilterMate", self._tr("Forced {0} backend for {1} layer(s)").format(current_backend.upper(), count))
                 # Update indicator for current layer after batch operation
                 self._refresh_indicator_for_current_layer()
             elif data == '__CLEANUP_PROJECT__':
                 count = self.cleanup_temp_tables_project()
                 if count > 0:
-                    show_success("FilterMate", f"Cleared {count} temporary table(s) for current project")
+                    show_success("FilterMate", self._tr("Cleared {0} temporary table(s) for current project").format(count))
                 else:
-                    show_info("FilterMate", "No temporary tables found for current project")
+                    show_info("FilterMate", self._tr("No temporary tables found for current project"))
             elif data == '__CLEANUP_GLOBAL__':
                 count = self.cleanup_temp_tables_global()
                 if count > 0:
-                    show_success("FilterMate", f"Cleared {count} temporary table(s) globally")
+                    show_success("FilterMate", self._tr("Cleared {0} temporary table(s) globally").format(count))
                 else:
-                    show_info("FilterMate", "No temporary tables found")
+                    show_info("FilterMate", self._tr("No temporary tables found"))
             else:
                 self.set_forced_backend(layer.id(), data)
                 if data:
                     self.update_for_layer(layer, actual_backend=data)
-                    show_success("FilterMate", f"Backend forced to {data.upper()} for '{layer.name()}'")
+                    show_success("FilterMate", self._tr("Backend forced to {0} for '{1}'").format(data.upper(), layer.name()))
                 else:
                     self.update_for_layer(layer)
-                    show_info("FilterMate", f"Backend set to Auto for '{layer.name()}'")
+                    show_info("FilterMate", self._tr("Backend set to Auto for '{0}'").format(layer.name()))
 
     # === Optimization Settings ===
 
