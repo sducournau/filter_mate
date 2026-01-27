@@ -10,13 +10,14 @@
 1. [Overview](#overview)
 2. [Architecture](#architecture)
 3. [Core Components](#core-components)
-4. [Usage Guide](#usage-guide)
-5. [API Reference](#api-reference)
-6. [Configuration](#configuration)
-7. [Performance Optimization](#performance-optimization)
-8. [Error Handling](#error-handling)
-9. [Testing](#testing)
-10. [Migration Guide](#migration-guide)
+4. [UI Widgets](#ui-widgets)
+5. [Usage Guide](#usage-guide)
+6. [API Reference](#api-reference)
+7. [Configuration](#configuration)
+8. [Performance Optimization](#performance-optimization)
+9. [Error Handling](#error-handling)
+10. [Testing](#testing)
+11. [Migration Guide](#migration-guide)
 
 ---
 
@@ -31,13 +32,13 @@ The Raster Integration module extends FilterMate with comprehensive raster layer
 
 ### Key Features
 
-| Feature | Description |
-|---------|-------------|
-| Multi-band support | Handle rasters with 1-N bands |
-| Statistics caching | LRU cache with TTL expiration |
-| Smart sampling | Automatic sampling for large rasters |
-| Progress tracking | Async operations with progress feedback |
-| Error handling | Typed exception hierarchy |
+| Feature            | Description                             |
+| ------------------ | --------------------------------------- |
+| Multi-band support | Handle rasters with 1-N bands           |
+| Statistics caching | LRU cache with TTL expiration           |
+| Smart sampling     | Automatic sampling for large rasters    |
+| Progress tracking  | Async operations with progress feedback |
+| Error handling     | Typed exception hierarchy               |
 
 ---
 
@@ -79,20 +80,20 @@ The Raster Integration module extends FilterMate with comprehensive raster layer
 
 ### Component Responsibilities
 
-| Layer | Component | Responsibility |
-|-------|-----------|----------------|
-| UI | `RasterExploringGroupBox` | Container for all raster widgets |
-| UI | `RasterStatsPanel` | Display statistics and layer info |
-| UI | `HistogramWidget` | Render interactive histograms |
-| UI | `PixelIdentifyWidget` | Pixel value identification |
-| UI | `TransparencyWidget` | Opacity and transparency control |
-| Controller | `RasterExploringController` | Orchestrate UI/Service/Backend |
-| Core | `RasterPort` | Abstract backend interface |
-| Core | `RasterStatsService` | Business logic orchestration |
-| Core | `RasterErrors` | Exception hierarchy |
-| Infrastructure | `QGISRasterBackend` | QGIS API implementation |
-| Infrastructure | `RasterStatsCache` | LRU caching with TTL |
-| Infrastructure | `RasterPerformance` | Sampling and optimization |
+| Layer          | Component                   | Responsibility                    |
+| -------------- | --------------------------- | --------------------------------- |
+| UI             | `RasterExploringGroupBox`   | Container for all raster widgets  |
+| UI             | `RasterStatsPanel`          | Display statistics and layer info |
+| UI             | `HistogramWidget`           | Render interactive histograms     |
+| UI             | `PixelIdentifyWidget`       | Pixel value identification        |
+| UI             | `TransparencyWidget`        | Opacity and transparency control  |
+| Controller     | `RasterExploringController` | Orchestrate UI/Service/Backend    |
+| Core           | `RasterPort`                | Abstract backend interface        |
+| Core           | `RasterStatsService`        | Business logic orchestration      |
+| Core           | `RasterErrors`              | Exception hierarchy               |
+| Infrastructure | `QGISRasterBackend`         | QGIS API implementation           |
+| Infrastructure | `RasterStatsCache`          | LRU caching with TTL              |
+| Infrastructure | `RasterPerformance`         | Sampling and optimization         |
 
 ---
 
@@ -113,19 +114,19 @@ from core.ports.raster_port import (
 
 class MyCustomBackend(RasterPort):
     """Custom raster backend implementation."""
-    
+
     def is_valid(self, layer) -> bool:
         """Check if layer is valid and accessible."""
         ...
-    
+
     def get_band_count(self, layer) -> int:
         """Return number of bands in raster."""
         ...
-    
+
     def get_statistics(self, layer, band_number: int) -> BandStatistics:
         """Compute band statistics."""
         ...
-    
+
     def get_histogram(
         self,
         layer,
@@ -134,7 +135,7 @@ class MyCustomBackend(RasterPort):
     ) -> HistogramData:
         """Compute histogram for band."""
         ...
-    
+
     def get_pixel_value(
         self,
         layer,
@@ -196,6 +197,253 @@ class RasterLayerSnapshot:
     data_type: str
     band_statistics: List[BandStatistics]
 ```
+
+---
+
+## UI Widgets
+
+### Widget Hierarchy
+
+```
+RasterExploringGroupBox (Container)
+├── Tab 1: Statistics
+│   └── RasterStatsPanel
+│       ├── StatCard (layer info)
+│       └── BandStatsRow[] (per band)
+├── Tab 2: Histogram
+│   └── HistogramWidget
+│       ├── HistogramCanvas (matplotlib)
+│       └── Band selector + range controls
+├── Tab 3: Transparency
+│   └── TransparencyWidget
+│       ├── OpacitySlider
+│       └── RangeTransparencyWidget
+└── PixelIdentifyWidget (floating)
+    ├── PixelValueCard[] (per band)
+    └── RasterIdentifyMapTool
+```
+
+### RasterExploringGroupBox
+
+Main container widget with tabbed interface:
+
+```python
+from ui.widgets.raster_groupbox import RasterExploringGroupBox
+
+# Create groupbox
+groupbox = RasterExploringGroupBox(parent=self)
+
+# Set layer - updates all child widgets
+groupbox.set_layer(raster_layer)
+
+# Clear all widgets
+groupbox.clear()
+
+# Access child widgets
+stats_panel = groupbox.stats_panel
+histogram_widget = groupbox.histogram_widget
+transparency_widget = groupbox.transparency_widget
+
+# Signals
+groupbox.band_changed.connect(self.on_band_changed)
+groupbox.transparency_changed.connect(self.on_transparency_changed)
+groupbox.histogram_range_selected.connect(self.on_range_selected)
+```
+
+### RasterStatsPanel
+
+Displays layer information and band statistics:
+
+```python
+from ui.widgets.raster_stats_panel import RasterStatsPanel, StatCard, BandStatsRow
+
+# Create panel
+panel = RasterStatsPanel(parent=self)
+
+# Set layer snapshot
+panel.set_layer_snapshot(snapshot)
+
+# Update individual band stats
+panel.update_band_stats(band_number=1, stats=band_statistics)
+
+# Clear display
+panel.clear()
+```
+
+**StatCard Component:**
+```python
+# Displays key-value pairs in a card format
+card = StatCard(title="Layer Info", parent=self)
+card.add_row("Name", "DEM_Layer")
+card.add_row("Size", "1000 x 1000")
+card.add_row("CRS", "EPSG:32632")
+```
+
+**BandStatsRow Component:**
+```python
+# Displays statistics for a single band
+row = BandStatsRow(band_number=1, parent=self)
+row.set_statistics(
+    min_val=0.0,
+    max_val=255.0,
+    mean=127.5,
+    std_dev=50.0,
+    null_pct=2.5
+)
+```
+
+### HistogramWidget
+
+Interactive histogram with range selection:
+
+```python
+from ui.widgets.histogram_widget import HistogramWidget, HistogramCanvas
+
+# Create widget
+histogram = HistogramWidget(parent=self)
+
+# Set histogram data
+histogram.set_histogram_data(histogram_data)
+
+# Set band selector options
+histogram.set_band_count(3)
+
+# Handle range selection
+histogram.range_selected.connect(self.on_range_selected)
+
+# Get current range
+min_val, max_val = histogram.get_selected_range()
+
+# Reset to full range
+histogram.reset_range()
+```
+
+**HistogramCanvas (matplotlib-based):**
+```python
+canvas = HistogramCanvas(parent=self)
+canvas.set_data(counts=[...], min_val=0, max_val=255)
+canvas.set_range_highlight(50, 200)  # Highlight range
+canvas.clear()
+```
+
+**Signals:**
+- `band_changed(int)` - Band selection changed
+- `range_selected(float, float)` - User selected value range
+- `range_reset()` - Range reset to full extent
+
+### PixelIdentifyWidget
+
+Click-to-identify pixel values:
+
+```python
+from ui.widgets.pixel_identify_widget import (
+    PixelIdentifyWidget,
+    PixelValueCard,
+    RasterIdentifyMapTool
+)
+
+# Create widget
+identify = PixelIdentifyWidget(parent=self)
+
+# Set layer
+identify.set_layer(raster_layer)
+
+# Enable/disable map tool
+identify.activate_tool()
+identify.deactivate_tool()
+
+# Display pixel values
+identify.display_values(pixel_values=[
+    PixelValue(band=1, value=125.5, is_no_data=False, x=100.0, y=200.0),
+    PixelValue(band=2, value=89.2, is_no_data=False, x=100.0, y=200.0),
+])
+
+# Clear display
+identify.clear()
+```
+
+**RasterIdentifyMapTool:**
+```python
+from qgis.gui import QgsMapTool
+
+tool = RasterIdentifyMapTool(canvas=iface.mapCanvas())
+tool.pixel_identified.connect(self.on_pixel_identified)
+
+# Activate tool
+iface.mapCanvas().setMapTool(tool)
+```
+
+### TransparencyWidget
+
+Opacity and value-based transparency:
+
+```python
+from ui.widgets.transparency_widget import (
+    TransparencyWidget,
+    OpacitySlider,
+    RangeTransparencyWidget
+)
+
+# Create widget
+transparency = TransparencyWidget(parent=self)
+
+# Set layer
+transparency.set_layer(raster_layer)
+
+# Handle opacity changes
+transparency.opacity_changed.connect(self.on_opacity_changed)
+
+# Get/set opacity
+current = transparency.get_opacity()  # 0.0 - 1.0
+transparency.set_opacity(0.75)
+
+# Apply transparency
+transparency.apply_to_layer()
+```
+
+**OpacitySlider Component:**
+```python
+slider = OpacitySlider(parent=self)
+slider.set_value(75)  # 0-100 percentage
+slider.value_changed.connect(lambda v: print(f"Opacity: {v}%"))
+```
+
+**RangeTransparencyWidget Component:**
+```python
+range_widget = RangeTransparencyWidget(parent=self)
+range_widget.set_band(1)
+range_widget.set_transparent_range(0, 10)  # Make values 0-10 transparent
+range_widget.range_changed.connect(self.on_transparent_range_changed)
+```
+
+### Widget Styling
+
+All widgets support FilterMate themes:
+
+```python
+from config.theme_helpers import apply_widget_theme
+
+# Apply current theme to widget
+apply_widget_theme(widget)
+
+# Widgets automatically inherit:
+# - Background colors
+# - Font styles
+# - Border styles
+# - Icon colors
+```
+
+### Widget Signals Summary
+
+| Widget | Signal | Parameters | Description |
+|--------|--------|------------|-------------|
+| `RasterExploringGroupBox` | `band_changed` | `int` | Band selection changed |
+| `RasterExploringGroupBox` | `transparency_changed` | `float` | Opacity value changed |
+| `HistogramWidget` | `range_selected` | `float, float` | Value range selected |
+| `HistogramWidget` | `band_changed` | `int` | Band selector changed |
+| `PixelIdentifyWidget` | `pixel_identified` | `List[PixelValue]` | Pixel clicked on map |
+| `TransparencyWidget` | `opacity_changed` | `float` | Opacity slider moved |
+| `TransparencyWidget` | `transparency_applied` | - | Changes applied to layer |
 
 ---
 
@@ -282,30 +530,30 @@ cache.invalidate_layer(layer_id)
 class RasterExploringController:
     """
     MVC Controller for raster exploration functionality.
-    
+
     Orchestrates:
     - UI widget updates
     - Statistics service calls
     - Backend operations
     - Error handling
     """
-    
+
     def __init__(
         self,
         raster_groupbox: QGroupBox,
         dockwidget: QDockWidget
     ):
         """Initialize controller with UI components."""
-    
+
     def set_current_layer(self, layer: QgsRasterLayer) -> None:
         """Set current layer and update UI."""
-    
+
     def refresh_statistics(self) -> None:
         """Force refresh statistics for current layer."""
-    
+
     def on_band_changed(self, band_index: int) -> None:
         """Handle band selection change."""
-    
+
     def on_transparency_changed(self, value: float) -> None:
         """Handle transparency slider change."""
 ```
@@ -316,31 +564,31 @@ class RasterExploringController:
 class RasterStatsCache:
     """
     LRU cache for raster statistics with TTL expiration.
-    
+
     Features:
     - Thread-safe with RLock
     - Automatic TTL expiration
     - Memory limit enforcement
     - Hit/miss tracking
     """
-    
+
     def get_statistics(self, layer_id: str) -> Optional[RasterLayerSnapshot]:
         """Get cached statistics or None if miss."""
-    
+
     def set_statistics(
         self,
         layer_id: str,
         stats: RasterLayerSnapshot
     ) -> None:
         """Store statistics in cache."""
-    
+
     def get_histogram(
         self,
         layer_id: str,
         band_number: int
     ) -> Optional[HistogramData]:
         """Get cached histogram or None if miss."""
-    
+
     def set_histogram(
         self,
         layer_id: str,
@@ -348,13 +596,13 @@ class RasterStatsCache:
         histogram: HistogramData
     ) -> None:
         """Store histogram in cache."""
-    
+
     def invalidate_layer(self, layer_id: str) -> int:
         """Remove all entries for layer. Returns count removed."""
-    
+
     def clear(self) -> None:
         """Clear entire cache."""
-    
+
     def get_cache_stats(self) -> CacheStats:
         """Get hit/miss statistics."""
 ```
@@ -535,21 +783,21 @@ python -m pytest tests/test_raster*.py --cov=core --cov=ui --cov-report=html
 
 ### Test Categories
 
-| File | Tests | Coverage |
-|------|-------|----------|
-| `test_raster_port.py` | Port interface | Core |
-| `test_qgis_raster_backend.py` | QGIS backend | Adapters |
-| `test_raster_stats_service.py` | Service layer | Core |
-| `test_raster_stats_panel.py` | Stats widget | UI |
-| `test_histogram_widget.py` | Histogram | UI |
-| `test_pixel_identify_widget.py` | Pixel tool | UI |
-| `test_transparency_widget.py` | Transparency | UI |
-| `test_raster_groupbox.py` | Container | UI |
-| `test_raster_exploring_controller.py` | Controller | Integration |
-| `test_raster_stats_cache.py` | Cache | Infrastructure |
-| `test_raster_errors.py` | Errors | Core |
-| `test_raster_performance.py` | Performance | Core |
-| `test_raster_integration.py` | End-to-end | Integration |
+| File                                  | Tests          | Coverage       |
+| ------------------------------------- | -------------- | -------------- |
+| `test_raster_port.py`                 | Port interface | Core           |
+| `test_qgis_raster_backend.py`         | QGIS backend   | Adapters       |
+| `test_raster_stats_service.py`        | Service layer  | Core           |
+| `test_raster_stats_panel.py`          | Stats widget   | UI             |
+| `test_histogram_widget.py`            | Histogram      | UI             |
+| `test_pixel_identify_widget.py`       | Pixel tool     | UI             |
+| `test_transparency_widget.py`         | Transparency   | UI             |
+| `test_raster_groupbox.py`             | Container      | UI             |
+| `test_raster_exploring_controller.py` | Controller     | Integration    |
+| `test_raster_stats_cache.py`          | Cache          | Infrastructure |
+| `test_raster_errors.py`               | Errors         | Core           |
+| `test_raster_performance.py`          | Performance    | Core           |
+| `test_raster_integration.py`          | End-to-end     | Integration    |
 
 ### Mock Layer Creation
 
@@ -642,6 +890,7 @@ elif layer_type == "vector":
 - ✅ Sprint 4: Testing & Documentation (US-13 to US-15)
 
 **New Features:**
+
 - `RasterPort` interface for backend abstraction
 - `QGISRasterBackend` implementation
 - `RasterStatsService` for business logic
@@ -656,4 +905,4 @@ elif layer_type == "vector":
 
 ---
 
-*Documentation generated for FilterMate v5.0 - EPIC-2 Raster Integration*
+_Documentation generated for FilterMate v5.0 - EPIC-2 Raster Integration_
