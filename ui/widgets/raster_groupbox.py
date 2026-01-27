@@ -38,6 +38,8 @@ except ImportError:
 
 from .raster_stats_panel import RasterStatsPanel
 from .histogram_widget import HistogramWidget
+from .pixel_identify_widget import PixelIdentifyWidget
+from .transparency_widget import TransparencyWidget
 
 if TYPE_CHECKING:
     from qgis.core import QgsRasterLayer
@@ -161,15 +163,27 @@ class RasterExploringGroupBox(QWidget):
         self._histogram_widget = HistogramWidget()
         self._tab_widget.addTab(self._histogram_widget, "📈 Histogram")
         
-        # Tools tab placeholder (US-07, US-08)
-        self._tools_placeholder = QLabel(
-            "Pixel identify & transparency tools\n(Coming soon)"
-        )
-        self._tools_placeholder.setAlignment(Qt.AlignCenter)
-        self._tools_placeholder.setStyleSheet(
-            "color: palette(mid); font-style: italic; padding: 20px;"
-        )
-        self._tab_widget.addTab(self._tools_placeholder, "🔧 Tools")
+        # Tools tab (US-07, US-08)
+        self._tools_widget = QWidget()
+        tools_layout = QVBoxLayout(self._tools_widget)
+        tools_layout.setContentsMargins(0, 0, 0, 0)
+        tools_layout.setSpacing(8)
+        
+        # Pixel Identify Widget (US-07)
+        self._pixel_identify_widget = PixelIdentifyWidget()
+        tools_layout.addWidget(self._pixel_identify_widget)
+        
+        # Separator
+        separator = QLabel()
+        separator.setFixedHeight(1)
+        separator.setStyleSheet("background: palette(mid);")
+        tools_layout.addWidget(separator)
+        
+        # Transparency Widget (US-08)
+        self._transparency_widget = TransparencyWidget()
+        tools_layout.addWidget(self._transparency_widget)
+        
+        self._tab_widget.addTab(self._tools_widget, "🔧 Tools")
         
         content_layout.addWidget(self._tab_widget)
         
@@ -197,7 +211,30 @@ class RasterExploringGroupBox(QWidget):
         self._stats_panel.refresh_requested.connect(self._on_refresh_clicked)
         
         # Connect histogram widget signals (US-06)
-        self._histogram_widget.range_changed.connect(self._on_histogram_range_changed)
+        self._histogram_widget.range_changed.connect(
+            self._on_histogram_range_changed
+        )
+        
+        # Connect pixel identify widget signals (US-07)
+        self._pixel_identify_widget.identify_requested.connect(
+            self._on_identify_requested
+        )
+        
+        # Connect transparency widget signals (US-08)
+        self._transparency_widget.opacity_changed.connect(
+            self._on_opacity_changed
+        )
+        self._transparency_widget.range_transparency_changed.connect(
+            self._on_range_transparency_changed
+        )
+        self._transparency_widget.apply_requested.connect(
+            self._on_apply_transparency
+        )
+        
+        # Sync histogram selection to transparency range
+        self._histogram_widget.range_changed.connect(
+            self._transparency_widget.set_range_from_histogram
+        )
     
     def _on_collapsed_changed(self, collapsed: bool) -> None:
         """Handle groupbox collapse state change."""
@@ -345,6 +382,40 @@ class RasterExploringGroupBox(QWidget):
         )
         # This can be connected to filter application in future
     
+    def _on_identify_requested(self) -> None:
+        """Handle pixel identify request."""
+        logger.debug("Pixel identify requested")
+        # This will be connected to map tool activation by the controller
+    
+    def _on_opacity_changed(self, opacity: float) -> None:
+        """Handle opacity slider change."""
+        logger.debug(f"Opacity changed: {opacity:.2f}")
+    
+    def _on_range_transparency_changed(
+        self,
+        min_val: float,
+        max_val: float
+    ) -> None:
+        """Handle range transparency change."""
+        logger.debug(f"Range transparency: [{min_val:.2f}, {max_val:.2f}]")
+    
+    def _on_apply_transparency(self) -> None:
+        """Handle apply transparency request."""
+        if self._layer is None:
+            logger.warning("No layer set, cannot apply transparency")
+            return
+        
+        # Apply opacity
+        opacity = self._transparency_widget.opacity
+        self._layer.setOpacity(opacity)
+        
+        # Refresh layer
+        self._layer.triggerRepaint()
+        
+        logger.info(
+            f"Applied opacity {opacity:.0%} to layer '{self._layer.name()}'"
+        )
+    
     def update_histogram(
         self,
         band_index: int = 1
@@ -380,6 +451,15 @@ class RasterExploringGroupBox(QWidget):
                     band_name=band_name,
                     is_sampled=histogram_data.is_sampled
                 )
+                
+                # Update transparency widget data range
+                if snapshot and snapshot.band_summaries:
+                    bs = snapshot.band_summaries[band_index - 1]
+                    self._transparency_widget.set_data_range(
+                        bs.min_value,
+                        bs.max_value
+                    )
+                
                 logger.debug(
                     f"Histogram updated for band {band_index}"
                 )
@@ -392,6 +472,18 @@ class RasterExploringGroupBox(QWidget):
         except Exception as e:
             logger.error(f"Failed to update histogram: {e}")
             self._histogram_widget.clear()
+    
+    # === Widget property accessors ===
+    
+    @property
+    def pixel_identify_widget(self) -> PixelIdentifyWidget:
+        """Get the pixel identify widget."""
+        return self._pixel_identify_widget
+    
+    @property
+    def transparency_widget(self) -> TransparencyWidget:
+        """Get the transparency widget."""
+        return self._transparency_widget
     
     # === Legacy compatibility methods ===
     

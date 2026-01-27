@@ -21,6 +21,11 @@ from .pixel_identify_widget import (
     PixelValueCard,
     RasterIdentifyMapTool,
 )
+from .transparency_widget import (
+    TransparencyWidget,
+    OpacitySlider,
+    RangeTransparencyWidget,
+)
 
 __all__ = [
     'FavoritesWidget',
@@ -40,4 +45,7 @@ __all__ = [
     'PixelIdentifyWidget',
     'PixelValueCard',
     'RasterIdentifyMapTool',
+    'TransparencyWidget',
+    'OpacitySlider',
+    'RangeTransparencyWidget',
 ]
