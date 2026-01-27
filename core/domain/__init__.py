@@ -35,6 +35,30 @@ from .layer_info import (
 from .optimization_config import (
     OptimizationConfig,
 )
+from .raster_errors import (
+    # Enums
+    ErrorSeverity,
+    RasterErrorCategory,
+    # Exceptions
+    RasterError,
+    LayerNotFoundError,
+    LayerInvalidError,
+    StatisticsComputationError,
+    HistogramComputationError,
+    TransparencyApplicationError,
+    PixelIdentifyError,
+    CacheError,
+    MemoryError,
+    # Result container
+    ErrorResult,
+    # Handler
+    RasterErrorHandler,
+    get_error_handler,
+    reset_error_handler,
+    # Decorators
+    handle_raster_errors,
+    with_error_result,
+)
 
 __all__ = [
     # Value Objects
@@ -48,4 +72,22 @@ __all__ = [
     'SpatialPredicate',
     'FilterStatus',
     'GeometryType',
+    # Raster Errors (EPIC-2)
+    'ErrorSeverity',
+    'RasterErrorCategory',
+    'RasterError',
+    'LayerNotFoundError',
+    'LayerInvalidError',
+    'StatisticsComputationError',
+    'HistogramComputationError',
+    'TransparencyApplicationError',
+    'PixelIdentifyError',
+    'CacheError',
+    'MemoryError',
+    'ErrorResult',
+    'RasterErrorHandler',
+    'get_error_handler',
+    'reset_error_handler',
+    'handle_raster_errors',
+    'with_error_result',
 ]
