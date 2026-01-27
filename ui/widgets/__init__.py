@@ -12,6 +12,8 @@ from .custom_widgets import (
     QgsCheckableComboBoxLayer,
     QgsCheckableComboBoxFeaturesListPickerWidget
 )
+# EPIC-2: Raster Integration widgets
+from .raster_groupbox import RasterExploringGroupBox
 
 __all__ = [
     'FavoritesWidget',
@@ -21,4 +23,6 @@ __all__ = [
     'ListWidgetWrapper',
     'QgsCheckableComboBoxLayer',
     'QgsCheckableComboBoxFeaturesListPickerWidget',
+    # EPIC-2: Raster widgets
+    'RasterExploringGroupBox',
 ]

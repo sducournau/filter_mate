@@ -92,6 +92,8 @@ from qgis.utils import iface
 
 import webbrowser
 from .ui.widgets import QgsCheckableComboBoxFeaturesListPickerWidget, QgsCheckableComboBoxLayer
+# EPIC-2: Raster Integration - Import raster groupbox widget
+from .ui.widgets import RasterExploringGroupBox
 from .ui.widgets.json_view.model import JsonModel
 from .ui.widgets.json_view.view import JsonView
 
@@ -99,7 +101,12 @@ from .ui.widgets.json_view.view import JsonView
 from .infrastructure.utils import is_layer_valid as is_valid_layer
 from .infrastructure.utils import (
     get_best_display_field,
-    is_layer_source_available
+    is_layer_source_available,
+    # EPIC-2: Layer type detection
+    LayerType,
+    detect_layer_type,
+    is_raster_layer,
+    is_vector_layer,
 )
 from .core.domain.exceptions import SignalStateChangeError
 from .infrastructure.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR, get_geometry_type_string
@@ -697,6 +704,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._setup_exploring_tab_widgets()
         self._setup_filtering_tab_widgets()
         self._setup_exporting_tab_widgets()
+        # EPIC-2: Setup raster exploring widget
+        self._setup_raster_exploring_widget()
         if 'CURRENT_PROJECT' in self.CONFIG_DATA:
             self.project_props = self.CONFIG_DATA["CURRENT_PROJECT"]
         self.manage_configuration_model()
@@ -1582,6 +1591,93 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 Sprint 16: Delegate to ConfigurationManager."""
         if self._configuration_manager:
             self._configuration_manager.setup_exploring_tab_widgets()
+
+    def _setup_raster_exploring_widget(self):
+        """
+        EPIC-2: Setup raster exploring widget (US-01).
+        
+        Creates and configures the RasterExploringGroupBox widget for
+        raster layer analysis. The widget is initially hidden and will
+        be shown when a raster layer is selected.
+        
+        Connects:
+        - LayerSyncController.layer_type_changed → _on_layer_type_changed
+        """
+        logger.debug("EPIC-2: Setting up raster exploring widget")
+        
+        # Create raster groupbox widget
+        self._raster_groupbox = RasterExploringGroupBox(self)
+        
+        # Add to exploring section (after CUSTOM SELECTION groupbox)
+        if hasattr(self, 'verticalLayout_exploring_tabs_content'):
+            # Insert before the bottom spacer (index -1 is the spacer)
+            layout = self.verticalLayout_exploring_tabs_content
+            # Insert at position 3 (after single, multiple, custom groupboxes)
+            # The layout order is: single, spacer, multiple, spacer, custom, spacer
+            # We want to insert after custom and before the final spacer
+            layout.addWidget(self._raster_groupbox)
+            logger.debug("EPIC-2: RasterExploringGroupBox added to exploring layout")
+        else:
+            logger.warning("EPIC-2: verticalLayout_exploring_tabs_content not found!")
+        
+        # Connect to LayerSyncController if available
+        if self._controller_integration:
+            try:
+                layer_sync = self._controller_integration.layer_sync_controller
+                if layer_sync:
+                    layer_sync.layer_type_changed.connect(self._on_layer_type_changed)
+                    logger.debug("EPIC-2: Connected layer_type_changed signal")
+            except Exception as e:
+                logger.warning(f"EPIC-2: Could not connect layer_type_changed: {e}")
+        
+        logger.info("EPIC-2: Raster exploring widget setup complete")
+
+    def _on_layer_type_changed(self, layer_type_str: str):
+        """
+        EPIC-2: Handle layer type changes (US-01).
+        
+        Shows/hides the raster groupbox and vector groupboxes based on
+        the current layer type.
+        
+        Args:
+            layer_type_str: 'vector', 'raster', or 'unknown'
+        """
+        logger.debug(f"EPIC-2: Layer type changed to '{layer_type_str}'")
+        
+        if not hasattr(self, '_raster_groupbox'):
+            logger.warning("EPIC-2: _raster_groupbox not initialized")
+            return
+        
+        # Get vector groupboxes
+        vector_groupboxes = [
+            getattr(self, 'mGroupBox_exploring_single_selection', None),
+            getattr(self, 'mGroupBox_exploring_multiple_selection', None),
+            getattr(self, 'mGroupBox_exploring_custom_selection', None),
+        ]
+        
+        if layer_type_str == 'raster':
+            # Show raster groupbox, hide vector groupboxes
+            self._raster_groupbox.show_for_raster()
+            for gb in vector_groupboxes:
+                if gb:
+                    gb.setVisible(False)
+            logger.info("EPIC-2: Switched to raster mode")
+            
+        elif layer_type_str == 'vector':
+            # Hide raster groupbox, show vector groupboxes
+            self._raster_groupbox.hide_for_vector()
+            for gb in vector_groupboxes:
+                if gb:
+                    gb.setVisible(True)
+            logger.info("EPIC-2: Switched to vector mode")
+            
+        else:
+            # Unknown - hide raster, show vector (default)
+            self._raster_groupbox.hide_for_vector()
+            for gb in vector_groupboxes:
+                if gb:
+                    gb.setVisible(True)
+            logger.debug("EPIC-2: Layer type unknown, defaulting to vector mode")
     
     def _schedule_expression_change(self, groupbox: str, expression: str):
         """v4.0 Sprint 16: Schedule debounced expression change."""
@@ -5054,6 +5150,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         FIX 2026-01-22: Use is_filter_expression() to properly detect non-filter expressions
         like field names, COALESCE, CONCAT, etc. These should not be used as filters.
         
+        v4.1.1 OPTIMIZATION: Use ExpressionTypeDetector to avoid loading features
+        when expression is a simple field reference or display expression.
+        
         This ensures custom_selection always returns the features matching the expression
         for use in source layer filtering.
         """
@@ -5064,11 +5163,31 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if not expression:
             return [], expression
         
-        # FIX 2026-01-22: Use centralized filter expression detection
-        # Expressions that don't return boolean values (field names, COALESCE, CONCAT, etc.)
-        # should not be used as filters - they would cause SQL errors
-        from .infrastructure.utils import should_skip_expression_for_filtering
+        # v4.1.1 OPTIMIZATION: Use advanced expression type detection
+        # This determines if we need to iterate features at all
+        from .infrastructure.utils import (
+            analyze_expression, 
+            ExpressionType,
+            should_skip_expression_for_filtering
+        )
         
+        analysis = analyze_expression(expression)
+        
+        # OPTIMIZATION: Simple field expressions don't need feature iteration
+        # They're just for display/labeling, not filtering
+        if analysis.expr_type == ExpressionType.SIMPLE_FIELD:
+            logger.debug(f"exploring_custom_selection: SKIP - Simple field expression '{analysis.field_name}'")
+            logger.debug(f"  Optimization: No feature iteration needed")
+            return [], expression
+        
+        # OPTIMIZATION: Display expressions (COALESCE, CONCAT) also don't filter
+        if analysis.expr_type == ExpressionType.DISPLAY_EXPRESSION:
+            logger.debug(f"exploring_custom_selection: SKIP - Display expression")
+            logger.debug(f"  Reason: {analysis.reason}")
+            return [], expression
+        
+        # FIX 2026-01-22: Use centralized filter expression detection as backup
+        # Expressions that don't return boolean values should not be used as filters
         should_skip, reason = should_skip_expression_for_filtering(expression)
         if should_skip:
             logger.debug(f"exploring_custom_selection: Skipping non-filter expression - {reason}")
@@ -5082,12 +5201,34 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.debug(f"exploring_custom_selection: Cache HIT - {len(cached)} features")
             return cached, expression
         
-        # FIX 2026-01-21: Load features DIRECTLY instead of via exploring_features_changed
-        # This bypasses the guards that can prevent features from being returned
+        # v4.1.1 OPTIMIZATION: For complex/spatial expressions, use async if layer is large
+        feature_count = self.current_layer.featureCount()
+        
+        # For large layers with complex expressions, recommend async processing
+        if feature_count > 10000 and analysis.estimated_complexity >= 5:
+            logger.info(
+                f"exploring_custom_selection: Large layer ({feature_count} features) with "
+                f"complex expression (score={analysis.estimated_complexity}). "
+                f"Consider using async processing."
+            )
+        
+        # Load features directly - this is the synchronous path
         features = []
         try:
             from qgis.core import QgsFeatureRequest
+            
+            # OPTIMIZATION: For large layers, limit initial fetch
             request = QgsFeatureRequest().setFilterExpression(expression)
+            
+            # v4.1.1: Limit to reasonable amount for UI responsiveness
+            MAX_SYNC_FEATURES = 10000
+            if feature_count > MAX_SYNC_FEATURES:
+                logger.warning(
+                    f"exploring_custom_selection: Large result set expected. "
+                    f"Limiting to {MAX_SYNC_FEATURES} features for UI responsiveness."
+                )
+                request.setLimit(MAX_SYNC_FEATURES)
+            
             features = list(self.current_layer.getFeatures(request))
             logger.info(f"exploring_custom_selection: Loaded {len(features)} features matching expression '{expression[:50]}...'")
         except Exception as e:
