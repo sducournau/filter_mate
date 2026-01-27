@@ -15,6 +15,7 @@ from .custom_widgets import (
 # EPIC-2: Raster Integration widgets
 from .raster_groupbox import RasterExploringGroupBox
 from .raster_stats_panel import RasterStatsPanel, StatCard, BandStatsRow
+from .histogram_widget import HistogramWidget, HistogramCanvas
 
 __all__ = [
     'FavoritesWidget',
@@ -29,4 +30,6 @@ __all__ = [
     'RasterStatsPanel',
     'StatCard',
     'BandStatsRow',
+    'HistogramWidget',
+    'HistogramCanvas',
 ]

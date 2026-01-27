@@ -37,6 +37,7 @@ except ImportError:
     QGIS_GUI_AVAILABLE = False
 
 from .raster_stats_panel import RasterStatsPanel
+from .histogram_widget import HistogramWidget
 
 if TYPE_CHECKING:
     from qgis.core import QgsRasterLayer
@@ -156,15 +157,9 @@ class RasterExploringGroupBox(QWidget):
         self._stats_panel = RasterStatsPanel()
         self._tab_widget.addTab(self._stats_panel, "📊 Stats")
         
-        # Histogram tab placeholder (US-06)
-        self._histogram_placeholder = QLabel(
-            "Histogram visualization\n(Coming soon)"
-        )
-        self._histogram_placeholder.setAlignment(Qt.AlignCenter)
-        self._histogram_placeholder.setStyleSheet(
-            "color: palette(mid); font-style: italic; padding: 20px;"
-        )
-        self._tab_widget.addTab(self._histogram_placeholder, "📈 Histogram")
+        # Histogram Widget (US-06)
+        self._histogram_widget = HistogramWidget()
+        self._tab_widget.addTab(self._histogram_widget, "📈 Histogram")
         
         # Tools tab placeholder (US-07, US-08)
         self._tools_placeholder = QLabel(
@@ -200,6 +195,9 @@ class RasterExploringGroupBox(QWidget):
         
         # Connect stats panel signals
         self._stats_panel.refresh_requested.connect(self._on_refresh_clicked)
+        
+        # Connect histogram widget signals (US-06)
+        self._histogram_widget.range_changed.connect(self._on_histogram_range_changed)
     
     def _on_collapsed_changed(self, collapsed: bool) -> None:
         """Handle groupbox collapse state change."""
@@ -322,6 +320,78 @@ class RasterExploringGroupBox(QWidget):
     def stats_panel(self) -> RasterStatsPanel:
         """Get the stats panel widget."""
         return self._stats_panel
+    
+    @property
+    def histogram_widget(self) -> HistogramWidget:
+        """Get the histogram widget."""
+        return self._histogram_widget
+    
+    # === Histogram methods (US-06) ===
+    
+    def _on_histogram_range_changed(
+        self,
+        min_val: float,
+        max_val: float
+    ) -> None:
+        """
+        Handle histogram range selection change.
+        
+        Args:
+            min_val: Minimum value of selection
+            max_val: Maximum value of selection
+        """
+        logger.debug(
+            f"Histogram range changed: [{min_val:.2f}, {max_val:.2f}]"
+        )
+        # This can be connected to filter application in future
+    
+    def update_histogram(
+        self,
+        band_index: int = 1
+    ) -> None:
+        """
+        Update the histogram for the specified band.
+        
+        Args:
+            band_index: 1-based band index to display
+        """
+        if self._layer is None or self._stats_service is None:
+            return
+        
+        try:
+            # Get histogram data from service
+            histogram_data = self._stats_service.get_histogram(
+                self._layer.id(),
+                band_index
+            )
+            
+            if histogram_data:
+                # Get band name from snapshot if available
+                snapshot = self._stats_service.get_layer_snapshot(
+                    self._layer.id()
+                )
+                band_name = ""
+                if snapshot and band_index <= len(snapshot.band_summaries):
+                    band_summary = snapshot.band_summaries[band_index - 1]
+                    band_name = f"Band {band_index}: {band_summary.band_name}"
+                
+                self._histogram_widget.set_histogram_data(
+                    histogram_data,
+                    band_name=band_name,
+                    is_sampled=histogram_data.is_sampled
+                )
+                logger.debug(
+                    f"Histogram updated for band {band_index}"
+                )
+            else:
+                self._histogram_widget.clear()
+                logger.warning(
+                    f"No histogram data for band {band_index}"
+                )
+                
+        except Exception as e:
+            logger.error(f"Failed to update histogram: {e}")
+            self._histogram_widget.clear()
     
     # === Legacy compatibility methods ===
     
