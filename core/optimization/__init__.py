@@ -84,6 +84,22 @@ from .auto_optimizer import (
     analyze_layer,
 )
 
+# Raster Performance (EPIC-2 US-12)
+from .raster_performance import (
+    PerformanceThresholds,
+    DEFAULT_THRESHOLDS,
+    SamplingStrategy,
+    SamplingConfig,
+    RasterSampler,
+    ProgressInfo,
+    ProgressTracker,
+    ComputationThrottle,
+    MemoryEstimate,
+    estimate_memory,
+    batch_iterator,
+    chunked_range,
+)
+
 __all__ = [
     # Combined Query Optimizer (v3.0+)
     'OptimizationType',
@@ -118,4 +134,17 @@ __all__ = [
     'get_auto_optimizer',
     'get_auto_optimization_config',
     'analyze_layer',
+    # Raster Performance (EPIC-2 US-12)
+    'PerformanceThresholds',
+    'DEFAULT_THRESHOLDS',
+    'SamplingStrategy',
+    'SamplingConfig',
+    'RasterSampler',
+    'ProgressInfo',
+    'ProgressTracker',
+    'ComputationThrottle',
+    'MemoryEstimate',
+    'estimate_memory',
+    'batch_iterator',
+    'chunked_range',
 ]
