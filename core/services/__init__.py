@@ -75,6 +75,19 @@ from .buffer_service import (
 # NOT exported here - has QGIS dependencies (iface, QgsProject)
 # Import directly: from core.services.canvas_refresh_service import single_canvas_refresh
 
+# EPIC-2: RasterStatsService - Pure Python service for raster statistics
+from .raster_stats_service import (
+    RasterStatsService,
+    StatsRequest,
+    StatsResponse,
+    StatsRequestStatus,
+    StatsCacheStrategy,
+    LayerStatsSnapshot,
+    BandSummary,
+    get_raster_stats_service,
+    reset_raster_stats_service,
+)
+
 __all__ = [
     # Expression Service
     'ExpressionService',
@@ -96,4 +109,14 @@ __all__ = [
     'SimplificationConfig',
     'SimplificationResult',
     'create_buffer_service',
+    # EPIC-2: Raster Stats Service
+    'RasterStatsService',
+    'StatsRequest',
+    'StatsResponse',
+    'StatsRequestStatus',
+    'StatsCacheStrategy',
+    'LayerStatsSnapshot',
+    'BandSummary',
+    'get_raster_stats_service',
+    'reset_raster_stats_service',
 ]
