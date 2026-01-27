@@ -28,6 +28,7 @@ from .favorites_controller import FavoritesController
 from .layer_sync_controller import LayerSyncController
 from .property_controller import PropertyController, PropertyType, PropertyChange
 from .integration import ControllerIntegration
+from .raster_exploring_controller import RasterExploringController
 
 __all__ = [
     'BaseController',
@@ -53,4 +54,5 @@ __all__ = [
     'PropertyType',
     'PropertyChange',
     'ControllerIntegration',
+    'RasterExploringController',
 ]
