@@ -66,6 +66,19 @@ from .materialized_view_port import (
     ViewConfig,
 )
 
+# Raster Port (EPIC-2 - Raster Integration)
+from .raster_port import (
+    RasterPort,
+    RasterStats,
+    BandStatistics,
+    HistogramData,
+    PixelIdentifyResult,
+    TransparencySettings,
+    RasterDataType,
+    RasterRendererType,
+    HistogramBinMethod,
+)
+
 __all__ = [
     # Backend
     'BackendPort',
@@ -102,4 +115,14 @@ __all__ = [
     'ViewType',
     'ViewInfo',
     'ViewConfig',
+    # Raster Port (EPIC-2)
+    'RasterPort',
+    'RasterStats',
+    'BandStatistics',
+    'HistogramData',
+    'PixelIdentifyResult',
+    'TransparencySettings',
+    'RasterDataType',
+    'RasterRendererType',
+    'HistogramBinMethod',
 ]
