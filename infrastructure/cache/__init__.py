@@ -37,6 +37,15 @@ from .spatialite_persistent_cache import (
     intersect_filter_fids,
 )
 
+# Raster Stats Cache (EPIC-2 US-10)
+from .raster_stats_cache import (
+    RasterStatsCache,
+    RasterStatsCacheConfig,
+    RasterStatsCacheStats,
+    get_raster_stats_cache,
+    reset_raster_stats_cache,
+)
+
 __all__ = [
     'QueryExpressionCache',
     'CacheEntry',
@@ -56,4 +65,10 @@ __all__ = [
     'store_filter_fids',
     'get_previous_filter_fids',
     'intersect_filter_fids',
+    # Raster Stats Cache (EPIC-2)
+    'RasterStatsCache',
+    'RasterStatsCacheConfig',
+    'RasterStatsCacheStats',
+    'get_raster_stats_cache',
+    'reset_raster_stats_cache',
 ]

@@ -23,7 +23,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 from ..ports.raster_port import (
     BandStatistics,
@@ -36,6 +36,9 @@ from ..ports.raster_port import (
     RasterStats,
     TransparencySettings,
 )
+
+if TYPE_CHECKING:
+    from ...infrastructure.cache import RasterStatsCache
 
 logger = logging.getLogger(__name__)
 
@@ -208,7 +211,8 @@ class RasterStatsService:
     def __init__(
         self,
         backend: RasterPort,
-        cache_strategy: StatsCacheStrategy = StatsCacheStrategy.SESSION
+        cache_strategy: StatsCacheStrategy = StatsCacheStrategy.SESSION,
+        cache: Optional['RasterStatsCache'] = None
     ):
         """
         Initialize Raster Stats Service.
@@ -216,11 +220,23 @@ class RasterStatsService:
         Args:
             backend: RasterPort implementation to use
             cache_strategy: Caching strategy for results
+            cache: Optional RasterStatsCache instance (uses global if None)
         """
         self._backend = backend
         self._cache_strategy = cache_strategy
         self._response_cache: Dict[str, StatsResponse] = {}
         self._pending_requests: Dict[str, StatsRequest] = {}
+        
+        # Use dedicated cache for better management (US-10)
+        self._stats_cache: Optional['RasterStatsCache'] = cache
+        if cache is None and cache_strategy != StatsCacheStrategy.NONE:
+            try:
+                from ...infrastructure.cache import get_raster_stats_cache
+                self._stats_cache = get_raster_stats_cache()
+            except ImportError:
+                logger.warning(
+                    "[RasterStatsService] RasterStatsCache not available"
+                )
         
         logger.debug(
             f"[RasterStatsService] Initialized with cache={cache_strategy.name}"
@@ -528,12 +544,30 @@ class RasterStatsService:
             ]
             for key in keys_to_remove:
                 del self._response_cache[key]
+            
+            # Also clear dedicated cache
+            if self._stats_cache:
+                self._stats_cache.invalidate_layer(layer_id)
+            
             logger.debug(
                 f"[RasterStatsService] Cleared cache for {layer_id}"
             )
         else:
             self._response_cache.clear()
+            if self._stats_cache:
+                self._stats_cache.clear()
             logger.debug("[RasterStatsService] Cleared all cache")
+    
+    def invalidate_cache(self, layer_id: str) -> None:
+        """
+        Invalidate cache for a specific layer.
+        
+        Alias for clear_cache(layer_id) for API compatibility.
+        
+        Args:
+            layer_id: Layer to invalidate
+        """
+        self.clear_cache(layer_id)
     
     def get_cache_stats(self) -> Dict[str, int]:
         """
