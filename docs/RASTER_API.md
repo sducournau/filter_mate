@@ -271,6 +271,7 @@ panel.clear()
 ```
 
 **StatCard Component:**
+
 ```python
 # Displays key-value pairs in a card format
 card = StatCard(title="Layer Info", parent=self)
@@ -280,6 +281,7 @@ card.add_row("CRS", "EPSG:32632")
 ```
 
 **BandStatsRow Component:**
+
 ```python
 # Displays statistics for a single band
 row = BandStatsRow(band_number=1, parent=self)
@@ -319,6 +321,7 @@ histogram.reset_range()
 ```
 
 **HistogramCanvas (matplotlib-based):**
+
 ```python
 canvas = HistogramCanvas(parent=self)
 canvas.set_data(counts=[...], min_val=0, max_val=255)
@@ -327,6 +330,7 @@ canvas.clear()
 ```
 
 **Signals:**
+
 - `band_changed(int)` - Band selection changed
 - `range_selected(float, float)` - User selected value range
 - `range_reset()` - Range reset to full extent
@@ -363,6 +367,7 @@ identify.clear()
 ```
 
 **RasterIdentifyMapTool:**
+
 ```python
 from qgis.gui import QgsMapTool
 
@@ -402,6 +407,7 @@ transparency.apply_to_layer()
 ```
 
 **OpacitySlider Component:**
+
 ```python
 slider = OpacitySlider(parent=self)
 slider.set_value(75)  # 0-100 percentage
@@ -409,6 +415,7 @@ slider.value_changed.connect(lambda v: print(f"Opacity: {v}%"))
 ```
 
 **RangeTransparencyWidget Component:**
+
 ```python
 range_widget = RangeTransparencyWidget(parent=self)
 range_widget.set_band(1)
@@ -435,15 +442,15 @@ apply_widget_theme(widget)
 
 ### Widget Signals Summary
 
-| Widget | Signal | Parameters | Description |
-|--------|--------|------------|-------------|
-| `RasterExploringGroupBox` | `band_changed` | `int` | Band selection changed |
-| `RasterExploringGroupBox` | `transparency_changed` | `float` | Opacity value changed |
-| `HistogramWidget` | `range_selected` | `float, float` | Value range selected |
-| `HistogramWidget` | `band_changed` | `int` | Band selector changed |
-| `PixelIdentifyWidget` | `pixel_identified` | `List[PixelValue]` | Pixel clicked on map |
-| `TransparencyWidget` | `opacity_changed` | `float` | Opacity slider moved |
-| `TransparencyWidget` | `transparency_applied` | - | Changes applied to layer |
+| Widget                    | Signal                 | Parameters         | Description              |
+| ------------------------- | ---------------------- | ------------------ | ------------------------ |
+| `RasterExploringGroupBox` | `band_changed`         | `int`              | Band selection changed   |
+| `RasterExploringGroupBox` | `transparency_changed` | `float`            | Opacity value changed    |
+| `HistogramWidget`         | `range_selected`       | `float, float`     | Value range selected     |
+| `HistogramWidget`         | `band_changed`         | `int`              | Band selector changed    |
+| `PixelIdentifyWidget`     | `pixel_identified`     | `List[PixelValue]` | Pixel clicked on map     |
+| `TransparencyWidget`      | `opacity_changed`      | `float`            | Opacity slider moved     |
+| `TransparencyWidget`      | `transparency_applied` | -                  | Changes applied to layer |
 
 ---
 
