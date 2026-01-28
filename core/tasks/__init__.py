@@ -39,6 +39,20 @@ from .expression_evaluation_task import (
 
 from .layer_management_task import LayersManagementEngineTask
 
+# v4.1.1: Async unique values loading for lazy loading widgets
+from .unique_values_task import (
+    UniqueValuesSignals,
+    UniqueValuesTask,
+    UniqueValuesManager,
+    get_unique_values_manager,
+)
+
+# v4.1.1: Lazy feature iteration for memory-efficient widget population
+from .lazy_feature_iterator import (
+    LazyFeatureIterator,
+    LazyUniqueValuesIterator,
+)
+
 # E6: Task completion handler functions
 from .task_completion_handler import (
     display_warning_messages,
@@ -58,6 +72,14 @@ __all__ = [
     'get_expression_manager',
     # Layer management
     'LayersManagementEngineTask',
+    # v4.1.1: Unique values async loading
+    'UniqueValuesSignals',
+    'UniqueValuesTask',
+    'UniqueValuesManager',
+    'get_unique_values_manager',
+    # v4.1.1: Lazy feature iteration
+    'LazyFeatureIterator',
+    'LazyUniqueValuesIterator',
     # E6: Task completion handler
     'display_warning_messages',
     'should_skip_subset_application',
