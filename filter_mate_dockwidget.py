@@ -94,6 +94,14 @@ import webbrowser
 from .ui.widgets import QgsCheckableComboBoxFeaturesListPickerWidget, QgsCheckableComboBoxLayer
 # EPIC-2: Raster Integration - Import raster groupbox widget
 from .ui.widgets import RasterExploringGroupBox
+# EPIC-2: Raster Integration - Import raster stats service
+try:
+    from .core.services.raster_stats_service import RasterStatsService, get_raster_stats_service
+    from .adapters.backends.qgis_raster_backend import QGISRasterBackend
+    RASTER_SERVICE_AVAILABLE = True
+except ImportError as e:
+    RASTER_SERVICE_AVAILABLE = False
+    logger.warning(f"EPIC-2: Raster stats service not available: {e}")
 from .ui.widgets.json_view.model import JsonModel
 from .ui.widgets.json_view.view import JsonView
 
@@ -347,6 +355,98 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return False
         return True
     
+    def get_source_layer_from_exploring_context(self):
+        """
+        v5.0: Get the source layer based on the current exploring tab context.
+        
+        Returns the layer from:
+        - mMapLayerComboBox_exploring_vector (if EXPLORING_VECTOR tab is active, index=0)
+        - mMapLayerComboBox_exploring_raster (if EXPLORING_RASTER tab is active, index=1)
+        
+        This replaces the old comboBox_filtering_current_layer which was removed.
+        
+        Returns:
+            QgsMapLayer: The current source layer from the active exploring tab, or None.
+        """
+        try:
+            if not hasattr(self, 'toolBox_exploring'):
+                return self.current_layer  # Fallback to current_layer
+            
+            current_index = self.toolBox_exploring.currentIndex()
+            
+            if current_index == 0:  # EXPLORING_VECTOR
+                if hasattr(self, 'mMapLayerComboBox_exploring_vector'):
+                    layer = self.mMapLayerComboBox_exploring_vector.currentLayer()
+                    if layer and layer.isValid():
+                        return layer
+            elif current_index == 1:  # EXPLORING_RASTER
+                if hasattr(self, 'mMapLayerComboBox_exploring_raster'):
+                    layer = self.mMapLayerComboBox_exploring_raster.currentLayer()
+                    if layer and layer.isValid():
+                        return layer
+            
+            # Fallback to current_layer
+            return self.current_layer
+        except Exception as e:
+            logger.debug(f"get_source_layer_from_exploring_context error: {e}")
+            return self.current_layer
+    
+    def get_source_layer_combobox(self):
+        """
+        v5.0: Get the appropriate source layer combobox based on exploring tab context.
+        
+        Returns the combobox from:
+        - mMapLayerComboBox_exploring_vector (if EXPLORING_VECTOR tab is active)
+        - mMapLayerComboBox_exploring_raster (if EXPLORING_RASTER tab is active)
+        
+        Returns:
+            QgsMapLayerComboBox: The combobox for the current exploring context, or None.
+        """
+        try:
+            if not hasattr(self, 'toolBox_exploring'):
+                return None
+            
+            current_index = self.toolBox_exploring.currentIndex()
+            
+            if current_index == 0:  # EXPLORING_VECTOR
+                if hasattr(self, 'mMapLayerComboBox_exploring_vector'):
+                    return self.mMapLayerComboBox_exploring_vector
+            elif current_index == 1:  # EXPLORING_RASTER
+                if hasattr(self, 'mMapLayerComboBox_exploring_raster'):
+                    return self.mMapLayerComboBox_exploring_raster
+            
+            return None
+        except Exception as e:
+            logger.debug(f"get_source_layer_combobox error: {e}")
+            return None
+    
+    def is_use_centroids_enabled(self) -> bool:
+        """
+        v5.0: Check if use centroids is enabled based on exploring tab context.
+        
+        Returns True if:
+        - checkBox_exploring_vector_use_centroids is checked (for EXPLORING_VECTOR)
+        
+        Note: Raster layers don't have centroids option.
+        
+        Returns:
+            bool: True if centroids should be used, False otherwise.
+        """
+        try:
+            if not hasattr(self, 'toolBox_exploring'):
+                return False
+            
+            current_index = self.toolBox_exploring.currentIndex()
+            
+            if current_index == 0:  # EXPLORING_VECTOR
+                if hasattr(self, 'checkBox_exploring_vector_use_centroids'):
+                    return self.checkBox_exploring_vector_use_centroids.isChecked()
+            
+            return False  # Raster doesn't have centroids option
+        except Exception as e:
+            logger.debug(f"is_use_centroids_enabled error: {e}")
+            return False
+    
     def _ensure_layer_signals_connected(self, layer) -> bool:
         """
         FIX 2026-01-15 (FIX-003): Ensure layer signals are connected.
@@ -527,6 +627,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.manage_ui_style()
         try: 
             self.manage_interactions()
+            # EPIC-2: Connect raster signals AFTER controllers are initialized
+            self._connect_raster_signals()
         except Exception as e: 
             logger.error(f"Error in manage_interactions: {e}", exc_info=True)
             from qgis.utils import iface
@@ -736,7 +838,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 return
             
             loaded_count = 0
-            for grp in ["ACTION", "EXPLORING", "FILTERING", "EXPORTING"]:
+            for grp in ["ACTION", "EXPLORING", "EXPLORING_RASTER", "FILTERING", "EXPORTING"]:
                 sz = sz_act if grp == "ACTION" else sz_oth
                 icons_grp = icons.get(grp, {})
                 logger.info(f"Group {grp}: {len(icons_grp)} icons configured")
@@ -779,6 +881,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             ("EXPLORING", "IS_TRACKING"): "pushButton_checkable_exploring_tracking",
             ("EXPLORING", "IS_LINKING"): "pushButton_checkable_exploring_linking_widgets",
             ("EXPLORING", "RESET_ALL_LAYER_PROPERTIES"): "pushButton_exploring_reset_layer_properties",
+            ("EXPLORING_RASTER", "IDENTIFY"): "pushButton_exploring_raster_identify",
+            ("EXPLORING_RASTER", "ZOOM"): "pushButton_exploring_raster_zoom_to_layer",
+            ("EXPLORING_RASTER", "REFRESH"): "pushButton_exploring_raster_refresh",
+            ("EXPLORING_RASTER", "IS_LINKING"): "pushButton_checkable_exploring_raster_linking_widgets",
+            ("EXPLORING_RASTER", "PROPERTIES"): "pushButton_exploring_raster_properties",
             ("FILTERING", "AUTO_CURRENT_LAYER"): "pushButton_checkable_filtering_auto_current_layer",
             ("FILTERING", "HAS_LAYERS_TO_FILTER"): "pushButton_checkable_filtering_layers_to_filter",
             ("FILTERING", "HAS_COMBINE_OPERATOR"): "pushButton_checkable_filtering_current_layer_combine_operator",
@@ -1594,90 +1701,245 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def _setup_raster_exploring_widget(self):
         """
-        EPIC-2: Setup raster exploring widget (US-01).
+        EPIC-2: Setup exploring accordion system with VECTEUR and RASTER panels.
         
-        Creates and configures the RasterExploringGroupBox widget for
-        raster layer analysis. The widget is initially hidden and will
-        be shown when a raster layer is selected.
+        Uses the UI-defined groupboxes:
+        - mGroupBox_exploring_vector: Contains single, multiple, custom selection
+        - mGroupBox_exploring_raster: Contains raster analysis tools
         
-        Connects:
-        - LayerSyncController.layer_type_changed → _on_layer_type_changed
+        Only one panel is visible at a time, switched based on layer type from 
+        comboBox_filtering_current_layer.
         """
-        logger.debug("EPIC-2: Setting up raster exploring widget")
+        logger.debug("EPIC-2: Setting up exploring accordion system from UI")
         
-        # Create raster groupbox widget
-        self._raster_groupbox = RasterExploringGroupBox(self)
+        from qgis.core import QgsMapLayerProxyModel
         
-        # Add to exploring section (after CUSTOM SELECTION groupbox)
-        if hasattr(self, 'verticalLayout_exploring_tabs_content'):
-            # Insert before the bottom spacer (index -1 is the spacer)
-            layout = self.verticalLayout_exploring_tabs_content
-            # Insert at position 3 (after single, multiple, custom groupboxes)
-            # The layout order is: single, spacer, multiple, spacer, custom, spacer
-            # We want to insert after custom and before the final spacer
-            layout.addWidget(self._raster_groupbox)
-            logger.debug("EPIC-2: RasterExploringGroupBox added to exploring layout")
-        else:
-            logger.warning("EPIC-2: verticalLayout_exploring_tabs_content not found!")
+        # Get the UI-defined groupboxes
+        self._exploring_vector_groupbox = getattr(self, 'mGroupBox_exploring_vector', None)
+        self._exploring_raster_groupbox = getattr(self, 'mGroupBox_exploring_raster', None)
         
+        if not self._exploring_vector_groupbox:
+            logger.warning("EPIC-2: mGroupBox_exploring_vector not found in UI!")
+            return
+        
+        if not self._exploring_raster_groupbox:
+            logger.warning("EPIC-2: mGroupBox_exploring_raster not found in UI!")
+            return
+        
+        # Get the raster layer combobox from UI
+        self._raster_layer_combo = getattr(self, 'mMapLayerComboBox_exploring_raster', None)
+        if self._raster_layer_combo:
+            # Configure to show only raster layers
+            self._raster_layer_combo.setFilters(QgsMapLayerProxyModel.RasterLayer)
+            self._raster_layer_combo.setAllowEmptyLayer(True)
+            self._raster_layer_combo.setShowCrs(True)
+            self._raster_layer_combo.layerChanged.connect(self._on_raster_combo_layer_changed)
+            logger.debug("EPIC-2: Raster layer combobox configured")
+        
+        # Get the raster stats container frame
+        self._raster_stats_frame = getattr(self, 'frame_raster_stats_container', None)
+        self._raster_status_label = getattr(self, 'label_raster_status', None)
+        
+        # Create and add the RasterExploringGroupBox to the stats container
+        if self._raster_stats_frame and hasattr(self._raster_stats_frame, 'layout'):
+            # Create raster content widget (stats, histogram, tools)
+            self._raster_groupbox = RasterExploringGroupBox(self)
+            # Hide its internal groupbox since we use the UI groupbox
+            if hasattr(self._raster_groupbox, '_groupbox'):
+                self._raster_groupbox._groupbox.setVisible(False)
+            
+            # Add directly to the frame's layout
+            stats_layout = self._raster_stats_frame.layout()
+            if stats_layout:
+                stats_layout.addWidget(self._raster_groupbox)
+            
+            # EPIC-2 US-14: Initialize and connect raster stats service
+            self._raster_stats_service = None
+            if RASTER_SERVICE_AVAILABLE:
+                try:
+                    backend = QGISRasterBackend()
+                    self._raster_stats_service = RasterStatsService(backend)
+                    self._raster_groupbox.set_stats_service(self._raster_stats_service)
+                    logger.debug("EPIC-2: Raster stats service initialized")
+                except Exception as e:
+                    logger.warning(f"EPIC-2: Could not initialize raster stats service: {e}")
+        
+        # === Connect exclusive accordion behavior ===
+        self._exploring_vector_groupbox.collapsedStateChanged.connect(
+            lambda collapsed: self._on_exploring_accordion_changed('vector', collapsed)
+        )
+        self._exploring_raster_groupbox.collapsedStateChanged.connect(
+            lambda collapsed: self._on_exploring_accordion_changed('raster', collapsed)
+        )
+        
+        # Initial state: vector expanded, raster collapsed
+        self._exploring_vector_groupbox.setCollapsed(False)
+        self._exploring_vector_groupbox.setChecked(True)
+        self._exploring_raster_groupbox.setCollapsed(True)
+        self._exploring_raster_groupbox.setChecked(False)
+        
+        logger.info("EPIC-2: Exploring accordion system setup complete")
+    
+    def _on_exploring_accordion_changed(self, panel_type: str, collapsed: bool):
+        """
+        EPIC-2: Handle exclusive accordion behavior for EXPLORING panels.
+        
+        When one panel is expanded, the other is collapsed automatically.
+        
+        Args:
+            panel_type: 'vector' or 'raster'
+            collapsed: True if the panel was collapsed
+        """
+        if collapsed:
+            # Panel was collapsed, nothing to do
+            return
+        
+        # Panel was expanded - collapse the other one
+        try:
+            if panel_type == 'vector':
+                if hasattr(self, '_exploring_raster_groupbox') and self._exploring_raster_groupbox:
+                    self._exploring_raster_groupbox.setCollapsed(True)
+                    self._exploring_raster_groupbox.setChecked(False)
+                logger.debug("EPIC-2: Switched to EXPLORING VECTEUR")
+            elif panel_type == 'raster':
+                if hasattr(self, '_exploring_vector_groupbox') and self._exploring_vector_groupbox:
+                    self._exploring_vector_groupbox.setCollapsed(True)
+                    self._exploring_vector_groupbox.setChecked(False)
+                logger.debug("EPIC-2: Switched to EXPLORING RASTER")
+        except RuntimeError:
+            # Widget may have been deleted
+            pass
+    
+    def _on_raster_combo_layer_changed(self, layer):
+        """
+        EPIC-2: Handle raster layer selection from the UI combobox.
+        
+        Args:
+            layer: The newly selected raster layer or None
+        """
+        from qgis.core import QgsRasterLayer
+        
+        try:
+            if layer is not None and isinstance(layer, QgsRasterLayer):
+                logger.info(f"EPIC-2: Raster layer selected from combo: {layer.name()}")
+                
+                # Update status label
+                if hasattr(self, '_raster_status_label') and self._raster_status_label:
+                    self._raster_status_label.setText(f"Analyzing {layer.name()}...")
+                
+                # Pass to the raster groupbox for stats/histogram
+                if hasattr(self, '_raster_groupbox') and self._raster_groupbox:
+                    self._raster_groupbox.set_layer(layer)
+            else:
+                logger.debug("EPIC-2: No raster layer selected from combo")
+                if hasattr(self, '_raster_status_label') and self._raster_status_label:
+                    self._raster_status_label.setText("Select a raster layer to view statistics")
+                if hasattr(self, '_raster_groupbox') and self._raster_groupbox:
+                    self._raster_groupbox.set_layer(None)
+        except RuntimeError:
+            # Widget may have been deleted
+            pass
+    
+    def _switch_exploring_panel(self, panel_type: str):
+        """
+        EPIC-2: Programmatically switch the exploring accordion.
+        
+        Args:
+            panel_type: 'vector' or 'raster'
+        """
+        if panel_type == 'vector':
+            if hasattr(self, '_exploring_vector_groupbox'):
+                self._exploring_vector_groupbox.setCollapsed(False)
+                self._exploring_vector_groupbox.setChecked(True)
+            if hasattr(self, '_exploring_raster_groupbox'):
+                self._exploring_raster_groupbox.setCollapsed(True)
+                self._exploring_raster_groupbox.setChecked(False)
+        elif panel_type == 'raster':
+            if hasattr(self, '_exploring_raster_groupbox'):
+                self._exploring_raster_groupbox.setCollapsed(False)
+                self._exploring_raster_groupbox.setChecked(True)
+            if hasattr(self, '_exploring_vector_groupbox'):
+                self._exploring_vector_groupbox.setCollapsed(True)
+                self._exploring_vector_groupbox.setChecked(False)
+        
+        logger.info(f"EPIC-2: Exploring panel switched to {panel_type}")
+
+    def _connect_raster_signals(self):
+        """
+        EPIC-2: Connect raster-related signals after controllers are initialized.
+        
+        This method must be called AFTER manage_interactions() because the
+        LayerSyncController is only fully initialized during that phase.
+        """
+        if not hasattr(self, '_raster_groupbox'):
+            logger.warning("EPIC-2: Cannot connect raster signals - _raster_groupbox not initialized")
+            return
+            
         # Connect to LayerSyncController if available
         if self._controller_integration:
             try:
                 layer_sync = self._controller_integration.layer_sync_controller
                 if layer_sync:
                     layer_sync.layer_type_changed.connect(self._on_layer_type_changed)
-                    logger.debug("EPIC-2: Connected layer_type_changed signal")
+                    # EPIC-2: Also connect to layer_changed for setting raster layer
+                    layer_sync.layer_changed.connect(self._on_layer_changed_for_raster)
+                    logger.info("EPIC-2: Connected layer_type_changed and layer_changed signals")
+                else:
+                    logger.warning("EPIC-2: layer_sync_controller is None - signals not connected")
             except Exception as e:
-                logger.warning(f"EPIC-2: Could not connect layer_type_changed: {e}")
+                logger.warning(f"EPIC-2: Could not connect layer signals: {e}")
+        else:
+            logger.warning("EPIC-2: _controller_integration is None - signals not connected")
+    
+    def _on_layer_changed_for_raster(self, layer):
+        """
+        EPIC-2: Handle layer changes for raster groupbox.
         
-        logger.info("EPIC-2: Raster exploring widget setup complete")
+        When a raster layer is selected, passes it to the raster groupbox.
+        
+        Args:
+            layer: The newly selected layer (may be vector or raster)
+        """
+        if not hasattr(self, '_raster_groupbox'):
+            return
+        
+        # Check if this is a raster layer
+        if layer is not None and is_raster_layer(layer):
+            self._raster_groupbox.set_layer(layer)
+            logger.debug(f"EPIC-2: Set raster layer '{layer.name()}' on groupbox")
+        else:
+            # Clear raster groupbox when switching to non-raster
+            self._raster_groupbox.set_layer(None)
+            logger.debug("EPIC-2: Cleared raster layer from groupbox")
 
     def _on_layer_type_changed(self, layer_type_str: str):
         """
-        EPIC-2: Handle layer type changes (US-01).
+        EPIC-2: Handle layer type changes - switch exploring accordion.
         
-        Shows/hides the raster groupbox and vector groupboxes based on
-        the current layer type.
+        When the source layer in comboBox_filtering_current_layer changes type,
+        automatically switches between EXPLORING VECTEUR and EXPLORING RASTER
+        accordions.
         
         Args:
             layer_type_str: 'vector', 'raster', or 'unknown'
         """
         logger.debug(f"EPIC-2: Layer type changed to '{layer_type_str}'")
         
-        if not hasattr(self, '_raster_groupbox'):
-            logger.warning("EPIC-2: _raster_groupbox not initialized")
-            return
-        
-        # Get vector groupboxes
-        vector_groupboxes = [
-            getattr(self, 'mGroupBox_exploring_single_selection', None),
-            getattr(self, 'mGroupBox_exploring_multiple_selection', None),
-            getattr(self, 'mGroupBox_exploring_custom_selection', None),
-        ]
-        
+        # Switch accordion based on layer type
         if layer_type_str == 'raster':
-            # Show raster groupbox, hide vector groupboxes
-            self._raster_groupbox.show_for_raster()
-            for gb in vector_groupboxes:
-                if gb:
-                    gb.setVisible(False)
-            logger.info("EPIC-2: Switched to raster mode")
+            # Switch to EXPLORING RASTER
+            self._switch_exploring_panel('raster')
+            logger.info("EPIC-2: Switched to EXPLORING RASTER accordion")
             
         elif layer_type_str == 'vector':
-            # Hide raster groupbox, show vector groupboxes
-            self._raster_groupbox.hide_for_vector()
-            for gb in vector_groupboxes:
-                if gb:
-                    gb.setVisible(True)
-            logger.info("EPIC-2: Switched to vector mode")
+            # Switch to EXPLORING VECTEUR
+            self._switch_exploring_panel('vector')
+            logger.info("EPIC-2: Switched to EXPLORING VECTEUR accordion")
             
         else:
-            # Unknown - hide raster, show vector (default)
-            self._raster_groupbox.hide_for_vector()
-            for gb in vector_groupboxes:
-                if gb:
-                    gb.setVisible(True)
-            logger.debug("EPIC-2: Layer type unknown, defaulting to vector mode")
+            # Unknown - default to vector
+            self._switch_exploring_panel('vector')
+            logger.debug("EPIC-2: Layer type unknown, defaulting to EXPLORING VECTEUR")
     
     def _schedule_expression_change(self, groupbox: str, expression: str):
         """v4.0 Sprint 16: Schedule debounced expression change."""
@@ -5551,6 +5813,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         v4.0 S18: → LayerSyncController with fallback for controller unavailable.
         FIX 2026-01-14: Added manual_change parameter.
+        v5.0: Updated to use exploring context combobox instead of filtering current layer.
         """
         # Try delegation first
         if self._layer_sync_ctrl:
@@ -5561,17 +5824,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if not self._is_ui_ready() or not layer:
             return
         
-        # FIX 2026-01-14: Define last_layer BEFORE using it
-        last_layer = self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].currentLayer()
-        logger.debug(f"current_layer_changed: Syncing combo | last_layer={last_layer.name() if last_layer else None} | new_layer={layer.name()}")
-        if last_layer is None or last_layer.id() != layer.id():
-            logger.debug(f"  -> Layer changed, updating combo")
-            self.manageSignal(["FILTERING", "CURRENT_LAYER"], 'disconnect')
-            self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].setLayer(layer)
-            self.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
-        else:
-            logger.debug(f"  -> Same layer, skipping combo update")
-        # NOTE: Removed duplicate last_layer definition - now defined at start of fallback block
+        # v5.0: Use exploring context combobox instead of filtering current layer
+        combo = self.get_source_layer_combobox()
+        if combo:
+            last_layer = combo.currentLayer()
+            logger.debug(f"current_layer_changed: Syncing combo | last_layer={last_layer.name() if last_layer else None} | new_layer={layer.name()}")
+            if last_layer is None or last_layer.id() != layer.id():
+                logger.debug(f"  -> Layer changed, updating combo")
+                self.manageSignal(["EXPLORING", "VECTOR_LAYER"], 'disconnect')
+                combo.blockSignals(True)
+                combo.setLayer(layer)
+                combo.blockSignals(False)
+                self.manageSignal(["EXPLORING", "VECTOR_LAYER"], 'connect', 'layerChanged')
+            else:
+                logger.debug(f"  -> Same layer, skipping combo update")
         
         # Update backend indicator
         forced_backend = getattr(self, 'forced_backends', {}).get(layer.id())

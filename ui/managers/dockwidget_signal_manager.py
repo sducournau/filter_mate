@@ -705,15 +705,17 @@ class DockwidgetSignalManager:
             return
         
         try:
-            # FIX 2026-01-14: Force connection by clearing cache first
-            cache_key = "FILTERING.CURRENT_LAYER.layerChanged"
+            # v5.0: Connect exploring vector combobox instead of filtering current layer
+            cache_key = "EXPLORING.VECTOR_LAYER.layerChanged"
             if cache_key in self._signal_connection_states:
                 logger.debug(f"Clearing stale cache for {cache_key}")
                 del self._signal_connection_states[cache_key]
             
-            # Connect comboBox_filtering_current_layer.layerChanged signal
-            self.manage_signal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
-            logger.debug("Connected FILTERING.CURRENT_LAYER.layerChanged signal")
+            # Connect mMapLayerComboBox_exploring_vector.layerChanged signal
+            self.manage_signal(["EXPLORING", "VECTOR_LAYER"], 'connect', 'layerChanged')
+            logger.debug("Connected EXPLORING.VECTOR_LAYER.layerChanged signal")
+        except Exception as e:
+            logger.warning(f"Could not connect VECTOR_LAYER signal: {e}")
         except Exception as e:
             logger.warning(f"Could not connect CURRENT_LAYER signal: {e}")
         

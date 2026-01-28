@@ -341,9 +341,9 @@ class FavoritesController(BaseController):
                 if subset and subset.strip():
                     return subset
 
-            # Source 3: Try filtering source layer combobox
-            if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
-                layer = self.dockwidget.comboBox_filtering_current_layer.currentLayer()
+            # v5.0: Source 3: Try exploring context source layer
+            if hasattr(self.dockwidget, 'get_source_layer_from_exploring_context'):
+                layer = self.dockwidget.get_source_layer_from_exploring_context()
                 if layer:
                     subset = layer.subsetString()
                     if subset and subset.strip():

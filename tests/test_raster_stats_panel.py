@@ -574,5 +574,186 @@ class TestRasterExploringGroupBox(unittest.TestCase):
         pass
 
 
+class TestExportButtonUS14(unittest.TestCase):
+    """Test cases for Export Stats CSV button (US-14)."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.patches = []
+        
+        # Patch QGIS modules
+        qgis_patch = patch.dict('sys.modules', {
+            'qgis': Mock(),
+            'qgis.PyQt': Mock(),
+            'qgis.PyQt.QtCore': Mock(
+                Qt=MockQt,
+                pyqtSignal=MockQtSignal,
+            ),
+            'qgis.PyQt.QtWidgets': Mock(
+                QWidget=MockWidget,
+                QLabel=MockLabel,
+                QVBoxLayout=MockVBoxLayout,
+                QHBoxLayout=MockHBoxLayout,
+                QGridLayout=MockGridLayout,
+                QComboBox=MockComboBox,
+                QScrollArea=MockScrollArea,
+                QFrame=Mock(),
+                QSizePolicy=Mock(),
+                QPushButton=Mock(return_value=MockWidget()),
+                QFileDialog=Mock(),
+                QMessageBox=Mock(),
+            ),
+            'qgis.PyQt.QtGui': Mock(QFont=Mock),
+        })
+        qgis_patch.start()
+        self.patches.append(qgis_patch)
+    
+    def tearDown(self):
+        """Clean up patches."""
+        for p in self.patches:
+            p.stop()
+    
+    def test_panel_has_export_button(self):
+        """Test that RasterStatsPanel has an export button."""
+        from ui.widgets.raster_stats_panel import RasterStatsPanel
+        
+        panel = RasterStatsPanel()
+        
+        # Verify export button exists
+        self.assertTrue(hasattr(panel, '_export_btn'))
+    
+    def test_export_button_disabled_initially(self):
+        """Test export button is disabled when no layer is set."""
+        from ui.widgets.raster_stats_panel import RasterStatsPanel
+        
+        panel = RasterStatsPanel()
+        
+        # Export button should be disabled initially
+        self.assertFalse(panel._export_btn._enabled)
+    
+    def test_export_button_enabled_after_layer_set(self):
+        """Test export button is enabled after layer is set."""
+        from ui.widgets.raster_stats_panel import RasterStatsPanel
+        
+        panel = RasterStatsPanel()
+        
+        snapshot = MockLayerStatsSnapshot(
+            layer_id="test_layer_001",
+            layer_name="test_raster.tif",
+            band_count=1,
+            width=100,
+            height=100,
+            crs_auth_id="EPSG:4326",
+            extent_wkt="POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))",
+            band_summaries=[
+                MockBandSummary(
+                    band_index=1, band_name="Band 1", data_type="Byte",
+                    min_value=0, max_value=255, mean=128, std_dev=45,
+                    null_count=0, total_pixels=10000, null_percentage=0
+                ),
+            ]
+        )
+        
+        panel.set_layer_snapshot(snapshot)
+        
+        # Export button should be enabled now
+        self.assertTrue(panel._export_btn._enabled)
+    
+    def test_export_button_disabled_after_clear(self):
+        """Test export button is disabled after panel is cleared."""
+        from ui.widgets.raster_stats_panel import RasterStatsPanel
+        
+        panel = RasterStatsPanel()
+        
+        snapshot = MockLayerStatsSnapshot(
+            layer_id="test_layer_001",
+            layer_name="test_raster.tif",
+            band_count=1,
+            width=100,
+            height=100,
+            crs_auth_id="EPSG:4326",
+            extent_wkt="POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))",
+            band_summaries=[
+                MockBandSummary(
+                    band_index=1, band_name="Band 1", data_type="Byte",
+                    min_value=0, max_value=255, mean=128, std_dev=45,
+                    null_count=0, total_pixels=10000, null_percentage=0
+                ),
+            ]
+        )
+        
+        panel.set_layer_snapshot(snapshot)
+        panel.clear()
+        
+        # Export button should be disabled after clear
+        self.assertFalse(panel._export_btn._enabled)
+    
+    def test_export_requested_signal_exists(self):
+        """Test that export_requested signal exists."""
+        from ui.widgets.raster_stats_panel import RasterStatsPanel
+        
+        panel = RasterStatsPanel()
+        
+        # Verify export_requested signal exists
+        self.assertTrue(hasattr(panel, 'export_requested'))
+    
+    def test_layer_id_stored_from_snapshot(self):
+        """Test that layer_id is stored from snapshot for export."""
+        from ui.widgets.raster_stats_panel import RasterStatsPanel
+        
+        panel = RasterStatsPanel()
+        
+        snapshot = MockLayerStatsSnapshot(
+            layer_id="test_layer_xyz",
+            layer_name="test_raster.tif",
+            band_count=1,
+            width=100,
+            height=100,
+            crs_auth_id="EPSG:4326",
+            extent_wkt="POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))",
+            band_summaries=[
+                MockBandSummary(
+                    band_index=1, band_name="Band 1", data_type="Byte",
+                    min_value=0, max_value=255, mean=128, std_dev=45,
+                    null_count=0, total_pixels=10000, null_percentage=0
+                ),
+            ]
+        )
+        
+        panel.set_layer_snapshot(snapshot)
+        
+        # Layer ID should be stored
+        self.assertEqual(panel._layer_id, "test_layer_xyz")
+    
+    def test_layer_id_cleared_on_clear(self):
+        """Test layer_id is cleared when panel is cleared."""
+        from ui.widgets.raster_stats_panel import RasterStatsPanel
+        
+        panel = RasterStatsPanel()
+        
+        snapshot = MockLayerStatsSnapshot(
+            layer_id="test_layer_xyz",
+            layer_name="test_raster.tif",
+            band_count=1,
+            width=100,
+            height=100,
+            crs_auth_id="EPSG:4326",
+            extent_wkt="POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))",
+            band_summaries=[
+                MockBandSummary(
+                    band_index=1, band_name="Band 1", data_type="Byte",
+                    min_value=0, max_value=255, mean=128, std_dev=45,
+                    null_count=0, total_pixels=10000, null_percentage=0
+                ),
+            ]
+        )
+        
+        panel.set_layer_snapshot(snapshot)
+        panel.clear()
+        
+        # Layer ID should be None after clear
+        self.assertIsNone(panel._layer_id)
+
+
 if __name__ == '__main__':
     unittest.main()

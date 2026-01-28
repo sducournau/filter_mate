@@ -26,12 +26,19 @@ from qgis.PyQt.QtWidgets import (
     QSizePolicy,
     QScrollArea,
     QComboBox,
+    QPushButton,
+    QFileDialog,
+    QMessageBox,
 )
 from qgis.PyQt.QtGui import QFont
 
 if TYPE_CHECKING:
     from qgis.core import QgsRasterLayer
-    from core.services.raster_stats_service import LayerStatsSnapshot, BandSummary
+    from core.services.raster_stats_service import (
+        LayerStatsSnapshot,
+        BandSummary,
+        RasterStatsService,
+    )
 
 logger = logging.getLogger('FilterMate.UI.RasterStatsPanel')
 
@@ -189,24 +196,30 @@ class RasterStatsPanel(QWidget):
     Panel displaying comprehensive raster statistics.
     
     EPIC-2 US-05: Stats Panel Widget
+    EPIC-2 US-14: Export Stats CSV
     
     Features:
     - Layer metadata (dimensions, CRS, extent)
     - Band selector for multi-band rasters
     - Per-band statistics (min, max, mean, stddev, null%)
     - Data type information
+    - Export to CSV functionality
     
     Signals:
         band_changed: Emitted when selected band changes
         refresh_requested: Emitted when user requests stats refresh
+        export_requested: Emitted when user requests CSV export
     """
     
     band_changed = pyqtSignal(int)  # band_number
     refresh_requested = pyqtSignal()
+    export_requested = pyqtSignal(str)  # output_path
     
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._layer: Optional['QgsRasterLayer'] = None
+        self._layer_id: Optional[str] = None
+        self._stats_service: Optional['RasterStatsService'] = None
         self._band_rows: Dict[int, BandStatsRow] = {}
         self._setup_ui()
     
@@ -300,6 +313,37 @@ class RasterStatsPanel(QWidget):
         self._stats_scroll.setWidget(self._stats_container)
         main_layout.addWidget(self._stats_scroll, 1)
         
+        # === Export Button Section (US-14) ===
+        self._export_frame = QWidget()
+        export_layout = QHBoxLayout(self._export_frame)
+        export_layout.setContentsMargins(0, 4, 0, 0)
+        export_layout.setSpacing(8)
+        
+        export_layout.addStretch()
+        
+        self._export_btn = QPushButton("📥 Export CSV")
+        self._export_btn.setToolTip("Export statistics to CSV file")
+        self._export_btn.setStyleSheet("""
+            QPushButton {
+                padding: 4px 12px;
+                border: 1px solid palette(mid);
+                border-radius: 4px;
+                background: palette(button);
+            }
+            QPushButton:hover {
+                background: palette(light);
+                border-color: palette(highlight);
+            }
+            QPushButton:disabled {
+                color: palette(mid);
+            }
+        """)
+        self._export_btn.clicked.connect(self._on_export_clicked)
+        self._export_btn.setEnabled(False)  # Disabled until layer is set
+        export_layout.addWidget(self._export_btn)
+        
+        main_layout.addWidget(self._export_frame)
+        
         # === Placeholder for empty state ===
         self._empty_label = QLabel(
             "Select a raster layer to view statistics"
@@ -313,18 +357,102 @@ class RasterStatsPanel(QWidget):
         # Initial state
         self._show_empty_state()
     
+    def _on_export_clicked(self) -> None:
+        """
+        Handle export button click.
+        
+        EPIC-2 US-14: Export Stats CSV
+        """
+        if self._layer_id is None:
+            QMessageBox.warning(
+                self,
+                "FilterMate",
+                "No raster layer selected. Please select a layer first."
+            )
+            return
+        
+        # Get suggested filename from layer name
+        layer_name = self._layer_name_label.text()
+        safe_name = "".join(
+            c if c.isalnum() or c in ('-', '_') else '_'
+            for c in layer_name
+        )
+        suggested_name = f"{safe_name}_stats.csv"
+        
+        # Show file dialog
+        output_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Raster Statistics",
+            suggested_name,
+            "CSV Files (*.csv);;All Files (*)"
+        )
+        
+        if not output_path:
+            return  # User cancelled
+        
+        # Ensure .csv extension
+        if not output_path.lower().endswith('.csv'):
+            output_path += '.csv'
+        
+        # Try to export using service if available
+        if self._stats_service is not None:
+            try:
+                success = self._stats_service.export_stats_to_csv(
+                    layer_id=self._layer_id,
+                    output_path=output_path,
+                    include_histogram_summary=True
+                )
+                
+                if success:
+                    QMessageBox.information(
+                        self,
+                        "FilterMate",
+                        f"Statistics exported successfully to:\n{output_path}"
+                    )
+                    logger.info(f"Stats exported to {output_path}")
+                else:
+                    QMessageBox.warning(
+                        self,
+                        "FilterMate",
+                        "Failed to export statistics. Check the log for details."
+                    )
+            except Exception as e:
+                logger.error(f"Export failed: {e}")
+                QMessageBox.critical(
+                    self,
+                    "FilterMate",
+                    f"Export error: {str(e)}"
+                )
+        else:
+            # Emit signal for controller to handle
+            self.export_requested.emit(output_path)
+            logger.debug(f"Export requested to {output_path}")
+    
+    def set_stats_service(self, service: 'RasterStatsService') -> None:
+        """
+        Set the stats service for direct export.
+        
+        Args:
+            service: RasterStatsService instance
+        """
+        self._stats_service = service
+    
     def _show_empty_state(self) -> None:
         """Show empty state (no layer selected)."""
         self._info_frame.setVisible(False)
         self._band_selector_frame.setVisible(False)
         self._stats_scroll.setVisible(False)
+        self._export_frame.setVisible(False)
         self._empty_label.setVisible(True)
+        self._export_btn.setEnabled(False)
     
     def _show_stats_state(self) -> None:
         """Show stats state (layer selected)."""
         self._info_frame.setVisible(True)
         self._stats_scroll.setVisible(True)
+        self._export_frame.setVisible(True)
         self._empty_label.setVisible(False)
+        self._export_btn.setEnabled(True)
     
     def _on_band_selection_changed(self, index: int) -> None:
         """Handle band selection change."""
@@ -355,6 +483,9 @@ class RasterStatsPanel(QWidget):
             return
         
         self._show_stats_state()
+        
+        # Store layer_id for export (US-14)
+        self._layer_id = snapshot.layer_id
         
         # Update layer info
         self._layer_name_label.setText(snapshot.layer_name)
@@ -410,6 +541,9 @@ class RasterStatsPanel(QWidget):
         self._bands_label.setText("—")
         self._crs_label.setText("—")
         self._filesize_label.setText("— MB")
+        
+        # Clear layer ID for export (US-14)
+        self._layer_id = None
         
         # Clear band rows
         for row in self._band_rows.values():

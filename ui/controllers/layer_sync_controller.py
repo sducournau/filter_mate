@@ -493,10 +493,10 @@ class LayerSyncController(BaseController):
         if not restore_layer:
             restore_layer = self._get_current_layer()
 
-        # Last resort: combobox layer
+        # v5.0: Last resort - use exploring context combobox
         if not restore_layer:
-            if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
-                combo_layer = self.dockwidget.comboBox_filtering_current_layer.currentLayer()
+            if hasattr(self.dockwidget, 'get_source_layer_from_exploring_context'):
+                combo_layer = self.dockwidget.get_source_layer_from_exploring_context()
                 if combo_layer and combo_layer.isValid():
                     restore_layer = combo_layer
 
@@ -561,9 +561,9 @@ class LayerSyncController(BaseController):
         if hasattr(self.dockwidget, 'current_layer'):
             self.dockwidget.current_layer = layer
         
-        # Update combobox
-        if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
-            combo = self.dockwidget.comboBox_filtering_current_layer
+        # v5.0: Update exploring context combobox instead of old filtering combobox
+        combo = self.dockwidget.get_source_layer_combobox() if hasattr(self.dockwidget, 'get_source_layer_combobox') else None
+        if combo:
             combo.blockSignals(True)
             combo.setLayer(layer)
             combo.blockSignals(False)

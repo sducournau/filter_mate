@@ -39,6 +39,7 @@ The Raster Integration module extends FilterMate with comprehensive raster layer
 | Smart sampling     | Automatic sampling for large rasters    |
 | Progress tracking  | Async operations with progress feedback |
 | Error handling     | Typed exception hierarchy               |
+| **CSV Export**     | Export statistics to CSV files (US-14)  |
 
 ---
 
@@ -526,6 +527,60 @@ cached_stats = cache.get_statistics(layer_id)
 # Invalidate when layer changes
 cache.invalidate_layer(layer_id)
 ```
+
+### Export to CSV (US-14)
+
+Export raster statistics to CSV for use in reports or external analysis:
+
+```python
+from core.services.raster_stats_service import RasterStatsService
+from adapters.backends.qgis_raster_backend import QGISRasterBackend
+
+# Initialize service
+backend = QGISRasterBackend()
+service = RasterStatsService(backend)
+
+# Basic export
+success = service.export_stats_to_csv(
+    layer_id=layer.id(),
+    output_path="/path/to/output.csv"
+)
+
+# Export with filter range (shows current filter values)
+success = service.export_stats_to_csv(
+    layer_id=layer.id(),
+    output_path="/path/to/output.csv",
+    filter_range=(100.0, 200.0)  # Current filter min/max
+)
+
+# Export with histogram percentiles
+success = service.export_stats_to_csv(
+    layer_id=layer.id(),
+    output_path="/path/to/output.csv",
+    include_histogram_summary=True  # Adds P25, P50, P75 columns
+)
+```
+
+**CSV Output Format:**
+
+```csv
+Layer,Band,Min,Max,Mean,StdDev,NoData,NullPercent,DataType,ValidPixels,TotalPixels
+# Exported from FilterMate on 2026-01-28T12:00:00
+# Layer: DEM_Sample
+# Size: 1000x1000 pixels
+# CRS: EPSG:32632
+test_raster,Band 1,0.000000,255.000000,127.500000,50.000000,-9999.000000,2.30%,FLOAT32,9770,10000
+```
+
+**UI Export Button:**
+
+The export button is available in the Statistics tab of the Raster Analysis panel:
+
+1. Select a raster layer
+2. Navigate to the **📊 Stats** tab
+3. Click **📥 Export CSV** button
+4. Choose save location
+5. Statistics are exported with metadata comments
 
 ---
 

@@ -400,6 +400,137 @@ class TestStatsCacheStrategy(unittest.TestCase):
         self.assertTrue(mock_backend.get_statistics_called)
 
 
+class TestExportStatsCSV(unittest.TestCase):
+    """Tests for CSV export functionality (US-14)."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.backend = MockRasterBackend()
+        self.service = RasterStatsService(
+            backend=self.backend,
+            cache_strategy=StatsCacheStrategy.NONE
+        )
+
+    def test_export_stats_creates_csv_file(self):
+        """Test export creates CSV file with correct content."""
+        import tempfile
+        import os
+        
+        with tempfile.NamedTemporaryFile(
+            mode='w', suffix='.csv', delete=False
+        ) as f:
+            output_path = f.name
+        
+        try:
+            # Export stats
+            result = self.service.export_stats_to_csv(
+                layer_id="valid_test_layer",
+                output_path=output_path
+            )
+            
+            self.assertTrue(result)
+            self.assertTrue(os.path.exists(output_path))
+            
+            # Verify content
+            with open(output_path, 'r') as f:
+                content = f.read()
+            
+            # Check headers exist
+            self.assertIn('Layer', content)
+            self.assertIn('Band', content)
+            self.assertIn('Min', content)
+            self.assertIn('Max', content)
+            self.assertIn('Mean', content)
+            self.assertIn('StdDev', content)
+            
+            # Check data exists
+            self.assertIn('Test Raster', content)
+            self.assertIn('Band 1', content)
+            
+        finally:
+            if os.path.exists(output_path):
+                os.remove(output_path)
+
+    def test_export_stats_with_filter_range(self):
+        """Test export includes filter range when provided."""
+        import tempfile
+        import os
+        
+        with tempfile.NamedTemporaryFile(
+            mode='w', suffix='.csv', delete=False
+        ) as f:
+            output_path = f.name
+        
+        try:
+            # Export with filter range
+            result = self.service.export_stats_to_csv(
+                layer_id="valid_test_layer",
+                output_path=output_path,
+                filter_range=(100.0, 200.0)
+            )
+            
+            self.assertTrue(result)
+            
+            with open(output_path, 'r') as f:
+                content = f.read()
+            
+            # Check filter columns exist
+            self.assertIn('FilterMin', content)
+            self.assertIn('FilterMax', content)
+            self.assertIn('100.0', content)
+            self.assertIn('200.0', content)
+            
+        finally:
+            if os.path.exists(output_path):
+                os.remove(output_path)
+
+    def test_export_stats_invalid_layer_returns_false(self):
+        """Test export returns False for invalid layer."""
+        import tempfile
+        
+        with tempfile.NamedTemporaryFile(
+            mode='w', suffix='.csv', delete=False
+        ) as f:
+            output_path = f.name
+        
+        # Try export with invalid layer ID (doesn't start with "valid_")
+        result = self.service.export_stats_to_csv(
+            layer_id="invalid_layer",
+            output_path=output_path
+        )
+        
+        self.assertFalse(result)
+
+    def test_export_stats_includes_metadata_comments(self):
+        """Test export includes metadata as CSV comments."""
+        import tempfile
+        import os
+        
+        with tempfile.NamedTemporaryFile(
+            mode='w', suffix='.csv', delete=False
+        ) as f:
+            output_path = f.name
+        
+        try:
+            self.service.export_stats_to_csv(
+                layer_id="valid_test_layer",
+                output_path=output_path
+            )
+            
+            with open(output_path, 'r') as f:
+                content = f.read()
+            
+            # Check for metadata comments
+            self.assertIn('# Exported from FilterMate', content)
+            self.assertIn('# Layer:', content)
+            self.assertIn('# Size:', content)
+            self.assertIn('# CRS:', content)
+            
+        finally:
+            if os.path.exists(output_path):
+                os.remove(output_path)
+
+
 class TestServiceExports(unittest.TestCase):
     """Tests for service module exports."""
 

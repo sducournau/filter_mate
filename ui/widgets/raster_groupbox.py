@@ -93,7 +93,7 @@ class RasterExploringGroupBox(QWidget):
         
         # Create collapsible group box
         self._groupbox = QgsCollapsibleGroupBox(self)
-        self._groupbox.setTitle("🗺️ RASTER ANALYSIS")
+        self._groupbox.setTitle("🏔️ RASTER")
         self._groupbox.setCheckable(True)
         self._groupbox.setChecked(False)
         self._groupbox.setCollapsed(True)
@@ -116,12 +116,34 @@ class RasterExploringGroupBox(QWidget):
         content_layout.setContentsMargins(8, 8, 8, 8)
         content_layout.setSpacing(8)
         
-        # === Header with refresh button ===
+        # === Raster Layer Selector (PRD requirement) ===
+        layer_selector_layout = QHBoxLayout()
+        layer_selector_layout.setSpacing(4)
+        
+        layer_label = QLabel("Raster layer:")
+        layer_label.setStyleSheet("font-weight: normal; font-size: 9pt;")
+        layer_selector_layout.addWidget(layer_label)
+        
+        # Import QgsMapLayerComboBox for raster selection
+        from qgis.gui import QgsMapLayerComboBox
+        from qgis.core import QgsMapLayerProxyModel
+        
+        self._raster_layer_combo = QgsMapLayerComboBox()
+        self._raster_layer_combo.setFilters(QgsMapLayerProxyModel.RasterLayer)
+        self._raster_layer_combo.setAllowEmptyLayer(True)
+        self._raster_layer_combo.setShowCrs(True)
+        self._raster_layer_combo.setMinimumHeight(26)
+        self._raster_layer_combo.layerChanged.connect(self._on_raster_layer_changed)
+        layer_selector_layout.addWidget(self._raster_layer_combo, 1)
+        
+        content_layout.addLayout(layer_selector_layout)
+        
+        # === Header with status and refresh button ===
         header_layout = QHBoxLayout()
         header_layout.setSpacing(8)
         
         self._status_label = QLabel("Select a raster layer")
-        self._status_label.setStyleSheet("color: palette(mid);")
+        self._status_label.setStyleSheet("color: palette(mid); font-style: italic;")
         header_layout.addWidget(self._status_label, 1)
         
         self._refresh_btn = QPushButton("↻")
@@ -190,8 +212,9 @@ class RasterExploringGroupBox(QWidget):
         # Add groupbox to main layout
         main_layout.addWidget(self._groupbox)
         
-        # Initially hidden (shown when raster layer is selected)
-        self.setVisible(False)
+        # VISIBLE BY DEFAULT (PRD: "Raster = just another criteria")
+        # Collapsed by default but always visible in EXPLORING panel
+        self.setVisible(True)
         
         # Setup debounce timer for stats updates
         self._update_timer = QTimer(self)
@@ -297,6 +320,8 @@ class RasterExploringGroupBox(QWidget):
             service: RasterStatsService instance
         """
         self._stats_service = service
+        # Also set service on stats panel for direct export (US-14)
+        self._stats_panel.set_stats_service(service)
         logger.debug("Stats service set for raster groupbox")
     
     def set_layer(self, layer: Optional['QgsRasterLayer']) -> None:
@@ -325,26 +350,58 @@ class RasterExploringGroupBox(QWidget):
         """Clear statistics display."""
         self._stats_panel.clear()
     
+    def _on_raster_layer_changed(self, layer) -> None:
+        """
+        Handle raster layer selection change from the combobox.
+        
+        Args:
+            layer: The newly selected raster layer or None
+        """
+        from qgis.core import QgsRasterLayer
+        
+        if layer is not None and isinstance(layer, QgsRasterLayer):
+            logger.info(f"Raster layer selected: {layer.name()}")
+            self.set_layer(layer)
+            # Expand the groupbox when a layer is selected
+            self._groupbox.setCollapsed(False)
+            self._groupbox.setChecked(True)
+        else:
+            logger.debug("No raster layer selected")
+            self.set_layer(None)
+    
     def show_for_raster(self) -> None:
-        """Show the groupbox for raster layer exploration."""
-        self.setVisible(True)
+        """
+        Expand the groupbox for raster analysis.
+        
+        Note: Widget visibility is always True in v4.0 (PRD requirement).
+        This method now only controls expansion state.
+        """
         self._groupbox.setCollapsed(False)
         self._groupbox.setChecked(True)
         self.visibility_changed.emit(True)
-        logger.debug("Raster groupbox shown")
+        logger.debug("Raster groupbox expanded")
     
     def hide_for_vector(self) -> None:
-        """Hide the groupbox when vector layer is selected."""
-        self.setVisible(False)
+        """
+        Collapse the groupbox when not in active use.
+        
+        Note: Widget visibility is always True in v4.0 (PRD requirement).
+        This method now only collapses without hiding.
+        """
         self._groupbox.setCollapsed(True)
         self._groupbox.setChecked(False)
         self.visibility_changed.emit(False)
-        logger.debug("Raster groupbox hidden")
+        logger.debug("Raster groupbox collapsed")
     
     @property
     def layer(self) -> Optional['QgsRasterLayer']:
         """Get the current raster layer."""
         return self._layer
+    
+    @property
+    def raster_layer_combo(self):
+        """Get the raster layer combobox widget."""
+        return self._raster_layer_combo
     
     @property
     def is_expanded(self) -> bool:

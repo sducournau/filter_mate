@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from .interface import CacheKey, CacheEntry, CacheManager, get_cache_manager
-from .query_cache import QueryCache, FilterResultCache, FilterCacheConfig
+from .lru_cache import FilterResultCache, FilterCacheConfig
 from .invalidation import CacheInvalidator, get_cache_invalidator
 
 logger = logging.getLogger('FilterMate.Cache.Backend')

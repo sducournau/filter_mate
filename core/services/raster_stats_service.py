@@ -527,6 +527,164 @@ class RasterStatsService:
         return self._backend.supports_statistics(layer_id)
     
     # =========================================================================
+    # Public API - Export (US-14)
+    # =========================================================================
+    
+    def export_stats_to_csv(
+        self,
+        layer_id: str,
+        output_path: str,
+        include_histogram_summary: bool = False,
+        filter_range: Optional[Tuple[float, float]] = None
+    ) -> bool:
+        """
+        Export raster statistics to CSV file.
+        
+        EPIC-2: Raster Integration - US-14: Export Stats CSV
+        
+        Args:
+            layer_id: Raster layer ID
+            output_path: Path to output CSV file
+            include_histogram_summary: Include histogram percentiles
+            filter_range: Optional (min, max) tuple for current filter
+            
+        Returns:
+            True if export succeeded, False otherwise
+            
+        Example CSV output:
+            Layer,Band,Min,Max,Mean,StdDev,NoData,NullPercent,DataType,FilterMin,FilterMax
+            dem_sample,Band 1,0.0,255.0,127.5,50.0,-9999.0,2.3%,FLOAT32,100.0,200.0
+        """
+        import csv
+        from datetime import datetime
+        
+        try:
+            # Get statistics
+            response = self.compute_statistics(StatsRequest(layer_id=layer_id))
+            
+            if not response.is_success or response.stats is None:
+                logger.error(
+                    f"[RasterStatsService] Cannot export: no stats for {layer_id}"
+                )
+                return False
+            
+            stats = response.stats
+            
+            with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
+                # Define headers
+                fieldnames = [
+                    'Layer', 'Band', 'Min', 'Max', 'Mean', 'StdDev',
+                    'NoData', 'NullPercent', 'DataType', 'ValidPixels', 'TotalPixels'
+                ]
+                
+                # Add filter columns if filter is active
+                if filter_range is not None:
+                    fieldnames.extend(['FilterMin', 'FilterMax'])
+                
+                # Add histogram percentiles if requested
+                if include_histogram_summary:
+                    fieldnames.extend(['P25', 'P50', 'P75'])
+                
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+                
+                # Write metadata comment (CSV comment style)
+                csvfile.write(f"# Exported from FilterMate on {datetime.now().isoformat()}\n")
+                csvfile.write(f"# Layer: {stats.layer_name}\n")
+                csvfile.write(f"# Size: {stats.width}x{stats.height} pixels\n")
+                csvfile.write(f"# CRS: {stats.crs_auth_id}\n")
+                csvfile.write(f"# File: {stats.file_path or 'N/A'}\n")
+                
+                # Write band statistics
+                for band_stats in stats.band_statistics:
+                    row = {
+                        'Layer': stats.layer_name,
+                        'Band': f"Band {band_stats.band_number}",
+                        'Min': f"{band_stats.min_value:.6f}",
+                        'Max': f"{band_stats.max_value:.6f}",
+                        'Mean': f"{band_stats.mean:.6f}",
+                        'StdDev': f"{band_stats.std_dev:.6f}",
+                        'NoData': f"{band_stats.no_data_value:.6f}" if band_stats.has_no_data else "None",
+                        'NullPercent': f"{band_stats.null_percentage:.2f}%",
+                        'DataType': band_stats.data_type.name,
+                        'ValidPixels': band_stats.valid_pixel_count,
+                        'TotalPixels': band_stats.total_pixel_count,
+                    }
+                    
+                    # Add filter range if active
+                    if filter_range is not None:
+                        row['FilterMin'] = f"{filter_range[0]:.6f}"
+                        row['FilterMax'] = f"{filter_range[1]:.6f}"
+                    
+                    # Add histogram percentiles if available
+                    if include_histogram_summary:
+                        histogram = response.histograms.get(band_stats.band_number)
+                        if histogram:
+                            percentiles = self._calculate_percentiles(histogram)
+                            row['P25'] = f"{percentiles[0]:.6f}"
+                            row['P50'] = f"{percentiles[1]:.6f}"
+                            row['P75'] = f"{percentiles[2]:.6f}"
+                        else:
+                            row['P25'] = 'N/A'
+                            row['P50'] = 'N/A'
+                            row['P75'] = 'N/A'
+                    
+                    writer.writerow(row)
+            
+            logger.info(
+                f"[RasterStatsService] Exported stats to {output_path}"
+            )
+            return True
+            
+        except Exception as e:
+            logger.error(
+                f"[RasterStatsService] Export failed: {e}"
+            )
+            return False
+    
+    def _calculate_percentiles(
+        self,
+        histogram: HistogramData
+    ) -> Tuple[float, float, float]:
+        """
+        Calculate 25th, 50th, 75th percentiles from histogram.
+        
+        Args:
+            histogram: HistogramData with counts and bin edges
+            
+        Returns:
+            Tuple of (P25, P50, P75) values
+        """
+        if not histogram.counts or not histogram.bin_edges:
+            return (0.0, 0.0, 0.0)
+        
+        # Calculate cumulative sum
+        total = sum(histogram.counts)
+        if total == 0:
+            return (histogram.min_value, histogram.min_value, histogram.min_value)
+        
+        cumsum = 0
+        p25, p50, p75 = None, None, None
+        
+        for i, count in enumerate(histogram.counts):
+            cumsum += count
+            ratio = cumsum / total
+            
+            if p25 is None and ratio >= 0.25:
+                p25 = histogram.bin_edges[i] if i < len(histogram.bin_edges) else histogram.min_value
+            if p50 is None and ratio >= 0.50:
+                p50 = histogram.bin_edges[i] if i < len(histogram.bin_edges) else histogram.min_value
+            if p75 is None and ratio >= 0.75:
+                p75 = histogram.bin_edges[i] if i < len(histogram.bin_edges) else histogram.min_value
+                break
+        
+        return (
+            p25 or histogram.min_value,
+            p50 or histogram.min_value,
+            p75 or histogram.max_value
+        )
+    
+    # =========================================================================
     # Cache Management
     # =========================================================================
     
