@@ -129,6 +129,20 @@ def apply_pending_subset_requests(
                     "FilterMate", Qgis.Warning
                 )
                 continue
+            
+            # FIX v4.8.4: Fix style filter type mismatches BEFORE applying filter
+            # This prevents "operator does not exist: character varying < integer" errors
+            # when PostgreSQL layers have rule-based renderers with numeric comparisons on VARCHAR fields
+            if layer.providerType() == 'postgres':
+                try:
+                    from ...infrastructure.database.style_filter_fixer import fix_layer_style_filters
+                    success, changes = fix_layer_style_filters(layer, dry_run=False)
+                    if changes:
+                        logger.info(f"  🔧 Fixed {len(changes)} style filter type mismatches for {layer.name()}")
+                        for change in changes:
+                            logger.debug(f"    → {change}")
+                except Exception as style_fix_err:
+                    logger.debug(f"  Style filter fix skipped (non-critical): {style_fix_err}")
                 
             current_subset = layer.subsetString() or ''
             expression_str = expression or ''

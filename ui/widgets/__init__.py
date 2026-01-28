@@ -26,6 +26,17 @@ from .transparency_widget import (
     OpacitySlider,
     RangeTransparencyWidget,
 )
+# EPIC-3: Raster-Vector Integration widgets
+from .raster_statistics_gb import RasterStatisticsGroupBox, StatCell
+from .raster_value_selection_gb import RasterValueSelectionGroupBox
+from .raster_mask_clip_gb import RasterMaskClipGroupBox
+from .raster_memory_clips_gb import (
+    RasterMemoryClipsGroupBox,
+    MemoryClipItem,
+    MemoryClipListItem,
+)
+from .raster_exploring_gb_v2 import RasterExploringGroupBoxV2
+from .pixel_picker_map_tool import PixelPickerMapTool
 
 __all__ = [
     'FavoritesWidget',
@@ -48,4 +59,14 @@ __all__ = [
     'TransparencyWidget',
     'OpacitySlider',
     'RangeTransparencyWidget',
+    # EPIC-3: Raster-Vector Integration widgets
+    'RasterStatisticsGroupBox',
+    'StatCell',
+    'RasterValueSelectionGroupBox',
+    'RasterMaskClipGroupBox',
+    'RasterMemoryClipsGroupBox',
+    'MemoryClipItem',
+    'MemoryClipListItem',
+    'RasterExploringGroupBoxV2',
+    'PixelPickerMapTool',
 ]

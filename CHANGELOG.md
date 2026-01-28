@@ -2,6 +2,64 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [4.4.7] - 2026-01-27 🔧 FIX: PostgreSQL style filter type mismatch errors
+
+### Bug Fix - Automatic type casting for rule-based renderer expressions
+
+**Symptom**: PostgreSQL queries fail with "operator does not exist: character varying < integer"  
+**Root Cause**: Rule-based renderer style expressions contain numeric comparisons on VARCHAR fields without explicit type casting
+
+#### Problem Analysis
+
+When a PostgreSQL layer has a rule-based renderer with expressions like:
+
+```sql
+-- Style filter from layer QML
+("nature" = 'Route à 1 chaussée') AND ("importance" < 4)
+```
+
+If the `importance` column is defined as `character varying` in PostgreSQL (common with IGN BDTopo), QGIS combines this with FilterMate's subset string, and PostgreSQL fails:
+
+```
+ERROR: operator does not exist: character varying < integer
+HINT: No operator matches the given name and argument types. 
+      You might need to add explicit type casts.
+```
+
+#### Solution (v4.8.4)
+
+1. **Proactive fix at plugin startup**: Scan all PostgreSQL layers with rule-based renderers and auto-fix type mismatches
+2. **Runtime fix before filter application**: Fix style filters before each filter is applied
+3. **Type casting applied**: `"importance" < 4` → `"importance"::integer < 4`
+
+#### Files Changed
+
+- `core/tasks/task_completion_handler.py`:
+  - Added automatic style filter fixing before applying subset string to PostgreSQL layers
+  
+- `core/services/app_initializer.py`:
+  - Added `_fix_postgresql_style_filters()` method to scan and fix layers at startup
+  
+- `infrastructure/database/style_filter_fixer.py` (existing):
+  - Already contained `apply_type_casting_to_expression()` and `fix_layer_style_filters()`
+  - Now automatically invoked by the plugin
+
+#### New Test File
+
+- `tests/unit/infrastructure/database/test_style_filter_fixer.py`:
+  - 18 tests for `apply_type_casting_to_expression()` function
+  - Tests for IGN BDTopo-style expressions
+
+---
+
+## [4.4.6] - 2026-01-27
+
+### Changes
+
+- Version bump
+
+---
+
 ## [4.4.5] - 2026-01-25 🔧 FIX: Dynamic buffer fails with `1 = 0` when PK is not "id"
 
 ### Bug Fix - Buffer table creation fails on tables without `id` column
