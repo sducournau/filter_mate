@@ -40,11 +40,12 @@ except ImportError:
     from qgis.PyQt.QtWidgets import QGroupBox as QgsCollapsibleGroupBox
     QGIS_GUI_AVAILABLE = False
 
-# Import the 4 GroupBox widgets
+# Import the 5 GroupBox widgets
 from .raster_statistics_gb import RasterStatisticsGroupBox
 from .raster_value_selection_gb import RasterValueSelectionGroupBox
 from .raster_mask_clip_gb import RasterMaskClipGroupBox
 from .raster_memory_clips_gb import RasterMemoryClipsGroupBox, MemoryClipItem
+from .raster_templates_gb import RasterTemplatesGroupBox
 
 if TYPE_CHECKING:
     from qgis.core import QgsRasterLayer
@@ -72,6 +73,9 @@ class RasterExploringGroupBoxV2(QWidget):
         active_groupbox_changed: Emitted when active GroupBox changes
         filter_context_changed: Emitted when filter context changes
         pick_mode_activated: Emitted when pixel picker mode is activated
+        execute_filter: Emitted when user requests filter execution
+        clear_filters: Emitted when user requests filter clearing
+        zonal_stats_requested: Emitted when user requests zonal statistics
     """
     
     # Signals
@@ -81,12 +85,30 @@ class RasterExploringGroupBoxV2(QWidget):
     active_groupbox_changed = pyqtSignal(str)  # groupbox name
     filter_context_changed = pyqtSignal(dict)  # filter context
     pick_mode_activated = pyqtSignal(bool)  # is_active
+    execute_filter = pyqtSignal()  # EPIC-3: execute filter request
+    clear_filters = pyqtSignal(list)  # EPIC-3: clear filters request (layer IDs)
+    zonal_stats_requested = pyqtSignal(list)  # EPIC-3: zonal stats request (layer IDs)
+    # EPIC-3: Memory Clips signals
+    clip_visibility_changed = pyqtSignal(str, bool)  # clip_id, visible
+    clip_save_requested = pyqtSignal(str)  # clip_id
+    clip_delete_requested = pyqtSignal(str)  # clip_id
+    save_all_clips_requested = pyqtSignal()
+    clear_all_clips_requested = pyqtSignal()
+    # EPIC-3: Mask & Clip operation signal
+    mask_clip_operation_requested = pyqtSignal(dict)  # operation params
+    # EPIC-3: Mask preview signal
+    preview_mask_requested = pyqtSignal()  # request mask preview on map
+    # EPIC-3: Workflow template signals
+    save_as_template_requested = pyqtSignal()  # save current config as template
+    load_template_requested = pyqtSignal()  # load and apply a template
+    template_apply_requested = pyqtSignal(str)  # apply specific template by ID
     
     # GroupBox identifiers
     GB_STATISTICS = "statistics"
     GB_VALUE_SELECTION = "value_selection"
     GB_MASK_CLIP = "mask_clip"
     GB_MEMORY_CLIPS = "memory_clips"
+    GB_TEMPLATES = "templates"
     
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         """
@@ -193,6 +215,10 @@ class RasterExploringGroupBoxV2(QWidget):
         self._memory_clips_gb = RasterMemoryClipsGroupBox()
         scroll_layout.addWidget(self._memory_clips_gb)
         
+        # 5. Workflow Templates GroupBox
+        self._templates_gb = RasterTemplatesGroupBox()
+        scroll_layout.addWidget(self._templates_gb)
+        
         scroll_layout.addStretch()
         
         scroll_area.setWidget(scroll_content)
@@ -241,6 +267,31 @@ class RasterExploringGroupBoxV2(QWidget):
         self._value_selection_gb.range_changed.connect(
             self._on_value_range_changed
         )
+        # EPIC-3: Forward filter execution signals
+        self._value_selection_gb.filter_context_changed.connect(
+            self.filter_context_changed.emit
+        )
+        self._value_selection_gb.execute_filter.connect(
+            self.execute_filter.emit
+        )
+        self._value_selection_gb.clear_filters.connect(
+            self.clear_filters.emit
+        )
+        self._value_selection_gb.zonal_stats_requested.connect(
+            self.zonal_stats_requested.emit
+        )
+        # EPIC-3: Forward preview request signal
+        self._value_selection_gb.preview_requested.connect(
+            self.preview_mask_requested.emit
+        )
+        # EPIC-3: Forward save as template signal
+        self._value_selection_gb.save_as_template_requested.connect(
+            self.save_as_template_requested.emit
+        )
+        # EPIC-3: Forward load template signal
+        self._value_selection_gb.load_template_requested.connect(
+            self.load_template_requested.emit
+        )
         
         # Mask & Clip GroupBox
         self._mask_clip_gb.activated.connect(
@@ -249,6 +300,10 @@ class RasterExploringGroupBoxV2(QWidget):
         self._mask_clip_gb.collapsed_changed.connect(
             lambda c: self._on_groupbox_collapsed(self.GB_MASK_CLIP, c)
         )
+        # EPIC-3: Forward Mask & Clip operation signal
+        self._mask_clip_gb.operation_requested.connect(
+            self.mask_clip_operation_requested.emit
+        )
         
         # Memory Clips GroupBox
         self._memory_clips_gb.activated.connect(
@@ -256,6 +311,37 @@ class RasterExploringGroupBoxV2(QWidget):
         )
         self._memory_clips_gb.collapsed_changed.connect(
             lambda c: self._on_groupbox_collapsed(self.GB_MEMORY_CLIPS, c)
+        )
+        # EPIC-3: Forward Memory Clips signals
+        self._memory_clips_gb.clip_visibility_changed.connect(
+            self.clip_visibility_changed.emit
+        )
+        self._memory_clips_gb.clip_save_requested.connect(
+            self.clip_save_requested.emit
+        )
+        self._memory_clips_gb.clip_delete_requested.connect(
+            self.clip_delete_requested.emit
+        )
+        self._memory_clips_gb.save_all_requested.connect(
+            self.save_all_clips_requested.emit
+        )
+        self._memory_clips_gb.clear_all_requested.connect(
+            self.clear_all_clips_requested.emit
+        )
+        
+        # Templates GroupBox
+        self._templates_gb.activated.connect(
+            lambda: self._on_groupbox_activated(self.GB_TEMPLATES)
+        )
+        self._templates_gb.collapsed_changed.connect(
+            lambda c: self._on_groupbox_collapsed(self.GB_TEMPLATES, c)
+        )
+        # EPIC-3: Forward Templates signals
+        self._templates_gb.template_apply_requested.connect(
+            self.template_apply_requested.emit
+        )
+        self._templates_gb.save_current_requested.connect(
+            self.save_as_template_requested.emit
         )
     
     def _on_main_collapsed_changed(self, collapsed: bool) -> None:
@@ -290,17 +376,18 @@ class RasterExploringGroupBoxV2(QWidget):
         """
         logger.debug(f"GroupBox activated: {groupbox_name}")
         
-        # Collapse all other GroupBoxes
+        # Collapse all other GroupBoxes (5 GroupBoxes including Templates)
         groupboxes = {
             self.GB_STATISTICS: self._statistics_gb,
             self.GB_VALUE_SELECTION: self._value_selection_gb,
             self.GB_MASK_CLIP: self._mask_clip_gb,
             self.GB_MEMORY_CLIPS: self._memory_clips_gb,
+            self.GB_TEMPLATES: self._templates_gb,
         }
         
         for name, gb in groupboxes.items():
             if name != groupbox_name:
-                gb.collapse()
+                gb.set_collapsed(True)
         
         self._active_groupbox = groupbox_name
         self.active_groupbox_changed.emit(groupbox_name)
@@ -368,6 +455,15 @@ class RasterExploringGroupBoxV2(QWidget):
         self._stats_service = service
         self._statistics_gb.set_stats_service(service)
         self._value_selection_gb.set_stats_service(service)
+    
+    def set_template_service(self, service) -> None:
+        """
+        Set the WorkflowTemplateService for Templates GroupBox.
+        
+        Args:
+            service: WorkflowTemplateService instance
+        """
+        self._templates_gb.set_service(service)
     
     def set_canvas(self, canvas: 'QgsMapCanvas') -> None:
         """

@@ -12,6 +12,7 @@ from .config_editor_widget import (
     TabbedConfigDialog,
     ColorPickerWidget
 )
+from .zonal_stats_dialog import ZonalStatsDialog
 
 __all__ = [
     'FavoritesManagerDialog',
@@ -24,4 +25,6 @@ __all__ = [
     'SimpleConfigDialog',
     'TabbedConfigDialog',
     'ColorPickerWidget',
+    # EPIC-3: Raster integration
+    'ZonalStatsDialog',
 ]

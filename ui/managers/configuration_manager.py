@@ -919,6 +919,9 @@ class ConfigurationManager(QObject):
             d.checkBox_filtering_use_centroids_distant_layers.show()
             logger.debug(f"Inserted filtering layers layout, widget visible: {d.checkableComboBoxLayer_filtering_layers_to_filter.isVisible()}")
         
+        # EPIC-3: Create raster source info label for FILTERING tab
+        self._setup_raster_source_indicator(d)
+        
         try:
             from ..config import UIConfig
             h = UIConfig.get_config('combobox', 'height')
@@ -926,6 +929,105 @@ class ConfigurationManager(QObject):
             d.checkableComboBoxLayer_filtering_layers_to_filter.setMaximumHeight(h)
         except Exception:
             pass
+    
+    def _setup_raster_source_indicator(self, d):
+        """
+        EPIC-3: Create raster source info indicator widget for FILTERING tab.
+        
+        This widget shows information about the active raster filter source:
+        - Raster layer name
+        - Active band
+        - Value range being used for filtering
+        
+        Hidden by default, becomes visible when a raster context is active.
+        """
+        from qgis.PyQt import QtWidgets, QtCore, QtGui
+        
+        # Create container frame
+        d.frame_raster_source_info = QtWidgets.QFrame(d.FILTERING)
+        d.frame_raster_source_info.setObjectName("frame_raster_source_info")
+        d.frame_raster_source_info.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        d.frame_raster_source_info.setFrameShadow(QtWidgets.QFrame.Raised)
+        d.frame_raster_source_info.setStyleSheet("""
+            QFrame#frame_raster_source_info {
+                background-color: rgba(52, 152, 219, 0.15);
+                border: 1px solid rgba(52, 152, 219, 0.4);
+                border-radius: 4px;
+                padding: 2px;
+            }
+        """)
+        
+        # Create horizontal layout for frame
+        layout = QtWidgets.QHBoxLayout(d.frame_raster_source_info)
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(6)
+        
+        # Create icon label
+        d.lbl_raster_source_icon = QtWidgets.QLabel(d.frame_raster_source_info)
+        d.lbl_raster_source_icon.setText("🗺️")
+        d.lbl_raster_source_icon.setFixedWidth(20)
+        d.lbl_raster_source_icon.setAlignment(QtCore.Qt.AlignCenter)
+        layout.addWidget(d.lbl_raster_source_icon)
+        
+        # Create info label
+        d.lbl_raster_source_info = QtWidgets.QLabel(d.frame_raster_source_info)
+        d.lbl_raster_source_info.setObjectName("lbl_raster_source_info")
+        d.lbl_raster_source_info.setText("")
+        font = QtGui.QFont()
+        font.setFamily("Segoe UI")
+        font.setPointSize(9)
+        d.lbl_raster_source_info.setFont(font)
+        d.lbl_raster_source_info.setWordWrap(True)
+        layout.addWidget(d.lbl_raster_source_info, 1)  # stretch factor 1
+        
+        # Create clear button
+        d.btn_clear_raster_source = QtWidgets.QPushButton(d.frame_raster_source_info)
+        d.btn_clear_raster_source.setObjectName("btn_clear_raster_source")
+        d.btn_clear_raster_source.setText("✕")
+        d.btn_clear_raster_source.setFixedSize(20, 20)
+        d.btn_clear_raster_source.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        d.btn_clear_raster_source.setToolTip(d.tr("Clear raster filter source"))
+        d.btn_clear_raster_source.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                color: #666;
+            }
+            QPushButton:hover {
+                color: #c0392b;
+            }
+        """)
+        d.btn_clear_raster_source.clicked.connect(lambda: self._clear_raster_filter_source(d))
+        layout.addWidget(d.btn_clear_raster_source)
+        
+        # Hide by default
+        d.frame_raster_source_info.setVisible(False)
+        
+        # Insert into filtering values layout at position 1 (after layers combo)
+        if hasattr(d, 'verticalLayout_filtering_values'):
+            d.verticalLayout_filtering_values.insertWidget(1, d.frame_raster_source_info)
+        
+        logger.debug("EPIC-3: Created raster source info indicator widget")
+    
+    def _clear_raster_filter_source(self, d):
+        """
+        EPIC-3: Clear the raster filter source when user clicks X button.
+        """
+        try:
+            d.frame_raster_source_info.setVisible(False)
+            d.lbl_raster_source_info.setText("")
+            
+            # Clear raster filter service context if available
+            if hasattr(d, '_controller_integration') and d._controller_integration:
+                filtering_ctrl = d._controller_integration.get_controller('filtering')
+                if filtering_ctrl and hasattr(filtering_ctrl, '_raster_filter_service'):
+                    raster_service = filtering_ctrl._raster_filter_service
+                    if raster_service:
+                        raster_service.clear_context()
+            
+            logger.info("EPIC-3: Raster filter source cleared")
+        except Exception as e:
+            logger.warning(f"EPIC-3: Error clearing raster source: {e}")
     
     def setup_exporting_tab_widgets(self):
         """v4.0 Sprint 16: Configure widgets for Exporting tab (migrated from dockwidget)."""

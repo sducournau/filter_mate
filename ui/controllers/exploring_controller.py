@@ -2334,6 +2334,19 @@ class ExploringController(BaseController, LayerSelectionMixin):
         # Update button states
         dw._update_exploring_buttons_state()
         
+        # EPIC-3: Update vector source context for MASK & CLIP operations
+        # This propagates the current vector selection to the raster panel
+        try:
+            mode = 'selected' if features else 'all'
+            if hasattr(dw, 'update_vector_source_context'):
+                dw.update_vector_source_context(
+                    layer=dw.current_layer,
+                    features=features,
+                    mode=mode
+                )
+        except Exception as e:
+            logger.debug(f"handle_exploring_features_result: Could not update vector context: {e}")
+        
         return features
 
     def exploring_link_widgets(self, expression=None, change_source=None):

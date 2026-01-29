@@ -36,6 +36,7 @@ from .raster_memory_clips_gb import (
     MemoryClipListItem,
 )
 from .raster_exploring_gb_v2 import RasterExploringGroupBoxV2
+from .raster_templates_gb import RasterTemplatesGroupBox, TemplateListItem
 from .pixel_picker_map_tool import PixelPickerMapTool
 
 __all__ = [
@@ -68,5 +69,7 @@ __all__ = [
     'MemoryClipItem',
     'MemoryClipListItem',
     'RasterExploringGroupBoxV2',
+    'RasterTemplatesGroupBox',
+    'TemplateListItem',
     'PixelPickerMapTool',
 ]

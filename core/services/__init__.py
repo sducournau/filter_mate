@@ -88,6 +88,10 @@ from .raster_stats_service import (
     reset_raster_stats_service,
 )
 
+# EPIC-3: RasterFilterService - Service for raster-based vector filtering
+# Has QGIS dependencies (QObject, pyqtSignal) - imported directly
+# Import directly: from core.services.raster_filter_service import RasterFilterService, RasterFilterContext, RasterFilterMode
+
 __all__ = [
     # Expression Service
     'ExpressionService',

@@ -40,6 +40,14 @@ except ImportError:
 
 from .histogram_widget import HistogramCanvas
 
+# EPIC-3: Target layer selection widget
+try:
+    from .raster_target_layer_widget import RasterTargetLayerWidget
+    RASTER_TARGET_WIDGET_AVAILABLE = True
+except ImportError:
+    RasterTargetLayerWidget = None
+    RASTER_TARGET_WIDGET_AVAILABLE = False
+
 if TYPE_CHECKING:
     from qgis.core import QgsRasterLayer
     from core.ports.raster_port import HistogramData
@@ -73,7 +81,8 @@ class RasterValueSelectionGroupBox(QWidget):
     - Predicate selector (within range, outside, etc.)
     - Pick from Map (pipette) tool for value capture
     - Pixel count display for selected range
-    - Preview Map button
+    - Target layer selection widget
+    - Execute filter button
     
     Signals:
         collapsed_changed: Emitted when collapse state changes
@@ -85,6 +94,9 @@ class RasterValueSelectionGroupBox(QWidget):
         pixel_value_picked: Emitted when a single pixel value is picked
         pixel_range_picked: Emitted when a range of values is picked
         preview_requested: Emitted when preview is requested
+        filter_context_changed: Current filter context (dict)
+        execute_filter: User clicked execute filter button
+        targets_changed: Target layers selection changed (list)
     """
     
     # Signals
@@ -97,6 +109,15 @@ class RasterValueSelectionGroupBox(QWidget):
     pixel_value_picked = pyqtSignal(float)  # single value
     pixel_range_picked = pyqtSignal(float, float)  # min, max from selection
     preview_requested = pyqtSignal()
+    # EPIC-3: Additional signals for filter execution
+    filter_context_changed = pyqtSignal(dict)  # context dict
+    execute_filter = pyqtSignal()  # execute requested
+    targets_changed = pyqtSignal(list)  # list of target configs
+    # EPIC-3: Workflow template signals
+    save_as_template_requested = pyqtSignal()  # save current config as template
+    load_template_requested = pyqtSignal()  # load and apply a template
+    clear_filters = pyqtSignal(list)  # EPIC-3: Clear filters for layer IDs
+    zonal_stats_requested = pyqtSignal(list)  # EPIC-3: Zonal stats for layer IDs
     
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         """
@@ -319,6 +340,13 @@ class RasterValueSelectionGroupBox(QWidget):
         
         content_layout.addLayout(pred_layout)
         
+        # === EPIC-3: Target Layer Selection ===
+        self._target_widget = None
+        if RASTER_TARGET_WIDGET_AVAILABLE:
+            self._target_widget = RasterTargetLayerWidget(content)
+            self._target_widget.setObjectName("target_layer_widget")
+            content_layout.addWidget(self._target_widget)
+        
         # === Action Buttons ===
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(8)
@@ -344,6 +372,42 @@ class RasterValueSelectionGroupBox(QWidget):
             }
         """)
         btn_layout.addWidget(self._preview_btn)
+        
+        # Save as template button
+        self._save_template_btn = QPushButton("📋 Save Template")
+        self._save_template_btn.setObjectName("btn_save_template")
+        self._save_template_btn.setToolTip("Save current configuration as reusable template")
+        self._save_template_btn.setStyleSheet("""
+            QPushButton {
+                padding: 4px 12px;
+                border: 1px solid palette(mid);
+                border-radius: 4px;
+                background: palette(button);
+            }
+            QPushButton:hover {
+                background: palette(light);
+                border-color: palette(highlight);
+            }
+        """)
+        btn_layout.addWidget(self._save_template_btn)
+        
+        # Load template button
+        self._load_template_btn = QPushButton("📂 Load Template")
+        self._load_template_btn.setObjectName("btn_load_template")
+        self._load_template_btn.setToolTip("Load and apply a saved workflow template")
+        self._load_template_btn.setStyleSheet("""
+            QPushButton {
+                padding: 4px 12px;
+                border: 1px solid palette(mid);
+                border-radius: 4px;
+                background: palette(button);
+            }
+            QPushButton:hover {
+                background: palette(light);
+                border-color: palette(highlight);
+            }
+        """)
+        btn_layout.addWidget(self._load_template_btn)
         
         content_layout.addLayout(btn_layout)
         
@@ -386,6 +450,17 @@ class RasterValueSelectionGroupBox(QWidget):
         
         # Preview
         self._preview_btn.clicked.connect(self._on_preview_clicked)
+        
+        # EPIC-3: Save/Load templates
+        self._save_template_btn.clicked.connect(self._on_save_template_clicked)
+        self._load_template_btn.clicked.connect(self._on_load_template_clicked)
+        
+        # EPIC-3: Target layer widget
+        if self._target_widget:
+            self._target_widget.targets_changed.connect(self._on_targets_changed)
+            self._target_widget.execute_requested.connect(self._on_execute_requested)
+            self._target_widget.clear_filters_requested.connect(self._on_clear_filters_requested)
+            self._target_widget.zonal_stats_requested.connect(self._on_zonal_stats_requested)
     
     def _on_collapse_changed(self, collapsed: bool) -> None:
         """Handle collapse state change."""
@@ -460,6 +535,14 @@ class RasterValueSelectionGroupBox(QWidget):
     def _on_preview_clicked(self) -> None:
         """Handle preview button click."""
         self.preview_requested.emit()
+    
+    def _on_save_template_clicked(self) -> None:
+        """Handle save as template button click."""
+        self.save_as_template_requested.emit()
+    
+    def _on_load_template_clicked(self) -> None:
+        """Handle load template button click."""
+        self.load_template_requested.emit()
     
     def _update_pixel_count(self) -> None:
         """Update the pixel count display."""
@@ -658,6 +741,11 @@ class RasterValueSelectionGroupBox(QWidget):
         
         predicate_key = self._predicate_combo.currentData() or "within_range"
         
+        # Get target layers if widget available
+        target_layers = []
+        if self._target_widget:
+            target_layers = self._target_widget.get_selected_layer_ids()
+        
         return {
             'source_type': 'raster',
             'mode': 'value_filter',
@@ -673,7 +761,52 @@ class RasterValueSelectionGroupBox(QWidget):
                 (self._pixel_count / self._total_pixels * 100)
                 if self._total_pixels > 0 else 0
             ),
+            'target_layers': target_layers,
         }
+    
+    def _on_targets_changed(self, targets: list) -> None:
+        """
+        EPIC-3: Handle target layers selection change.
+        
+        Args:
+            targets: List of target layer configurations
+        """
+        self.targets_changed.emit(targets)
+        # Also emit updated context
+        self._emit_filter_context_changed()
+    
+    def _on_execute_requested(self) -> None:
+        """
+        EPIC-3: Handle execute filter button click.
+        """
+        logger.info("EPIC-3: Execute filter requested from Value Selection")
+        self.execute_filter.emit()
+    
+    def _on_clear_filters_requested(self, layer_ids: list) -> None:
+        """
+        EPIC-3: Handle clear filters button click.
+        
+        Args:
+            layer_ids: List of layer IDs to clear filters from
+        """
+        logger.info(f"EPIC-3: Clear filters requested for {len(layer_ids)} layers")
+        self.clear_filters.emit(layer_ids)
+    
+    def _on_zonal_stats_requested(self, layer_ids: list) -> None:
+        """
+        EPIC-3: Handle zonal stats button click.
+        
+        Args:
+            layer_ids: List of layer IDs for zonal statistics computation
+        """
+        logger.info(f"EPIC-3: Zonal stats requested for {len(layer_ids)} layers")
+        self.zonal_stats_requested.emit(layer_ids)
+    
+    def _emit_filter_context_changed(self) -> None:
+        """Emit the filter_context_changed signal with current context."""
+        context = self.get_filter_context()
+        if context:
+            self.filter_context_changed.emit(context)
     
     @property
     def layer(self) -> Optional['QgsRasterLayer']:

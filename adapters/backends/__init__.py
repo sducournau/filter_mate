@@ -6,6 +6,7 @@ Part of the Hexagonal Architecture refactoring.
 
 v4.1.0: Added legacy adapters for progressive migration.
 EPIC-2: Added QGIS raster backend for raster integration.
+EPIC-3: Added QGIS raster filter backend for raster-vector filtering.
 """
 
 from .factory import BackendFactory, BackendSelector, create_backend_factory
@@ -28,6 +29,14 @@ except ImportError:
     QGISRasterBackend = None
     get_qgis_raster_backend = None
     QGIS_RASTER_BACKEND_AVAILABLE = False
+
+# EPIC-3: QGIS Raster Filter Backend (Raster-Vector integration)
+try:
+    from .qgis_raster_filter_backend import QGISRasterFilterBackend
+    QGIS_RASTER_FILTER_BACKEND_AVAILABLE = True
+except ImportError:
+    QGISRasterFilterBackend = None
+    QGIS_RASTER_FILTER_BACKEND_AVAILABLE = False
 
 # v4.1.0: Legacy adapters for progressive migration
 try:
@@ -62,6 +71,9 @@ __all__ = [
     'QGISRasterBackend',
     'get_qgis_raster_backend',
     'QGIS_RASTER_BACKEND_AVAILABLE',
+    # EPIC-3: Raster filter backend
+    'QGISRasterFilterBackend',
+    'QGIS_RASTER_FILTER_BACKEND_AVAILABLE',
     # v4.1.0: Legacy adapters
     'get_legacy_adapter',
     'LegacyPostgreSQLAdapter',

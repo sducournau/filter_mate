@@ -79,6 +79,18 @@ from .raster_port import (
     HistogramBinMethod,
 )
 
+# Raster Filter Port (EPIC-3 - Raster-Vector Integration)
+from .raster_filter_port import (
+    RasterFilterPort,
+    RasterValuePredicate,
+    SamplingMethod,
+    RasterOperation,
+    RasterSampleResult,
+    RasterFilterResult,
+    RasterMaskResult,
+    ZonalStatisticsResult,
+)
+
 __all__ = [
     # Backend
     'BackendPort',
@@ -125,4 +137,13 @@ __all__ = [
     'RasterDataType',
     'RasterRendererType',
     'HistogramBinMethod',
+    # Raster Filter Port (EPIC-3)
+    'RasterFilterPort',
+    'RasterValuePredicate',
+    'SamplingMethod',
+    'RasterOperation',
+    'RasterSampleResult',
+    'RasterFilterResult',
+    'RasterMaskResult',
+    'ZonalStatisticsResult',
 ]
