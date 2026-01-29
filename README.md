@@ -1,8 +1,8 @@
 # ![FilterMate](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 4.4.6** | QGIS Plugin | **Production-Ready** 🎉
+**Version 4.5.0** | QGIS Plugin | **Production-Ready** 🎉
 
-> 🚀 Explore, filter & export vector data with lightning-fast performance on ANY data source.
+> 🚀 Explore, filter & export vector data with lightning-fast performance on ANY data source. Now with Raster-Vector integration!
 
 [![Documentation](https://img.shields.io/badge/docs-website-blue)](https://sducournau.github.io/filter_mate)
 [![QGIS Plugin](https://img.shields.io/badge/QGIS-Plugin-green)](https://plugins.qgis.org/plugins/filter_mate)
@@ -17,11 +17,24 @@
 |---------|-------------|
 | 🔍 **Smart Search** | Intuitive entity search across all layer types |
 | 📐 **Geometric Filtering** | Spatial predicates with buffer support |
+| 🏔️ **Raster Integration** | Filter vectors by raster values (NEW in 4.5!) |
 | ⭐ **Filter Favorites** | Save and reuse filter configurations |
 | 📝 **Undo/Redo** | Complete filter history |
 | 🌍 **21 Languages** | Full internationalization |
 | 🎨 **Dark Mode** | Automatic theme detection |
 | 🚀 **Multi-Backend** | PostgreSQL, Spatialite, OGR |
+
+---
+
+## 🆕 New in v4.5.0: Raster-Vector Integration
+
+| Feature | Description |
+|---------|-------------|
+| 📈 **Value Selection** | Interactive histogram with range selection |
+| 🎭 **Mask & Clip** | Clip/mask rasters using vector geometries |
+| 💾 **Memory Clips** | Manage temporary raster clips |
+| 📋 **Workflow Templates** | Save and reuse filter configurations |
+| ⏳ **Loading Indicators** | Visual feedback during computation |
 
 ---
 
@@ -86,6 +99,7 @@ pip install psycopg2-binary
 
 - **Users**: [Documentation Website](https://sducournau.github.io/filter_mate)
 - **Developers**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- **Raster API**: [docs/RASTER_API.md](docs/RASTER_API.md)
 - **Changelog**: [CHANGELOG.md](CHANGELOG.md)
 
 ---
