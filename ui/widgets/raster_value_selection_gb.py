@@ -27,6 +27,8 @@ from qgis.PyQt.QtWidgets import (
     QPushButton,
     QDoubleSpinBox,
     QGroupBox,
+    QStackedWidget,
+    QProgressBar,
 )
 from qgis.PyQt.QtGui import QFont, QCursor
 
@@ -208,9 +210,55 @@ class RasterValueSelectionGroupBox(QWidget):
         hist_layout = QVBoxLayout(self._histogram_frame)
         hist_layout.setContentsMargins(4, 4, 4, 4)
         
+        # Stacked widget for histogram/loading switch
+        self._histogram_stack = QStackedWidget()
+        
+        # Page 0: Histogram canvas
         self._histogram_canvas = HistogramCanvas()
         self._histogram_canvas.setMinimumHeight(120)
-        hist_layout.addWidget(self._histogram_canvas)
+        self._histogram_stack.addWidget(self._histogram_canvas)
+        
+        # Page 1: Loading indicator
+        loading_widget = QWidget()
+        loading_layout = QVBoxLayout(loading_widget)
+        loading_layout.setAlignment(Qt.AlignCenter)
+        
+        self._loading_label = QLabel("⏳ Loading histogram...")
+        self._loading_label.setStyleSheet("""
+            QLabel {
+                color: palette(mid);
+                font-style: italic;
+                font-size: 10pt;
+            }
+        """)
+        self._loading_label.setAlignment(Qt.AlignCenter)
+        loading_layout.addWidget(self._loading_label)
+        
+        self._loading_progress = QProgressBar()
+        self._loading_progress.setRange(0, 0)  # Indeterminate mode
+        self._loading_progress.setMaximumWidth(200)
+        self._loading_progress.setTextVisible(False)
+        self._loading_progress.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid palette(mid);
+                border-radius: 4px;
+                background: palette(base);
+                height: 8px;
+            }
+            QProgressBar::chunk {
+                background: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #3498db, stop:1 #2ecc71
+                );
+                border-radius: 3px;
+            }
+        """)
+        loading_layout.addWidget(self._loading_progress, 0, Qt.AlignCenter)
+        
+        loading_widget.setMinimumHeight(120)
+        self._histogram_stack.addWidget(loading_widget)
+        
+        hist_layout.addWidget(self._histogram_stack)
         
         content_layout.addWidget(self._histogram_frame)
         
@@ -804,10 +852,26 @@ class RasterValueSelectionGroupBox(QWidget):
         self._band_combo.blockSignals(False)
         self._current_band = 1
     
+    def _show_loading(self, message: str = "⏳ Loading histogram...") -> None:
+        """Show loading indicator over histogram."""
+        self._loading_label.setText(message)
+        self._histogram_stack.setCurrentIndex(1)  # Show loading page
+    
+    def _hide_loading(self) -> None:
+        """Hide loading indicator and show histogram."""
+        self._histogram_stack.setCurrentIndex(0)  # Show histogram page
+    
     def _load_histogram(self) -> None:
         """Load histogram data for current band."""
         if not self._stats_service or not self._layer_id:
             return
+        
+        # Show loading indicator
+        self._show_loading("⏳ Computing histogram...")
+        
+        # Force UI update
+        from qgis.PyQt.QtWidgets import QApplication
+        QApplication.processEvents()
         
         try:
             hist_data = self._stats_service.get_histogram(
@@ -838,6 +902,9 @@ class RasterValueSelectionGroupBox(QWidget):
         except Exception as e:
             logger.error(f"Failed to load histogram: {e}")
             self._histogram_data = None
+        finally:
+            # Always hide loading indicator
+            self._hide_loading()
     
     def clear(self) -> None:
         """Clear all data and reset to default state."""

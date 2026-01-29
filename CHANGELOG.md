@@ -2,6 +2,89 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [4.5.0] - 2026-01-29 🚀 EPIC-3: Raster-Vector Integration
+
+### Major Feature: Complete Raster-Vector Integration
+
+FilterMate now supports advanced raster-vector filtering workflows, enabling users to filter vector features by underlying raster values and perform mask/clip operations.
+
+#### New UI Components
+
+- **📈 VALUE SELECTION GroupBox**: Interactive histogram-based value selection
+  - Histogram with real-time range selection
+  - Multiple predicates: within_range, outside_range, above_value, below_value, equals_value, is_nodata
+  - Pixel count indicator with percentage bar
+  - 🔬 Pick from Map tool for value capture
+  - Loading indicator during histogram computation
+
+- **🎭 MASK & CLIP GroupBox**: Vector-to-raster operations
+  - Clip to Vector Extent
+  - Mask Outside/Inside Vector
+  - Zonal Statistics Only mode
+  - Multi-raster target selection
+
+- **💾 MEMORY CLIPS GroupBox**: Temporary clip management
+  - Clip list with visibility toggles
+  - Save to disk / Delete actions
+  - Batch operations (Save All / Clear All)
+
+- **📋 WORKFLOW TEMPLATES GroupBox**: Save and reuse filter configurations
+  - Template list with Apply/Import/Export/Delete
+  - JSON file import/export
+  - Cross-project template sharing
+
+#### Core Services
+
+- **RasterFilterService**: Orchestrates raster-based filtering with signals
+- **WorkflowTemplateService**: Template persistence and management
+- **RasterFilterPort**: Abstract interface for raster operations
+- **QGISRasterFilterBackend**: QGIS implementation of RasterFilterPort
+
+#### Performance Optimizations
+
+- **Benchmarking Framework**: Performance testing for filter operations
+- **Query Cache System**: LRU cache with TTL for repeated queries
+- **Histogram-based Pixel Count**: Accurate pixel estimation without full raster scan
+
+#### Architecture
+
+```
+EPIC-3 Signal Chain:
+UI Widget → RasterFilterService → RasterFilterPort → QGISRasterFilterBackend
+     ↓                                                        ↓
+FilteringController ←──────── filter_completed signal ←───────┘
+```
+
+#### Files Added/Modified
+
+**New Files:**
+- `core/ports/raster_filter_port.py` - Abstract interface
+- `core/services/raster_filter_service.py` - Service layer
+- `core/services/workflow_template_service.py` - Template management
+- `adapters/backends/qgis_raster_filter_backend.py` - QGIS implementation
+- `ui/widgets/raster_value_selection_gb.py` - Value selection UI
+- `ui/widgets/raster_mask_clip_gb.py` - Mask/Clip UI
+- `ui/widgets/raster_memory_clips_gb.py` - Memory clips UI
+- `ui/widgets/raster_templates_gb.py` - Templates UI
+- `ui/widgets/raster_target_layer_widget.py` - Layer selector
+- `infrastructure/benchmark/` - Benchmarking framework
+- `infrastructure/cache/` - Query cache system
+
+**Tests Added:**
+- `tests/test_epic3_raster_filter_integration.py` - Integration tests
+- `tests/test_workflow_templates.py` - Template tests
+- `tests/test_mask_clip_operations.py` - Mask/Clip tests
+- `tests/test_memory_clips.py` - Memory clips tests
+- `tests/test_vector_source_sync.py` - Sync tests
+- `tests/test_zonal_stats_dialog.py` - Zonal stats tests
+- `tests/unit/widgets/test_raster_value_selection_gb.py` - Pixel count tests
+
+#### Documentation
+
+- `_bmad-output/planning-artifacts/stories-epic3.md` - User stories
+
+---
+
 ## [4.4.7] - 2026-01-27 🔧 FIX: PostgreSQL style filter type mismatch errors
 
 ### Bug Fix - Automatic type casting for rule-based renderer expressions
