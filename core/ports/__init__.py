@@ -66,6 +66,31 @@ from .materialized_view_port import (
     ViewConfig,
 )
 
+# Raster Port (EPIC-2 - Raster Integration)
+from .raster_port import (
+    RasterPort,
+    RasterStats,
+    BandStatistics,
+    HistogramData,
+    PixelIdentifyResult,
+    TransparencySettings,
+    RasterDataType,
+    RasterRendererType,
+    HistogramBinMethod,
+)
+
+# Raster Filter Port (EPIC-3 - Raster-Vector Integration)
+from .raster_filter_port import (
+    RasterFilterPort,
+    RasterValuePredicate,
+    SamplingMethod,
+    RasterOperation,
+    RasterSampleResult,
+    RasterFilterResult,
+    RasterMaskResult,
+    ZonalStatisticsResult,
+)
+
 __all__ = [
     # Backend
     'BackendPort',
@@ -102,4 +127,23 @@ __all__ = [
     'ViewType',
     'ViewInfo',
     'ViewConfig',
+    # Raster Port (EPIC-2)
+    'RasterPort',
+    'RasterStats',
+    'BandStatistics',
+    'HistogramData',
+    'PixelIdentifyResult',
+    'TransparencySettings',
+    'RasterDataType',
+    'RasterRendererType',
+    'HistogramBinMethod',
+    # Raster Filter Port (EPIC-3)
+    'RasterFilterPort',
+    'RasterValuePredicate',
+    'SamplingMethod',
+    'RasterOperation',
+    'RasterSampleResult',
+    'RasterFilterResult',
+    'RasterMaskResult',
+    'ZonalStatisticsResult',
 ]

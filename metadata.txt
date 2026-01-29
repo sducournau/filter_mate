@@ -6,12 +6,12 @@
 [general]
 name=FilterMate
 qgisMinimumVersion=3.0
-description=🚀 The ultimate spatial filtering plugin! Explore, filter & export vector data with lightning-fast performance on ANY data source.
-version=4.4.5
+description=🚀 The ultimate spatial filtering plugin! Explore, filter & export vector data with lightning-fast performance on ANY data source. Now with Raster-Vector integration!
+version=4.5.0
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=🎯 FilterMate 4.4 - Your Swiss Army Knife for Spatial Data!
+about=🎯 FilterMate 4.5 - Your Swiss Army Knife for Spatial Data!
     
     Stop struggling with complex filters. FilterMate makes spatial queries intuitive, fast, and powerful.
     
@@ -22,6 +22,12 @@ about=🎯 FilterMate 4.4 - Your Swiss Army Knife for Spatial Data!
     ✓ Intuitive: Filter by clicking, drawing, or selecting - no SQL needed!
     ✓ Professional: Undo/Redo, Favorites, Dark Mode, 21 languages
     
+    🆕 NEW IN 4.5 - RASTER-VECTOR INTEGRATION:
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    🏔️ Filter vectors by raster values with interactive histogram
+    🎭 Mask & Clip operations between vector and raster layers
+    📋 Workflow templates for reusable filter configurations
+    
     🔥 KILLER FEATURES:
     ━━━━━━━━━━━━━━━━━━
     📍 Geometric filtering with buffer, intersection, containment...
@@ -31,7 +37,7 @@ about=🎯 FilterMate 4.4 - Your Swiss Army Knife for Spatial Data!
     🎨 Beautiful UI that adapts to your QGIS theme
     ⚡ Filter chaining with dynamic buffer expressions
     
-    💡 v4.4.5: Fix dynamic buffer on tables without "id" column (BDTopo, OSM...)
+    💡 v4.4.6: Latest maintenance release
     💡 v4.4.0: Quality release - 396 unit tests, hexagonal architecture, 75%% coverage!
     
     📖 Full docs: https://sducournau.github.io/filter_mate

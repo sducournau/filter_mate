@@ -26,6 +26,24 @@ except ImportError:
     TaskParameterBuilder = None
     TaskParameters = None
 
+# EPIC-3: Import RasterFilterService for raster-based filtering
+try:
+    from ...core.services.raster_filter_service import (
+        RasterFilterService,
+        RasterFilterContext,
+        RasterFilterMode
+    )
+    from ...core.ports.raster_filter_port import RasterValuePredicate
+    from ...adapters.backends.qgis_raster_filter_backend import QGISRasterFilterBackend
+    RASTER_FILTER_AVAILABLE = True
+except ImportError:
+    RASTER_FILTER_AVAILABLE = False
+    RasterFilterService = None
+    RasterFilterContext = None
+    RasterFilterMode = None
+    RasterValuePredicate = None
+    QGISRasterFilterBackend = None
+
 if TYPE_CHECKING:
     from qgis.core import QgsVectorLayer
     from filter_mate_dockwidget import FilterMateDockWidget
@@ -259,6 +277,17 @@ class FilteringController(BaseController, LayerSelectionMixin):
         # Execution state
         self._is_executing: bool = False
         self._last_result: Optional[FilterResult] = None
+        
+        # EPIC-3: Raster filter service for raster-based filtering
+        self._raster_filter_service: Optional['RasterFilterService'] = None
+        if RASTER_FILTER_AVAILABLE:
+            try:
+                backend = QGISRasterFilterBackend()
+                self._raster_filter_service = RasterFilterService(backend)
+                self._connect_raster_filter_signals()
+                logger.info("EPIC-3: RasterFilterService initialized")
+            except Exception as e:
+                logger.warning(f"EPIC-3: Failed to initialize RasterFilterService: {e}")
 
     # === LayerSelectionMixin implementation ===
     
@@ -1059,6 +1088,8 @@ class FilteringController(BaseController, LayerSelectionMixin):
         """Initialize the controller."""
         # Connect signals would happen here
         # For now, just initialize state
+        # EPIC-3: Initialize raster context
+        self._raster_exploring_context: Optional[Dict[str, Any]] = None
     
     def teardown(self) -> None:
         """Clean up the controller."""
@@ -1084,7 +1115,471 @@ class FilteringController(BaseController, LayerSelectionMixin):
     def on_tab_deactivated(self) -> None:
         """Called when filtering tab becomes inactive."""
         super().on_tab_deactivated()
+
+    # =========================================================================
+    # EPIC-3: Raster-Vector Integration - Exploring Context Handling
+    # =========================================================================
     
+    def on_exploring_context_changed(self, context: Dict[str, Any]) -> None:
+        """
+        EPIC-3: Handle context changes from EXPLORING panels (Vector or Raster).
+        
+        When the user interacts with EXPLORING (selects features, adjusts histogram,
+        configures mask operations), the filter context is updated here.
+        
+        This enables bidirectional filtering:
+        - Vector → Vector: Spatial predicates
+        - Vector → Raster: Clip/Mask by geometry
+        - Raster → Vector: Filter by underlying values
+        - Raster → Raster: Value-based masking
+        
+        Args:
+            context: Filter context from EXPLORING panel with keys:
+                - source_type: 'vector' or 'raster'
+                - mode: 'value_filter', 'spatial_operation', 'info_only', etc.
+                - layer_id: Source layer ID
+                - layer_name: Source layer name
+                - For raster value_filter:
+                    - band: Band number
+                    - range_min, range_max: Value range
+                    - predicate: Value predicate (within_range, etc.)
+                    - pixel_count: Pixels in range
+                - For raster spatial_operation:
+                    - operation: clip, mask_outside, mask_inside, zonal_stats
+                    - target_rasters: List of target raster IDs
+                - For vector:
+                    - feature_count: Number of selected features
+                    - selection_mode: single, multiple, custom
+        """
+        if not context:
+            logger.debug("EPIC-3: Empty context received, ignoring")
+            return
+        
+        source_type = context.get('source_type')
+        mode = context.get('mode')
+        
+        logger.info(f"EPIC-3: Exploring context changed - source_type={source_type}, mode={mode}")
+        
+        # Store context
+        if source_type == 'raster':
+            self._raster_exploring_context = context
+            
+            # EPIC-3: Configure RasterFilterService from context
+            if self._raster_filter_service and RASTER_FILTER_AVAILABLE:
+                self._configure_raster_filter_from_context(context)
+        
+        # Update UI based on context
+        self._update_filtering_source_display(context)
+        
+        # Notify config changed
+        self._notify_config_changed()
+    
+    def _configure_raster_filter_from_context(self, context: Dict[str, Any]) -> None:
+        """
+        EPIC-3: Configure RasterFilterService from exploring context.
+        
+        Args:
+            context: Raster exploring context with filter parameters
+        """
+        if not self._raster_filter_service:
+            return
+        
+        mode = context.get('mode')
+        layer_id = context.get('layer_id')
+        layer_name = context.get('layer_name', '')
+        band = context.get('band', 1)
+        band_name = context.get('band_name', f'Band {band}')
+        
+        # Set raster source
+        if layer_id:
+            self._raster_filter_service.set_raster_source(
+                layer_id=layer_id,
+                layer_name=layer_name,
+                band=band,
+                band_name=band_name
+            )
+        
+        # Configure filter based on mode
+        if mode == 'value_filter':
+            range_min = context.get('range_min')
+            range_max = context.get('range_max')
+            predicate_str = context.get('predicate', 'within_range')
+            
+            if range_min is not None and range_max is not None:
+                # Map string predicate to enum
+                predicate_map = {
+                    'within_range': RasterValuePredicate.WITHIN_RANGE,
+                    'outside_range': RasterValuePredicate.OUTSIDE_RANGE,
+                    'above_value': RasterValuePredicate.ABOVE_VALUE,
+                    'below_value': RasterValuePredicate.BELOW_VALUE,
+                    'equals_value': RasterValuePredicate.EQUALS_VALUE,
+                    'is_nodata': RasterValuePredicate.IS_NODATA,
+                    'is_not_nodata': RasterValuePredicate.IS_NOT_NODATA,
+                }
+                predicate = predicate_map.get(predicate_str, RasterValuePredicate.WITHIN_RANGE)
+                
+                self._raster_filter_service.set_value_range(
+                    min_value=float(range_min),
+                    max_value=float(range_max),
+                    predicate=predicate
+                )
+                
+                logger.info(
+                    f"EPIC-3: Configured raster filter - "
+                    f"range [{range_min}, {range_max}], predicate={predicate_str}"
+                )
+        
+        elif mode == 'single_value':
+            value = context.get('value')
+            tolerance = context.get('tolerance', 0.01)
+            if value is not None:
+                self._raster_filter_service.set_single_value(
+                    value=float(value),
+                    tolerance=float(tolerance)
+                )
+        
+        elif mode == 'nodata_filter':
+            include_nodata = context.get('include_nodata', False)
+            self._raster_filter_service.set_nodata_filter(include_nodata)
+        
+        # Set target layers if provided
+        target_layers = context.get('target_layers', [])
+        if target_layers:
+            self._raster_filter_service.set_target_layers(target_layers)
+    
+    def _update_filtering_source_display(self, context: Dict[str, Any]) -> None:
+        """
+        EPIC-3: Update the FILTERING SOURCE panel display based on context.
+        
+        Args:
+            context: Filter context from EXPLORING
+        """
+        try:
+            dockwidget = self._dockwidget
+            if not dockwidget:
+                return
+            
+            source_type = context.get('source_type', 'unknown')
+            mode = context.get('mode', 'unknown')
+            layer_name = context.get('layer_name', 'Unknown')
+            
+            # EPIC-3: Update raster source frame indicator if available
+            if hasattr(dockwidget, 'frame_raster_source_info'):
+                if source_type == 'raster' and mode in ('value_filter', 'single_value', 'nodata_filter'):
+                    band = context.get('band', 1)
+                    band_name = context.get('band_name', f'Band {band}')
+                    range_min = context.get('range_min')
+                    range_max = context.get('range_max')
+                    pixel_count = context.get('pixel_count', 0)
+                    
+                    # Build info text based on mode
+                    if mode == 'value_filter' and range_min is not None and range_max is not None:
+                        # Format numbers nicely
+                        if isinstance(range_min, float):
+                            range_min = f"{range_min:.2f}" if range_min != int(range_min) else str(int(range_min))
+                        if isinstance(range_max, float):
+                            range_max = f"{range_max:.2f}" if range_max != int(range_max) else str(int(range_max))
+                        
+                        info_text = f"<b>{layer_name}</b> • {band_name} • [{range_min}, {range_max}]"
+                        if pixel_count > 0:
+                            info_text += f" • {pixel_count:,} px"
+                    elif mode == 'single_value':
+                        value = context.get('value', '?')
+                        info_text = f"<b>{layer_name}</b> • {band_name} • Value: {value}"
+                    elif mode == 'nodata_filter':
+                        include_nodata = context.get('include_nodata', False)
+                        nodata_str = "NoData" if include_nodata else "Valid pixels"
+                        info_text = f"<b>{layer_name}</b> • {band_name} • {nodata_str}"
+                    else:
+                        info_text = f"<b>{layer_name}</b> • {band_name}"
+                    
+                    dockwidget.lbl_raster_source_info.setText(info_text)
+                    dockwidget.frame_raster_source_info.setVisible(True)
+                    logger.debug(f"EPIC-3: Raster source display updated: {info_text}")
+                else:
+                    dockwidget.frame_raster_source_info.setVisible(False)
+            
+            logger.debug(
+                f"EPIC-3: Updating source display - {source_type}/{mode}: {layer_name}"
+            )
+            
+        except Exception as e:
+            logger.warning(f"EPIC-3: Error updating source display: {e}")
+    
+    def get_raster_exploring_context(self) -> Optional[Dict[str, Any]]:
+        """
+        EPIC-3: Get the current raster exploring context.
+        
+        Returns:
+            Current raster context or None
+        """
+        return self._raster_exploring_context
+    
+    def _connect_raster_filter_signals(self) -> None:
+        """
+        EPIC-3: Connect RasterFilterService signals to handlers.
+        """
+        if not self._raster_filter_service:
+            return
+        
+        try:
+            self._raster_filter_service.context_changed.connect(
+                self._on_raster_filter_context_changed
+            )
+            self._raster_filter_service.filter_completed.connect(
+                self._on_raster_filter_completed
+            )
+            self._raster_filter_service.filter_error.connect(
+                self._on_raster_filter_error
+            )
+            self._raster_filter_service.filter_progress.connect(
+                self._on_raster_filter_progress
+            )
+            # EPIC-3: Connect mask_created for Memory Clips integration
+            self._raster_filter_service.mask_created.connect(
+                self._on_raster_mask_created
+            )
+        except Exception as e:
+            logger.warning(f"EPIC-3: Failed to connect raster filter signals: {e}")
+    
+    def _on_raster_filter_context_changed(self, context: Dict[str, Any]) -> None:
+        """
+        EPIC-3: Handle context changes from RasterFilterService.
+        
+        Args:
+            context: Service context as dictionary
+        """
+        logger.debug(f"EPIC-3: Raster filter context changed: {context.get('mode')}")
+        self._notify_config_changed()
+    
+    def _on_raster_filter_completed(self, result) -> None:
+        """
+        EPIC-3: Handle completion of raster filter operation.
+        
+        Args:
+            result: RasterFilterResult from service
+        """
+        logger.info(
+            f"EPIC-3: Raster filter completed - "
+            f"{result.matching_count}/{result.total_features} features matched"
+        )
+        
+        # Apply filter to matching features
+        if result.matching_feature_ids and result.is_success:
+            self._apply_raster_filter_result(result)
+            
+            # Show success message to user
+            try:
+                from qgis.utils import iface
+                percentage = result.match_percentage
+                iface.messageBar().pushSuccess(
+                    "FilterMate",
+                    f"Raster filter applied: {result.matching_count}/{result.total_features} features ({percentage:.1f}%)"
+                )
+            except Exception:
+                pass  # Message bar optional
+        elif not result.matching_feature_ids:
+            # No matches found
+            try:
+                from qgis.utils import iface
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    f"No features match the raster value criteria"
+                )
+            except Exception:
+                pass
+    
+    def _on_raster_filter_error(self, error_msg: str) -> None:
+        """
+        EPIC-3: Handle raster filter error.
+        
+        Args:
+            error_msg: Error message from service
+        """
+        logger.error(f"EPIC-3: Raster filter error: {error_msg}")
+        
+        # Show error to user
+        try:
+            from qgis.utils import iface
+            iface.messageBar().pushCritical(
+                "FilterMate",
+                f"Raster filter error: {error_msg}"
+            )
+        except Exception:
+            pass
+    
+    def _on_raster_filter_progress(self, progress: int) -> None:
+        """
+        EPIC-3: Handle raster filter progress update.
+        
+        Args:
+            progress: Progress percentage (0-100)
+        """
+        logger.debug(f"EPIC-3: Raster filter progress: {progress}%")
+    
+    def _on_raster_mask_created(self, result) -> None:
+        """
+        EPIC-3: Handle mask creation from RasterFilterService.
+        
+        Notifies the dockwidget to add the mask to Memory Clips.
+        
+        Args:
+            result: RasterMaskResult from service
+        """
+        logger.info(
+            f"EPIC-3: Mask created - {result.layer_name}, "
+            f"{result.mask_percentage:.1f}% masked"
+        )
+        
+        # Notify dockwidget to add to Memory Clips
+        if hasattr(self._dockwidget, '_on_mask_created_for_memory_clips'):
+            self._dockwidget._on_mask_created_for_memory_clips(result)
+    
+    def _apply_raster_filter_result(self, result) -> None:
+        """
+        EPIC-3: Apply raster filter result to vector layers.
+        
+        Creates a subset string expression to show only matching features.
+        
+        Args:
+            result: RasterFilterResult with matching feature IDs
+        """
+        try:
+            from qgis.core import QgsProject
+            
+            if not result.matching_feature_ids:
+                logger.warning("EPIC-3: No matching features to filter")
+                return
+            
+            # Build expression for matching feature IDs
+            # Format: $id IN (1, 2, 3, ...)
+            id_list = ', '.join(str(fid) for fid in result.matching_feature_ids)
+            expression = f"$id IN ({id_list})"
+            
+            # Get target layers from service context
+            if self._raster_filter_service:
+                for layer_id in self._raster_filter_service.context.target_layers:
+                    layer = QgsProject.instance().mapLayer(layer_id)
+                    if layer:
+                        layer.setSubsetString(expression)
+                        logger.info(f"EPIC-3: Applied filter to {layer.name()}")
+            
+        except Exception as e:
+            logger.error(f"EPIC-3: Failed to apply raster filter result: {e}")
+    
+    def execute_raster_filter(self, context: Optional[Dict[str, Any]] = None) -> None:
+        """
+        EPIC-3: Execute raster-based filtering using provided or current context.
+        
+        Uses RasterFilterService to filter vector features by raster values.
+        
+        Args:
+            context: Optional filter context dictionary. If provided, configures
+                     the service before executing. If None, uses current config.
+        """
+        if not self._raster_filter_service:
+            logger.warning("EPIC-3: RasterFilterService not available")
+            return
+        
+        # Configure service from context if provided
+        if context:
+            self._configure_raster_filter_from_context(context)
+            
+            # Set target layers from context
+            target_layers = context.get('target_layers', [])
+            if target_layers:
+                self._raster_filter_service.set_target_layers(target_layers)
+        
+        if not self._raster_filter_service.is_ready():
+            logger.warning("EPIC-3: RasterFilterService not ready - configure context first")
+            return
+        
+        try:
+            logger.info(f"EPIC-3: Executing raster filter - {self._raster_filter_service.get_status_summary()}")
+            self._raster_filter_service.filter_features()
+        except Exception as e:
+            logger.error(f"EPIC-3: Raster filter execution failed: {e}")
+    
+    def get_raster_filter_service(self) -> Optional['RasterFilterService']:
+        """
+        EPIC-3: Get the raster filter service instance.
+        
+        Returns:
+            RasterFilterService or None if not available
+        """
+        return self._raster_filter_service
+    
+    def compute_zonal_statistics(
+        self,
+        raster_layer: 'QgsRasterLayer',
+        vector_layer: 'QgsVectorLayer',
+        band_index: int = 1,
+        statistics: list = None
+    ) -> Optional[list]:
+        """
+        EPIC-3: Compute zonal statistics for vector features over raster.
+        
+        Calculates statistics (min, max, mean, std, sum, count) for each
+        vector feature based on the underlying raster values.
+        
+        Args:
+            raster_layer: Source raster layer
+            vector_layer: Vector layer with zone polygons
+            band_index: Raster band to analyze (1-based)
+            statistics: List of statistics to compute (default: all)
+            
+        Returns:
+            List of dicts with feature ID and computed statistics,
+            or None if computation fails
+        """
+        if not self._raster_filter_service:
+            logger.warning("EPIC-3: RasterFilterService not available for zonal stats")
+            return None
+        
+        try:
+            logger.info(f"EPIC-3: Computing zonal statistics for {vector_layer.name()} on {raster_layer.name()}")
+            
+            # Configure the service context with the raster layer
+            self._raster_filter_service.update_context(
+                raster_layer_id=raster_layer.id(),
+                band=band_index
+            )
+            
+            # Default statistics names for backend
+            stats_names = statistics or ['min', 'max', 'mean', 'std', 'count', 'sum']
+            
+            # Use the service to compute - pass vector_layer_id
+            results = self._raster_filter_service.compute_zonal_statistics(
+                vector_layer_id=vector_layer.id(),
+                statistics=stats_names
+            )
+            
+            if results:
+                logger.info(f"EPIC-3: Computed zonal stats for {len(results)} features")
+                # Convert to list of dicts for dialog
+                return [
+                    {
+                        'feature_id': r.feature_id,
+                        'zone_name': r.zone_name,
+                        'pixel_count': r.pixel_count,
+                        'min': r.min_value,
+                        'max': r.max_value,
+                        'mean': r.mean_value,
+                        'std_dev': r.std_dev,
+                        'sum': r.sum_value
+                    }
+                    for r in results
+                ]
+            else:
+                logger.warning("EPIC-3: No zonal statistics computed")
+                return None
+            
+        except Exception as e:
+            logger.error(f"EPIC-3: Error computing zonal statistics: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
     # === Reset ===
     
     def reset(self) -> None:

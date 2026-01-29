@@ -279,6 +279,9 @@ class ExploringController(BaseController, LayerSelectionMixin):
         """
         Populate features list with unique values.
 
+        v4.1.1 OPTIMIZATION: Uses async loading for large layers (>10k features)
+        to prevent UI freeze. For smaller layers, uses synchronous uniqueValues().
+        
         Uses cache for performance on repeated access.
         """
         if not self._current_layer or not self._current_field:
@@ -296,7 +299,19 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 self._update_features_widget(cached)
                 return
 
-        # Fetch unique values
+        # v4.1.1: Use async for large layers to prevent UI freeze
+        feature_count = self._current_layer.featureCount()
+        ASYNC_THRESHOLD = 10000
+        
+        if feature_count > ASYNC_THRESHOLD:
+            logger.info(
+                f"Large layer ({feature_count} features) - using async loading "
+                f"to prevent UI freeze"
+            )
+            self._populate_features_list_async()
+            return
+
+        # Fetch unique values (sync for small layers)
         values = self._get_unique_values()
         
         # Cache the values
@@ -308,6 +323,9 @@ class ExploringController(BaseController, LayerSelectionMixin):
     def _get_unique_values(self) -> List[str]:
         """
         Get unique values for current field.
+        
+        v4.1.1 OPTIMIZATION: Uses async loading for large layers (>10k features)
+        to prevent UI freeze. For smaller layers, uses synchronous uniqueValues().
 
         Returns:
             List of unique values as strings
@@ -319,6 +337,16 @@ class ExploringController(BaseController, LayerSelectionMixin):
             field_index = self._current_layer.fields().indexFromName(self._current_field)
             if field_index < 0:
                 return []
+            
+            feature_count = self._current_layer.featureCount()
+            
+            # v4.1.1: Use async for large layers to prevent UI freeze
+            ASYNC_THRESHOLD = 10000
+            if feature_count > ASYNC_THRESHOLD:
+                logger.info(
+                    f"Large layer ({feature_count} features) - unique values loading "
+                    f"should use async. Consider calling _populate_features_list_async()"
+                )
 
             unique_values = self._current_layer.uniqueValues(field_index)
             
@@ -335,6 +363,68 @@ class ExploringController(BaseController, LayerSelectionMixin):
         Args:
             values: List of feature values to display
         """
+
+    def _populate_features_list_async(self, max_values: int = 1000) -> None:
+        """
+        v4.1.1: Async version of feature list population for large layers.
+        
+        Uses UniqueValuesTask (QgsTask) to load values in background,
+        preventing UI freeze on layers with 10k+ features.
+        
+        Args:
+            max_values: Maximum values to load (for UI responsiveness)
+        """
+        if not self._current_layer or not self._current_field:
+            self._clear_features_list()
+            return
+        
+        layer_id = self._current_layer.id()
+        field = self._current_field
+        
+        # Check cache first
+        if self._features_cache:
+            cached = self._features_cache.get(layer_id, field)
+            if cached:
+                logger.debug(f"Using cached values for {layer_id}:{field}")
+                self._update_features_widget(cached)
+                return
+        
+        # Import async task
+        try:
+            from core.tasks import get_unique_values_manager
+        except ImportError:
+            logger.warning("UniqueValuesManager not available, falling back to sync")
+            self._populate_features_list()
+            return
+        
+        # Define callbacks
+        def on_complete(values: List[str]):
+            """Handle async completion in main thread."""
+            # Cache the values
+            if self._features_cache and values:
+                self._features_cache.set(layer_id, field, values)
+            
+            # Update UI
+            self._update_features_widget(values)
+            logger.info(f"Async: Loaded {len(values)} unique values for {field}")
+        
+        def on_error(error: str):
+            """Handle async error."""
+            logger.error(f"Async unique values failed: {error}")
+            # Fallback to sync
+            self._populate_features_list()
+        
+        # Start async loading
+        manager = get_unique_values_manager()
+        manager.fetch_async(
+            layer=self._current_layer,
+            field_name=self._current_field,
+            on_complete=on_complete,
+            on_error=on_error,
+            max_values=max_values,
+        )
+        
+        logger.debug(f"Started async unique values loading for {field}")
         # Implementation depends on dockwidget structure
         # This would update the checkable combo or list widget
 
@@ -2243,6 +2333,19 @@ class ExploringController(BaseController, LayerSelectionMixin):
         
         # Update button states
         dw._update_exploring_buttons_state()
+        
+        # EPIC-3: Update vector source context for MASK & CLIP operations
+        # This propagates the current vector selection to the raster panel
+        try:
+            mode = 'selected' if features else 'all'
+            if hasattr(dw, 'update_vector_source_context'):
+                dw.update_vector_source_context(
+                    layer=dw.current_layer,
+                    features=features,
+                    mode=mode
+                )
+        except Exception as e:
+            logger.debug(f"handle_exploring_features_result: Could not update vector context: {e}")
         
         return features
 

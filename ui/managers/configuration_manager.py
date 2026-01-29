@@ -345,6 +345,23 @@ class ConfigurationManager(QObject):
                 "TYPE": "QgsFieldExpressionWidget",
                 "WIDGET": d.mFieldExpressionWidget_exploring_custom_selection,
                 "SIGNALS": [("fieldChanged", None)]
+            },
+            # v5.0: Vector layer combobox for EXPLORING_VECTOR panel
+            "VECTOR_LAYER": {
+                "TYPE": "ComboBox",
+                "WIDGET": getattr(d, 'mMapLayerComboBox_exploring_vector', None),
+                "SIGNALS": [("layerChanged", lambda layer: d.current_layer_changed(layer, manual_change=True))] if hasattr(d, 'mMapLayerComboBox_exploring_vector') else []
+            },
+            # v5.0: Use centroids checkbox for EXPLORING_VECTOR panel
+            "USE_CENTROIDS": {
+                "TYPE": "CheckBox",
+                "WIDGET": getattr(d, 'checkBox_exploring_vector_use_centroids', None),
+                "SIGNALS": [(
+                    "stateChanged",
+                    lambda state, x='use_centroids_source_layer', custom_functions={
+                        "ON_CHANGE": lambda x: d._update_buffer_validation()
+                    }: d.layer_property_changed(x, bool(state), custom_functions)
+                )] if hasattr(d, 'checkBox_exploring_vector_use_centroids') else []
             }
         }
         
@@ -412,12 +429,8 @@ class ConfigurationManager(QObject):
                 )],
                 "ICON": None
             },
-            "CURRENT_LAYER": {
-                "TYPE": "ComboBox",
-                "WIDGET": d.comboBox_filtering_current_layer,
-                # FIX 2026-01-14: Pass manual_change=True for manual combobox changes
-                "SIGNALS": [("layerChanged", lambda layer: d.current_layer_changed(layer, manual_change=True))]
-            },
+            # v5.0: CURRENT_LAYER removed from FILTERING - now using exploring context comboboxes
+            # Source layer is determined by mMapLayerComboBox_exploring_vector or mMapLayerComboBox_exploring_raster
             "LAYERS_TO_FILTER": {
                 "TYPE": "CustomCheckableLayerComboBox",
                 "WIDGET": d.checkableComboBoxLayer_filtering_layers_to_filter,
@@ -453,15 +466,17 @@ class ConfigurationManager(QObject):
                     lambda state, x='geometric_predicates': d.layer_property_changed(x, state)
                 )]
             },
+            # v5.0: USE_CENTROIDS_SOURCE_LAYER now uses checkBox_exploring_vector_use_centroids
+            # Located in EXPLORING_VECTOR panel instead of FILTERING
             "USE_CENTROIDS_SOURCE_LAYER": {
                 "TYPE": "CheckBox",
-                "WIDGET": d.checkBox_filtering_use_centroids_source_layer,
+                "WIDGET": getattr(d, 'checkBox_exploring_vector_use_centroids', None),
                 "SIGNALS": [(
                     "stateChanged",
                     lambda state, x='use_centroids_source_layer', custom_functions={
                         "ON_CHANGE": lambda x: d._update_buffer_validation()
                     }: d.layer_property_changed(x, bool(state), custom_functions)
-                )]
+                )] if hasattr(d, 'checkBox_exploring_vector_use_centroids') else []
             },
             "USE_CENTROIDS_DISTANT_LAYERS": {
                 "TYPE": "CheckBox",
@@ -828,7 +843,12 @@ class ConfigurationManager(QObject):
     #         widget.fieldChanged.connect(lambda f, g=groupbox: d._schedule_expression_change(g, f))
     
     def setup_filtering_tab_widgets(self):
-        """v4.0 Sprint 16: Configure widgets for Filtering tab (migrated from dockwidget)."""
+        """v4.0 Sprint 16: Configure widgets for Filtering tab (migrated from dockwidget).
+        
+        v5.0: comboBox_filtering_current_layer removed - source layer now managed by:
+        - mMapLayerComboBox_exploring_vector (for vector layers)
+        - mMapLayerComboBox_exploring_raster (for raster layers)
+        """
         import os
         from qgis.PyQt import QtGui, QtCore, QtWidgets
         
@@ -839,29 +859,38 @@ class ConfigurationManager(QObject):
             from qgis.core import QgsMapLayerProxyModel
         
         d = self.dockwidget
-        # v4.2: Filter to show only vector layers WITH geometry (exclude non-spatial tables)
-        # HasGeometry = PointLayer | LineLayer | PolygonLayer = 4 | 8 | 16 = 28
-        # This excludes tables without geometry (NoGeometry = 2)
-        try:
-            d.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.HasGeometry)
-            logger.info("comboBox_filtering_current_layer: Filter set to HasGeometry (exclude non-spatial tables)")
-        except Exception as e:
-            logger.warning(f"Could not set HasGeometry filter: {e}")
-            # Fallback to VectorLayer only
-            d.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
         
-        # Apply themed icon to centroids checkbox
+        # v5.0: Configure mMapLayerComboBox_exploring_vector instead of comboBox_filtering_current_layer
+        if hasattr(d, 'mMapLayerComboBox_exploring_vector'):
+            try:
+                d.mMapLayerComboBox_exploring_vector.setFilters(QgsMapLayerProxyModel.HasGeometry)
+                logger.info("mMapLayerComboBox_exploring_vector: Filter set to HasGeometry (exclude non-spatial tables)")
+            except Exception as e:
+                logger.warning(f"Could not set HasGeometry filter for exploring vector: {e}")
+                d.mMapLayerComboBox_exploring_vector.setFilters(QgsMapLayerProxyModel.VectorLayer)
+        
+        # v5.0: Configure mMapLayerComboBox_exploring_raster to show only raster layers
+        if hasattr(d, 'mMapLayerComboBox_exploring_raster'):
+            try:
+                d.mMapLayerComboBox_exploring_raster.setFilters(QgsMapLayerProxyModel.RasterLayer)
+                logger.info("mMapLayerComboBox_exploring_raster: Filter set to RasterLayer")
+            except Exception as e:
+                logger.warning(f"Could not set RasterLayer filter for exploring raster: {e}")
+        
+        # Apply themed icon to centroids checkbox in EXPLORING_VECTOR
         try:
             from ..icons import get_themed_icon, ICON_THEME_AVAILABLE
         except ImportError:
             ICON_THEME_AVAILABLE = False
         
         icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "icons", "centroid.png")
-        if os.path.exists(icon_path) and hasattr(d, 'checkBox_filtering_use_centroids_source_layer'):
+        
+        # v5.0: Configure checkBox_exploring_vector_use_centroids (replaces checkBox_filtering_use_centroids_source_layer)
+        if os.path.exists(icon_path) and hasattr(d, 'checkBox_exploring_vector_use_centroids'):
             icon = get_themed_icon(icon_path) if ICON_THEME_AVAILABLE else QtGui.QIcon(icon_path)
-            d.checkBox_filtering_use_centroids_source_layer.setIcon(icon)
-            d.checkBox_filtering_use_centroids_source_layer.setText("")
-            d.checkBox_filtering_use_centroids_source_layer.setLayoutDirection(QtCore.Qt.RightToLeft)
+            d.checkBox_exploring_vector_use_centroids.setIcon(icon)
+            d.checkBox_exploring_vector_use_centroids.setText("")
+            d.checkBox_exploring_vector_use_centroids.setLayoutDirection(QtCore.Qt.RightToLeft)
 
         # Configure centroids distant layers checkbox (created in setupUiCustom)
         # Widget already created in setupUiCustom() - just configure appearance
@@ -882,13 +911,16 @@ class ConfigurationManager(QObject):
         d.horizontalLayout_filtering_distant_layers.addWidget(d.checkableComboBoxLayer_filtering_layers_to_filter)
         d.horizontalLayout_filtering_distant_layers.addWidget(d.checkBox_filtering_use_centroids_distant_layers)
         
-        # Insert into main vertical layout at position 2 (after current layer, before predicates)
+        # v5.0: Insert at position 0 (no more current layer at top)
         if hasattr(d, 'verticalLayout_filtering_values'):
-            d.verticalLayout_filtering_values.insertLayout(2, d.horizontalLayout_filtering_distant_layers)
+            d.verticalLayout_filtering_values.insertLayout(0, d.horizontalLayout_filtering_distant_layers)
             # Ensure visibility
             d.checkableComboBoxLayer_filtering_layers_to_filter.show()
             d.checkBox_filtering_use_centroids_distant_layers.show()
             logger.debug(f"Inserted filtering layers layout, widget visible: {d.checkableComboBoxLayer_filtering_layers_to_filter.isVisible()}")
+        
+        # EPIC-3: Create raster source info label for FILTERING tab
+        self._setup_raster_source_indicator(d)
         
         try:
             from ..config import UIConfig
@@ -897,6 +929,105 @@ class ConfigurationManager(QObject):
             d.checkableComboBoxLayer_filtering_layers_to_filter.setMaximumHeight(h)
         except Exception:
             pass
+    
+    def _setup_raster_source_indicator(self, d):
+        """
+        EPIC-3: Create raster source info indicator widget for FILTERING tab.
+        
+        This widget shows information about the active raster filter source:
+        - Raster layer name
+        - Active band
+        - Value range being used for filtering
+        
+        Hidden by default, becomes visible when a raster context is active.
+        """
+        from qgis.PyQt import QtWidgets, QtCore, QtGui
+        
+        # Create container frame
+        d.frame_raster_source_info = QtWidgets.QFrame(d.FILTERING)
+        d.frame_raster_source_info.setObjectName("frame_raster_source_info")
+        d.frame_raster_source_info.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        d.frame_raster_source_info.setFrameShadow(QtWidgets.QFrame.Raised)
+        d.frame_raster_source_info.setStyleSheet("""
+            QFrame#frame_raster_source_info {
+                background-color: rgba(52, 152, 219, 0.15);
+                border: 1px solid rgba(52, 152, 219, 0.4);
+                border-radius: 4px;
+                padding: 2px;
+            }
+        """)
+        
+        # Create horizontal layout for frame
+        layout = QtWidgets.QHBoxLayout(d.frame_raster_source_info)
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(6)
+        
+        # Create icon label
+        d.lbl_raster_source_icon = QtWidgets.QLabel(d.frame_raster_source_info)
+        d.lbl_raster_source_icon.setText("🗺️")
+        d.lbl_raster_source_icon.setFixedWidth(20)
+        d.lbl_raster_source_icon.setAlignment(QtCore.Qt.AlignCenter)
+        layout.addWidget(d.lbl_raster_source_icon)
+        
+        # Create info label
+        d.lbl_raster_source_info = QtWidgets.QLabel(d.frame_raster_source_info)
+        d.lbl_raster_source_info.setObjectName("lbl_raster_source_info")
+        d.lbl_raster_source_info.setText("")
+        font = QtGui.QFont()
+        font.setFamily("Segoe UI")
+        font.setPointSize(9)
+        d.lbl_raster_source_info.setFont(font)
+        d.lbl_raster_source_info.setWordWrap(True)
+        layout.addWidget(d.lbl_raster_source_info, 1)  # stretch factor 1
+        
+        # Create clear button
+        d.btn_clear_raster_source = QtWidgets.QPushButton(d.frame_raster_source_info)
+        d.btn_clear_raster_source.setObjectName("btn_clear_raster_source")
+        d.btn_clear_raster_source.setText("✕")
+        d.btn_clear_raster_source.setFixedSize(20, 20)
+        d.btn_clear_raster_source.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        d.btn_clear_raster_source.setToolTip(d.tr("Clear raster filter source"))
+        d.btn_clear_raster_source.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                color: #666;
+            }
+            QPushButton:hover {
+                color: #c0392b;
+            }
+        """)
+        d.btn_clear_raster_source.clicked.connect(lambda: self._clear_raster_filter_source(d))
+        layout.addWidget(d.btn_clear_raster_source)
+        
+        # Hide by default
+        d.frame_raster_source_info.setVisible(False)
+        
+        # Insert into filtering values layout at position 1 (after layers combo)
+        if hasattr(d, 'verticalLayout_filtering_values'):
+            d.verticalLayout_filtering_values.insertWidget(1, d.frame_raster_source_info)
+        
+        logger.debug("EPIC-3: Created raster source info indicator widget")
+    
+    def _clear_raster_filter_source(self, d):
+        """
+        EPIC-3: Clear the raster filter source when user clicks X button.
+        """
+        try:
+            d.frame_raster_source_info.setVisible(False)
+            d.lbl_raster_source_info.setText("")
+            
+            # Clear raster filter service context if available
+            if hasattr(d, '_controller_integration') and d._controller_integration:
+                filtering_ctrl = d._controller_integration.get_controller('filtering')
+                if filtering_ctrl and hasattr(filtering_ctrl, '_raster_filter_service'):
+                    raster_service = filtering_ctrl._raster_filter_service
+                    if raster_service:
+                        raster_service.clear_context()
+            
+            logger.info("EPIC-3: Raster filter source cleared")
+        except Exception as e:
+            logger.warning(f"EPIC-3: Error clearing raster source: {e}")
     
     def setup_exporting_tab_widgets(self):
         """v4.0 Sprint 16: Configure widgets for Exporting tab (migrated from dockwidget)."""

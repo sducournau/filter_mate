@@ -92,6 +92,18 @@ from qgis.utils import iface
 
 import webbrowser
 from .ui.widgets import QgsCheckableComboBoxFeaturesListPickerWidget, QgsCheckableComboBoxLayer
+# EPIC-2: Raster Integration - Import raster groupbox widget
+from .ui.widgets import RasterExploringGroupBox
+# EPIC-3: Raster-Vector Integration - Import accordion GroupBox V2
+from .ui.widgets import RasterExploringGroupBoxV2
+# EPIC-2: Raster Integration - Import raster stats service
+try:
+    from .core.services.raster_stats_service import RasterStatsService, get_raster_stats_service
+    from .adapters.backends.qgis_raster_backend import QGISRasterBackend
+    RASTER_SERVICE_AVAILABLE = True
+except ImportError as e:
+    RASTER_SERVICE_AVAILABLE = False
+    logger.warning(f"EPIC-2: Raster stats service not available: {e}")
 from .ui.widgets.json_view.model import JsonModel
 from .ui.widgets.json_view.view import JsonView
 
@@ -99,7 +111,12 @@ from .ui.widgets.json_view.view import JsonView
 from .infrastructure.utils import is_layer_valid as is_valid_layer
 from .infrastructure.utils import (
     get_best_display_field,
-    is_layer_source_available
+    is_layer_source_available,
+    # EPIC-2: Layer type detection
+    LayerType,
+    detect_layer_type,
+    is_raster_layer,
+    is_vector_layer,
 )
 from .core.domain.exceptions import SignalStateChangeError
 from .infrastructure.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR, get_geometry_type_string
@@ -340,6 +357,98 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return False
         return True
     
+    def get_source_layer_from_exploring_context(self):
+        """
+        v5.0: Get the source layer based on the current exploring tab context.
+        
+        Returns the layer from:
+        - mMapLayerComboBox_exploring_vector (if EXPLORING_VECTOR tab is active, index=0)
+        - mMapLayerComboBox_exploring_raster (if EXPLORING_RASTER tab is active, index=1)
+        
+        This replaces the old comboBox_filtering_current_layer which was removed.
+        
+        Returns:
+            QgsMapLayer: The current source layer from the active exploring tab, or None.
+        """
+        try:
+            if not hasattr(self, 'toolBox_exploring'):
+                return self.current_layer  # Fallback to current_layer
+            
+            current_index = self.toolBox_exploring.currentIndex()
+            
+            if current_index == 0:  # EXPLORING_VECTOR
+                if hasattr(self, 'mMapLayerComboBox_exploring_vector'):
+                    layer = self.mMapLayerComboBox_exploring_vector.currentLayer()
+                    if layer and layer.isValid():
+                        return layer
+            elif current_index == 1:  # EXPLORING_RASTER
+                if hasattr(self, 'mMapLayerComboBox_exploring_raster'):
+                    layer = self.mMapLayerComboBox_exploring_raster.currentLayer()
+                    if layer and layer.isValid():
+                        return layer
+            
+            # Fallback to current_layer
+            return self.current_layer
+        except Exception as e:
+            logger.debug(f"get_source_layer_from_exploring_context error: {e}")
+            return self.current_layer
+    
+    def get_source_layer_combobox(self):
+        """
+        v5.0: Get the appropriate source layer combobox based on exploring tab context.
+        
+        Returns the combobox from:
+        - mMapLayerComboBox_exploring_vector (if EXPLORING_VECTOR tab is active)
+        - mMapLayerComboBox_exploring_raster (if EXPLORING_RASTER tab is active)
+        
+        Returns:
+            QgsMapLayerComboBox: The combobox for the current exploring context, or None.
+        """
+        try:
+            if not hasattr(self, 'toolBox_exploring'):
+                return None
+            
+            current_index = self.toolBox_exploring.currentIndex()
+            
+            if current_index == 0:  # EXPLORING_VECTOR
+                if hasattr(self, 'mMapLayerComboBox_exploring_vector'):
+                    return self.mMapLayerComboBox_exploring_vector
+            elif current_index == 1:  # EXPLORING_RASTER
+                if hasattr(self, 'mMapLayerComboBox_exploring_raster'):
+                    return self.mMapLayerComboBox_exploring_raster
+            
+            return None
+        except Exception as e:
+            logger.debug(f"get_source_layer_combobox error: {e}")
+            return None
+    
+    def is_use_centroids_enabled(self) -> bool:
+        """
+        v5.0: Check if use centroids is enabled based on exploring tab context.
+        
+        Returns True if:
+        - checkBox_exploring_vector_use_centroids is checked (for EXPLORING_VECTOR)
+        
+        Note: Raster layers don't have centroids option.
+        
+        Returns:
+            bool: True if centroids should be used, False otherwise.
+        """
+        try:
+            if not hasattr(self, 'toolBox_exploring'):
+                return False
+            
+            current_index = self.toolBox_exploring.currentIndex()
+            
+            if current_index == 0:  # EXPLORING_VECTOR
+                if hasattr(self, 'checkBox_exploring_vector_use_centroids'):
+                    return self.checkBox_exploring_vector_use_centroids.isChecked()
+            
+            return False  # Raster doesn't have centroids option
+        except Exception as e:
+            logger.debug(f"is_use_centroids_enabled error: {e}")
+            return False
+    
     def _ensure_layer_signals_connected(self, layer) -> bool:
         """
         FIX 2026-01-15 (FIX-003): Ensure layer signals are connected.
@@ -520,6 +629,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.manage_ui_style()
         try: 
             self.manage_interactions()
+            # EPIC-2: Connect raster signals AFTER controllers are initialized
+            self._connect_raster_signals()
         except Exception as e: 
             logger.error(f"Error in manage_interactions: {e}", exc_info=True)
             from qgis.utils import iface
@@ -697,6 +808,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._setup_exploring_tab_widgets()
         self._setup_filtering_tab_widgets()
         self._setup_exporting_tab_widgets()
+        # EPIC-2: Setup raster exploring widget
+        self._setup_raster_exploring_widget()
         if 'CURRENT_PROJECT' in self.CONFIG_DATA:
             self.project_props = self.CONFIG_DATA["CURRENT_PROJECT"]
         self.manage_configuration_model()
@@ -727,7 +840,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 return
             
             loaded_count = 0
-            for grp in ["ACTION", "EXPLORING", "FILTERING", "EXPORTING"]:
+            for grp in ["ACTION", "EXPLORING", "EXPLORING_RASTER", "FILTERING", "EXPORTING"]:
                 sz = sz_act if grp == "ACTION" else sz_oth
                 icons_grp = icons.get(grp, {})
                 logger.info(f"Group {grp}: {len(icons_grp)} icons configured")
@@ -770,6 +883,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             ("EXPLORING", "IS_TRACKING"): "pushButton_checkable_exploring_tracking",
             ("EXPLORING", "IS_LINKING"): "pushButton_checkable_exploring_linking_widgets",
             ("EXPLORING", "RESET_ALL_LAYER_PROPERTIES"): "pushButton_exploring_reset_layer_properties",
+            ("EXPLORING_RASTER", "IDENTIFY"): "pushButton_exploring_raster_identify",
+            ("EXPLORING_RASTER", "ZOOM"): "pushButton_exploring_raster_zoom_to_layer",
+            ("EXPLORING_RASTER", "REFRESH"): "pushButton_exploring_raster_refresh",
+            ("EXPLORING_RASTER", "IS_LINKING"): "pushButton_checkable_exploring_raster_linking_widgets",
+            ("EXPLORING_RASTER", "PROPERTIES"): "pushButton_exploring_raster_properties",
             ("FILTERING", "AUTO_CURRENT_LAYER"): "pushButton_checkable_filtering_auto_current_layer",
             ("FILTERING", "HAS_LAYERS_TO_FILTER"): "pushButton_checkable_filtering_layers_to_filter",
             ("FILTERING", "HAS_COMBINE_OPERATOR"): "pushButton_checkable_filtering_current_layer_combine_operator",
@@ -1582,6 +1700,1921 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 Sprint 16: Delegate to ConfigurationManager."""
         if self._configuration_manager:
             self._configuration_manager.setup_exploring_tab_widgets()
+
+    def _setup_raster_exploring_widget(self):
+        """
+        EPIC-3: Setup exploring accordion system with VECTEUR and RASTER panels.
+        
+        Uses the UI-defined groupboxes:
+        - mGroupBox_exploring_vector: Contains single, multiple, custom selection
+        - mGroupBox_exploring_raster: Contains raster analysis tools with 4 sub-GroupBoxes
+        
+        EPIC-3 Update: Uses RasterExploringGroupBoxV2 with accordion pattern:
+        - 📊 STATISTICS
+        - 📈 VALUE SELECTION  
+        - 🎭 MASK & CLIP
+        - 💾 MEMORY CLIPS
+        
+        Only one panel is visible at a time, switched based on layer type from 
+        comboBox_filtering_current_layer.
+        """
+        logger.debug("EPIC-3: Setting up exploring accordion system with V2 GroupBox")
+        
+        from qgis.core import QgsMapLayerProxyModel
+        
+        # Get the UI-defined groupboxes
+        self._exploring_vector_groupbox = getattr(self, 'mGroupBox_exploring_vector', None)
+        self._exploring_raster_groupbox = getattr(self, 'mGroupBox_exploring_raster', None)
+        
+        if not self._exploring_vector_groupbox:
+            logger.warning("EPIC-3: mGroupBox_exploring_vector not found in UI!")
+            return
+        
+        if not self._exploring_raster_groupbox:
+            logger.warning("EPIC-3: mGroupBox_exploring_raster not found in UI!")
+            return
+        
+        # Get the raster stats container frame
+        self._raster_stats_frame = getattr(self, 'frame_raster_stats_container', None)
+        self._raster_status_label = getattr(self, 'label_raster_status', None)
+        
+        # EPIC-3: Create and add the RasterExploringGroupBoxV2 with accordion pattern
+        if self._raster_stats_frame and hasattr(self._raster_stats_frame, 'layout'):
+            # Create V2 raster content widget (with 4 accordion GroupBoxes)
+            self._raster_groupbox_v2 = RasterExploringGroupBoxV2(self)
+            
+            # Hide internal main groupbox since we use the UI groupbox
+            if hasattr(self._raster_groupbox_v2, '_main_groupbox'):
+                self._raster_groupbox_v2._main_groupbox.setVisible(False)
+            
+            # Add directly to the frame's layout
+            stats_layout = self._raster_stats_frame.layout()
+            if stats_layout:
+                # Clear any old widgets first
+                while stats_layout.count():
+                    item = stats_layout.takeAt(0)
+                    if item.widget():
+                        item.widget().setParent(None)
+                stats_layout.addWidget(self._raster_groupbox_v2)
+            
+            # EPIC-2/3: Initialize and connect raster stats service
+            self._raster_stats_service = None
+            if RASTER_SERVICE_AVAILABLE:
+                try:
+                    backend = QGISRasterBackend()
+                    self._raster_stats_service = RasterStatsService(backend)
+                    self._raster_groupbox_v2.set_stats_service(self._raster_stats_service)
+                    logger.debug("EPIC-3: Raster stats service initialized for V2")
+                except Exception as e:
+                    logger.warning(f"EPIC-3: Could not initialize raster stats service: {e}")
+            
+            # EPIC-3: Connect V2 GroupBox signals for filter context
+            self._raster_groupbox_v2.filter_context_changed.connect(
+                self._on_raster_filter_context_changed
+            )
+            self._raster_groupbox_v2.pick_mode_activated.connect(
+                self._on_raster_pick_mode_activated
+            )
+            self._raster_groupbox_v2.active_groupbox_changed.connect(
+                self._on_raster_active_groupbox_changed
+            )
+            # EPIC-3: Connect execute filter signal
+            self._raster_groupbox_v2.execute_filter.connect(
+                self._on_raster_execute_filter
+            )
+            # EPIC-3: Connect clear filters signal
+            self._raster_groupbox_v2.clear_filters.connect(
+                self._on_raster_clear_filters
+            )
+            # EPIC-3: Connect zonal stats signal
+            self._raster_groupbox_v2.zonal_stats_requested.connect(
+                self._on_raster_zonal_stats
+            )
+            # EPIC-3: Connect Memory Clips signals
+            self._raster_groupbox_v2.clip_visibility_changed.connect(
+                self._on_memory_clip_visibility_changed
+            )
+            self._raster_groupbox_v2.clip_save_requested.connect(
+                self._on_memory_clip_save_requested
+            )
+            self._raster_groupbox_v2.clip_delete_requested.connect(
+                self._on_memory_clip_delete_requested
+            )
+            self._raster_groupbox_v2.save_all_clips_requested.connect(
+                self._on_memory_clips_save_all
+            )
+            self._raster_groupbox_v2.clear_all_clips_requested.connect(
+                self._on_memory_clips_clear_all
+            )
+            # EPIC-3: Connect Mask & Clip operation signal
+            self._raster_groupbox_v2.mask_clip_operation_requested.connect(
+                self._on_mask_clip_operation_requested
+            )
+            # EPIC-3: Connect mask preview signal
+            self._raster_groupbox_v2.preview_mask_requested.connect(
+                self._on_preview_mask_requested
+            )
+            # EPIC-3: Connect save as template signal
+            self._raster_groupbox_v2.save_as_template_requested.connect(
+                self._on_save_as_template_requested
+            )
+            # EPIC-3: Connect load template signal
+            self._raster_groupbox_v2.load_template_requested.connect(
+                self._on_load_template_requested
+            )
+            # EPIC-3: Connect template apply signal from Templates GroupBox
+            self._raster_groupbox_v2.template_apply_requested.connect(
+                self._on_template_apply_requested
+            )
+            
+            # EPIC-3: Initialize and connect WorkflowTemplateService
+            self._init_workflow_template_service()
+            
+            logger.info("EPIC-3: RasterExploringGroupBoxV2 created and connected")
+        
+        # Also keep reference to old groupbox for compatibility
+        self._raster_groupbox = self._raster_groupbox_v2 if hasattr(self, '_raster_groupbox_v2') else None
+        
+        # Get the raster layer combobox from V2 widget (it has its own)
+        if hasattr(self, '_raster_groupbox_v2') and self._raster_groupbox_v2:
+            self._raster_layer_combo = self._raster_groupbox_v2.raster_layer_combo
+        
+        # === Connect exclusive accordion behavior ===
+        self._exploring_vector_groupbox.collapsedStateChanged.connect(
+            lambda collapsed: self._on_exploring_accordion_changed('vector', collapsed)
+        )
+        self._exploring_raster_groupbox.collapsedStateChanged.connect(
+            lambda collapsed: self._on_exploring_accordion_changed('raster', collapsed)
+        )
+        
+        # Initial state: vector expanded, raster collapsed
+        self._exploring_vector_groupbox.setCollapsed(False)
+        self._exploring_vector_groupbox.setChecked(True)
+        self._exploring_raster_groupbox.setCollapsed(True)
+        self._exploring_raster_groupbox.setChecked(False)
+        
+        logger.info("EPIC-3: Exploring accordion system setup complete")
+    
+    def _on_exploring_accordion_changed(self, panel_type: str, collapsed: bool):
+        """
+        EPIC-2: Handle exclusive accordion behavior for EXPLORING panels.
+        
+        When one panel is expanded, the other is collapsed automatically.
+        
+        Args:
+            panel_type: 'vector' or 'raster'
+            collapsed: True if the panel was collapsed
+        """
+        if collapsed:
+            # Panel was collapsed, nothing to do
+            return
+        
+        # Panel was expanded - collapse the other one
+        try:
+            if panel_type == 'vector':
+                if hasattr(self, '_exploring_raster_groupbox') and self._exploring_raster_groupbox:
+                    self._exploring_raster_groupbox.setCollapsed(True)
+                    self._exploring_raster_groupbox.setChecked(False)
+                logger.debug("EPIC-2: Switched to EXPLORING VECTEUR")
+            elif panel_type == 'raster':
+                if hasattr(self, '_exploring_vector_groupbox') and self._exploring_vector_groupbox:
+                    self._exploring_vector_groupbox.setCollapsed(True)
+                    self._exploring_vector_groupbox.setChecked(False)
+                logger.debug("EPIC-2: Switched to EXPLORING RASTER")
+        except RuntimeError:
+            # Widget may have been deleted
+            pass
+    
+    def _on_raster_combo_layer_changed(self, layer):
+        """
+        EPIC-2: Handle raster layer selection from the UI combobox.
+        
+        Args:
+            layer: The newly selected raster layer or None
+        """
+        from qgis.core import QgsRasterLayer
+        
+        try:
+            if layer is not None and isinstance(layer, QgsRasterLayer):
+                logger.info(f"EPIC-2: Raster layer selected from combo: {layer.name()}")
+                
+                # Update status label
+                if hasattr(self, '_raster_status_label') and self._raster_status_label:
+                    self._raster_status_label.setText(f"Analyzing {layer.name()}...")
+                
+                # Pass to the raster groupbox for stats/histogram
+                if hasattr(self, '_raster_groupbox') and self._raster_groupbox:
+                    self._raster_groupbox.set_layer(layer)
+            else:
+                logger.debug("EPIC-2: No raster layer selected from combo")
+                if hasattr(self, '_raster_status_label') and self._raster_status_label:
+                    self._raster_status_label.setText("Select a raster layer to view statistics")
+                if hasattr(self, '_raster_groupbox') and self._raster_groupbox:
+                    self._raster_groupbox.set_layer(None)
+        except RuntimeError:
+            # Widget may have been deleted
+            pass
+    
+    def _switch_exploring_panel(self, panel_type: str):
+        """
+        EPIC-2: Programmatically switch the exploring accordion.
+        
+        Args:
+            panel_type: 'vector' or 'raster'
+        """
+        if panel_type == 'vector':
+            if hasattr(self, '_exploring_vector_groupbox'):
+                self._exploring_vector_groupbox.setCollapsed(False)
+                self._exploring_vector_groupbox.setChecked(True)
+            if hasattr(self, '_exploring_raster_groupbox'):
+                self._exploring_raster_groupbox.setCollapsed(True)
+                self._exploring_raster_groupbox.setChecked(False)
+        elif panel_type == 'raster':
+            if hasattr(self, '_exploring_raster_groupbox'):
+                self._exploring_raster_groupbox.setCollapsed(False)
+                self._exploring_raster_groupbox.setChecked(True)
+            if hasattr(self, '_exploring_vector_groupbox'):
+                self._exploring_vector_groupbox.setCollapsed(True)
+                self._exploring_vector_groupbox.setChecked(False)
+        
+        logger.info(f"EPIC-2: Exploring panel switched to {panel_type}")
+
+    # =========================================================================
+    # EPIC-3: Raster-Vector Integration Signal Handlers
+    # =========================================================================
+    
+    def _on_raster_filter_context_changed(self, context: dict):
+        """
+        EPIC-3: Handle filter context changes from RasterExploringGroupBoxV2.
+        
+        When the user interacts with raster GroupBoxes (Statistics, Value Selection, etc.),
+        the filter context is updated and should be synchronized with the FILTERING panel.
+        
+        Args:
+            context: Filter context dictionary with source_type, mode, range, etc.
+        """
+        try:
+            source_type = context.get('source_type', 'raster')
+            mode = context.get('mode')
+            
+            logger.debug(f"EPIC-3: Raster filter context changed - mode: {mode}")
+            
+            # Store context for FILTERING synchronization
+            self._raster_filter_context = context
+            
+            # Update FILTERING panel SOURCE display if available
+            if hasattr(self, '_filtering_controller') and self._filtering_controller:
+                self._filtering_controller.on_exploring_context_changed(context)
+            
+            # Update status message based on mode
+            if hasattr(self, '_raster_status_label') and self._raster_status_label:
+                if mode == 'value_filter':
+                    range_min = context.get('range_min', 0)
+                    range_max = context.get('range_max', 0)
+                    pixel_count = context.get('pixel_count', 0)
+                    self._raster_status_label.setText(
+                        f"Value filter: {range_min:.1f} - {range_max:.1f} ({pixel_count:,} pixels)"
+                    )
+                elif mode == 'spatial_operation':
+                    operation = context.get('operation', 'clip')
+                    self._raster_status_label.setText(f"Operation: {operation}")
+                elif mode == 'info_only':
+                    layer_name = context.get('layer_name', 'Unknown')
+                    self._raster_status_label.setText(f"Viewing: {layer_name}")
+                    
+        except Exception as e:
+            logger.warning(f"EPIC-3: Error handling filter context change: {e}")
+    
+    def update_vector_source_context(self, layer=None, features=None, mode: str = 'all'):
+        """
+        EPIC-3: Update the vector source context for MASK & CLIP GroupBox.
+        
+        Called when the EXPLORING VECTOR selection changes to propagate
+        the vector layer/feature context to the raster MASK & CLIP operations.
+        
+        Args:
+            layer: Vector layer (QgsVectorLayer) or None
+            features: List of QgsFeature objects or None (all features)
+            mode: Selection mode - 'all', 'selected', 'expression'
+        """
+        try:
+            if not hasattr(self, '_raster_groupbox_v2') or not self._raster_groupbox_v2:
+                logger.debug("EPIC-3: No V2 groupbox available for vector context update")
+                return
+            
+            if layer is None or not layer.isValid():
+                # Clear context
+                context = None
+                logger.debug("EPIC-3: Clearing vector source context (no valid layer)")
+            else:
+                # Build context dictionary
+                feature_count = len(features) if features else layer.featureCount()
+                
+                # Get selected feature IDs if features provided
+                selected_ids = []
+                if features:
+                    selected_ids = [f.id() for f in features]
+                
+                context = {
+                    'layer_id': layer.id(),
+                    'layer_name': layer.name(),
+                    'feature_count': feature_count,
+                    'mode': mode,
+                    'selected_ids': selected_ids,
+                    'has_selection': len(selected_ids) > 0
+                }
+                
+                logger.info(f"EPIC-3: Vector source context updated - {layer.name()}, "
+                           f"{feature_count} features, mode={mode}")
+            
+            # Propagate to MASK & CLIP GroupBox via V2 container
+            self._raster_groupbox_v2.set_vector_source_context(context)
+            
+            # Store context for later use
+            self._vector_source_context = context
+            
+        except Exception as e:
+            logger.error(f"EPIC-3: Error updating vector source context: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _on_raster_execute_filter(self):
+        """
+        EPIC-3: Handle execute filter request from RasterExploringGroupBoxV2.
+        
+        When the user clicks the "Execute Filter" button in VALUE SELECTION,
+        this method delegates to the FilteringController to apply the raster-based
+        filter to the selected target vector layers.
+        """
+        try:
+            logger.info("EPIC-3: Execute raster filter requested")
+            
+            # Get current filter context from V2 groupbox
+            if not hasattr(self, '_raster_groupbox_v2') or not self._raster_groupbox_v2:
+                logger.warning("EPIC-3: No V2 groupbox available for execute filter")
+                return
+                
+            context = self._raster_groupbox_v2.get_filter_context()
+            if not context:
+                logger.warning("EPIC-3: No filter context available")
+                return
+            
+            # Check if we have a raster layer set
+            raster_layer = context.get('layer')
+            if not raster_layer:
+                logger.warning("EPIC-3: No raster layer in context")
+                from qgis.utils import iface
+                iface.messageBar().pushWarning(
+                    "FilterMate", 
+                    self.tr("Please select a raster layer first")
+                )
+                return
+            
+            # Check if we have target layers
+            target_layers = context.get('target_layers', [])
+            if not target_layers:
+                logger.warning("EPIC-3: No target layers selected")
+                from qgis.utils import iface
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    self.tr("Please select at least one target vector layer")
+                )
+                return
+            
+            # Delegate to FilteringController
+            if hasattr(self, '_filtering_controller') and self._filtering_controller:
+                self._filtering_controller.execute_raster_filter(context)
+            else:
+                logger.warning("EPIC-3: FilteringController not available")
+                
+        except Exception as e:
+            logger.error(f"EPIC-3: Error executing raster filter: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _on_raster_clear_filters(self, layer_ids: list):
+        """
+        EPIC-3: Handle clear filters request from raster exploring.
+        
+        Removes subset string from the specified vector layers.
+        
+        Args:
+            layer_ids: List of layer IDs to clear filters from
+        """
+        try:
+            from qgis.core import QgsProject
+            from qgis.utils import iface
+            
+            logger.info(f"EPIC-3: Clear filters requested for {len(layer_ids)} layers")
+            
+            cleared_count = 0
+            for layer_id in layer_ids:
+                layer = QgsProject.instance().mapLayer(layer_id)
+                if layer and hasattr(layer, 'setSubsetString'):
+                    current_filter = layer.subsetString()
+                    if current_filter:
+                        layer.setSubsetString("")
+                        cleared_count += 1
+                        logger.debug(f"EPIC-3: Cleared filter from {layer.name()}")
+            
+            if cleared_count > 0:
+                iface.messageBar().pushSuccess(
+                    "FilterMate",
+                    f"Cleared filters from {cleared_count} layer(s)"
+                )
+            else:
+                iface.messageBar().pushInfo(
+                    "FilterMate",
+                    "No filters to clear"
+                )
+                
+        except Exception as e:
+            logger.error(f"EPIC-3: Error clearing filters: {e}")
+    
+    def _on_raster_zonal_stats(self, layer_ids: list):
+        """
+        EPIC-3: Handle zonal statistics request from raster exploring.
+        
+        Computes zonal statistics for each target layer using the current
+        raster layer and value selection, then displays results in a dialog.
+        
+        Args:
+            layer_ids: List of target vector layer IDs for zonal statistics
+        """
+        try:
+            from qgis.core import QgsProject
+            from qgis.utils import iface
+            from .ui.dialogs import ZonalStatsDialog
+            
+            logger.info(f"EPIC-3: Zonal stats requested for {len(layer_ids)} layers")
+            
+            # Get the current raster layer
+            if not hasattr(self, '_raster_groupbox_v2') or not self._raster_groupbox_v2:
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    "Raster widget not available"
+                )
+                return
+            
+            raster_layer = self._raster_groupbox_v2.current_layer
+            if not raster_layer:
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    "No raster layer selected"
+                )
+                return
+            
+            # Get the filter context (includes selected band, etc.)
+            filter_context = self._raster_groupbox_v2.get_filter_context()
+            band_index = filter_context.get('band_index', 1) if filter_context else 1
+            
+            # Compute zonal stats for each target layer
+            all_results = []
+            for layer_id in layer_ids:
+                vector_layer = QgsProject.instance().mapLayer(layer_id)
+                if not vector_layer:
+                    logger.warning(f"EPIC-3: Layer {layer_id} not found")
+                    continue
+                
+                # Use the filtering controller to compute zonal stats
+                if hasattr(self, '_filtering_controller') and self._filtering_controller:
+                    try:
+                        results = self._filtering_controller.compute_zonal_statistics(
+                            raster_layer=raster_layer,
+                            vector_layer=vector_layer,
+                            band_index=band_index
+                        )
+                        if results:
+                            all_results.extend(results)
+                    except Exception as e:
+                        logger.error(f"EPIC-3: Error computing zonal stats for {vector_layer.name()}: {e}")
+            
+            if all_results:
+                # Show the dialog with results
+                dialog = ZonalStatsDialog(
+                    stats_data=all_results,
+                    raster_name=raster_layer.name(),
+                    parent=self
+                )
+                dialog.exec_()
+                
+                iface.messageBar().pushSuccess(
+                    "FilterMate",
+                    f"Computed zonal statistics for {len(all_results)} features"
+                )
+            else:
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    "No zonal statistics computed. Check that vector layers have geometry."
+                )
+                
+        except Exception as e:
+            logger.error(f"EPIC-3: Error computing zonal stats: {e}")
+            import traceback
+            traceback.print_exc()
+            from qgis.utils import iface
+            iface.messageBar().pushCritical(
+                "FilterMate",
+                f"Error computing zonal statistics: {str(e)}"
+            )
+    
+    # =========================================================================
+    # EPIC-3: Memory Clips Management
+    # =========================================================================
+    
+    def _on_memory_clip_visibility_changed(self, clip_id: str, visible: bool):
+        """
+        EPIC-3: Handle memory clip visibility toggle.
+        
+        Shows or hides the clip layer in the map canvas.
+        
+        Args:
+            clip_id: ID of the clip layer
+            visible: New visibility state
+        """
+        try:
+            from qgis.core import QgsProject
+            
+            logger.info(f"EPIC-3: Memory clip {clip_id} visibility -> {visible}")
+            
+            layer = QgsProject.instance().mapLayer(clip_id)
+            if layer:
+                # Use layer tree to set visibility
+                root = QgsProject.instance().layerTreeRoot()
+                node = root.findLayer(layer.id())
+                if node:
+                    node.setItemVisibilityChecked(visible)
+                    logger.debug(f"EPIC-3: Set {layer.name()} visibility to {visible}")
+                    
+        except Exception as e:
+            logger.error(f"EPIC-3: Error toggling clip visibility: {e}")
+    
+    def _on_memory_clip_save_requested(self, clip_id: str):
+        """
+        EPIC-3: Handle request to save a memory clip to disk.
+        
+        Opens a file dialog and saves the clip as GeoTIFF.
+        
+        Args:
+            clip_id: ID of the clip layer to save
+        """
+        try:
+            from qgis.core import QgsProject, QgsRasterFileWriter, QgsRasterPipe
+            from qgis.PyQt.QtWidgets import QFileDialog
+            from qgis.utils import iface
+            
+            logger.info(f"EPIC-3: Save memory clip requested: {clip_id}")
+            
+            layer = QgsProject.instance().mapLayer(clip_id)
+            if not layer:
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    f"Clip layer not found: {clip_id}"
+                )
+                return
+            
+            # Open save dialog
+            filename, _ = QFileDialog.getSaveFileName(
+                self,
+                f"Save Clip - {layer.name()}",
+                "",
+                "GeoTIFF (*.tif);;All Files (*.*)"
+            )
+            
+            if not filename:
+                return  # User cancelled
+            
+            # Ensure .tif extension
+            if not filename.lower().endswith('.tif'):
+                filename += '.tif'
+            
+            # Save the raster
+            pipe = QgsRasterPipe()
+            pipe.set(layer.dataProvider().clone())
+            
+            writer = QgsRasterFileWriter(filename)
+            error = writer.writeRaster(
+                pipe,
+                layer.width(),
+                layer.height(),
+                layer.extent(),
+                layer.crs()
+            )
+            
+            if error == QgsRasterFileWriter.NoError:
+                iface.messageBar().pushSuccess(
+                    "FilterMate",
+                    f"Saved clip to: {filename}"
+                )
+                logger.info(f"EPIC-3: Clip saved to {filename}")
+            else:
+                iface.messageBar().pushCritical(
+                    "FilterMate",
+                    f"Error saving clip: {error}"
+                )
+                
+        except Exception as e:
+            logger.error(f"EPIC-3: Error saving memory clip: {e}")
+            import traceback
+            traceback.print_exc()
+            from qgis.utils import iface
+            iface.messageBar().pushCritical(
+                "FilterMate",
+                f"Error saving clip: {str(e)}"
+            )
+    
+    def _on_memory_clip_delete_requested(self, clip_id: str):
+        """
+        EPIC-3: Handle request to delete a memory clip.
+        
+        Removes the clip layer from the project and memory.
+        
+        Args:
+            clip_id: ID of the clip layer to delete
+        """
+        try:
+            from qgis.core import QgsProject
+            from qgis.utils import iface
+            
+            logger.info(f"EPIC-3: Delete memory clip requested: {clip_id}")
+            
+            layer = QgsProject.instance().mapLayer(clip_id)
+            if layer:
+                layer_name = layer.name()
+                QgsProject.instance().removeMapLayer(clip_id)
+                logger.info(f"EPIC-3: Removed clip layer: {layer_name}")
+            
+            # Also remove from the memory clips widget
+            if hasattr(self, '_raster_groupbox_v2') and self._raster_groupbox_v2:
+                self._raster_groupbox_v2.remove_memory_clip(clip_id)
+            
+            iface.messageBar().pushInfo(
+                "FilterMate",
+                "Memory clip deleted"
+            )
+                
+        except Exception as e:
+            logger.error(f"EPIC-3: Error deleting memory clip: {e}")
+    
+    def _on_memory_clips_save_all(self):
+        """
+        EPIC-3: Handle request to save all memory clips to a folder.
+        
+        Opens a folder dialog and saves all clips as GeoTIFFs.
+        """
+        try:
+            from qgis.core import QgsProject, QgsRasterFileWriter, QgsRasterPipe
+            from qgis.PyQt.QtWidgets import QFileDialog
+            from qgis.utils import iface
+            import os
+            
+            logger.info("EPIC-3: Save all memory clips requested")
+            
+            # Get clips from the memory clips groupbox
+            if not hasattr(self, '_raster_groupbox_v2') or not self._raster_groupbox_v2:
+                return
+            
+            clips_context = self._raster_groupbox_v2.memory_clips_groupbox.get_filter_context()
+            clips = clips_context.get('clips', [])
+            
+            if not clips:
+                iface.messageBar().pushInfo(
+                    "FilterMate",
+                    "No memory clips to save"
+                )
+                return
+            
+            # Open folder dialog
+            folder = QFileDialog.getExistingDirectory(
+                self,
+                "Select Folder to Save Clips",
+                ""
+            )
+            
+            if not folder:
+                return  # User cancelled
+            
+            saved_count = 0
+            for clip_info in clips:
+                clip_id = clip_info['id']
+                clip_name = clip_info['name']
+                
+                layer = QgsProject.instance().mapLayer(clip_id)
+                if not layer:
+                    continue
+                
+                # Clean filename
+                safe_name = "".join(c for c in clip_name if c.isalnum() or c in "._- ")
+                filename = os.path.join(folder, f"{safe_name}.tif")
+                
+                # Save the raster
+                pipe = QgsRasterPipe()
+                pipe.set(layer.dataProvider().clone())
+                
+                writer = QgsRasterFileWriter(filename)
+                error = writer.writeRaster(
+                    pipe,
+                    layer.width(),
+                    layer.height(),
+                    layer.extent(),
+                    layer.crs()
+                )
+                
+                if error == QgsRasterFileWriter.NoError:
+                    saved_count += 1
+                    logger.debug(f"EPIC-3: Saved {clip_name} to {filename}")
+            
+            if saved_count > 0:
+                iface.messageBar().pushSuccess(
+                    "FilterMate",
+                    f"Saved {saved_count} clip(s) to: {folder}"
+                )
+            else:
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    "No clips were saved"
+                )
+                
+        except Exception as e:
+            logger.error(f"EPIC-3: Error saving all clips: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _on_memory_clips_clear_all(self):
+        """
+        EPIC-3: Handle request to clear all memory clips.
+        
+        Removes all clip layers from the project.
+        """
+        try:
+            from qgis.core import QgsProject
+            from qgis.utils import iface
+            
+            logger.info("EPIC-3: Clear all memory clips requested")
+            
+            # Get clips from the memory clips groupbox
+            if not hasattr(self, '_raster_groupbox_v2') or not self._raster_groupbox_v2:
+                return
+            
+            clips_context = self._raster_groupbox_v2.memory_clips_groupbox.get_filter_context()
+            clips = clips_context.get('clips', [])
+            
+            removed_count = 0
+            for clip_info in clips:
+                clip_id = clip_info['id']
+                layer = QgsProject.instance().mapLayer(clip_id)
+                if layer:
+                    QgsProject.instance().removeMapLayer(clip_id)
+                    removed_count += 1
+            
+            # Clear the widget
+            self._raster_groupbox_v2.memory_clips_groupbox.clear()
+            
+            if removed_count > 0:
+                iface.messageBar().pushSuccess(
+                    "FilterMate",
+                    f"Cleared {removed_count} memory clip(s)"
+                )
+                logger.info(f"EPIC-3: Cleared {removed_count} memory clips")
+                
+        except Exception as e:
+            logger.error(f"EPIC-3: Error clearing memory clips: {e}")
+    
+    def _on_mask_created_for_memory_clips(self, mask_result):
+        """
+        EPIC-3: Handle mask creation and add to Memory Clips.
+        
+        Called by FilteringController when a mask is created via RasterFilterService.
+        Converts the mask result to a MemoryClipItem and adds to the widget.
+        
+        Args:
+            mask_result: RasterMaskResult from the service
+        """
+        try:
+            from qgis.core import QgsProject
+            from .ui.widgets.raster_memory_clips_gb import MemoryClipItem
+            
+            logger.info(f"EPIC-3: Adding mask to Memory Clips: {mask_result.layer_name}")
+            
+            # Get the source raster name
+            source_name = "Unknown"
+            if mask_result.source_layer_id:
+                source_layer = QgsProject.instance().mapLayer(mask_result.source_layer_id)
+                if source_layer:
+                    source_name = source_layer.name()
+            
+            # Estimate size from pixel count (rough estimate: 4 bytes per pixel)
+            size_mb = (mask_result.total_pixel_count * 4) / (1024 * 1024)
+            
+            # Create MemoryClipItem
+            clip_item = MemoryClipItem(
+                clip_id=mask_result.layer_id,
+                name=mask_result.layer_name,
+                source_name=source_name,
+                size_mb=size_mb,
+                operation="mask_outside" if mask_result.mask_percentage < 50 else "mask_inside",
+                visible=True
+            )
+            
+            # Add to Memory Clips widget
+            if hasattr(self, '_raster_groupbox_v2') and self._raster_groupbox_v2:
+                self._raster_groupbox_v2.add_memory_clip(clip_item)
+                logger.info(f"EPIC-3: Added clip to Memory Clips: {clip_item.name}")
+                
+                # Show message
+                from qgis.utils import iface
+                iface.messageBar().pushSuccess(
+                    "FilterMate",
+                    f"Mask created: {mask_result.layer_name} ({mask_result.mask_percentage:.1f}% masked)"
+                )
+                
+        except Exception as e:
+            logger.error(f"EPIC-3: Error adding mask to Memory Clips: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _on_mask_clip_operation_requested(self, params: dict):
+        """
+        EPIC-3: Handle Mask & Clip operation request.
+        
+        Executes clip, mask_outside, mask_inside, or zonal_stats operations
+        based on user selection in the MASK & CLIP GroupBox.
+        
+        Args:
+            params: Operation parameters dict with keys:
+                - operation: 'clip_extent', 'mask_outside', 'mask_inside', 'zonal_stats'
+                - target_rasters: List of raster layer IDs
+                - vector_source: Vector context from EXPLORING VECTOR
+                - output: {'add_to_memory': bool, 'save_to_disk': bool, 'disk_path': str}
+        """
+        try:
+            from qgis.core import QgsProject
+            from qgis.utils import iface
+            
+            operation = params.get('operation', 'clip_extent')
+            target_rasters = params.get('target_rasters', [])
+            vector_source = params.get('vector_source')
+            output_options = params.get('output', {})
+            
+            logger.info(f"EPIC-3: Mask & Clip operation requested: {operation}")
+            
+            # Validate inputs
+            if not target_rasters:
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    "No target rasters selected"
+                )
+                return
+            
+            if not vector_source:
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    "No vector source configured. Select features in EXPLORING VECTOR first."
+                )
+                return
+            
+            # Get vector layer
+            vector_layer_id = vector_source.get('layer_id')
+            vector_layer = QgsProject.instance().mapLayer(vector_layer_id) if vector_layer_id else None
+            
+            if not vector_layer:
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    "Vector source layer not found"
+                )
+                return
+            
+            # Execute operation for each target raster
+            results = []
+            for raster_id in target_rasters:
+                raster_layer = QgsProject.instance().mapLayer(raster_id)
+                if not raster_layer:
+                    logger.warning(f"EPIC-3: Raster layer not found: {raster_id}")
+                    continue
+                
+                try:
+                    if operation == 'clip_extent':
+                        result = self._execute_clip_extent(
+                            raster_layer, vector_layer, output_options
+                        )
+                    elif operation == 'mask_outside':
+                        result = self._execute_mask_outside(
+                            raster_layer, vector_layer, output_options
+                        )
+                    elif operation == 'mask_inside':
+                        result = self._execute_mask_inside(
+                            raster_layer, vector_layer, output_options
+                        )
+                    elif operation == 'zonal_stats':
+                        result = self._execute_zonal_stats_only(
+                            raster_layer, vector_layer
+                        )
+                    else:
+                        logger.warning(f"EPIC-3: Unknown operation: {operation}")
+                        continue
+                    
+                    if result:
+                        results.append(result)
+                        
+                except Exception as e:
+                    logger.error(f"EPIC-3: Error processing {raster_layer.name()}: {e}")
+            
+            # Show summary
+            if results:
+                iface.messageBar().pushSuccess(
+                    "FilterMate",
+                    f"Completed {len(results)} {operation} operation(s)"
+                )
+            else:
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    "No operations completed"
+                )
+                
+        except Exception as e:
+            logger.error(f"EPIC-3: Error in Mask & Clip operation: {e}")
+            import traceback
+            traceback.print_exc()
+            from qgis.utils import iface
+            iface.messageBar().pushCritical(
+                "FilterMate",
+                f"Error in operation: {str(e)}"
+            )
+    
+    def _execute_clip_extent(self, raster_layer, vector_layer, output_options: dict):
+        """
+        EPIC-3: Execute clip to vector extent operation.
+        
+        Uses GDAL clip by mask layer to clip raster to vector bounds.
+        
+        Args:
+            raster_layer: Source raster layer
+            vector_layer: Vector layer defining clip extent
+            output_options: Output configuration
+            
+        Returns:
+            Result layer or None
+        """
+        try:
+            import processing
+            from qgis.core import QgsRasterLayer, QgsProject
+            
+            output_name = f"{raster_layer.name()}_clipped"
+            
+            # Use GDAL clip
+            result = processing.run(
+                "gdal:cliprasterbymasklayer",
+                {
+                    'INPUT': raster_layer,
+                    'MASK': vector_layer,
+                    'SOURCE_CRS': raster_layer.crs(),
+                    'TARGET_CRS': raster_layer.crs(),
+                    'NODATA': None,
+                    'ALPHA_BAND': False,
+                    'CROP_TO_CUTLINE': True,
+                    'KEEP_RESOLUTION': True,
+                    'SET_RESOLUTION': False,
+                    'OPTIONS': '',
+                    'DATA_TYPE': 0,  # Use input type
+                    'EXTRA': '',
+                    'OUTPUT': 'TEMPORARY_OUTPUT' if output_options.get('add_to_memory') else output_options.get('disk_path', 'TEMPORARY_OUTPUT')
+                }
+            )
+            
+            output_path = result['OUTPUT']
+            
+            # Add to project
+            clipped_layer = QgsRasterLayer(output_path, output_name)
+            if clipped_layer.isValid():
+                QgsProject.instance().addMapLayer(clipped_layer)
+                
+                # Add to Memory Clips if requested
+                if output_options.get('add_to_memory'):
+                    self._add_clip_to_memory(
+                        clipped_layer,
+                        raster_layer.name(),
+                        "clip_extent"
+                    )
+                
+                logger.info(f"EPIC-3: Created clip: {output_name}")
+                return clipped_layer
+            
+        except Exception as e:
+            logger.error(f"EPIC-3: Error in clip_extent: {e}")
+        
+        return None
+    
+    def _execute_mask_outside(self, raster_layer, vector_layer, output_options: dict):
+        """
+        EPIC-3: Execute mask outside vector operation.
+        
+        Masks pixels outside vector features (keeps pixels inside).
+        
+        Args:
+            raster_layer: Source raster layer
+            vector_layer: Vector layer defining mask
+            output_options: Output configuration
+            
+        Returns:
+            Result layer or None
+        """
+        try:
+            import processing
+            from qgis.core import QgsRasterLayer, QgsProject
+            
+            output_name = f"{raster_layer.name()}_masked"
+            
+            # Use GDAL clip with mask (not cropping)
+            result = processing.run(
+                "gdal:cliprasterbymasklayer",
+                {
+                    'INPUT': raster_layer,
+                    'MASK': vector_layer,
+                    'SOURCE_CRS': raster_layer.crs(),
+                    'TARGET_CRS': raster_layer.crs(),
+                    'NODATA': -9999,
+                    'ALPHA_BAND': True,
+                    'CROP_TO_CUTLINE': False,  # Keep original extent
+                    'KEEP_RESOLUTION': True,
+                    'SET_RESOLUTION': False,
+                    'OPTIONS': '',
+                    'DATA_TYPE': 0,
+                    'EXTRA': '',
+                    'OUTPUT': 'TEMPORARY_OUTPUT' if output_options.get('add_to_memory') else output_options.get('disk_path', 'TEMPORARY_OUTPUT')
+                }
+            )
+            
+            output_path = result['OUTPUT']
+            
+            # Add to project
+            masked_layer = QgsRasterLayer(output_path, output_name)
+            if masked_layer.isValid():
+                QgsProject.instance().addMapLayer(masked_layer)
+                
+                # Add to Memory Clips if requested
+                if output_options.get('add_to_memory'):
+                    self._add_clip_to_memory(
+                        masked_layer,
+                        raster_layer.name(),
+                        "mask_outside"
+                    )
+                
+                logger.info(f"EPIC-3: Created mask: {output_name}")
+                return masked_layer
+            
+        except Exception as e:
+            logger.error(f"EPIC-3: Error in mask_outside: {e}")
+        
+        return None
+    
+    def _execute_mask_inside(self, raster_layer, vector_layer, output_options: dict):
+        """
+        EPIC-3: Execute mask inside vector operation.
+        
+        Masks pixels inside vector features (keeps pixels outside).
+        Uses inverted mask approach.
+        
+        Args:
+            raster_layer: Source raster layer
+            vector_layer: Vector layer defining mask
+            output_options: Output configuration
+            
+        Returns:
+            Result layer or None
+        """
+        try:
+            import processing
+            from qgis.core import QgsRasterLayer, QgsProject
+            
+            output_name = f"{raster_layer.name()}_masked_inverse"
+            
+            # First create the mask_outside, then invert
+            # Using raster calculator to invert
+            result = processing.run(
+                "gdal:cliprasterbymasklayer",
+                {
+                    'INPUT': raster_layer,
+                    'MASK': vector_layer,
+                    'SOURCE_CRS': raster_layer.crs(),
+                    'TARGET_CRS': raster_layer.crs(),
+                    'NODATA': -9999,
+                    'ALPHA_BAND': True,
+                    'CROP_TO_CUTLINE': False,
+                    'KEEP_RESOLUTION': True,
+                    'SET_RESOLUTION': False,
+                    'OPTIONS': '',
+                    'DATA_TYPE': 0,
+                    'EXTRA': '-i',  # Invert mask
+                    'OUTPUT': 'TEMPORARY_OUTPUT' if output_options.get('add_to_memory') else output_options.get('disk_path', 'TEMPORARY_OUTPUT')
+                }
+            )
+            
+            output_path = result['OUTPUT']
+            
+            # Add to project
+            masked_layer = QgsRasterLayer(output_path, output_name)
+            if masked_layer.isValid():
+                QgsProject.instance().addMapLayer(masked_layer)
+                
+                # Add to Memory Clips if requested
+                if output_options.get('add_to_memory'):
+                    self._add_clip_to_memory(
+                        masked_layer,
+                        raster_layer.name(),
+                        "mask_inside"
+                    )
+                
+                logger.info(f"EPIC-3: Created inverted mask: {output_name}")
+                return masked_layer
+            
+        except Exception as e:
+            logger.error(f"EPIC-3: Error in mask_inside: {e}")
+        
+        return None
+    
+    def _execute_zonal_stats_only(self, raster_layer, vector_layer):
+        """
+        EPIC-3: Execute zonal statistics only (no raster modification).
+        
+        Computes and displays statistics for raster values within vector zones.
+        
+        Args:
+            raster_layer: Source raster layer
+            vector_layer: Vector layer defining zones
+            
+        Returns:
+            Statistics results or None
+        """
+        try:
+            from .ui.dialogs import ZonalStatsDialog
+            
+            # Use the filtering controller to compute
+            if hasattr(self, '_filtering_controller') and self._filtering_controller:
+                results = self._filtering_controller.compute_zonal_statistics(
+                    raster_layer=raster_layer,
+                    vector_layer=vector_layer,
+                    band_index=1
+                )
+                
+                if results:
+                    # Show dialog
+                    dialog = ZonalStatsDialog(
+                        stats_data=results,
+                        raster_name=raster_layer.name(),
+                        parent=self
+                    )
+                    dialog.exec_()
+                    
+                    logger.info(f"EPIC-3: Computed zonal stats for {len(results)} zones")
+                    return results
+            
+        except Exception as e:
+            logger.error(f"EPIC-3: Error in zonal_stats: {e}")
+        
+        return None
+    
+    def _add_clip_to_memory(self, layer, source_name: str, operation: str):
+        """
+        EPIC-3: Helper to add a created clip to Memory Clips widget.
+        
+        Args:
+            layer: The created raster layer
+            source_name: Name of the source raster
+            operation: Operation type (clip_extent, mask_outside, etc.)
+        """
+        try:
+            from .ui.widgets.raster_memory_clips_gb import MemoryClipItem
+            
+            # Estimate size
+            provider = layer.dataProvider()
+            if provider:
+                width = provider.xSize()
+                height = provider.ySize()
+                bands = provider.bandCount()
+                size_mb = (width * height * bands * 4) / (1024 * 1024)
+            else:
+                size_mb = 1.0
+            
+            clip_item = MemoryClipItem(
+                clip_id=layer.id(),
+                name=layer.name(),
+                source_name=source_name,
+                size_mb=size_mb,
+                operation=operation,
+                visible=True
+            )
+            
+            if hasattr(self, '_raster_groupbox_v2') and self._raster_groupbox_v2:
+                self._raster_groupbox_v2.add_memory_clip(clip_item)
+                
+        except Exception as e:
+            logger.error(f"EPIC-3: Error adding clip to memory: {e}")
+    
+    def _on_preview_mask_requested(self):
+        """
+        EPIC-3: Handle mask preview request.
+        
+        Creates a temporary semi-transparent mask layer showing pixels
+        that match the current value range selection.
+        """
+        try:
+            from qgis.core import QgsProject, QgsRasterLayer, QgsSingleBandPseudoColorRenderer
+            from qgis.core import QgsRasterShader, QgsColorRampShader, QgsGradientColorRamp
+            from qgis.utils import iface
+            import numpy as np
+            
+            logger.info("EPIC-3: Preview mask requested")
+            
+            # Get current raster and value range from V2 groupbox
+            if not hasattr(self, '_raster_groupbox_v2') or not self._raster_groupbox_v2:
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    "Raster widget not available"
+                )
+                return
+            
+            raster_layer = self._raster_groupbox_v2.current_layer
+            if not raster_layer:
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    "Please select a raster layer first"
+                )
+                return
+            
+            # Get value range from context
+            context = self._raster_groupbox_v2.get_filter_context()
+            value_min = context.get('range_min')
+            value_max = context.get('range_max')
+            
+            if value_min is None or value_max is None:
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    "Please select a value range first"
+                )
+                return
+            
+            # Check if preview layer already exists
+            preview_layer_name = f"[PREVIEW] {raster_layer.name()} mask"
+            existing_preview = None
+            for layer in QgsProject.instance().mapLayers().values():
+                if layer.name() == preview_layer_name:
+                    existing_preview = layer
+                    break
+            
+            if existing_preview:
+                # Remove existing preview
+                QgsProject.instance().removeMapLayer(existing_preview.id())
+                logger.debug("EPIC-3: Removed existing preview layer")
+            
+            # Create mask using raster calculator
+            try:
+                import processing
+                
+                # Create expression for mask
+                # (raster >= min AND raster <= max) -> 1, else 0
+                band = context.get('band', 1)
+                expression = f'("{raster_layer.name()}@{band}" >= {value_min}) * ("{raster_layer.name()}@{band}" <= {value_max})'
+                
+                result = processing.run(
+                    "gdal:rastercalculator",
+                    {
+                        'INPUT_A': raster_layer,
+                        'BAND_A': band,
+                        'FORMULA': f'(A >= {value_min}) * (A <= {value_max})',
+                        'NO_DATA': None,
+                        'RTYPE': 1,  # Byte
+                        'OUTPUT': 'TEMPORARY_OUTPUT'
+                    }
+                )
+                
+                output_path = result['OUTPUT']
+                
+            except Exception as calc_error:
+                logger.warning(f"EPIC-3: Raster calculator failed, using fallback: {calc_error}")
+                # Fallback: just use the original layer with adjusted renderer
+                output_path = raster_layer.source()
+            
+            # Create preview layer with special styling
+            preview_layer = QgsRasterLayer(output_path, preview_layer_name)
+            
+            if not preview_layer.isValid():
+                logger.error("EPIC-3: Failed to create preview layer")
+                return
+            
+            # Apply semi-transparent coloring
+            from qgis.core import QgsSingleBandGrayRenderer
+            from qgis.PyQt.QtGui import QColor
+            
+            # Use single band gray renderer with transparency
+            renderer = QgsSingleBandGrayRenderer(preview_layer.dataProvider(), 1)
+            
+            # Set color gradient (blue semi-transparent for matching pixels)
+            shader = QgsRasterShader()
+            color_ramp = QgsColorRampShader()
+            color_ramp.setColorRampType(QgsColorRampShader.Discrete)
+            color_ramp.setColorRampItemList([
+                QgsColorRampShader.ColorRampItem(0, QColor(0, 0, 0, 0), "No match"),
+                QgsColorRampShader.ColorRampItem(1, QColor(0, 120, 255, 150), "Match")
+            ])
+            shader.setRasterShaderFunction(color_ramp)
+            
+            pseudo_renderer = QgsSingleBandPseudoColorRenderer(
+                preview_layer.dataProvider(), 1, shader
+            )
+            preview_layer.setRenderer(pseudo_renderer)
+            preview_layer.setOpacity(0.6)
+            
+            # Add to project
+            QgsProject.instance().addMapLayer(preview_layer)
+            
+            # Count matching pixels
+            provider = preview_layer.dataProvider()
+            if provider:
+                stats = provider.bandStatistics(1)
+                total_pixels = stats.maximumValue > 0 or stats.minimumValue > 0
+                # Rough estimate from mask
+                logger.info(f"EPIC-3: Mask preview created")
+            
+            iface.messageBar().pushSuccess(
+                "FilterMate",
+                f"Preview mask created: {value_min:.1f} - {value_max:.1f}"
+            )
+            
+        except Exception as e:
+            logger.error(f"EPIC-3: Error creating mask preview: {e}")
+            import traceback
+            traceback.print_exc()
+            from qgis.utils import iface
+            iface.messageBar().pushCritical(
+                "FilterMate",
+                f"Error creating preview: {str(e)}"
+            )
+    
+    def _init_workflow_template_service(self):
+        """
+        EPIC-3: Initialize the WorkflowTemplateService.
+        
+        Creates the service and connects it to the Templates GroupBox.
+        """
+        try:
+            from .core.services.workflow_template_service import WorkflowTemplateService
+            
+            # Create service if not exists
+            if not hasattr(self, '_workflow_template_service') or not self._workflow_template_service:
+                self._workflow_template_service = WorkflowTemplateService()
+                logger.info("EPIC-3: WorkflowTemplateService initialized")
+            
+            # Connect to V2 Templates GroupBox
+            if hasattr(self, '_raster_groupbox_v2') and self._raster_groupbox_v2:
+                self._raster_groupbox_v2.set_template_service(self._workflow_template_service)
+                logger.debug("EPIC-3: Template service connected to V2 GroupBox")
+                
+        except ImportError as ie:
+            logger.warning(f"EPIC-3: WorkflowTemplateService not available: {ie}")
+        except Exception as e:
+            logger.error(f"EPIC-3: Error initializing template service: {e}")
+    
+    def _on_template_apply_requested(self, template_id: str):
+        """
+        EPIC-3: Handle template apply request from Templates GroupBox.
+        
+        Args:
+            template_id: ID of the template to apply
+        """
+        try:
+            from qgis.utils import iface
+            
+            logger.info(f"EPIC-3: Apply template requested: {template_id}")
+            
+            if not hasattr(self, '_workflow_template_service') or not self._workflow_template_service:
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    "Template service not available"
+                )
+                return
+            
+            template = self._workflow_template_service.get_template(template_id)
+            if not template:
+                iface.messageBar().pushCritical(
+                    "FilterMate",
+                    "Template not found"
+                )
+                return
+            
+            # Match template to project
+            match_result = self._workflow_template_service.match_template_to_project(template_id)
+            
+            # Apply template settings to UI
+            self._apply_template_to_ui(template, match_result)
+            
+            iface.messageBar().pushSuccess(
+                "FilterMate",
+                f"Template '{template.name}' applied"
+            )
+            
+        except Exception as e:
+            logger.error(f"EPIC-3: Error applying template: {e}")
+            import traceback
+            traceback.print_exc()
+            from qgis.utils import iface
+            iface.messageBar().pushCritical(
+                "FilterMate",
+                f"Error applying template: {str(e)}"
+            )
+    
+    def _on_save_as_template_requested(self):
+        """
+        EPIC-3: Handle save as template request.
+        
+        Shows the SaveTemplateDialog and creates a new workflow template
+        from the current filter context.
+        """
+        try:
+            from .core.services.workflow_template_service import WorkflowTemplateService
+            from .ui.widgets.workflow_templates_widget import SaveTemplateDialog
+            from qgis.utils import iface
+            
+            logger.info("EPIC-3: Save as template requested")
+            
+            # Ensure service exists
+            if not hasattr(self, '_workflow_template_service') or not self._workflow_template_service:
+                self._workflow_template_service = WorkflowTemplateService()
+            
+            # Get current filter context from V2 groupbox
+            if not hasattr(self, '_raster_groupbox_v2') or not self._raster_groupbox_v2:
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    "Raster widget not available"
+                )
+                return
+            
+            context = self._raster_groupbox_v2.get_filter_context()
+            if not context:
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    "No filter context available to save"
+                )
+                return
+            
+            # Check minimum requirements
+            if not context.get('raster_layer') and not context.get('vector_layer'):
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    "Please configure a filter before saving as template"
+                )
+                return
+            
+            # Show save dialog
+            dialog = SaveTemplateDialog(self)
+            if dialog.exec_():
+                name = dialog.name_edit.text().strip()
+                description = dialog.description_edit.toPlainText().strip()
+                tags_text = dialog.tags_edit.text().strip()
+                tags = [t.strip() for t in tags_text.split(',') if t.strip()]
+                
+                # Create template from context (automatically saves to disk)
+                template = self._workflow_template_service.create_from_context(
+                    name=name,
+                    context=context,
+                    description=description,
+                    tags=tags
+                )
+                
+                if template:
+                    iface.messageBar().pushSuccess(
+                        "FilterMate",
+                        f"Template '{name}' saved successfully"
+                    )
+                    logger.info(f"EPIC-3: Template '{name}' saved ({template.template_id})")
+                else:
+                    iface.messageBar().pushCritical(
+                        "FilterMate",
+                        "Failed to create template from current context"
+                    )
+            
+        except ImportError as ie:
+            logger.warning(f"EPIC-3: WorkflowTemplateService not available: {ie}")
+            from qgis.utils import iface
+            iface.messageBar().pushWarning(
+                "FilterMate",
+                "Workflow Templates feature not available"
+            )
+        except Exception as e:
+            logger.error(f"EPIC-3: Error saving template: {e}")
+            import traceback
+            traceback.print_exc()
+            from qgis.utils import iface
+            iface.messageBar().pushCritical(
+                "FilterMate",
+                f"Error saving template: {str(e)}"
+            )
+    
+    def _on_load_template_requested(self):
+        """
+        EPIC-3: Handle load template request.
+        
+        Shows the LoadTemplateDialog and applies the selected template
+        to the current filter context.
+        """
+        try:
+            from .core.services.workflow_template_service import WorkflowTemplateService
+            from .ui.widgets.workflow_templates_widget import LoadTemplateDialog
+            from qgis.utils import iface
+            from qgis.core import QgsProject
+            
+            logger.info("EPIC-3: Load template requested")
+            
+            # Ensure service exists
+            if not hasattr(self, '_workflow_template_service') or not self._workflow_template_service:
+                self._workflow_template_service = WorkflowTemplateService()
+            
+            # Get all templates
+            templates = self._workflow_template_service.get_all_templates()
+            
+            if not templates:
+                iface.messageBar().pushInfo(
+                    "FilterMate",
+                    "No templates available. Save a workflow first."
+                )
+                return
+            
+            # Convert templates to dicts for dialog
+            template_dicts = [t.to_dict() for t in templates]
+            
+            # Show load dialog
+            dialog = LoadTemplateDialog(template_dicts, self)
+            
+            if dialog.exec_() and dialog.selected_template_id:
+                template_id = dialog.selected_template_id
+                template = self._workflow_template_service.get_template(template_id)
+                
+                if not template:
+                    iface.messageBar().pushCritical(
+                        "FilterMate",
+                        "Template not found"
+                    )
+                    return
+                
+                # Match template to project layers
+                match_result = self._workflow_template_service.match_template_to_project(template_id)
+                
+                if match_result.warnings:
+                    for warning in match_result.warnings:
+                        logger.warning(f"EPIC-3: Template match warning: {warning}")
+                
+                # Apply template settings to UI
+                self._apply_template_to_ui(template, match_result)
+                
+                iface.messageBar().pushSuccess(
+                    "FilterMate",
+                    f"Template '{template.name}' applied successfully"
+                )
+                logger.info(f"EPIC-3: Template '{template.name}' applied")
+            
+        except ImportError as ie:
+            logger.warning(f"EPIC-3: WorkflowTemplateService not available: {ie}")
+            from qgis.utils import iface
+            iface.messageBar().pushWarning(
+                "FilterMate",
+                "Workflow Templates feature not available"
+            )
+        except Exception as e:
+            logger.error(f"EPIC-3: Error loading template: {e}")
+            import traceback
+            traceback.print_exc()
+            from qgis.utils import iface
+            iface.messageBar().pushCritical(
+                "FilterMate",
+                f"Error loading template: {str(e)}"
+            )
+    
+    def _apply_template_to_ui(self, template, match_result):
+        """
+        EPIC-3: Apply a loaded template to the UI.
+        
+        Args:
+            template: WorkflowTemplate instance
+            match_result: TemplateMatchResult with matched layers
+        """
+        try:
+            from qgis.core import QgsProject
+            
+            logger.info(f"EPIC-3: Applying template '{template.name}' to UI")
+            
+            # Check for V2 groupbox
+            if not hasattr(self, '_raster_groupbox_v2') or not self._raster_groupbox_v2:
+                logger.warning("EPIC-3: No raster groupbox V2 available")
+                return
+            
+            # Set source raster layer if matched
+            if match_result.source_layer_id:
+                layer = QgsProject.instance().mapLayer(match_result.source_layer_id)
+                if layer:
+                    self._raster_groupbox_v2.set_raster_layer(layer)
+                    logger.debug(f"EPIC-3: Set raster layer to '{layer.name()}'")
+            
+            # Apply raster filter rules
+            for rule in template.raster_rules:
+                if not rule.enabled:
+                    continue
+                
+                # Set band
+                vs_gb = self._raster_groupbox_v2.value_selection_groupbox
+                if vs_gb and hasattr(vs_gb, 'set_band'):
+                    vs_gb.set_band(rule.band)
+                
+                # Set value range
+                if vs_gb and rule.min_value is not None and rule.max_value is not None:
+                    vs_gb.set_range(rule.min_value, rule.max_value)
+                    logger.debug(f"EPIC-3: Set range to {rule.min_value} - {rule.max_value}")
+                
+                # Set predicate
+                if vs_gb and hasattr(vs_gb, 'set_predicate'):
+                    vs_gb.set_predicate(rule.predicate)
+                
+                # Only apply first enabled rule
+                break
+            
+            # Set target layers if matched
+            if match_result.matched_target_layers:
+                # Try to set targets in the target widget
+                vs_gb = self._raster_groupbox_v2.value_selection_groupbox
+                if vs_gb and hasattr(vs_gb, 'set_target_layers'):
+                    vs_gb.set_target_layers(match_result.matched_target_layers)
+                    logger.debug(f"EPIC-3: Set target layers: {match_result.matched_target_layers}")
+            
+            logger.info(f"EPIC-3: Template '{template.name}' applied successfully")
+            
+        except Exception as e:
+            logger.error(f"EPIC-3: Error applying template to UI: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _on_raster_pick_mode_activated(self, active: bool):
+        """
+        EPIC-3: Handle pixel picker (pipette) mode activation.
+        
+        When the user activates the "Pick from Map" button in VALUE SELECTION,
+        we need to switch the map tool to the pixel picker.
+        
+        Args:
+            active: True if pick mode was activated, False if deactivated
+        """
+        try:
+            if active:
+                logger.info("EPIC-3: Pixel picker mode ACTIVATED")
+                self._activate_pixel_picker_tool()
+            else:
+                logger.info("EPIC-3: Pixel picker mode DEACTIVATED")
+                self._restore_previous_map_tool()
+        except Exception as e:
+            logger.warning(f"EPIC-3: Error handling pick mode change: {e}")
+    
+    def _activate_pixel_picker_tool(self):
+        """
+        EPIC-3: Activate the PixelPickerMapTool for capturing pixel values.
+        
+        Saves the current map tool and activates the pixel picker.
+        """
+        try:
+            from .ui.widgets.pixel_picker_map_tool import PixelPickerMapTool
+            
+            canvas = iface.mapCanvas()
+            if not canvas:
+                logger.warning("EPIC-3: No map canvas available for pixel picker")
+                return
+            
+            # Get current raster layer and band from V2 groupbox
+            layer = None
+            band = 1
+            if hasattr(self, '_raster_groupbox_v2') and self._raster_groupbox_v2:
+                layer = self._raster_groupbox_v2.layer
+                if hasattr(self._raster_groupbox_v2, 'value_selection_groupbox'):
+                    vs_gb = self._raster_groupbox_v2.value_selection_groupbox
+                    band = vs_gb.current_band if hasattr(vs_gb, 'current_band') else 1
+            
+            if not layer:
+                logger.warning("EPIC-3: No raster layer set for pixel picker")
+                return
+            
+            # Save current map tool
+            self._previous_map_tool = canvas.mapTool()
+            
+            # Create and activate pixel picker
+            self._pixel_picker_tool = PixelPickerMapTool(canvas, layer, band, self)
+            
+            # Connect signals
+            self._pixel_picker_tool.value_picked.connect(self._on_pixel_value_picked)
+            self._pixel_picker_tool.range_picked.connect(self._on_pixel_range_picked)
+            self._pixel_picker_tool.extend_requested.connect(self._on_pixel_extend_requested)
+            self._pixel_picker_tool.multi_band_picked.connect(self._on_multi_band_picked)
+            self._pixel_picker_tool.pick_cancelled.connect(self._on_pixel_pick_cancelled)
+            
+            canvas.setMapTool(self._pixel_picker_tool)
+            logger.info(f"EPIC-3: Pixel picker activated for {layer.name()}, band {band}")
+            
+        except Exception as e:
+            logger.error(f"EPIC-3: Failed to activate pixel picker: {e}")
+    
+    def _restore_previous_map_tool(self):
+        """
+        EPIC-3: Restore the previous map tool after pixel picking.
+        """
+        try:
+            canvas = iface.mapCanvas()
+            if not canvas:
+                return
+            
+            # Restore previous tool
+            if hasattr(self, '_previous_map_tool') and self._previous_map_tool:
+                canvas.setMapTool(self._previous_map_tool)
+                self._previous_map_tool = None
+            
+            # Clean up pixel picker
+            if hasattr(self, '_pixel_picker_tool') and self._pixel_picker_tool:
+                self._pixel_picker_tool = None
+            
+            logger.debug("EPIC-3: Previous map tool restored")
+            
+        except Exception as e:
+            logger.warning(f"EPIC-3: Error restoring map tool: {e}")
+    
+    def _on_pixel_value_picked(self, value: float):
+        """
+        EPIC-3: Handle single pixel value picked from map.
+        
+        Args:
+            value: The picked pixel value
+        """
+        logger.debug(f"EPIC-3: Pixel value picked: {value}")
+        
+        # Forward to Value Selection GroupBox
+        if hasattr(self, '_raster_groupbox_v2') and self._raster_groupbox_v2:
+            self._raster_groupbox_v2.receive_picked_value(value)
+    
+    def _on_pixel_range_picked(self, min_val: float, max_val: float):
+        """
+        EPIC-3: Handle pixel range picked from rectangle selection.
+        
+        Args:
+            min_val: Minimum value in selection
+            max_val: Maximum value in selection
+        """
+        logger.debug(f"EPIC-3: Pixel range picked: [{min_val}, {max_val}]")
+        
+        # Forward to Value Selection GroupBox
+        if hasattr(self, '_raster_groupbox_v2') and self._raster_groupbox_v2:
+            self._raster_groupbox_v2.receive_picked_range(min_val, max_val)
+    
+    def _on_pixel_extend_requested(self, value: float):
+        """
+        EPIC-3: Handle Ctrl+Click to extend range.
+        
+        Args:
+            value: Value to extend range with
+        """
+        logger.debug(f"EPIC-3: Extend range requested with: {value}")
+        
+        # Forward to Value Selection GroupBox
+        if hasattr(self, '_raster_groupbox_v2') and self._raster_groupbox_v2:
+            self._raster_groupbox_v2.extend_range(value)
+    
+    def _on_multi_band_picked(self, band_values: dict):
+        """
+        EPIC-3: Handle Shift+Click multi-band sampling.
+        
+        Args:
+            band_values: Dict mapping band number to value
+        """
+        logger.debug(f"EPIC-3: Multi-band values picked: {band_values}")
+        # TODO: Show band selection dialog or use current band
+    
+    def _on_pixel_pick_cancelled(self):
+        """
+        EPIC-3: Handle pixel picking cancellation (Esc key).
+        """
+        logger.debug("EPIC-3: Pixel picking cancelled")
+        
+        # Deactivate pick mode in Value Selection GroupBox
+        if hasattr(self, '_raster_groupbox_v2') and self._raster_groupbox_v2:
+            self._raster_groupbox_v2.deactivate_pick_mode()
+        
+        # Restore map tool
+        self._restore_previous_map_tool()
+
+    def _on_raster_active_groupbox_changed(self, groupbox_name: str):
+        """
+        EPIC-3: Handle active GroupBox changes in the raster accordion.
+        
+        When the user expands a different GroupBox (Statistics, Value Selection, etc.),
+        the filter context and available operations change.
+        
+        Args:
+            groupbox_name: Name of the newly active GroupBox
+        """
+        try:
+            logger.debug(f"EPIC-3: Active raster GroupBox changed to: {groupbox_name}")
+            
+            # Notify FILTERING panel of mode change
+            mode_mapping = {
+                'statistics': 'info_only',
+                'value_selection': 'value_filter',
+                'mask_clip': 'spatial_operation',
+                'memory_clips': 'memory_management'
+            }
+            
+            mode = mode_mapping.get(groupbox_name, 'unknown')
+            
+            # Update any dependent UI
+            if hasattr(self, '_filtering_source_label'):
+                if groupbox_name == 'statistics':
+                    self._filtering_source_label.setText("🏔️ Raster (Info Only)")
+                elif groupbox_name == 'value_selection':
+                    self._filtering_source_label.setText("🏔️ Raster (Value Filter)")
+                elif groupbox_name == 'mask_clip':
+                    self._filtering_source_label.setText("🏔️ Raster (Mask & Clip)")
+                elif groupbox_name == 'memory_clips':
+                    self._filtering_source_label.setText("🏔️ Memory Clips")
+                    
+        except Exception as e:
+            logger.warning(f"EPIC-3: Error handling active GroupBox change: {e}")
+
+    def _connect_raster_signals(self):
+        """
+        EPIC-2: Connect raster-related signals after controllers are initialized.
+        
+        This method must be called AFTER manage_interactions() because the
+        LayerSyncController is only fully initialized during that phase.
+        """
+        if not hasattr(self, '_raster_groupbox'):
+            logger.warning("EPIC-2: Cannot connect raster signals - _raster_groupbox not initialized")
+            return
+            
+        # Connect to LayerSyncController if available
+        if self._controller_integration:
+            try:
+                layer_sync = self._controller_integration.layer_sync_controller
+                if layer_sync:
+                    layer_sync.layer_type_changed.connect(self._on_layer_type_changed)
+                    # EPIC-2: Also connect to layer_changed for setting raster layer
+                    layer_sync.layer_changed.connect(self._on_layer_changed_for_raster)
+                    logger.info("EPIC-2: Connected layer_type_changed and layer_changed signals")
+                else:
+                    logger.warning("EPIC-2: layer_sync_controller is None - signals not connected")
+            except Exception as e:
+                logger.warning(f"EPIC-2: Could not connect layer signals: {e}")
+        else:
+            logger.warning("EPIC-2: _controller_integration is None - signals not connected")
+    
+    def _on_layer_changed_for_raster(self, layer):
+        """
+        EPIC-2: Handle layer changes for raster groupbox.
+        
+        When a raster layer is selected, passes it to the raster groupbox.
+        
+        Args:
+            layer: The newly selected layer (may be vector or raster)
+        """
+        if not hasattr(self, '_raster_groupbox'):
+            return
+        
+        # Check if this is a raster layer
+        if layer is not None and is_raster_layer(layer):
+            self._raster_groupbox.set_layer(layer)
+            logger.debug(f"EPIC-2: Set raster layer '{layer.name()}' on groupbox")
+        else:
+            # Clear raster groupbox when switching to non-raster
+            self._raster_groupbox.set_layer(None)
+            logger.debug("EPIC-2: Cleared raster layer from groupbox")
+
+    def _on_layer_type_changed(self, layer_type_str: str):
+        """
+        EPIC-2: Handle layer type changes - switch exploring accordion.
+        
+        When the source layer in comboBox_filtering_current_layer changes type,
+        automatically switches between EXPLORING VECTEUR and EXPLORING RASTER
+        accordions.
+        
+        Args:
+            layer_type_str: 'vector', 'raster', or 'unknown'
+        """
+        logger.debug(f"EPIC-2: Layer type changed to '{layer_type_str}'")
+        
+        # Switch accordion based on layer type
+        if layer_type_str == 'raster':
+            # Switch to EXPLORING RASTER
+            self._switch_exploring_panel('raster')
+            logger.info("EPIC-2: Switched to EXPLORING RASTER accordion")
+            
+        elif layer_type_str == 'vector':
+            # Switch to EXPLORING VECTEUR
+            self._switch_exploring_panel('vector')
+            logger.info("EPIC-2: Switched to EXPLORING VECTEUR accordion")
+            
+        else:
+            # Unknown - default to vector
+            self._switch_exploring_panel('vector')
+            logger.debug("EPIC-2: Layer type unknown, defaulting to EXPLORING VECTEUR")
     
     def _schedule_expression_change(self, groupbox: str, expression: str):
         """v4.0 Sprint 16: Schedule debounced expression change."""
@@ -5054,6 +7087,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         FIX 2026-01-22: Use is_filter_expression() to properly detect non-filter expressions
         like field names, COALESCE, CONCAT, etc. These should not be used as filters.
         
+        v4.1.1 OPTIMIZATION: Use ExpressionTypeDetector to avoid loading features
+        when expression is a simple field reference or display expression.
+        
         This ensures custom_selection always returns the features matching the expression
         for use in source layer filtering.
         """
@@ -5064,11 +7100,31 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if not expression:
             return [], expression
         
-        # FIX 2026-01-22: Use centralized filter expression detection
-        # Expressions that don't return boolean values (field names, COALESCE, CONCAT, etc.)
-        # should not be used as filters - they would cause SQL errors
-        from .infrastructure.utils import should_skip_expression_for_filtering
+        # v4.1.1 OPTIMIZATION: Use advanced expression type detection
+        # This determines if we need to iterate features at all
+        from .infrastructure.utils import (
+            analyze_expression, 
+            ExpressionType,
+            should_skip_expression_for_filtering
+        )
         
+        analysis = analyze_expression(expression)
+        
+        # OPTIMIZATION: Simple field expressions don't need feature iteration
+        # They're just for display/labeling, not filtering
+        if analysis.expr_type == ExpressionType.SIMPLE_FIELD:
+            logger.debug(f"exploring_custom_selection: SKIP - Simple field expression '{analysis.field_name}'")
+            logger.debug(f"  Optimization: No feature iteration needed")
+            return [], expression
+        
+        # OPTIMIZATION: Display expressions (COALESCE, CONCAT) also don't filter
+        if analysis.expr_type == ExpressionType.DISPLAY_EXPRESSION:
+            logger.debug(f"exploring_custom_selection: SKIP - Display expression")
+            logger.debug(f"  Reason: {analysis.reason}")
+            return [], expression
+        
+        # FIX 2026-01-22: Use centralized filter expression detection as backup
+        # Expressions that don't return boolean values should not be used as filters
         should_skip, reason = should_skip_expression_for_filtering(expression)
         if should_skip:
             logger.debug(f"exploring_custom_selection: Skipping non-filter expression - {reason}")
@@ -5082,12 +7138,34 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.debug(f"exploring_custom_selection: Cache HIT - {len(cached)} features")
             return cached, expression
         
-        # FIX 2026-01-21: Load features DIRECTLY instead of via exploring_features_changed
-        # This bypasses the guards that can prevent features from being returned
+        # v4.1.1 OPTIMIZATION: For complex/spatial expressions, use async if layer is large
+        feature_count = self.current_layer.featureCount()
+        
+        # For large layers with complex expressions, recommend async processing
+        if feature_count > 10000 and analysis.estimated_complexity >= 5:
+            logger.info(
+                f"exploring_custom_selection: Large layer ({feature_count} features) with "
+                f"complex expression (score={analysis.estimated_complexity}). "
+                f"Consider using async processing."
+            )
+        
+        # Load features directly - this is the synchronous path
         features = []
         try:
             from qgis.core import QgsFeatureRequest
+            
+            # OPTIMIZATION: For large layers, limit initial fetch
             request = QgsFeatureRequest().setFilterExpression(expression)
+            
+            # v4.1.1: Limit to reasonable amount for UI responsiveness
+            MAX_SYNC_FEATURES = 10000
+            if feature_count > MAX_SYNC_FEATURES:
+                logger.warning(
+                    f"exploring_custom_selection: Large result set expected. "
+                    f"Limiting to {MAX_SYNC_FEATURES} features for UI responsiveness."
+                )
+                request.setLimit(MAX_SYNC_FEATURES)
+            
             features = list(self.current_layer.getFeatures(request))
             logger.info(f"exploring_custom_selection: Loaded {len(features)} features matching expression '{expression[:50]}...'")
         except Exception as e:
@@ -5410,6 +7488,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         v4.0 S18: → LayerSyncController with fallback for controller unavailable.
         FIX 2026-01-14: Added manual_change parameter.
+        v5.0: Updated to use exploring context combobox instead of filtering current layer.
         """
         # Try delegation first
         if self._layer_sync_ctrl:
@@ -5420,17 +7499,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if not self._is_ui_ready() or not layer:
             return
         
-        # FIX 2026-01-14: Define last_layer BEFORE using it
-        last_layer = self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].currentLayer()
-        logger.debug(f"current_layer_changed: Syncing combo | last_layer={last_layer.name() if last_layer else None} | new_layer={layer.name()}")
-        if last_layer is None or last_layer.id() != layer.id():
-            logger.debug(f"  -> Layer changed, updating combo")
-            self.manageSignal(["FILTERING", "CURRENT_LAYER"], 'disconnect')
-            self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].setLayer(layer)
-            self.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
-        else:
-            logger.debug(f"  -> Same layer, skipping combo update")
-        # NOTE: Removed duplicate last_layer definition - now defined at start of fallback block
+        # v5.0: Use exploring context combobox instead of filtering current layer
+        combo = self.get_source_layer_combobox()
+        if combo:
+            last_layer = combo.currentLayer()
+            logger.debug(f"current_layer_changed: Syncing combo | last_layer={last_layer.name() if last_layer else None} | new_layer={layer.name()}")
+            if last_layer is None or last_layer.id() != layer.id():
+                logger.debug(f"  -> Layer changed, updating combo")
+                self.manageSignal(["EXPLORING", "VECTOR_LAYER"], 'disconnect')
+                combo.blockSignals(True)
+                combo.setLayer(layer)
+                combo.blockSignals(False)
+                self.manageSignal(["EXPLORING", "VECTOR_LAYER"], 'connect', 'layerChanged')
+            else:
+                logger.debug(f"  -> Same layer, skipping combo update")
         
         # Update backend indicator
         forced_backend = getattr(self, 'forced_backends', {}).get(layer.id())
@@ -5902,6 +7984,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             self._update_exploring_buttons_state()
             logger.info("✓ Step 5: Exploring buttons state updated")
+            
+            # EPIC-3: Update vector source context for MASK & CLIP
+            try:
+                self.update_vector_source_context(
+                    layer=validated_layer,
+                    features=None,  # All features initially
+                    mode='all'
+                )
+                logger.info("✓ Step 5.1: Vector source context updated")
+            except Exception as ctx_e:
+                logger.debug(f"Could not update vector source context: {ctx_e}")
             
             self._reconnect_layer_signals(widgets, layer_props)
             logger.debug("✓ Step 6: Layer signals reconnected")

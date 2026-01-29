@@ -38,7 +38,22 @@ from .validation_utils import (
     is_display_expression,
     should_skip_expression_for_filtering,
 )
+# v4.1.1: Advanced expression type detection for optimization
+from .expression_type_detector import (
+    ExpressionType,
+    ExpressionAnalysis,
+    ExpressionTypeDetector,
+    get_expression_detector,
+    is_simple_field_expression,
+    analyze_expression,
+)
 from .layer_utils import (
+    # EPIC-2: Layer type detection (vector vs raster)
+    LayerType,
+    detect_layer_type,
+    is_raster_layer,
+    is_vector_layer,
+    # Provider detection
     detect_layer_provider_type,
     get_datasource_connexion_from_layer,
     get_data_source_uri,

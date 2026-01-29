@@ -37,6 +37,53 @@ from .spatialite_persistent_cache import (
     intersect_filter_fids,
 )
 
+# Raster Stats Cache (EPIC-2 US-10)
+from .raster_stats_cache import (
+    RasterStatsCache,
+    RasterStatsCacheConfig,
+    RasterStatsCacheStats,
+    get_raster_stats_cache,
+    reset_raster_stats_cache,
+)
+
+# EPIC-3 Sprint 2: Query Cache System
+from .interface import (
+    CacheStrategy,
+    CacheKey,
+    CacheEntry as CacheEntryV2,
+    CacheStats,
+    CacheInterface,
+    CacheConfig,
+    CacheManager,
+    get_cache_manager,
+    reset_cache_manager,
+)
+
+from .lru_cache import (
+    LRUQueryCache,
+    FilterCacheConfig,
+    FilterResultCache,
+)
+
+from .invalidation import (
+    InvalidationReason,
+    InvalidationEvent,
+    InvalidationStrategy,
+    InvalidationRule,
+    DependencyTracker,
+    CacheInvalidator,
+    get_cache_invalidator,
+    reset_cache_invalidator,
+)
+
+from .backend_integration import (
+    BackendType,
+    BackendCacheConfig,
+    BackendCacheIntegration,
+    CacheWarmer,
+    get_layer_cache,
+)
+
 __all__ = [
     'QueryExpressionCache',
     'CacheEntry',
@@ -56,4 +103,39 @@ __all__ = [
     'store_filter_fids',
     'get_previous_filter_fids',
     'intersect_filter_fids',
+    # Raster Stats Cache (EPIC-2)
+    'RasterStatsCache',
+    'RasterStatsCacheConfig',
+    'RasterStatsCacheStats',
+    'get_raster_stats_cache',
+    'reset_raster_stats_cache',
+    # EPIC-3 Sprint 2: Cache Interface
+    'CacheStrategy',
+    'CacheKey',
+    'CacheEntryV2',
+    'CacheStats',
+    'CacheInterface',
+    'CacheConfig',
+    'CacheManager',
+    'get_cache_manager',
+    'reset_cache_manager',
+    # EPIC-3 Sprint 2: LRU Cache
+    'LRUQueryCache',
+    'FilterCacheConfig',
+    'FilterResultCache',
+    # EPIC-3 Sprint 2: Invalidation
+    'InvalidationReason',
+    'InvalidationEvent',
+    'InvalidationStrategy',
+    'InvalidationRule',
+    'DependencyTracker',
+    'CacheInvalidator',
+    'get_cache_invalidator',
+    'reset_cache_invalidator',
+    # EPIC-3 Sprint 2: Backend Integration
+    'BackendType',
+    'BackendCacheConfig',
+    'BackendCacheIntegration',
+    'CacheWarmer',
+    'get_layer_cache',
 ]

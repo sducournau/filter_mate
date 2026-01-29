@@ -224,6 +224,11 @@ class AppInitializer:
         # Process existing layers with retry mechanism
         if init_layers is not None and len(init_layers) > 0:
             self._process_initial_layers(init_layers)
+            
+            # FIX v4.8.4: Scan and fix PostgreSQL style filter type mismatches
+            # This prevents "operator does not exist: character varying < integer" errors
+            # when layers have rule-based renderers with numeric comparisons on VARCHAR fields
+            self._fix_postgresql_style_filters(init_layers)
         else:
             logger.info("FilterMate: Plugin started with empty project - waiting for layers to be added")
             show_info("Projet vide détecté. Ajoutez des couches vectorielles pour activer le plugin.")
@@ -483,6 +488,62 @@ class AppInitializer:
         # Safety timer to ensure UI is enabled
         QTimer.singleShot(5000, self._ensure_ui_enabled_after_startup)
     
+    def _fix_postgresql_style_filters(self, layers: List[QgsVectorLayer]):
+        """
+        Scan and fix PostgreSQL layers with type mismatch issues in style filters.
+        
+        FIX v4.8.4: This prevents "operator does not exist: character varying < integer"
+        errors when PostgreSQL layers have rule-based renderers with numeric comparisons
+        on VARCHAR fields.
+        
+        Called during plugin initialization to proactively fix style filters before
+        any filtering operation that could fail.
+        
+        Args:
+            layers: List of layers to scan
+        """
+        try:
+            from ...infrastructure.database.style_filter_fixer import fix_layer_style_filters
+            
+            # Filter to PostgreSQL layers only
+            postgres_layers = [l for l in layers if l.providerType() == 'postgres']
+            
+            if not postgres_layers:
+                logger.debug("No PostgreSQL layers found, skipping style filter fix")
+                return
+            
+            logger.info(f"Scanning {len(postgres_layers)} PostgreSQL layer(s) for style filter type mismatches...")
+            
+            total_fixes = 0
+            for layer in postgres_layers:
+                try:
+                    success, changes = fix_layer_style_filters(layer, dry_run=False)
+                    if changes:
+                        total_fixes += len(changes)
+                        logger.info(f"🔧 Fixed {len(changes)} style filter(s) in '{layer.name()}':")
+                        for change in changes:
+                            logger.debug(f"    → {change}")
+                except Exception as layer_err:
+                    logger.debug(f"Could not fix style filters for '{layer.name()}': {layer_err}")
+            
+            if total_fixes > 0:
+                logger.info(f"✅ Fixed {total_fixes} style filter type mismatch(es) in PostgreSQL layers")
+                # Inform user about the fixes
+                try:
+                    iface.messageBar().pushInfo(
+                        "FilterMate",
+                        f"Corrigé {total_fixes} filtre(s) de style PostgreSQL (type VARCHAR → ::integer)"
+                    )
+                except Exception:
+                    pass  # UI not available
+            else:
+                logger.debug("No style filter type mismatches found")
+                
+        except ImportError as import_err:
+            logger.debug(f"Style filter fixer not available: {import_err}")
+        except Exception as e:
+            logger.warning(f"Error scanning style filters: {e}")
+
     def _ensure_ui_enabled_after_startup(self):
         """
         Safety check to ensure UI is enabled after startup.

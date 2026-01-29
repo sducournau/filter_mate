@@ -1227,9 +1227,11 @@ class FilterMateApp:
         if not self.dockwidget: return
         if self._current_layer_id_before_filter: self.dockwidget._saved_layer_id_before_filter = self._current_layer_id_before_filter
         self.dockwidget._filtering_in_progress = True
+        # v5.0: Disconnect exploring vector combobox signals instead of filtering current layer
         try:
-            self.dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'disconnect')
-            self.dockwidget.comboBox_filtering_current_layer.blockSignals(True)
+            self.dockwidget.manageSignal(["EXPLORING", "VECTOR_LAYER"], 'disconnect')
+            if hasattr(self.dockwidget, 'mMapLayerComboBox_exploring_vector'):
+                self.dockwidget.mMapLayerComboBox_exploring_vector.blockSignals(True)
             self.dockwidget.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'disconnect')
         except Exception:  # Signal may already be disconnected - expected during filtering protection
             pass
@@ -1520,15 +1522,16 @@ class FilterMateApp:
 
     def on_remove_layer_task_begun(self):
         """Called when layer removal task begins. Cleanup UI before layers are removed."""
-        # CRITICAL: Clear layer combo box before layers are removed to prevent access violations
-        if self.dockwidget and hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
+        # v5.0: CRITICAL - Clear exploring comboboxes before layers are removed to prevent access violations
+        if self.dockwidget:
             try:
-                # Check if current layer is about to be removed
-                current_layer = self.dockwidget.current_layer
-                if current_layer:
-                    # Clear if it's the current layer being removed
-                    self.dockwidget.comboBox_filtering_current_layer.setLayer(None)
-                    logger.debug("FilterMate: Cleared layer combo during remove_layers task")
+                # Clear vector layer combo
+                if hasattr(self.dockwidget, 'mMapLayerComboBox_exploring_vector'):
+                    self.dockwidget.mMapLayerComboBox_exploring_vector.setLayer(None)
+                # Clear raster layer combo
+                if hasattr(self.dockwidget, 'mMapLayerComboBox_exploring_raster'):
+                    self.dockwidget.mMapLayerComboBox_exploring_raster.setLayer(None)
+                logger.debug("FilterMate: Cleared layer combos during remove_layers task")
             except Exception as e:
                 logger.debug(f"FilterMate: Error clearing layer combo in on_remove_layer_task_begun: {e}")
         

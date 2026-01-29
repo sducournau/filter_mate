@@ -9,6 +9,8 @@ to prevent CRIT-005 (layer loss after filter).
 
 Story: MIG-073
 Phase: 6 - God Class DockWidget Migration
+
+EPIC-2 Addition: layer_type_changed signal for raster/vector detection.
 """
 
 from typing import TYPE_CHECKING, Optional, List
@@ -19,6 +21,21 @@ from qgis.PyQt.QtCore import pyqtSignal
 from qgis.core import QgsVectorLayer, QgsProject
 
 from .base_controller import BaseController
+
+# EPIC-2: Import layer type detection utilities
+try:
+    from ...infrastructure.utils import LayerType, detect_layer_type
+    LAYER_TYPE_DETECTION_AVAILABLE = True
+except ImportError:
+    LAYER_TYPE_DETECTION_AVAILABLE = False
+    # Fallback enum for testing
+    from enum import Enum
+    class LayerType(Enum):
+        VECTOR = 'vector'
+        RASTER = 'raster'
+        UNKNOWN = 'unknown'
+    def detect_layer_type(layer):
+        return LayerType.UNKNOWN
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
@@ -39,6 +56,7 @@ class LayerSyncController(BaseController):
     - Widget synchronization on layer change
     - Post-filter protection (CRIT-005 fix)
     - Layer add/remove events
+    - EPIC-2: Layer type detection (vector/raster)
 
     CRITICAL FIX (CRIT-005): This controller implements a 5-second protection
     window after filtering to prevent unwanted layer changes from async signals.
@@ -47,6 +65,7 @@ class LayerSyncController(BaseController):
         layer_synchronized: Emitted when layer sync completes
         sync_blocked: Emitted when sync is blocked (protection)
         layer_changed: Emitted when current layer changes
+        layer_type_changed: EPIC-2 - Emitted when layer type changes (vector/raster)
 
     Example:
         controller = LayerSyncController(dockwidget)
@@ -55,11 +74,16 @@ class LayerSyncController(BaseController):
         # React to sync events
         controller.layer_synchronized.connect(on_layer_synced)
         controller.sync_blocked.connect(on_sync_blocked)
+        
+        # EPIC-2: React to layer type changes
+        controller.layer_type_changed.connect(on_layer_type_changed)
     """
 
     layer_synchronized = pyqtSignal(object)  # QgsVectorLayer
     sync_blocked = pyqtSignal(str)  # reason
     layer_changed = pyqtSignal(object)  # QgsVectorLayer or None
+    # EPIC-2: Signal for layer type changes (vector/raster detection)
+    layer_type_changed = pyqtSignal(str)  # 'vector', 'raster', or 'unknown'
 
     def __init__(self, dockwidget: 'FilterMateDockWidget') -> None:
         """
@@ -77,11 +101,49 @@ class LayerSyncController(BaseController):
         self._updating_current_layer: bool = False
         # Filtering state
         self._filtering_in_progress: bool = False
+        # EPIC-2: Track current layer type
+        self._current_layer_type: LayerType = LayerType.UNKNOWN
 
     @property
     def current_layer_id(self) -> Optional[str]:
         """Get the current layer ID."""
         return self._current_layer_id
+
+    @property
+    def current_layer_type(self) -> LayerType:
+        """
+        Get the current layer type.
+        
+        EPIC-2: Used to determine if current layer is vector or raster.
+        
+        Returns:
+            LayerType: VECTOR, RASTER, or UNKNOWN
+        """
+        return self._current_layer_type
+
+    @property
+    def is_raster(self) -> bool:
+        """
+        Check if current layer is a raster layer.
+        
+        EPIC-2: Convenience property for UI adaptation.
+        
+        Returns:
+            True if current layer is a raster, False otherwise
+        """
+        return self._current_layer_type == LayerType.RASTER
+
+    @property
+    def is_vector(self) -> bool:
+        """
+        Check if current layer is a vector layer.
+        
+        EPIC-2: Convenience property for UI adaptation.
+        
+        Returns:
+            True if current layer is a vector, False otherwise
+        """
+        return self._current_layer_type == LayerType.VECTOR
 
     @property
     def is_within_protection_window(self) -> bool:
@@ -207,6 +269,14 @@ class LayerSyncController(BaseController):
         self._updating_current_layer = True
         try:
             self._current_layer_id = layer.id()
+            
+            # EPIC-2: Detect and emit layer type change
+            new_layer_type = detect_layer_type(layer)
+            if new_layer_type != self._current_layer_type:
+                self._current_layer_type = new_layer_type
+                self.layer_type_changed.emit(str(new_layer_type))
+                logger.debug(f"Layer type changed to: {new_layer_type}")
+            
             self.layer_changed.emit(layer)
             self.layer_synchronized.emit(layer)
             logger.debug(f"Layer synchronized: {layer.name()}")
@@ -423,10 +493,10 @@ class LayerSyncController(BaseController):
         if not restore_layer:
             restore_layer = self._get_current_layer()
 
-        # Last resort: combobox layer
+        # v5.0: Last resort - use exploring context combobox
         if not restore_layer:
-            if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
-                combo_layer = self.dockwidget.comboBox_filtering_current_layer.currentLayer()
+            if hasattr(self.dockwidget, 'get_source_layer_from_exploring_context'):
+                combo_layer = self.dockwidget.get_source_layer_from_exploring_context()
                 if combo_layer and combo_layer.isValid():
                     restore_layer = combo_layer
 
@@ -491,9 +561,9 @@ class LayerSyncController(BaseController):
         if hasattr(self.dockwidget, 'current_layer'):
             self.dockwidget.current_layer = layer
         
-        # Update combobox
-        if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
-            combo = self.dockwidget.comboBox_filtering_current_layer
+        # v5.0: Update exploring context combobox instead of old filtering combobox
+        combo = self.dockwidget.get_source_layer_combobox() if hasattr(self.dockwidget, 'get_source_layer_combobox') else None
+        if combo:
             combo.blockSignals(True)
             combo.setLayer(layer)
             combo.blockSignals(False)

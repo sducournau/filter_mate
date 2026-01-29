@@ -13,12 +13,19 @@ Functions:
 - validate_and_cleanup_postgres_layers: Validate PostgreSQL layers
 - get_primary_key_name: Get primary key field name
 
+EPIC-2 Additions (Raster Integration):
+- LayerType: Enum for layer type (VECTOR, RASTER, UNKNOWN)
+- detect_layer_type: Detect if layer is vector or raster
+- is_raster_layer: Check if layer is a raster layer
+- is_vector_layer: Check if layer is a vector layer
+
 Author: FilterMate Team
 Date: January 2026
 """
 
 import logging
-from typing import Optional, Tuple, List, Any
+from enum import Enum
+from typing import Optional, Tuple, List, Any, Union
 
 logger = logging.getLogger('FilterMate.LayerUtils')
 
@@ -26,6 +33,9 @@ logger = logging.getLogger('FilterMate.LayerUtils')
 try:
     from qgis.core import (
         QgsVectorLayer,
+        QgsRasterLayer,
+        QgsMapLayer,
+        QgsMapLayerType,
         QgsDataSourceUri,
         QgsFeatureRequest,
         QgsApplication,
@@ -36,6 +46,9 @@ try:
 except ImportError:
     QGIS_AVAILABLE = False
     QgsVectorLayer = object
+    QgsRasterLayer = object
+    QgsMapLayer = object
+    QgsMapLayerType = None
     QgsDataSourceUri = None
     QgsFeatureRequest = None
     QVariant = None
@@ -63,6 +76,120 @@ PROVIDER_OGR = 'ogr'
 PROVIDER_MEMORY = 'memory'
 
 REMOTE_PROVIDERS = {'WFS', 'wfs', 'arcgisfeatureserver', 'oapif'}
+
+
+# =============================================================================
+# EPIC-2: Layer Type Detection (Vector vs Raster)
+# =============================================================================
+
+class LayerType(Enum):
+    """
+    Enum representing the type of a QGIS layer.
+    
+    EPIC-2 Feature: Raster Integration
+    Used to differentiate between vector and raster layers for UI adaptation.
+    
+    Values:
+        VECTOR: Vector layer (points, lines, polygons)
+        RASTER: Raster layer (images, DEMs, etc.)
+        UNKNOWN: Unknown or unsupported layer type
+    """
+    VECTOR = 'vector'
+    RASTER = 'raster'
+    UNKNOWN = 'unknown'
+    
+    def __str__(self) -> str:
+        return self.value
+
+
+def detect_layer_type(layer: Optional[Union['QgsMapLayer', Any]]) -> LayerType:
+    """
+    Detect the type of a QGIS layer (vector or raster).
+    
+    EPIC-2 Feature: Raster Integration (US-01)
+    
+    This function determines whether a layer is a vector or raster layer,
+    enabling the UI to adapt its display accordingly.
+    
+    Args:
+        layer: A QGIS map layer (QgsVectorLayer, QgsRasterLayer, etc.)
+    
+    Returns:
+        LayerType: VECTOR, RASTER, or UNKNOWN
+    
+    Examples:
+        >>> from qgis.core import QgsVectorLayer, QgsRasterLayer
+        >>> vector = QgsVectorLayer("Point?crs=epsg:4326", "test", "memory")
+        >>> detect_layer_type(vector)
+        LayerType.VECTOR
+        >>> raster = QgsRasterLayer("/path/to/dem.tif", "dem")
+        >>> detect_layer_type(raster)
+        LayerType.RASTER
+    """
+    if layer is None:
+        return LayerType.UNKNOWN
+    
+    if not QGIS_AVAILABLE:
+        # Fallback for testing: check class name
+        class_name = type(layer).__name__
+        if 'RasterLayer' in class_name:
+            return LayerType.RASTER
+        if 'VectorLayer' in class_name:
+            return LayerType.VECTOR
+        return LayerType.UNKNOWN
+    
+    try:
+        # QGIS 3.x: Use layer.type() enum
+        if QgsMapLayerType is not None:
+            layer_type = layer.type()
+            if layer_type == QgsMapLayerType.VectorLayer:
+                return LayerType.VECTOR
+            elif layer_type == QgsMapLayerType.RasterLayer:
+                return LayerType.RASTER
+            else:
+                return LayerType.UNKNOWN
+        
+        # Fallback: isinstance check
+        if isinstance(layer, QgsVectorLayer):
+            return LayerType.VECTOR
+        if isinstance(layer, QgsRasterLayer):
+            return LayerType.RASTER
+        
+        return LayerType.UNKNOWN
+        
+    except (RuntimeError, AttributeError) as e:
+        logger.debug(f"Error detecting layer type: {e}")
+        return LayerType.UNKNOWN
+
+
+def is_raster_layer(layer: Optional[Any]) -> bool:
+    """
+    Check if a layer is a raster layer.
+    
+    EPIC-2 Feature: Raster Integration (US-01)
+    
+    Args:
+        layer: A QGIS map layer
+    
+    Returns:
+        True if the layer is a raster layer, False otherwise
+    """
+    return detect_layer_type(layer) == LayerType.RASTER
+
+
+def is_vector_layer(layer: Optional[Any]) -> bool:
+    """
+    Check if a layer is a vector layer.
+    
+    EPIC-2 Feature: Raster Integration (US-01)
+    
+    Args:
+        layer: A QGIS map layer
+    
+    Returns:
+        True if the layer is a vector layer, False otherwise
+    """
+    return detect_layer_type(layer) == LayerType.VECTOR
 
 
 # =============================================================================

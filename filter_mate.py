@@ -785,11 +785,12 @@ class FilterMate:
                 self.app.dockwidget._plugin_busy = False
                 self.app.dockwidget._updating_layers = False
                 
-                # Clear combobox safely
+                # v5.0: Clear exploring comboboxes safely (replaces comboBox_filtering_current_layer)
                 try:
-                    if hasattr(self.app.dockwidget, 'comboBox_filtering_current_layer'):
-                        self.app.dockwidget.comboBox_filtering_current_layer.setLayer(None)
-                        self.app.dockwidget.comboBox_filtering_current_layer.clear()
+                    if hasattr(self.app.dockwidget, 'mMapLayerComboBox_exploring_vector'):
+                        self.app.dockwidget.mMapLayerComboBox_exploring_vector.setLayer(None)
+                    if hasattr(self.app.dockwidget, 'mMapLayerComboBox_exploring_raster'):
+                        self.app.dockwidget.mMapLayerComboBox_exploring_raster.setLayer(None)
                 except Exception as e:
                     logger.debug(f"Error clearing layer combobox on project cleared: {e}")
                 
@@ -1021,12 +1022,13 @@ class FilterMate:
             if hasattr(self.app, 'PROJECT_LAYERS'):
                 self.app.PROJECT_LAYERS = {}
             
-            # 5. Clear the combobox to prevent access violations
-            if (self.app.dockwidget and 
-                hasattr(self.app.dockwidget, 'comboBox_filtering_current_layer')):
+            # v5.0: 5. Clear exploring comboboxes to prevent access violations
+            if self.app.dockwidget:
                 try:
-                    self.app.dockwidget.comboBox_filtering_current_layer.setLayer(None)
-                    self.app.dockwidget.comboBox_filtering_current_layer.clear()
+                    if hasattr(self.app.dockwidget, 'mMapLayerComboBox_exploring_vector'):
+                        self.app.dockwidget.mMapLayerComboBox_exploring_vector.setLayer(None)
+                    if hasattr(self.app.dockwidget, 'mMapLayerComboBox_exploring_raster'):
+                        self.app.dockwidget.mMapLayerComboBox_exploring_raster.setLayer(None)
                 except Exception as e:
                     logger.debug(f"Error clearing layer combobox: {e}")
             
@@ -1122,13 +1124,14 @@ class FilterMate:
         except Exception as e:
             logger.debug(f"FilterMate: Error cleaning up connection pools: {e}")
         
-        # CRITICAL: Clear QgsMapLayerComboBox before cleanup to prevent access violations
+        # v5.0: CRITICAL - Clear exploring comboboxes before cleanup to prevent access violations
         if self.app and self.app.dockwidget:
             try:
-                if hasattr(self.app.dockwidget, 'comboBox_filtering_current_layer'):
-                    self.app.dockwidget.comboBox_filtering_current_layer.setLayer(None)
-                    self.app.dockwidget.comboBox_filtering_current_layer.clear()
-                    logger.debug("FilterMate: Layer combo box cleared during unload")
+                if hasattr(self.app.dockwidget, 'mMapLayerComboBox_exploring_vector'):
+                    self.app.dockwidget.mMapLayerComboBox_exploring_vector.setLayer(None)
+                if hasattr(self.app.dockwidget, 'mMapLayerComboBox_exploring_raster'):
+                    self.app.dockwidget.mMapLayerComboBox_exploring_raster.setLayer(None)
+                logger.debug("FilterMate: Layer combo boxes cleared during unload")
             except Exception as e:
                 logger.debug(f"FilterMate: Error clearing layer combo during unload: {e}")
             

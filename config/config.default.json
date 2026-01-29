@@ -563,6 +563,60 @@
       "ACTIVE_POSTGRESQL": "",
       "IS_ACTIVE_POSTGRESQL": false
     },
+    "RASTER": {
+      "ENABLED": {
+        "value": true,
+        "description": "Enable raster layer analysis features (EPIC-2)"
+      },
+      "AUTO_COMPUTE_STATS": {
+        "value": true,
+        "description": "Automatically compute statistics when a raster layer is selected"
+      },
+      "SAMPLING": {
+        "AUTO_SAMPLE_THRESHOLD_PIXELS": {
+          "value": 1000000,
+          "description": "Pixel count threshold above which sampling is automatically enabled"
+        },
+        "DEFAULT_SAMPLE_SIZE": {
+          "value": 250000,
+          "description": "Default number of pixels to sample for large rasters"
+        },
+        "MAX_SAMPLE_SIZE": {
+          "value": 1000000,
+          "description": "Maximum sample size regardless of raster size"
+        }
+      },
+      "HISTOGRAM": {
+        "DEFAULT_BINS": {
+          "value": 256,
+          "description": "Default number of histogram bins"
+        },
+        "TIMEOUT_SECONDS": {
+          "value": 10,
+          "description": "Maximum time allowed for histogram computation"
+        }
+      },
+      "MEMORY": {
+        "MAX_MEMORY_MB": {
+          "value": 500,
+          "description": "Maximum memory usage for raster operations (in MB)"
+        },
+        "WARNING_THRESHOLD_MB": {
+          "value": 200,
+          "description": "Memory usage threshold to trigger warning"
+        }
+      },
+      "EXPORT": {
+        "INCLUDE_HISTOGRAM_PERCENTILES": {
+          "value": true,
+          "description": "Include P25, P50, P75 in CSV exports"
+        },
+        "DEFAULT_CSV_ENCODING": {
+          "value": "utf-8",
+          "description": "Character encoding for CSV exports"
+        }
+      }
+    },
     "layers": []
   }
 }
