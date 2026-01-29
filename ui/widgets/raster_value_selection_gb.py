@@ -136,6 +136,7 @@ class RasterValueSelectionGroupBox(QWidget):
         self._pixel_count: int = 0
         self._total_pixels: int = 0
         self._pick_mode_active: bool = False
+        self._histogram_data: Optional['HistogramData'] = None  # Store histogram for pixel count
         
         # Debounce timer for spinbox changes
         self._update_timer = QTimer(self)
@@ -257,11 +258,36 @@ class RasterValueSelectionGroupBox(QWidget):
         
         range_layout.addStretch()
         
-        # Pixel count
+        # Pixel count with visual indicator
+        pixel_frame = QFrame()
+        pixel_frame.setStyleSheet("""
+            QFrame {
+                background: transparent;
+            }
+        """)
+        pixel_layout = QHBoxLayout(pixel_frame)
+        pixel_layout.setContentsMargins(0, 0, 0, 0)
+        pixel_layout.setSpacing(4)
+        
         self._pixel_label = QLabel("Pixels: —")
         self._pixel_label.setObjectName("label_pixel_count")
-        self._pixel_label.setStyleSheet("font-family: monospace; color: palette(mid);")
-        range_layout.addWidget(self._pixel_label)
+        self._pixel_label.setStyleSheet("font-family: monospace; font-weight: bold;")
+        pixel_layout.addWidget(self._pixel_label)
+        
+        # Percentage bar indicator
+        self._pct_bar = QLabel()
+        self._pct_bar.setFixedSize(50, 8)
+        self._pct_bar.setStyleSheet("""
+            background: qlineargradient(
+                x1:0, y1:0, x2:1, y2:0,
+                stop:0 #3498db, stop:1 #ecf0f1
+            );
+            border-radius: 4px;
+        """)
+        self._pct_bar.setToolTip("Percentage of selected pixels")
+        pixel_layout.addWidget(self._pct_bar)
+        
+        range_layout.addWidget(pixel_frame)
         
         content_layout.addWidget(range_frame)
         
@@ -488,6 +514,9 @@ class RasterValueSelectionGroupBox(QWidget):
             self._max_spin.value()
         )
         
+        # Update pixel count immediately for better UX
+        self._update_pixel_count()
+        
         # Debounce the signal emission
         self._update_timer.stop()
         self._update_timer.start()
@@ -545,16 +574,203 @@ class RasterValueSelectionGroupBox(QWidget):
         self.load_template_requested.emit()
     
     def _update_pixel_count(self) -> None:
-        """Update the pixel count display."""
-        # TODO: Calculate actual pixel count from histogram data
-        # For now, show placeholder
+        """
+        Update the pixel count display based on histogram data and current selection.
+        
+        Calculates the number of pixels within the selected value range using
+        histogram bin data. Handles predicates like within_range, outside_range, etc.
+        """
+        # Check if we have histogram data
+        if not hasattr(self, '_histogram_data') or self._histogram_data is None:
+            self._pixel_label.setText("Pixels: —")
+            return
+        
+        histogram_data = self._histogram_data
+        if not histogram_data.counts or not histogram_data.bin_edges:
+            self._pixel_label.setText("Pixels: —")
+            return
+        
+        # Get current range and predicate
+        range_min = self._min_spin.value()
+        range_max = self._max_spin.value()
+        predicate = self._predicate_combo.currentData() or "within_range"
+        
+        # Calculate pixel count based on predicate
+        selected_count = self._calculate_pixel_count_for_predicate(
+            histogram_data, range_min, range_max, predicate
+        )
+        
+        self._pixel_count = selected_count
+        self._total_pixels = histogram_data.total_count
+        
         if self._total_pixels > 0:
             pct = (self._pixel_count / self._total_pixels) * 100
             self._pixel_label.setText(
                 f"Pixels: {self._pixel_count:,} ({pct:.1f}%)"
             )
+            
+            # Update percentage bar with gradient color
+            # Color: green (0%) -> blue (50%) -> orange (100%)
+            self._update_percentage_bar(pct)
         else:
             self._pixel_label.setText("Pixels: —")
+            self._update_percentage_bar(0)
+    
+    def _update_percentage_bar(self, percentage: float) -> None:
+        """
+        Update the percentage bar visual indicator.
+        
+        Args:
+            percentage: Percentage value (0-100)
+        """
+        if not hasattr(self, '_pct_bar'):
+            return
+        
+        # Clamp percentage
+        pct = max(0, min(100, percentage))
+        
+        # Determine color based on percentage
+        # Low selection (0-30%): Blue
+        # Medium selection (30-70%): Green
+        # High selection (70-100%): Orange
+        if pct < 30:
+            color = "#3498db"  # Blue
+        elif pct < 70:
+            color = "#27ae60"  # Green
+        else:
+            color = "#e67e22"  # Orange
+        
+        # Calculate fill width (50px * percentage / 100)
+        fill_width = int(50 * pct / 100)
+        
+        self._pct_bar.setStyleSheet(f"""
+            background: qlineargradient(
+                x1:0, y1:0, x2:1, y2:0,
+                stop:0 {color},
+                stop:{pct/100:.2f} {color},
+                stop:{pct/100 + 0.01:.2f} palette(mid),
+                stop:1 palette(mid)
+            );
+            border-radius: 4px;
+            border: 1px solid palette(mid);
+        """)
+    
+    def _calculate_pixel_count_for_predicate(
+        self,
+        histogram_data: 'HistogramData',
+        range_min: float,
+        range_max: float,
+        predicate: str
+    ) -> int:
+        """
+        Calculate pixel count based on predicate type.
+        
+        Args:
+            histogram_data: Histogram data with counts and bin_edges
+            range_min: Minimum value of selection
+            range_max: Maximum value of selection
+            predicate: Predicate type (within_range, outside_range, etc.)
+        
+        Returns:
+            Number of pixels matching the predicate
+        """
+        counts = histogram_data.counts
+        bin_edges = histogram_data.bin_edges
+        total_count = histogram_data.total_count
+        
+        if predicate == "is_nodata":
+            # NoData count would require stats - use 0 as placeholder
+            return 0
+        
+        if predicate == "is_not_nodata":
+            # All non-NoData pixels
+            return total_count
+        
+        # Calculate pixels within range
+        within_range_count = 0
+        for i, count in enumerate(counts):
+            if i + 1 >= len(bin_edges):
+                break
+            
+            bin_start = bin_edges[i]
+            bin_end = bin_edges[i + 1]
+            
+            # Check if bin overlaps with selection range
+            if bin_end <= range_min or bin_start >= range_max:
+                # No overlap
+                continue
+            
+            # Bin overlaps - determine how much
+            if bin_start >= range_min and bin_end <= range_max:
+                # Bin is fully within range
+                within_range_count += count
+            else:
+                # Partial overlap - estimate fraction
+                overlap_start = max(bin_start, range_min)
+                overlap_end = min(bin_end, range_max)
+                bin_width = bin_end - bin_start
+                
+                if bin_width > 0:
+                    fraction = (overlap_end - overlap_start) / bin_width
+                    within_range_count += int(count * fraction)
+        
+        # Apply predicate
+        if predicate == "within_range":
+            return within_range_count
+        elif predicate == "outside_range":
+            return total_count - within_range_count
+        elif predicate == "above_value":
+            # Count pixels above range_min
+            return self._count_pixels_above(histogram_data, range_min)
+        elif predicate == "below_value":
+            # Count pixels below range_max
+            return self._count_pixels_below(histogram_data, range_max)
+        elif predicate == "equals_value":
+            # Estimate pixels at exact value (use narrow bin around range_min)
+            tolerance = histogram_data.bin_width if histogram_data.bin_width > 0 else 0.01
+            return self._calculate_pixel_count_for_predicate(
+                histogram_data, range_min - tolerance, range_min + tolerance, "within_range"
+            )
+        
+        return within_range_count
+    
+    def _count_pixels_above(self, histogram_data: 'HistogramData', threshold: float) -> int:
+        """Count pixels with values above threshold."""
+        count = 0
+        for i, bin_count in enumerate(histogram_data.counts):
+            if i + 1 >= len(histogram_data.bin_edges):
+                break
+            
+            bin_start = histogram_data.bin_edges[i]
+            bin_end = histogram_data.bin_edges[i + 1]
+            
+            if bin_start >= threshold:
+                count += bin_count
+            elif bin_end > threshold:
+                # Partial bin
+                fraction = (bin_end - threshold) / (bin_end - bin_start)
+                count += int(bin_count * fraction)
+        
+        return count
+    
+    def _count_pixels_below(self, histogram_data: 'HistogramData', threshold: float) -> int:
+        """Count pixels with values below threshold."""
+        count = 0
+        for i, bin_count in enumerate(histogram_data.counts):
+            if i + 1 >= len(histogram_data.bin_edges):
+                break
+            
+            bin_start = histogram_data.bin_edges[i]
+            bin_end = histogram_data.bin_edges[i + 1]
+            
+            if bin_end <= threshold:
+                count += bin_count
+            elif bin_start < threshold:
+                # Partial bin
+                fraction = (threshold - bin_start) / (bin_end - bin_start)
+                count += int(bin_count * fraction)
+        
+        return count
     
     def set_layer(self, layer: Optional['QgsRasterLayer']) -> None:
         """
@@ -598,6 +814,9 @@ class RasterValueSelectionGroupBox(QWidget):
                 self._layer_id, self._current_band
             )
             if hist_data:
+                # Store histogram data for pixel count calculation
+                self._histogram_data = hist_data
+                
                 self._histogram_canvas.set_histogram_data(hist_data)
                 
                 # Update data range
@@ -610,17 +829,21 @@ class RasterValueSelectionGroupBox(QWidget):
                 self._min_spin.setValue(self._data_min)
                 self._max_spin.setValue(self._data_max)
                 
-                # Update total pixels
-                self._total_pixels = sum(hist_data.counts)
+                # Update total pixels from histogram
+                self._total_pixels = hist_data.total_count
                 self._pixel_count = self._total_pixels
                 self._update_pixel_count()
+            else:
+                self._histogram_data = None
         except Exception as e:
             logger.error(f"Failed to load histogram: {e}")
+            self._histogram_data = None
     
     def clear(self) -> None:
         """Clear all data and reset to default state."""
         self._layer = None
         self._layer_id = None
+        self._histogram_data = None  # Clear histogram data
         
         self._band_combo.clear()
         self._band_combo.addItem("Band 1")
@@ -629,6 +852,8 @@ class RasterValueSelectionGroupBox(QWidget):
         
         self._min_spin.setValue(0)
         self._max_spin.setValue(100)
+        self._pixel_count = 0
+        self._total_pixels = 0
         self._pixel_label.setText("Pixels: —")
         
         # Deactivate pick mode
