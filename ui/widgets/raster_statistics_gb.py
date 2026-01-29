@@ -28,6 +28,8 @@ from qgis.PyQt.QtWidgets import (
     QPushButton,
     QFileDialog,
     QMessageBox,
+    QStackedWidget,
+    QProgressBar,
 )
 from qgis.PyQt.QtGui import QFont, QCursor
 
@@ -211,7 +213,10 @@ class RasterStatisticsGroupBox(QWidget):
         
         content_layout.addLayout(band_layout)
         
-        # === Statistics Grid ===
+        # === Statistics Grid with Loading Overlay ===
+        self._stats_stack = QStackedWidget()
+        
+        # Page 0: Statistics display
         self._stats_frame = QFrame()
         self._stats_frame.setFrameStyle(QFrame.StyledPanel)
         self._stats_frame.setStyleSheet("""
@@ -248,7 +253,55 @@ class RasterStatisticsGroupBox(QWidget):
             self._stat_cells[key] = cell
             stats_layout.addWidget(cell, 1, col)
         
-        content_layout.addWidget(self._stats_frame)
+        self._stats_stack.addWidget(self._stats_frame)
+        
+        # Page 1: Loading indicator
+        loading_widget = QFrame()
+        loading_widget.setFrameStyle(QFrame.StyledPanel)
+        loading_widget.setStyleSheet("""
+            QFrame {
+                background-color: palette(alternate-base);
+                border-radius: 4px;
+            }
+        """)
+        loading_layout = QVBoxLayout(loading_widget)
+        loading_layout.setAlignment(Qt.AlignCenter)
+        
+        self._stats_loading_label = QLabel("⏳ Computing statistics...")
+        self._stats_loading_label.setStyleSheet("""
+            QLabel {
+                color: palette(mid);
+                font-style: italic;
+                font-size: 10pt;
+            }
+        """)
+        self._stats_loading_label.setAlignment(Qt.AlignCenter)
+        loading_layout.addWidget(self._stats_loading_label)
+        
+        self._stats_loading_progress = QProgressBar()
+        self._stats_loading_progress.setRange(0, 0)  # Indeterminate
+        self._stats_loading_progress.setMaximumWidth(200)
+        self._stats_loading_progress.setTextVisible(False)
+        self._stats_loading_progress.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid palette(mid);
+                border-radius: 4px;
+                background: palette(base);
+                height: 8px;
+            }
+            QProgressBar::chunk {
+                background: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #e74c3c, stop:1 #f39c12
+                );
+                border-radius: 3px;
+            }
+        """)
+        loading_layout.addWidget(self._stats_loading_progress, 0, Qt.AlignCenter)
+        
+        self._stats_stack.addWidget(loading_widget)
+        
+        content_layout.addWidget(self._stats_stack)
         
         # === Metadata Info ===
         self._info_frame = QFrame()
@@ -507,10 +560,26 @@ class RasterStatisticsGroupBox(QWidget):
         self._band_combo.blockSignals(False)
         self._current_band = 1
     
+    def _show_stats_loading(self, message: str = "⏳ Computing statistics...") -> None:
+        """Show loading indicator over statistics grid."""
+        self._stats_loading_label.setText(message)
+        self._stats_stack.setCurrentIndex(1)  # Show loading page
+    
+    def _hide_stats_loading(self) -> None:
+        """Hide loading indicator and show statistics."""
+        self._stats_stack.setCurrentIndex(0)  # Show stats page
+    
     def _load_stats(self) -> None:
         """Load statistics from service."""
         if not self._stats_service or not self._layer_id:
             return
+        
+        # Show loading indicator
+        self._show_stats_loading("⏳ Computing band statistics...")
+        
+        # Force UI update
+        from qgis.PyQt.QtWidgets import QApplication
+        QApplication.processEvents()
         
         try:
             snapshot = self._stats_service.get_layer_snapshot(self._layer_id)
@@ -518,6 +587,9 @@ class RasterStatisticsGroupBox(QWidget):
                 self._apply_snapshot(snapshot)
         except Exception as e:
             logger.error(f"Failed to load stats: {e}")
+        finally:
+            # Always hide loading indicator
+            self._hide_stats_loading()
     
     def _apply_snapshot(self, snapshot: 'LayerStatsSnapshot') -> None:
         """Apply a stats snapshot to the display."""
