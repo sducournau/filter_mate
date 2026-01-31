@@ -8128,7 +8128,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._reset_selection_tracking_for_layer(layer)
         try:
             should_continue, validated_layer, layer_props = self._validate_and_prepare_layer(layer)
-            if not should_continue: return
+            
+            # v5.2 FIX 2026-01-31: ALWAYS switch exploring page based on layer type
+            # Even if validation fails, UI should reflect the user's layer selection
+            # This ensures toolBox_exploring shows Vector/Raster page correctly
+            if layer is not None:
+                try:
+                    self._auto_switch_exploring_page(layer)
+                    logger.info(f"✓ Step 0: Exploring page auto-switched for '{layer.name()}'")
+                except Exception as e:
+                    logger.warning(f"Failed to auto-switch exploring page: {e}")
+            
+            if not should_continue:
+                logger.debug("current_layer_changed: Validation failed, returning after auto-switch")
+                return
             
             # v5.0: Detect layer type for conditional processing
             is_raster = isinstance(validated_layer, QgsRasterLayer)
@@ -8151,9 +8164,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             else:
                 logger.info("✓ Step 2: Raster layer (skipping vector widget sync)")
             
-            # v5.0: Auto-switch exploring page based on layer type (vector vs raster)
-            self._auto_switch_exploring_page(validated_layer)
-            logger.info("✓ Step 2b: Exploring page auto-switched based on layer type")
+            # v5.2 FIX: Auto-switch already done in Step 0 (before validation check)
+            # This ensures UI always reflects layer type, even if validation fails
             
             # v5.0: Only reload exploration widgets for vector layers
             if is_vector and layer_props:

@@ -393,7 +393,8 @@
 #dockWidgetContents QToolBox::tab {
     background-color: {color_bg_0};
     border: 1px solid {color_2};
-    padding: 4px 8px 8px 8px;
+    padding: 0px 0px 0px 0px;
+    margin: 2px 0px 0px 0px;
     min-height: 24px;
     color: {color_font_0};
 }
@@ -402,7 +403,8 @@
 #dockWidgetContents QToolBox QToolButton {
     background-color: transparent;
     border: none;
-    padding: 4px 10px 8px 28px;
+    padding: 0px 0px 0px 0px;
+    margin: 2px 0px 0px 0px;
     min-height: 24px;
     color: {color_font_0};
     font-weight: normal;

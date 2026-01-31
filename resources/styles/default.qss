@@ -214,8 +214,8 @@ END OF REMOVED SECTION */
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 4px;
-    padding: 4px 8px 8px 8px;
-    margin: 2px;
+    padding: 0px 0px 0px 0px;
+    margin: 2px 0px 0px 0px;
     color: {color_font_0};
     font-weight: normal;
     min-height: 24px;
@@ -225,7 +225,8 @@ END OF REMOVED SECTION */
 #dockWidgetContents QToolBox QToolButton {
     background-color: transparent;
     border: none;
-    padding: 4px 10px 8px 28px;
+    padding: 0px 0px 0px 0px;
+    margin: 2px 0px 0px 0px;
     min-height: 24px;
     color: {color_font_0};
     font-weight: normal;

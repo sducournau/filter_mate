@@ -217,7 +217,7 @@
                <normaloff>:/plugins/filter_mate/icons/vector.png</normaloff>:/plugins/filter_mate/icons/vector.png</iconset>
              </attribute>
              <attribute name="label">
-              <string>EXPLORING VECTOR</string>
+              <string>VECTOR</string>
              </attribute>
              <layout class="QVBoxLayout" name="verticalLayout_exploring_vector">
               <property name="spacing">
@@ -1255,7 +1255,7 @@
                <normaloff>:/plugins/filter_mate/icons/raster.png</normaloff>:/plugins/filter_mate/icons/raster.png</iconset>
              </attribute>
              <attribute name="label">
-              <string>EXPLORING RASTER</string>
+              <string>RASTER</string>
              </attribute>
              <layout class="QVBoxLayout" name="verticalLayout_exploring_raster">
               <property name="spacing">

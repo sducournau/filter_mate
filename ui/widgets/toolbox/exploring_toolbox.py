@@ -986,8 +986,8 @@ class ExploringToolBox(BaseToolBox):
     clearRequested = pyqtSignal()
     
     # Page name constants
-    PAGE_VECTOR = "📍 EXPLORING VECTOR"
-    PAGE_RASTER = "🏔️ EXPLORING RASTER"
+    PAGE_VECTOR = "📍 VECTOR"
+    PAGE_RASTER = "🏔️ RASTER"
     
     def __init__(self, parent=None):
         super().__init__(parent, title="EXPLORING")
