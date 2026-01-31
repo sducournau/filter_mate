@@ -270,6 +270,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._pending_layers_update = self._plugin_busy = self._syncing_from_qgis = False
         self._filtering_in_progress, self._filter_completed_time, self._saved_layer_id_before_filter = False, 0, None
         self._layer_tree_view_signal_connected, self._signal_connection_states, self._theme_watcher = False, {}, None
+        # v5.2 FIX 2026-01-31: Flag to prevent handler interference during programmatic page changes
+        self._programmatic_page_change = False
         # FIX 2026-01-19: Flag to prevent feedback loop when widget updates QGIS selection
         self._updating_qgis_selection_from_widget = False
         self._configuring_groupbox = False  # FIX 2026-01-19: Prevent nested groupbox config
@@ -984,14 +986,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """Note: Handle page change in native toolBox_exploring.
         
         v5.2 FIX 2026-01-31: Enforce page consistency with current layer type.
-        User cannot stay on raster page with vector layer or vice versa.
+        User cannot manually switch between vector/raster pages - always follows current layer.
         """
         page_names = {0: 'vector', 1: 'raster'}
         page_name = page_names.get(index, 'unknown')
         logger.debug(f"Note: Exploring page changed to {page_name} (index {index})")
         
+        # v5.2 FIX: Check if this is a programmatic change (during auto-switch)
+        if getattr(self, '_programmatic_page_change', False):
+            logger.debug("Programmatic page change - allowing")
+            return
+        
         # v5.2 FIX: Enforce page consistency - user cannot be on wrong page
         layer = self._get_current_exploring_layer()
+        print(f"🔧🔧🔧 _on_native_exploring_page_changed: index={index}, layer={layer.name() if layer else 'None'}")
+        
         if layer:
             is_raster = isinstance(layer, QgsRasterLayer)
             is_vector = isinstance(layer, QgsVectorLayer)
@@ -1005,7 +1014,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 
                 # Use QTimer to avoid signal recursion
                 from qgis.PyQt.QtCore import QTimer
-                QTimer.singleShot(0, lambda: self.toolBox_exploring.setCurrentIndex(expected_index))
+                self._programmatic_page_change = True
+                def reset_page():
+                    self.toolBox_exploring.setCurrentIndex(expected_index)
+                    self._programmatic_page_change = False
+                QTimer.singleShot(0, reset_page)
                 return
         
         # Notify the bridge if available
@@ -1611,53 +1624,74 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             is_raster = isinstance(layer, QgsRasterLayer)
             is_vector = isinstance(layer, QgsVectorLayer)
             
-            # v5.2 FIX: Enhanced logging + console print for debugging
-            print(f"🔧🔧🔧 _auto_switch_exploring_page: layer='{layer.name()}', is_raster={is_raster}, is_vector={is_vector}")
-            logger.info(f"_auto_switch_exploring_page: layer='{layer.name()}', is_raster={is_raster}, is_vector={is_vector}, type={type(layer).__name__}")
+            # v5.2 FIX: Disable centroids checkboxes for raster layers (centroids only apply to vectors)
+            # Inline implementation instead of separate method
+            try:
+                if hasattr(self, 'checkBox_filtering_use_centroids_source_layer'):
+                    self.checkBox_filtering_use_centroids_source_layer.setEnabled(not is_raster)
+                if hasattr(self, 'checkBox_filtering_use_centroids_distant_layers'):
+                    self.checkBox_filtering_use_centroids_distant_layers.setEnabled(not is_raster)
+            except Exception as e:
+                logger.debug(f"Could not update centroids checkboxes: {e}")
             
-            # v5.0: Disable centroids checkbox for raster layers (centroids only apply to vectors)
-            self._update_centroids_checkbox_for_layer_type(is_raster)
+            # v5.2 FIX: Check toolBox_exploring existence with detailed logging
+            has_toolbox = hasattr(self, 'toolBox_exploring')
+            toolbox_not_none = self.toolBox_exploring is not None if has_toolbox else False
+            print(f"🔧🔧🔧 _auto_switch_exploring_page: has_toolbox={has_toolbox}, toolbox_not_none={toolbox_not_none}")
             
-            if hasattr(self, 'toolBox_exploring'):
+            if has_toolbox and toolbox_not_none:
                 # v5.2 FIX: Log toolbox state for debugging
                 current_idx = self.toolBox_exploring.currentIndex()
                 page_count = self.toolBox_exploring.count()
                 logger.info(f"🔧 toolBox_exploring: current_index={current_idx}, page_count={page_count}")
                 
-                if is_raster:
-                    # Switch to raster page (index 1)
-                    self.toolBox_exploring.setCurrentIndex(1)
-                    logger.info(f"🔧 Toolbox: Auto-switched to RASTER exploring page (index 1) for '{layer.name()}'")
+                # v5.2 FIX: Mark as programmatic change to avoid handler interference
+                self._programmatic_page_change = True
+                try:
+                    if is_raster:
+                        # Switch to raster page (index 1)
+                        print(f"🔧🔧🔧 _auto_switch_exploring_page: SWITCHING TO RASTER (index 1)")
+                        self.toolBox_exploring.setCurrentIndex(1)
+                        logger.info(f"🔧 Toolbox: Auto-switched to RASTER exploring page (index 1) for '{layer.name()}'")
+                        
+                        # Sync raster-specific widgets
+                        self._sync_native_raster_widgets_with_layer(layer)
+                        
+                        # v5.2 FIX 2026-01-31: Also sync DualToolBox for rasters (same as vectors)
+                        if DUAL_TOOLBOX_ENABLED and self._dual_toolbox_container:
+                            self._sync_toolbox_exploring_with_layer(layer)
+                        
+                    elif is_vector:
+                        # Switch to vector page (index 0)
+                        print(f"🔧🔧🔧 _auto_switch_exploring_page: SWITCHING TO VECTOR (index 0)")
+                        self.toolBox_exploring.setCurrentIndex(0)
+                        logger.info(f"🔧 Toolbox: Auto-switched to VECTOR exploring page (index 0) for '{layer.name()}'")
+                        
+                        # Sync vector-specific widgets via Dual QToolBox if available
+                        if DUAL_TOOLBOX_ENABLED and self._dual_toolbox_container:
+                            self._sync_toolbox_exploring_with_layer(layer)
+                    else:
+                        print(f"🔧🔧🔧 _auto_switch_exploring_page: UNKNOWN TYPE - defaulting to vector")
+                        logger.warning(f"🔧 Toolbox: Unknown layer type for '{layer.name()}', defaulting to vector page")
+                        self.toolBox_exploring.setCurrentIndex(0)
                     
-                    # Sync raster-specific widgets
-                    self._sync_native_raster_widgets_with_layer(layer)
-                    
-                    # v5.2 FIX 2026-01-31: Also sync DualToolBox for rasters (same as vectors)
-                    if DUAL_TOOLBOX_ENABLED and self._dual_toolbox_container:
-                        self._sync_toolbox_exploring_with_layer(layer)
-                    
-                elif is_vector:
-                    # Switch to vector page (index 0)
-                    self.toolBox_exploring.setCurrentIndex(0)
-                    logger.info(f"🔧 Toolbox: Auto-switched to VECTOR exploring page (index 0) for '{layer.name()}'")
-                    
-                    # Sync vector-specific widgets via Dual QToolBox if available
-                    if DUAL_TOOLBOX_ENABLED and self._dual_toolbox_container:
-                        self._sync_toolbox_exploring_with_layer(layer)
-                else:
-                    logger.warning(f"🔧 Toolbox: Unknown layer type for '{layer.name()}', defaulting to vector page")
-                    self.toolBox_exploring.setCurrentIndex(0)
-                
-                # v5.2 FIX: Confirm the switch happened
-                new_idx = self.toolBox_exploring.currentIndex()
-                logger.info(f"🔧 toolBox_exploring: new_index={new_idx} (expected: {1 if is_raster else 0})")
+                    # v5.2 FIX: Confirm the switch happened
+                    new_idx = self.toolBox_exploring.currentIndex()
+                    print(f"🔧🔧🔧 _auto_switch_exploring_page: RESULT new_index={new_idx} (expected: {1 if is_raster else 0})")
+                    logger.info(f"🔧 toolBox_exploring: new_index={new_idx} (expected: {1 if is_raster else 0})")
+                finally:
+                    self._programmatic_page_change = False
             else:
+                print(f"🔧🔧🔧 _auto_switch_exploring_page: toolBox_exploring NOT AVAILABLE")
                 logger.warning("🔧 toolBox_exploring NOT FOUND - cannot switch pages")
             
             # v5.0: Sync FilteringPage source context when layer changes
             self._sync_filtering_page_with_layer(layer)
             
         except Exception as e:
+            print(f"🔧🔧🔧 _auto_switch_exploring_page: EXCEPTION: {e}")
+            import traceback
+            traceback.print_exc()
             logger.error(f"Toolbox: Error in _auto_switch_exploring_page: {e}")
     
     def _sync_filtering_page_with_layer(self, layer):
@@ -8112,6 +8146,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     # Automatic change blocked by controller - STOP here
                     logger.info("⚠️ Controller blocked automatic layer change (protection active) - STOPPING")
                     return
+        
+        # v5.2 FIX 2026-01-31: ALWAYS switch exploring page BEFORE validation
+        # This ensures UI reflects layer type even if validation fails later
+        if layer is not None:
+            try:
+                self._auto_switch_exploring_page(layer)
+            except Exception as e:
+                logger.warning(f"Failed to auto-switch exploring page (pre-validation): {e}")
+        
         layer = self._ensure_valid_current_layer(layer)
         if layer is None:
             logger.debug("current_layer_changed: Layer is None after validation")
