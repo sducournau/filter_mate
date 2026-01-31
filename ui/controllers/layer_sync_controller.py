@@ -77,6 +77,7 @@ class LayerSyncController(BaseController):
         self._current_layer_id: Optional[str] = None
         # Lock to prevent reentrant calls
         self._updating_current_layer: bool = False
+        self._updating_lock_time: float = 0  # v5.2: Track lock timestamp for timeout
         # Filtering state
         self._filtering_in_progress: bool = False
 
@@ -146,12 +147,24 @@ class LayerSyncController(BaseController):
             True if layer change was accepted, False if blocked
         """
         layer_name = layer.name() if layer else "(None)"
-        logger.debug(f"on_current_layer_changed called with layer='{layer_name}', manual={manual_change}")
+        # v5.2 FIX 2026-01-31: Enhanced logging for debugging
+        print(f"🔧🔧🔧 LayerSyncController.on_current_layer_changed: layer='{layer_name}', manual={manual_change}")
+        logger.info(f"on_current_layer_changed called with layer='{layer_name}', manual={manual_change}")
 
-        # Check lock for reentrant calls
+        # v5.2 FIX: Check lock for reentrant calls with timeout protection
         if self._updating_current_layer:
-            logger.debug("on_current_layer_changed BLOCKED - already updating")
-            return False
+            # Check if lock has been held too long (safety reset)
+            if hasattr(self, '_updating_lock_time'):
+                elapsed = time.time() - self._updating_lock_time
+                if elapsed > 2.0:  # 2 second timeout
+                    logger.warning(f"⚠️ on_current_layer_changed: Lock held for {elapsed:.2f}s - FORCING RESET")
+                    self._updating_current_layer = False
+                else:
+                    logger.debug(f"on_current_layer_changed BLOCKED - already updating (held for {elapsed:.2f}s)")
+                    return False
+            else:
+                logger.debug("on_current_layer_changed BLOCKED - already updating")
+                return False
 
         # Block during active filtering UNLESS manual change
         if self._filtering_in_progress and not manual_change:
@@ -207,6 +220,7 @@ class LayerSyncController(BaseController):
 
         # Accept the layer change
         self._updating_current_layer = True
+        self._updating_lock_time = time.time()  # v5.2: Track lock timestamp for timeout
         try:
             self._current_layer_id = layer.id()
             self.layer_changed.emit(layer)
@@ -215,6 +229,7 @@ class LayerSyncController(BaseController):
             return True
         finally:
             self._updating_current_layer = False
+            self._updating_lock_time = 0  # v5.2: Clear lock timestamp
 
     def set_filtering_in_progress(self, in_progress: bool) -> None:
         """

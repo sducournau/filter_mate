@@ -4066,12 +4066,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if cache_key in self._signal_connection_states:
                 logger.debug(f"Clearing stale cache for {cache_key} (was: {self._signal_connection_states[cache_key]})")
                 del self._signal_connection_states[cache_key]
+            # v5.2 FIX: Also clear in signal_manager to avoid desync
+            if hasattr(self, '_signal_manager') and self._signal_manager:
+                if cache_key in self._signal_manager._signal_connection_states:
+                    del self._signal_manager._signal_connection_states[cache_key]
             
             # Connect comboBox_filtering_current_layer.layerChanged signal
             # This is CRITICAL for exploring widgets to update when current layer changes
-            self.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
-            logger.debug("✓ Connected FILTERING.CURRENT_LAYER.layerChanged signal via manageSignal")
+            result = self.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
+            print(f"🔧🔧🔧 _connect_initial_widget_signals: CURRENT_LAYER.layerChanged connect result={result}")
+            logger.info(f"✓ Connected FILTERING.CURRENT_LAYER.layerChanged signal via manageSignal (result={result})")
         except Exception as e:
+            print(f"🔧🔧🔧 _connect_initial_widget_signals ERROR: {e}")
             logger.warning(f"Could not connect CURRENT_LAYER signal: {e}")
         
         # FIX 2026-01-16: CRITICAL - Connect ACTION button signals at startup

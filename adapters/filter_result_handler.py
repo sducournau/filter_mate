@@ -767,9 +767,23 @@ class FilterResultHandler:
                     return
                 # Unblock Qt internal signals
                 dockwidget.comboBox_filtering_current_layer.blockSignals(False)
+                
+                # v5.2 FIX 2026-01-31: CRITICAL - Clear cache before reconnection to avoid skip
+                # The cache may show 'connected' while the actual signal was disconnected
+                cache_key = "FILTERING.CURRENT_LAYER.layerChanged"
+                if hasattr(dockwidget, '_signal_connection_states'):
+                    if cache_key in dockwidget._signal_connection_states:
+                        logger.debug(f"v5.2: Clearing cache '{cache_key}' before reconnection (was: {dockwidget._signal_connection_states[cache_key]})")
+                        del dockwidget._signal_connection_states[cache_key]
+                # Also clear in signal_manager if exists
+                if hasattr(dockwidget, '_signal_manager') and dockwidget._signal_manager:
+                    if cache_key in dockwidget._signal_manager._signal_connection_states:
+                        del dockwidget._signal_manager._signal_connection_states[cache_key]
+                
                 # Reconnect our handler
                 if hasattr(dockwidget, 'manageSignal'):
-                    dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
+                    result = dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
+                    logger.info(f"v5.2: manageSignal CURRENT_LAYER connect result: {result}")
                 
                 # v3.0.19: CRITICAL FIX - Reset _filtering_in_progress HERE, not earlier
                 dockwidget._filtering_in_progress = False
