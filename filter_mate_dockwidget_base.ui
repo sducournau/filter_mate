@@ -15,8 +15,8 @@
   </property>
   <property name="minimumSize">
    <size>
-    <width>314</width>
-    <height>316</height>
+    <width>356</width>
+    <height>317</height>
    </size>
   </property>
   <property name="baseSize">
@@ -25,9 +25,6 @@
     <height>0</height>
    </size>
   </property>
-  <!-- FIX 2026-01-21: Removed custom palette with transparent colors (alpha=0)
-       that caused display issues in child dialogs like QgsExpressionBuilderDialog.
-       Now inherits QGIS default palette for proper color handling. -->
   <property name="font">
    <font>
     <family>Segoe UI</family>
@@ -50,7 +47,6 @@
   <property name="windowOpacity">
    <double>1.000000000000000</double>
   </property>
-  <!-- FIX 2026-01-21: Removed stylesheet property to prevent inheritance to child dialogs -->
   <property name="floating">
    <bool>true</bool>
   </property>
@@ -172,66 +168,89 @@
            <number>1</number>
           </property>
           <item>
-           <widget class="QScrollArea" name="scrollArea_frame_exploring">
+           <widget class="QToolBox" name="toolBox_exploring">
             <property name="sizePolicy">
-             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+             <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
               <horstretch>0</horstretch>
-              <verstretch>2</verstretch>
+              <verstretch>1</verstretch>
              </sizepolicy>
             </property>
-            <property name="cursor" stdset="0">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>200</height>
+             </size>
+            </property>
+            <property name="font">
+             <font>
+              <family>Segoe UI Semibold</family>
+              <pointsize>10</pointsize>
+              <weight>75</weight>
+              <italic>false</italic>
+              <bold>true</bold>
+              <underline>false</underline>
+              <strikeout>false</strikeout>
+              <stylestrategy>PreferAntialias</stylestrategy>
+              <kerning>true</kerning>
+             </font>
+            </property>
+            <property name="cursor">
              <cursorShape>PointingHandCursor</cursorShape>
             </property>
-            <property name="horizontalScrollBarPolicy">
-             <enum>Qt::ScrollBarAlwaysOff</enum>
+            <property name="frameShape">
+             <enum>QFrame::Panel</enum>
             </property>
-            <property name="sizeAdjustPolicy">
-             <enum>QAbstractScrollArea::AdjustToContents</enum>
+            <property name="currentIndex">
+             <number>0</number>
             </property>
-            <property name="widgetResizable">
-             <bool>true</bool>
-            </property>
-            <widget class="QWidget" name="scrollAreaWidgetContents">
+            <widget class="QWidget" name="page_exploring_vector">
              <property name="geometry">
               <rect>
                <x>0</x>
                <y>0</y>
                <width>433</width>
-               <height>247</height>
+               <height>200</height>
               </rect>
              </property>
-             <layout class="QGridLayout" name="gridLayout_main_header">
+             <attribute name="icon">
+              <iconset>
+               <normaloff>:/plugins/filter_mate/icons/vector.png</normaloff>:/plugins/filter_mate/icons/vector.png</iconset>
+             </attribute>
+             <attribute name="label">
+              <string>EXPLORING VECTOR</string>
+             </attribute>
+             <layout class="QVBoxLayout" name="verticalLayout_exploring_vector">
+              <property name="spacing">
+               <number>4</number>
+              </property>
               <property name="leftMargin">
-               <number>1</number>
+               <number>0</number>
               </property>
               <property name="topMargin">
                <number>0</number>
               </property>
               <property name="rightMargin">
-               <number>1</number>
+               <number>0</number>
               </property>
               <property name="bottomMargin">
                <number>0</number>
               </property>
-              <property name="spacing">
-               <number>0</number>
-              </property>
-              <item row="0" column="0">
+              <item>
                <layout class="QGridLayout" name="gridLayout_main_actions">
                 <property name="leftMargin">
-                 <number>0</number>
+                 <number>4</number>
                 </property>
                 <property name="topMargin">
-                 <number>0</number>
+                 <number>4</number>
                 </property>
                 <property name="rightMargin">
-                 <number>0</number>
+                 <number>4</number>
                 </property>
                 <property name="bottomMargin">
-                 <number>0</number>
+                 <number>4</number>
                 </property>
                 <property name="spacing">
-                 <number>2</number>
+                 <number>4</number>
                 </property>
                 <item row="0" column="0">
                  <widget class="QWidget" name="widget_exploring_keys" native="true">
@@ -261,26 +280,29 @@
                   </property>
                   <layout class="QVBoxLayout" name="verticalLayout_exploring_container">
                    <property name="spacing">
-                    <number>1</number>
+                    <number>2</number>
                    </property>
                    <property name="leftMargin">
-                    <number>1</number>
+                    <number>0</number>
                    </property>
                    <property name="topMargin">
-                    <number>1</number>
+                    <number>0</number>
                    </property>
                    <property name="rightMargin">
-                    <number>1</number>
+                    <number>0</number>
                    </property>
                    <property name="bottomMargin">
-                    <number>2</number>
+                    <number>0</number>
                    </property>
                    <item>
                     <layout class="QVBoxLayout" name="verticalLayout_exploring_content">
+                     <property name="spacing">
+                      <number>2</number>
+                     </property>
                      <item alignment="Qt::AlignHCenter">
                       <widget class="QPushButton" name="pushButton_exploring_identify">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -293,14 +315,14 @@
                        </property>
                        <property name="maximumSize">
                         <size>
-                         <width>16777215</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="baseSize">
                         <size>
-                         <width>0</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="font">
@@ -352,7 +374,7 @@
                      <item alignment="Qt::AlignHCenter">
                       <widget class="QPushButton" name="pushButton_exploring_zoom">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -365,14 +387,14 @@
                        </property>
                        <property name="maximumSize">
                         <size>
-                         <width>16777215</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="baseSize">
                         <size>
-                         <width>0</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="font">
@@ -424,7 +446,7 @@
                      <item alignment="Qt::AlignHCenter">
                       <widget class="QPushButton" name="pushButton_checkable_exploring_selecting">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -437,14 +459,14 @@
                        </property>
                        <property name="maximumSize">
                         <size>
-                         <width>16777215</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="baseSize">
                         <size>
-                         <width>0</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="font">
@@ -508,7 +530,7 @@
                      <item alignment="Qt::AlignHCenter">
                       <widget class="QPushButton" name="pushButton_checkable_exploring_tracking">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -521,14 +543,14 @@
                        </property>
                        <property name="maximumSize">
                         <size>
-                         <width>16777215</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="baseSize">
                         <size>
-                         <width>0</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="font">
@@ -592,7 +614,7 @@
                      <item alignment="Qt::AlignHCenter">
                       <widget class="QPushButton" name="pushButton_checkable_exploring_linking_widgets">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -605,14 +627,14 @@
                        </property>
                        <property name="maximumSize">
                         <size>
-                         <width>16777215</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="baseSize">
                         <size>
-                         <width>0</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="font">
@@ -676,7 +698,7 @@
                      <item alignment="Qt::AlignHCenter">
                       <widget class="QPushButton" name="pushButton_exploring_reset_layer_properties">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -689,14 +711,14 @@
                        </property>
                        <property name="maximumSize">
                         <size>
-                         <width>16777215</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="baseSize">
                         <size>
-                         <width>0</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="font">
@@ -779,7 +801,7 @@
                      <string>SINGLE SELECTION</string>
                     </property>
                     <property name="alignment">
-                     <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                     <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
                     </property>
                     <property name="flat">
                      <bool>true</bool>
@@ -828,17 +850,17 @@
                        </property>
                        <property name="minimumSize">
                         <size>
-                         <width>0</width>
-                         <height>26</height>
+                         <width>180</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="font">
                         <font>
                          <family>Segoe UI</family>
-                         <pointsize>8</pointsize>
-                         <weight>75</weight>
+                         <pointsize>9</pointsize>
+                         <weight>50</weight>
                          <italic>false</italic>
-                         <bold>true</bold>
+                         <bold>false</bold>
                          <underline>false</underline>
                          <strikeout>false</strikeout>
                          <stylestrategy>PreferDefault</stylestrategy>
@@ -857,6 +879,22 @@
                       </widget>
                      </item>
                      <item>
+                      <spacer name="verticalSpacer">
+                       <property name="orientation">
+                        <enum>Qt::Vertical</enum>
+                       </property>
+                       <property name="sizeType">
+                        <enum>QSizePolicy::Fixed</enum>
+                       </property>
+                       <property name="sizeHint" stdset="0">
+                        <size>
+                         <width>20</width>
+                         <height>6</height>
+                        </size>
+                       </property>
+                      </spacer>
+                     </item>
+                     <item>
                       <widget class="QgsFieldExpressionWidget" name="mFieldExpressionWidget_exploring_single_selection">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
@@ -866,17 +904,17 @@
                        </property>
                        <property name="minimumSize">
                         <size>
-                         <width>0</width>
-                         <height>26</height>
+                         <width>180</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="font">
                         <font>
                          <family>Segoe UI</family>
-                         <pointsize>8</pointsize>
-                         <weight>75</weight>
+                         <pointsize>9</pointsize>
+                         <weight>50</weight>
                          <italic>false</italic>
-                         <bold>true</bold>
+                         <bold>false</bold>
                          <underline>false</underline>
                          <strikeout>false</strikeout>
                          <stylestrategy>PreferDefault</stylestrategy>
@@ -941,7 +979,7 @@
                      <string>MULTIPLE SELECTION</string>
                     </property>
                     <property name="alignment">
-                     <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                     <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
                     </property>
                     <property name="flat">
                      <bool>true</bool>
@@ -1000,6 +1038,22 @@
                       </layout>
                      </item>
                      <item>
+                      <spacer name="verticalSpacer_2">
+                       <property name="orientation">
+                        <enum>Qt::Vertical</enum>
+                       </property>
+                       <property name="sizeType">
+                        <enum>QSizePolicy::Fixed</enum>
+                       </property>
+                       <property name="sizeHint" stdset="0">
+                        <size>
+                         <width>20</width>
+                         <height>6</height>
+                        </size>
+                       </property>
+                      </spacer>
+                     </item>
+                     <item>
                       <widget class="QgsFieldExpressionWidget" name="mFieldExpressionWidget_exploring_multiple_selection">
                        <property name="enabled">
                         <bool>false</bool>
@@ -1012,17 +1066,17 @@
                        </property>
                        <property name="minimumSize">
                         <size>
-                         <width>0</width>
-                         <height>24</height>
+                         <width>180</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="font">
                         <font>
                          <family>Segoe UI</family>
-                         <pointsize>10</pointsize>
-                         <weight>75</weight>
+                         <pointsize>9</pointsize>
+                         <weight>50</weight>
                          <italic>false</italic>
-                         <bold>true</bold>
+                         <bold>false</bold>
                          <underline>false</underline>
                          <strikeout>false</strikeout>
                          <stylestrategy>PreferAntialias</stylestrategy>
@@ -1030,7 +1084,7 @@
                         </font>
                        </property>
                        <property name="cursor">
-                        <cursorShape>PointingHandCursor</cursorShape>
+                        <cursorShape>IBeamCursor</cursorShape>
                        </property>
                       </widget>
                      </item>
@@ -1086,6 +1140,12 @@
                     <property name="title">
                      <string>CUSTOM SELECTION</string>
                     </property>
+                    <property name="alignment">
+                     <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+                    </property>
+                    <property name="flat">
+                     <bool>true</bool>
+                    </property>
                     <property name="checkable">
                      <bool>true</bool>
                     </property>
@@ -1132,17 +1192,17 @@
                          </property>
                          <property name="minimumSize">
                           <size>
-                           <width>0</width>
-                           <height>24</height>
+                           <width>180</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
                           <font>
                            <family>Segoe UI</family>
-                           <pointsize>8</pointsize>
-                           <weight>75</weight>
+                           <pointsize>9</pointsize>
+                           <weight>50</weight>
                            <italic>false</italic>
-                           <bold>true</bold>
+                           <bold>false</bold>
                            <underline>false</underline>
                            <strikeout>false</strikeout>
                            <stylestrategy>PreferDefault</stylestrategy>
@@ -1178,6 +1238,376 @@
                  </layout>
                 </item>
                </layout>
+              </item>
+             </layout>
+            </widget>
+            <widget class="QWidget" name="page_exploring_raster">
+             <property name="geometry">
+              <rect>
+               <x>0</x>
+               <y>0</y>
+               <width>420</width>
+               <height>500</height>
+              </rect>
+             </property>
+             <attribute name="icon">
+              <iconset>
+               <normaloff>:/plugins/filter_mate/icons/raster.png</normaloff>:/plugins/filter_mate/icons/raster.png</iconset>
+             </attribute>
+             <attribute name="label">
+              <string>EXPLORING RASTER</string>
+             </attribute>
+             <layout class="QVBoxLayout" name="verticalLayout_exploring_raster">
+              <property name="spacing">
+               <number>4</number>
+              </property>
+              <property name="leftMargin">
+               <number>4</number>
+              </property>
+              <property name="topMargin">
+               <number>4</number>
+              </property>
+              <property name="rightMargin">
+               <number>4</number>
+              </property>
+              <property name="bottomMargin">
+               <number>4</number>
+              </property>
+              <item>
+               <layout class="QHBoxLayout" name="horizontalLayout_band">
+                <item>
+                 <widget class="QLabel" name="label_band">
+                  <property name="text">
+                   <string>Band:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QComboBox" name="comboBox_band">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="pushButton_refresh_stats">
+                  <property name="text">
+                   <string>↻ Refresh</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <widget class="QGroupBox" name="groupBox_statistics">
+                <property name="title">
+                 <string>📊 Statistics</string>
+                </property>
+                <layout class="QGridLayout" name="gridLayout_stats">
+                 <item row="0" column="0">
+                  <widget class="QLabel" name="label_stat_min_title">
+                   <property name="text">
+                    <string>Min:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="1">
+                  <widget class="QLabel" name="label_stat_min">
+                   <property name="text">
+                    <string>--</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="2">
+                  <widget class="QLabel" name="label_stat_max_title">
+                   <property name="text">
+                    <string>Max:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="3">
+                  <widget class="QLabel" name="label_stat_max">
+                   <property name="text">
+                    <string>--</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="4">
+                  <widget class="QLabel" name="label_stat_mean_title">
+                   <property name="text">
+                    <string>Mean:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="5">
+                  <widget class="QLabel" name="label_stat_mean">
+                   <property name="text">
+                    <string>--</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="0">
+                  <widget class="QLabel" name="label_stat_stddev_title">
+                   <property name="text">
+                    <string>StdDev:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="1">
+                  <widget class="QLabel" name="label_stat_stddev">
+                   <property name="text">
+                    <string>--</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="2">
+                  <widget class="QLabel" name="label_stat_nodata_title">
+                   <property name="text">
+                    <string>NoData:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="3">
+                  <widget class="QLabel" name="label_stat_nodata">
+                   <property name="text">
+                    <string>--</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="4">
+                  <widget class="QLabel" name="label_stat_dtype_title">
+                   <property name="text">
+                    <string>Type:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="5">
+                  <widget class="QLabel" name="label_stat_dtype">
+                   <property name="text">
+                    <string>--</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+              <item>
+               <widget class="QGroupBox" name="groupBox_value_selection">
+                <property name="title">
+                 <string>📈 Value Selection</string>
+                </property>
+                <layout class="QVBoxLayout" name="verticalLayout_value_sel">
+                 <item>
+                  <widget class="QWidget" name="widget_histogram_placeholder" native="true">
+                   <property name="minimumSize">
+                    <size>
+                     <width>0</width>
+                     <height>80</height>
+                    </size>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <layout class="QHBoxLayout" name="horizontalLayout_range">
+                   <item>
+                    <widget class="QLabel" name="label_range_min">
+                     <property name="text">
+                      <string>Min:</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QDoubleSpinBox" name="doubleSpinBox_min">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                       <horstretch>0</horstretch>
+                       <verstretch>0</verstretch>
+                      </sizepolicy>
+                     </property>
+                     <property name="decimals">
+                      <number>2</number>
+                     </property>
+                     <property name="minimum">
+                      <double>-999999.000000000000000</double>
+                     </property>
+                     <property name="maximum">
+                      <double>999999.000000000000000</double>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QLabel" name="label_range_to">
+                     <property name="text">
+                      <string>◄───►</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QLabel" name="label_range_max">
+                     <property name="text">
+                      <string>Max:</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QDoubleSpinBox" name="doubleSpinBox_max">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                       <horstretch>0</horstretch>
+                       <verstretch>0</verstretch>
+                      </sizepolicy>
+                     </property>
+                     <property name="decimals">
+                      <number>2</number>
+                     </property>
+                     <property name="minimum">
+                      <double>-999999.000000000000000</double>
+                     </property>
+                     <property name="maximum">
+                      <double>999999.000000000000000</double>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                 <item>
+                  <layout class="QHBoxLayout" name="horizontalLayout_predicate">
+                   <item>
+                    <widget class="QLabel" name="label_predicate">
+                     <property name="text">
+                      <string>Predicate:</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QComboBox" name="comboBox_predicate">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                       <horstretch>0</horstretch>
+                       <verstretch>0</verstretch>
+                      </sizepolicy>
+                     </property>
+                     <item>
+                      <property name="text">
+                       <string>Within Range (min ≤ val ≤ max)</string>
+                      </property>
+                     </item>
+                     <item>
+                      <property name="text">
+                       <string>Outside Range (val &lt; min OR val &gt; max)</string>
+                      </property>
+                     </item>
+                     <item>
+                      <property name="text">
+                       <string>Above Value (val ≥ min)</string>
+                      </property>
+                     </item>
+                     <item>
+                      <property name="text">
+                       <string>Below Value (val ≤ max)</string>
+                      </property>
+                     </item>
+                     <item>
+                      <property name="text">
+                       <string>Is NoData</string>
+                      </property>
+                     </item>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                 <item>
+                  <layout class="QHBoxLayout" name="horizontalLayout_picker">
+                   <item>
+                    <widget class="QLabel" name="label_pixels">
+                     <property name="text">
+                      <string>Pixels: -- / --</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <spacer name="horizontalSpacer_picker">
+                     <property name="orientation">
+                      <enum>Qt::Horizontal</enum>
+                     </property>
+                     <property name="sizeHint" stdset="0">
+                      <size>
+                       <width>40</width>
+                       <height>20</height>
+                      </size>
+                     </property>
+                    </spacer>
+                   </item>
+                   <item>
+                    <widget class="QPushButton" name="pushButton_pixel_picker">
+                     <property name="text">
+                      <string>🔬 Pick from Map</string>
+                     </property>
+                     <property name="checkable">
+                      <bool>true</bool>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+              <item>
+               <widget class="QGroupBox" name="groupBox_mask_clip">
+                <property name="title">
+                 <string>🎭 Mask &amp; Clip Operations</string>
+                </property>
+                <property name="checkable">
+                 <bool>true</bool>
+                </property>
+                <property name="checked">
+                 <bool>false</bool>
+                </property>
+                <layout class="QVBoxLayout" name="verticalLayout_mask_clip">
+                 <item>
+                  <widget class="QLabel" name="label_mask_info">
+                   <property name="text">
+                    <string>Clip/Mask raster with vector geometries</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+              <item>
+               <widget class="QGroupBox" name="groupBox_memory_clips">
+                <property name="title">
+                 <string>💾 Memory Clips (0)</string>
+                </property>
+                <property name="checkable">
+                 <bool>true</bool>
+                </property>
+                <property name="checked">
+                 <bool>false</bool>
+                </property>
+                <layout class="QVBoxLayout" name="verticalLayout_memory_clips">
+                 <item>
+                  <widget class="QListWidget" name="listWidget_memory_clips"/>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+              <item>
+               <spacer name="verticalSpacer_raster">
+                <property name="orientation">
+                 <enum>Qt::Vertical</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>10</height>
+                 </size>
+                </property>
+               </spacer>
               </item>
              </layout>
             </widget>
@@ -1248,6 +1678,25 @@
           <item>
            <layout class="QVBoxLayout" name="verticalLayout_filtering_container">
             <item>
+             <widget class="QWidget" name="widget_toolset_placeholder" native="true">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+                <horstretch>0</horstretch>
+                <verstretch>1</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>300</height>
+               </size>
+              </property>
+              <property name="visible">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
              <widget class="QToolBox" name="toolBox_tabTools">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
@@ -1304,7 +1753,7 @@
                  <x>0</x>
                  <y>0</y>
                  <width>429</width>
-                 <height>380</height>
+                 <height>359</height>
                 </rect>
                </property>
                <attribute name="icon">
@@ -1321,21 +1770,21 @@
                    <number>4</number>
                   </property>
                   <property name="leftMargin">
-                   <number>2</number>
+                   <number>4</number>
                   </property>
                   <property name="topMargin">
-                   <number>2</number>
+                   <number>4</number>
                   </property>
                   <property name="rightMargin">
-                   <number>2</number>
+                   <number>4</number>
                   </property>
                   <property name="bottomMargin">
-                   <number>2</number>
+                   <number>4</number>
                   </property>
                   <item>
                    <widget class="QWidget" name="widget_filtering_keys" native="true">
                     <property name="sizePolicy">
-                     <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+                     <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                       <horstretch>0</horstretch>
                       <verstretch>0</verstretch>
                      </sizepolicy>
@@ -1343,7 +1792,7 @@
                     <property name="minimumSize">
                      <size>
                       <width>38</width>
-                      <height>0</height>
+                      <height>60</height>
                      </size>
                     </property>
                     <property name="maximumSize">
@@ -1360,19 +1809,19 @@
                     </property>
                     <layout class="QVBoxLayout" name="verticalLayout_filtering_keys_container">
                      <property name="spacing">
-                      <number>0</number>
+                      <number>2</number>
                      </property>
                      <property name="leftMargin">
-                      <number>4</number>
+                      <number>0</number>
                      </property>
                      <property name="topMargin">
-                      <number>4</number>
+                      <number>0</number>
                      </property>
                      <property name="rightMargin">
-                      <number>4</number>
+                      <number>0</number>
                      </property>
                      <property name="bottomMargin">
-                      <number>4</number>
+                      <number>0</number>
                      </property>
                      <item>
                       <layout class="QVBoxLayout" name="verticalLayout_filtering_keys" stretch="0,0,0,0,0,0,0,0,0,0,0,0">
@@ -2593,7 +3042,7 @@
                  <x>0</x>
                  <y>0</y>
                  <width>429</width>
-                 <height>380</height>
+                 <height>359</height>
                 </rect>
                </property>
                <attribute name="icon">
@@ -2652,17 +3101,33 @@
                       <number>1</number>
                      </property>
                      <property name="leftMargin">
-                      <number>1</number>
+                      <number>0</number>
                      </property>
                      <property name="topMargin">
-                      <number>1</number>
+                      <number>0</number>
                      </property>
                      <property name="rightMargin">
-                      <number>1</number>
+                      <number>0</number>
                      </property>
                      <property name="bottomMargin">
-                      <number>1</number>
+                      <number>0</number>
                      </property>
+                     <item>
+                      <spacer name="verticalSpacer_exporting_keys_top">
+                       <property name="orientation">
+                        <enum>Qt::Vertical</enum>
+                       </property>
+                       <property name="sizeType">
+                        <enum>QSizePolicy::Fixed</enum>
+                       </property>
+                       <property name="sizeHint" stdset="0">
+                        <size>
+                         <width>20</width>
+                         <height>40</height>
+                        </size>
+                       </property>
+                      </spacer>
+                     </item>
                      <item>
                       <layout class="QVBoxLayout" name="verticalLayout_exporting_keys" stretch="0,0,0,0,0,0,0,0,0,0,0">
                        <item alignment="Qt::AlignHCenter">
@@ -3455,7 +3920,7 @@
                  <x>0</x>
                  <y>0</y>
                  <width>429</width>
-                 <height>380</height>
+                 <height>359</height>
                 </rect>
                </property>
                <attribute name="icon">

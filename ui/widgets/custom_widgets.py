@@ -224,7 +224,10 @@ class QgsCheckableComboBoxLayer(QComboBox):
         self.view().viewport().installEventFilter(self)
 
     def createMenuContext(self):
-        """Create the context menu with selection actions."""
+        """Create the context menu with selection actions.
+        
+        v5.1: Added raster layer selection actions.
+        """
         self.context_menu = QMenu(self)
         
         self.action_check_all = QAction('Select All', self)
@@ -243,6 +246,11 @@ class QgsCheckableComboBoxLayer(QComboBox):
         self.action_check_all_geometry_polygon.triggered.connect(partial(self.select_by_geometry, 'GeometryType.Polygon', Qt.Checked))
         self.action_uncheck_all_geometry_polygon = QAction('De-Select all layers by geometry type (Polygon)', self)
         self.action_uncheck_all_geometry_polygon.triggered.connect(partial(self.select_by_geometry, 'GeometryType.Polygon', Qt.Unchecked))
+        # v5.1: Raster layer selection actions
+        self.action_check_all_geometry_raster = QAction('Select all layers by geometry type (Rasters)', self)
+        self.action_check_all_geometry_raster.triggered.connect(partial(self.select_by_geometry, 'GeometryType.Raster', Qt.Checked))
+        self.action_uncheck_all_geometry_raster = QAction('De-Select all layers by geometry type (Rasters)', self)
+        self.action_uncheck_all_geometry_raster.triggered.connect(partial(self.select_by_geometry, 'GeometryType.Raster', Qt.Unchecked))
 
         self.context_menu.addAction(self.action_check_all)
         self.context_menu.addAction(self.action_uncheck_all)
@@ -255,6 +263,10 @@ class QgsCheckableComboBoxLayer(QComboBox):
         self.context_menu.addSeparator()        
         self.context_menu.addAction(self.action_check_all_geometry_polygon)
         self.context_menu.addAction(self.action_uncheck_all_geometry_polygon)
+        self.context_menu.addSeparator()
+        # v5.1: Raster menu items
+        self.context_menu.addAction(self.action_check_all_geometry_raster)
+        self.context_menu.addAction(self.action_uncheck_all_geometry_raster)
 
     def addItem(self, icon, text, data=None):
         """
@@ -1037,13 +1049,17 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                     logger.warning(f"Could not restore checked items: {restore_err}")
 
     def _populate_features_sync(self, expression, preserve_checked=False):
-        """Populate features list synchronously.
+        """Populate features list synchronously with limit for large layers.
         
         FIX 2026-01-19: Added explicit visual refresh after population to ensure
         the list is displayed correctly.
         
         FIX 2026-01-19 v4: Added preserve_checked parameter to maintain checkbox state
         during repopulation. This prevents the auto-uncheck issue.
+        
+        v5.2 FIX 2026-01-31: Added initial limit for large layers to prevent QGIS freeze.
+        For layers with >10k features, only loads first 1000 initially. User can
+        search/filter to find specific features.
         
         Args:
             expression: The display expression to use
@@ -1070,9 +1086,22 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         
         identifier_field = list_widget.getIdentifierFieldName()
         
+        # v5.2 FIX 2026-01-31: Check layer size and set limit for large layers
+        feature_count = self.layer.featureCount()
+        LARGE_LAYER_THRESHOLD = 10_000
+        INITIAL_LOAD_LIMIT = 1_000
+        
+        is_large_layer = feature_count > LARGE_LAYER_THRESHOLD
+        if is_large_layer:
+            logger.info(f"v5.2: Large layer detected ({feature_count:,} features), limiting initial load to {INITIAL_LOAD_LIMIT}")
+        
         # Request features
         request = QgsFeatureRequest()
         request.setFlags(QgsFeatureRequest.NoGeometry)
+        
+        # v5.2 FIX: Limit features for large layers
+        if is_large_layer:
+            request.setLimit(INITIAL_LOAD_LIMIT)
         
         features_data = []
         for feature in safe_iterate_features(self.layer, request):
@@ -1130,6 +1159,14 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         
         list_widget.setFeaturesList(features_data)
         list_widget.setTotalFeaturesListCount(len(features_data))
+        
+        # v5.2 FIX 2026-01-31: Update placeholder text for large layers
+        if is_large_layer:
+            remaining = feature_count - len(features_data)
+            self.filter_le.setPlaceholderText(f'Type to search... ({len(features_data):,} of {feature_count:,} shown)')
+            logger.info(f"v5.2: Loaded {len(features_data):,} features, {remaining:,} more available via search")
+        else:
+            self.filter_le.setPlaceholderText('Type to filter...')
         
         # FIX 2026-01-19: Force visual refresh after population
         # This ensures the list is displayed correctly, especially after layer changes

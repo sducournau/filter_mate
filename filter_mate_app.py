@@ -22,6 +22,7 @@ from qgis.core import (
     QgsCoordinateTransformContext,
     QgsExpressionContextUtils,
     QgsProject,
+    QgsRasterLayer,  # v5.0: Added for unified vector/raster layer support
     QgsTask,
     QgsVectorFileWriter,
     QgsVectorLayer
@@ -253,8 +254,23 @@ class FilterMateApp:
         return [l for l in layers if isinstance(l, QgsVectorLayer) and l.isValid() and is_layer_source_available(l)]
 
     def _on_layers_added(self, layers):
-        """Signal handler for layersAdded: ignore broken/invalid layers."""
+        """Signal handler for layersAdded: ignore broken/invalid layers.
+        
+        v5.0.1: Optimized to early-exit for non-vector layers (raster, VRT, mesh)
+        to avoid freeze with large VRT files (e.g., 333 tiles).
+        """
         import time
+        
+        # v5.0.1 PERFORMANCE: Filter out non-vector layers FIRST before any processing
+        # This prevents freeze with large raster datasets (VRT, etc.)
+        vector_layers_only = [l for l in (layers or []) if isinstance(l, QgsVectorLayer)]
+        
+        if not vector_layers_only:
+            # No vector layers in this batch - skip all processing
+            non_vector_count = len(layers) if layers else 0
+            if non_vector_count > 0:
+                logger.debug(f"FilterMate: layersAdded signal skipped ({non_vector_count} non-vector layer(s))")
+            return
         
         # Debounce rapid layer additions
         current_time = time.time() * 1000
@@ -267,14 +283,15 @@ class FilterMateApp:
         self._last_layer_change_timestamp = current_time
         self._check_and_reset_stale_flags()
         
-        # Identify PostgreSQL layers
-        all_postgres = [l for l in layers if isinstance(l, QgsVectorLayer) and l.providerType() == 'postgres']
+        # Identify PostgreSQL layers (only from vector layers)
+        all_postgres = [l for l in vector_layers_only if l.providerType() == 'postgres']
         if all_postgres and not POSTGRESQL_AVAILABLE:
             names = ', '.join([l.name() for l in all_postgres[:3]]) + (f" (+{len(all_postgres) - 3} autres)" if len(all_postgres) > 3 else "")
             show_warning(f"Couches PostgreSQL détectées ({names}) mais psycopg2 n'est pas installé.")
             logger.warning(f"FilterMate: Cannot use {len(all_postgres)} PostgreSQL layer(s) - psycopg2 not available")
         
-        filtered = self._filter_usable_layers(layers)
+        # Note: _filter_usable_layers now only receives vector layers
+        filtered = self._filter_usable_layers(vector_layers_only)
         postgres_pending = [l for l in all_postgres if l.id() not in [f.id() for f in filtered] and not is_sip_deleted(l)]
         
         if not filtered and not postgres_pending:
@@ -2357,16 +2374,29 @@ class FilterMateApp:
         if hasattr(self.dockwidget, 'set_widgets_enabled_state'): self.dockwidget.set_widgets_enabled_state(True)
         try:
             if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
-                # v4.2: Filter to show only vector layers WITH geometry (exclude non-spatial tables)
+                # v5.0: Filter to show vector layers WITH geometry AND raster layers
                 # HasGeometry = PointLayer | LineLayer | PolygonLayer (excludes NoGeometry tables)
-                self.dockwidget.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.HasGeometry)
+                # RasterLayer = 1 (raster layers for unified exploring)
+                # QGIS 3.40+: setFilters() deprecated, use setProxyModelFilters()
+                filters = QgsMapLayerProxyModel.HasGeometry | QgsMapLayerProxyModel.RasterLayer
+                combo = self.dockwidget.comboBox_filtering_current_layer
+                if hasattr(combo, 'setProxyModelFilters'):
+                    combo.setProxyModelFilters(filters)
+                else:
+                    combo.setFilters(filters)
         except Exception as e: logger.debug(f"ComboBox filter setup (non-critical): {e}")
         
         # Trigger layer change with active or first layer
+        # v5.0: Supports both vector and raster layers
         active = self.iface.activeLayer()
-        if active and isinstance(active, QgsVectorLayer) and active.id() in self.PROJECT_LAYERS:
-            self.dockwidget.current_layer_changed(active)
-            logger.info(f"UI refreshed with active layer: {active.name()}")
+        if active:
+            # v5.0: Vector layer in PROJECT_LAYERS OR raster layer
+            is_vector_in_project = isinstance(active, QgsVectorLayer) and active.id() in self.PROJECT_LAYERS
+            is_raster = isinstance(active, QgsRasterLayer)
+            if is_vector_in_project or is_raster:
+                self.dockwidget.current_layer_changed(active)
+                layer_type = "raster" if is_raster else "vector"
+                logger.info(f"UI refreshed with active {layer_type} layer: {active.name()}")
         elif self.PROJECT_LAYERS:
             first_layer = self.PROJECT.mapLayer(list(self.PROJECT_LAYERS.keys())[0])
             if first_layer:

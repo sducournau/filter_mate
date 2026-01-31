@@ -176,7 +176,7 @@ class FavoritesService(QObject):
             self.favorites_changed.emit()
             logger.info(f"✓ Favorites loaded from database and UI notified (count: {self.count})")
         else:
-            # v5.0: Internal database storage when manager not available
+            # Note: Internal database storage when manager not available
             self._db_path = db_path
             self._project_uuid = project_uuid
             self._init_internal_storage()
@@ -187,7 +187,7 @@ class FavoritesService(QObject):
         """
         Initialize internal SQLite storage for favorites when manager not available.
         
-        v5.0: Standalone favorites storage capability.
+        Note: Standalone favorites storage capability.
         """
         import sqlite3
         import os

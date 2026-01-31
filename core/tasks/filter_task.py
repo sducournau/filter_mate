@@ -1274,7 +1274,7 @@ class FilterEngineTask(QgsTask):
         PHASE 14.7: Migrated to TaskRunOrchestrator service.
         Delegates to execute_task_run() for main orchestration flow.
         
-        Extracted 129 lines to core/services/task_run_orchestrator.py (v5.0-alpha).
+        Extracted 129 lines to core/services/task_run_orchestrator.py .
         v4.1.0: Enhanced logging for debugging.
         
         Returns:
@@ -1893,7 +1893,7 @@ class FilterEngineTask(QgsTask):
         PHASE 14.6: Migrated to SourceLayerFilterExecutor service.
         Delegates to execute_source_layer_filtering() for actual execution.
         
-        Extracted 220 lines to core/services/source_layer_filter_executor.py (v5.0-alpha).
+        Extracted 220 lines to core/services/source_layer_filter_executor.py .
         """
         # Initialize all parameters and configuration
         self._initialize_source_filtering_parameters()
@@ -1928,7 +1928,7 @@ class FilterEngineTask(QgsTask):
         PHASE 14.5: Migrated to SourceSubsetBufferBuilder service.
         Delegates to build_source_subset_buffer_config() for actual initialization.
         
-        Extracted 163 lines to core/services/source_subset_buffer_builder.py (v5.0-alpha).
+        Extracted 163 lines to core/services/source_subset_buffer_builder.py .
         """
         # PHASE 14.5: Delegate to SourceSubsetBufferBuilder service
         from ..services.source_subset_buffer_builder import build_source_subset_buffer_config
@@ -3447,7 +3447,7 @@ class FilterEngineTask(QgsTask):
         Build filter expression using backend - PHASE 14.1 REFACTORED VERSION.
         
         Delegates to BackendExpressionBuilder service to reduce God Class size.
-        Extracted 426 lines to core/services/backend_expression_builder.py (v5.0-alpha).
+        Extracted 426 lines to core/services/backend_expression_builder.py .
         
         Args:
             backend: Backend instance
@@ -5033,7 +5033,7 @@ class FilterEngineTask(QgsTask):
         
         EPIC-1 Phase E5/E6: Delegates to adapters.backends.postgresql.filter_actions.
         
-        TODO v5.0: Refactor to use self._get_backend_executor() with FilterExecutorPort
+        TODO Note: Refactor to use self._get_backend_executor() with FilterExecutorPort
                    instead of direct pg_execute_filter import. This will complete the
                    hexagonal architecture compliance for filter execution.
         
@@ -5523,7 +5523,7 @@ class FilterEngineTask(QgsTask):
         PHASE 14.8: Migrated to CanvasRefreshService.
         Delegates to single_canvas_refresh() for actual refresh logic.
         
-        Extracted 138 lines to core/services/canvas_refresh_service.py (v5.0-alpha).
+        Extracted 138 lines to core/services/canvas_refresh_service.py .
         """
         from ..services.canvas_refresh_service import single_canvas_refresh
         single_canvas_refresh()
@@ -5535,7 +5535,7 @@ class FilterEngineTask(QgsTask):
         PHASE 14.8: Migrated to CanvasRefreshService.
         Delegates to delayed_canvas_refresh() for actual refresh logic.
         
-        Extracted 112 lines to core/services/canvas_refresh_service.py (v5.0-alpha).
+        Extracted 112 lines to core/services/canvas_refresh_service.py .
         """
         from ..services.canvas_refresh_service import delayed_canvas_refresh
         delayed_canvas_refresh()

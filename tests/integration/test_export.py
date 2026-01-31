@@ -5,7 +5,7 @@ Integration Tests for Export Workflow.
 Tests the complete export workflow including:
 - Single layer export to various formats
 - Multi-layer batch export
-- ZIP archive creation (v5.0)
+- ZIP archive creation 
 - Style export
 - CRS transformation
 
@@ -187,7 +187,7 @@ class TestLayerExporterGetLayer:
 
 
 class TestBatchExportZip:
-    """Tests for batch ZIP export functionality (v5.0)."""
+    """Tests for batch ZIP export functionality ."""
     
     def test_batch_export_creates_zip(self):
         """Test that batch_zip creates a ZIP archive."""

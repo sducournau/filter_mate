@@ -208,10 +208,40 @@ class ButtonStyler(StylerBase):
                 button.setMinimumHeight(heights['standard'])
         
         # Configure QToolButtons similarly
+        # BUT skip buttons inside QGIS composite widgets (they have their own internal buttons)
         for button in self.dockwidget.findChildren(QToolButton):
+            # Skip internal buttons of QGIS composite widgets
+            if self._is_internal_qgis_widget_button(button):
+                continue
             button.setCursor(QCursor(Qt.PointingHandCursor))
             button.setMinimumHeight(heights['tool'])
     
+    def _is_internal_qgis_widget_button(self, button: QToolButton) -> bool:
+        """
+        Check if a QToolButton is an internal button of a QGIS composite widget.
+        
+        QGIS widgets like QgsFieldExpressionWidget and QgsFeaturePickerWidget
+        have internal QToolButtons (E button, < > navigation) that should not
+        be restyled as they have their own internal styling.
+        
+        Args:
+            button: The QToolButton to check
+            
+        Returns:
+            True if button is inside a QGIS composite widget
+        """
+        try:
+            from qgis.gui import QgsFieldExpressionWidget, QgsFeaturePickerWidget
+            
+            parent = button.parent()
+            while parent:
+                if isinstance(parent, (QgsFieldExpressionWidget, QgsFeaturePickerWidget)):
+                    return True
+                parent = parent.parent()
+            return False
+        except ImportError:
+            return False
+
     def _harmonize_checkable_pushbuttons(self) -> None:
         """
         Harmonize styling of checkable pushbuttons.

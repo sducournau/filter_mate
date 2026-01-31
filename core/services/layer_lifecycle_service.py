@@ -95,6 +95,7 @@ class LayerLifecycleService:
             input_count = len(layers or [])
             usable = []
             filtered_reasons = []
+            raster_count = 0  # v5.0.1: Track raster layers for performance logging
             
             logger.info(f"filter_usable_layers: Processing {input_count} layers (POSTGRESQL_AVAILABLE={postgresql_available})")
             
@@ -103,13 +104,13 @@ class LayerLifecycleService:
                 if is_sip_deleted(l):
                     filtered_reasons.append("unknown: C++ object deleted")
                     continue
-                    
+                
+                # v5.0.1 PERFORMANCE: Early-exit for non-vector layers (raster, VRT, mesh, etc.)
+                # This MUST be checked BEFORE any expensive operations like is_valid_layer()
+                # to avoid freeze with large VRT files (e.g., 333 tiles)
                 if not isinstance(l, QgsVectorLayer):
-                    try:
-                        name = l.name() if hasattr(l, 'name') else 'unknown'
-                    except RuntimeError:
-                        name = 'unknown'
-                    filtered_reasons.append(f"{name}: not a vector layer")
+                    raster_count += 1
+                    # Skip detailed logging for raster layers to avoid log spam
                     continue
                 
                 is_postgres = l.providerType() == 'postgres'
@@ -141,19 +142,23 @@ class LayerLifecycleService:
                 else:
                     usable.append(l)
             
-            if filtered_reasons and input_count != len(usable):
-                logger.info(f"filter_usable_layers: {input_count} input layers -> {len(usable)} usable layers. Filtered: {len(filtered_reasons)}")
-                # Group filtered reasons by type for cleaner logging
-                reason_types = {}
-                for reason in filtered_reasons:
-                    reason_key = reason.split(':')[1].strip() if ':' in reason else reason
-                    if reason_key not in reason_types:
-                        reason_types[reason_key] = []
-                    layer_name = reason.split(':')[0] if ':' in reason else 'unknown'
-                    reason_types[reason_key].append(layer_name)
+            # v5.0.1: Improved logging with raster count
+            total_filtered = len(filtered_reasons) + raster_count
+            if total_filtered > 0 or input_count != len(usable):
+                logger.info(f"filter_usable_layers: {input_count} input -> {len(usable)} usable (skipped: {raster_count} raster, {len(filtered_reasons)} other)")
                 
-                for reason_type, layers_list in reason_types.items():
-                    logger.info(f"  Filtered ({reason_type}): {len(layers_list)} layer(s) - {', '.join(layers_list[:5])}{'...' if len(layers_list) > 5 else ''}")
+                # Group filtered reasons by type for cleaner logging (only if non-raster filters)
+                if filtered_reasons:
+                    reason_types = {}
+                    for reason in filtered_reasons:
+                        reason_key = reason.split(':')[1].strip() if ':' in reason else reason
+                        if reason_key not in reason_types:
+                            reason_types[reason_key] = []
+                        layer_name = reason.split(':')[0] if ':' in reason else 'unknown'
+                        reason_types[reason_key].append(layer_name)
+                    
+                    for reason_type, layers_list in reason_types.items():
+                        logger.info(f"  Filtered ({reason_type}): {len(layers_list)} layer(s) - {', '.join(layers_list[:5])}{'...' if len(layers_list) > 5 else ''}")
             else:
                 logger.info(f"filter_usable_layers: All {input_count} layers are usable")
             
@@ -798,9 +803,16 @@ class LayerLifecycleService:
             # Use timestamp-tracked flag setter for loading
             set_loading_flag_callback(True)
             
-            # Get all vector layers
+            # v5.0.1 PERFORMANCE: Pre-filter to vector layers only before calling filter_usable_layers
+            # This avoids iterating through potentially hundreds of raster tiles (VRT)
             all_layers = list(current_project.mapLayers().values())
-            usable_layers = self.filter_usable_layers(all_layers, postgresql_available=True)
+            vector_layers_only = [l for l in all_layers if isinstance(l, QgsVectorLayer)]
+            
+            raster_skipped = len(all_layers) - len(vector_layers_only)
+            if raster_skipped > 0:
+                logger.debug(f"FilterMate: {task_name} - skipped {raster_skipped} non-vector layer(s)")
+            
+            usable_layers = self.filter_usable_layers(vector_layers_only, postgresql_available=True)
             
             if usable_layers:
                 logger.info(f"FilterMate: {task_name} - loading {len(usable_layers)} layers")

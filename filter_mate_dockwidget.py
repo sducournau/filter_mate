@@ -23,7 +23,7 @@ from .infrastructure.logging import get_app_logger
 logger = get_app_logger()
 
 # v4.0 Sprint 6: Widget configuration management
-# v5.0 Phase 2: Add DockwidgetSignalManager for signal management extraction
+# Dual QToolBox Phase 2: Add DockwidgetSignalManager for signal management extraction
 from .ui.managers import ConfigurationManager, DockwidgetSignalManager
 from qgis.PyQt import QtGui, QtWidgets, QtCore
 from qgis.PyQt.QtCore import (
@@ -46,6 +46,7 @@ from qgis.core import (
     QgsProject,
     QgsProperty,
     QgsPropertyDefinition,
+    QgsRasterLayer,  # Note: Added for Dual QToolBox raster support
     QgsRectangle,
     QgsVectorLayer
 )
@@ -113,11 +114,13 @@ except ImportError:
     def should_show_message(category): return True
 
 # Config helpers (migrated to config/)
-from .config.config import get_optimization_thresholds
-from .infrastructure.config import set_config_value
+from .config.config import get_optimization_thresholds, save_config_value, get_config_value, reset_config_to_defaults
 
 from .infrastructure.cache import ExploringFeaturesCache
 from .filter_mate_dockwidget_base import Ui_FilterMateDockWidgetBase
+
+# Qt resources for icons (must be imported before UI is created)
+from . import resources  # noqa: F401
 
 # Import async expression evaluation for large layers (v2.5.10)
 # EPIC-1: Migrated to core/tasks/
@@ -162,6 +165,16 @@ except ImportError: LAYOUT_MANAGERS_AVAILABLE = False; SplitterManager = Dimensi
 # Style Managers
 try: from .ui.styles import ThemeManager, IconManager, ButtonStyler; STYLE_MANAGERS_AVAILABLE = True
 except ImportError: STYLE_MANAGERS_AVAILABLE = False; ThemeManager = IconManager = ButtonStyler = None
+
+# Dual QToolBox Dual QToolBox Architecture (Feature Flag)
+DUAL_TOOLBOX_ENABLED = True  # Set to True to enable new UI architecture
+try:
+    from .ui.widgets.toolbox import DualToolBoxContainer, ToolBoxIntegrationBridge
+    DUAL_TOOLBOX_AVAILABLE = True
+except ImportError as e:
+    DUAL_TOOLBOX_AVAILABLE = False
+    DualToolBoxContainer = ToolBoxIntegrationBridge = None
+    logger.debug(f"Dual QToolBox DualToolBox import failed: {e}")
 
 
 class ClickableLabel(QtWidgets.QLabel):
@@ -275,7 +288,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # When a layer is deleted, its QgsFeaturePickerWidget must be cleared BEFORE
         # the internal QTimer triggers scheduledReload, which would cause access violation
         self._feature_picker_layer_connection = None  # Stores (layer, connection) tuple
-        # v5.0 Phase 2: Initialize signal manager for progressive migration
+        # Dual QToolBox Phase 2: Initialize signal manager for progressive migration
         self._signal_manager = DockwidgetSignalManager(self)
         self._initialize_layer_state()
     
@@ -319,7 +332,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     @property
     def signal_manager(self):
-        """v5.0 Phase 2: Access to DockwidgetSignalManager for signal management.
+        """Dual QToolBox Phase 2: Access to DockwidgetSignalManager for signal management.
         
         Progressive migration: methods can use either:
         - self.manageSignal() (legacy, will be deprecated)
@@ -539,7 +552,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def manageSignal(self, widget_path, custom_action=None, custom_signal_name=None):
         """v4.0 S16: Manage signal connection/disconnection.
         
-        DEPRECATED v5.0: Use self.signal_manager.manage_signal() instead.
+        DEPRECATED Note: Use self.signal_manager.manage_signal() instead.
         This method delegates to DockwidgetSignalManager and syncs caches.
         """
         if not isinstance(widget_path, list) or len(widget_path) != 2:
@@ -557,7 +570,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 continue
             state = self.changeSignalState(widget_path, signal_name, func, custom_action)
             self._signal_connection_states[state_key] = state
-            # v5.0: Sync cache with signal manager
+            # Note: Sync cache with signal manager
             self._signal_manager._signal_connection_states[state_key] = state
             logger.debug(f"  -> Changed state to {state}")
         return True if state is None and widget_object["SIGNALS"] else state
@@ -686,6 +699,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self._configuration_manager is None:
             self._configuration_manager = ConfigurationManager(self)
         
+        # Note: Initialize Dual QToolBox container (if enabled)
+        self._dual_toolbox_container = None
+        self._toolbox_bridge = None
+        if DUAL_TOOLBOX_ENABLED and DUAL_TOOLBOX_AVAILABLE:
+            self._setup_dual_toolbox()
+        
         if self._splitter_manager:
             self._splitter_manager.setup()
         else:
@@ -783,6 +802,1934 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             ("EXPORTING", "HAS_OUTPUT_FOLDER_TO_EXPORT"): "pushButton_checkable_exporting_output_folder",
             ("EXPORTING", "HAS_ZIP_TO_EXPORT"): "pushButton_checkable_exporting_zip"}
         return widget_map.get((widget_group, widget_name), "")
+
+    def _setup_dual_toolbox(self):
+        """Note: Setup the new Dual QToolBox architecture.
+        
+        Creates and integrates the DualToolBoxContainer which provides:
+        - EXPLORING QToolBox (Vector/Raster pages with auto-switch)
+        - TOOLSET QToolBox (Filtering/Exporting/Configuration pages)
+        - Integration bridge for signal routing
+        
+        This replaces the legacy frame_exploring and toolBox_tabTools widgets
+        when DUAL_TOOLBOX_ENABLED is True.
+        """
+        if not DUAL_TOOLBOX_AVAILABLE:
+            logger.warning("Dual QToolBox DualToolBox not available - using legacy UI")
+            return
+        
+        try:
+            logger.info("Note: Setting up Dual QToolBox architecture...")
+            
+            # Create the container
+            self._dual_toolbox_container = DualToolBoxContainer(self)
+            self._toolbox_bridge = self._dual_toolbox_container.get_bridge()
+            
+            # Connect bridge signals to dockwidget handlers
+            self._connect_toolbox_bridge_signals()
+            
+            # --- EXPLORING QToolBox ---
+            # Note: Use native toolBox_exploring from .ui file instead of dynamic creation
+            # The UI now has toolBox_exploring with page_exploring_vector and page_exploring_raster
+            exploring_tb = self._dual_toolbox_container.get_exploring_toolbox()
+            
+            if hasattr(self, 'toolBox_exploring'):
+                # Note: Native QToolBox exists in UI - use it directly
+                # The DualToolBoxContainer's exploring_toolbox is used for signal routing
+                # but we keep the native UI toolBox_exploring visible
+                logger.debug("Note: Using native toolBox_exploring from UI file")
+                # Connect native UI toolBox signals to the bridge
+                self._connect_native_exploring_toolbox_signals()
+            elif hasattr(self, 'frame_exploring') and hasattr(self, 'verticalLayout_main_content'):
+                # Fallback: Insert dynamically created toolbox
+                self.verticalLayout_main_content.insertWidget(0, exploring_tb)
+                logger.debug("Note: EXPLORING QToolBox inserted into frame_exploring (fallback)")
+            
+            # Hide legacy exploring content (scrollArea if it exists)
+            if hasattr(self, 'scrollArea_frame_exploring'):
+                self.scrollArea_frame_exploring.hide()
+            
+            # --- TOOLSET QToolBox ---
+            # Use placeholder widget from .ui file if available, otherwise insert dynamically
+            toolset_tb = self._dual_toolbox_container.get_toolset_toolbox()
+            
+            if hasattr(self, 'widget_toolset_placeholder'):
+                # Note: Use the placeholder from .ui file (without v5 prefix)
+                placeholder_layout = self.widget_toolset_placeholder.layout()
+                if placeholder_layout is None:
+                    from qgis.PyQt.QtWidgets import QVBoxLayout
+                    placeholder_layout = QVBoxLayout(self.widget_toolset_placeholder)
+                    placeholder_layout.setContentsMargins(0, 0, 0, 0)
+                placeholder_layout.addWidget(toolset_tb)
+                self.widget_toolset_placeholder.show()
+                logger.debug("Note: TOOLSET QToolBox added to UI placeholder widget")
+            elif hasattr(self, 'frame_toolset') and hasattr(self, 'verticalLayout_filtering_container'):
+                # Fallback: Insert dynamically
+                self.verticalLayout_filtering_container.insertWidget(0, toolset_tb)
+                logger.debug("Note: TOOLSET QToolBox inserted into frame_toolset (fallback)")
+            
+            # Hide legacy toolBox
+            if hasattr(self, 'toolBox_tabTools'):
+                self.toolBox_tabTools.hide()
+            
+            logger.info("✅ Dual QToolBox Dual QToolBox architecture initialized successfully")
+            
+            # Load config values into ConfigurationPage
+            self._load_config_into_toolbox()
+            
+        except Exception as e:
+            logger.error(f"Dual QToolBox DualToolBox setup failed: {e}", exc_info=True)
+            self._dual_toolbox_container = None
+            self._toolbox_bridge = None
+    
+    def _connect_native_exploring_toolbox_signals(self):
+        """Note: Connect signals from native UI toolBox_exploring widgets.
+        
+        This method connects the widgets defined in the .ui file (toolBox_exploring,
+        page_exploring_vector, page_exploring_raster) to the filter engine.
+        """
+        try:
+            # Connect toolBox_exploring page changes for auto-switch
+            if hasattr(self, 'toolBox_exploring'):
+                self.toolBox_exploring.currentChanged.connect(self._on_native_exploring_page_changed)
+                logger.debug("Note: Connected toolBox_exploring.currentChanged")
+            
+            # Connect raster page widgets
+            if hasattr(self, 'comboBox_band'):
+                self.comboBox_band.currentIndexChanged.connect(self._on_raster_band_changed)
+            if hasattr(self, 'doubleSpinBox_min'):
+                self.doubleSpinBox_min.valueChanged.connect(self._on_raster_range_changed)
+            if hasattr(self, 'doubleSpinBox_max'):
+                self.doubleSpinBox_max.valueChanged.connect(self._on_raster_range_changed)
+            if hasattr(self, 'comboBox_predicate'):
+                self.comboBox_predicate.currentIndexChanged.connect(self._on_raster_predicate_changed)
+            if hasattr(self, 'pushButton_refresh_stats'):
+                self.pushButton_refresh_stats.clicked.connect(self._on_refresh_raster_stats)
+            if hasattr(self, 'pushButton_pixel_picker'):
+                self.pushButton_pixel_picker.clicked.connect(self._on_pixel_picker_clicked)
+            
+            # Note: Setup interactive histogram widget
+            self._setup_raster_histogram_widget()
+            
+            logger.info("Note: Native exploring toolbox signals connected")
+            
+        except Exception as e:
+            logger.error(f"Failed to connect native exploring toolbox signals: {e}")
+    
+    def _setup_raster_histogram_widget(self):
+        """Note: Setup the interactive raster histogram widget.
+        
+        Creates and embeds the RasterHistogramWidget into the widget_histogram_placeholder
+        defined in the .ui file.
+        """
+        try:
+            from ui.widgets.raster_histogram import RasterHistogramWidget, is_histogram_available
+            
+            if not is_histogram_available():
+                logger.warning("Note: Histogram widget not available (pyqtgraph missing)")
+                return
+            
+            if not hasattr(self, 'widget_histogram_placeholder'):
+                logger.warning("Note: widget_histogram_placeholder not found in UI")
+                return
+            
+            # Create histogram widget
+            self._raster_histogram = RasterHistogramWidget(self.widget_histogram_placeholder)
+            self._raster_histogram.setMinimumHeight(80)
+            
+            # Add to placeholder layout
+            from qgis.PyQt.QtWidgets import QVBoxLayout
+            layout = self.widget_histogram_placeholder.layout()
+            if layout is None:
+                layout = QVBoxLayout(self.widget_histogram_placeholder)
+                layout.setContentsMargins(0, 0, 0, 0)
+            layout.addWidget(self._raster_histogram)
+            
+            # Ensure widget is visible
+            self._raster_histogram.show()
+            self.widget_histogram_placeholder.show()
+            
+            # Connect histogram signals to spinboxes
+            self._raster_histogram.rangeChanged.connect(self._on_histogram_range_changed)
+            self._raster_histogram.rangeSelectionFinished.connect(self._on_histogram_range_finished)
+            
+            logger.info("Note: Raster histogram widget initialized")
+            
+        except ImportError as e:
+            logger.warning(f"Note: Could not import histogram widget: {e}")
+            self._raster_histogram = None
+        except Exception as e:
+            logger.error(f"Note: Failed to setup histogram widget: {e}", exc_info=True)
+            self._raster_histogram = None
+    
+    def _on_histogram_range_changed(self, min_val: float, max_val: float):
+        """Note: Handle range change from histogram drag (real-time updates)."""
+        # Update spinboxes without triggering their signals
+        if hasattr(self, 'doubleSpinBox_min'):
+            self.doubleSpinBox_min.blockSignals(True)
+            self.doubleSpinBox_min.setValue(min_val)
+            self.doubleSpinBox_min.blockSignals(False)
+        if hasattr(self, 'doubleSpinBox_max'):
+            self.doubleSpinBox_max.blockSignals(True)
+            self.doubleSpinBox_max.setValue(max_val)
+            self.doubleSpinBox_max.blockSignals(False)
+    
+    def _on_histogram_range_finished(self, min_val: float, max_val: float):
+        """Note: Handle histogram range selection finished."""
+        logger.debug(f"Note: Histogram range selected: [{min_val:.2f}, {max_val:.2f}]")
+        # Final update to spinboxes
+        self._on_histogram_range_changed(min_val, max_val)
+
+    def _on_native_exploring_page_changed(self, index: int):
+        """Note: Handle page change in native toolBox_exploring.
+        
+        v5.2 FIX 2026-01-31: Enforce page consistency with current layer type.
+        User cannot stay on raster page with vector layer or vice versa.
+        """
+        page_names = {0: 'vector', 1: 'raster'}
+        page_name = page_names.get(index, 'unknown')
+        logger.debug(f"Note: Exploring page changed to {page_name} (index {index})")
+        
+        # v5.2 FIX: Enforce page consistency - user cannot be on wrong page
+        layer = self._get_current_exploring_layer()
+        if layer:
+            is_raster = isinstance(layer, QgsRasterLayer)
+            is_vector = isinstance(layer, QgsVectorLayer)
+            expected_index = 1 if is_raster else 0
+            
+            if index != expected_index:
+                # User tried to go to wrong page - force back to correct page
+                expected_page = 'raster' if is_raster else 'vector'
+                logger.warning(f"🔧 Page mismatch! Layer '{layer.name()}' is {expected_page}, forcing page {expected_index}")
+                print(f"🔧🔧🔧 Page mismatch! Layer '{layer.name()}' is {expected_page}, forcing back to index {expected_index}")
+                
+                # Use QTimer to avoid signal recursion
+                from qgis.PyQt.QtCore import QTimer
+                QTimer.singleShot(0, lambda: self.toolBox_exploring.setCurrentIndex(expected_index))
+                return
+        
+        # Notify the bridge if available
+        if self._toolbox_bridge:
+            self._toolbox_bridge.layerSwitched.emit(page_name)
+    
+    def _on_raster_band_changed(self, index: int):
+        """Note: Handle band selection change for raster filtering."""
+        if hasattr(self, 'comboBox_band'):
+            band_name = self.comboBox_band.currentText()
+            logger.debug(f"Note: Raster band changed to: {band_name}")
+            self._refresh_raster_statistics()
+            
+            # Also update histogram for new band
+            layer = self._get_current_exploring_layer()
+            if layer:
+                self._update_raster_histogram(layer)
+    
+    def _on_raster_range_changed(self, value: float):
+        """Note: Handle min/max range change for raster value selection.
+        
+        Also updates the histogram selection region to match the spinbox values.
+        """
+        if hasattr(self, 'doubleSpinBox_min') and hasattr(self, 'doubleSpinBox_max'):
+            min_val = self.doubleSpinBox_min.value()
+            max_val = self.doubleSpinBox_max.value()
+            logger.debug(f"Note: Raster range changed: {min_val} - {max_val}")
+            
+            # Sync histogram selection
+            if hasattr(self, '_raster_histogram') and self._raster_histogram:
+                self._raster_histogram.set_range(min_val, max_val)
+    
+    def _on_raster_predicate_changed(self, index: int):
+        """Note: Handle predicate change for raster filtering."""
+        if hasattr(self, 'comboBox_predicate'):
+            predicate = self.comboBox_predicate.currentText()
+            logger.debug(f"Note: Raster predicate changed to: {predicate}")
+    
+    def _on_refresh_raster_stats(self):
+        """Note: Refresh raster statistics for current layer/band."""
+        logger.debug("Note: Refresh raster stats requested")
+        self._refresh_raster_statistics()
+        
+        # v5.0: Force histogram computation (even for large rasters)
+        if hasattr(self, '_raster_histogram') and self._raster_histogram:
+            from qgis.core import QgsRasterLayer
+            layer = self._get_current_exploring_layer()
+            if layer and isinstance(layer, QgsRasterLayer):
+                # Set layer first if not set
+                band_index = 1
+                if hasattr(self, 'comboBox_band'):
+                    band_index = self.comboBox_band.currentIndex() + 1
+                    if band_index < 1:
+                        band_index = 1
+                # Store layer/band then force compute
+                self._raster_histogram._layer = layer
+                self._raster_histogram._band_index = band_index
+                self._raster_histogram.force_compute()
+    
+    def _on_pixel_picker_clicked(self):
+        """Note: Activate pixel picker map tool for raster value selection.
+        
+        Creates and activates the RasterPixelPickerTool which allows users to:
+        - Click on raster: Set min = max = pixel value
+        - Drag rectangle: Set min/max from area statistics
+        - Ctrl+click: Extend current range with new value
+        - Shift+click: Show all bands values
+        """
+        try:
+            from qgis.utils import iface
+            from ui.tools.pixel_picker_tool import RasterPixelPickerTool
+            
+            if not iface or not iface.mapCanvas():
+                show_warning("FilterMate", "Map canvas not available")
+                return
+            
+            layer = self._get_current_exploring_layer()
+            if not layer or not isinstance(layer, QgsRasterLayer):
+                show_warning("FilterMate", "Please select a raster layer first")
+                return
+            
+            # Create or reuse pixel picker tool
+            if not hasattr(self, '_pixel_picker_tool') or self._pixel_picker_tool is None:
+                self._pixel_picker_tool = RasterPixelPickerTool(iface.mapCanvas(), self)
+                
+                # Connect signals
+                self._pixel_picker_tool.valuesPicked.connect(self._on_pixel_values_picked)
+                self._pixel_picker_tool.valuePicked.connect(self._on_single_pixel_picked)
+                self._pixel_picker_tool.allBandsPicked.connect(self._on_all_bands_picked)
+                self._pixel_picker_tool.pickingFinished.connect(self._on_pixel_picking_finished)
+            
+            # Configure for current layer and band
+            band_index = 1
+            if hasattr(self, 'comboBox_band'):
+                band_index = self.comboBox_band.currentIndex() + 1
+                if band_index < 1:
+                    band_index = 1
+            
+            self._pixel_picker_tool.set_layer(layer, band_index)
+            
+            # Set current range for Ctrl+click extend mode
+            if hasattr(self, 'doubleSpinBox_min') and hasattr(self, 'doubleSpinBox_max'):
+                self._pixel_picker_tool.set_current_range(
+                    self.doubleSpinBox_min.value(),
+                    self.doubleSpinBox_max.value()
+                )
+            
+            # Activate the tool
+            iface.mapCanvas().setMapTool(self._pixel_picker_tool)
+            
+            # Update button state to show it's active
+            if hasattr(self, 'pushButton_pixel_picker'):
+                self.pushButton_pixel_picker.setChecked(True)
+            
+            show_info("FilterMate", "Click on raster to pick value. Drag for range. Press Escape to cancel.")
+            logger.info("Note: Pixel picker tool activated")
+            
+        except ImportError as e:
+            logger.error(f"Note: Could not import pixel picker tool: {e}")
+            show_warning("FilterMate", "Pixel picker not available")
+        except Exception as e:
+            logger.error(f"Note: Failed to activate pixel picker: {e}", exc_info=True)
+            show_warning("FilterMate", f"Error activating pixel picker: {e}")
+    
+    def _on_pixel_values_picked(self, min_val: float, max_val: float):
+        """Note: Handle min/max values picked from raster.
+        
+        Args:
+            min_val: Minimum value from pick
+            max_val: Maximum value from pick
+        """
+        logger.debug(f"Note: Pixel values picked: [{min_val:.2f}, {max_val:.2f}]")
+        
+        # Update spinboxes
+        if hasattr(self, 'doubleSpinBox_min'):
+            self.doubleSpinBox_min.setValue(min_val)
+        if hasattr(self, 'doubleSpinBox_max'):
+            self.doubleSpinBox_max.setValue(max_val)
+        
+        # Update histogram selection
+        if hasattr(self, '_raster_histogram') and self._raster_histogram:
+            self._raster_histogram.set_range(min_val, max_val)
+    
+    def _on_single_pixel_picked(self, value: float):
+        """Note: Handle single pixel value picked.
+        
+        Args:
+            value: Pixel value
+        """
+        logger.info(f"Note: Single pixel value picked: {value:.4f}")
+    
+    def _on_all_bands_picked(self, values: list):
+        """Note: Handle all bands values picked (Shift+click).
+        
+        Args:
+            values: List of values for each band
+        """
+        # Format values for display
+        band_info = []
+        for i, val in enumerate(values, 1):
+            if val is not None:
+                band_info.append(f"Band {i}: {val:.4f}")
+            else:
+                band_info.append(f"Band {i}: NoData")
+        
+        message = "\n".join(band_info)
+        logger.info(f"Note: All bands:\n{message}")
+        show_info("FilterMate - Pixel Values", message)
+    
+    def _on_pixel_picking_finished(self):
+        """Note: Handle pixel picking tool deactivation."""
+        logger.debug("Note: Pixel picker deactivated")
+        
+        # Update button state
+        if hasattr(self, 'pushButton_pixel_picker'):
+            self.pushButton_pixel_picker.setChecked(False)
+
+    def _refresh_raster_statistics(self, force_full_scan: bool = False):
+        """Note: Calculate and display statistics for current raster layer/band.
+        
+        Uses QGIS QgsRasterBandStats to compute min, max, mean, stddev for the
+        selected band of the current raster layer. Updates UI labels accordingly.
+        
+        v5.0: Uses sampling for large rasters (VRT with many tiles) to avoid freezing.
+        v5.0.2: Uses async QgsTask for large rasters to prevent QGIS freeze.
+        
+        Args:
+            force_full_scan: If True, compute stats on all pixels (slow for large rasters)
+        """
+        try:
+            from qgis.core import QgsRasterLayer, QgsRasterBandStats, Qgis, QgsApplication
+            
+            # Get current layer from project
+            current_layer = self._get_current_exploring_layer()
+            
+            if not current_layer or not isinstance(current_layer, QgsRasterLayer):
+                self._clear_raster_statistics_display()
+                logger.debug("Note: No raster layer selected for statistics")
+                return
+            
+            # Get selected band (1-indexed in QGIS)
+            band_index = 1
+            if hasattr(self, 'comboBox_band'):
+                band_index = self.comboBox_band.currentIndex() + 1
+                if band_index < 1:
+                    band_index = 1
+            
+            # Compute statistics
+            provider = current_layer.dataProvider()
+            if not provider:
+                self._clear_raster_statistics_display()
+                return
+            
+            # v5.0.2: Determine if async processing is needed for large rasters/VRT
+            width = current_layer.width()
+            height = current_layer.height()
+            total_pixels = width * height
+            
+            # Threshold: 10 million pixels (~3000x3000)
+            LARGE_RASTER_THRESHOLD = 10_000_000
+            
+            # v5.0.2: Use async task for large rasters to avoid QGIS freeze
+            if total_pixels > LARGE_RASTER_THRESHOLD and not force_full_scan:
+                logger.info(f"v5.0.2: Large raster detected ({total_pixels:,} pixels), using async QgsTask")
+                self._refresh_raster_statistics_async(current_layer, band_index, force_full_scan)
+                return
+            
+            # For small rasters, compute synchronously (fast enough)
+            # Sample size for large rasters (250k samples is usually sufficient)
+            SAMPLE_SIZE = 250_000
+            sample_size = SAMPLE_SIZE if total_pixels > LARGE_RASTER_THRESHOLD else 0
+            
+            # Get band statistics (compute if not cached)
+            stats = provider.bandStatistics(
+                band_index,
+                QgsRasterBandStats.All,
+                current_layer.extent(),
+                sample_size
+            )
+            
+            # Get NoData value
+            nodata_value = None
+            if provider.sourceHasNoDataValue(band_index):
+                nodata_value = provider.sourceNoDataValue(band_index)
+            
+            # Update UI labels
+            self._update_raster_statistics_display(
+                min_val=stats.minimumValue,
+                max_val=stats.maximumValue,
+                mean_val=stats.mean,
+                stddev_val=stats.stdDev,
+                nodata_val=nodata_value,
+                band_index=band_index,
+                layer=current_layer
+            )
+            
+            # Update min/max spinboxes with actual range
+            if hasattr(self, 'doubleSpinBox_min') and hasattr(self, 'doubleSpinBox_max'):
+                self.doubleSpinBox_min.setMinimum(stats.minimumValue)
+                self.doubleSpinBox_min.setMaximum(stats.maximumValue)
+                self.doubleSpinBox_max.setMinimum(stats.minimumValue)
+                self.doubleSpinBox_max.setMaximum(stats.maximumValue)
+                # Set default selection to full range
+                self.doubleSpinBox_min.setValue(stats.minimumValue)
+                self.doubleSpinBox_max.setValue(stats.maximumValue)
+            
+            logger.info(f"Note: Raster stats computed for {current_layer.name()} band {band_index}: "
+                       f"min={stats.minimumValue:.2f}, max={stats.maximumValue:.2f}, "
+                       f"mean={stats.mean:.2f}, stddev={stats.stdDev:.2f}")
+            
+        except Exception as e:
+            logger.error(f"Note: Failed to compute raster statistics: {e}", exc_info=True)
+            self._clear_raster_statistics_display()
+    
+    def _refresh_raster_statistics_async(self, layer, band_index: int, force_full_scan: bool = False):
+        """v5.0.2: Compute raster statistics asynchronously using QgsTask.
+        
+        This prevents QGIS freeze when loading large VRT files or rasters with many tiles.
+        Shows a loading indicator while computing, then updates UI on completion.
+        
+        Args:
+            layer: QgsRasterLayer to compute statistics for
+            band_index: Band index (1-based)
+            force_full_scan: If True, compute stats on all pixels
+        """
+        try:
+            from qgis.core import QgsApplication
+            from .core.tasks.raster_stats_task import RasterStatsTask
+            
+            # Cancel any pending stats task for this layer
+            if hasattr(self, '_raster_stats_task') and self._raster_stats_task:
+                try:
+                    self._raster_stats_task.cancel()
+                except Exception:
+                    pass
+            
+            # Show loading state in UI
+            self._show_raster_statistics_loading(layer.name(), band_index)
+            
+            # Create async task
+            self._raster_stats_task = RasterStatsTask(
+                layer=layer,
+                band_index=band_index,
+                force_full_scan=force_full_scan
+            )
+            
+            # Connect signals
+            self._raster_stats_task.statsComputed.connect(self._on_raster_stats_computed)
+            self._raster_stats_task.statsFailed.connect(self._on_raster_stats_failed)
+            
+            # Add to task manager
+            QgsApplication.taskManager().addTask(self._raster_stats_task)
+            
+            logger.info(f"v5.0.2: Started async raster stats task for {layer.name()} band {band_index}")
+            
+        except ImportError as e:
+            logger.warning(f"v5.0.2: RasterStatsTask not available, falling back to sync: {e}")
+            # Fallback to synchronous computation
+            self._refresh_raster_statistics_sync(layer, band_index, force_full_scan)
+        except Exception as e:
+            logger.error(f"v5.0.2: Failed to start async stats task: {e}", exc_info=True)
+            self._clear_raster_statistics_display()
+    
+    def _refresh_raster_statistics_sync(self, layer, band_index: int, force_full_scan: bool = False):
+        """Synchronous fallback for raster statistics computation.
+        
+        Used when async task is not available or for small rasters.
+        """
+        try:
+            from qgis.core import QgsRasterBandStats
+            
+            provider = layer.dataProvider()
+            if not provider:
+                self._clear_raster_statistics_display()
+                return
+            
+            # Use sampling for large rasters
+            total_pixels = layer.width() * layer.height()
+            LARGE_RASTER_THRESHOLD = 10_000_000
+            SAMPLE_SIZE = 250_000
+            sample_size = SAMPLE_SIZE if (total_pixels > LARGE_RASTER_THRESHOLD and not force_full_scan) else 0
+            
+            stats = provider.bandStatistics(
+                band_index,
+                QgsRasterBandStats.All,
+                layer.extent(),
+                sample_size
+            )
+            
+            nodata_value = None
+            if provider.sourceHasNoDataValue(band_index):
+                nodata_value = provider.sourceNoDataValue(band_index)
+            
+            self._update_raster_statistics_display(
+                min_val=stats.minimumValue,
+                max_val=stats.maximumValue,
+                mean_val=stats.mean,
+                stddev_val=stats.stdDev,
+                nodata_val=nodata_value,
+                band_index=band_index,
+                layer=layer
+            )
+            
+            if hasattr(self, 'doubleSpinBox_min') and hasattr(self, 'doubleSpinBox_max'):
+                self.doubleSpinBox_min.setMinimum(stats.minimumValue)
+                self.doubleSpinBox_min.setMaximum(stats.maximumValue)
+                self.doubleSpinBox_max.setMinimum(stats.minimumValue)
+                self.doubleSpinBox_max.setMaximum(stats.maximumValue)
+                self.doubleSpinBox_min.setValue(stats.minimumValue)
+                self.doubleSpinBox_max.setValue(stats.maximumValue)
+                
+        except Exception as e:
+            logger.error(f"Sync raster stats failed: {e}", exc_info=True)
+            self._clear_raster_statistics_display()
+    
+    def _show_raster_statistics_loading(self, layer_name: str, band_index: int):
+        """v5.0.2: Show loading indicator while computing raster statistics.
+        
+        Args:
+            layer_name: Name of layer being processed
+            band_index: Band index being processed
+        """
+        # Update labels with loading state
+        loading_text = "..."
+        
+        if hasattr(self, 'label_stat_min'):
+            self.label_stat_min.setText(loading_text)
+        if hasattr(self, 'label_stat_max'):
+            self.label_stat_max.setText(loading_text)
+        if hasattr(self, 'label_stat_mean'):
+            self.label_stat_mean.setText(loading_text)
+        if hasattr(self, 'label_stat_stddev'):
+            self.label_stat_stddev.setText(loading_text)
+        if hasattr(self, 'label_stat_nodata'):
+            self.label_stat_nodata.setText(loading_text)
+        
+        logger.debug(f"v5.0.2: Showing loading indicator for {layer_name} band {band_index}")
+    
+    def _on_raster_stats_computed(self, stats: dict):
+        """v5.0.2: Handle async raster statistics completion.
+        
+        Called on main thread when RasterStatsTask completes successfully.
+        
+        Args:
+            stats: Dictionary with computed statistics
+        """
+        try:
+            # Update UI with computed stats
+            self._update_raster_statistics_display(
+                min_val=stats['min'],
+                max_val=stats['max'],
+                mean_val=stats['mean'],
+                stddev_val=stats['stddev'],
+                nodata_val=stats['nodata'],
+                band_index=stats['band_index'],
+                layer=None  # Layer info is in stats dict
+            )
+            
+            # Update min/max spinboxes with actual range
+            if hasattr(self, 'doubleSpinBox_min') and hasattr(self, 'doubleSpinBox_max'):
+                self.doubleSpinBox_min.setMinimum(stats['min'])
+                self.doubleSpinBox_min.setMaximum(stats['max'])
+                self.doubleSpinBox_max.setMinimum(stats['min'])
+                self.doubleSpinBox_max.setMaximum(stats['max'])
+                # Set default selection to full range
+                self.doubleSpinBox_min.setValue(stats['min'])
+                self.doubleSpinBox_max.setValue(stats['max'])
+            
+            sampled_text = " (sampled)" if stats.get('was_sampled') else ""
+            logger.info(
+                f"v5.0.2: Async raster stats computed{sampled_text} for {stats['layer_name']} "
+                f"band {stats['band_index']}: min={stats['min']:.2f}, max={stats['max']:.2f}"
+            )
+            
+        except Exception as e:
+            logger.error(f"v5.0.2: Error handling computed stats: {e}", exc_info=True)
+    
+    def _on_raster_stats_failed(self, error_message: str):
+        """v5.0.2: Handle async raster statistics failure.
+        
+        Args:
+            error_message: Error description
+        """
+        logger.warning(f"v5.0.2: Async raster stats failed: {error_message}")
+        self._clear_raster_statistics_display()
+    
+    def _update_raster_statistics_display(self, min_val, max_val, mean_val, stddev_val, 
+                                          nodata_val, band_index, layer):
+        """Note: Update the statistics display labels in the UI.
+        
+        Args:
+            min_val: Minimum pixel value
+            max_val: Maximum pixel value
+            mean_val: Mean pixel value
+            stddev_val: Standard deviation
+            nodata_val: NoData value (or None)
+            band_index: Band index (1-based)
+            layer: The raster layer
+        """
+        # Format numbers for display
+        def fmt(val, decimals=2):
+            if val is None:
+                return "N/A"
+            return f"{val:.{decimals}f}"
+        
+        # Update labels if they exist
+        if hasattr(self, 'label_stat_min'):
+            self.label_stat_min.setText(fmt(min_val))
+        if hasattr(self, 'label_stat_max'):
+            self.label_stat_max.setText(fmt(max_val))
+        if hasattr(self, 'label_stat_mean'):
+            self.label_stat_mean.setText(fmt(mean_val))
+        if hasattr(self, 'label_stat_stddev'):
+            self.label_stat_stddev.setText(fmt(stddev_val))
+        if hasattr(self, 'label_stat_nodata'):
+            self.label_stat_nodata.setText(fmt(nodata_val) if nodata_val is not None else "None")
+        
+        # Update groupbox title with layer info
+        if hasattr(self, 'groupBox_statistics'):
+            data_type = layer.dataProvider().dataType(band_index) if layer.dataProvider() else None
+            type_name = self._get_raster_data_type_name(data_type) if data_type else "Unknown"
+            self.groupBox_statistics.setTitle(f"📊 Statistics - Band {band_index} ({type_name})")
+    
+    def _clear_raster_statistics_display(self):
+        """Note: Clear statistics display when no raster is selected."""
+        na = "—"
+        if hasattr(self, 'label_stat_min'):
+            self.label_stat_min.setText(na)
+        if hasattr(self, 'label_stat_max'):
+            self.label_stat_max.setText(na)
+        if hasattr(self, 'label_stat_mean'):
+            self.label_stat_mean.setText(na)
+        if hasattr(self, 'label_stat_stddev'):
+            self.label_stat_stddev.setText(na)
+        if hasattr(self, 'label_stat_nodata'):
+            self.label_stat_nodata.setText(na)
+        if hasattr(self, 'groupBox_statistics'):
+            self.groupBox_statistics.setTitle("📊 Statistics")
+    
+    def _get_raster_data_type_name(self, data_type):
+        """Note: Convert QGIS raster data type to human-readable name."""
+        from qgis.core import Qgis
+        type_names = {
+            Qgis.Byte: "Byte",
+            Qgis.UInt16: "UInt16",
+            Qgis.Int16: "Int16",
+            Qgis.UInt32: "UInt32",
+            Qgis.Int32: "Int32",
+            Qgis.Float32: "Float32",
+            Qgis.Float64: "Float64",
+        }
+        return type_names.get(data_type, "Unknown")
+    
+    def _get_current_exploring_layer(self):
+        """Note: Get the current layer being explored.
+        
+        Returns the layer from the current layer combobox or iface.activeLayer().
+        """
+        from qgis.core import QgsProject
+        from qgis.utils import iface
+        
+        # Try to get from current layer combobox first
+        if hasattr(self, 'comboBox_filtering_current_layer'):
+            layer_name = self.comboBox_filtering_current_layer.currentText()
+            if layer_name:
+                layers = QgsProject.instance().mapLayersByName(layer_name)
+                if layers:
+                    return layers[0]
+        
+        # Fallback to active layer
+        if iface and iface.activeLayer():
+            return iface.activeLayer()
+        
+        return None
+    
+    def _populate_raster_band_combobox(self, layer):
+        """Note: Populate the band combobox with available bands from raster layer.
+        
+        Args:
+            layer: QgsRasterLayer to get bands from
+        """
+        from qgis.core import QgsRasterLayer
+        
+        if not hasattr(self, 'comboBox_band'):
+            return
+        
+        self.comboBox_band.blockSignals(True)
+        self.comboBox_band.clear()
+        
+        if layer and isinstance(layer, QgsRasterLayer):
+            band_count = layer.bandCount()
+            for i in range(1, band_count + 1):
+                band_name = layer.bandName(i) if layer.bandName(i) else f"Band {i}"
+                self.comboBox_band.addItem(f"{i} - {band_name}")
+        
+        self.comboBox_band.blockSignals(False)
+        
+        # Trigger statistics refresh
+        if self.comboBox_band.count() > 0:
+            self._refresh_raster_statistics()
+    
+    def _populate_raster_predicate_combobox(self):
+        """Note: Populate the predicate combobox with available filter predicates."""
+        if not hasattr(self, 'comboBox_predicate'):
+            return
+        
+        self.comboBox_predicate.blockSignals(True)
+        self.comboBox_predicate.clear()
+        
+        predicates = [
+            ("within_range", "Within Range (min ≤ val ≤ max)"),
+            ("outside_range", "Outside Range (val < min OR val > max)"),
+            ("above_value", "Above Value (val > min)"),
+            ("below_value", "Below Value (val < max)"),
+            ("equals_value", "Equals Value (val = min)"),
+            ("is_nodata", "Is NoData"),
+            ("is_not_nodata", "Is Not NoData"),
+        ]
+        
+        for key, label in predicates:
+            self.comboBox_predicate.addItem(label, key)
+        
+        self.comboBox_predicate.blockSignals(False)
+    
+    def _auto_switch_exploring_page(self, layer):
+        """Note: Auto-switch exploring toolbox page based on layer type.
+        
+        Automatically switches between vector (index 0) and raster (index 1) 
+        exploring pages in toolBox_exploring based on the layer type.
+        Also syncs the appropriate widgets for the layer type.
+        
+        v5.2 FIX 2026-01-31: Enhanced logging for debugging autoswitch issues.
+        
+        Args:
+            layer: QgsVectorLayer or QgsRasterLayer to switch page for
+        """
+        if not layer:
+            logger.debug("_auto_switch_exploring_page: No layer provided, returning early")
+            return
+        
+        try:
+            # Determine layer type
+            is_raster = isinstance(layer, QgsRasterLayer)
+            is_vector = isinstance(layer, QgsVectorLayer)
+            
+            # v5.2 FIX: Enhanced logging + console print for debugging
+            print(f"🔧🔧🔧 _auto_switch_exploring_page: layer='{layer.name()}', is_raster={is_raster}, is_vector={is_vector}")
+            logger.info(f"_auto_switch_exploring_page: layer='{layer.name()}', is_raster={is_raster}, is_vector={is_vector}, type={type(layer).__name__}")
+            
+            # v5.0: Disable centroids checkbox for raster layers (centroids only apply to vectors)
+            self._update_centroids_checkbox_for_layer_type(is_raster)
+            
+            if hasattr(self, 'toolBox_exploring'):
+                # v5.2 FIX: Log toolbox state for debugging
+                current_idx = self.toolBox_exploring.currentIndex()
+                page_count = self.toolBox_exploring.count()
+                logger.info(f"🔧 toolBox_exploring: current_index={current_idx}, page_count={page_count}")
+                
+                if is_raster:
+                    # Switch to raster page (index 1)
+                    self.toolBox_exploring.setCurrentIndex(1)
+                    logger.info(f"🔧 Toolbox: Auto-switched to RASTER exploring page (index 1) for '{layer.name()}'")
+                    
+                    # Sync raster-specific widgets
+                    self._sync_native_raster_widgets_with_layer(layer)
+                    
+                    # v5.2 FIX 2026-01-31: Also sync DualToolBox for rasters (same as vectors)
+                    if DUAL_TOOLBOX_ENABLED and self._dual_toolbox_container:
+                        self._sync_toolbox_exploring_with_layer(layer)
+                    
+                elif is_vector:
+                    # Switch to vector page (index 0)
+                    self.toolBox_exploring.setCurrentIndex(0)
+                    logger.info(f"🔧 Toolbox: Auto-switched to VECTOR exploring page (index 0) for '{layer.name()}'")
+                    
+                    # Sync vector-specific widgets via Dual QToolBox if available
+                    if DUAL_TOOLBOX_ENABLED and self._dual_toolbox_container:
+                        self._sync_toolbox_exploring_with_layer(layer)
+                else:
+                    logger.warning(f"🔧 Toolbox: Unknown layer type for '{layer.name()}', defaulting to vector page")
+                    self.toolBox_exploring.setCurrentIndex(0)
+                
+                # v5.2 FIX: Confirm the switch happened
+                new_idx = self.toolBox_exploring.currentIndex()
+                logger.info(f"🔧 toolBox_exploring: new_index={new_idx} (expected: {1 if is_raster else 0})")
+            else:
+                logger.warning("🔧 toolBox_exploring NOT FOUND - cannot switch pages")
+            
+            # v5.0: Sync FilteringPage source context when layer changes
+            self._sync_filtering_page_with_layer(layer)
+            
+        except Exception as e:
+            logger.error(f"Toolbox: Error in _auto_switch_exploring_page: {e}")
+    
+    def _sync_filtering_page_with_layer(self, layer):
+        """Note: v5.0 Synchronize TOOLSET FilteringPage with current layer.
+        
+        Updates the source context display and refreshes target layers list
+        in the new FilteringPage when the current layer changes.
+        
+        Args:
+            layer: Current layer (QgsVectorLayer or QgsRasterLayer)
+        """
+        if not DUAL_TOOLBOX_ENABLED or not self._dual_toolbox_container:
+            return
+        
+        try:
+            toolset = self._dual_toolbox_container.get_toolset_toolbox()
+            if not toolset:
+                return
+            
+            filtering_page = toolset.get_filtering_page()
+            if not filtering_page:
+                return
+            
+            # Build selection info based on layer type
+            selection_info = {}
+            
+            if isinstance(layer, QgsVectorLayer):
+                # Get selected features count from layer
+                selected_count = layer.selectedFeatureCount()
+                
+                # Try to get selection info from exploring widgets
+                if hasattr(self, 'mFeaturePickerWidget_exploring_single_selection'):
+                    feat = self.mFeaturePickerWidget_exploring_single_selection.feature()
+                    if feat.isValid():
+                        selected_count = 1
+                
+                selection_info = {
+                    'selected_count': selected_count,
+                    'selection_type': 'Single Selection' if selected_count == 1 else 'Multiple' if selected_count > 1 else 'None',
+                    'selection_value': '',
+                    'geometry_type': layer.geometryType().name if hasattr(layer.geometryType(), 'name') else str(layer.geometryType()),
+                }
+                
+            elif isinstance(layer, QgsRasterLayer):
+                # Get range values from spinboxes
+                min_val = self.doubleSpinBox_min.value() if hasattr(self, 'doubleSpinBox_min') else 0.0
+                max_val = self.doubleSpinBox_max.value() if hasattr(self, 'doubleSpinBox_max') else 0.0
+                
+                selection_info = {
+                    'min_value': min_val,
+                    'max_value': max_val,
+                    'predicate': self.comboBox_predicate.currentText() if hasattr(self, 'comboBox_predicate') else 'Within Range',
+                    'band': self.comboBox_band.currentIndex() + 1 if hasattr(self, 'comboBox_band') else 1,
+                    'data_type': 'Unknown',
+                }
+            
+            # Update FilteringPage source display
+            filtering_page.set_source(layer, selection_info)
+            
+            # Refresh target layers list
+            filtering_page.refresh_target_layers()
+            
+            # Also sync ExportingPage with filtered layers
+            self._sync_exporting_page_with_project_layers()
+            
+            logger.debug(f"FilteringPage synced with layer '{layer.name() if layer else 'None'}'")
+            
+        except Exception as e:
+            logger.warning(f"Failed to sync FilteringPage with layer: {e}")
+    
+    def _sync_exporting_page_with_project_layers(self):
+        """v5.0: Synchronize ExportingPage with layers that have filters applied.
+        
+        Populates the export table with layers from PROJECT_LAYERS that have
+        active filters, allowing users to export filtered data.
+        """
+        if not DUAL_TOOLBOX_ENABLED or not self._dual_toolbox_container:
+            return
+        
+        try:
+            toolset = self._dual_toolbox_container.get_toolset_toolbox()
+            if not toolset:
+                return
+            
+            export_page = toolset.get_exporting_page()
+            if not export_page:
+                return
+            
+            # Build list of layers with filter status
+            layers_to_export = []
+            
+            for layer_id, layer_props in self.PROJECT_LAYERS.items():
+                layer = QgsProject.instance().mapLayer(layer_id)
+                if not layer:
+                    continue
+                
+                # Determine filter status
+                has_filter = False
+                status = "No filter"
+                
+                if isinstance(layer, QgsVectorLayer):
+                    subset = layer.subsetString()
+                    if subset:
+                        has_filter = True
+                        status = f"Filtered ({layer.featureCount()} features)"
+                elif isinstance(layer, QgsRasterLayer):
+                    # Check if raster has mask in PROJECT_LAYERS
+                    if layer_props.get('filtering', {}).get('has_mask', False):
+                        has_filter = True
+                        status = "Masked"
+                
+                info = {
+                    'status': status,
+                    'has_filter': has_filter,
+                    'layer_type': 'vector' if isinstance(layer, QgsVectorLayer) else 'raster'
+                }
+                
+                layers_to_export.append((layer, info))
+            
+            # Update ExportingPage
+            export_page.set_export_layers(layers_to_export)
+            logger.debug(f"v5.0: ExportingPage updated with {len(layers_to_export)} layers")
+            
+        except Exception as e:
+            logger.warning(f"v5.0: Failed to sync ExportingPage: {e}")
+    
+    def _sync_native_raster_widgets_with_layer(self, layer):
+        """Note: Synchronize native UI raster widgets with the current raster layer.
+        
+        Updates the band combobox, predicate combobox, statistics display, and range 
+        spinboxes based on the selected raster layer.
+        
+        v5.0: Defers expensive operations (stats, histogram) for large rasters/VRT
+        to avoid freezing QGIS.
+        v5.2 FIX 2026-01-31: Always defer stats/histogram to prevent QGIS freeze.
+        Removed duplicate setCurrentIndex call (already handled by _auto_switch_exploring_page).
+        
+        Args:
+            layer: QgsRasterLayer to sync widgets with
+        """
+        from qgis.core import QgsRasterLayer
+        from qgis.PyQt.QtCore import QTimer
+        
+        if not layer or not isinstance(layer, QgsRasterLayer):
+            self._clear_raster_statistics_display()
+            return
+        
+        try:
+            logger.info(f"Note: Syncing native raster widgets with layer '{layer.name()}'")
+            
+            # v5.2 FIX: Removed duplicate setCurrentIndex - already handled by _auto_switch_exploring_page
+            # This prevents redundant UI updates and improves performance
+            
+            # Populate band combobox (fast operation)
+            self._populate_raster_band_combobox(layer)
+            
+            # Populate predicate combobox (if not already done)
+            if hasattr(self, 'comboBox_predicate') and self.comboBox_predicate.count() == 0:
+                self._populate_raster_predicate_combobox()
+            
+            # v5.2 FIX 2026-01-31: CRITICAL - Defer expensive operations to prevent QGIS freeze
+            # Using QTimer.singleShot allows the UI to update and remain responsive
+            # This fixes the freeze when switching to raster layers with large files
+            import weakref
+            weak_self = weakref.ref(self)
+            captured_layer_id = layer.id()
+            
+            def deferred_stats_update():
+                """Deferred update of raster statistics and histogram."""
+                self_ref = weak_self()
+                if not self_ref:
+                    return
+                try:
+                    from qgis.core import QgsProject
+                    fresh_layer = QgsProject.instance().mapLayer(captured_layer_id)
+                    if fresh_layer and isinstance(fresh_layer, QgsRasterLayer):
+                        self_ref._refresh_raster_statistics()
+                        self_ref._update_raster_histogram(fresh_layer)
+                        logger.debug(f"Note: Deferred raster stats/histogram completed for {fresh_layer.name()}")
+                except Exception as e:
+                    logger.warning(f"Note: Deferred raster update failed: {e}")
+            
+            # Defer the expensive operations by 100ms to allow UI to update first
+            QTimer.singleShot(100, deferred_stats_update)
+            
+            logger.info(f"Note: Native raster widgets sync started (stats deferred)")
+            
+        except Exception as e:
+            logger.error(f"Note: Failed to sync native raster widgets: {e}", exc_info=True)
+    
+    def _is_large_raster(self, layer) -> bool:
+        """v5.0: Check if a raster is large enough to require deferred processing.
+        
+        Considers:
+        - Total pixel count (> 10M pixels)
+        - VRT format (often composed of many tiles)
+        - Source path characteristics
+        
+        Args:
+            layer: QgsRasterLayer to check
+            
+        Returns:
+            True if raster is considered large and should use deferred processing
+        """
+        try:
+            from qgis.core import QgsRasterLayer
+            if not layer or not isinstance(layer, QgsRasterLayer):
+                return False
+            
+            # Check total pixels
+            width = layer.width()
+            height = layer.height()
+            total_pixels = width * height
+            
+            # Threshold: 10 million pixels
+            LARGE_RASTER_THRESHOLD = 10_000_000
+            
+            if total_pixels > LARGE_RASTER_THRESHOLD:
+                logger.debug(f"v5.0: Raster {layer.name()} has {total_pixels:,} pixels (threshold: {LARGE_RASTER_THRESHOLD:,})")
+                return True
+            
+            # Check if VRT (Virtual Raster) - often composed of many tiles
+            source = layer.source()
+            if source.lower().endswith('.vrt'):
+                logger.debug(f"v5.0: Raster {layer.name()} is a VRT")
+                return True
+            
+            # Check provider type
+            provider = layer.dataProvider()
+            if provider:
+                provider_name = provider.name().lower()
+                if 'vrt' in provider_name or 'virtual' in provider_name:
+                    logger.debug(f"v5.0: Raster {layer.name()} uses VRT provider")
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            logger.warning(f"v5.0: Error checking raster size: {e}")
+            return True  # Assume large on error to be safe
+    
+    def _show_large_raster_placeholder(self, layer):
+        """v5.0: Show placeholder for large rasters instead of computing stats.
+        
+        Displays a message indicating the user should click Refresh to compute
+        statistics for large rasters.
+        
+        Args:
+            layer: The large raster layer
+        """
+        try:
+            # Clear current stats display
+            self._clear_raster_statistics_display()
+            
+            # Update labels to show placeholder
+            if hasattr(self, 'label_stat_min'):
+                self.label_stat_min.setText("--")
+            if hasattr(self, 'label_stat_max'):
+                self.label_stat_max.setText("--")
+            if hasattr(self, 'label_stat_mean'):
+                self.label_stat_mean.setText("--")
+            if hasattr(self, 'label_stat_stddev'):
+                self.label_stat_stddev.setText("--")
+            if hasattr(self, 'label_stat_nodata'):
+                self.label_stat_nodata.setText("--")
+            
+            # Set tooltip with info
+            width = layer.width()
+            height = layer.height()
+            total_pixels = width * height
+            
+            tooltip = (f"Large raster: {width:,} x {height:,} = {total_pixels:,} pixels\n"
+                      f"Click 'Refresh' to compute statistics (may take time)")
+            
+            if hasattr(self, 'groupBox_statistics'):
+                self.groupBox_statistics.setToolTip(tooltip)
+            
+            logger.info(f"v5.0: Showing placeholder for large raster '{layer.name()}'")
+            
+        except Exception as e:
+            logger.warning(f"v5.0: Error showing large raster placeholder: {e}")
+    
+    def _update_raster_histogram(self, layer):
+        """Note: Update the interactive histogram widget with the current raster layer.
+        
+        Args:
+            layer: QgsRasterLayer to display histogram for
+        """
+        if not hasattr(self, '_raster_histogram') or self._raster_histogram is None:
+            return
+        
+        try:
+            from qgis.core import QgsRasterLayer
+            
+            if not layer or not isinstance(layer, QgsRasterLayer):
+                return
+            
+            # Get current band index
+            band_index = 1
+            if hasattr(self, 'comboBox_band'):
+                band_index = self.comboBox_band.currentIndex() + 1
+                if band_index < 1:
+                    band_index = 1
+            
+            # Update histogram
+            self._raster_histogram.set_layer(layer, band_index)
+            logger.debug(f"Note: Histogram updated for band {band_index}")
+            
+        except Exception as e:
+            logger.error(f"Note: Failed to update histogram: {e}")
+
+    def _connect_toolbox_bridge_signals(self):
+        """Note: Connect the ToolBoxIntegrationBridge signals to dockwidget handlers."""
+        if not self._toolbox_bridge:
+            return
+        
+        try:
+            # Filter requests
+            self._toolbox_bridge.vectorFilterRequested.connect(self._on_toolbox_vector_filter_requested)
+            self._toolbox_bridge.rasterFilterRequested.connect(self._on_toolbox_raster_filter_requested)
+            
+            # Undo/Redo/Reset
+            self._toolbox_bridge.undoRequested.connect(self._on_toolbox_undo_requested)
+            self._toolbox_bridge.redoRequested.connect(self._on_toolbox_redo_requested)
+            self._toolbox_bridge.resetAllFiltersRequested.connect(self._on_toolbox_reset_all_filters)
+            
+            # Export
+            self._toolbox_bridge.exportRequested.connect(self._on_toolbox_export_requested)
+            
+            # Config
+            self._toolbox_bridge.configChanged.connect(self._on_toolbox_config_changed)
+            
+            # Layer switch
+            self._toolbox_bridge.layerSwitched.connect(self._on_toolbox_layer_type_switched)
+            
+            logger.debug("Note: ToolBox bridge signals connected")
+            
+        except Exception as e:
+            logger.error(f"Failed to connect toolbox bridge signals: {e}")
+    
+    def _on_toolbox_vector_filter_requested(self, info: dict):
+        """v5.0 EPIC-6: Handle vector filter request with multi-target operation dispatch.
+        
+        Dispatches filtering operations based on target layer types:
+        - Vector targets: Use legacy filter pipeline (spatial filter)
+        - Raster targets: Use RasterFilterService for Clip/Mask/Zonal operations
+        
+        Args:
+            info: Dict with:
+                - source_layer: The source vector layer
+                - selection: Selection info dict
+                - targets: List of (layer_id, operation) tuples from FilteringPage
+                - raster_options: Dict with raster operation settings (EPIC-6)
+        """
+        logger.info(f"EPIC-6 Vector filter dispatch: {info}")
+        
+        source_layer = info.get('source_layer')
+        targets = info.get('targets', [])  # [(layer_id, operation), ...]
+        raster_options = info.get('raster_options', {})  # EPIC-6
+        
+        if not source_layer:
+            logger.warning("No source layer provided")
+            return
+        
+        # Separate targets by type
+        vector_targets = []
+        raster_targets = []
+        
+        for target_id, operation in targets:
+            target = QgsProject.instance().mapLayer(target_id)
+            if not target:
+                continue
+            
+            if isinstance(target, QgsVectorLayer):
+                vector_targets.append((target, operation))
+            elif isinstance(target, QgsRasterLayer):
+                raster_targets.append((target, operation))
+        
+        logger.debug(f"Dispatch: {len(vector_targets)} vector, {len(raster_targets)} raster targets")
+        
+        # === VECTOR TARGETS: Sync to legacy and use filter pipeline ===
+        if vector_targets:
+            self._dispatch_vector_filter(source_layer, vector_targets)
+        
+        # === RASTER TARGETS: Use RasterFilterService with options ===
+        if raster_targets:
+            self._dispatch_raster_operations(source_layer, raster_targets, raster_options)
+        
+        # Update FilteringPage status
+        self._update_filtering_page_status(targets)
+    
+    def _dispatch_vector_filter(self, source_layer, vector_targets: list):
+        """v5.0: Dispatch vector-to-vector filtering via legacy pipeline.
+        
+        Args:
+            source_layer: Source vector layer
+            vector_targets: List of (layer, operation) tuples
+        """
+        # Sync to legacy widget
+        if hasattr(self, 'checkableComboBoxLayer_filtering_layers_to_filter'):
+            try:
+                widget = self.checkableComboBoxLayer_filtering_layers_to_filter
+                target_ids = [layer.id() for layer, _ in vector_targets]
+                
+                for i in range(widget.count()):
+                    item_data = widget.itemData(i, Qt.UserRole)
+                    layer_id = item_data.get('layer_id') if isinstance(item_data, dict) else item_data
+                    
+                    if layer_id in target_ids:
+                        widget.setItemCheckState(i, Qt.Checked)
+                
+                logger.debug(f"Synced {len(target_ids)} vector targets to legacy widget")
+            except Exception as e:
+                logger.warning(f"Failed to sync vector targets: {e}")
+        
+        # Trigger legacy filter
+        self.launchingTask.emit('filter')
+    
+    def _dispatch_raster_operations(self, source_layer, raster_targets: list, options: dict = None):
+        """v5.0 EPIC-6: Dispatch vector-to-raster operations (Clip/Mask/Zonal).
+        
+        Args:
+            source_layer: Source vector layer with geometry
+            raster_targets: List of (layer, operation) tuples
+            options: Dict with raster operation settings (nodata, compression, etc.)
+        """
+        options = options or {}
+        
+        try:
+            from core.services.raster_filter_service import (
+                RasterFilterService, VectorFilterRequest, RasterOperation
+            )
+            
+            service = RasterFilterService()
+            
+            # Operation mapping
+            op_map = {
+                'Clip': RasterOperation.CLIP,
+                'Mask Outside': RasterOperation.MASK_OUTSIDE,
+                'Mask Inside': RasterOperation.MASK_INSIDE,
+                'Zonal Stats': RasterOperation.ZONAL_STATS,
+            }
+            
+            for raster_layer, operation in raster_targets:
+                if operation == 'Skip':
+                    continue
+                
+                raster_op = op_map.get(operation, RasterOperation.CLIP)
+                
+                request = VectorFilterRequest(
+                    vector_layer=source_layer,
+                    raster_layer=raster_layer,
+                    operation=raster_op,
+                    use_selected_only=True,
+                    nodata_value=options.get('nodata_value', -9999),
+                    output_to_memory=options.get('output_to_memory', True),
+                )
+                
+                logger.info(f"EPIC-6: {operation} on {raster_layer.name()} with options {options}")
+                
+                result = service.apply_vector_to_raster(request)
+                
+                if result.success:
+                    # Add output layer to project if requested
+                    if result.output_layer and options.get('add_to_project', True):
+                        QgsProject.instance().addMapLayer(result.output_layer)
+                    
+                    from qgis.utils import iface
+                    iface.messageBar().pushSuccess(
+                        "FilterMate",
+                        f"{operation}: {raster_layer.name()} ✓"
+                    )
+                else:
+                    from qgis.utils import iface
+                    iface.messageBar().pushWarning(
+                        "FilterMate",
+                        f"{operation} failed on {raster_layer.name()}: {result.error_message}"
+                    )
+                    
+        except ImportError as e:
+            logger.error(f"RasterFilterService not available: {e}")
+        except Exception as e:
+            logger.error(f"Raster operation failed: {e}", exc_info=True)
+    
+    def _update_filtering_page_status(self, targets: list):
+        """v5.0: Update FilteringPage target status after operations.
+        
+        Args:
+            targets: List of (layer_id, operation) tuples
+        """
+        if not DUAL_TOOLBOX_ENABLED or not self._dual_toolbox_container:
+            return
+        
+        try:
+            toolset = self._dual_toolbox_container.get_toolset_toolbox()
+            if not toolset:
+                return
+            
+            filtering_page = toolset.get_filtering_page()
+            if not filtering_page:
+                return
+            
+            for layer_id, operation in targets:
+                layer = QgsProject.instance().mapLayer(layer_id)
+                if not layer:
+                    continue
+                
+                if isinstance(layer, QgsVectorLayer):
+                    subset = layer.subsetString()
+                    if subset:
+                        count = layer.featureCount()
+                        filtering_page.update_target_status(layer_id, f"{count} feat", "green")
+                    else:
+                        filtering_page.update_target_status(layer_id, "No filter", "gray")
+                elif isinstance(layer, QgsRasterLayer):
+                    filtering_page.update_target_status(layer_id, f"{operation} ✓", "green")
+                    
+        except Exception as e:
+            logger.warning(f"Failed to update filtering page status: {e}")
+    
+    def _on_toolbox_raster_filter_requested(self, info: dict):
+        """Note: Handle raster filter request from new QToolBox.
+        
+        Supports bidirectional filtering:
+        - Raster → Vector: Filter vector features by raster values
+        - Vector → Raster: Clip/Mask raster by vector geometries
+        
+        Args:
+            info: Dict with operation details:
+                - operation: 'raster_to_vector' or 'vector_to_raster'
+                - source_layer: Source layer
+                - target_layers: List of target layers
+                - raster_params: {band, min, max, predicate, sampling_method}
+                - vector_params: {operation, feature_ids}
+        """
+        logger.info(f"Note Raster filter requested: {info}")
+        
+        try:
+            from core.services.raster_filter_service import (
+                get_raster_filter_service,
+                RasterFilterRequest,
+                VectorFilterRequest,
+                RasterPredicate,
+                SamplingMethod,
+                RasterOperation
+            )
+            from qgis.core import QgsRasterLayer, QgsVectorLayer
+            
+            service = get_raster_filter_service()
+            operation = info.get('operation', 'raster_to_vector')
+            
+            if operation == 'raster_to_vector':
+                # Raster → Vector filtering
+                raster_layer = info.get('source_layer')
+                target_layers = info.get('target_layers', [])
+                params = info.get('raster_params', {})
+                
+                if not raster_layer or not isinstance(raster_layer, QgsRasterLayer):
+                    show_warning("FilterMate", "Please select a raster layer as source")
+                    return
+                
+                # Build request
+                predicate_map = {
+                    'within_range': RasterPredicate.WITHIN_RANGE,
+                    'outside_range': RasterPredicate.OUTSIDE_RANGE,
+                    'above_value': RasterPredicate.ABOVE_VALUE,
+                    'below_value': RasterPredicate.BELOW_VALUE,
+                    'equals_value': RasterPredicate.EQUALS_VALUE,
+                    'is_nodata': RasterPredicate.IS_NODATA,
+                    'is_not_nodata': RasterPredicate.IS_NOT_NODATA,
+                }
+                
+                sampling_map = {
+                    'centroid': SamplingMethod.CENTROID,
+                    'all_vertices': SamplingMethod.ALL_VERTICES,
+                    'zonal_mean': SamplingMethod.ZONAL_MEAN,
+                    'zonal_max': SamplingMethod.ZONAL_MAX,
+                    'zonal_min': SamplingMethod.ZONAL_MIN,
+                }
+                
+                # Filter each vector target
+                for target in target_layers:
+                    if not isinstance(target, QgsVectorLayer):
+                        continue
+                    
+                    request = RasterFilterRequest(
+                        raster_layer=raster_layer,
+                        vector_layer=target,
+                        band_index=params.get('band', 1),
+                        min_value=params.get('min', 0.0),
+                        max_value=params.get('max', 0.0),
+                        predicate=predicate_map.get(params.get('predicate', 'within_range'), RasterPredicate.WITHIN_RANGE),
+                        sampling_method=sampling_map.get(params.get('sampling_method', 'centroid'), SamplingMethod.CENTROID)
+                    )
+                    
+                    result = service.filter_vector_by_raster(request)
+                    
+                    if result.success:
+                        # Apply filter expression to layer
+                        target.setSubsetString(result.expression)
+                        show_success("FilterMate", f"Filtered {result.matching_count}/{result.total_features} features in {target.name()}")
+                    else:
+                        show_warning("FilterMate", f"Filter failed for {target.name()}: {result.error_message}")
+            
+            elif operation == 'vector_to_raster':
+                # Vector → Raster (Clip/Mask)
+                vector_layer = info.get('source_layer')
+                target_layers = info.get('target_layers', [])
+                params = info.get('vector_params', {})
+                
+                if not vector_layer or not isinstance(vector_layer, QgsVectorLayer):
+                    show_warning("FilterMate", "Please select a vector layer as source")
+                    return
+                
+                op_map = {
+                    'clip': RasterOperation.CLIP,
+                    'mask_outside': RasterOperation.MASK_OUTSIDE,
+                    'mask_inside': RasterOperation.MASK_INSIDE,
+                    'zonal_stats': RasterOperation.ZONAL_STATS,
+                }
+                
+                for target in target_layers:
+                    if not isinstance(target, QgsRasterLayer):
+                        continue
+                    
+                    op_name = params.get('operation', 'clip')
+                    request = VectorFilterRequest(
+                        vector_layer=vector_layer,
+                        raster_layer=target,
+                        operation=op_map.get(op_name, RasterOperation.CLIP),
+                        feature_ids=params.get('feature_ids'),
+                        use_selected_only=params.get('use_selected', True)
+                    )
+                    
+                    result = service.apply_vector_to_raster(request)
+                    
+                    if result.success:
+                        # Add output layer to project
+                        if result.output_layer:
+                            from qgis.core import QgsProject
+                            QgsProject.instance().addMapLayer(result.output_layer)
+                        show_success("FilterMate", f"{op_name.title()} completed for {target.name()}")
+                    else:
+                        show_warning("FilterMate", f"{op_name.title()} failed: {result.error_message}")
+            
+            else:
+                show_warning("FilterMate", f"Unknown operation: {operation}")
+                
+        except ImportError as e:
+            logger.error(f"Failed to import raster filter service: {e}")
+            show_warning("FilterMate", "Raster filtering service not available")
+        except Exception as e:
+            logger.error(f"Raster filter failed: {e}", exc_info=True)
+            show_warning("FilterMate", f"Raster filter error: {str(e)}")
+    
+    def _on_toolbox_undo_requested(self):
+        """Note: Handle undo request from new QToolBox."""
+        if hasattr(self, 'pushButton_action_undo_filter'):
+            self.pushButton_action_undo_filter.click()
+    
+    def _on_toolbox_redo_requested(self):
+        """Note: Handle redo request from new QToolBox."""
+        if hasattr(self, 'pushButton_action_redo_filter'):
+            self.pushButton_action_redo_filter.click()
+    
+    def _on_toolbox_reset_all_filters(self):
+        """Note: Handle reset all filters from new QToolBox."""
+        if hasattr(self, 'pushButton_action_unfilter'):
+            self.pushButton_action_unfilter.click()
+    
+    def _on_toolbox_export_requested(self, settings: dict):
+        """v5.0: Handle export request from new QToolBox.
+        
+        Syncs v5.0 ExportingPage selection to legacy checkableComboBoxLayer_exporting_layers,
+        then delegates to the existing export pipeline via launchingTask signal.
+        This preserves all existing export features (formats, styles, projections, etc.).
+        
+        Args:
+            settings: Export settings dict from ExportingPage.get_export_settings()
+        """
+        logger.info(f"v5.0 Export requested with settings: {settings}")
+        
+        # Sync v5.0 layer selection to legacy widget
+        if self._dual_toolbox_container:
+            toolset = self._dual_toolbox_container.get_toolset_toolbox()
+            if toolset:
+                export_page = toolset.get_exporting_page()
+                if export_page:
+                    layers_to_export = export_page.get_selected_export_layers()
+                    self._sync_v5_export_selection_to_legacy(layers_to_export)
+        
+        # Delegate to legacy export pipeline
+        self.launchingTask.emit('export')
+    
+    def _sync_v5_export_selection_to_legacy(self, layer_ids: list):
+        """v5.0: Sync ExportingPage layer selection to legacy checkableComboBoxLayer.
+        
+        Args:
+            layer_ids: List of layer IDs selected in v5.0 ExportingPage
+        """
+        try:
+            if not hasattr(self, 'checkableComboBoxLayer_exporting_layers'):
+                logger.warning("v5.0: Legacy export widget not found")
+                return
+            
+            # Convert layer IDs to layer names
+            layer_names = []
+            for layer_id in layer_ids:
+                layer = QgsProject.instance().mapLayer(layer_id)
+                if layer:
+                    layer_names.append(layer.name())
+            
+            # Sync to legacy widget
+            self.checkableComboBoxLayer_exporting_layers.deselect_all()
+            if layer_names:
+                self.checkableComboBoxLayer_exporting_layers.setCheckedItems(layer_names)
+                logger.debug(f"v5.0→Legacy: Set export layers to {layer_names}")
+            
+        except Exception as e:
+            logger.warning(f"v5.0: Failed to sync export selection: {e}")
+    
+    def _export_raster_layer(self, layer: QgsRasterLayer, settings: dict):
+        """Note: Export a single raster layer.
+        
+        Args:
+            layer: Raster layer to export
+            settings: Export settings
+        """
+        try:
+            from core.export import (
+                RasterExporter, RasterExportConfig, RasterExportFormat, CompressionType
+            )
+            
+            format_str = settings.get('format', 'GeoTIFF (.tif)')
+            output_dir = settings.get('output_dir', '')
+            raster_opts = settings.get('raster', {})
+            
+            # Determine format
+            if 'COG' in format_str:
+                export_format = RasterExportFormat.COG
+            else:
+                export_format = RasterExportFormat.GEOTIFF
+            
+            # Build output path
+            filename = f"{layer.name()}.tif"
+            output_path = os.path.join(output_dir, filename)
+            
+            # Get compression
+            compression_str = raster_opts.get('compression', 'LZW').upper()
+            try:
+                compression = CompressionType[compression_str]
+            except KeyError:
+                compression = CompressionType.LZW
+            
+            # Create config
+            config = RasterExportConfig(
+                layer=layer,
+                output_path=output_path,
+                format=export_format,
+                compression=compression,
+                create_pyramids=raster_opts.get('create_pyramids', False),
+                include_world_file=raster_opts.get('include_world', False)
+            )
+            
+            # Add mask if clip_extent and we have a current vector selection
+            if raster_opts.get('clip_extent', False):
+                current_layer = self._get_current_exploring_layer()
+                if isinstance(current_layer, QgsVectorLayer):
+                    config.mask_layer = current_layer
+            
+            # Export
+            exporter = RasterExporter()
+            exporter.progressChanged.connect(self._on_export_progress)
+            result = exporter.export(config)
+            
+            from qgis.utils import iface
+            if result.success:
+                iface.messageBar().pushSuccess(
+                    "FilterMate", 
+                    f"Raster exported: {result.output_path} ({result.output_size_mb:.1f} MB)"
+                )
+            else:
+                iface.messageBar().pushCritical(
+                    "FilterMate",
+                    f"Export failed: {result.error_message}"
+                )
+                
+        except ImportError as e:
+            logger.error(f"Failed to import raster exporter: {e}")
+        except Exception as e:
+            logger.exception(f"Raster export error: {e}")
+    
+    def _export_vector_layer(self, layer: QgsVectorLayer, settings: dict):
+        """Note: Export a single vector layer.
+        
+        Args:
+            layer: Vector layer to export
+            settings: Export settings
+        """
+        try:
+            from core.export import LayerExporter, ExportConfig
+            
+            format_str = settings.get('format', 'GeoPackage (.gpkg)')
+            output_dir = settings.get('output_dir', '')
+            vector_opts = settings.get('vector', {})
+            
+            # Map format string to driver
+            format_map = {
+                'GeoPackage (.gpkg)': 'GPKG',
+                'Shapefile (.shp)': 'ESRI Shapefile',
+                'GeoJSON (.geojson)': 'GeoJSON',
+                'KML (.kml)': 'KML',
+                'CSV (.csv)': 'CSV'
+            }
+            
+            ext_map = {
+                'GPKG': '.gpkg',
+                'ESRI Shapefile': '.shp',
+                'GeoJSON': '.geojson',
+                'KML': '.kml',
+                'CSV': '.csv'
+            }
+            
+            driver = format_map.get(format_str, 'GPKG')
+            ext = ext_map.get(driver, '.gpkg')
+            
+            # Build output path
+            filename = f"{layer.name()}{ext}"
+            output_path = os.path.join(output_dir, filename)
+            
+            # Create export config
+            config = ExportConfig(
+                layers=[layer.name()],
+                output_path=output_path,
+                datatype=driver,
+                save_styles=vector_opts.get('include_styles', False)
+            )
+            
+            # Export using existing LayerExporter
+            exporter = LayerExporter()
+            result = exporter.export_layer(layer, output_path, driver)
+            
+            from qgis.utils import iface
+            if result.success:
+                iface.messageBar().pushSuccess("FilterMate", f"Vector exported: {output_path}")
+            else:
+                iface.messageBar().pushCritical("FilterMate", f"Export failed: {result.error_message}")
+                
+        except ImportError as e:
+            logger.error(f"Failed to import layer exporter: {e}")
+        except Exception as e:
+            logger.exception(f"Vector export error: {e}")
+    
+    def _on_export_progress(self, progress: int):
+        """Handle export progress update."""
+        # TODO: Update progress bar if available
+        logger.debug(f"Export progress: {progress}%")
+    
+    def _on_toolbox_config_changed(self, key: str, value):
+        """Note: Handle config change from new QToolBox.
+        
+        Saves configuration changes to config.json when user modifies settings
+        in the ConfigurationPage.
+        
+        Args:
+            key: Config key or special command ('__save__', '__reset__')
+            value: New value for the setting
+        """
+        logger.debug(f"Dual QToolBox Config changed: {key} = {value}")
+        
+        if key == '__save__':
+            # Save all config - already handled by individual changes
+            from qgis.utils import iface
+            iface.messageBar().pushSuccess("FilterMate", "Configuration saved successfully")
+            
+        elif key == '__reset__':
+            # Reset to defaults
+            from .config.config import reset_config_to_defaults
+            try:
+                reset_config_to_defaults()
+                # Reload config into UI
+                self._load_config_into_toolbox()
+                from qgis.utils import iface
+                iface.messageBar().pushInfo("FilterMate", "Configuration reset to defaults")
+            except Exception as e:
+                logger.error(f"Failed to reset config: {e}")
+                from qgis.utils import iface
+                iface.messageBar().pushCritical("FilterMate", f"Reset failed: {e}")
+        else:
+            # Individual setting - save to config.json
+            success = save_config_value(key, value)
+            if not success:
+                logger.warning(f"Failed to save config: {key} = {value}")
+    
+    def _on_toolbox_layer_type_switched(self, layer_type: str):
+        """Note: Handle layer type switch (vector/raster) from new QToolBox."""
+        logger.debug(f"Dual QToolBox Layer type switched to: {layer_type}")
+    
+    def _load_config_into_toolbox(self):
+        """Load current configuration values into the TOOLSET QToolBox ConfigurationPage.
+        
+        Called on startup and after config reset to sync UI with config.json.
+        """
+        if not DUAL_TOOLBOX_ENABLED or not self._dual_toolbox_container:
+            return
+        
+        try:
+            toolset_tb = self._dual_toolbox_container.get_toolset_toolbox()
+            if not toolset_tb:
+                return
+            
+            config_page = toolset_tb.get_page_by_name("configuration")
+            if not config_page:
+                return
+            
+            # Load all config values into UI widgets
+            config_keys = [
+                'auto_activate', 'remember_filters', 'auto_switch_exploring',
+                'show_advanced', 'experimental', 'default_backend',
+                'raster_sampling', 'raster_clip_op', 'use_pyramids', 'cache_histogram',
+                'ui_profile', 'theme'
+            ]
+            
+            for key in config_keys:
+                value = get_config_value(key)
+                if value is not None:
+                    config_page.set_config_value(key, value)
+            
+            logger.debug("ConfigurationPage loaded from config.json")
+            
+        except Exception as e:
+            logger.error(f"Failed to load config into toolbox: {e}")
+    
+    def _sync_toolbox_exploring_with_layer(self, layer):
+        """Note: Synchronize the new EXPLORING QToolBox with the current layer.
+        
+        Updates field combos and value lists when the current layer changes.
+        
+        Args:
+            layer: QgsVectorLayer or QgsRasterLayer to sync with
+        """
+        if not DUAL_TOOLBOX_ENABLED or not self._dual_toolbox_container:
+            return
+        
+        try:
+            exploring_tb = self._dual_toolbox_container.get_exploring_toolbox()
+            if not exploring_tb:
+                return
+            
+            if isinstance(layer, QgsVectorLayer):
+                # Get the vector exploring page
+                vector_page = exploring_tb.get_page_by_name("vector")
+                if vector_page:
+                    vector_page.set_layer(layer)
+                    logger.debug(f"Note: Synced vector exploring page with layer '{layer.name()}'")
+                    
+                    # Connect signals from vector page to existing filter logic
+                    try:
+                        vector_page.filterRequested.disconnect()
+                    except (TypeError, RuntimeError):
+                        pass
+                    vector_page.filterRequested.connect(self._on_toolbox_vector_page_filter)
+                    
+            elif isinstance(layer, QgsRasterLayer):
+                # Get the raster exploring page
+                raster_page = exploring_tb.get_page_by_name("raster")
+                if raster_page:
+                    raster_page.set_layer(layer)
+                    logger.debug(f"Note: Synced raster exploring page with layer '{layer.name()}'")
+                
+                # v5.2 FIX 2026-01-31: Don't call _sync_native_raster_widgets_with_layer here
+                # It will be called by _auto_switch_exploring_page to avoid double execution
+                # which causes QGIS freeze due to redundant stats/histogram computation
+                    
+        except Exception as e:
+            logger.error(f"Note: Failed to sync exploring with layer: {e}")
+    
+    def _on_toolbox_vector_page_filter(self):
+        """Note: Handle filter request from Vector Exploring Page.
+        
+        v5.0: Enhanced to sync with legacy system and use existing filter engine.
+        Instead of directly applying setSubsetString, we sync the selection to
+        the native exploring widgets and trigger the full filter pipeline.
+        """
+        if not self._dual_toolbox_container:
+            return
+        
+        try:
+            exploring_tb = self._dual_toolbox_container.get_exploring_toolbox()
+            if not exploring_tb:
+                return
+                
+            vector_page = exploring_tb.get_page_by_name("vector")
+            if not vector_page:
+                return
+            
+            # Get filter parameters from the v5.0 widget
+            filter_info = vector_page.get_current_filter()
+            
+            if filter_info['type'] == 'single' and filter_info['field'] and filter_info['value']:
+                field = filter_info['field']
+                value = filter_info['value']
+                
+                # v5.0: Sync to legacy widgets to use existing filter engine
+                # This ensures undo/redo, distant layers filtering, and other features work
+                self._sync_v5_selection_to_native_widgets(field, value)
+                
+                # Trigger filter using existing pipeline
+                self.launchingTask.emit('filter')
+                
+                # Update result indicator in v5.0 page
+                if self.current_layer:
+                    total = self.current_layer.featureCount()
+                    vector_page.update_result(total, total)
+            else:
+                show_warning("FilterMate", "Please select a field and value to filter")
+                
+        except Exception as e:
+            logger.error(f"Note: Error applying filter from vector page: {e}")
+            show_warning("FilterMate", f"Filter error: {str(e)}")
+    
+    def _sync_v5_selection_to_native_widgets(self, field: str, value: str):
+        """v5.0: Sync selection from VectorExploringPage to native legacy widgets.
+        
+        This allows the v5.0 interface to use the existing filter engine which
+        provides undo/redo, distant layers filtering, and other advanced features.
+        
+        Args:
+            field: Field name selected in v5.0 page
+            value: Value selected in v5.0 page
+        """
+        from qgis.core import QgsFeatureRequest
+        
+        try:
+            # Sync to mFieldExpressionWidget_exploring_single_selection
+            if hasattr(self, 'mFieldExpressionWidget_exploring_single_selection'):
+                self.mFieldExpressionWidget_exploring_single_selection.setField(field)
+                logger.debug(f"v5.0→Legacy: Set field to '{field}'")
+            
+            # Sync to mFeaturePickerWidget_exploring_single_selection
+            if hasattr(self, 'mFeaturePickerWidget_exploring_single_selection') and self.current_layer:
+                # Find feature matching the value
+                field_idx = self.current_layer.fields().indexOf(field)
+                if field_idx >= 0:
+                    # Build expression to find matching feature
+                    expr = f'"{field}" = \'{value}\''
+                    request = QgsFeatureRequest().setFilterExpression(expr).setLimit(1)
+                    
+                    for feat in self.current_layer.getFeatures(request):
+                        self.mFeaturePickerWidget_exploring_single_selection.setFeature(feat.id())
+                        logger.debug(f"v5.0→Legacy: Set feature ID to {feat.id()}")
+                        break
+            
+            # Update PROJECT_LAYERS with the selection
+            if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
+                layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+                if 'exploring' in layer_props:
+                    layer_props['exploring']['single_selection_expression'] = field
+                    logger.debug(f"v5.0→Legacy: Updated PROJECT_LAYERS exploring expression")
+                    
+        except Exception as e:
+            logger.warning(f"v5.0: Failed to sync selection to native widgets: {e}")
+    
+    @property
+    def dual_toolbox(self):
+        """Note: Access to the DualToolBoxContainer (if enabled)."""
+        return self._dual_toolbox_container
+    
+    @property
+    def toolbox_bridge(self):
+        """Note: Access to the ToolBoxIntegrationBridge (if enabled)."""
+        return self._toolbox_bridge
 
     def _setup_main_splitter(self):
         """v4.0 S16: Setup splitter."""
@@ -908,7 +2855,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         This function is kept for backward compatibility but does nothing.
         QSS rules override any Python-side dimension settings.
         
-        TODO v5.0: Remove this function entirely.
+        TODO Note: Remove this function entirely.
         """
         # Widget dimensions managed by QSS - no Python intervention needed
         logger.debug("Widget dimensions managed by QSS (20px standard)")
@@ -1096,7 +3043,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Only QgsPropertyOverrideButton still needs Python sizing (22px fixed).
         All other QGIS widgets inherit 20px height from QSS rules.
         
-        TODO v5.0: Extract QgsPropertyOverrideButton sizing to separate function.
+        TODO Note: Extract QgsPropertyOverrideButton sizing to separate function.
         """
         try:
             from qgis.PyQt.QtWidgets import QSizePolicy
@@ -1207,6 +3154,98 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         hl.addWidget(self.backend_indicator_label)
         self.forced_backends = {}
         if hasattr(self,'verticalLayout_8'): self.verticalLayout_8.insertWidget(0,self.frame_header)
+        
+        # v5.0: Setup global progress bar
+        self._setup_global_progress_bar()
+    
+    def _setup_global_progress_bar(self):
+        """v5.0: Setup a global progress bar for long operations."""
+        self._global_progress = QtWidgets.QProgressBar(self.dockWidgetContents)
+        self._global_progress.setObjectName("globalProgressBar")
+        self._global_progress.setMinimum(0)
+        self._global_progress.setMaximum(100)
+        self._global_progress.setValue(0)
+        self._global_progress.setTextVisible(True)
+        self._global_progress.setFormat("%p%")
+        self._global_progress.setFixedHeight(16)
+        self._global_progress.setVisible(False)
+        
+        # Style
+        self._global_progress.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                background: #f0f0f0;
+                text-align: center;
+                font-size: 9px;
+            }
+            QProgressBar::chunk {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #3498db, stop:1 #2980b9);
+                border-radius: 3px;
+            }
+        """)
+        
+        # Insert after header (before frame_exploring)
+        if hasattr(self, 'verticalLayout_8'):
+            self.verticalLayout_8.insertWidget(1, self._global_progress)
+        
+        logger.debug("Global progress bar initialized")
+    
+    def show_progress(self, value: int, message: str = "", operation: str = ""):
+        """Show the global progress bar with value and optional message.
+        
+        Args:
+            value: Progress value (0-100), -1 to hide
+            message: Optional message to show in the progress bar
+            operation: Optional operation name for logging
+        """
+        if not hasattr(self, '_global_progress') or not self._global_progress:
+            return
+        
+        if value < 0:
+            # Hide progress bar
+            self._global_progress.setVisible(False)
+            self._global_progress.setValue(0)
+            if operation:
+                logger.debug(f"Operation completed: {operation}")
+        else:
+            # Show progress bar with value
+            self._global_progress.setVisible(True)
+            self._global_progress.setValue(min(100, max(0, value)))
+            
+            if message:
+                self._global_progress.setFormat(f"{message} - %p%")
+            else:
+                self._global_progress.setFormat("%p%")
+            
+            if operation and value == 0:
+                logger.debug(f"Operation started: {operation}")
+    
+    def pulse_progress(self, message: str = "Processing..."):
+        """Show an indeterminate progress bar (pulse/marquee style).
+        
+        Args:
+            message: Message to show
+        """
+        if not hasattr(self, '_global_progress') or not self._global_progress:
+            return
+        
+        self._global_progress.setVisible(True)
+        self._global_progress.setMinimum(0)
+        self._global_progress.setMaximum(0)  # Indeterminate mode
+        self._global_progress.setFormat(message)
+    
+    def hide_progress(self):
+        """Hide the global progress bar and reset to determinate mode."""
+        if not hasattr(self, '_global_progress') or not self._global_progress:
+            return
+        
+        self._global_progress.setVisible(False)
+        self._global_progress.setMinimum(0)
+        self._global_progress.setMaximum(100)
+        self._global_progress.setValue(0)
+        self._global_progress.setFormat("%p%")
     
     def _create_indicator_label(self, name, text, style, hover_style, tooltip, click_handler, min_width):
         """v4.0 S16: Create indicator label with soft "mousse" style."""
@@ -1572,7 +3611,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 S16: → ActionBarManager."""
         if self._action_bar_manager: self._action_bar_manager.set_position(position); self._action_bar_manager.apply_position()
 
-    # v5.0: ActionBar wrapper methods removed - use self._action_bar_manager directly
+    # Note: ActionBar wrapper methods removed - use self._action_bar_manager directly
     # Removed: _adjust_header_for_side_position, _restore_header_from_wrapper, _clear_action_bar_layout,
     # _create_horizontal_action_layout, _create_vertical_action_layout, _apply_action_bar_size_constraints,
     # _reposition_action_bar_in_main_layout, _create_horizontal_wrapper_for_side_action_bar,
@@ -2059,17 +4098,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # restore the state at startup based on saved project settings
         try:
             auto_current_layer_enabled = self.project_props.get("OPTIONS", {}).get("LAYERS", {}).get("LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG", False)
+            print(f"🔧🔧🔧 LAYER_TREE_VIEW: auto_current_layer_enabled={auto_current_layer_enabled}")
             if auto_current_layer_enabled:
                 # Clear cache for LAYER_TREE_VIEW as well
                 cache_key = "QGIS.LAYER_TREE_VIEW.currentLayerChanged"
                 if cache_key in self._signal_connection_states:
                     del self._signal_connection_states[cache_key]
                 
-                self.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect', 'currentLayerChanged')
+                result = self.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect', 'currentLayerChanged')
+                print(f"🔧🔧🔧 LAYER_TREE_VIEW: signal connected={result}, flag={self._layer_tree_view_signal_connected}")
                 logger.debug("✓ Connected QGIS.LAYER_TREE_VIEW.currentLayerChanged signal (AUTO_CURRENT_LAYER enabled)")
             else:
+                print(f"🔧🔧🔧 LAYER_TREE_VIEW: NOT connected (AUTO_CURRENT_LAYER disabled)")
                 logger.debug("QGIS.LAYER_TREE_VIEW signal not connected (AUTO_CURRENT_LAYER disabled)")
         except Exception as e:
+            print(f"🔧🔧🔧 LAYER_TREE_VIEW ERROR: {e}")
             logger.warning(f"Could not check/connect LAYER_TREE_VIEW signal: {e}")
 
     def _on_combo_layer_changed(self, layer):
@@ -2448,6 +4491,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             'GeometryType.UnknownGeometry': QgsLayerItem.iconTable,
             'GeometryType.Null': QgsLayerItem.iconTable,
             'GeometryType.Unknown': QgsLayerItem.iconDefault,
+            'GeometryType.Raster': QgsLayerItem.iconRaster,  # v5.1: Raster support
             # Short format 
             'Line': QgsLayerItem.iconLine,
             'Point': QgsLayerItem.iconPoint,
@@ -2455,6 +4499,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             'Unknown': QgsLayerItem.iconTable,
             'Null': QgsLayerItem.iconTable,
             'NoGeometry': QgsLayerItem.iconTable,
+            'Raster': QgsLayerItem.iconRaster,  # v5.1: Raster support
             # New format from infrastructure/utils geometry_type_to_string
             'LineString': QgsLayerItem.iconLine,
             'MultiPoint': QgsLayerItem.iconPoint,
@@ -2722,11 +4767,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         This is a fallback method that populates the combobox directly,
         bypassing the controller integration which may not be initialized.
         
+        v5.1: Support both vector and raster layers.
+        
         Returns:
             True if population succeeded, False otherwise
         """
         try:
-            from qgis.core import QgsVectorLayer, QgsProject
+            from qgis.core import QgsVectorLayer, QgsRasterLayer, QgsProject
             from qgis.PyQt.QtCore import Qt
             
             # Check preconditions
@@ -2783,9 +4830,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 geom_type = layer_info["layer_geometry_type"]
                 layer_icon = self.icon_per_geometry_type(geom_type)
                 
-                # Validate layer
+                # Validate layer - v5.1: Support both vector and raster
                 layer_obj = project.mapLayer(layer_id)
-                if layer_obj and isinstance(layer_obj, QgsVectorLayer) and is_layer_source_available(layer_obj, require_psycopg2=False):
+                if not layer_obj:
+                    continue
+                
+                is_vector = isinstance(layer_obj, QgsVectorLayer)
+                is_raster = isinstance(layer_obj, QgsRasterLayer)
+                
+                if (is_vector or is_raster) and is_layer_source_available(layer_obj, require_psycopg2=False):
+                    # v5.1: Update geometry type for raster layers
+                    if is_raster:
+                        geom_type = "GeometryType.Raster"
+                        layer_icon = self.icon_per_geometry_type(geom_type)
+                    
                     display_name = f"{layer_name} [{layer_crs_authid}]"
                     item_data = {"layer_id": key, "layer_geometry_type": geom_type}
                     layers_widget.addItem(layer_icon, display_name, item_data)
@@ -2821,6 +4879,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _populate_filtering_layers_direct(self, layer) -> bool:
         """v4.0.6: Direct population of filtering layers combobox without controller dependency.
         
+        v5.1: Support both vector and raster layers as filtering targets.
+        
         Args:
             layer: Source layer for which to populate target layers
             
@@ -2828,7 +4888,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             True if population succeeded, False otherwise
         """
         try:
-            from qgis.core import QgsVectorLayer, QgsProject
+            from qgis.core import QgsVectorLayer, QgsRasterLayer, QgsProject
             from qgis.PyQt.QtCore import Qt
             
             # Check preconditions
@@ -2839,8 +4899,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if not self.PROJECT_LAYERS:
                 logger.warning("❌ _populate_filtering_layers_direct: PROJECT_LAYERS empty")
                 return False
-            if not layer or not isinstance(layer, QgsVectorLayer):
-                logger.warning("❌ _populate_filtering_layers_direct: invalid layer")
+            # v5.1: Accept both vector and raster layers as source
+            if not layer or not (isinstance(layer, QgsVectorLayer) or isinstance(layer, QgsRasterLayer)):
+                logger.warning("❌ _populate_filtering_layers_direct: invalid layer (must be vector or raster)")
                 return False
             if layer.id() not in self.PROJECT_LAYERS:
                 logger.warning(f"❌ _populate_filtering_layers_direct: layer {layer.name()} not in PROJECT_LAYERS")
@@ -2897,15 +4958,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 geom_type = layer_info["layer_geometry_type"]
                 layer_icon = self.icon_per_geometry_type(geom_type)
                 
-                # Validate layer
+                # Validate layer - v5.1: Support both vector and raster
                 layer_obj = project.mapLayer(layer_id)
-                if not layer_obj or not isinstance(layer_obj, QgsVectorLayer):
+                if not layer_obj:
                     continue
-                # v4.2: Skip non-spatial tables (tables without geometry)
-                if not layer_obj.isSpatial():
+                    
+                is_vector = isinstance(layer_obj, QgsVectorLayer)
+                is_raster = isinstance(layer_obj, QgsRasterLayer)
+                
+                if not is_vector and not is_raster:
+                    continue
+                # v4.2: Skip non-spatial tables (tables without geometry) - only for vectors
+                if is_vector and not layer_obj.isSpatial():
                     continue
                 if not is_layer_source_available(layer_obj, require_psycopg2=False):
                     continue
+                
+                # v5.1: Update geometry type for raster layers
+                if is_raster:
+                    geom_type = "GeometryType.Raster"
+                    layer_icon = self.icon_per_geometry_type(geom_type)
                 
                 # Add to combobox
                 display_name = f"{layer_name} [{layer_crs}]"
@@ -4556,6 +6628,64 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         except Exception as e:
                             logger.debug(f"  → Could not get QGIS selection: {e}")
                 
+                # Strategy 4 (FIX 2026-01-31): Try to get feature from picker's internal model
+                # QgsFeaturePickerWidget uses QgsFeaturePickerModel internally. When feature() returns 
+                # invalid, we can try to extract the feature from the model via currentIndex.
+                # This handles the case where user selected in dropdown but featureChanged signal
+                # wasn't properly emitted or _last_single_selection_fid wasn't saved.
+                try:
+                    model = picker.model()
+                    current_index = picker.currentIndex()
+                    logger.info(f"   Strategy 4: picker.currentIndex()={current_index}, model={type(model).__name__ if model else 'None'}")
+                    if model and current_index >= 0:
+                        # QgsFeaturePickerModel stores feature in FeatureRole (Qt.UserRole + 1)
+                        from qgis.PyQt.QtCore import Qt
+                        model_index = model.index(current_index, 0)
+                        if model_index.isValid():
+                            # Try different roles to extract feature data
+                            # QgsFeaturePickerModelBase::FeatureRole = Qt::UserRole + 1
+                            feature_role = Qt.UserRole + 1
+                            feature_data = model.data(model_index, feature_role)
+                            logger.info(f"   Strategy 4: feature_data from FeatureRole={feature_data}")
+                            
+                            # Try IdentifierValueRole = Qt::UserRole + 2 (contains FID or identifier)
+                            id_role = Qt.UserRole + 2
+                            id_data = model.data(model_index, id_role)
+                            logger.info(f"   Strategy 4: id_data from IdentifierValueRole={id_data}")
+                            
+                            # If we got a QgsFeature directly
+                            if feature_data and hasattr(feature_data, 'isValid') and feature_data.isValid():
+                                fid = feature_data.id()
+                                reloaded = self.current_layer.getFeature(fid)
+                                if reloaded.isValid():
+                                    logger.info(f"  ✓ Strategy 4 SUCCESS: Got feature {fid} from model FeatureRole")
+                                    self._last_single_selection_fid = fid
+                                    self._last_single_selection_layer_id = self.current_layer.id()
+                                    return [reloaded], ""
+                            
+                            # If we got an identifier (FID or PK value)
+                            if id_data is not None:
+                                if isinstance(id_data, int):
+                                    # Likely a FID
+                                    reloaded = self.current_layer.getFeature(id_data)
+                                    if reloaded.isValid():
+                                        logger.info(f"  ✓ Strategy 4 SUCCESS: Got feature from IdentifierValueRole FID={id_data}")
+                                        self._last_single_selection_fid = id_data
+                                        self._last_single_selection_layer_id = self.current_layer.id()
+                                        return [reloaded], ""
+                                elif isinstance(id_data, (list, tuple)) and len(id_data) > 0:
+                                    # Could be a compound key
+                                    pk_value = id_data[0]
+                                    if isinstance(pk_value, int):
+                                        reloaded = self.current_layer.getFeature(pk_value)
+                                        if reloaded.isValid():
+                                            logger.info(f"  ✓ Strategy 4 SUCCESS: Got feature from compound key FID={pk_value}")
+                                            self._last_single_selection_fid = pk_value
+                                            self._last_single_selection_layer_id = self.current_layer.id()
+                                            return [reloaded], ""
+                except Exception as e:
+                    logger.debug(f"  → Strategy 4 (model extraction) failed: {e}")
+                
                 logger.debug(f"  → No feature in single_selection picker")
                 return [], ''
                     
@@ -5339,9 +7469,41 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return self.widgets["EXPORTING"]["PROJECTION_TO_EXPORT"]["WIDGET"].crs().authid() if self.widgets_initialized and self.has_loaded_layers else None
     
     def _validate_and_prepare_layer(self, layer):
-        """Validate and prepare layer for change. Returns: (should_continue, layer, layer_props)"""
-        if self._plugin_busy or not self.PROJECT_LAYERS or not self.widgets_initialized: return (False, None, None)
-        if layer is None or not isinstance(layer, QgsVectorLayer): return (False, None, None)
+        """Validate and prepare layer for change. Returns: (should_continue, layer, layer_props)
+        
+        Note: Supports both vector and raster layers for unified exploring with auto-switch.
+        """
+        if self._plugin_busy or not self.widgets_initialized: return (False, None, None)
+        
+        # Note: Support both Vector and Raster layers for Dual QToolBox
+        is_vector = isinstance(layer, QgsVectorLayer)
+        is_raster = isinstance(layer, QgsRasterLayer)
+        
+        # Note: Handle raster layers - continue with raster-specific handling
+        if is_raster:
+            try: _ = layer.id()
+            except RuntimeError: return (False, None, None)
+            
+            # Store as current layer for raster operations
+            self.current_layer = layer
+            
+            # Note: If dual toolbox enabled, set current layer on container
+            # v5.2 FIX 2026-01-31: Don't call _sync_toolbox_exploring_with_layer here
+            # It will be called by _auto_switch_exploring_page to avoid double sync
+            if DUAL_TOOLBOX_ENABLED and self._dual_toolbox_container:
+                try:
+                    self._dual_toolbox_container.set_current_layer(layer)
+                    logger.debug(f"Note: Set raster layer '{layer.name()}' on DualToolBox")
+                except Exception as e:
+                    logger.warning(f"Note: Failed to set raster layer on DualToolBox: {e}")
+            
+            # Note: Return raster layer for further processing (auto-switch will happen)
+            # Note: layer_props is None for raster layers as they don't use PROJECT_LAYERS
+            return (True, layer, None)
+        
+        # Vector layer handling (legacy flow)
+        if not self.PROJECT_LAYERS: return (False, None, None)
+        if layer is None or not is_vector: return (False, None, None)
         try: _ = layer.id()
         except RuntimeError: return (False, None, None)
         try:
@@ -5363,6 +7525,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return (False, None, None)
         
         self.currentLayerChanged.emit()
+        
+        # Note: Update Dual QToolBox with new current layer (vector)
+        # v5.2 FIX 2026-01-31: Don't call _sync_toolbox_exploring_with_layer here
+        # It will be called by _auto_switch_exploring_page to avoid double sync
+        if DUAL_TOOLBOX_ENABLED and self._dual_toolbox_container:
+            self._dual_toolbox_container.set_current_layer(layer)
+        
         return (True, layer, self.PROJECT_LAYERS[self.current_layer.id()])
     
     def _reset_layer_expressions(self, layer_props):
@@ -5519,15 +7688,73 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.filtering_geometric_predicates_state_changed()
     
     def _reload_exploration_widgets(self, layer, layer_props):
-        """v4.0 S18: → ExploringController with fallback."""
+        """v4.0 S18: → ExploringController with fallback.
+        
+        v5.2 FIX 2026-01-31: For large layers (>10k features), defers widget loading
+        to prevent QGIS freeze during layer change.
+        """
         logger.info(f"_reload_exploration_widgets called for layer: {layer.name() if layer else 'None'}")
+        
+        # v5.2 FIX: Check layer size to decide if we should defer
+        is_large_layer = False
+        if layer and isinstance(layer, QgsVectorLayer):
+            try:
+                feature_count = layer.featureCount()
+                # Threshold: 10,000 features
+                LARGE_LAYER_THRESHOLD = 10_000
+                is_large_layer = feature_count > LARGE_LAYER_THRESHOLD
+                if is_large_layer:
+                    logger.info(f"v5.2: Large vector layer detected ({feature_count:,} features > {LARGE_LAYER_THRESHOLD:,})")
+            except Exception:
+                pass
+        
         if self._exploring_ctrl:
             logger.debug("Delegating to ExploringController")
-            self._exploring_ctrl._reload_exploration_widgets(layer, layer_props)
+            if is_large_layer:
+                # Defer to prevent freeze
+                self._deferred_reload_exploration_widgets(layer, layer_props)
+            else:
+                self._exploring_ctrl._reload_exploration_widgets(layer, layer_props)
         else:
             logger.warning("ExploringController NOT available - using fallback")
-            # Fallback: Update exploring widgets layer when controller unavailable
-            self._fallback_reload_exploration_widgets(layer, layer_props)
+            if is_large_layer:
+                self._deferred_reload_exploration_widgets(layer, layer_props)
+            else:
+                self._fallback_reload_exploration_widgets(layer, layer_props)
+    
+    def _deferred_reload_exploration_widgets(self, layer, layer_props):
+        """v5.2 FIX 2026-01-31: Defer exploration widget loading for large layers.
+        
+        Uses QTimer to allow UI to remain responsive while widgets are loaded.
+        """
+        from qgis.PyQt.QtCore import QTimer
+        import weakref
+        
+        weak_self = weakref.ref(self)
+        captured_layer_id = layer.id() if layer else None
+        captured_layer_props = layer_props.copy() if layer_props else {}
+        
+        def deferred_load():
+            self_ref = weak_self()
+            if not self_ref:
+                return
+            try:
+                from qgis.core import QgsProject
+                fresh_layer = QgsProject.instance().mapLayer(captured_layer_id) if captured_layer_id else None
+                if fresh_layer and isinstance(fresh_layer, QgsVectorLayer):
+                    # Get fresh layer_props
+                    fresh_props = self_ref.PROJECT_LAYERS.get(captured_layer_id, captured_layer_props)
+                    if self_ref._exploring_ctrl:
+                        self_ref._exploring_ctrl._reload_exploration_widgets(fresh_layer, fresh_props)
+                    else:
+                        self_ref._fallback_reload_exploration_widgets(fresh_layer, fresh_props)
+                    logger.info(f"v5.2: Deferred exploration widgets loaded for {fresh_layer.name()}")
+            except Exception as e:
+                logger.warning(f"v5.2: Deferred exploration load failed: {e}")
+        
+        # Defer by 150ms to allow UI to update
+        QTimer.singleShot(150, deferred_load)
+        logger.debug(f"v5.2: Exploration widgets loading deferred for large layer")
     
     def _fallback_reload_exploration_widgets(self, layer, layer_props):
         """FIX 2026-01-14: Fallback to update exploring widgets when controller unavailable."""
@@ -5589,11 +7816,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         logger.info(f"✨ FALLBACK: Upgraded custom_selection to '{best_field}'")
             
             # Update single selection widget (QgsFeaturePickerWidget)
+            # v5.2 FIX 2026-01-31: Use setFetchLimit to prevent loading all features at once
             if "SINGLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
                 widget = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
                 if widget:
                     logger.debug(f"Updating SINGLE_SELECTION_FEATURES: old_layer={widget.layer().name() if widget.layer() else 'None'} → new_layer={layer.name()}")
                     widget.setLayer(None)  # Force refresh
+                    
+                    # v5.2 FIX: Set fetch limit BEFORE setting layer to limit initial load
+                    # This prevents QGIS freeze on large layers
+                    if hasattr(widget, 'setFetchLimit'):
+                        widget.setFetchLimit(100)  # Only fetch 100 features initially
+                    
                     widget.setLayer(layer)
                     widget.setDisplayExpression(single_expr)
                     widget.setFetchGeometry(True)
@@ -5805,7 +8039,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except (ImportError, RuntimeError, AttributeError):
             return True  # Assume deleted if we can't check
 
-    def current_layer_changed(self, layer: QgsVectorLayer, manual_change: bool = False) -> None:
+    def current_layer_changed(self, layer, manual_change: bool = False) -> None:
         """Handle current layer change event from QGIS or user interaction.
 
         Updates all UI components when the active layer changes:
@@ -5814,9 +8048,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         - Synchronizes filtering/exporting widgets
         - Reloads exploration widgets (feature picker, combobox)
         - Reconnects layer-specific signals
+        - Note: Auto-switches between vector/raster exploring pages
 
         Args:
-            layer: The new current QgsVectorLayer.
+            layer: The new current layer (QgsVectorLayer or QgsRasterLayer).
             manual_change: True if user manually selected layer from combobox.
                           Bypasses protection windows when True.
 
@@ -5824,8 +8059,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             - Ignores layer changes during active filtering (_filtering_in_progress)
             - Defers changes if plugin is busy (_plugin_busy)
             - Handles deleted C++ objects gracefully
+            - Note: Supports both vector and raster layers with auto-switch
         """
         import traceback
+        # v5.2 DEBUG: Print to console for debugging autoswitch issues
+        print(f"🔧🔧🔧 current_layer_changed: layer={layer.name() if layer else 'None'}, manual={manual_change}, type={type(layer).__name__ if layer else 'None'}")
         logger.info(f"=== current_layer_changed ENTRY === layer: {layer.name() if layer else 'None'}, manual: {manual_change}")
         logger.debug(f"Flags: _updating={self._updating_current_layer}, _filtering={self._filtering_in_progress}, _busy={self._plugin_busy}")
         logger.debug(f"Caller stack:\n{''.join(traceback.format_stack()[-4:-1])}")
@@ -5839,6 +8077,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Restored from v2.9.26 - was lost during hexagonal migration
         if getattr(self, '_filtering_in_progress', False):
             logger.debug("v4.0.5: 🛡️ current_layer_changed BLOCKED - filtering in progress")
+            # FIX v5.2 2026-01-31: Still switch toolbox page to show correct layer type
+            if layer is not None:
+                try:
+                    self._auto_switch_exploring_page(layer)
+                except Exception as e:
+                    logger.warning(f"Failed to auto-switch during filtering: {e}")
             return
         
         # CRITICAL FIX (2026-01-14): Delegate to controller with manual_change flag
@@ -5850,6 +8094,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     # Manual change bypasses protection - continue with update
                     logger.info("⚠️ Controller blocked but continuing anyway (manual user change)")
                 else:
+                    # FIX v5.2 2026-01-31: ALWAYS switch toolbox page even when controller blocks
+                    # The UI should reflect the user's selection even if sync is blocked
+                    # This ensures the exploring toolbox shows Vector/Raster page correctly
+                    if layer is not None:
+                        try:
+                            self._auto_switch_exploring_page(layer)
+                            logger.info(f"🔄 Auto-switched exploring page for '{layer.name()}' (controller blocked sync)")
+                        except Exception as e:
+                            logger.warning(f"Failed to auto-switch exploring page: {e}")
                     # Automatic change blocked by controller - STOP here
                     logger.info("⚠️ Controller blocked automatic layer change (protection active) - STOPPING")
                     return
@@ -5870,15 +8123,38 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try:
             should_continue, validated_layer, layer_props = self._validate_and_prepare_layer(layer)
             if not should_continue: return
-            self._reset_layer_expressions(layer_props); widgets = self._disconnect_layer_signals()
-            logger.info("✓ Step 1: Layer validated and expressions reset")
+            
+            # v5.0: Detect layer type for conditional processing
+            is_raster = isinstance(validated_layer, QgsRasterLayer)
+            is_vector = isinstance(validated_layer, QgsVectorLayer)
+            
+            # v5.0: Only reset expressions and disconnect signals for vector layers
+            if is_vector and layer_props:
+                self._reset_layer_expressions(layer_props)
+                widgets = self._disconnect_layer_signals()
+                logger.info("✓ Step 1: Layer validated and expressions reset")
+            else:
+                widgets = []  # No signals to reconnect for raster
+                logger.info(f"✓ Step 1: Raster layer validated (skipping vector-specific init)")
             
             # FIX 2026-01-14: Pass manual_change flag to widget synchronization
-            self._synchronize_layer_widgets(validated_layer, layer_props, manual_change=manual_change)
-            logger.info("✓ Step 2: Layer widgets synchronized")
+            # v5.0: Only synchronize widgets for vector layers
+            if is_vector and layer_props:
+                self._synchronize_layer_widgets(validated_layer, layer_props, manual_change=manual_change)
+                logger.info("✓ Step 2: Layer widgets synchronized")
+            else:
+                logger.info("✓ Step 2: Raster layer (skipping vector widget sync)")
             
-            self._reload_exploration_widgets(validated_layer, layer_props)
-            logger.info("✓ Step 3: Exploration widgets reloaded")
+            # v5.0: Auto-switch exploring page based on layer type (vector vs raster)
+            self._auto_switch_exploring_page(validated_layer)
+            logger.info("✓ Step 2b: Exploring page auto-switched based on layer type")
+            
+            # v5.0: Only reload exploration widgets for vector layers
+            if is_vector and layer_props:
+                self._reload_exploration_widgets(validated_layer, layer_props)
+                logger.info("✓ Step 3: Exploration widgets reloaded")
+            else:
+                logger.info("✓ Step 3: Raster layer (raster widgets synced in auto-switch)")
             
             # Force visual update of exploration widgets
             if "EXPLORING" in self.widgets:
@@ -5891,20 +8167,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             pass
                 logger.debug("Exploring widgets visually refreshed")
             
-            # CRITICAL: Initialize exploring groupbox for ALL layers, not just existing ones
-            # This ensures widgets are updated even when switching to a new layer
-            if self.current_layer:
+            # v5.0: Initialize exploring groupbox for vector layers only
+            # Raster layers don't use exploring groupbox (use dedicated raster widgets)
+            if self.current_layer and is_vector:
                 # Ensure layer is in PROJECT_LAYERS before initializing
                 if self.current_layer.id() not in self.PROJECT_LAYERS:
                     logger.debug(f"Layer {self.current_layer.name()} not in PROJECT_LAYERS yet - will be added")
                 self.exploring_groupbox_init()
                 logger.info("✓ Step 4: Exploring groupbox initialized")
+            elif is_raster:
+                logger.info("✓ Step 4: Raster layer (using raster exploring widgets)")
             
             self._update_exploring_buttons_state()
             logger.info("✓ Step 5: Exploring buttons state updated")
             
-            self._reconnect_layer_signals(widgets, layer_props)
-            logger.debug("✓ Step 6: Layer signals reconnected")
+            # v5.0: Only reconnect signals for vector layers
+            if is_vector and layer_props:
+                self._reconnect_layer_signals(widgets, layer_props)
+                logger.debug("✓ Step 6: Layer signals reconnected")
+            else:
+                logger.debug("✓ Step 6: Raster layer (no vector signals to reconnect)")
             
             logger.info(f"=== current_layer_changed SUCCESS === layer: {validated_layer.name()}")
         except Exception as e:
@@ -6502,6 +8784,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         v3.1 Sprint 12: Simplified - handle auto current layer toggle.
         v4.0.5: When checked, synchronizes comboBox_filtering_current_layer with iface.activeLayer()
+        v5.0: Supports both vector and raster layers for unified exploring.
         FIX 2026-01-14: Clear signal cache to ensure connection/disconnection works properly.
         """
         if not self._is_ui_ready(): return
@@ -6510,11 +8793,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.widgets["FILTERING"]["AUTO_CURRENT_LAYER"]["WIDGET"].setChecked(state)
         self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"] = state
         
-        # v4.0.5: When enabling auto sync, immediately sync current layer with active layer
+        # v5.0: When enabling auto sync, immediately sync current layer with active layer
+        # Supports both vector and raster layers
         if state and hasattr(self, 'comboBox_filtering_current_layer'):
             active_layer = self.iface.activeLayer()
-            if active_layer and isinstance(active_layer, QgsVectorLayer):
-                logger.debug(f"Auto-sync enabled: Setting current layer to {active_layer.name()}")
+            if active_layer and isinstance(active_layer, (QgsVectorLayer, QgsRasterLayer)):
+                logger.debug(f"Auto-sync enabled: Setting current layer to {active_layer.name()} (type: {'raster' if isinstance(active_layer, QgsRasterLayer) else 'vector'})")
                 self.comboBox_filtering_current_layer.setLayer(active_layer)
         
         # FIX 2026-01-14: Clear signal cache before connect/disconnect to avoid stale state

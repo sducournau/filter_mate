@@ -383,7 +383,7 @@ class FilteringController(BaseController, LayerSelectionMixin):
             logger.info(f"populate_layers_checkable_combobox: has_loaded_layers={getattr(dockwidget, 'has_loaded_layers', False)}, PROJECT_LAYERS count={len(dockwidget.PROJECT_LAYERS) if dockwidget.PROJECT_LAYERS else 0}")
             
             # Imports
-            from qgis.core import QgsVectorLayer, QgsProject
+            from qgis.core import QgsVectorLayer, QgsRasterLayer, QgsProject
             from qgis.PyQt.QtCore import Qt
             from ...infrastructure.utils.validation_utils import is_layer_source_available
             
@@ -391,8 +391,9 @@ class FilteringController(BaseController, LayerSelectionMixin):
             if layer is None:
                 layer = dockwidget.current_layer
             
-            if layer is None or not isinstance(layer, QgsVectorLayer):
-                logger.debug("populate_layers_checkable_combobox: No valid source layer")
+            # v5.1: Accept both vector and raster layers as source
+            if layer is None or not (isinstance(layer, QgsVectorLayer) or isinstance(layer, QgsRasterLayer)):
+                logger.debug("populate_layers_checkable_combobox: No valid source layer (must be vector or raster)")
                 return False
             
             # Check layer exists in PROJECT_LAYERS
@@ -431,10 +432,11 @@ class FilteringController(BaseController, LayerSelectionMixin):
             else:
                 logger.debug(f"✓ Source layer {layer.name()} (ID: {source_layer_id}) not in layers_to_filter (correct)")
             
-            # Diagnostic logging
-            qgis_vector_layers = [l for l in project.mapLayers().values() 
-                                  if isinstance(l, QgsVectorLayer) and l.id() != layer.id()]
-            missing = [l for l in qgis_vector_layers if l.id() not in dockwidget.PROJECT_LAYERS]
+            # Diagnostic logging - v5.1: Include both vector and raster layers
+            qgis_layers = [l for l in project.mapLayers().values() 
+                           if (isinstance(l, QgsVectorLayer) or isinstance(l, QgsRasterLayer)) 
+                           and l.id() != layer.id()]
+            missing = [l for l in qgis_layers if l.id() not in dockwidget.PROJECT_LAYERS]
             if missing:
                 logger.warning(f"populate_layers_checkable_combobox: {len(missing)} layer(s) NOT in PROJECT_LAYERS")
                 logger.warning(f"Layers in QGIS but NOT in PROJECT_LAYERS: {[l.name() for l in missing]}")
@@ -499,16 +501,26 @@ class FilteringController(BaseController, LayerSelectionMixin):
                 if not layer_obj:
                     skipped_reasons.append(f"{layer_name}: layer_obj is None (not in project)")
                     continue
-                if not isinstance(layer_obj, QgsVectorLayer):
-                    skipped_reasons.append(f"{layer_name}: not QgsVectorLayer")
+                
+                # v5.1: Support both vector and raster layers as filtering targets
+                is_vector = isinstance(layer_obj, QgsVectorLayer)
+                is_raster = isinstance(layer_obj, QgsRasterLayer)
+                
+                if not is_vector and not is_raster:
+                    skipped_reasons.append(f"{layer_name}: not QgsVectorLayer or QgsRasterLayer")
                     continue
-                # v4.2: Skip non-spatial tables (tables without geometry)
-                if not layer_obj.isSpatial():
+                
+                # v4.2: Skip non-spatial tables (tables without geometry) - only for vectors
+                if is_vector and not layer_obj.isSpatial():
                     skipped_reasons.append(f"{layer_name}: non-spatial table (no geometry)")
                     continue
                 if not is_layer_source_available(layer_obj, require_psycopg2=False):
                     skipped_reasons.append(f"{layer_name}: source not available")
                     continue
+                
+                # v5.1: Update geometry type for raster layers
+                if is_raster:
+                    geom_type = "GeometryType.Raster"
                 
                 # Layer is valid - add to combobox
                 display_name = f"{layer_name} [{layer_crs}]"
@@ -530,22 +542,36 @@ class FilteringController(BaseController, LayerSelectionMixin):
             
             # FIX v4.1.3 (2026-01-18): Add missing layers directly to combobox (same as populate_export_combobox)
             # This ensures PostgreSQL and remote layers missing from PROJECT_LAYERS are still filterable
+            # v5.1: Support both vector and raster missing layers
             from ...infrastructure.utils import geometry_type_to_string
             
             for missing_layer in missing:
-                # v4.2: Skip non-spatial tables (tables without geometry)
-                if missing_layer.isValid() and missing_layer.isSpatial() and is_layer_source_available(missing_layer, require_psycopg2=False):
-                    display_name = f"{missing_layer.name()} [{missing_layer.crs().authid()}]"
+                is_vector = isinstance(missing_layer, QgsVectorLayer)
+                is_raster = isinstance(missing_layer, QgsRasterLayer)
+                
+                # v4.2: Skip non-spatial tables (tables without geometry) - only for vectors
+                # v5.1: Rasters are always valid (no isSpatial check needed)
+                if not missing_layer.isValid():
+                    continue
+                if is_vector and not missing_layer.isSpatial():
+                    continue
+                if not is_layer_source_available(missing_layer, require_psycopg2=False):
+                    continue
+                
+                display_name = f"{missing_layer.name()} [{missing_layer.crs().authid()}]"
+                if is_raster:
+                    geom_type_str = "GeometryType.Raster"
+                else:
                     geom_type_str = geometry_type_to_string(missing_layer)
-                    layer_icon = dockwidget.icon_per_geometry_type(geom_type_str)
-                    logger.debug(f"populate_layers_checkable_combobox [MISSING]: layer='{missing_layer.name()}', geom_type='{geom_type_str}', icon_isNull={layer_icon.isNull() if layer_icon else 'None'}")
-                    item_data = {"layer_id": missing_layer.id(), "layer_geometry_type": geom_type_str}
-                    layers_widget.addItem(layer_icon, display_name, item_data)
-                    item = layers_widget.model().item(item_index)
-                    # Check if this layer was previously selected for filtering
-                    item.setCheckState(Qt.Checked if missing_layer.id() in layers_to_filter else Qt.Unchecked)
-                    item_index += 1
-                    logger.info(f"✓ populate_layers_checkable_combobox: Added missing layer '{missing_layer.name()}'")
+                layer_icon = dockwidget.icon_per_geometry_type(geom_type_str)
+                logger.debug(f"populate_layers_checkable_combobox [MISSING]: layer='{missing_layer.name()}', geom_type='{geom_type_str}', icon_isNull={layer_icon.isNull() if layer_icon else 'None'}")
+                item_data = {"layer_id": missing_layer.id(), "layer_geometry_type": geom_type_str}
+                layers_widget.addItem(layer_icon, display_name, item_data)
+                item = layers_widget.model().item(item_index)
+                # Check if this layer was previously selected for filtering
+                item.setCheckState(Qt.Checked if missing_layer.id() in layers_to_filter else Qt.Unchecked)
+                item_index += 1
+                logger.info(f"✓ populate_layers_checkable_combobox: Added missing layer '{missing_layer.name()}'")
             
             logger.info(f"✓ populate_layers_checkable_combobox: Added {item_index} layers (source layer '{layer.name()}' excluded)")
             logger.info(f"=== populate_layers_checkable_combobox END ===")
@@ -797,7 +823,7 @@ class FilteringController(BaseController, LayerSelectionMixin):
             # v4.0 Note: FilterService integration requires additional work:
             # 1. FilterService.apply_filter() expects FilterRequest with domain objects
             # 2. The async task execution model (QgsTask) is currently in FilterEngineTask
-            # 3. Full integration planned for v5.0 when FilterEngineTask is fully refactored
+            # 3. Full integration planned when FilterEngineTask is fully refactored
             # For now, delegate to legacy path which uses FilterEngineTask via TaskBuilder
             logger.debug("FilteringController: FilterService available but delegating to legacy (v4.0)")
             return False

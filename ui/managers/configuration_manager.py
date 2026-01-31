@@ -839,16 +839,26 @@ class ConfigurationManager(QObject):
             from qgis.core import QgsMapLayerProxyModel
         
         d = self.dockwidget
-        # v4.2: Filter to show only vector layers WITH geometry (exclude non-spatial tables)
+        # Note: Filter to show vector layers WITH geometry AND raster layers
         # HasGeometry = PointLayer | LineLayer | PolygonLayer = 4 | 8 | 16 = 28
+        # RasterLayer = 1
         # This excludes tables without geometry (NoGeometry = 2)
         try:
-            d.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.HasGeometry)
-            logger.info("comboBox_filtering_current_layer: Filter set to HasGeometry (exclude non-spatial tables)")
+            # Note: Accept both vector layers with geometry AND raster layers for unified exploring
+            # QGIS 3.40+: setFilters() deprecated, use setProxyModelFilters()
+            filters = QgsMapLayerProxyModel.HasGeometry | QgsMapLayerProxyModel.RasterLayer
+            if hasattr(d.comboBox_filtering_current_layer, 'setProxyModelFilters'):
+                d.comboBox_filtering_current_layer.setProxyModelFilters(filters)
+            else:
+                d.comboBox_filtering_current_layer.setFilters(filters)
+            logger.info("comboBox_filtering_current_layer: Filter set to HasGeometry | RasterLayer (vector + raster)")
         except Exception as e:
-            logger.warning(f"Could not set HasGeometry filter: {e}")
+            logger.warning(f"Could not set HasGeometry | RasterLayer filter: {e}")
             # Fallback to VectorLayer only
-            d.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
+            if hasattr(d.comboBox_filtering_current_layer, 'setProxyModelFilters'):
+                d.comboBox_filtering_current_layer.setProxyModelFilters(QgsMapLayerProxyModel.VectorLayer)
+            else:
+                d.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
         
         # Apply themed icon to centroids checkbox
         try:

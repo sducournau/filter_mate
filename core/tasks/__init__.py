@@ -13,6 +13,7 @@ Exported Symbols:
     - ExpressionEvaluationManager: Singleton manager for expression tasks
     - get_expression_manager: Factory function for manager singleton
     - LayersManagementEngineTask: QgsTask for layer tracking management
+    - RasterStatsTask: QgsTask for async raster statistics computation (v5.0.2)
 
 Architecture:
     core/tasks/ → Application layer (business logic with QGIS)
@@ -25,6 +26,7 @@ Migration History:
     - v3.0: Migrated expression_evaluation_task.py from modules/tasks/ (EPIC-1)
     - v3.0: Migrated layer_management_task.py from modules/tasks/ (EPIC-1)
     - v4.0: Migrated filter_task.py from modules/tasks/ (EPIC-1 Final)
+    - v5.0.2: Added RasterStatsTask for async raster stats (VRT freeze fix)
 """
 
 # Main filter task (EPIC-1 migration - January 2026)
@@ -38,6 +40,9 @@ from .expression_evaluation_task import (
 )
 
 from .layer_management_task import LayersManagementEngineTask
+
+# v5.0.2: Raster statistics async task (VRT freeze fix)
+from .raster_stats_task import RasterStatsTask
 
 # E6: Task completion handler functions
 from .task_completion_handler import (
@@ -58,6 +63,8 @@ __all__ = [
     'get_expression_manager',
     # Layer management
     'LayersManagementEngineTask',
+    # v5.0.2: Raster statistics async
+    'RasterStatsTask',
     # E6: Task completion handler
     'display_warning_messages',
     'should_skip_subset_application',

@@ -27,7 +27,7 @@ import logging
 from qgis.PyQt.QtCore import QSize, Qt
 from qgis.PyQt.QtWidgets import (
     QComboBox, QLineEdit, QDoubleSpinBox, QSpinBox, QGroupBox,
-    QPushButton, QSizePolicy, QSpacerItem
+    QPushButton, QSizePolicy, QSpacerItem, QToolButton
 )
 from qgis.gui import (
     QgsFeaturePickerWidget, QgsFieldExpressionWidget,
@@ -198,7 +198,7 @@ class DimensionsManager(LayoutManagerBase):
         This function is kept for backward compatibility but does nothing.
         QSS rules override any Python-side dimension settings.
         
-        TODO v5.0: Remove this function and entire DimensionsManager class.
+        TODO Note: Remove this function and entire DimensionsManager class.
         """
         # Widget dimensions managed by QSS - no Python intervention needed
         logger.debug("Widget dimensions managed by QSS (20px standard)")
@@ -647,16 +647,20 @@ class DimensionsManager(LayoutManagerBase):
             combobox_height = UIConfig.get_config('combobox', 'height') or 24
             input_height = UIConfig.get_config('input', 'height') or 24
             
-            # QgsFeaturePickerWidget
+            # QGIS composite widgets need extra height for internal buttons (< > E)
+            # Minimum 28px to show buttons properly, but ideally 32px
+            qgis_composite_height = max(32, combobox_height, input_height)
+            
+            # QgsFeaturePickerWidget - has < > navigation buttons
             for widget in self.dockwidget.findChildren(QgsFeaturePickerWidget):
-                widget.setMinimumHeight(combobox_height)
-                widget.setMaximumHeight(combobox_height)
+                widget.setMinimumHeight(qgis_composite_height)
+                widget.setMaximumHeight(qgis_composite_height)
                 widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             
-            # QgsFieldExpressionWidget
+            # QgsFieldExpressionWidget - has E (expression builder) button
             for widget in self.dockwidget.findChildren(QgsFieldExpressionWidget):
-                widget.setMinimumHeight(input_height)
-                widget.setMaximumHeight(input_height)
+                widget.setMinimumHeight(qgis_composite_height)
+                widget.setMaximumHeight(qgis_composite_height)
                 widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             
             # QgsProjectionSelectionWidget
@@ -693,11 +697,73 @@ class DimensionsManager(LayoutManagerBase):
                 widget.setFixedSize(button_size, button_size)
                 widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             
-            logger.debug(f"Applied QGIS widget dimensions: ComboBox={combobox_height}px, Input={input_height}px")
+            # Configure internal buttons of QGIS composite widgets
+            self._configure_qgis_internal_buttons()
+            
+            logger.debug(f"Applied QGIS widget dimensions: ComboBox={combobox_height}px, Input={input_height}px, Composite={qgis_composite_height}px")
             
         except Exception as e:
             logger.debug(f"Could not apply dimensions to QGIS widgets: {e}")
     
+    def _configure_qgis_internal_buttons(self) -> None:
+        """
+        Configure internal QToolButtons of QGIS composite widgets.
+        
+        QgsFieldExpressionWidget and QgsFeaturePickerWidget have internal buttons:
+        - E button (expression builder) in QgsFieldExpressionWidget
+        - < > buttons (navigation) in QgsFeaturePickerWidget
+        
+        These buttons need explicit sizing and styling to be visible.
+        CSS selectors like 'QgsFieldExpressionWidget QToolButton' don't work
+        because Qt doesn't recognize QGIS class names in stylesheets.
+        """
+        try:
+            button_size = 24  # Size for internal buttons
+            
+            # Inline style for QGIS internal buttons - forces visibility
+            button_style = """
+                QToolButton {
+                    background-color: #FFFFFF;
+                    border: 1px solid #BDBDBD;
+                    border-radius: 3px;
+                    padding: 2px;
+                    min-width: 22px;
+                    min-height: 22px;
+                }
+                QToolButton:hover {
+                    background-color: #E3F2FD;
+                    border: 1px solid #2196F3;
+                }
+                QToolButton:pressed {
+                    background-color: #BBDEFB;
+                }
+            """
+            
+            # Find all QgsFieldExpressionWidget and configure their internal buttons
+            for widget in self.dockwidget.findChildren(QgsFieldExpressionWidget):
+                for button in widget.findChildren(QToolButton):
+                    button.setMinimumSize(QSize(button_size, button_size))
+                    button.setMaximumSize(QSize(button_size, button_size))
+                    button.setFixedSize(QSize(button_size, button_size))
+                    button.setVisible(True)
+                    button.setStyleSheet(button_style)
+                    button.raise_()  # Bring to front
+                    logger.debug(f"Configured E button in {widget.objectName()}: visible={button.isVisible()}, size={button.size()}")
+            
+            # Find all QgsFeaturePickerWidget and configure their internal buttons
+            for widget in self.dockwidget.findChildren(QgsFeaturePickerWidget):
+                for button in widget.findChildren(QToolButton):
+                    button.setMinimumSize(QSize(button_size, button_size))
+                    button.setMaximumSize(QSize(button_size, button_size))
+                    button.setFixedSize(QSize(button_size, button_size))
+                    button.setVisible(True)
+                    button.setStyleSheet(button_style)
+                    button.raise_()  # Bring to front
+                    logger.debug(f"Configured nav button in {widget.objectName()}: visible={button.isVisible()}, size={button.size()}")
+                    
+        except Exception as e:
+            logger.warning(f"Could not configure QGIS internal buttons: {e}")
+
     def align_key_layouts(self) -> None:
         """
         Align key layouts (exploring/filtering/exporting) for visual consistency.

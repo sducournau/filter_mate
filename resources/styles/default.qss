@@ -80,11 +80,10 @@ END OF REMOVED SECTION */
    QGIS Widgets - Common Styling with better spacing
    SCOPED to FilterMate only to avoid polluting global QGIS styles
    ======================================================================== */
-#dockWidgetContents QgsFeaturePickerWidget,
+/* Simple widgets with fixed height */
 #dockWidgetContents QgsProjectionSelectionWidget,
 #dockWidgetContents QgsMapLayerComboBox,
 #dockWidgetContents QgsFieldComboBox,
-#dockWidgetContents QgsFieldExpressionWidget,
 #dockWidgetContents QgsCheckableComboBox,
 #dockWidgetContents QComboBox,
 #dockWidgetContents QgsCheckableComboBoxLayer {
@@ -97,11 +96,46 @@ END OF REMOVED SECTION */
     max-height: 20px;
 }
 
-#dockWidgetContents QgsFeaturePickerWidget:hover,
+/* Composite widgets (with navigation/expression buttons) - NO max-height constraint */
+#dockWidgetContents QgsFeaturePickerWidget,
+#dockWidgetContents QgsFieldExpressionWidget {
+    background-color: transparent;
+    border: none;
+    padding: 0px;
+    color: {color_font_0};
+    min-height: 28px;
+}
+
+/* Navigation/Expression buttons inside QGIS composite widgets (< > E buttons) */
+/* These are QToolButton children - ensure they are visible and properly sized */
+#dockWidgetContents QgsFeaturePickerWidget QToolButton,
+#dockWidgetContents QgsFieldExpressionWidget QToolButton {
+    background-color: {color_1};
+    border: 1px solid {color_2};
+    border-radius: 3px;
+    padding: 2px;
+    min-width: 22px;
+    max-width: 22px;
+    min-height: 22px;
+    max-height: 22px;
+    margin: 1px;
+}
+
+#dockWidgetContents QgsFeaturePickerWidget QToolButton:hover,
+#dockWidgetContents QgsFieldExpressionWidget QToolButton:hover {
+    background-color: {color_accent_light_bg};
+    border: 1px solid {color_accent};
+}
+
+#dockWidgetContents QgsFeaturePickerWidget QToolButton:pressed,
+#dockWidgetContents QgsFieldExpressionWidget QToolButton:pressed {
+    background-color: {color_accent_pressed};
+    border: 1px solid {color_accent_dark};
+}
+
 #dockWidgetContents QgsProjectionSelectionWidget:hover,
 #dockWidgetContents QgsMapLayerComboBox:hover,
 #dockWidgetContents QgsFieldComboBox:hover,
-#dockWidgetContents QgsFieldExpressionWidget:hover,
 #dockWidgetContents QgsCheckableComboBox:hover,
 #dockWidgetContents QComboBox:hover,
 #dockWidgetContents QgsCheckableComboBoxLayer:hover {
@@ -109,11 +143,9 @@ END OF REMOVED SECTION */
     padding: 2px 4px; /* Adjusted for thicker border */
 }
 
-#dockWidgetContents QgsFeaturePickerWidget:focus,
 #dockWidgetContents QgsProjectionSelectionWidget:focus,
 #dockWidgetContents QgsMapLayerComboBox:focus,
 #dockWidgetContents QgsFieldComboBox:focus,
-#dockWidgetContents QgsFieldExpressionWidget:focus,
 #dockWidgetContents QgsCheckableComboBox:focus,
 #dockWidgetContents QComboBox:focus,
 #dockWidgetContents QgsCheckableComboBoxLayer:focus {
@@ -182,25 +214,23 @@ END OF REMOVED SECTION */
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 4px;
-    padding: 0;
+    padding: 4px 8px 8px 8px;
     margin: 2px;
     color: {color_font_0};
     font-weight: normal;
-    min-height: 50px;
-    max-height: 50px;
+    min-height: 24px;
 }
 
-/* Style pour les boutons à l'intérieur des onglets - C'EST ICI QU'IL FAUT DÉFINIR LA HAUTEUR */
+/* Style pour les boutons à l'intérieur des onglets - alignement icône/texte */
 #dockWidgetContents QToolBox QToolButton {
     background-color: transparent;
     border: none;
-    padding: 12px 10px 12px 45px;
-    min-height: 50px;
-    max-height: 50px;
-    height: 50px;
+    padding: 4px 10px 8px 28px;
+    min-height: 24px;
     color: {color_font_0};
     font-weight: normal;
     text-align: left;
+    qproperty-iconSize: 16px 16px;
 }
 
 #dockWidgetContents QToolBox::tab:selected {
@@ -557,9 +587,9 @@ QWidget#widget_exporting_content {
     background-color: transparent;
     border: 1px solid {color_2};
     border-radius: 6px;
-    margin-top: 1ex;
+    margin-top: 16px;
     padding: 10px;
-    padding-top: 16px;
+    padding-top: 24px;
     font-weight: 600;
     color: {color_font_0};
 }
@@ -567,10 +597,12 @@ QWidget#widget_exporting_content {
 #dockWidgetContents QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    padding: 2px 10px;
+    padding: 4px 12px;
     color: {color_font_0};
-    background-color: transparent;
+    background-color: {color_1};
+    border-radius: 4px;
     margin-left: 8px;
+    margin-top: 2px;
     /* Improved text handling */
     max-width: 400px;
     text-overflow: ellipsis;
@@ -584,17 +616,24 @@ QWidget#widget_exporting_content {
     border: 1px solid {color_2};
     border-radius: 6px;
     padding: 8px;
-    padding-top: 26px;
-    margin: 0px 0px 2px 0px;
+    padding-top: 40px;
+    margin-top: 12px;
+    margin-bottom: 4px;
+    margin-left: 0px;
+    margin-right: 0px;
     color: {color_font_0};
 }
 
 #dockWidgetContents QgsCollapsibleGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    padding: 4px 10px;
-    margin-left: 28px;
+    padding: 8px 14px;
+    margin-left: 24px;
     margin-top: 4px;
+    background-color: {color_accent_light_bg};
+    border-radius: 4px;
+    color: {color_accent_dark};
+    font-weight: bold;
 }
 
 /* Exploring Section GroupBox - Subtle styling */
@@ -939,10 +978,10 @@ QWidget#widget_exporting_keys {
     /* Smooth transitions for responsive behavior */
 }
 
-/* Buttons inside widget_exploring_keys - Non-checkable - Responsive sizing */
+/* Buttons inside widget_exploring_keys - Non-checkable - Harmonized with filtering_keys */
 QWidget#widget_exploring_keys QPushButton:!checkable {
-    background-color: transparent;
-    border: 2px solid transparent;
+    background-color: {color_1};
+    border: 1px solid {color_2};
     border-radius: 6px;
     padding: 2px;
     margin: 1px 0px;
@@ -968,10 +1007,10 @@ QWidget#widget_exploring_keys QPushButton:!checkable:pressed {
     margin: 1px 0px;
 }
 
-/* Buttons inside widget_exploring_keys - Checkable - Enhanced visibility */
+/* Buttons inside widget_exploring_keys - Checkable - Harmonized with filtering_keys */
 QWidget#widget_exploring_keys QPushButton:checkable {
-    background-color: transparent;
-    border: 2px solid transparent;
+    background-color: {color_1};
+    border: 1px solid {color_2};
     border-radius: 6px;
     padding: 2px;
     margin: 1px 0px;
@@ -1020,10 +1059,10 @@ QWidget#widget_exploring_keys QPushButton:checkable:checked:pressed {
     box-shadow: 0 1px 3px rgba(25, 118, 210, 0.3);
 }
 
-/* Buttons inside widget_filtering_keys - Checkable only - Enhanced visibility */
+/* Buttons inside widget_filtering_keys - Checkable only - Harmonized style */
 QWidget#widget_filtering_keys QPushButton:checkable {
-    background-color: transparent;
-    border: 2px solid transparent;
+    background-color: {color_1};
+    border: 1px solid {color_2};
     border-radius: 6px;
     padding: 2px;
     margin: 1px 0px;
@@ -1072,10 +1111,10 @@ QWidget#widget_filtering_keys QPushButton:checkable:checked:pressed {
     box-shadow: 0 1px 3px rgba(25, 118, 210, 0.3);
 }
 
-/* Buttons inside widget_exporting_keys - Checkable only - Enhanced visibility */
+/* Buttons inside widget_exporting_keys - Checkable only - Harmonized style */
 QWidget#widget_exporting_keys QPushButton:checkable {
-    background-color: transparent;
-    border: 2px solid transparent;
+    background-color: {color_1};
+    border: 1px solid {color_2};
     border-radius: 6px;
     padding: 2px;
     margin: 1px 0px;

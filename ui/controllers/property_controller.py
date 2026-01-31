@@ -16,8 +16,10 @@ from enum import Enum, auto
 
 try:
     from qgis.PyQt.QtCore import pyqtSignal
+    from qgis.core import QgsRasterLayer
 except ImportError:
     from PyQt5.QtCore import pyqtSignal
+    QgsRasterLayer = None
 
 from .base_controller import BaseController
 
@@ -165,10 +167,18 @@ class PropertyController(BaseController):
         if current_layer is None:
             return False
         
-        # Guard: layer must be in PROJECT_LAYERS
+        # Guard: layer must be in PROJECT_LAYERS (raster layers are excluded - EPIC-3)
         layer_id = current_layer.id()
         project_layers = getattr(dw, 'PROJECT_LAYERS', {})
         if layer_id not in project_layers:
+            # EPIC-3: Raster layers are not stored in PROJECT_LAYERS by design
+            # Return True (silent success) to avoid error spam in logs
+            if QgsRasterLayer is not None and isinstance(current_layer, QgsRasterLayer):
+                logger.debug(
+                    f"change_property: raster layer '{current_layer.name()}' - skipping (not in PROJECT_LAYERS by design)"
+                )
+                return True  # Silent success for raster layers
+            
             logger.warning(
                 f"change_property: layer {current_layer.name()} not in PROJECT_LAYERS"
             )

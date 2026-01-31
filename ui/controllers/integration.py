@@ -2050,7 +2050,7 @@ class ControllerIntegration:
         Call this to update UI from controller state,
         for example after loading a configuration.
         
-        v5.0: Full implementation of widget synchronization.
+        Note: Full implementation of widget synchronization.
         """
         if not self._is_setup:
             return

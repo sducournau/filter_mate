@@ -9,14 +9,15 @@ to prevent CRIT-005 (layer loss after filter).
 
 Story: MIG-073
 Phase: 6 - God Class DockWidget Migration
+Note: Supports both vector and raster layers for unified exploring
 """
 
-from typing import TYPE_CHECKING, Optional, List
+from typing import TYPE_CHECKING, Optional, List, Union
 import logging
 import time
 
 from qgis.PyQt.QtCore import pyqtSignal
-from qgis.core import QgsVectorLayer, QgsProject
+from qgis.core import QgsVectorLayer, QgsRasterLayer, QgsProject, QgsMapLayer
 
 from .base_controller import BaseController
 
@@ -39,6 +40,7 @@ class LayerSyncController(BaseController):
     - Widget synchronization on layer change
     - Post-filter protection (CRIT-005 fix)
     - Layer add/remove events
+    - Note: Supports both vector and raster layers for unified exploring
 
     CRITICAL FIX (CRIT-005): This controller implements a 5-second protection
     window after filtering to prevent unwanted layer changes from async signals.
@@ -458,9 +460,12 @@ class LayerSyncController(BaseController):
         # Try to find a fallback layer
         return self._find_fallback_layer()
 
-    def _find_fallback_layer(self) -> Optional[QgsVectorLayer]:
-        """Find a fallback layer from project."""
-        # Try PROJECT_LAYERS first
+    def _find_fallback_layer(self) -> Optional[Union[QgsVectorLayer, QgsRasterLayer]]:
+        """Find a fallback layer from project.
+        
+        Note: Supports both vector and raster layers for unified exploring.
+        """
+        # Try PROJECT_LAYERS first (for vector layers)
         if hasattr(self.dockwidget, 'PROJECT_LAYERS'):
             for layer_id in self.dockwidget.PROJECT_LAYERS:
                 project = QgsProject.instance()
@@ -469,10 +474,11 @@ class LayerSyncController(BaseController):
                     logger.debug(f"Using fallback layer from PROJECT_LAYERS: {layer.name()}")
                     return layer
 
-        # Try all project layers
+        # Try all project layers (vector and raster)
         project = QgsProject.instance()
         for layer in project.mapLayers().values():
-            if isinstance(layer, QgsVectorLayer) and self.validate_layer(layer):
+            # Note: Accept both vector layers with geometry AND raster layers
+            if isinstance(layer, (QgsVectorLayer, QgsRasterLayer)) and self.validate_layer(layer):
                 logger.debug(f"Using fallback layer from project: {layer.name()}")
                 return layer
 
@@ -508,14 +514,17 @@ class LayerSyncController(BaseController):
 
     # === Layer Events ===
 
-    def on_layer_added(self, layer: QgsVectorLayer) -> None:
+    def on_layer_added(self, layer: Union[QgsVectorLayer, QgsRasterLayer]) -> None:
         """
         Handle layer added event.
 
+        Note: Supports both vector and raster layers.
+        
         Args:
             layer: Layer that was added
         """
-        if not isinstance(layer, QgsVectorLayer):
+        # Note: Accept both vector and raster layers
+        if not isinstance(layer, (QgsVectorLayer, QgsRasterLayer)):
             return
 
         if not self.validate_layer(layer):

@@ -4,7 +4,7 @@ Unit Tests for Favorites Service.
 
 Tests the FavoritesService including:
 - CRUD operations (add, remove, update, get)
-- Internal database storage (v5.0)
+- Internal database storage 
 - Import/Export functionality
 - Statistics and validation
 
@@ -36,7 +36,7 @@ sys.path.insert(0, str(plugin_dir))
 # ============================================================
 
 class TestInternalDatabaseStorageStandalone:
-    """Tests for internal SQLite storage schema (v5.0 feature).
+    """Tests for internal SQLite storage schema .
     
     These tests verify the database schema without importing FavoritesService.
     """
@@ -49,7 +49,7 @@ class TestInternalDatabaseStorageStandalone:
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
             
-            # Create table with v5.0 schema
+            # Create table with internal schema
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS favorites (
                     id TEXT PRIMARY KEY,
@@ -305,7 +305,7 @@ class TestFavoritesStatisticsStandalone:
 
 
 class TestFavoritesSpatialConfigStandalone:
-    """Tests for spatial configuration in favorites (v5.0)."""
+    """Tests for spatial configuration in favorites ."""
     
     def test_spatial_config_with_buffer(self):
         """Test favorite with buffer in spatial config."""

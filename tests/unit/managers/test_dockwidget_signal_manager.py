@@ -1,7 +1,7 @@
 """
 Tests for DockwidgetSignalManager.
 
-v5.0 Phase 2: Unit tests for extracted signal management.
+Refactoring: Unit tests for extracted signal management.
 """
 
 import os

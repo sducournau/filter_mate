@@ -12,6 +12,19 @@ from .custom_widgets import (
     QgsCheckableComboBoxLayer,
     QgsCheckableComboBoxFeaturesListPickerWidget
 )
+# Note QToolBox Architecture
+from .toolbox import (
+    BaseToolBox,
+    ExploringToolBox,
+    VectorExploringPage,
+    RasterExploringPage,
+    ToolsetToolBox,
+    FilteringPage,
+    ExportingPage,
+    ConfigurationPage,
+    ToolBoxIntegrationBridge,
+    DualToolBoxContainer
+)
 
 __all__ = [
     'FavoritesWidget',
@@ -21,4 +34,15 @@ __all__ = [
     'ListWidgetWrapper',
     'QgsCheckableComboBoxLayer',
     'QgsCheckableComboBoxFeaturesListPickerWidget',
+    # Note QToolBox
+    'BaseToolBox',
+    'ExploringToolBox',
+    'VectorExploringPage',
+    'RasterExploringPage',
+    'ToolsetToolBox',
+    'FilteringPage',
+    'ExportingPage',
+    'ConfigurationPage',
+    'ToolBoxIntegrationBridge',
+    'DualToolBoxContainer',
 ]

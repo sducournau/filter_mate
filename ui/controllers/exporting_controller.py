@@ -259,7 +259,7 @@ class ExportingController(BaseController):
                 datatype_to_export = dockwidget.project_props['EXPORTING']['DATATYPE_TO_EXPORT']
             
             # Import required modules
-            from qgis.core import QgsVectorLayer, QgsProject
+            from qgis.core import QgsVectorLayer, QgsRasterLayer, QgsProject
             from qgis.PyQt.QtCore import Qt
             from ...infrastructure.constants import REMOTE_PROVIDERS
             from ...infrastructure.utils import geometry_type_to_string
@@ -275,8 +275,9 @@ class ExportingController(BaseController):
             
             project = QgsProject.instance()
             
-            # Collect diagnostic info
-            qgis_layers = [l for l in project.mapLayers().values() if isinstance(l, QgsVectorLayer)]
+            # Collect diagnostic info - v5.1: Include both vector and raster layers
+            qgis_layers = [l for l in project.mapLayers().values() 
+                           if isinstance(l, QgsVectorLayer) or isinstance(l, QgsRasterLayer)]
             postgres_layers = [l for l in qgis_layers if l.providerType() == 'postgres']
             remote_layers = [l for l in qgis_layers if l.providerType() in REMOTE_PROVIDERS]
             
@@ -357,11 +358,22 @@ class ExportingController(BaseController):
                 # DIAGNOSTIC: Log geometry type and icon validity
                 logger.debug(f"populate_export_combobox: layer='{layer_name}', geom_type='{geom_type}', icon_isNull={layer_icon.isNull() if layer_icon else 'None'}")
                 
-                # Validate layer is usable
+                # Validate layer is usable - v5.1: Support both vector and raster layers
                 layer_obj = project.mapLayer(layer_id)
-                if layer_obj and isinstance(layer_obj, QgsVectorLayer) and is_layer_source_available(layer_obj, require_psycopg2=False):
+                if not layer_obj:
+                    continue
+                
+                is_vector = isinstance(layer_obj, QgsVectorLayer)
+                is_raster = isinstance(layer_obj, QgsRasterLayer)
+                
+                if (is_vector or is_raster) and is_layer_source_available(layer_obj, require_psycopg2=False):
+                    # v5.1: Update geometry type for raster layers
+                    if is_raster:
+                        geom_type = "GeometryType.Raster"
+                        layer_icon = dockwidget.icon_per_geometry_type(geom_type)
+                    
                     display_name = f"{layer_name} [{layer_crs_authid}]"
-                    item_data = {"layer_id": key, "layer_geometry_type": layer_info["layer_geometry_type"]}
+                    item_data = {"layer_id": key, "layer_geometry_type": geom_type}
                     layers_widget.addItem(layer_icon, display_name, item_data)
                     item = layers_widget.model().item(item_index)
                     item.setCheckState(Qt.Checked if key in layers_to_export else Qt.Unchecked)

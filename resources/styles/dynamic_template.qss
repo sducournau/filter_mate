@@ -196,6 +196,45 @@
 }
 
 /* ========================================================================
+   QGIS COMPOSITE WIDGETS - Feature picker and expression buttons
+   ======================================================================== */
+
+/* QgsFeaturePickerWidget and QgsFieldExpressionWidget container */
+#dockWidgetContents QgsFeaturePickerWidget,
+#dockWidgetContents QgsFieldExpressionWidget {
+    background-color: transparent;
+    border: none;
+    padding: 0px;
+    min-height: 28px;
+}
+
+/* Navigation/Expression buttons inside QGIS composite widgets (< > E buttons) */
+#dockWidgetContents QgsFeaturePickerWidget QToolButton,
+#dockWidgetContents QgsFieldExpressionWidget QToolButton {
+    background-color: {color_1};
+    border: 1px solid {color_2};
+    border-radius: 3px;
+    padding: 2px;
+    min-width: 22px;
+    max-width: 22px;
+    min-height: 22px;
+    max-height: 22px;
+    margin: 1px;
+}
+
+#dockWidgetContents QgsFeaturePickerWidget QToolButton:hover,
+#dockWidgetContents QgsFieldExpressionWidget QToolButton:hover {
+    background-color: {color_accent_light_bg};
+    border: 1px solid {color_accent};
+}
+
+#dockWidgetContents QgsFeaturePickerWidget QToolButton:pressed,
+#dockWidgetContents QgsFieldExpressionWidget QToolButton:pressed {
+    background-color: {color_accent_pressed};
+    border: 1px solid {color_accent_dark};
+}
+
+/* ========================================================================
    HEADER BAR - Backend indicator only (minimal, transparent)
    ======================================================================== */
 #dockWidgetContents QFrame#frame_header {
@@ -247,8 +286,9 @@
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 5px;
-    margin-top: {spacing_large};
+    margin-top: 16px;
     padding: {spacing_medium};
+    padding-top: 24px;
     font-weight: bold;
     color: {color_font_0};
 }
@@ -256,9 +296,33 @@
 #dockWidgetContents QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    padding: {spacing_small} {spacing_medium};
+    padding: 4px {spacing_medium};
     background-color: {color_accent_light_bg};
-    border-radius: 3px;
+    border-radius: 4px;
+    margin-left: 8px;
+    margin-top: 2px;
+    color: {color_accent_dark};
+}
+
+#dockWidgetContents QgsCollapsibleGroupBox {
+    background-color: {color_1};
+    border: 1px solid {color_2};
+    border-radius: 6px;
+    padding: 8px;
+    padding-top: 32px;
+    margin-top: 8px;
+    margin-bottom: 4px;
+    color: {color_font_0};
+}
+
+#dockWidgetContents QgsCollapsibleGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 6px 12px;
+    margin-left: 28px;
+    margin-top: 8px;
+    background-color: {color_accent_light_bg};
+    border-radius: 4px;
     color: {color_accent_dark};
 }
 
@@ -329,8 +393,21 @@
 #dockWidgetContents QToolBox::tab {
     background-color: {color_bg_0};
     border: 1px solid {color_2};
-    padding: {spacing_medium};
+    padding: 4px 8px 8px 8px;
+    min-height: 24px;
     color: {color_font_0};
+}
+
+/* Style pour les boutons à l'intérieur des onglets - alignement icône/texte */
+#dockWidgetContents QToolBox QToolButton {
+    background-color: transparent;
+    border: none;
+    padding: 4px 10px 8px 28px;
+    min-height: 24px;
+    color: {color_font_0};
+    font-weight: normal;
+    text-align: left;
+    qproperty-iconSize: 16px 16px;
 }
 
 #dockWidgetContents QToolBox::tab:hover:!selected {

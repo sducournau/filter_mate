@@ -1,5 +1,7 @@
 <!DOCTYPE RCC><RCC version="1.0">
     <qresource prefix="/plugins/filter_mate">
         <file>icon.png</file>
+        <file>icons/vector.png</file>
+        <file>icons/raster.png</file>
     </qresource>
 </RCC>

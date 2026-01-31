@@ -1,7 +1,7 @@
 """
 DockwidgetSignalManager - Extracted from filter_mate_dockwidget.py
 
-v5.0 Phase 2 Sprint 2.1: Extract signal management from God Class.
+Refactoring Sprint 2.1: Extract signal management from God Class.
 Manages PyQt signal connections/disconnections for FilterMate dockwidget.
 
 This module extracts ~570 lines of signal management code from the 
