@@ -17,12 +17,8 @@ from qgis.PyQt.QtGui import QColor, QPen, QBrush
 
 from qgis.core import QgsRasterLayer, QgsRasterBandStats
 
-# Try to import pyqtgraph (available in QGIS)
-try:
-    import pyqtgraph as pg
-    PYQTGRAPH_AVAILABLE = True
-except ImportError:
-    PYQTGRAPH_AVAILABLE = False
+
+from qgis.gui import QgsHistogramWidget
 
 from infrastructure.logging import get_logger
 
@@ -61,95 +57,34 @@ class RasterHistogramWidget(QWidget):
         self._setup_ui()
         
     def _setup_ui(self):
-        """Setup the widget UI with pyqtgraph plot."""
+        """Setup the widget UI with QGIS native histogram widget."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(2)
-        
-        if not PYQTGRAPH_AVAILABLE:
-            # Fallback: show message if pyqtgraph not available
-            label = QLabel("Histogram requires pyqtgraph\n(pip install pyqtgraph)")
-            label.setAlignment(Qt.AlignCenter)
-            label.setStyleSheet("color: #888; font-style: italic;")
-            layout.addWidget(label)
-            logger.warning("pyqtgraph not available - histogram disabled")
-            return
-        
-        # Configure pyqtgraph for dark/light theme compatibility
-        pg.setConfigOptions(antialias=True, background='w', foreground='k')
-        
-        # Create plot widget
-        self._plot_widget = pg.PlotWidget()
-        self._plot_widget.setMinimumHeight(60)
-        self._plot_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        
-        # Configure plot appearance
-        self._plot_widget.showGrid(x=False, y=False)
-        self._plot_widget.setMenuEnabled(False)
-        self._plot_widget.hideButtons()
-        
-        # Hide axes for cleaner look
-        self._plot_widget.getPlotItem().hideAxis('left')
-        self._plot_widget.getPlotItem().hideAxis('bottom')
-        
-        # Create histogram bar graph item
-        self._histogram_item = pg.BarGraphItem(
-            x=[0], height=[0], width=1,
-            brush=QColor(100, 149, 237, 180),  # Cornflower blue
-            pen=pg.mkPen(color=(70, 130, 180), width=0.5)
-        )
-        self._plot_widget.addItem(self._histogram_item)
-        
-        # Create selection region (draggable)
-        self._selection_region = pg.LinearRegionItem(
-            values=[0, 1],
-            brush=QColor(255, 165, 0, 80),  # Orange with transparency
-            pen=pg.mkPen(color=(255, 140, 0), width=2),
-            movable=True
-        )
-        self._selection_region.sigRegionChanged.connect(self._on_region_changed)
-        self._selection_region.sigRegionChangeFinished.connect(self._on_region_change_finished)
-        self._plot_widget.addItem(self._selection_region)
-        
-        layout.addWidget(self._plot_widget)
-        
-        # Info label showing selection
-        self._info_label = QLabel("Select range on histogram")
+
+        self._histogram_widget = QgsHistogramWidget(self)
+        self._histogram_widget.setMinimumHeight(60)
+        self._histogram_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        layout.addWidget(self._histogram_widget)
+
+        # Info label (optionnel)
+        self._info_label = QLabel("Histogram (QGIS native)")
         self._info_label.setAlignment(Qt.AlignCenter)
         self._info_label.setStyleSheet("font-size: 9px; color: #666;")
         layout.addWidget(self._info_label)
-        
-        logger.debug("RasterHistogramWidget UI setup complete")
+
+        logger.debug("RasterHistogramWidget (QGIS native) UI setup complete")
     
     def set_layer(self, layer: QgsRasterLayer, band_index: int = 1):
-        """Set the raster layer and band to display histogram for.
-        
-        v5.1: Always computes histogram using sampling for large rasters/VRT.
-        
-        Args:
-            layer: QgsRasterLayer to analyze
-            band_index: Band index (1-based)
-        """
-        if not PYQTGRAPH_AVAILABLE:
-            return
-            
+        """Set the raster layer and band to display histogram for (QGIS native)."""
         self._layer = layer
         self._band_index = band_index
-        
         if layer is None:
-            self._clear_histogram()
+            self._histogram_widget.clear()
+            self._info_label.setText("No raster layer selected")
             return
-        
-        # v5.1: Show computing message for large rasters
-        if self._is_large_raster(layer):
-            logger.info(f"v5.1: Large raster/VRT detected, computing histogram with sampling...")
-            self._info_label.setText("Computing histogram (sampling)...")
-            from qgis.PyQt.QtWidgets import QApplication
-            QApplication.processEvents()
-        
-        # v5.1: Always compute (uses sampling internally for large rasters)
-        self._compute_histogram()
-        self._update_display()
+        self._histogram_widget.setRasterLayer(layer, band_index)
+        self._info_label.setText(f"Histogram: {layer.name()} (Band {band_index})")
     
     def force_compute(self):
         """v5.0: Force histogram computation even for large rasters.
@@ -437,7 +372,7 @@ class RasterHistogramWidget(QWidget):
             return
         if self._histogram_data is None:
             logger.warning("_update_display: no histogram data - showing message")
-            self._info_label.setText("Could not compute histogram\\nTry selecting a different band")
+            self._info_label.setText("Could not compute histogram\nTry selecting a different band")
             self._info_label.setStyleSheet("font-size: 9px; color: #888; font-style: italic;")
             return
         

@@ -884,6 +884,8 @@ class ConfigurationManager(QObject):
                 d.checkBox_filtering_use_centroids_distant_layers.setIcon(icon)
             d.checkBox_filtering_use_centroids_distant_layers.setLayoutDirection(QtCore.Qt.RightToLeft)
             d.checkBox_filtering_use_centroids_distant_layers.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+            # v5.2 FIX 2026-01-31: Disable by default - enabled only when HAS_LAYERS_TO_FILTER is checked
+            d.checkBox_filtering_use_centroids_distant_layers.setEnabled(False)
 
         
         # Create horizontal layout and insert widgets
