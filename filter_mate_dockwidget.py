@@ -455,15 +455,35 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._feature_picker_layer_connection = None
 
     def _initialize_layer_state(self):
-        """v4.0 Sprint 15: Initialize layers, managers, controllers, and UI."""
+        """v4.0 Sprint 15: Initialize layers, managers, controllers, and UI.
+        
+        v5.3 FIX 2026-01-31: Also consider raster layers as valid initial layer
+        to ensure toolBox_exploring shows correct page at startup.
+        """
         self.init_layer, self.has_loaded_layers = None, False
         if self.PROJECT:
+            # v5.3: Consider both vector and raster layers for initial layer
+            active_layer = self.iface.activeLayer()
             vector_layers = [l for l in self.PROJECT.mapLayers().values() if isinstance(l, QgsVectorLayer)]
-            if vector_layers:
-                self.init_layer, self.has_loaded_layers = self.iface.activeLayer() or vector_layers[0], True
+            raster_layers = [l for l in self.PROJECT.mapLayers().values() if isinstance(l, QgsRasterLayer)]
+            
+            # Priority: active layer > first vector layer > first raster layer
+            if active_layer:
+                self.init_layer = active_layer
+                self.has_loaded_layers = True
+            elif vector_layers:
+                self.init_layer = vector_layers[0]
+                self.has_loaded_layers = True
+            elif raster_layers:
+                self.init_layer = raster_layers[0]
+                self.has_loaded_layers = True
         self.widgets, self.widgets_initialized, self.current_exploring_groupbox, self.tabTools_current_index = None, False, None, 0
         self.backend_indicator_label, self.plugin_title_label, self.frame_header = None, None, None
         self._exploring_cache = ExploringFeaturesCache(max_layers=50, max_age_seconds=300.0)
+        
+        # v5.3 FIX 2026-01-31: Track last active layer by type for manual toolbox switching
+        self._last_vector_layer_id = None  # ID of last used vector layer
+        self._last_raster_layer_id = None  # ID of last used raster layer
         
         # Layout/Style managers
         self._splitter_manager = self._dimensions_manager = self._spacing_manager = self._action_bar_manager = None
@@ -927,8 +947,33 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         The page (vector/raster) is controlled ONLY by the type of layer selected
         in comboBox_filtering_current_layer. User cannot manually click to switch pages.
         
-        Strategy: Disable both page items so user cannot click on headers.
-        We re-enable them temporarily only when switching programmatically.
+        v5.3 FIX 2026-01-31: Keep icons styled as ACTIVE (not grayed out).
+        We block manual switching by reverting changes in currentChanged handler,
+        NOT by disabling the items (which causes grayed-out appearance).
+        
+        Strategy: Keep pages enabled (active style) but revert any manual change
+        back to the correct page based on current layer type.
+        """
+        try:
+            if not hasattr(self, 'toolBox_exploring') or self.toolBox_exploring is None:
+                return
+            
+            # v5.3: Keep all pages ENABLED (not grayed) - blocking is done in handler
+            # Do NOT call setItemEnabled(i, False) as it grays out the icons
+            
+            # Set flag to track that manual switching should be blocked
+            self._toolbox_manual_switch_blocked = True
+            
+            logger.info("🔒 toolBox_exploring manual switching blocked (icons remain active style)")
+            
+        except Exception as e:
+            logger.warning(f"Could not setup toolBox manual switch blocking: {e}")
+    
+    def _enable_toolbox_page_for_switch(self, index: int):
+        """v5.2 FIX 2026-01-31: Switch to a page programmatically.
+        
+        v5.3 FIX 2026-01-31: Pages are now always enabled (active style).
+        We just need to mark this as a programmatic change and switch.
         """
         try:
             if not hasattr(self, 'toolBox_exploring') or self.toolBox_exploring is None:
@@ -936,33 +981,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             toolbox = self.toolBox_exploring
             
-            # Disable both page headers - user cannot click on them
-            # setItemEnabled(index, False) grays out and disables the header button
-            for i in range(toolbox.count()):
-                toolbox.setItemEnabled(i, False)
-            
-            # Change cursor to indicate non-clickable
-            toolbox.setCursor(QtCore.Qt.ArrowCursor)
-            
-            logger.info("🔒 toolBox_exploring manual switching disabled - all page headers disabled")
-            
-        except Exception as e:
-            logger.warning(f"Could not disable toolBox manual switching: {e}")
-    
-    def _enable_toolbox_page_for_switch(self, index: int):
-        """v5.2 FIX 2026-01-31: Temporarily enable a page to switch to it programmatically."""
-        try:
-            if not hasattr(self, 'toolBox_exploring') or self.toolBox_exploring is None:
-                return
-            
-            toolbox = self.toolBox_exploring
-            
-            # Enable the target page temporarily
-            toolbox.setItemEnabled(index, True)
-            # Switch to it
-            toolbox.setCurrentIndex(index)
-            # Disable it again immediately
-            toolbox.setItemEnabled(index, False)
+            # v5.3: Mark as programmatic change so handler doesn't revert it
+            self._programmatic_page_change = True
+            try:
+                toolbox.setCurrentIndex(index)
+            finally:
+                self._programmatic_page_change = False
             
         except Exception as e:
             logger.warning(f"Could not switch toolBox page: {e}")
@@ -971,14 +995,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """Note: Setup the interactive raster histogram widget.
         
         Creates and embeds the RasterHistogramWidget into the widget_histogram_placeholder
-        defined in the .ui file.
+        defined in the .ui file. Uses QPainter-based widget (no pyqtgraph dependency).
         """
         try:
             from ui.widgets.raster_histogram_interactive import RasterHistogramInteractiveWidget
             
-            if not is_histogram_available():
-                logger.warning("Note: Histogram widget not available (pyqtgraph missing)")
-                return
+            # Note: RasterHistogramInteractiveWidget uses QPainter, no pyqtgraph needed
             
             if not hasattr(self, 'widget_histogram_placeholder'):
                 logger.warning("Note: widget_histogram_placeholder not found in UI")
@@ -1028,28 +1050,43 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _on_native_exploring_page_changed(self, index: int):
         """Note: Handle page change in native toolBox_exploring.
         
-        v5.2 FIX 2026-01-31: Page is now controlled by layer type only.
-        Manual switching is blocked via event filter in _disable_toolbox_manual_switch().
-        This handler only processes programmatic changes from _auto_switch_exploring_page().
+        v5.3 FIX 2026-01-31: When user manually clicks on a page (Vector/Raster),
+        switch to the last used layer of that type and update comboBox_filtering_current_layer.
+        This provides a better UX - user can switch between vector and raster workflows.
         """
         page_names = {0: 'vector', 1: 'raster'}
         page_name = page_names.get(index, 'unknown')
         logger.debug(f"Note: Exploring page changed to {page_name} (index {index})")
         
-        # v5.2 FIX: Only allow programmatic changes (from _auto_switch_exploring_page)
+        # v5.3 FIX: If manual click (not programmatic), switch to last layer of that type
         if not getattr(self, '_programmatic_page_change', False):
-            # This should not happen since clicks are blocked, but just in case
+            # User manually clicked on a page - switch to last layer of that type
             layer = self._get_current_exploring_layer()
+            
+            # Determine if we need to switch layer type
             if layer:
                 is_raster = isinstance(layer, QgsRasterLayer)
-                expected_index = 1 if is_raster else 0
-                
-                if index != expected_index:
-                    # Force back to correct page (safety net)
-                    logger.warning(f"🔒 Unexpected page change blocked - reverting to index {expected_index}")
-                    self._programmatic_page_change = True
-                    QTimer.singleShot(0, lambda: self._revert_toolbox_page(expected_index))
-                    return
+                current_type_index = 1 if is_raster else 0
+            else:
+                # No current layer - always try to switch to requested type
+                current_type_index = -1  # Force switch
+            
+            if index != current_type_index:
+                # User wants to switch to a different layer type
+                target_layer = self._get_last_layer_by_type(index)
+                if target_layer:
+                    logger.info(f"🔄 Manual switch to {page_name} - updating comboBox to: {target_layer.name()}")
+                    # Switch the combobox to the target layer (this updates comboBox_filtering_current_layer)
+                    self._switch_to_layer(target_layer)
+                else:
+                    # No layer of that type available - revert to current page if possible
+                    if current_type_index >= 0:
+                        logger.warning(f"🔒 No {page_name} layer available - staying on current page")
+                        self._programmatic_page_change = True
+                        QTimer.singleShot(0, lambda: self._revert_toolbox_page(current_type_index))
+                    else:
+                        logger.warning(f"🔒 No {page_name} layer available and no current layer")
+                return
         
         # Notify the bridge if available
         if self._toolbox_bridge:
@@ -1062,6 +1099,80 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.toolBox_exploring.setCurrentIndex(expected_index)
         finally:
             self._programmatic_page_change = False
+    
+    def _get_last_layer_by_type(self, page_index: int):
+        """v5.3 FIX 2026-01-31: Get the last used layer of the specified type.
+        
+        Args:
+            page_index: 0 for vector, 1 for raster
+            
+        Returns:
+            Last used layer of that type, or first available layer of that type,
+            or None if no layers of that type exist.
+        """
+        try:
+            if page_index == 0:  # Vector
+                # Try last used vector layer first
+                if self._last_vector_layer_id:
+                    layer = self.PROJECT.mapLayer(self._last_vector_layer_id)
+                    if layer and isinstance(layer, QgsVectorLayer):
+                        return layer
+                # Fallback to first vector layer
+                for layer in self.PROJECT.mapLayers().values():
+                    if isinstance(layer, QgsVectorLayer):
+                        return layer
+            else:  # Raster
+                # Try last used raster layer first
+                if self._last_raster_layer_id:
+                    layer = self.PROJECT.mapLayer(self._last_raster_layer_id)
+                    if layer and isinstance(layer, QgsRasterLayer):
+                        return layer
+                # Fallback to first raster layer
+                for layer in self.PROJECT.mapLayers().values():
+                    if isinstance(layer, QgsRasterLayer):
+                        return layer
+            return None
+        except Exception as e:
+            logger.warning(f"Error getting last layer by type: {e}")
+            return None
+    
+    def _switch_to_layer(self, layer):
+        """v5.3 FIX 2026-01-31: Switch current layer combobox to the specified layer.
+        
+        This triggers the normal layer change flow which updates all widgets.
+        Uses QgsMapLayerComboBox.setLayer() for proper layer selection.
+        """
+        try:
+            if hasattr(self, 'comboBox_filtering_current_layer') and self.comboBox_filtering_current_layer:
+                # Use setLayer() which is the proper method for QgsMapLayerComboBox
+                self.comboBox_filtering_current_layer.setLayer(layer)
+                logger.info(f"✓ Switched comboBox_filtering_current_layer to: {layer.name()}")
+                return True
+            else:
+                # Fallback: directly call current_layer_changed
+                logger.debug("comboBox_filtering_current_layer not available, calling current_layer_changed directly")
+                self.current_layer_changed(layer, manual_change=True)
+                return True
+        except Exception as e:
+            logger.warning(f"Error switching to layer: {e}")
+            return False
+    
+    def _update_last_layer_by_type(self, layer):
+        """v5.3 FIX 2026-01-31: Update the last used layer tracking.
+        
+        Called when a layer becomes active to remember it for manual switching.
+        """
+        if layer is None:
+            return
+        try:
+            if isinstance(layer, QgsVectorLayer):
+                self._last_vector_layer_id = layer.id()
+                logger.debug(f"Updated last vector layer: {layer.name()}")
+            elif isinstance(layer, QgsRasterLayer):
+                self._last_raster_layer_id = layer.id()
+                logger.debug(f"Updated last raster layer: {layer.name()}")
+        except Exception as e:
+            logger.debug(f"Could not update last layer tracking: {e}")
     
     def _on_raster_band_changed(self, index: int):
         """Note: Handle band selection change for raster filtering.
@@ -1338,6 +1449,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.doubleSpinBox_min.setValue(stats.minimumValue)
                 self.doubleSpinBox_max.setValue(stats.maximumValue)
             
+            # v5.3 FIX: Update histogram after statistics are computed
+            self._update_raster_histogram(current_layer)
+            
             logger.info(f"Note: Raster stats computed for {current_layer.name()} band {band_index}: "
                        f"min={stats.minimumValue:.2f}, max={stats.maximumValue:.2f}, "
                        f"mean={stats.mean:.2f}, stddev={stats.stdDev:.2f}")
@@ -1442,6 +1556,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.doubleSpinBox_max.setMaximum(stats.maximumValue)
                 self.doubleSpinBox_min.setValue(stats.minimumValue)
                 self.doubleSpinBox_max.setValue(stats.maximumValue)
+            
+            # v5.3 FIX: Update histogram after stats computed
+            self._update_raster_histogram(layer)
                 
         except Exception as e:
             logger.error(f"Sync raster stats failed: {e}", exc_info=True)
@@ -1499,6 +1616,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # Set default selection to full range
                 self.doubleSpinBox_min.setValue(stats['min'])
                 self.doubleSpinBox_max.setValue(stats['max'])
+            
+            # v5.3 FIX: Update histogram after async stats computed
+            layer = self._get_current_exploring_layer()
+            if layer:
+                self._update_raster_histogram(layer)
             
             sampled_text = " (sampled)" if stats.get('was_sampled') else ""
             logger.info(
@@ -5628,6 +5750,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 Sprint 8: Optimized - initialize widget interactions and default values."""
         logger.info("🚀 manage_interactions CALLED - Starting widget configuration")
         
+        # v5.3 FIX 2026-01-31: Import QgsRasterLayer for startup toolbox sync
+        from qgis.core import QgsRasterLayer
+        
         self.coordinateReferenceSystem = QgsCoordinateReferenceSystem()
         
         # FIX 2026-01-15 (FIX-009): CRITICAL - Connect exploring buttons FIRST before accessing widgets dict
@@ -5675,6 +5800,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # UX Enhancement: Setup conditional widget states based on pushbutton toggles
         self._setup_conditional_widget_states()
 
+        # v5.3 FIX 2026-01-31: Sync toolBox_exploring page with initial layer type at startup
+        # This ensures the exploring toolbox shows the correct page (Vector/Raster) 
+        # based on the active layer when the plugin opens
+        if self.init_layer:
+            try:
+                self._auto_switch_exploring_page(self.init_layer)
+                logger.info(f"✓ Startup: Exploring toolbox synced to '{type(self.init_layer).__name__}'")
+            except Exception as e:
+                logger.warning(f"Could not sync exploring toolbox at startup: {e}")
+
         if self.init_layer and isinstance(self.init_layer, QgsVectorLayer):
             self.manage_output_name()
             # v4.0.4: Don't populate export combobox here - will be done via projectLayersReady signal
@@ -5685,6 +5820,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.exploring_groupbox_init()
             self.current_layer_changed(self.init_layer)
             self.filtering_auto_current_layer_changed()
+        elif self.init_layer and isinstance(self.init_layer, QgsRasterLayer):
+            # v5.3 FIX 2026-01-31: Also call current_layer_changed for raster layers
+            # This ensures raster-specific widgets are properly initialized at startup
+            self.current_layer_changed(self.init_layer)
+            logger.info(f"✓ Startup: Raster layer '{self.init_layer.name()}' initialized")
     
     def _setup_conditional_widget_states(self):
         """
@@ -8250,6 +8390,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if not should_continue:
                 logger.debug("current_layer_changed: Validation failed, returning after auto-switch")
                 return
+            
+            # v5.3 FIX 2026-01-31: Track this layer as last used of its type
+            # This enables manual toolbox switching to remember last vector/raster
+            self._update_last_layer_by_type(validated_layer)
             
             # v5.0: Detect layer type for conditional processing
             is_raster = isinstance(validated_layer, QgsRasterLayer)
