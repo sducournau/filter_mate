@@ -137,6 +137,11 @@ try:
     logger.debug("✓ layer_validator")
     from .core.services.filter_application_service import FilterApplicationService
     logger.debug("✓ filter_application_service")
+    
+    # v5.0: Raster filter controller (EPIC Raster Visibility Controls - Sprint 2)
+    from .ui.controllers.raster_filter_controller import RasterFilterController
+    logger.debug("✓ raster_filter_controller")
+    
     HEXAGONAL_AVAILABLE = True
     logger.debug("All hexagonal services loaded successfully")
 except ImportError as e:
@@ -148,7 +153,7 @@ except ImportError as e:
     LayerLifecycleService = LayerLifecycleConfig = TaskManagementService = TaskManagementConfig = None
     UndoRedoHandler = DatabaseManager = VariablesPersistenceManager = TaskOrchestrator = None
     OptimizationManager = FilterResultHandler = AppInitializer = DatasourceManager = LayerFilterBuilder = None
-    LayerValidator = FilterApplicationService = None
+    LayerValidator = FilterApplicationService = RasterFilterController = None
     def _init_hexagonal_services(config=None): pass
     def _cleanup_hexagonal_services(): pass
     def _hexagonal_initialized(): return False
@@ -311,6 +316,14 @@ class FilterMateApp:
 
     def cleanup(self):
         """Clean up plugin resources on unload or reload. Delegates to LayerLifecycleService."""
+        # Clean up raster filter controller temporary layers (v5.0)
+        if hasattr(self, '_raster_filter_controller') and self._raster_filter_controller:
+            try:
+                self._raster_filter_controller.cleanup_on_close()
+                logger.debug("✅ Raster filter controller cleanup completed")
+            except Exception as e:
+                logger.warning(f"Raster filter controller cleanup failed: {e}")
+        
         service = self._get_layer_lifecycle_service()
         if service:
             auto_cleanup_enabled = getattr(self.dockwidget, '_pg_auto_cleanup_enabled', True) if self.dockwidget else True
@@ -583,6 +596,10 @@ class FilterMateApp:
             logger.info("FilterMate: FilterApplicationService initialized (Sprint 17)")
         else:
             self._filter_application_service = None
+        
+        # v5.0 Sprint 2: Initialize RasterFilterController (EPIC Raster Visibility Controls)
+        # Note: Initialized later in _on_widgets_initialized() when dockwidget is ready
+        self._raster_filter_controller = None
         
         # Note: Do NOT call self.run() here - it will be called from filter_mate.py
         # when the user actually activates the plugin to avoid QGIS initialization race conditions
@@ -1518,6 +1535,15 @@ class FilterMateApp:
         logger.info("✓ Received widgetsInitialized signal - dockwidget ready for operations")
         self._widgets_ready = True
         logger.debug(f"_widgets_ready set to: {self._widgets_ready}")
+        
+        # v5.0 Sprint 2: Initialize RasterFilterController now that dockwidget is ready
+        if HEXAGONAL_AVAILABLE and RasterFilterController and not self._raster_filter_controller:
+            try:
+                self._raster_filter_controller = RasterFilterController(self.dockwidget, self)
+                logger.info("FilterMate: RasterFilterController initialized (v5.0 Sprint 2)")
+            except Exception as e:
+                logger.error(f"Failed to initialize RasterFilterController: {e}", exc_info=True)
+                self._raster_filter_controller = None
         
         # If we have PROJECT_LAYERS but UI wasn't refreshed yet, do it now
         if len(self.PROJECT_LAYERS) > 0:

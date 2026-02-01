@@ -14,6 +14,7 @@ Exported Symbols:
     - get_expression_manager: Factory function for manager singleton
     - LayersManagementEngineTask: QgsTask for layer tracking management
     - RasterStatsTask: QgsTask for async raster statistics computation (v5.0.2)
+    - RasterRangeFilterTask: QgsTask for raster range filtering (v5.0 EPIC Raster)
 
 Architecture:
     core/tasks/ → Application layer (business logic with QGIS)
@@ -27,6 +28,7 @@ Migration History:
     - v3.0: Migrated layer_management_task.py from modules/tasks/ (EPIC-1)
     - v4.0: Migrated filter_task.py from modules/tasks/ (EPIC-1 Final)
     - v5.0.2: Added RasterStatsTask for async raster stats (VRT freeze fix)
+    - v5.0: Added RasterRangeFilterTask for raster filtering (Sprint 2)
 """
 
 # Main filter task (EPIC-1 migration - January 2026)
@@ -43,6 +45,10 @@ from .layer_management_task import LayersManagementEngineTask
 
 # v5.0.2: Raster statistics async task (VRT freeze fix)
 from .raster_stats_task import RasterStatsTask
+
+# v5.0: Raster filtering tasks (EPIC Raster Visibility Controls - Sprint 2)
+from .raster_range_filter_task import RasterRangeFilterTask
+from .raster_mask_task import RasterMaskTask
 
 # E6: Task completion handler functions
 from .task_completion_handler import (
