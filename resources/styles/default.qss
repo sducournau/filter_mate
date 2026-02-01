@@ -589,8 +589,8 @@ QWidget#widget_exporting_content {
     border: 1px solid {color_2};
     border-radius: 6px;
     margin-top: 16px;
-    padding: 10px;
-    padding-top: 24px;
+    padding: 12px;
+    padding-top: 26px;
     font-weight: 600;
     color: {color_font_0};
 }
@@ -616,8 +616,8 @@ QWidget#widget_exporting_content {
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 6px;
-    padding: 8px;
-    padding-top: 40px;
+    padding: 10px;
+    padding-top: 42px;
     margin-top: 12px;
     margin-bottom: 4px;
     margin-left: 0px;

@@ -4758,19 +4758,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             from .ui.config import UIConfig
             layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 8
             content_spacing = UIConfig.get_config('layout', 'spacing_content') or 6
-            main_margins = UIConfig.get_config('layout', 'margins_main') or 2
+            main_margins = UIConfig.get_config('layout', 'margins_main') or 4
             key_cfg = UIConfig.get_config('key_button') or {}
-            button_spacing = key_cfg.get('spacing', 2)
+            button_spacing = key_cfg.get('spacing', 4)
             # Apply reduced margins to main layouts (verticalLayout_8, verticalLayout_main)
             for name in ['verticalLayout_8', 'verticalLayout_main']:
                 if hasattr(self, name): 
-                    getattr(self, name).setContentsMargins(main_margins, 0, main_margins, 0)
-                    getattr(self, name).setSpacing(0)
-            # Apply zero margins to exploring content layouts
+                    getattr(self, name).setContentsMargins(main_margins, main_margins, main_margins, main_margins)
+                    getattr(self, name).setSpacing(4)
+            # Apply minimal margins to exploring content layouts
             for name in ['verticalLayout_main_content', 'gridLayout_main_header', 'gridLayout_main_actions']:
                 if hasattr(self, name):
-                    getattr(self, name).setContentsMargins(0, 0, 0, 0)
-                    getattr(self, name).setSpacing(2)
+                    getattr(self, name).setContentsMargins(2, 2, 2, 2)
+                    getattr(self, name).setSpacing(4)
             # Configure column stretch for proper groupbox display
             if hasattr(self, 'gridLayout_main_actions'):
                 self.gridLayout_main_actions.setColumnStretch(0, 0)  # Keys: fixed
@@ -4778,8 +4778,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Apply minimal margins to groupbox content layouts
             for name in ['verticalLayout_exploring_tabs_content']:
                 if hasattr(self, name):
-                    getattr(self, name).setContentsMargins(0, 0, 0, 0)
-                    getattr(self, name).setSpacing(2)
+                    getattr(self, name).setContentsMargins(4, 4, 4, 4)
+                    getattr(self, name).setSpacing(4)
             # Apply spacing to exploring layouts
             for name in ['verticalLayout_exploring_single_selection', 'verticalLayout_exploring_multiple_selection', 'verticalLayout_exploring_custom_selection']:
                 if hasattr(self, name): getattr(self, name).setSpacing(layout_spacing)

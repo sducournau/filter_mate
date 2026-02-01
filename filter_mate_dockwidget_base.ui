@@ -10,13 +10,13 @@
     <x>0</x>
     <y>0</y>
     <width>443</width>
-    <height>799</height>
+    <height>909</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
     <width>356</width>
-    <height>317</height>
+    <height>909</height>
    </size>
   </property>
   <property name="baseSize">
@@ -209,7 +209,7 @@
                <x>0</x>
                <y>0</y>
                <width>433</width>
-               <height>272</height>
+               <height>290</height>
               </rect>
              </property>
              <attribute name="icon">
@@ -1353,8 +1353,8 @@ Build advanced filter expressions using QGIS expression builder.
               <rect>
                <x>0</x>
                <y>0</y>
-               <width>433</width>
-               <height>272</height>
+               <width>420</width>
+               <height>504</height>
               </rect>
              </property>
              <attribute name="icon">
@@ -2468,7 +2468,7 @@ Can be set manually or by dragging the histogram right handle.</string>
                  <x>0</x>
                  <y>0</y>
                  <width>429</width>
-                 <height>287</height>
+                 <height>379</height>
                 </rect>
                </property>
                <attribute name="icon">
@@ -3769,7 +3769,7 @@ intersects, contains, within, touches, crosses, overlaps.</string>
                  <x>0</x>
                  <y>0</y>
                  <width>429</width>
-                 <height>287</height>
+                 <height>379</height>
                 </rect>
                </property>
                <attribute name="icon">
@@ -4872,7 +4872,7 @@ Includes data files, styles, and metadata.</string>
                  <x>0</x>
                  <y>0</y>
                  <width>429</width>
-                 <height>287</height>
+                 <height>379</height>
                 </rect>
                </property>
                <attribute name="icon">
@@ -4935,264 +4935,6 @@ Includes data files, styles, and metadata.</string>
           </item>
          </layout>
         </widget>
-       </widget>
-      </item>
-      <item>
-       <widget class="QgsCollapsibleGroupBox" name="groupBox_raster_filter">
-        <property name="title">
-         <string>Raster Filter</string>
-        </property>
-        <property name="collapsed">
-         <bool>false</bool>
-        </property>
-        <layout class="QVBoxLayout" name="verticalLayout_raster_filter">
-         <property name="spacing">
-          <number>5</number>
-         </property>
-         <property name="leftMargin">
-          <number>10</number>
-         </property>
-         <property name="topMargin">
-          <number>10</number>
-         </property>
-         <property name="rightMargin">
-          <number>10</number>
-         </property>
-         <property name="bottomMargin">
-          <number>10</number>
-         </property>
-         <item>
-          <widget class="QLabel" name="label_raster_source_layer">
-           <property name="text">
-            <string>Source Layer:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QgsMapLayerComboBox" name="comboBox_raster_source_layer">
-           <property name="toolTip">
-            <string>Select raster layer to filter</string>
-           </property>
-           <property name="accessibleName">
-            <string>Raster Source Layer</string>
-           </property>
-           <property name="accessibleDescription">
-            <string>Select the raster layer you want to filter by value range or vector overlay</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QGroupBox" name="groupBox_range_filter">
-           <property name="title">
-            <string>Filter by Value Range</string>
-           </property>
-           <layout class="QFormLayout" name="formLayout_range_filter">
-            <property name="horizontalSpacing">
-             <number>10</number>
-            </property>
-            <property name="verticalSpacing">
-             <number>5</number>
-            </property>
-            <item row="0" column="0">
-             <widget class="QLabel" name="label_min_value">
-              <property name="text">
-               <string>Min Value:</string>
-              </property>
-             </widget>
-            </item>
-            <item row="0" column="1">
-             <widget class="QgsDoubleSpinBox" name="doubleSpinBox_raster_min">
-              <property name="toolTip">
-               <string>Minimum value to include in filter (pixels below will be transparent)</string>
-              </property>
-              <property name="accessibleName">
-               <string>Minimum Filter Value</string>
-              </property>
-              <property name="accessibleDescription">
-               <string>Enter minimum pixel value to show. Pixels with values below this will be hidden.</string>
-              </property>
-              <property name="decimals">
-               <number>2</number>
-              </property>
-              <property name="minimum">
-               <double>-999999.990000000002328</double>
-              </property>
-              <property name="maximum">
-               <double>999999.990000000002328</double>
-              </property>
-             </widget>
-            </item>
-            <item row="1" column="0">
-             <widget class="QLabel" name="label_max_value">
-              <property name="text">
-               <string>Max Value:</string>
-              </property>
-             </widget>
-            </item>
-            <item row="1" column="1">
-             <widget class="QgsDoubleSpinBox" name="doubleSpinBox_raster_max">
-              <property name="toolTip">
-               <string>Maximum value to include in filter (pixels above will be transparent)</string>
-              </property>
-              <property name="accessibleName">
-               <string>Maximum Filter Value</string>
-              </property>
-              <property name="accessibleDescription">
-               <string>Enter maximum pixel value to show. Pixels with values above this will be hidden.</string>
-              </property>
-              <property name="decimals">
-               <number>2</number>
-              </property>
-              <property name="minimum">
-               <double>-999999.990000000002328</double>
-              </property>
-              <property name="maximum">
-               <double>999999.990000000002328</double>
-              </property>
-             </widget>
-            </item>
-            <item row="2" column="0">
-             <widget class="QLabel" name="label_band">
-              <property name="text">
-               <string>Band:</string>
-              </property>
-             </widget>
-            </item>
-            <item row="2" column="1">
-             <widget class="QComboBox" name="comboBox_raster_band">
-              <property name="toolTip">
-               <string>Select band to apply filter to (only for multi-band rasters)</string>
-              </property>
-              <property name="accessibleName">
-               <string>Raster Band Selector</string>
-              </property>
-              <property name="accessibleDescription">
-               <string>Choose which band to filter. For multi-band rasters only.</string>
-              </property>
-             </widget>
-            </item>
-            <item row="3" column="0" colspan="2">
-             <widget class="QPushButton" name="pushButton_apply_range_filter">
-              <property name="text">
-               <string>Apply Range Filter</string>
-              </property>
-              <property name="toolTip">
-               <string>Create filtered layer with value range applied</string>
-              </property>
-              <property name="accessibleName">
-               <string>Apply Range Filter Button</string>
-              </property>
-              <property name="accessibleDescription">
-               <string>Click to create a new temporary layer with the specified value range filter applied</string>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </widget>
-         </item>
-         <item>
-          <widget class="QGroupBox" name="groupBox_vector_mask">
-           <property name="title">
-            <string>Filter by Vector Overlay</string>
-           </property>
-           <layout class="QFormLayout" name="formLayout_vector_mask">
-            <property name="horizontalSpacing">
-             <number>10</number>
-            </property>
-            <property name="verticalSpacing">
-             <number>5</number>
-            </property>
-            <item row="0" column="0">
-             <widget class="QLabel" name="label_mask_layer">
-              <property name="text">
-               <string>Mask Layer:</string>
-              </property>
-             </widget>
-            </item>
-            <item row="0" column="1">
-             <widget class="QgsMapLayerComboBox" name="comboBox_vector_mask_layer">
-              <property name="toolTip">
-               <string>Select polygon layer to use as mask</string>
-              </property>
-              <property name="accessibleName">
-               <string>Vector Mask Layer</string>
-              </property>
-              <property name="accessibleDescription">
-               <string>Select a polygon layer to clip the raster. Only pixels inside the polygon will be visible.</string>
-              </property>
-             </widget>
-            </item>
-            <item row="1" column="0" colspan="2">
-             <widget class="QPushButton" name="pushButton_apply_vector_mask">
-              <property name="text">
-               <string>Apply Vector Mask</string>
-              </property>
-              <property name="toolTip">
-               <string>Clip raster to mask layer extent</string>
-              </property>
-              <property name="accessibleName">
-               <string>Apply Vector Mask Button</string>
-              </property>
-              <property name="accessibleDescription">
-               <string>Click to create a new temporary layer clipped to the selected polygon mask</string>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLabel" name="label_active_filtered_layers">
-           <property name="text">
-            <string>Active Filtered Layers:</string>
-           </property>
-           <property name="font">
-            <font>
-             <weight>75</weight>
-             <bold>true</bold>
-            </font>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QListWidget" name="listWidget_active_filtered_layers">
-           <property name="minimumSize">
-            <size>
-             <width>0</width>
-             <height>150</height>
-            </size>
-           </property>
-           <property name="toolTip">
-            <string>List of temporary filtered raster layers</string>
-           </property>
-           <property name="accessibleName">
-            <string>Active Filtered Layers List</string>
-           </property>
-           <property name="accessibleDescription">
-            <string>List showing all temporary filtered raster layers with visibility and opacity controls</string>
-           </property>
-           <property name="selectionMode">
-            <enum>QAbstractItemView::SingleSelection</enum>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="pushButton_clear_all_temp_layers">
-           <property name="text">
-            <string>Clear All Temp Layers</string>
-           </property>
-           <property name="toolTip">
-            <string>Remove all temporary filtered layers from project</string>
-           </property>
-           <property name="accessibleName">
-            <string>Clear All Temporary Layers Button</string>
-           </property>
-           <property name="accessibleDescription">
-            <string>Click to remove all temporary filtered raster layers from the project at once</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
        </widget>
       </item>
       <item>
@@ -5550,17 +5292,6 @@ and access settings and optimization options.</string>
    <header>qgsspinbox.h</header>
   </customwidget>
  </customwidgets>
- <tabstops>
-  <tabstop>comboBox_raster_source_layer</tabstop>
-  <tabstop>doubleSpinBox_raster_min</tabstop>
-  <tabstop>doubleSpinBox_raster_max</tabstop>
-  <tabstop>comboBox_raster_band</tabstop>
-  <tabstop>pushButton_apply_range_filter</tabstop>
-  <tabstop>comboBox_vector_mask_layer</tabstop>
-  <tabstop>pushButton_apply_vector_mask</tabstop>
-  <tabstop>listWidget_active_filtered_layers</tabstop>
-  <tabstop>pushButton_clear_all_temp_layers</tabstop>
- </tabstops>
  <resources>
   <include location="resources.qrc"/>
  </resources>

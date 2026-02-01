@@ -949,18 +949,18 @@ class ConfigurationManager(QObject):
         # This excludes tables without geometry (NoGeometry = 2)
         try:
             # Note: Accept both vector layers with geometry AND raster layers for unified exploring
-            # QGIS 3.40+: setFilters() deprecated, use setProxyModelFilters()
+            # QGIS 3.40+: setFilters() deprecated, use setLayerFilters()
             filters = QgsMapLayerProxyModel.HasGeometry | QgsMapLayerProxyModel.RasterLayer
-            if hasattr(d.comboBox_filtering_current_layer, 'setProxyModelFilters'):
-                d.comboBox_filtering_current_layer.setProxyModelFilters(filters)
+            if hasattr(d.comboBox_filtering_current_layer, 'setLayerFilters'):
+                d.comboBox_filtering_current_layer.setLayerFilters(filters)
             else:
                 d.comboBox_filtering_current_layer.setFilters(filters)
             logger.info("comboBox_filtering_current_layer: Filter set to HasGeometry | RasterLayer (vector + raster)")
         except Exception as e:
             logger.warning(f"Could not set HasGeometry | RasterLayer filter: {e}")
             # Fallback to VectorLayer only
-            if hasattr(d.comboBox_filtering_current_layer, 'setProxyModelFilters'):
-                d.comboBox_filtering_current_layer.setProxyModelFilters(QgsMapLayerProxyModel.VectorLayer)
+            if hasattr(d.comboBox_filtering_current_layer, 'setLayerFilters'):
+                d.comboBox_filtering_current_layer.setLayerFilters(QgsMapLayerProxyModel.VectorLayer)
             else:
                 d.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
         
