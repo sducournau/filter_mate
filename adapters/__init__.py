@@ -83,6 +83,11 @@ __all__ = [
     
     # Database manager (v3.0 MIG-024)
     'DatabaseManager',
+    
+    # Unified Export (v5.0 EPIC-UNIFIED-FILTER)
+    'UnifiedExportAdapter',
+    'UnifiedExportRequest',
+    'UnifiedExportResult',
 ]
 
 # Task parameter builder for MIG-024
@@ -121,3 +126,14 @@ try:
 except ImportError:
     DatabaseManager = None
 
+# Unified Export Adapter (v5.0 - EPIC-UNIFIED-FILTER)
+try:
+    from .unified_export_adapter import (
+        UnifiedExportAdapter,
+        UnifiedExportRequest,
+        UnifiedExportResult,
+    )
+except ImportError:
+    UnifiedExportAdapter = None
+    UnifiedExportRequest = None
+    UnifiedExportResult = None

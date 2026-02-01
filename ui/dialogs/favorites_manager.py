@@ -87,7 +87,7 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
     
     def _setup_ui(self):
         """Build the dialog UI."""
-        self.setWindowTitle("FilterMate - Favorites Manager")
+        self.setWindowTitle(self.tr("FilterMate - Favorites Manager"))
         self.setMinimumSize(600, 450)
         self.resize(720, 520)
         self.setModal(True)
@@ -102,7 +102,7 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         # Header with count (handle None favorites_manager)
         fav_count = self._favorites_manager.count if self._favorites_manager else 0
         self._header_label = QLabel(
-            f"<b>Saved Favorites ({fav_count})</b>"
+            self.tr("<b>Saved Favorites ({})</b>").format(fav_count)
         )
         self._header_label.setObjectName("dialogHeader")
         layout.addWidget(self._header_label)
@@ -117,7 +117,15 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         self._search_edit = QLineEdit()
         self._search_edit.setObjectName("searchEdit")
         self._search_edit.setPlaceholderText(
-            "Search by name, expression, tags, or description..."
+            self.tr("Search by name, expression, tags, or description...")
+        )
+        self._search_edit.setToolTip(
+            self.tr("Search Favorites\n\n"
+            "Type to filter favorites by:\n"
+            "• Name\n"
+            "• Filter expression\n"
+            "• Tags\n"
+            "• Description")
         )
         self._search_edit.setClearButtonEnabled(True)
         self._search_edit.textChanged.connect(self._on_search_changed)
@@ -380,15 +388,15 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         
         # Tab 1: General Info
         general_tab = self._create_general_tab()
-        self._tab_widget.addTab(general_tab, "Général")
+        self._tab_widget.addTab(general_tab, self.tr("General"))
         
         # Tab 2: Expression
         expr_tab = self._create_expression_tab()
-        self._tab_widget.addTab(expr_tab, "Expression")
+        self._tab_widget.addTab(expr_tab, self.tr("Expression"))
         
         # Tab 3: Remote Layers
         remote_tab = self._create_remote_tab()
-        self._tab_widget.addTab(remote_tab, "Distant")
+        self._tab_widget.addTab(remote_tab, self.tr("Remote"))
         
         right_layout.addWidget(self._tab_widget)
         return right_panel
@@ -402,31 +410,44 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         general_layout.setRowWrapPolicy(QFormLayout.DontWrapRows)
         
         self._name_edit = QLineEdit()
-        self._name_edit.setPlaceholderText("Favorite name")
-        general_layout.addRow("Name:", self._name_edit)
+        self._name_edit.setPlaceholderText(self.tr("Favorite name"))
+        self._name_edit.setToolTip(
+            self.tr("Favorite Name\n\n"
+            "A descriptive name for this favorite filter.\n"
+            "Used for quick identification in the list.")
+        )
+        general_layout.addRow(self.tr("Name:"), self._name_edit)
         
         self._description_edit = QTextEdit()
         self._description_edit.setMaximumHeight(70)
-        self._description_edit.setPlaceholderText("Description (auto-generated, editable)")
-        general_layout.addRow("Description:", self._description_edit)
+        self._description_edit.setPlaceholderText(self.tr("Description (auto-generated, editable)"))
+        self._description_edit.setToolTip(
+            self.tr("Description\n\n"
+            "Optional notes about this favorite.\n"
+            "Auto-generated from expression, but editable.")
+        )
+        general_layout.addRow(self.tr("Description:"), self._description_edit)
         
         self._tags_edit = QLineEdit()
         self._tags_edit.setPlaceholderText(
-            "Enter tags separated by commas (e.g., urban, population, 2024)"
+            self.tr("Enter tags separated by commas (e.g., urban, population, 2024)")
         )
         self._tags_edit.setToolTip(
-            "Tags help organize and search favorites.\nSeparate multiple tags with commas."
+            self.tr("Tags\n\n"
+            "Keywords to organize and find favorites easily.\n"
+            "Separate multiple tags with commas.\n"
+            "Example: urban, 2024, population > 10000")
         )
-        general_layout.addRow("Tags:", self._tags_edit)
+        general_layout.addRow(self.tr("Tags:"), self._tags_edit)
         
         self._layer_label = QLabel("-")
         self._layer_label.setObjectName("infoLabel")
         self._layer_label.setWordWrap(True)
-        general_layout.addRow("Source Layer:", self._layer_label)
+        general_layout.addRow(self.tr("Source Layer:"), self._layer_label)
         
         self._provider_label = QLabel("-")
         self._provider_label.setObjectName("infoLabel")
-        general_layout.addRow("Provider:", self._provider_label)
+        general_layout.addRow(self.tr("Provider:"), self._provider_label)
         
         # Stats row
         stats_layout = QHBoxLayout()
@@ -434,10 +455,10 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         self._use_count_label = QLabel("-")
         self._created_label = QLabel("-")
         self._created_label.setObjectName("infoLabel")
-        stats_layout.addWidget(QLabel("Used:"))
+        stats_layout.addWidget(QLabel(self.tr("Used:")))
         stats_layout.addWidget(self._use_count_label)
         stats_layout.addStretch()
-        stats_layout.addWidget(QLabel("Created:"))
+        stats_layout.addWidget(QLabel(self.tr("Created:")))
         stats_layout.addWidget(self._created_label)
         general_layout.addRow(stats_layout)
         
@@ -450,11 +471,11 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         expr_layout.setContentsMargins(12, 12, 12, 12)
         expr_layout.setSpacing(8)
         
-        source_expr_label = QLabel("<b>Source Layer Expression:</b>")
+        source_expr_label = QLabel(self.tr("<b>Source Layer Expression:</b>"))
         expr_layout.addWidget(source_expr_label)
         
         self._expression_edit = QTextEdit()
-        self._expression_edit.setPlaceholderText("Filter expression for source layer")
+        self._expression_edit.setPlaceholderText(self.tr("Filter expression for source layer"))
         self._expression_edit.setStyleSheet(
             "font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 10pt;"
         )
@@ -469,11 +490,11 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         remote_layout.setContentsMargins(12, 12, 12, 12)
         remote_layout.setSpacing(8)
         
-        remote_header = QLabel("<b>Filtered Remote Layers:</b>")
+        remote_header = QLabel(self.tr("<b>Filtered Remote Layers:</b>"))
         remote_layout.addWidget(remote_header)
         
         self._remote_tree = QTreeWidget()
-        self._remote_tree.setHeaderLabels(["Layer", "Features", "Expression"])
+        self._remote_tree.setHeaderLabels([self.tr("Layer"), self.tr("Features"), self.tr("Expression")])
         self._remote_tree.setColumnCount(3)
         self._remote_tree.header().setStretchLastSection(True)
         self._remote_tree.header().setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -481,7 +502,7 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         self._remote_tree.setAlternatingRowColors(True)
         remote_layout.addWidget(self._remote_tree)
         
-        self._no_remote_label = QLabel("<i>No remote layers in this favorite</i>")
+        self._no_remote_label = QLabel(self.tr("<i>No remote layers in this favorite</i>"))
         self._no_remote_label.setObjectName("noRemoteLabel")
         self._no_remote_label.setAlignment(Qt.AlignCenter)
         remote_layout.addWidget(self._no_remote_label)
@@ -494,27 +515,42 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         button_layout.setContentsMargins(0, 12, 0, 0)
         button_layout.setSpacing(10)
         
-        self._apply_btn = QPushButton("▶ Apply")
+        self._apply_btn = QPushButton(self.tr("▶ Apply"))
         self._apply_btn.setObjectName("applyBtn")
         self._apply_btn.setEnabled(False)
-        self._apply_btn.setToolTip("Apply this favorite filter to the project")
+        self._apply_btn.setToolTip(self.tr(
+            "Apply Favorite Filter\n\n"
+            "Load and apply the selected favorite's filter expression\n"
+            "to the corresponding layer(s) in your project.\n"
+            "Remote layers will also be filtered if included."
+        ))
         self._apply_btn.clicked.connect(self._on_apply)
         
-        self._save_btn = QPushButton("💾 Save Changes")
+        self._save_btn = QPushButton(self.tr("💾 Save Changes"))
         self._save_btn.setObjectName("saveBtn")
         self._save_btn.setEnabled(False)
-        self._save_btn.setToolTip("Save modifications to this favorite")
+        self._save_btn.setToolTip(self.tr(
+            "Save Changes\n\n"
+            "Save modifications to this favorite:\n"
+            "• Name and description\n"
+            "• Tags for organization\n"
+            "• Filter expression"
+        ))
         self._save_btn.clicked.connect(self._on_save)
         
-        self._delete_btn = QPushButton("🗑️ Delete")
+        self._delete_btn = QPushButton(self.tr("🗑️ Delete"))
         self._delete_btn.setObjectName("deleteBtn")
         self._delete_btn.setEnabled(False)
-        self._delete_btn.setToolTip("Permanently delete this favorite")
+        self._delete_btn.setToolTip(self.tr(
+            "Delete Favorite\n\n"
+            "Permanently remove this favorite from storage.\n"
+            "This action cannot be undone."
+        ))
         self._delete_btn.clicked.connect(self._on_delete)
         
-        close_btn = QPushButton("Close")
+        close_btn = QPushButton(self.tr("Close"))
         close_btn.setObjectName("closeBtn")
-        close_btn.setToolTip("Close this dialog")
+        close_btn.setToolTip(self.tr("Close this dialog without applying changes"))
         close_btn.clicked.connect(self.reject)
         
         button_layout.addWidget(self._apply_btn)
@@ -540,9 +576,9 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
             item = QListWidgetItem(item_text)
             item.setData(Qt.UserRole, fav.id)
             
-            tooltip = f"Layer: {fav.layer_name}\nUsed: {fav.use_count} times"
+            tooltip = self.tr("Layer: {}").format(fav.layer_name) + "\n" + self.tr("Used: {} times").format(fav.use_count)
             if fav.tags:
-                tooltip += f"\nTags: {', '.join(fav.tags)}"
+                tooltip += "\n" + self.tr("Tags: {}").format(', '.join(fav.tags))
             if fav.description:
                 tooltip += f"\n\n{fav.description}"
             item.setToolTip(tooltip)
@@ -556,13 +592,13 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         if not text.strip():
             self._populate_list(self._all_favorites)
             self._header_label.setText(
-                f"<b>Saved Favorites ({self._favorites_manager.count})</b>"
+                self.tr("<b>Saved Favorites ({})</b>").format(self._favorites_manager.count)
             )
         else:
             filtered = self._favorites_manager.search_favorites(text)
             self._populate_list(filtered)
             self._header_label.setText(
-                f"<b>Favorites ({len(filtered)}/{self._favorites_manager.count})</b>"
+                self.tr("<b>Favorites ({}/{})</b>").format(len(filtered), self._favorites_manager.count)
             )
     
     def _on_selection_changed(self):
@@ -585,7 +621,7 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         self._tags_edit.setText(", ".join(fav.tags) if fav.tags else "")
         self._layer_label.setText(fav.layer_name or "-")
         self._provider_label.setText(fav.layer_provider or "-")
-        self._use_count_label.setText(f"{fav.use_count} times")
+        self._use_count_label.setText(self.tr("{} times").format(fav.use_count))
         self._created_label.setText(fav.created_at[:16] if fav.created_at else "-")
         
         # Update Expression tab
@@ -686,8 +722,8 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         
         reply = QMessageBox.question(
             self,
-            "Delete Favorite",
-            f"Delete favorite '{fav.name}'?",
+            self.tr("Delete Favorite"),
+            self.tr("Delete favorite '{}'?").format(fav.name),
             QMessageBox.Yes | QMessageBox.No
         )
         
@@ -700,7 +736,7 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         
         fav_count = self._favorites_manager.count if self._favorites_manager else 0
         self._header_label.setText(
-            f"<b>Saved Favorites ({fav_count})</b>"
+            self.tr("<b>Saved Favorites ({})</b>").format(fav_count)
         )
         
         # Clear all fields
@@ -746,12 +782,12 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         if not self._favorites_manager:
             self._all_favorites = []
             self._populate_list(self._all_favorites)
-            self._header_label.setText("<b>Saved Favorites (0)</b>")
+            self._header_label.setText(self.tr("<b>Saved Favorites (0)</b>"))
             return
         self._all_favorites = self._favorites_manager.get_all_favorites()
         self._populate_list(self._all_favorites)
         self._header_label.setText(
-            f"<b>Saved Favorites ({self._favorites_manager.count})</b>"
+            self.tr("<b>Saved Favorites ({})</b>").format(self._favorites_manager.count)
         )
     
     @staticmethod
@@ -768,12 +804,14 @@ class FavoritesManagerDialog(QDialog if HAS_QGIS else object):
         """
         if not favorites_manager or favorites_manager.count == 0:
             if HAS_QGIS:
+                from qgis.PyQt.QtCore import QCoreApplication
                 QMessageBox.information(
                     parent,
-                    "Favorites Manager",
-                    "No favorites saved yet.\n\n"
-                    "Click the ★ indicator and select 'Add current filter to favorites' "
-                    "to save your first favorite."
+                    QCoreApplication.translate("FavoritesManagerDialog", "Favorites Manager"),
+                    QCoreApplication.translate("FavoritesManagerDialog", 
+                        "No favorites saved yet.\n\n"
+                        "Click the ★ indicator and select 'Add current filter to favorites' "
+                        "to save your first favorite.")
                 )
             return None
         

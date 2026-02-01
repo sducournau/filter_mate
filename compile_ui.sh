@@ -52,11 +52,43 @@ else
     exit 1
 fi
 
+# Clear Python cache to prevent stale bytecode issues
+echo "Cleaning Python cache..."
+find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+find . -name "*.pyc" -delete 2>/dev/null || true
+echo "  - Cache cleared"
+echo ""
+
 # Run pyuic5
 $PYUIC5_CMD -x "$UI_FILE" -o "$PY_FILE"
 
 # Check result
 if [ $? -eq 0 ]; then
+    echo ""
+    echo "Post-processing: Fixing resource imports..."
+    
+    # Fix the import statement: replace 'import resources_rc' with 'from . import resources'
+    # This is required for QGIS plugin relative imports to work correctly
+    # Handle all variations that pyuic5 might generate (with/without trailing whitespace, comments, etc.)
+    # Use a more robust pattern that matches any 'import resources_rc' line
+    sed -i 's/^import resources_rc.*$/from . import resources  # Qt resources (was: import resources_rc)/' "$PY_FILE"
+    
+    # Verify the fix was applied
+    if grep -q "from . import resources" "$PY_FILE"; then
+        echo "  - Fixed: 'import resources_rc' -> 'from . import resources'"
+    elif grep -q "import resources_rc" "$PY_FILE"; then
+        echo "  - WARNING: 'import resources_rc' still present! Trying alternative fix..."
+        # Fallback: use perl for more robust replacement
+        perl -i -pe 's/^import resources_rc.*$/from . import resources  # Qt resources (was: import resources_rc)/' "$PY_FILE"
+        if grep -q "from . import resources" "$PY_FILE"; then
+            echo "  - Fixed with perl fallback"
+        else
+            echo "  - ERROR: Could not fix import statement!"
+        fi
+    else
+        echo "  - Note: No resources_rc import found (may already be correct)"
+    fi
+    
     echo ""
     echo "============================================================"
     echo "SUCCESS: File compiled successfully!"

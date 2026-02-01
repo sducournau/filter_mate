@@ -67,7 +67,7 @@ class RasterHistogramInteractiveWidget(QWidget):
         layout.addWidget(self._canvas)
         
         # Info label
-        self._info_label = QLabel("Select range on histogram")
+        self._info_label = QLabel(self.tr("Select range on histogram"))
         self._info_label.setAlignment(Qt.AlignCenter)
         self._info_label.setStyleSheet("font-size: 9px; color: #666;")
         layout.addWidget(self._info_label)
@@ -87,7 +87,7 @@ class RasterHistogramInteractiveWidget(QWidget):
             self._clear_histogram()
             return
         
-        self._info_label.setText("Computing histogram...")
+        self._info_label.setText(self.tr("Computing histogram..."))
         from qgis.PyQt.QtWidgets import QApplication
         QApplication.processEvents()
         
@@ -163,13 +163,13 @@ class RasterHistogramInteractiveWidget(QWidget):
         if self._histogram_data is not None:
             self._update_info_label()
         else:
-            self._info_label.setText("Could not compute histogram")
+            self._info_label.setText(self.tr("Could not compute histogram"))
 
     def _clear_histogram(self):
         """Clear the histogram display."""
         self._histogram_data = None
         self._canvas.set_histogram_data(None, 0, 1, 0, 1)
-        self._info_label.setText("No raster layer selected")
+        self._info_label.setText(self.tr("No raster layer selected"))
 
     def _on_canvas_selection_changed(self, min_val: float, max_val: float):
         """Handle real-time selection changes."""
@@ -191,6 +191,14 @@ class RasterHistogramInteractiveWidget(QWidget):
             self._info_label.setText(
                 f"Range: [{self._selected_min:.1f} - {self._selected_max:.1f}]"
             )
+
+    def showEvent(self, event):
+        """v5.11: Force refresh when widget becomes visible."""
+        super().showEvent(event)
+        # Force canvas update when becoming visible
+        if self._canvas:
+            self._canvas.update()
+        logger.debug("RasterHistogramInteractiveWidget shown, canvas refreshed")
 
     def set_range(self, min_val: float, max_val: float):
         """Set the selection range programmatically."""
@@ -239,6 +247,7 @@ class HistogramCanvas(QWidget):
         self._data_max = data_max
         self._selected_min = sel_min
         self._selected_max = sel_max
+        logger.debug(f"HistogramCanvas: set_histogram_data called, data={'None' if data is None else f'{len(data)} bins'}")
         self.update()
         
     def set_selection(self, sel_min, sel_max):
@@ -253,6 +262,10 @@ class HistogramCanvas(QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
         
         rect = self.rect()
+        
+        # v5.11: Log paint event for debugging
+        logger.debug(f"HistogramCanvas paintEvent: rect={rect.width()}x{rect.height()}, data={'Yes' if self._histogram_data is not None else 'No'}")
+        
         plot_rect = QRectF(
             self._margin_left,
             self._margin_top,
@@ -260,13 +273,20 @@ class HistogramCanvas(QWidget):
             rect.height() - self._margin_top - self._margin_bottom
         )
         
-        # Background
-        painter.fillRect(rect, QColor(250, 250, 250))
+        # Background - use a visible color for debugging
+        painter.fillRect(rect, QColor(245, 245, 250))
+        
+        # Draw border to see the widget bounds
+        painter.setPen(QPen(QColor(200, 200, 210), 1))
+        painter.drawRect(rect.adjusted(0, 0, -1, -1))
         
         if self._histogram_data is None or len(self._histogram_data) == 0:
             # No data message
-            painter.setPen(QColor(150, 150, 150))
-            painter.drawText(rect, Qt.AlignCenter, "No histogram data")
+            painter.setPen(QColor(120, 120, 130))
+            font = painter.font()
+            font.setPointSize(9)
+            painter.setFont(font)
+            painter.drawText(rect, Qt.AlignCenter, "Click to compute histogram\nor select a raster layer")
             painter.end()
             return
         

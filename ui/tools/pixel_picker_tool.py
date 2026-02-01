@@ -50,6 +50,7 @@ class RasterPixelPickerTool(QgsMapTool):
     
     valuesPicked = pyqtSignal(float, float)  # min, max
     valuePicked = pyqtSignal(float)  # single value
+    pixelPicked = pyqtSignal(float, float, float)  # value, x, y coordinates
     allBandsPicked = pyqtSignal(list)  # all bands values
     pickingStarted = pyqtSignal()
     pickingFinished = pyqtSignal()
@@ -205,8 +206,9 @@ class RasterPixelPickerTool(QgsMapTool):
             else:
                 # Normal click: Set exact value
                 self.valuePicked.emit(value)
+                self.pixelPicked.emit(value, point.x(), point.y())
                 self.valuesPicked.emit(value, value)
-                logger.debug(f"PixelPicker: Value picked: {value:.2f}")
+                logger.debug(f"PixelPicker: Value picked: {value:.2f} at ({point.x():.2f}, {point.y():.2f})")
                 
         except Exception as e:
             logger.error(f"PixelPicker: Error picking point value: {e}")

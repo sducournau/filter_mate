@@ -7,7 +7,7 @@ class InputWindow(QtWidgets.QDialog):
     def __init__(self):
         """Initializer."""
         super().__init__()
-        self.setWindowTitle("Python Menus & Toolbars")
+        self.setWindowTitle(self.tr("Edit Property"))
         self.resize(400, 200)
 
 
@@ -21,8 +21,8 @@ class InputWindow(QtWidgets.QDialog):
         self.buttonBox.rejected.connect(self.reject)
         self.key = QtWidgets.QLineEdit()
         self.value = QtWidgets.QTextEdit()
-        self.keyLabel = QtWidgets.QLabel("Propriété")
-        self.valueLabel = QtWidgets.QLabel("Valeur")
+        self.keyLabel = QtWidgets.QLabel(self.tr("Property"))
+        self.valueLabel = QtWidgets.QLabel(self.tr("Value"))
 
         self.layout.addWidget(self.keyLabel, 0, 0)
         self.layout.addWidget(self.key, 0, 1)

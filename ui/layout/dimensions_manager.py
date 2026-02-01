@@ -284,16 +284,16 @@ class DimensionsManager(LayoutManagerBase):
         widget_keys_padding = widget_keys_config.get('padding', 2) if widget_keys_config else 2
         
         # Apply to widget keys containers with enhanced styling
-        for widget_name in ['widget_exploring_keys', 'widget_filtering_keys', 'widget_exporting_keys']:
+        for widget_name in ['widget_exploring_keys', 'widget_raster_keys', 'widget_filtering_keys', 'widget_exporting_keys']:
             if hasattr(self.dockwidget, widget_name):
                 widget = getattr(self.dockwidget, widget_name)
                 widget.setMinimumWidth(widget_keys_min_width)
                 widget.setMaximumWidth(widget_keys_max_width)
-                # Apply consistent padding via layout margins
+                # Apply consistent padding via layout margins (0 for raster_keys)
                 layout = widget.layout()
                 if layout:
-                    layout.setContentsMargins(widget_keys_padding, widget_keys_padding, 
-                                            widget_keys_padding, widget_keys_padding)
+                    padding = 0 if widget_name == 'widget_raster_keys' else widget_keys_padding
+                    layout.setContentsMargins(padding, padding, padding, padding)
                     layout.setSpacing(0)  # No extra spacing in container
         
         # Apply to frame_exploring with size policy
@@ -425,7 +425,8 @@ class DimensionsManager(LayoutManagerBase):
             # Apply spacing to layout containers
             for layout_name in ['verticalLayout_exploring_content', 
                                'verticalLayout_filtering_keys',
-                               'verticalLayout_exporting_keys']:
+                               'verticalLayout_exporting_keys',
+                               'verticalLayout_raster_keys']:
                 if hasattr(self.dockwidget, layout_name):
                     layout = getattr(self.dockwidget, layout_name)
                     layout.setSpacing(button_spacing)
@@ -491,6 +492,10 @@ class DimensionsManager(LayoutManagerBase):
             # Apply spacing to exploring key layout
             if hasattr(self.dockwidget, 'verticalLayout_exploring_content'):
                 self.dockwidget.verticalLayout_exploring_content.setSpacing(button_spacing)
+            
+            # Apply spacing to raster key layout (same style as exploring)
+            if hasattr(self.dockwidget, 'verticalLayout_raster_keys'):
+                self.dockwidget.verticalLayout_raster_keys.setSpacing(button_spacing)
             
             section_spacing_adjusted = UIConfig.get_config('layout', 'spacing_section') or 4
             horizontal_layouts = [
@@ -585,9 +590,10 @@ class DimensionsManager(LayoutManagerBase):
             
             spacer_width = 20  # Standard width for vertical spacers
             
-            # Harmonize spacers in all three key widgets
+            # Harmonize spacers in all key widgets
             sections = {
                 'exploring': 'widget_exploring_keys',
+                'raster': 'widget_raster_keys',
                 'filtering': 'widget_filtering_keys',
                 'exporting': 'widget_exporting_keys'
             }
@@ -789,7 +795,8 @@ class DimensionsManager(LayoutManagerBase):
             key_layouts = [
                 ('verticalLayout_exploring_content', 'exploring content'),
                 ('verticalLayout_filtering_keys', 'filtering keys'),
-                ('verticalLayout_exporting_keys', 'exporting keys')
+                ('verticalLayout_exporting_keys', 'exporting keys'),
+                ('verticalLayout_raster_keys', 'raster keys')
             ]
             
             for layout_name, description in key_layouts:
@@ -844,6 +851,7 @@ class DimensionsManager(LayoutManagerBase):
             # Apply consistent styling to parent widget containers
             parent_widgets = [
                 ('widget_exploring_keys', 'exploring'),
+                ('widget_raster_keys', 'raster'),
                 ('widget_filtering_keys', 'filtering'),
                 ('widget_exporting_keys', 'exporting')
             ]
@@ -858,8 +866,9 @@ class DimensionsManager(LayoutManagerBase):
                     
                     parent_layout = widget.layout()
                     if parent_layout:
-                        parent_layout.setContentsMargins(widget_keys_padding, widget_keys_padding, 
-                                                        widget_keys_padding, widget_keys_padding)
+                        # Apply 0 margins for widget_raster_keys
+                        padding = 0 if widget_name == 'widget_raster_keys' else widget_keys_padding
+                        parent_layout.setContentsMargins(padding, padding, padding, padding)
                         parent_layout.setAlignment(Qt.AlignCenter)
             
             # Apply consistent spacing to content layouts

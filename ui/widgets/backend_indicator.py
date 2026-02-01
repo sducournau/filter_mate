@@ -180,7 +180,7 @@ class BackendIndicatorWidget(QLabel if HAS_QGIS else object):
         """)
         
         # Header
-        header = menu.addAction("Select Backend:")
+        header = menu.addAction(self.tr("Select Backend:"))
         header.setEnabled(False)
         menu.addSeparator()
         
@@ -199,7 +199,7 @@ class BackendIndicatorWidget(QLabel if HAS_QGIS else object):
         menu.addSeparator()
         
         # Auto option
-        auto_action = menu.addAction("⚙️ Auto (Default)")
+        auto_action = menu.addAction(self.tr("⚙️ Auto (Default)"))
         auto_action.setData(('backend', None))
         if not current_forced:
             auto_action.setText(auto_action.text() + " ✓")
@@ -207,7 +207,7 @@ class BackendIndicatorWidget(QLabel if HAS_QGIS else object):
         menu.addSeparator()
         
         # Auto-select all
-        auto_all_action = menu.addAction("🎯 Auto-select Optimal for All Layers")
+        auto_all_action = menu.addAction(self.tr("🎯 Auto-select Optimal for All Layers"))
         auto_all_action.setData(('action', 'auto_all'))
         
         # Force all layers
@@ -260,7 +260,11 @@ class BackendIndicatorWidget(QLabel if HAS_QGIS else object):
         """Set indicator to waiting state (no layers loaded)."""
         self._is_waiting = True
         self.setText("...")
-        self.setToolTip("Click to reload layers")
+        self.setToolTip(
+            "No layer selected\n\n"
+            "Select a vector layer to see its backend.\n"
+            "Click to reload available layers."
+        )
         
         # v4.0: Soft "mousse" style with rounded corners
         style = """
@@ -296,8 +300,9 @@ class BackendIndicatorWidget(QLabel if HAS_QGIS else object):
         
         self.setText(backend_type.upper() if backend_type else "AUTO")
         self.setToolTip(
-            f"Backend: {config['name']}\n"
-            f"Click to change backend"
+            f"Backend: {config['name']}\n\n"
+            f"Current database engine for spatial operations.\n"
+            f"Click to change backend or force auto-selection."
         )
         
         # v4.0: Soft "mousse" style with smoother appearance

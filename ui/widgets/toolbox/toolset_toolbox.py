@@ -73,27 +73,31 @@ class FilteringPage(QWidget):
         content_layout.setSpacing(6)
         
         # === SOURCE CONTEXT ===
-        self.source_group = QGroupBox("Source Context")
+        self.source_group = QGroupBox(self.tr("Source Context"))
         source_layout = QVBoxLayout(self.source_group)
         source_layout.setContentsMargins(6, 20, 6, 6)  # top margin for title
         source_layout.setSpacing(4)
         
-        self.source_type_label = QLabel("📍 Vector: -")
+        self.source_type_label = QLabel(self.tr("📍 Vector: -"))
         self.source_type_label.setStyleSheet("font-weight: bold;")
         source_layout.addWidget(self.source_type_label)
         
-        self.selection_label = QLabel("Selection: -")
+        self.selection_label = QLabel(self.tr("Selection: -"))
         source_layout.addWidget(self.selection_label)
         
-        self.geometry_label = QLabel("Geometry: -")
+        self.geometry_label = QLabel(self.tr("Geometry: -"))
         self.geometry_label.setStyleSheet("color: gray;")
         source_layout.addWidget(self.geometry_label)
         
         content_layout.addWidget(self.source_group)
         
         # === TARGET LAYERS ===
-        self.target_group = QGroupBox("Target Layers")
-        self.target_group.setToolTip("Select target layers and operations for filtering")
+        self.target_group = QGroupBox(self.tr("Target Layers"))
+        self.target_group.setToolTip(self.tr(
+            "Target Layers\n\n"
+            "Select layers to receive the filtering operation.\n"
+            "Check boxes to include layers in batch processing."
+        ))
         target_layout = QVBoxLayout(self.target_group)
         target_layout.setContentsMargins(6, 20, 6, 6)  # top margin for title
         target_layout.setSpacing(4)
@@ -101,7 +105,9 @@ class FilteringPage(QWidget):
         # Target layers table
         self.target_table = QTableWidget()
         self.target_table.setColumnCount(4)
-        self.target_table.setHorizontalHeaderLabels(["✓", "Layer", "Operation", "Status"])
+        self.target_table.setHorizontalHeaderLabels([
+            self.tr("✓"), self.tr("Layer"), self.tr("Operation"), self.tr("Status")
+        ])
         self.target_table.horizontalHeader().setStretchLastSection(True)
         self.target_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.target_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -109,33 +115,45 @@ class FilteringPage(QWidget):
         self.target_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
         self.target_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.target_table.setMinimumHeight(150)
-        self.target_table.setToolTip(
+        self.target_table.setToolTip(self.tr(
             "✓: Check layers to include in filtering operation\n"
             "Layer: Target layer name with type icon (📍=Vector, 🏔️=Raster)\n"
             "Operation: Filter operation (Filter for vectors, Clip/Mask for rasters)\n"
             "Status: Current filter status of the layer"
-        )
+        ))
         target_layout.addWidget(self.target_table)
         
         # Operations info
-        ops_label = QLabel("Operations:\n• 📍 Vectors: Filter (spatial)\n• 🏔️ Rasters: Clip, Mask Outside, Mask Inside, Zonal Stats")
+        ops_label = QLabel(self.tr("Operations:\n• 📍 Vectors: Filter (spatial)\n• 🏔️ Rasters: Clip, Mask Outside, Mask Inside, Zonal Stats"))
         ops_label.setStyleSheet("color: gray; font-size: 9px;")
         target_layout.addWidget(ops_label)
         
         # Selection buttons
         sel_row = QHBoxLayout()
-        self.select_all_btn = QPushButton("☑ Select All")
-        self.select_all_btn.setToolTip("Select all layers for the filtering operation")
+        self.select_all_btn = QPushButton(self.tr("☑ Select All"))
+        self.select_all_btn.setToolTip(self.tr(
+            "Select All Layers\n\n"
+            "Check all layers in the list for filtering.\n"
+            "Useful for batch operations on entire project."
+        ))
         self.select_all_btn.clicked.connect(self._select_all)
         sel_row.addWidget(self.select_all_btn)
         
-        self.deselect_all_btn = QPushButton("☐ Deselect All")
-        self.deselect_all_btn.setToolTip("Deselect all layers")
+        self.deselect_all_btn = QPushButton(self.tr("☐ Deselect All"))
+        self.deselect_all_btn.setToolTip(self.tr(
+            "Deselect All Layers\n\n"
+            "Uncheck all layers in the list.\n"
+            "Use to start fresh with layer selection."
+        ))
         self.deselect_all_btn.clicked.connect(self._deselect_all)
         sel_row.addWidget(self.deselect_all_btn)
         
-        self.refresh_btn = QPushButton("🔄 Refresh List")
-        self.refresh_btn.setToolTip("Refresh the layer list from the current project")
+        self.refresh_btn = QPushButton(self.tr("🔄 Refresh List"))
+        self.refresh_btn.setToolTip(self.tr(
+            "Refresh Layer List\n\n"
+            "Reload the layer list from the current project.\n"
+            "Use after adding or removing layers in QGIS."
+        ))
         self.refresh_btn.clicked.connect(self.refresh_target_layers)
         
         target_layout.addLayout(sel_row)
@@ -143,7 +161,7 @@ class FilteringPage(QWidget):
         content_layout.addWidget(self.target_group)
         
         # === RASTER OPTIONS (EPIC-6) ===
-        self.raster_options_group = QgsCollapsibleGroupBox("Raster Operation Options")
+        self.raster_options_group = QgsCollapsibleGroupBox(self.tr("Raster Operation Options"))
         self.raster_options_group.setCollapsed(True)
         raster_opts_layout = QVBoxLayout(self.raster_options_group)
         raster_opts_layout.setContentsMargins(6, 20, 6, 6)
@@ -151,7 +169,7 @@ class FilteringPage(QWidget):
         
         # NoData value
         nodata_row = QHBoxLayout()
-        nodata_row.addWidget(QLabel("NoData Value:"))
+        nodata_row.addWidget(QLabel(self.tr("NoData Value:")))
         self.nodata_spin = QDoubleSpinBox()
         self.nodata_spin.setRange(-999999, 999999)
         self.nodata_spin.setValue(-9999)
@@ -160,19 +178,24 @@ class FilteringPage(QWidget):
         raster_opts_layout.addLayout(nodata_row)
         
         # Output memory checkbox
-        self.memory_output_cb = QCheckBox("Output to memory layer")
+        self.memory_output_cb = QCheckBox(self.tr("Output to memory layer"))
         self.memory_output_cb.setChecked(True)
-        self.memory_output_cb.setToolTip("If unchecked, saves to temp file on disk")
+        self.memory_output_cb.setToolTip(self.tr(
+            "Output to Memory Layer\n\n"
+            "Keep raster result in memory (faster).\n"
+            "Uncheck to save to temporary file on disk.\n"
+            "Disk output recommended for large rasters."
+        ))
         raster_opts_layout.addWidget(self.memory_output_cb)
         
         # Add to project checkbox
-        self.add_to_project_cb = QCheckBox("Add result to project")
+        self.add_to_project_cb = QCheckBox(self.tr("Add result to project"))
         self.add_to_project_cb.setChecked(True)
         raster_opts_layout.addWidget(self.add_to_project_cb)
         
         # Compression for output
         compress_row = QHBoxLayout()
-        compress_row.addWidget(QLabel("Compression:"))
+        compress_row.addWidget(QLabel(self.tr("Compression:")))
         self.compression_combo = QComboBox()
         self.compression_combo.addItems(["LZW", "DEFLATE", "None", "ZSTD"])
         compress_row.addWidget(self.compression_combo, 1)
@@ -181,65 +204,69 @@ class FilteringPage(QWidget):
         content_layout.addWidget(self.raster_options_group)
         
         # === ACTIONS ===
-        self.action_group = QGroupBox("Actions")
+        self.action_group = QGroupBox(self.tr("Actions"))
         action_layout = QVBoxLayout(self.action_group)
         action_layout.setContentsMargins(6, 20, 6, 6)  # top margin for title
         action_layout.setSpacing(4)
         
         # Main action buttons
         action_row1 = QHBoxLayout()
-        self.filter_btn = QPushButton("▶ EXECUTE FILTER")
+        self.filter_btn = QPushButton(self.tr("▶ EXECUTE FILTER"))
         self.filter_btn.setStyleSheet("background-color: #2a82da; color: white; font-weight: bold; padding: 8px;")
-        self.filter_btn.setToolTip(
+        self.filter_btn.setToolTip(self.tr(
             "Execute the filtering operation on all selected target layers.\n"
             "• Vectors: Apply spatial filter from source layer selection\n"
             "• Rasters: Apply clip/mask operation using vector geometry\n\n"
             "Shortcut: Ctrl+Enter (when focused)"
-        )
+        ))
         self.filter_btn.clicked.connect(self.filterRequested.emit)
         action_row1.addWidget(self.filter_btn)
         
-        self.pause_btn = QPushButton("⏸ PAUSE")
+        self.pause_btn = QPushButton(self.tr("⏸ PAUSE"))
         self.pause_btn.setEnabled(False)
-        self.pause_btn.setToolTip("Pause the current filtering operation (not yet implemented)")
+        self.pause_btn.setToolTip(self.tr(
+            "Pause Operation (Coming Soon)\n\n"
+            "Pause the current filtering operation.\n"
+            "Feature not yet implemented."
+        ))
         action_row1.addWidget(self.pause_btn)
         action_layout.addLayout(action_row1)
         
         # Undo/Redo/Reset
         action_row2 = QHBoxLayout()
-        self.undo_btn = QPushButton("↩ UNDO")
-        self.undo_btn.setToolTip(
+        self.undo_btn = QPushButton(self.tr("↩ UNDO"))
+        self.undo_btn.setToolTip(self.tr(
             "Undo the last filter operation.\n"
             "Restores previous filter state for affected layers.\n\n"
             "Shortcut: Ctrl+Z"
-        )
+        ))
         self.undo_btn.clicked.connect(self.undoRequested.emit)
         action_row2.addWidget(self.undo_btn)
         
-        self.redo_btn = QPushButton("↪ REDO")
-        self.redo_btn.setToolTip(
+        self.redo_btn = QPushButton(self.tr("↪ REDO"))
+        self.redo_btn.setToolTip(self.tr(
             "Redo the last undone filter operation.\n\n"
             "Shortcut: Ctrl+Shift+Z"
-        )
+        ))
         self.redo_btn.clicked.connect(self.redoRequested.emit)
         action_row2.addWidget(self.redo_btn)
         action_layout.addLayout(action_row2)
         
         action_row3 = QHBoxLayout()
-        self.reset_btn = QPushButton("🔄 RESET ALL FILTERS")
-        self.reset_btn.setToolTip(
+        self.reset_btn = QPushButton(self.tr("🔄 RESET ALL FILTERS"))
+        self.reset_btn.setToolTip(self.tr(
             "Remove all filters from all layers in the project.\n"
             "This clears all setSubsetString filters on vector layers\n"
             "and restores full visibility."
-        )
+        ))
         self.reset_btn.clicked.connect(self.resetRequested.emit)
         action_row3.addWidget(self.reset_btn)
         
-        self.summary_btn = QPushButton("📊 Show Results Summary")
-        self.summary_btn.setToolTip(
+        self.summary_btn = QPushButton(self.tr("📊 Show Results Summary"))
+        self.summary_btn.setToolTip(self.tr(
             "Display a summary of the last filtering operation.\n"
             "Shows: affected layers, feature counts, and timing."
-        )
+        ))
         action_row3.addWidget(self.summary_btn)
         action_layout.addLayout(action_row3)
         
@@ -265,9 +292,9 @@ class FilteringPage(QWidget):
     def _update_source_display(self):
         """Update the source context display."""
         if not self._source_layer:
-            self.source_type_label.setText("📍 No source layer")
-            self.selection_label.setText("Selection: -")
-            self.geometry_label.setText("Geometry: -")
+            self.source_type_label.setText(self.tr("📍 No source layer"))
+            self.selection_label.setText(self.tr("Selection: -"))
+            self.geometry_label.setText(self.tr("Geometry: -"))
             return
         
         if isinstance(self._source_layer, QgsVectorLayer):
@@ -461,7 +488,7 @@ class ExportingPage(QWidget):
         content_layout.setSpacing(6)
         
         # === OUTPUT SETTINGS ===
-        self.output_group = QgsCollapsibleGroupBox("Output Settings")
+        self.output_group = QgsCollapsibleGroupBox(self.tr("Output Settings"))
         self.output_group.setCollapsed(False)
         output_layout = QVBoxLayout(self.output_group)
         output_layout.setContentsMargins(6, 20, 6, 6)  # top margin for title
@@ -469,7 +496,7 @@ class ExportingPage(QWidget):
         
         # Format
         format_row = QHBoxLayout()
-        format_row.addWidget(QLabel("Format:"))
+        format_row.addWidget(QLabel(self.tr("Format:")))
         self.format_combo = QComboBox()
         self.format_combo.addItems([
             "GeoPackage (.gpkg)",
@@ -485,7 +512,7 @@ class ExportingPage(QWidget):
         
         # Output directory
         dir_row = QHBoxLayout()
-        dir_row.addWidget(QLabel("Output Dir:"))
+        dir_row.addWidget(QLabel(self.tr("Output Dir:")))
         self.output_dir = QgsFileWidget()
         self.output_dir.setStorageMode(QgsFileWidget.GetDirectory)
         dir_row.addWidget(self.output_dir, 1)
@@ -493,12 +520,12 @@ class ExportingPage(QWidget):
         
         # Filename pattern
         name_row = QHBoxLayout()
-        name_row.addWidget(QLabel("Filename:"))
+        name_row.addWidget(QLabel(self.tr("Filename:")))
         self.filename_edit = QLineEdit("filtered_{layer_name}_{date}")
         name_row.addWidget(self.filename_edit, 1)
         output_layout.addLayout(name_row)
         
-        vars_label = QLabel("Variables: {layer_name}, {date}, {time}, {user}")
+        vars_label = QLabel(self.tr("Variables: {layer_name}, {date}, {time}, {user}"))
         vars_label.setStyleSheet("color: gray; font-size: 9px;")
         output_layout.addWidget(vars_label)
         
@@ -508,25 +535,25 @@ class ExportingPage(QWidget):
         options_row = QHBoxLayout()
         
         # Vector options
-        self.vector_options = QGroupBox("Vector Options")
+        self.vector_options = QGroupBox(self.tr("Vector Options"))
         vector_layout = QVBoxLayout(self.vector_options)
         vector_layout.setContentsMargins(6, 20, 6, 6)  # top margin for title
         vector_layout.setSpacing(4)
-        self.export_filtered_cb = QCheckBox("Export filtered features only")
+        self.export_filtered_cb = QCheckBox(self.tr("Export filtered features only"))
         self.export_filtered_cb.setChecked(True)
         vector_layout.addWidget(self.export_filtered_cb)
-        self.include_styles_cb = QCheckBox("Include layer styles (.qml)")
+        self.include_styles_cb = QCheckBox(self.tr("Include layer styles (.qml)"))
         self.include_styles_cb.setChecked(True)
         vector_layout.addWidget(self.include_styles_cb)
-        self.keep_filters_cb = QCheckBox("Keep active subset filters")
+        self.keep_filters_cb = QCheckBox(self.tr("Keep active subset filters"))
         vector_layout.addWidget(self.keep_filters_cb)
-        self.export_visible_cb = QCheckBox("Export all visible layers")
+        self.export_visible_cb = QCheckBox(self.tr("Export all visible layers"))
         vector_layout.addWidget(self.export_visible_cb)
-        self.include_metadata_cb = QCheckBox("Include metadata")
+        self.include_metadata_cb = QCheckBox(self.tr("Include metadata"))
         vector_layout.addWidget(self.include_metadata_cb)
         
         crs_row = QHBoxLayout()
-        crs_row.addWidget(QLabel("CRS:"))
+        crs_row.addWidget(QLabel(self.tr("CRS:")))
         self.crs_combo = QComboBox()
         self.crs_combo.addItems(["Project CRS", "Layer CRS", "Custom..."])
         crs_row.addWidget(self.crs_combo, 1)
@@ -535,20 +562,20 @@ class ExportingPage(QWidget):
         options_row.addWidget(self.vector_options)
         
         # Raster options
-        self.raster_options = QGroupBox("Raster Options")
+        self.raster_options = QGroupBox(self.tr("Raster Options"))
         raster_layout = QVBoxLayout(self.raster_options)
         raster_layout.setContentsMargins(6, 20, 6, 6)  # top margin for title
         raster_layout.setSpacing(4)
-        self.clip_extent_cb = QCheckBox("Clip to source extent")
+        self.clip_extent_cb = QCheckBox(self.tr("Clip to source extent"))
         self.clip_extent_cb.setChecked(True)
         raster_layout.addWidget(self.clip_extent_cb)
-        self.create_pyramids_cb = QCheckBox("Create COG pyramids")
+        self.create_pyramids_cb = QCheckBox(self.tr("Create COG pyramids"))
         raster_layout.addWidget(self.create_pyramids_cb)
-        self.include_world_cb = QCheckBox("Include world file")
+        self.include_world_cb = QCheckBox(self.tr("Include world file"))
         raster_layout.addWidget(self.include_world_cb)
         
         compress_row = QHBoxLayout()
-        compress_row.addWidget(QLabel("Compression:"))
+        compress_row.addWidget(QLabel(self.tr("Compression:")))
         self.compression_combo = QComboBox()
         self.compression_combo.addItems(["None", "LZW", "DEFLATE", "JPEG"])
         self.compression_combo.setCurrentText("LZW")
@@ -559,7 +586,7 @@ class ExportingPage(QWidget):
         content_layout.addLayout(options_row)
         
         # === LAYERS TO EXPORT ===
-        self.layers_group = QgsCollapsibleGroupBox("Layers to Export")
+        self.layers_group = QgsCollapsibleGroupBox(self.tr("Layers to Export"))
         self.layers_group.setCollapsed(False)
         layers_layout = QVBoxLayout(self.layers_group)
         layers_layout.setContentsMargins(6, 20, 6, 6)  # top margin for title
@@ -567,22 +594,26 @@ class ExportingPage(QWidget):
         
         # Selection controls row
         selection_row = QHBoxLayout()
-        self.select_all_btn = QPushButton("☑ Select All")
+        self.select_all_btn = QPushButton(self.tr("☑ Select All"))
         self.select_all_btn.clicked.connect(self._on_select_all)
         selection_row.addWidget(self.select_all_btn)
         
-        self.deselect_all_btn = QPushButton("☐ Deselect All")
+        self.deselect_all_btn = QPushButton(self.tr("☐ Deselect All"))
         self.deselect_all_btn.clicked.connect(self._on_deselect_all)
         selection_row.addWidget(self.deselect_all_btn)
         
-        self.refresh_layers_btn = QPushButton("🔄 Refresh")
-        self.refresh_layers_btn.setToolTip("Refresh layer list from project")
+        self.refresh_layers_btn = QPushButton(self.tr("🔄 Refresh"))
+        self.refresh_layers_btn.setToolTip(self.tr(
+            "Refresh Layers\n\n"
+            "Reload the list of filterable layers from project.\n"
+            "Use after adding or removing layers."
+        ))
         self.refresh_layers_btn.clicked.connect(self._on_refresh_layers)
         selection_row.addWidget(self.refresh_layers_btn)
         
         selection_row.addStretch()
         
-        self.layers_count_label = QLabel("0 layers selected")
+        self.layers_count_label = QLabel(self.tr("0 layers selected"))
         self.layers_count_label.setStyleSheet("color: gray;")
         selection_row.addWidget(self.layers_count_label)
         
@@ -611,21 +642,21 @@ class ExportingPage(QWidget):
         content_layout.addWidget(self.layers_group)
         
         # === ACTIONS ===
-        self.action_group = QGroupBox("Actions")
+        self.action_group = QGroupBox(self.tr("Actions"))
         action_layout = QHBoxLayout(self.action_group)
         action_layout.setContentsMargins(6, 20, 6, 6)  # top margin for title
         action_layout.setSpacing(4)
         
-        self.export_btn = QPushButton("📤 EXPORT SELECTED")
+        self.export_btn = QPushButton(self.tr("📤 EXPORT SELECTED"))
         self.export_btn.setStyleSheet("background-color: #28a745; color: white; font-weight: bold; padding: 8px;")
         self.export_btn.clicked.connect(self.exportRequested.emit)
         action_layout.addWidget(self.export_btn)
         
-        self.export_all_btn = QPushButton("📤 EXPORT ALL")
+        self.export_all_btn = QPushButton(self.tr("📤 EXPORT ALL"))
         self.export_all_btn.clicked.connect(self.exportAllRequested.emit)
         action_layout.addWidget(self.export_all_btn)
         
-        self.open_dir_btn = QPushButton("📁 Open Output Dir")
+        self.open_dir_btn = QPushButton(self.tr("📁 Open Output Dir"))
         self.open_dir_btn.clicked.connect(self.openOutputDirRequested.emit)
         action_layout.addWidget(self.open_dir_btn)
         
@@ -826,7 +857,7 @@ class ConfigurationPage(QWidget):
         content_layout.setSpacing(6)
         
         # === UI SETTINGS ===
-        self.ui_group = QgsCollapsibleGroupBox("UI Settings")
+        self.ui_group = QgsCollapsibleGroupBox(self.tr("UI Settings"))
         self.ui_group.setCollapsed(False)
         ui_layout = QVBoxLayout(self.ui_group)
         ui_layout.setContentsMargins(6, 20, 6, 6)  # top margin for title
@@ -834,32 +865,32 @@ class ConfigurationPage(QWidget):
         
         # UI Profile
         profile_row = QHBoxLayout()
-        profile_row.addWidget(QLabel("UI Profile:"))
+        profile_row.addWidget(QLabel(self.tr("UI Profile:")))
         self.profile_combo = QComboBox()
         self.profile_combo.addItems(["Auto", "Compact", "Normal", "HiDPI"])
-        self.profile_combo.setToolTip(
+        self.profile_combo.setToolTip(self.tr(
             "Select UI density profile:\n"
             "• Auto: Automatically detect based on screen DPI\n"
             "• Compact: Smaller fonts and spacing for more content\n"
             "• Normal: Default balanced layout\n"
             "• HiDPI: Larger elements for high-resolution displays"
-        )
+        ))
         self.profile_combo.currentTextChanged.connect(lambda v: self._emit_change('ui_profile', v))
         profile_row.addWidget(self.profile_combo, 1)
         ui_layout.addLayout(profile_row)
         
         # Theme
         theme_row = QHBoxLayout()
-        theme_row.addWidget(QLabel("Theme:"))
+        theme_row.addWidget(QLabel(self.tr("Theme:")))
         self.theme_combo = QComboBox()
         self.theme_combo.addItems(["Sync with QGIS", "Light", "Dark", "System"])
-        self.theme_combo.setToolTip(
+        self.theme_combo.setToolTip(self.tr(
             "Select color theme:\n"
             "• Sync with QGIS: Match QGIS application theme\n"
             "• Light: Light colors for bright environments\n"
             "• Dark: Dark colors to reduce eye strain\n"
             "• System: Follow operating system preference"
-        )
+        ))
         self.theme_combo.currentTextChanged.connect(lambda v: self._emit_change('theme', v))
         theme_row.addWidget(self.theme_combo, 1)
         ui_layout.addLayout(theme_row)
@@ -867,42 +898,67 @@ class ConfigurationPage(QWidget):
         content_layout.addWidget(self.ui_group)
         
         # === BEHAVIOR ===
-        self.behavior_group = QgsCollapsibleGroupBox("Behavior")
+        self.behavior_group = QgsCollapsibleGroupBox(self.tr("Behavior"))
         self.behavior_group.setCollapsed(False)
         behavior_layout = QVBoxLayout(self.behavior_group)
         behavior_layout.setContentsMargins(6, 20, 6, 6)  # top margin for title
         behavior_layout.setSpacing(4)
         
-        self.auto_activate_cb = QCheckBox("Auto-activate plugin when project is loaded")
-        self.auto_activate_cb.setToolTip("Automatically open FilterMate dockwidget when a QGIS project is loaded")
+        self.auto_activate_cb = QCheckBox(self.tr("Auto-activate plugin when project is loaded"))
+        self.auto_activate_cb.setToolTip(self.tr(
+            "Auto-activate on Project Load\n\n"
+            "Automatically open FilterMate dockwidget\n"
+            "when a QGIS project is loaded.\n"
+            "Useful for frequently used filtering workflows."
+        ))
         self.auto_activate_cb.stateChanged.connect(lambda s: self._emit_change('auto_activate', s == Qt.Checked))
         behavior_layout.addWidget(self.auto_activate_cb)
         
-        self.remember_filters_cb = QCheckBox("Remember last filter expression per layer")
-        self.remember_filters_cb.setToolTip("Store and restore the last used filter expression for each layer")
+        self.remember_filters_cb = QCheckBox(self.tr("Remember last filter expression per layer"))
+        self.remember_filters_cb.setToolTip(self.tr(
+            "Remember Last Filter\n\n"
+            "Store and restore the last used filter expression\n"
+            "for each layer between sessions.\n"
+            "Helps resume work without re-entering filters."
+        ))
         self.remember_filters_cb.stateChanged.connect(lambda s: self._emit_change('remember_filters', s == Qt.Checked))
         behavior_layout.addWidget(self.remember_filters_cb)
         
-        self.auto_switch_cb = QCheckBox("Auto-switch EXPLORING mode based on current layer type")
+        self.auto_switch_cb = QCheckBox(self.tr("Auto-switch EXPLORING mode based on current layer type"))
         self.auto_switch_cb.setChecked(True)
-        self.auto_switch_cb.setToolTip("Automatically switch between Vector and Raster exploring pages when selecting layers")
+        self.auto_switch_cb.setToolTip(self.tr(
+            "Auto-switch Exploring Mode\n\n"
+            "Automatically switch between Vector and Raster\n"
+            "exploring pages when selecting different layer types.\n"
+            "Disable to stay on the current page."
+        ))
         self.auto_switch_cb.stateChanged.connect(lambda s: self._emit_change('auto_switch_exploring', s == Qt.Checked))
         behavior_layout.addWidget(self.auto_switch_cb)
         
-        self.advanced_options_cb = QCheckBox("Show advanced filtering options")
-        self.advanced_options_cb.setToolTip("Display additional advanced options in the filtering interface")
+        self.advanced_options_cb = QCheckBox(self.tr("Show advanced filtering options"))
+        self.advanced_options_cb.setToolTip(self.tr(
+            "Show Advanced Options\n\n"
+            "Display additional advanced options\n"
+            "in the filtering interface.\n"
+            "Includes buffer, centroid, and precision settings."
+        ))
         self.advanced_options_cb.stateChanged.connect(lambda s: self._emit_change('show_advanced', s == Qt.Checked))
         behavior_layout.addWidget(self.advanced_options_cb)
         
-        self.experimental_cb = QCheckBox("Enable experimental features")
-        self.experimental_cb.setToolTip("Enable features that are still in development (may be unstable)")
+        self.experimental_cb = QCheckBox(self.tr("Enable experimental features"))
+        self.experimental_cb.setToolTip(self.tr(
+            "Enable Experimental Features\n\n"
+            "Enable features that are still in development.\n"
+            "May be unstable or change in future versions.\n"
+            "Use at your own risk."
+        ))
         self.experimental_cb.stateChanged.connect(lambda s: self._emit_change('experimental', s == Qt.Checked))
         behavior_layout.addWidget(self.experimental_cb)
         
         content_layout.addWidget(self.behavior_group)
         
         # === BACKEND SETTINGS ===
-        self.backend_group = QgsCollapsibleGroupBox("Backend Settings")
+        self.backend_group = QgsCollapsibleGroupBox(self.tr("Backend Settings"))
         self.backend_group.setCollapsed(False)
         backend_layout = QVBoxLayout(self.backend_group)
         backend_layout.setContentsMargins(6, 20, 6, 6)  # top margin for title
@@ -910,7 +966,7 @@ class ConfigurationPage(QWidget):
         
         # Default backend
         backend_row = QHBoxLayout()
-        backend_row.addWidget(QLabel("Default Backend:"))
+        backend_row.addWidget(QLabel(self.tr("Default Backend:")))
         self.backend_combo = QComboBox()
         self.backend_combo.addItems(["Auto-detect", "PostgreSQL", "Spatialite", "OGR", "Memory"])
         self.backend_combo.currentTextChanged.connect(lambda v: self._emit_change('default_backend', v))
@@ -918,14 +974,14 @@ class ConfigurationPage(QWidget):
         backend_layout.addLayout(backend_row)
         
         # PostgreSQL status
-        self.pg_status_label = QLabel("PostgreSQL Status: Checking...")
+        self.pg_status_label = QLabel(self.tr("PostgreSQL Status: Checking..."))
         self.pg_status_label.setStyleSheet("color: gray;")
         backend_layout.addWidget(self.pg_status_label)
         
         content_layout.addWidget(self.backend_group)
         
         # === RASTER SETTINGS ===
-        self.raster_group = QgsCollapsibleGroupBox("Raster Settings")
+        self.raster_group = QgsCollapsibleGroupBox(self.tr("Raster Settings"))
         self.raster_group.setCollapsed(True)
         raster_layout = QVBoxLayout(self.raster_group)
         raster_layout.setContentsMargins(6, 20, 6, 6)  # top margin for title
@@ -933,7 +989,7 @@ class ConfigurationPage(QWidget):
         
         # Default sampling
         sampling_row = QHBoxLayout()
-        sampling_row.addWidget(QLabel("Default Sampling:"))
+        sampling_row.addWidget(QLabel(self.tr("Default Sampling:")))
         self.sampling_combo = QComboBox()
         self.sampling_combo.addItems(["Centroid", "All Vertices", "Zonal Mean", "Weighted Average"])
         self.sampling_combo.currentTextChanged.connect(lambda v: self._emit_change('raster_sampling', v))
@@ -942,7 +998,7 @@ class ConfigurationPage(QWidget):
         
         # Default clip operation
         clip_row = QHBoxLayout()
-        clip_row.addWidget(QLabel("Default Clip Op:"))
+        clip_row.addWidget(QLabel(self.tr("Default Clip Op:")))
         self.clip_combo = QComboBox()
         self.clip_combo.addItems(["Clip to extent", "Mask outside", "Mask inside"])
         self.clip_combo.currentTextChanged.connect(lambda v: self._emit_change('raster_clip_op', v))
@@ -951,19 +1007,19 @@ class ConfigurationPage(QWidget):
         
         # Memory clips directory
         clips_row = QHBoxLayout()
-        clips_row.addWidget(QLabel("Memory Clips Dir:"))
+        clips_row.addWidget(QLabel(self.tr("Memory Clips Dir:")))
         self.clips_dir = QgsFileWidget()
         self.clips_dir.setStorageMode(QgsFileWidget.GetDirectory)
         clips_row.addWidget(self.clips_dir, 1)
         raster_layout.addLayout(clips_row)
         
         # Raster options
-        self.use_pyramids_cb = QCheckBox("Use pyramids when available")
+        self.use_pyramids_cb = QCheckBox(self.tr("Use pyramids when available"))
         self.use_pyramids_cb.setChecked(True)
         self.use_pyramids_cb.stateChanged.connect(lambda s: self._emit_change('use_pyramids', s == Qt.Checked))
         raster_layout.addWidget(self.use_pyramids_cb)
         
-        self.cache_histogram_cb = QCheckBox("Cache histogram computations")
+        self.cache_histogram_cb = QCheckBox(self.tr("Cache histogram computations"))
         self.cache_histogram_cb.setChecked(True)
         self.cache_histogram_cb.stateChanged.connect(lambda s: self._emit_change('cache_histogram', s == Qt.Checked))
         raster_layout.addWidget(self.cache_histogram_cb)
@@ -971,32 +1027,32 @@ class ConfigurationPage(QWidget):
         content_layout.addWidget(self.raster_group)
         
         # === ACTIONS ===
-        self.action_group = QGroupBox("Actions")
+        self.action_group = QGroupBox(self.tr("Actions"))
         action_layout = QVBoxLayout(self.action_group)
         action_layout.setContentsMargins(6, 20, 6, 6)  # top margin for title
         action_layout.setSpacing(4)
         
         action_row1 = QHBoxLayout()
-        self.open_config_btn = QPushButton("📁 Open Config File")
+        self.open_config_btn = QPushButton(self.tr("📁 Open Config File"))
         action_row1.addWidget(self.open_config_btn)
         
-        self.save_btn = QPushButton("💾 Save")
+        self.save_btn = QPushButton(self.tr("💾 Save"))
         self.save_btn.clicked.connect(self.saveRequested.emit)
         action_row1.addWidget(self.save_btn)
         
-        self.reset_btn = QPushButton("↻ Reset to Defaults")
+        self.reset_btn = QPushButton(self.tr("↻ Reset to Defaults"))
         self.reset_btn.clicked.connect(self.resetRequested.emit)
         action_row1.addWidget(self.reset_btn)
         action_layout.addLayout(action_row1)
         
         action_row2 = QHBoxLayout()
-        self.copy_btn = QPushButton("📋 Copy Config")
+        self.copy_btn = QPushButton(self.tr("📋 Copy Config"))
         action_row2.addWidget(self.copy_btn)
         
-        self.import_btn = QPushButton("📥 Import")
+        self.import_btn = QPushButton(self.tr("📥 Import"))
         action_row2.addWidget(self.import_btn)
         
-        self.export_btn = QPushButton("📤 Export")
+        self.export_btn = QPushButton(self.tr("📤 Export"))
         action_row2.addWidget(self.export_btn)
         action_layout.addLayout(action_row2)
         
@@ -1119,10 +1175,10 @@ class ConfigurationPage(QWidget):
             available: Whether PostgreSQL is available
         """
         if available:
-            self.pg_status_label.setText("PostgreSQL Status: ✅ Available (psycopg2 installed)")
+            self.pg_status_label.setText(self.tr("PostgreSQL Status: ✅ Available (psycopg2 installed)"))
             self.pg_status_label.setStyleSheet("color: green;")
         else:
-            self.pg_status_label.setText("PostgreSQL Status: ❌ Not available")
+            self.pg_status_label.setText(self.tr("PostgreSQL Status: ❌ Not available"))
             self.pg_status_label.setStyleSheet("color: red;")
 
 

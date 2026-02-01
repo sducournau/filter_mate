@@ -776,7 +776,12 @@ class PropertyController(BaseController):
         
         # Default: allow negative buffers (for polygons)
         min_value = -1000000.0
-        tooltip = "Buffer value in meters (positive=expand, negative=shrink polygons)"
+        tooltip = (
+            "Buffer Value (meters)\n\n"
+            "Positive: Expand geometry outward\n"
+            "Negative: Shrink polygon inward (polygons only)\n"
+            "Zero: Use original geometry"
+        )
         
         current_layer = getattr(dw, 'current_layer', None)
         
@@ -798,8 +803,10 @@ class PropertyController(BaseController):
                     # Centroids enabled: source layer is effectively points
                     min_value = 0.0
                     tooltip = (
-                        "Buffer value in meters (positive only when centroids are enabled. "
-                        "Negative buffers cannot be applied to points)"
+                        "Buffer Value (meters) - Centroids Mode\n\n"
+                        "Only positive values allowed when using centroids.\n"
+                        "Centroids convert geometry to points.\n"
+                        "Negative buffers cannot be applied to points."
                     )
                     
                     # Reset negative value to 0
@@ -824,8 +831,10 @@ class PropertyController(BaseController):
                         geom_name = "non-polygon"
                     
                     tooltip = (
-                        f"Buffer value in meters (positive only for {geom_name} layers. "
-                        f"Negative buffers only work on polygon layers)"
+                        f"Buffer Value (meters) - {geom_name.title()} Layer\n\n"
+                        f"Only positive values allowed for {geom_name} layers.\n"
+                        f"Negative buffers only work on polygon layers.\n"
+                        f"Use positive buffer to create search zone."
                     )
                     
                     # Reset negative value to 0

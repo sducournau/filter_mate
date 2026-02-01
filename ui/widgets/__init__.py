@@ -10,7 +10,8 @@ from .custom_widgets import (
     ItemDelegate,
     ListWidgetWrapper,
     QgsCheckableComboBoxLayer,
-    QgsCheckableComboBoxFeaturesListPickerWidget
+    QgsCheckableComboBoxFeaturesListPickerWidget,
+    QgsCheckableComboBoxBands
 )
 # Note QToolBox Architecture
 from .toolbox import (
@@ -25,6 +26,8 @@ from .toolbox import (
     ToolBoxIntegrationBridge,
     DualToolBoxContainer
 )
+# Raster Tools Keys Widget
+from .raster_tools_keys import RasterToolsKeysWidget
 
 __all__ = [
     'FavoritesWidget',
@@ -34,6 +37,7 @@ __all__ = [
     'ListWidgetWrapper',
     'QgsCheckableComboBoxLayer',
     'QgsCheckableComboBoxFeaturesListPickerWidget',
+    'QgsCheckableComboBoxBands',
     # Note QToolBox
     'BaseToolBox',
     'ExploringToolBox',
@@ -45,4 +49,6 @@ __all__ = [
     'ConfigurationPage',
     'ToolBoxIntegrationBridge',
     'DualToolBoxContainer',
+    # Raster Tools
+    'RasterToolsKeysWidget',
 ]

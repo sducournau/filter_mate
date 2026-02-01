@@ -681,13 +681,107 @@ class ConfigurationManager(QObject):
         icon_manager = getattr(self.dockwidget, '_icon_manager', None)
         
         icons_config = pushButton_config.get("ICONS", {})
+        
+        # Enhanced tooltips with detailed descriptions
         exploring_tooltips = {
-            "IDENTIFY": self.dockwidget.tr("Identify selected feature"),
-            "ZOOM": self.dockwidget.tr("Zoom to selected feature"),
-            "IS_SELECTING": self.dockwidget.tr("Toggle feature selection on map"),
-            "IS_TRACKING": self.dockwidget.tr("Auto-zoom when feature changes"),
-            "IS_LINKING": self.dockwidget.tr("Link exploring widgets together"),
-            "RESET_ALL_LAYER_PROPERTIES": self.dockwidget.tr("Reset all layer exploring properties")
+            "IDENTIFY": self.dockwidget.tr(
+                "Identify Feature\n\n"
+                "Display attributes of the selected feature in the info panel.\n"
+                "Click on a feature in the list to see its details."
+            ),
+            "ZOOM": self.dockwidget.tr(
+                "Zoom to Feature\n\n"
+                "Center the map view on the selected feature.\n"
+                "The map will zoom to fit the feature's extent."
+            ),
+            "IS_SELECTING": self.dockwidget.tr(
+                "Toggle Selection Mode\n\n"
+                "When enabled, clicking on items in the list will also select\n"
+                "them on the map canvas. Useful for visual identification."
+            ),
+            "IS_TRACKING": self.dockwidget.tr(
+                "Auto-Track Feature\n\n"
+                "When enabled, the map automatically pans and zooms\n"
+                "to follow the currently selected feature as you navigate."
+            ),
+            "IS_LINKING": self.dockwidget.tr(
+                "Link Widgets Together\n\n"
+                "When enabled, selection in one widget is synchronized\n"
+                "with other exploring widgets (Single, Multiple, Custom)."
+            ),
+            "RESET_ALL_LAYER_PROPERTIES": self.dockwidget.tr(
+                "Reset Layer Properties\n\n"
+                "Restore all exploring properties to their default state.\n"
+                "This clears any custom display expressions or settings."
+            )
+        }
+        
+        filtering_tooltips = {
+            "AUTO_CURRENT_LAYER": self.dockwidget.tr(
+                "Auto-Sync with Current Layer\n\n"
+                "When enabled, the filter automatically updates\n"
+                "when you select a different layer in the layer panel."
+            ),
+            "IS_FILTERING_LAYERS_TO_FILTER": self.dockwidget.tr(
+                "Multi-Layer Filtering\n\n"
+                "When enabled, apply the filter to multiple layers simultaneously.\n"
+                "Select target layers in the dropdown menu."
+            ),
+            "IS_FILTERING_LAYERS_TO_FILTER_WITH_CURRENT_LAYER_COMBINE_OPERATOR": self.dockwidget.tr(
+                "Additive Filter Mode\n\n"
+                "When enabled, new filters are combined with existing ones\n"
+                "using the selected logical operator (AND/OR)."
+            ),
+            "IS_FILTERING_GEOMETRIC_PREDICATES": self.dockwidget.tr(
+                "Spatial Filter Mode\n\n"
+                "When enabled, filter features based on their spatial relationship\n"
+                "with selected geometries (intersects, contains, within, etc.)."
+            ),
+            "IS_FILTERING_BUFFER_VALUE": self.dockwidget.tr(
+                "Buffer Distance\n\n"
+                "Add a buffer zone around selected features before filtering.\n"
+                "Enter the distance in meters (positive=expand, negative=shrink)."
+            ),
+            "IS_FILTERING_BUFFER_TYPE": self.dockwidget.tr(
+                "Buffer Type\n\n"
+                "Define how the buffer is calculated:\n"
+                "• Round: circular ends\n"
+                "• Flat: square ends\n"
+                "• Miter: pointed corners"
+            )
+        }
+        
+        exporting_tooltips = {
+            "IS_EXPORTING_LAYERS": self.dockwidget.tr(
+                "Select Layers to Export\n\n"
+                "Choose which layers will be included in the export.\n"
+                "You can select multiple layers from the dropdown."
+            ),
+            "IS_EXPORTING_PROJECTION": self.dockwidget.tr(
+                "Export Projection (CRS)\n\n"
+                "Define the coordinate reference system for exported files.\n"
+                "Leave unchanged to keep original layer CRS."
+            ),
+            "IS_EXPORTING_STYLES": self.dockwidget.tr(
+                "Export Layer Styles\n\n"
+                "When enabled, layer symbology will be exported as QML or SLD files\n"
+                "alongside the data files."
+            ),
+            "IS_EXPORTING_DATATYPE": self.dockwidget.tr(
+                "Output Format\n\n"
+                "Select the file format for exported data:\n"
+                "GeoPackage, Shapefile, GeoJSON, CSV, etc."
+            ),
+            "IS_EXPORTING_OUTPUT_FOLDER": self.dockwidget.tr(
+                "Output Location\n\n"
+                "Configure the destination folder and filename\n"
+                "for exported files."
+            ),
+            "IS_EXPORTING_ZIP": self.dockwidget.tr(
+                "ZIP Compression\n\n"
+                "When enabled, all exported files will be compressed\n"
+                "into a single ZIP archive for easier sharing."
+            )
         }
         
         for widget_group in self.dockwidget.widgets:
@@ -711,8 +805,14 @@ class ConfigurationManager(QObject):
                             widget_data["ICON"] = icon_path
                 
                 widget_obj.setCursor(Qt.PointingHandCursor)
+                
+                # Apply tooltips based on widget group
                 if widget_group == "EXPLORING" and widget_name in exploring_tooltips:
                     widget_obj.setToolTip(exploring_tooltips[widget_name])
+                elif widget_group == "FILTERING" and widget_name in filtering_tooltips:
+                    widget_obj.setToolTip(filtering_tooltips[widget_name])
+                elif widget_group == "EXPORTING" and widget_name in exporting_tooltips:
+                    widget_obj.setToolTip(exporting_tooltips[widget_name])
                 
                 # Apply dimensions
                 icon_size = icons_sizes.get(widget_group, icons_sizes["OTHERS"])
@@ -775,7 +875,11 @@ class ConfigurationManager(QObject):
             # Get widget_keys width directly from config
             widget_keys_width = UIConfig.get_config('widget_keys', 'max_width') or 56
             
-            for widget in [d.widget_exploring_keys, d.widget_filtering_keys, d.widget_exporting_keys]:
+            widgets_to_configure = [d.widget_exploring_keys, d.widget_filtering_keys, d.widget_exporting_keys]
+            if hasattr(d, 'widget_raster_keys'):
+                widgets_to_configure.append(d.widget_raster_keys)
+            
+            for widget in widgets_to_configure:
                 widget.setMinimumWidth(widget_keys_width)
                 widget.setMaximumWidth(widget_keys_width)
                 widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)

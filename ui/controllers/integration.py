@@ -689,14 +689,19 @@ class ControllerIntegration:
                 except Exception as e:
                     logger.debug(f"Could not sync exploring controller: {e}")
         
-        # Notify exporting controller to populate layers
+        # Notify exporting controller to populate layers and setup UI signals
         if self._exporting_controller and self._dockwidget:
             try:
+                # EPIC-4 v5.0: Setup raster UI signal connections
+                if hasattr(self._exporting_controller, 'setup'):
+                    self._exporting_controller.setup()
+                    logger.debug("ExportingController.setup() completed")
+                    
                 if hasattr(self._exporting_controller, 'refresh_layers'):
                     self._exporting_controller.refresh_layers()
                     logger.debug("ExportingController layers refreshed")
             except Exception as e:
-                logger.debug(f"Could not refresh exporting layers: {e}")
+                logger.debug(f"Could not setup/refresh exporting controller: {e}")
     
     def _on_launching_task(self, task_type: str) -> None:
         """

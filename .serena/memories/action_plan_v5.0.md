@@ -1,223 +1,248 @@
-# 🎯 FilterMate v5.0 - Plan d'Action
+# FilterMate Action Plan v5.4
 
-**Date de création:** 22 janvier 2026  
-**Version actuelle:** 4.3.10  
-**Objectif:** v5.0 Production Release  
-**Timeline estimée:** Février-Mars 2026
-
----
-
-## 📊 État Actuel
-
-| Métrique | Valeur | Objectif v5.0 |
-|----------|--------|---------------|
-| Score qualité | 8.5/10 | 9.0/10 |
-| Test coverage | ~75% | 80% |
-| God classes (>2000 lignes) | 4 | 1 max |
-| TODOs P1 | 5 | 0 |
-| Lignes de code (prod) | 126,539 | < 120,000 |
+**Last Updated:** February 1, 2026  
+**Current Version:** 5.4.0  
+**Status:** Production - Raster Tools Complete
 
 ---
 
-## 🚀 PHASE 1: Stabilisation (Semaine 1-2)
+## ✅ Recently Completed (Jan-Feb 2026)
 
-### Sprint 1.1: TODOs Critiques (P1)
+### v5.4.0 (Feb 1, 2026) - Raster Exploring Tools ✅
+- [x] Added 5 interactive raster tool buttons
+- [x] Pixel Picker tool (click to pick value, Ctrl+click extends range)
+- [x] Rectangle Range tool (drag for area statistics)
+- [x] Sync Histogram tool (bidirectional spinbox ↔ histogram)
+- [x] All Bands Info tool (multi-band pixel values)
+- [x] Reset Range tool (reset to data range)
+- [x] UI consistency with vector exploring panel
+- [x] Checkable button mutual exclusion
+- [x] Theme-aware icons and tooltips
 
-| # | TODO | Fichier | Effort | Impact |
-|---|------|---------|--------|--------|
-| 1.1 | Zip archive creation | `core/export/layer_exporter.py:418` | 2h | Export complet |
-| 1.2 | Internal DB storage | `core/services/favorites_service.py:179` | 3h | Favoris autonomes |
-| 1.3 | Widget updates | `ui/controllers/integration.py:2072` | 2h | UI cohérente |
-| 1.4 | Buffer widget value | `ui/controllers/favorites_controller.py:625,948` | 1h | Favoris + buffer |
+**Impact:** Enhanced raster workflow, consistent UX with vector panel
 
-**Effort total:** ~8h  
-**Livrable:** v4.4.0 - Tous les TODOs P1 résolus
+### v4.4.5 (Jan 25, 2026) - Primary Key Detection ✅
+- [x] Automatic PK detection from PostgreSQL metadata
+- [x] Fallback to common PK names (id, fid, ogc_fid, cleabs, gid, objectid)
+- [x] Fixed dynamic buffer on BDTopo/OSM tables
+- [x] Graceful handling when no PK found
 
-### Sprint 1.2: Tests Critiques
+**Impact:** Dynamic buffers now work on ANY PostgreSQL table
 
-| # | Action | Fichiers | Effort |
-|---|--------|----------|--------|
-| 1.5 | Tests export workflow | `tests/integration/test_export.py` | 4h |
-| 1.6 | Tests filter chaining | `tests/integration/test_filter_chain.py` | 4h |
-| 1.7 | Tests favorites | `tests/unit/test_favorites.py` | 3h |
+### v4.4.4 (Jan 25, 2026) - Naming Harmonization ✅
+- [x] Unified `fm_temp_*` prefix for all temp objects
+- [x] Simplified cleanup logic
+- [x] Consistent naming across PostgreSQL backend
 
-**Effort total:** ~11h  
-**Livrable:** Coverage +3% (~78%)
+**Impact:** Better maintainability, easier debugging
 
----
+### v4.4.0 (Jan 22, 2026) - Quality Release ✅
+- [x] 396 standalone unit tests
+- [x] DockwidgetSignalManager extracted (778 lines)
+- [x] Hexagonal architecture complete
+- [x] Test coverage: 75%
+- [x] Quality score: 8.5/10
 
-## 🏗️ PHASE 2: Refactoring God Classes (Semaine 3-6)
-
-### Sprint 2.1: filter_mate_dockwidget.py (PRIORITÉ HAUTE)
-
-**Fichier:** `filter_mate_dockwidget.py` (6,925 lignes → < 2,500)
-
-| # | Extraction | Lignes | Destination |
-|---|------------|--------|-------------|
-| 2.1.1 | Signal handlers | ~800 | `ui/managers/dockwidget_signal_manager.py` |
-| 2.1.2 | Widget initialization | ~600 | `ui/managers/widget_initializer.py` |
-| 2.1.3 | Context menu handlers | ~400 | `ui/managers/context_menu_manager.py` |
-| 2.1.4 | Export UI logic | ~500 | `ui/controllers/export_ui_controller.py` |
-| 2.1.5 | Layer sync logic | ~600 | `ui/managers/layer_sync_manager.py` |
-
-**Effort total:** ~16h  
-**Objectif:** 6,925 → 2,500 lignes (-64%)
-
-### Sprint 2.2: exploring_controller.py
-
-**Fichier:** `ui/controllers/exploring_controller.py` (3,208 lignes → < 1,500)
-
-| # | Extraction | Lignes | Destination |
-|---|------------|--------|-------------|
-| 2.2.1 | Field handling | ~500 | `ui/controllers/field_controller.py` |
-| 2.2.2 | Value loading | ~400 | `ui/controllers/value_loader_controller.py` |
-| 2.2.3 | Selection sync | ~300 | `ui/managers/selection_sync_manager.py` |
-
-**Effort total:** ~8h  
-**Objectif:** 3,208 → 1,500 lignes (-53%)
-
-### Sprint 2.3: filter_task.py (OPTIONNEL v5.0)
-
-**Fichier:** `core/tasks/filter_task.py` (5,851 lignes)
-
-Ce fichier est complexe mais stable. Prévu pour v5.1 ou v6.0.
+**Impact:** Solid foundation for future development
 
 ---
 
-## 🧪 PHASE 3: Couverture de Tests (Semaine 7-8)
+## 🚀 Current Sprint (Q1 2026)
 
-### Sprint 3.1: Tests Unitaires
+### Priority 1: Translation Coverage
 
-| # | Module | Tests à ajouter | Coverage cible |
-|---|--------|-----------------|----------------|
-| 3.1.1 | `core/services/` | 15 tests | 85% |
-| 3.1.2 | `adapters/backends/` | 10 tests | 80% |
-| 3.1.3 | `ui/controllers/` | 12 tests | 75% |
+**Goal:** Improve non-FR/EN language coverage
 
-### Sprint 3.2: Tests d'Intégration
+| Language | Current | Target | Gap |
+|----------|---------|--------|-----|
+| German (DE) | 48% | 70% | 127 strings |
+| Spanish (ES) | 45% | 70% | 145 strings |
+| Italian (IT) | 40% | 65% | 145 strings |
 
-| # | Scénario | Effort |
-|---|----------|--------|
-| 3.2.1 | Multi-backend filtering | 4h |
-| 3.2.2 | Export all formats | 3h |
-| 3.2.3 | Undo/Redo complet | 2h |
+**Tasks:**
+- [ ] Extract missing translations with `pylupdate5`
+- [ ] Use AI translation for batch DE/ES/IT updates
+- [ ] Manual review of critical UI strings
+- [ ] Update .qm compiled files
 
-**Effort total Phase 3:** ~20h  
-**Objectif:** 75% → 80% coverage
+**Estimated:** 2 days
 
----
+### Priority 2: Test Coverage
 
-## 📝 PHASE 4: Documentation & Release (Semaine 9-10)
+**Goal:** 75% → 80%
 
-### Sprint 4.1: Documentation
+**Focus Areas:**
+- [ ] Raster tools unit tests (new in v5.4.0)
+- [ ] PostgreSQL PK detection tests
+- [ ] Edge cases in filter chaining
+- [ ] Export functionality coverage
 
-| # | Document | Action |
-|---|----------|--------|
-| 4.1.1 | CHANGELOG.md | Consolidation v4.x → v5.0 |
-| 4.1.2 | README.md | Mise à jour features v5.0 |
-| 4.1.3 | ARCHITECTURE.md | Refresh post-refactoring |
-| 4.1.4 | User Guide (website) | Nouveaux screenshots |
+**Estimated:** 1 week
 
-### Sprint 4.2: Release v5.0
+### Priority 3: Documentation
 
-| # | Action | Effort |
-|---|--------|--------|
-| 4.2.1 | Final QA testing | 4h |
-| 4.2.2 | QGIS plugin repository update | 1h |
-| 4.2.3 | GitHub release notes | 1h |
-| 4.2.4 | Website update | 2h |
+**Goal:** Complete user and developer docs
 
----
+- [ ] Raster tools user guide
+- [ ] Primary key detection technical note
+- [ ] Backend selection algorithm documentation
+- [ ] API documentation for services
 
-## 📅 Timeline Résumé
-
-```
-Semaine 1-2  : PHASE 1 - Stabilisation (TODOs P1 + Tests critiques)
-Semaine 3-6  : PHASE 2 - Refactoring God Classes
-Semaine 7-8  : PHASE 3 - Couverture de Tests
-Semaine 9-10 : PHASE 4 - Documentation & Release v5.0
-```
-
-**Date cible v5.0:** Mi-mars 2026
+**Estimated:** 3 days
 
 ---
 
-## 🎯 Critères de Succès v5.0
+## 📋 Next Release: v5.5 (Planned March 2026)
 
-| Critère | Seuil | Méthode de validation |
-|---------|-------|----------------------|
-| Score qualité | ≥ 9.0/10 | Audit Serena |
-| Test coverage | ≥ 80% | pytest-cov |
-| God classes | ≤ 1 fichier > 3000 lignes | wc -l |
-| TODOs P1 | 0 | grep "# TODO" |
-| Bugs critiques | 0 | Issue tracker |
-| Temps de démarrage | < 2s | Benchmark |
+### EPIC-4: Raster Export UI
 
----
+**User Stories:**
+- [ ] Export filtered raster to GeoTIFF
+- [ ] Export filtered raster to Cloud Optimized GeoTIFF (COG)
+- [ ] Export with value range clipping
+- [ ] Export multiple bands to separate files
+- [ ] Export with compression options
+- [ ] Export with NoData handling
 
-## 🔧 Actions Immédiates (Cette semaine)
+**Complexity:** High (8-13 story points each)  
+**Estimated:** 2-3 weeks
 
-### Aujourd'hui (22 janvier)
-- [x] Analyse du codebase complète
-- [x] Nettoyage __pycache__ et fichiers temporaires
-- [x] Mise à jour des mémoires Serena
-- [x] Création du plan d'action
+### Quality Improvements
 
-### Sprint 1.1 - TODOs P1 (COMPLÉTÉ ✅)
-- [x] TODO 1.1 - Zip archive creation (`core/export/layer_exporter.py`)
-- [x] TODO 1.2 - Internal DB storage (`core/services/favorites_service.py`)
-- [x] TODO 1.3 - Widget updates (`ui/controllers/integration.py`)
-- [x] TODO 1.4 - Buffer widget value (`ui/controllers/favorites_controller.py`)
-
-### Sprint 1.2 - Tests Critiques (COMPLÉTÉ ✅)
-- [x] Tests export workflow (`tests/integration/test_export.py`) - 17 tests
-- [x] Tests filter chaining (`tests/integration/test_filter_chain.py`) - 26 tests  
-- [x] Tests favorites (`tests/unit/services/test_favorites_service.py`) - 21 tests
-- **Total: 62/64 tests passent** (2 échecs liés aux mocks QGIS)
-
-### Sprint 2.1 - DockwidgetSignalManager (COMPLÉTÉ ✅)
-- [x] Extraction DockwidgetSignalManager (778 lignes)
-- [x] 14 tests unitaires (100% passent)
-- [x] Integration avec filter_mate_dockwidget.py
-- **Commit:** `cba8e94`
-
-### Sprint 2.2-2.3 - Analyse (COMPLÉTÉ ✅)
-- [x] Analyse des controllers existants
-- [x] **Découverte:** ExploringController (3,259L), LayerSyncController (1,270L) déjà migrés
-- [x] Les wrappers dans dockwidget délèguent aux controllers
-- [x] modules/ folder supprimé
-
-### Sprint 3.1 - Nettoyage imports modules/ (COMPLÉTÉ ✅)
-- [x] Suppression références obsolètes dans tests
-- [x] Mise à jour imports vers core/tasks/, infrastructure/utils, adapters/backends/
-- [x] Documentation copilot-instructions.md mise à jour
-
-### Prochaines étapes
-- [ ] Phase 2: Consolidation fallbacks (optionnel)
-- [ ] Phase 3: Tests couverture 80%
+- [ ] Reduce dockwidget.py complexity (~6,925 lines → split into modules)
+- [ ] Performance optimization for very large rasters
+- [ ] Memory usage profiling and optimization
+- [ ] Code coverage dashboard integration
 
 ---
 
-## 📌 Notes Importantes
+## 🔮 Future Roadmap: v6.0 (Q2-Q3 2026)
 
-### Fichiers à NE PAS toucher (stable)
-- `adapters/backends/postgresql/` - Stable, bien testé
-- `core/geometry/` - Fonctionnel
-- `infrastructure/cache/` - Performant
+### Major Features
 
-### Fichiers prioritaires pour refactoring
-1. `filter_mate_dockwidget.py` - CRITIQUE
-2. `exploring_controller.py` - HAUTE
-3. `integration.py` - MOYENNE
-4. `filter_task.py` - BASSE (v5.1)
+#### 1. Plugin API for Extensibility
+- [ ] Define stable API for custom backends
+- [ ] Plugin system for custom filters
+- [ ] Extension points for UI customization
+- [ ] Documentation and example plugins
 
-### Risques identifiés
-| Risque | Mitigation |
-|--------|------------|
-| Régression UI pendant refactoring | Tests E2E avant/après |
-| Performance dégradée | Benchmarks comparatifs |
-| Breaking changes | Backwards compat layer |
+**Benefit:** Community contributions, custom workflows
+
+#### 2. Advanced Raster Analytics
+- [ ] Raster calculator integration
+- [ ] Band math operations
+- [ ] Temporal raster series filtering
+- [ ] Multi-dimensional raster support (NetCDF)
+
+**Benefit:** Scientific workflows, time-series analysis
+
+#### 3. Cloud Data Sources
+- [ ] AWS S3 raster support
+- [ ] Azure Blob Storage integration
+- [ ] Google Cloud Storage support
+- [ ] STAC (SpatioTemporal Asset Catalog) integration
+
+**Benefit:** Cloud-native workflows, big data
+
+#### 4. Performance Optimization
+- [ ] Parallel raster processing
+- [ ] Lazy loading for large rasters
+- [ ] Tile-based processing
+- [ ] GPU acceleration (GDAL CUDA)
+
+**Benefit:** 10× speedup on large datasets
 
 ---
 
-*Plan créé par BMAD Master - 22 janvier 2026*
+## 🐛 Known Issues & Technical Debt
+
+### Priority 1 (Must Fix)
+
+- [ ] **Dockwidget complexity** (~6,925 lines - needs refactoring)
+  - Split into logical modules (RasterPanel, VectorPanel, FilteringPanel, ExportingPanel)
+  - Extract signal management (partially done with DockwidgetSignalManager)
+  - Separate UI state from business logic
+
+### Priority 2 (Should Fix)
+
+- [ ] **Memory usage** with very large rasters (>2GB)
+  - Profile memory consumption
+  - Implement streaming/chunked processing
+  - Add memory usage warnings
+
+- [ ] **Translation coverage** for 19 secondary languages (~29%)
+  - Automated translation review workflow
+  - Community contribution process
+  - Translation memory integration
+
+### Priority 3 (Nice to Have)
+
+- [ ] **Performance** on shapefiles with >1M features
+  - Recommend PostgreSQL/Spatialite migration
+  - Add performance advisor
+  - Implement progressive loading
+
+- [ ] **Documentation** completeness
+  - Video tutorials
+  - Interactive examples
+  - Developer API docs
+
+---
+
+## 📊 Quality Metrics Tracking
+
+| Metric | v4.4.0 | v5.4.0 | Target v6.0 |
+|--------|--------|--------|-------------|
+| Test Coverage | 75% | 75% | 80% |
+| Unit Tests | 396 | 400+ | 500+ |
+| Quality Score | 8.5/10 | 8.5/10 | 9.0/10 |
+| LOC (prod) | ~130k | ~130k | ~140k |
+| FR/EN Translation | 96% | 96% | 98% |
+| DE/ES Translation | 48%/45% | 48%/45% | 70%/70% |
+| Bare Excepts | 0 ✅ | 0 ✅ | 0 ✅ |
+| Debug Prints | 0 ✅ | 0 ✅ | 0 ✅ |
+
+---
+
+## 🎯 Success Criteria
+
+### v5.5 (March 2026)
+- ✅ Test coverage ≥ 80%
+- ✅ DE/ES translation ≥ 70%
+- ✅ Raster export UI complete
+- ✅ Documentation complete
+
+### v6.0 (Q3 2026)
+- ✅ Plugin API stable and documented
+- ✅ Cloud data source support
+- ✅ Performance: 10× improvement on large datasets
+- ✅ Quality score: 9.0/10
+- ✅ Community contributions: ≥5 plugins
+
+---
+
+## 📝 Notes
+
+### Development Priorities
+1. **Stability**: No breaking changes in minor versions
+2. **Performance**: Optimize before adding features
+3. **Quality**: Maintain 80%+ test coverage
+4. **UX**: Consistent patterns across vector/raster
+
+### Architecture Principles
+- **Hexagonal Architecture**: Maintain clean separation
+- **SOLID Principles**: Single responsibility, dependency injection
+- **DRY**: Extract common patterns to services
+- **KISS**: Keep it simple, avoid over-engineering
+
+### Commit Strategy
+- **Atomic commits**: One logical change per commit
+- **Conventional commits**: feat/fix/docs/test/refactor
+- **Descriptive messages**: Explain WHY, not WHAT
+- **Reference issues**: Link to GitHub issues/PRDs
+
+---
+
+**Last Review:** February 1, 2026  
+**Next Review:** March 1, 2026  
+**Owner:** Simon (@sducournau)

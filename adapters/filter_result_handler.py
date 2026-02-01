@@ -487,6 +487,11 @@ class FilterResultHandler:
                 dockwidget._update_exploring_buttons_state()
                 logger.info(f"v2.9.41: ✅ Updated exploring button states after {display_backend} filter")
             
+            # v5.6: Update vector statistics display after filtering
+            if hasattr(dockwidget, '_update_vector_statistics_display'):
+                dockwidget._update_vector_statistics_display(target_layer)
+                logger.info(f"v5.6: ✅ Updated vector stats display after {display_backend} filter")
+            
             logger.info(f"v2.9.20: ✅ Exploring widgets reloaded successfully")
         except Exception as exploring_error:
             logger.error(f"v2.9.20: ❌ Error reloading exploring widgets: {exploring_error}")

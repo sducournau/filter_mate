@@ -67,8 +67,24 @@ class VectorExploringPage(QWidget):
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(6)
         
+        # === VECTOR STATS HEADER ===
+        # Stats line (like raster exploring)
+        self.stats_label = QLabel(self.tr("📊 Features: - | Selected: - | Fields: - | Geom: -"))
+        self.stats_label.setStyleSheet("color: #2a82da; font-size: 10px;")
+        content_layout.addWidget(self.stats_label)
+        
+        # Metadata line
+        self.metadata_label = QLabel(self.tr("Data: - | CRS: - | Extent: -"))
+        self.metadata_label.setStyleSheet("color: gray; font-size: 9px;")
+        content_layout.addWidget(self.metadata_label)
+        
+        # Filter status line
+        self.filter_status_label = QLabel(self.tr("🔍 Filter: None"))
+        self.filter_status_label.setStyleSheet("color: #666; font-size: 9px;")
+        content_layout.addWidget(self.filter_status_label)
+        
         # === SINGLE SELECTION ===
-        self.single_group = QgsCollapsibleGroupBox("🎯 Single Selection")
+        self.single_group = QgsCollapsibleGroupBox(self.tr("🎯 Single Selection"))
         self.single_group.setCollapsed(False)
         single_layout = QVBoxLayout(self.single_group)
         single_layout.setContentsMargins(6, 20, 6, 6)  # top margin for title
@@ -76,7 +92,7 @@ class VectorExploringPage(QWidget):
         
         # Field selector
         field_row = QHBoxLayout()
-        field_row.addWidget(QLabel("Field:"))
+        field_row.addWidget(QLabel(self.tr("Field:")))
         self.field_combo = QComboBox()
         self.field_combo.setMinimumWidth(150)
         self.field_combo.currentTextChanged.connect(self._on_field_changed)
@@ -85,7 +101,7 @@ class VectorExploringPage(QWidget):
         
         # Value selector
         value_row = QHBoxLayout()
-        value_row.addWidget(QLabel("Value:"))
+        value_row.addWidget(QLabel(self.tr("Value:")))
         self.value_combo = QComboBox()
         self.value_combo.setEditable(True)
         self.value_combo.setMinimumWidth(150)
@@ -94,35 +110,43 @@ class VectorExploringPage(QWidget):
         
         self.filter_btn = QPushButton("🔍")
         self.filter_btn.setFixedWidth(30)
-        self.filter_btn.setToolTip("Apply filter")
+        self.filter_btn.setToolTip(self.tr(
+            "Apply Filter\n\n"
+            "Filter features matching the selected value.\n"
+            "Use options below to control matching behavior."
+        ))
         self.filter_btn.clicked.connect(self.filterRequested.emit)
         value_row.addWidget(self.filter_btn)
         
         self.clear_btn = QPushButton("✕")
         self.clear_btn.setFixedWidth(30)
-        self.clear_btn.setToolTip("Clear selection")
+        self.clear_btn.setToolTip(self.tr(
+            "Clear Selection\n\n"
+            "Remove all filters and restore full visibility.\n"
+            "Resets field and value selections."
+        ))
         self.clear_btn.clicked.connect(self.clearRequested.emit)
         value_row.addWidget(self.clear_btn)
         single_layout.addLayout(value_row)
         
         # Options
         options_row = QHBoxLayout()
-        self.case_sensitive_cb = QCheckBox("Case sensitive")
-        self.exact_match_cb = QCheckBox("Exact match")
+        self.case_sensitive_cb = QCheckBox(self.tr("Case sensitive"))
+        self.exact_match_cb = QCheckBox(self.tr("Exact match"))
         options_row.addWidget(self.case_sensitive_cb)
         options_row.addWidget(self.exact_match_cb)
         options_row.addStretch()
         single_layout.addLayout(options_row)
         
         # Result indicator
-        self.result_label = QLabel("Result: - / -")
+        self.result_label = QLabel(self.tr("Result: - / -"))
         self.result_label.setStyleSheet("color: gray; font-style: italic;")
         single_layout.addWidget(self.result_label)
         
         content_layout.addWidget(self.single_group)
         
         # === MULTIPLE SELECTION ===
-        self.multiple_group = QgsCollapsibleGroupBox("📋 Multiple Selection")
+        self.multiple_group = QgsCollapsibleGroupBox(self.tr("📋 Multiple Selection"))
         self.multiple_group.setCollapsed(True)
         multiple_layout = QVBoxLayout(self.multiple_group)
         multiple_layout.setContentsMargins(6, 20, 6, 6)  # top margin for title
@@ -130,14 +154,14 @@ class VectorExploringPage(QWidget):
         
         # Field selector for multiple
         multi_field_row = QHBoxLayout()
-        multi_field_row.addWidget(QLabel("Field:"))
+        multi_field_row.addWidget(QLabel(self.tr("Field:")))
         self.multi_field_combo = QComboBox()
         self.multi_field_combo.currentTextChanged.connect(self._on_multi_field_changed)
         multi_field_row.addWidget(self.multi_field_combo, 1)
         multiple_layout.addLayout(multi_field_row)
         
         # Multi-value picker placeholder
-        self.multi_value_label = QLabel("Select multiple values from the field above")
+        self.multi_value_label = QLabel(self.tr("Select multiple values from the field above"))
         self.multi_value_label.setStyleSheet("color: gray;")
         multiple_layout.addWidget(self.multi_value_label)
         
@@ -150,14 +174,14 @@ class VectorExploringPage(QWidget):
         content_layout.addWidget(self.multiple_group)
         
         # === CUSTOM EXPRESSION ===
-        self.expression_group = QgsCollapsibleGroupBox("🔧 Custom Expression")
+        self.expression_group = QgsCollapsibleGroupBox(self.tr("🔧 Custom Expression"))
         self.expression_group.setCollapsed(True)
         expression_layout = QVBoxLayout(self.expression_group)
         expression_layout.setContentsMargins(6, 20, 6, 6)  # top margin for title
         expression_layout.setSpacing(4)
         
         # Expression builder placeholder
-        self.expression_label = QLabel("Build advanced filter with expression builder")
+        self.expression_label = QLabel(self.tr("Build advanced filter with expression builder"))
         self.expression_label.setStyleSheet("color: gray;")
         expression_layout.addWidget(self.expression_label)
         
@@ -183,6 +207,7 @@ class VectorExploringPage(QWidget):
         """
         self._current_layer = layer
         self._populate_fields()
+        self._update_stats_display()
     
     def _populate_fields(self):
         """Populate field combos from current layer."""
@@ -257,6 +282,81 @@ class VectorExploringPage(QWidget):
             'case_sensitive': self.case_sensitive_cb.isChecked(),
             'exact_match': self.exact_match_cb.isChecked()
         }
+    
+    def _update_stats_display(self):
+        """Update vector statistics display (similar to raster exploring)."""
+        if not self._current_layer:
+            self.stats_label.setText(self.tr("📊 Features: - | Selected: - | Fields: - | Geom: -"))
+            self.metadata_label.setText(self.tr("Data: - | CRS: - | Extent: -"))
+            self.filter_status_label.setText(self.tr("🔍 Filter: None"))
+            self.filter_status_label.setStyleSheet("color: #666; font-size: 9px;")
+            return
+        
+        layer = self._current_layer
+        
+        try:
+            # Line 1: Layer metrics
+            total = layer.featureCount()
+            selected = layer.selectedFeatureCount()
+            sel_pct = (selected / total * 100) if total > 0 else 0
+            fields_count = len(layer.fields())
+            
+            # Geometry type mapping
+            geom_map = {0: "Point", 1: "Line", 2: "Polygon", 3: "Unknown", 4: "Null"}
+            geom = geom_map.get(layer.geometryType(), "Unknown")
+            
+            self.stats_label.setText(
+                f"📊 Features: {total:,} | Selected: {selected:,} ({sel_pct:.1f}%) | Fields: {fields_count} | Geom: {geom}"
+            )
+            
+            # Line 2: Data source info
+            provider = layer.providerType()
+            provider_names = {
+                'postgres': 'PostgreSQL',
+                'spatialite': 'Spatialite', 
+                'ogr': 'OGR/File',
+                'memory': 'Memory',
+                'wfs': 'WFS',
+                'gpx': 'GPX'
+            }
+            provider_display = provider_names.get(provider, provider.title())
+            
+            crs = layer.crs().authid() if layer.crs().isValid() else "Unknown"
+            
+            # Extent with auto-unit
+            extent = layer.extent()
+            if not extent.isEmpty():
+                width = extent.width()
+                height = extent.height()
+                # Detect unit based on CRS (geographic vs projected)
+                if layer.crs().isGeographic():
+                    ext_str = f"{width:.2f}°×{height:.2f}°"
+                elif width > 10000:
+                    ext_str = f"{width/1000:.1f}×{height/1000:.1f} km"
+                else:
+                    ext_str = f"{width:.0f}×{height:.0f} m"
+            else:
+                ext_str = "Empty"
+            
+            self.metadata_label.setText(f"Data: {provider_display} | CRS: {crs} | Extent: {ext_str}")
+            
+            # Line 3: Filter status
+            subset = layer.subsetString()
+            if subset:
+                expr_preview = subset[:40] + "..." if len(subset) > 40 else subset
+                self.filter_status_label.setText(f"🔍 Filter: Active | {expr_preview}")
+                self.filter_status_label.setStyleSheet("color: #27ae60; font-size: 9px; font-weight: bold;")
+            else:
+                self.filter_status_label.setText(self.tr("🔍 Filter: None"))
+                self.filter_status_label.setStyleSheet("color: #666; font-size: 9px;")
+                
+        except Exception as e:
+            logger.error(f"Error updating vector stats display: {e}")
+            self.stats_label.setText(self.tr("📊 Features: Error"))
+    
+    def refresh_stats(self):
+        """Public method to refresh statistics display."""
+        self._update_stats_display()
 
 
 class RasterExploringPage(QWidget):
@@ -268,28 +368,56 @@ class RasterExploringPage(QWidget):
     - Mask & Clip Operations
     - Memory Clips Manager
     
+    Also includes a left column of tool buttons for:
+    - Pixel Picker (pick single value)
+    - Rectangle Picker (pick range from area)
+    - Sync Histogram
+    - All Bands Info
+    - Reset Range
+    
     Signals:
         rangeChanged: Emitted when value range changes (min, max)
         statisticsComputed: Emitted when statistics are computed
         clipRequested: Emitted when clip operation requested
+        pixelPickerRequested: Emitted when pixel picker tool is requested
+        rectPickerRequested: Emitted when rectangle picker tool is requested
+        allBandsRequested: Emitted when all bands info mode is requested
+        syncHistogramRequested: Emitted when histogram sync is requested
+        resetRangeRequested: Emitted when range reset is requested
     """
     
     rangeChanged = pyqtSignal(float, float)  # min, max
     statisticsComputed = pyqtSignal(dict)  # stats dict
     clipRequested = pyqtSignal(str, dict)  # operation, parameters
     pickFromMapRequested = pyqtSignal()
+    # New signals for raster tools
+    pixelPickerRequested = pyqtSignal(bool)  # checked state
+    rectPickerRequested = pyqtSignal(bool)  # checked state
+    allBandsRequested = pyqtSignal(bool)  # checked state
+    syncHistogramRequested = pyqtSignal()
+    resetRangeRequested = pyqtSignal()
     
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, icons_path: str = ""):
         super().__init__(parent)
         self._current_layer = None
         self._stats = {}
+        self._icons_path = icons_path
         self._setup_ui()
     
     def _setup_ui(self):
-        """Setup the raster exploring UI."""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(4)
+        """Setup the raster exploring UI with tool buttons column."""
+        main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(2, 2, 2, 2)
+        main_layout.setSpacing(2)
+        
+        # === LEFT COLUMN: TOOL BUTTONS ===
+        self._setup_tools_column(main_layout)
+        
+        # === RIGHT COLUMN: CONTENT ===
+        content_widget = QWidget()
+        content_outer_layout = QVBoxLayout(content_widget)
+        content_outer_layout.setContentsMargins(0, 0, 0, 0)
+        content_outer_layout.setSpacing(4)
         
         # Scroll area for content
         scroll = QScrollArea()
@@ -303,60 +431,38 @@ class RasterExploringPage(QWidget):
         
         # === RASTER INFO HEADER ===
         info_row = QHBoxLayout()
-        info_row.addWidget(QLabel("Band:"))
+        info_row.addWidget(QLabel(self.tr("Band:")))
         self.band_combo = QComboBox()
         self.band_combo.setMinimumWidth(120)
         self.band_combo.currentIndexChanged.connect(self._on_band_changed)
         info_row.addWidget(self.band_combo, 1)
-        content_layout.addLayout(info_row)
-        
-        # === STATISTICS ===
-        self.stats_group = QgsCollapsibleGroupBox("📊 Statistics")
-        self.stats_group.setCollapsed(False)
-        stats_layout = QVBoxLayout(self.stats_group)
-        stats_layout.setContentsMargins(6, 20, 6, 6)  # top margin for title
-        stats_layout.setSpacing(4)
-        
-        # Stats grid
-        stats_grid = QHBoxLayout()
-        
-        # Create stat labels
-        self.stat_labels = {}
-        for stat_name in ['Min', 'Max', 'Mean', 'StdDev', 'NoData']:
-            col = QVBoxLayout()
-            header = QLabel(stat_name)
-            header.setAlignment(Qt.AlignCenter)
-            header.setStyleSheet("font-weight: bold; font-size: 9px;")
-            col.addWidget(header)
-            
-            value = QLabel("-")
-            value.setAlignment(Qt.AlignCenter)
-            value.setStyleSheet("color: #2a82da;")
-            col.addWidget(value)
-            self.stat_labels[stat_name] = value
-            
-            stats_grid.addLayout(col)
-        
-        stats_layout.addLayout(stats_grid)
-        
-        # Metadata row
-        self.metadata_label = QLabel("Data: - | Res: - | Size: -")
-        self.metadata_label.setStyleSheet("color: gray; font-size: 9px;")
-        
-        meta_row = QHBoxLayout()
-        meta_row.addWidget(self.metadata_label, 1)
         
         self.refresh_stats_btn = QPushButton("↻")
         self.refresh_stats_btn.setFixedWidth(30)
-        self.refresh_stats_btn.setToolTip("Refresh statistics")
+        self.refresh_stats_btn.setToolTip(self.tr(
+            "Refresh Statistics\n\n"
+            "Recalculate zonal statistics for the selected raster.\n"
+            "Updates min, max, mean, and other statistics."
+        ))
         self.refresh_stats_btn.clicked.connect(self._compute_statistics)
-        meta_row.addWidget(self.refresh_stats_btn)
+        info_row.addWidget(self.refresh_stats_btn)
+        content_layout.addLayout(info_row)
         
-        stats_layout.addLayout(meta_row)
-        content_layout.addWidget(self.stats_group)
+        # === SIMPLIFIED STATS LINE ===
+        self.stats_label = QLabel(self.tr("📊 Min: - | Max: - | Mean: - | σ: - | NoData: -"))
+        self.stats_label.setStyleSheet("color: #2a82da; font-size: 10px;")
+        content_layout.addWidget(self.stats_label)
+        
+        # Metadata line
+        self.metadata_label = QLabel(self.tr("Data: - | Res: - | Size: -"))
+        self.metadata_label.setStyleSheet("color: gray; font-size: 9px;")
+        content_layout.addWidget(self.metadata_label)
+        
+        # Keep stat_labels dict for backward compatibility
+        self.stat_labels = {}
         
         # === VALUE SELECTION ===
-        self.value_group = QgsCollapsibleGroupBox("📈 Value Selection")
+        self.value_group = QgsCollapsibleGroupBox(self.tr("📈 Value Selection"))
         self.value_group.setCollapsed(False)
         value_layout = QVBoxLayout(self.value_group)
         value_layout.setContentsMargins(6, 20, 6, 6)  # top margin for title
@@ -373,7 +479,7 @@ class RasterExploringPage(QWidget):
             }
         """)
         histogram_inner = QVBoxLayout(self.histogram_frame)
-        histogram_label = QLabel("📊 Interactive Histogram\n(Coming in Sprint 2)")
+        histogram_label = QLabel(self.tr("📊 Interactive Histogram\n(Coming in Sprint 2)"))
         histogram_label.setAlignment(Qt.AlignCenter)
         histogram_label.setStyleSheet("color: gray;")
         histogram_inner.addWidget(histogram_label)
@@ -381,13 +487,13 @@ class RasterExploringPage(QWidget):
         
         # Range selection
         range_row = QHBoxLayout()
-        range_row.addWidget(QLabel("Range:"))
+        range_row.addWidget(QLabel(self.tr("Range:")))
         
         self.min_spin = QDoubleSpinBox()
         self.min_spin.setDecimals(2)
         self.min_spin.setRange(-999999, 999999)
         self.min_spin.valueChanged.connect(self._on_range_changed)
-        range_row.addWidget(QLabel("Min"))
+        range_row.addWidget(QLabel(self.tr("Min")))
         range_row.addWidget(self.min_spin)
         
         range_row.addWidget(QLabel("◄────►"))
@@ -396,14 +502,14 @@ class RasterExploringPage(QWidget):
         self.max_spin.setDecimals(2)
         self.max_spin.setRange(-999999, 999999)
         self.max_spin.valueChanged.connect(self._on_range_changed)
-        range_row.addWidget(QLabel("Max"))
+        range_row.addWidget(QLabel(self.tr("Max")))
         range_row.addWidget(self.max_spin)
         
         value_layout.addLayout(range_row)
         
         # Predicate selection
         predicate_row = QHBoxLayout()
-        predicate_row.addWidget(QLabel("Predicate:"))
+        predicate_row.addWidget(QLabel(self.tr("Predicate:")))
         self.predicate_combo = QComboBox()
         self.predicate_combo.addItems([
             "Within Range (min ≤ val ≤ max)",
@@ -417,11 +523,11 @@ class RasterExploringPage(QWidget):
         
         # Pixels info and pick button
         pick_row = QHBoxLayout()
-        self.pixels_label = QLabel("Pixels: - / - (-)")
+        self.pixels_label = QLabel(self.tr("Pixels: - / - (-)"))
         self.pixels_label.setStyleSheet("color: gray;")
         pick_row.addWidget(self.pixels_label, 1)
         
-        self.pick_btn = QPushButton("🔬 Pick from Map")
+        self.pick_btn = QPushButton(self.tr("🔬 Pick from Map"))
         self.pick_btn.clicked.connect(self.pickFromMapRequested.emit)
         pick_row.addWidget(self.pick_btn)
         
@@ -429,19 +535,19 @@ class RasterExploringPage(QWidget):
         content_layout.addWidget(self.value_group)
         
         # === MASK & CLIP ===
-        self.mask_group = QgsCollapsibleGroupBox("🎭 Mask & Clip Operations")
+        self.mask_group = QgsCollapsibleGroupBox(self.tr("🎭 Mask & Clip Operations"))
         self.mask_group.setCollapsed(True)
         mask_layout = QVBoxLayout(self.mask_group)
         mask_layout.setContentsMargins(6, 20, 6, 6)  # top margin for title
         mask_layout.setSpacing(4)
         
-        self.mask_info_label = QLabel("Clip/Mask raster with vector geometries")
+        self.mask_info_label = QLabel(self.tr("Clip/Mask raster with vector geometries"))
         self.mask_info_label.setStyleSheet("color: gray;")
         mask_layout.addWidget(self.mask_info_label)
         
         # Clip operation selector
         clip_row = QHBoxLayout()
-        clip_row.addWidget(QLabel("Operation:"))
+        clip_row.addWidget(QLabel(self.tr("Operation:")))
         self.clip_operation_combo = QComboBox()
         self.clip_operation_combo.addItems([
             "Clip to extent",
@@ -454,20 +560,20 @@ class RasterExploringPage(QWidget):
         
         # Vector source for clip
         vector_row = QHBoxLayout()
-        vector_row.addWidget(QLabel("Vector:"))
+        vector_row.addWidget(QLabel(self.tr("Vector:")))
         self.clip_vector_combo = QComboBox()
         vector_row.addWidget(self.clip_vector_combo, 1)
         mask_layout.addLayout(vector_row)
         
         # Clip button
-        self.clip_btn = QPushButton("Execute Clip/Mask")
+        self.clip_btn = QPushButton(self.tr("Execute Clip/Mask"))
         self.clip_btn.clicked.connect(self._on_clip_requested)
         mask_layout.addWidget(self.clip_btn)
         
         content_layout.addWidget(self.mask_group)
         
         # === MEMORY CLIPS MANAGER ===
-        self.clips_group = QgsCollapsibleGroupBox("💾 Memory Clips (0)")
+        self.clips_group = QgsCollapsibleGroupBox(self.tr("💾 Memory Clips (0)"))
         self.clips_group.setCollapsed(True)
         clips_layout = QVBoxLayout(self.clips_group)
         clips_layout.setContentsMargins(6, 20, 6, 6)  # top margin for title
@@ -486,13 +592,21 @@ class RasterExploringPage(QWidget):
         # Clip actions row
         clip_actions = QHBoxLayout()
         
-        self.add_to_project_btn = QPushButton("➕ Add to Project")
-        self.add_to_project_btn.setToolTip("Add selected clip as a new layer in the project")
+        self.add_to_project_btn = QPushButton(self.tr("➕ Add to Project"))
+        self.add_to_project_btn.setToolTip(self.tr(
+            "Add to Project\n\n"
+            "Add selected clip as a new layer in the project.\n"
+            "Creates a permanent copy from the memory clip."
+        ))
         self.add_to_project_btn.clicked.connect(self._on_add_clip_to_project)
         clip_actions.addWidget(self.add_to_project_btn)
         
-        self.delete_clip_btn = QPushButton("🗑️ Delete")
-        self.delete_clip_btn.setToolTip("Delete selected memory clip")
+        self.delete_clip_btn = QPushButton(self.tr("🗑️ Delete"))
+        self.delete_clip_btn.setToolTip(self.tr(
+            "Delete Clip\n\n"
+            "Remove selected memory clip from the list.\n"
+            "Frees memory resources."
+        ))
         self.delete_clip_btn.clicked.connect(self._on_delete_clip)
         clip_actions.addWidget(self.delete_clip_btn)
         
@@ -500,13 +614,21 @@ class RasterExploringPage(QWidget):
         
         clip_actions_row2 = QHBoxLayout()
         
-        self.export_clip_btn = QPushButton("💾 Export...")
-        self.export_clip_btn.setToolTip("Export selected clip to file")
+        self.export_clip_btn = QPushButton(self.tr("💾 Export..."))
+        self.export_clip_btn.setToolTip(self.tr(
+            "Export Clip\n\n"
+            "Save selected clip to a raster file (GeoTIFF).\n"
+            "Preserves georeferencing and compression settings."
+        ))
         self.export_clip_btn.clicked.connect(self._on_export_clip)
         clip_actions_row2.addWidget(self.export_clip_btn)
         
-        self.clear_all_clips_btn = QPushButton("🧹 Clear All")
-        self.clear_all_clips_btn.setToolTip("Delete all memory clips")
+        self.clear_all_clips_btn = QPushButton(self.tr("🧹 Clear All"))
+        self.clear_all_clips_btn.setToolTip(self.tr(
+            "Clear All Clips\n\n"
+            "Delete all memory clips from the list.\n"
+            "Use to free memory after processing."
+        ))
         self.clear_all_clips_btn.clicked.connect(self._on_clear_all_clips)
         clip_actions_row2.addWidget(self.clear_all_clips_btn)
         
@@ -518,7 +640,7 @@ class RasterExploringPage(QWidget):
         content_layout.addWidget(self.clips_group)
         
         # === ZONAL STATISTICS RESULTS ===
-        self.zonal_group = QgsCollapsibleGroupBox("📊 Zonal Statistics Results")
+        self.zonal_group = QgsCollapsibleGroupBox(self.tr("📊 Zonal Statistics Results"))
         self.zonal_group.setCollapsed(True)
         zonal_layout = QVBoxLayout(self.zonal_group)
         zonal_layout.setContentsMargins(6, 20, 6, 6)  # top margin for title
@@ -537,25 +659,37 @@ class RasterExploringPage(QWidget):
         # Actions row
         zonal_actions = QHBoxLayout()
         
-        self.copy_stats_btn = QPushButton("📋 Copy")
-        self.copy_stats_btn.setToolTip("Copy statistics to clipboard")
+        self.copy_stats_btn = QPushButton(self.tr("📋 Copy"))
+        self.copy_stats_btn.setToolTip(self.tr(
+            "Copy to Clipboard\n\n"
+            "Copy statistics table to clipboard.\n"
+            "Paste into Excel, LibreOffice, or text editor."
+        ))
         self.copy_stats_btn.clicked.connect(self._on_copy_zonal_stats)
         zonal_actions.addWidget(self.copy_stats_btn)
         
-        self.export_stats_btn = QPushButton("📤 Export CSV")
-        self.export_stats_btn.setToolTip("Export statistics to CSV file")
+        self.export_stats_btn = QPushButton(self.tr("📤 Export CSV"))
+        self.export_stats_btn.setToolTip(self.tr(
+            "Export to CSV\n\n"
+            "Save statistics to a CSV file.\n"
+            "Includes all bands and calculated values."
+        ))
         self.export_stats_btn.clicked.connect(self._on_export_zonal_stats)
         zonal_actions.addWidget(self.export_stats_btn)
         
-        self.add_to_layer_btn = QPushButton("➕ Add to Layer")
-        self.add_to_layer_btn.setToolTip("Add statistics as attributes to source vector layer")
+        self.add_to_layer_btn = QPushButton(self.tr("➕ Add to Layer"))
+        self.add_to_layer_btn.setToolTip(self.tr(
+            "Add to Layer\n\n"
+            "Add statistics as attributes to source vector layer.\n"
+            "Creates new fields: zs_min, zs_max, zs_mean, etc."
+        ))
         self.add_to_layer_btn.clicked.connect(self._on_add_stats_to_layer)
         zonal_actions.addWidget(self.add_to_layer_btn)
         
         zonal_layout.addLayout(zonal_actions)
         
         # Info label
-        self.zonal_info_label = QLabel("Run 'Zonal statistics' operation to compute results")
+        self.zonal_info_label = QLabel(self.tr("Run 'Zonal statistics' operation to compute results"))
         self.zonal_info_label.setStyleSheet("color: gray; font-size: 10px;")
         self.zonal_info_label.setWordWrap(True)
         zonal_layout.addWidget(self.zonal_info_label)
@@ -566,7 +700,176 @@ class RasterExploringPage(QWidget):
         content_layout.addStretch()
         
         scroll.setWidget(content)
-        layout.addWidget(scroll)
+        content_outer_layout.addWidget(scroll)
+        main_layout.addWidget(content_widget, 1)  # Content takes remaining space
+    
+    def _setup_tools_column(self, parent_layout: QHBoxLayout):
+        """Setup the left column with tool buttons.
+        
+        Args:
+            parent_layout: Parent horizontal layout to add buttons to
+        """
+        import os
+        from qgis.PyQt.QtCore import QSize
+        from qgis.PyQt.QtGui import QIcon
+        
+        # Create tools column widget
+        self.widget_raster_keys = QWidget()
+        self.widget_raster_keys.setObjectName("widget_raster_keys")
+        self.widget_raster_keys.setMinimumWidth(42)
+        self.widget_raster_keys.setMaximumWidth(50)
+        
+        tools_layout = QVBoxLayout(self.widget_raster_keys)
+        tools_layout.setContentsMargins(2, 4, 2, 4)
+        tools_layout.setSpacing(4)
+        
+        BUTTON_SIZE = 32
+        
+        # Helper function to create buttons
+        def create_tool_button(object_name: str, tooltip: str, icon_name: str, checkable: bool) -> QPushButton:
+            btn = QPushButton()
+            btn.setObjectName(object_name)
+            btn.setToolTip(tooltip)
+            btn.setCheckable(checkable)
+            btn.setFlat(True)
+            btn.setMinimumSize(QSize(BUTTON_SIZE, BUTTON_SIZE))
+            btn.setMaximumSize(QSize(BUTTON_SIZE, BUTTON_SIZE))
+            
+            # Set icon
+            if self._icons_path and icon_name:
+                icon_path = os.path.join(self._icons_path, icon_name)
+                if os.path.exists(icon_path):
+                    btn.setIcon(QIcon(icon_path))
+                    btn.setIconSize(QSize(BUTTON_SIZE - 4, BUTTON_SIZE - 4))
+            return btn
+        
+        # Button 1: Pixel Picker
+        self.pushButton_raster_pixel_picker = create_tool_button(
+            "pushButton_raster_pixel_picker",
+            self.tr("Click on raster to pick a single value\n(Ctrl+click to extend range)"),
+            "raster_pipette.png",
+            True
+        )
+        self.pushButton_raster_pixel_picker.clicked.connect(self._on_pixel_picker_clicked)
+        tools_layout.addWidget(self.pushButton_raster_pixel_picker)
+        
+        # Button 2: Rectangle Picker
+        self.pushButton_raster_rect_picker = create_tool_button(
+            "pushButton_raster_rect_picker",
+            self.tr("Drag rectangle to pick value range\nfrom area statistics"),
+            "raster_rectangle_picker.png",
+            True
+        )
+        self.pushButton_raster_rect_picker.clicked.connect(self._on_rect_picker_clicked)
+        tools_layout.addWidget(self.pushButton_raster_rect_picker)
+        
+        # Button 3: Sync Histogram
+        self.pushButton_raster_sync_histogram = create_tool_button(
+            "pushButton_raster_sync_histogram",
+            self.tr("Synchronize spinbox values\nwith histogram selection"),
+            "raster_sync.png",
+            False
+        )
+        self.pushButton_raster_sync_histogram.clicked.connect(self._on_sync_histogram_clicked)
+        tools_layout.addWidget(self.pushButton_raster_sync_histogram)
+        
+        # Button 4: All Bands Info
+        self.pushButton_raster_all_bands = create_tool_button(
+            "pushButton_raster_all_bands",
+            self.tr("Show pixel values for all bands\nat clicked point"),
+            "raster_all_bands.png",
+            True
+        )
+        self.pushButton_raster_all_bands.clicked.connect(self._on_all_bands_clicked)
+        tools_layout.addWidget(self.pushButton_raster_all_bands)
+        
+        # Button 5: Reset Range
+        self.pushButton_raster_reset_range = create_tool_button(
+            "pushButton_raster_reset_range",
+            self.tr("Reset Min/Max to full data range"),
+            "raster_reset_bands.png",
+            False
+        )
+        self.pushButton_raster_reset_range.clicked.connect(self._on_reset_range_clicked)
+        tools_layout.addWidget(self.pushButton_raster_reset_range)
+        
+        # Add spacer to push buttons to top
+        tools_layout.addStretch()
+        
+        # Add to parent layout
+        parent_layout.addWidget(self.widget_raster_keys)
+    
+    def _on_pixel_picker_clicked(self, checked: bool):
+        """Handle pixel picker button click."""
+        if checked:
+            self._set_exclusive_tool_check('pixel_picker')
+        self.pixelPickerRequested.emit(checked)
+    
+    def _on_rect_picker_clicked(self, checked: bool):
+        """Handle rectangle picker button click."""
+        if checked:
+            self._set_exclusive_tool_check('rect_picker')
+        self.rectPickerRequested.emit(checked)
+    
+    def _on_sync_histogram_clicked(self):
+        """Handle sync histogram button click."""
+        self.syncHistogramRequested.emit()
+    
+    def _on_all_bands_clicked(self, checked: bool):
+        """Handle all bands button click."""
+        if checked:
+            self._set_exclusive_tool_check('all_bands')
+        self.allBandsRequested.emit(checked)
+    
+    def _on_reset_range_clicked(self):
+        """Handle reset range button click."""
+        self.resetRangeRequested.emit()
+    
+    def _set_exclusive_tool_check(self, active_key: str):
+        """Ensure checkable tool buttons are mutually exclusive.
+        
+        Args:
+            active_key: Key of the button that should remain checked
+        """
+        buttons = {
+            'pixel_picker': self.pushButton_raster_pixel_picker,
+            'rect_picker': self.pushButton_raster_rect_picker,
+            'all_bands': self.pushButton_raster_all_bands
+        }
+        
+        for key, btn in buttons.items():
+            if btn and btn.isCheckable() and key != active_key:
+                btn.blockSignals(True)
+                btn.setChecked(False)
+                btn.blockSignals(False)
+    
+    def uncheck_all_tools(self):
+        """Uncheck all checkable tool buttons."""
+        for btn in [self.pushButton_raster_pixel_picker, 
+                    self.pushButton_raster_rect_picker, 
+                    self.pushButton_raster_all_bands]:
+            if btn:
+                btn.blockSignals(True)
+                btn.setChecked(False)
+                btn.blockSignals(False)
+    
+    def set_tools_enabled(self, enabled: bool):
+        """Set enabled state for all tool buttons.
+        
+        Args:
+            enabled: Whether buttons should be enabled
+        """
+        for btn in [self.pushButton_raster_pixel_picker,
+                    self.pushButton_raster_rect_picker,
+                    self.pushButton_raster_sync_histogram,
+                    self.pushButton_raster_all_bands,
+                    self.pushButton_raster_reset_range]:
+            if btn:
+                btn.setEnabled(enabled)
+        
+        # If disabling, also uncheck all
+        if not enabled:
+            self.uncheck_all_tools()
     
     def set_layer(self, layer: QgsRasterLayer):
         """Set the current raster layer.
@@ -578,6 +881,10 @@ class RasterExploringPage(QWidget):
         self._populate_bands()
         self._compute_statistics()
         self._populate_vector_layers()
+        
+        # Update tool buttons state
+        is_valid = layer is not None and layer.isValid()
+        self.set_tools_enabled(is_valid)
     
     def _populate_bands(self):
         """Populate band combo from current layer."""
@@ -629,20 +936,20 @@ class RasterExploringPage(QWidget):
                     'stddev': stats.stdDev
                 }
                 
-                # Update labels
-                self.stat_labels['Min'].setText(f"{stats.minimumValue:.2f}")
-                self.stat_labels['Max'].setText(f"{stats.maximumValue:.2f}")
-                self.stat_labels['Mean'].setText(f"{stats.mean:.2f}")
-                self.stat_labels['StdDev'].setText(f"{stats.stdDev:.2f}")
-                
                 # Get nodata value
                 if provider.sourceHasNoDataValue(band):
                     nodata = provider.sourceNoDataValue(band)
-                    self.stat_labels['NoData'].setText(f"{nodata:.0f}")
+                    nodata_str = f"{nodata:.0f}"
                     self._stats['nodata'] = nodata
                 else:
-                    self.stat_labels['NoData'].setText("-")
+                    nodata_str = "-"
                     self._stats['nodata'] = None
+                
+                # Update simplified stats label
+                self.stats_label.setText(
+                    f"📊 Min: {stats.minimumValue:.2f} | Max: {stats.maximumValue:.2f} | "
+                    f"Mean: {stats.mean:.2f} | σ: {stats.stdDev:.2f} | NoData: {nodata_str}"
+                )
                 
                 # Update range spinboxes
                 self.min_spin.setRange(stats.minimumValue, stats.maximumValue)
@@ -680,7 +987,7 @@ class RasterExploringPage(QWidget):
     def _update_pixel_count(self):
         """Update the pixel count for current range."""
         # TODO: Implement actual pixel counting based on range
-        self.pixels_label.setText("Pixels: calculating...")
+        self.pixels_label.setText(self.tr("Pixels: calculating..."))
     
     def _on_clip_requested(self):
         """Handle clip/mask request."""
@@ -923,7 +1230,7 @@ class RasterExploringPage(QWidget):
         QApplication.clipboard().setText(text)
         
         from qgis.utils import iface
-        iface.messageBar().pushSuccess("FilterMate", "Zonal statistics copied to clipboard")
+        iface.messageBar().pushSuccess("FilterMate", self.tr("Zonal statistics copied to clipboard"))
     
     def _on_export_zonal_stats(self):
         """Export zonal statistics to CSV file."""

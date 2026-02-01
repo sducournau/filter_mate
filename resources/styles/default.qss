@@ -969,6 +969,7 @@ QLabel#label_backend_indicator {
 /* Widget Keys Panels - Sidebar buttons with responsive layout */
 /* Enhanced styling for better alignment and visual hierarchy */
 QWidget#widget_exploring_keys,
+QWidget#widget_raster_keys,
 QWidget#widget_filtering_keys,
 QWidget#widget_exporting_keys {
     background-color: {color_1};
@@ -979,8 +980,9 @@ QWidget#widget_exporting_keys {
     /* Smooth transitions for responsive behavior */
 }
 
-/* Buttons inside widget_exploring_keys - Non-checkable - Harmonized with filtering_keys */
-QWidget#widget_exploring_keys QPushButton:!checkable {
+/* Buttons inside widget_exploring_keys and widget_raster_keys - Non-checkable - Harmonized with filtering_keys */
+QWidget#widget_exploring_keys QPushButton:!checkable,
+QWidget#widget_raster_keys QPushButton:!checkable {
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 6px;
@@ -989,11 +991,13 @@ QWidget#widget_exploring_keys QPushButton:!checkable {
     /* Dimensions managed by UIConfig for profile-specific sizing */
 }
 
-QWidget#widget_exploring_keys QPushButton:!checkable::icon {
+QWidget#widget_exploring_keys QPushButton:!checkable::icon,
+QWidget#widget_raster_keys QPushButton:!checkable::icon {
     filter: {icon_filter};
 }
 
-QWidget#widget_exploring_keys QPushButton:!checkable:hover {
+QWidget#widget_exploring_keys QPushButton:!checkable:hover,
+QWidget#widget_raster_keys QPushButton:!checkable:hover {
     background-color: {color_accent_light_bg};
     border: 2px solid {color_accent};
     padding: 2px;
@@ -1001,15 +1005,17 @@ QWidget#widget_exploring_keys QPushButton:!checkable:hover {
     /* Subtle scale effect on hover */
 }
 
-QWidget#widget_exploring_keys QPushButton:!checkable:pressed {
+QWidget#widget_exploring_keys QPushButton:!checkable:pressed,
+QWidget#widget_raster_keys QPushButton:!checkable:pressed {
     background-color: {color_accent_pressed};
     border: 2px solid {color_accent_dark};
     padding: 2px;
     margin: 1px 0px;
 }
 
-/* Buttons inside widget_exploring_keys - Checkable - Harmonized with filtering_keys */
-QWidget#widget_exploring_keys QPushButton:checkable {
+/* Buttons inside widget_exploring_keys and widget_raster_keys - Checkable - Harmonized with filtering_keys */
+QWidget#widget_exploring_keys QPushButton:checkable,
+QWidget#widget_raster_keys QPushButton:checkable {
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 6px;
@@ -1018,18 +1024,21 @@ QWidget#widget_exploring_keys QPushButton:checkable {
     /* Dimensions managed by UIConfig for profile-specific sizing */
 }
 
-QWidget#widget_exploring_keys QPushButton:checkable::icon {
+QWidget#widget_exploring_keys QPushButton:checkable::icon,
+QWidget#widget_raster_keys QPushButton:checkable::icon {
     filter: {icon_filter};
 }
 
-QWidget#widget_exploring_keys QPushButton:checkable:hover:!checked {
+QWidget#widget_exploring_keys QPushButton:checkable:hover:!checked,
+QWidget#widget_raster_keys QPushButton:checkable:hover:!checked {
     background-color: {color_accent_light_bg};
     border: 2px solid {color_accent};
     padding: 2px;
     margin: 1px 0px;
 }
 
-QWidget#widget_exploring_keys QPushButton:checkable:checked {
+QWidget#widget_exploring_keys QPushButton:checkable:checked,
+QWidget#widget_raster_keys QPushButton:checkable:checked {
     background-color: {color_accent};
     border: 2px solid {color_accent_dark};
     padding: 2px;
@@ -1037,7 +1046,8 @@ QWidget#widget_exploring_keys QPushButton:checkable:checked {
     box-shadow: 0 2px 6px rgba(25, 118, 210, 0.45);
 }
 
-QWidget#widget_exploring_keys QPushButton:checkable:checked:hover {
+QWidget#widget_exploring_keys QPushButton:checkable:checked:hover,
+QWidget#widget_raster_keys QPushButton:checkable:checked:hover {
     background-color: {color_accent_hover};
     border: 2px solid {color_accent_dark};
     padding: 2px;
@@ -1045,14 +1055,16 @@ QWidget#widget_exploring_keys QPushButton:checkable:checked:hover {
     box-shadow: 0 3px 10px rgba(33, 150, 243, 0.65);
 }
 
-QWidget#widget_exploring_keys QPushButton:checkable:pressed {
+QWidget#widget_exploring_keys QPushButton:checkable:pressed,
+QWidget#widget_raster_keys QPushButton:checkable:pressed {
     background-color: {color_accent_pressed};
     border: 2px solid {color_accent_dark};
     padding: 2px;
     margin: 1px 0px;
 }
 
-QWidget#widget_exploring_keys QPushButton:checkable:checked:pressed {
+QWidget#widget_exploring_keys QPushButton:checkable:checked:pressed,
+QWidget#widget_raster_keys QPushButton:checkable:checked:pressed {
     background-color: {color_accent_pressed};
     border: 2px solid {color_accent_dark};
     padding: 2px;

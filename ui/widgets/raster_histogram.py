@@ -4,6 +4,9 @@ Note: Interactive Raster Histogram Widget for FilterMate.
 Provides a visual histogram of raster band values with draggable range selection.
 Uses PyQtGraph for fast rendering and interaction.
 
+DEPRECATED: This module is deprecated. Use raster_histogram_interactive.py instead,
+which uses QPainter and has no external dependencies.
+
 Author: FilterMate Team
 Date: January 2026
 """
@@ -21,6 +24,10 @@ from qgis.core import QgsRasterLayer, QgsRasterBandStats
 from qgis.gui import QgsHistogramWidget
 
 from infrastructure.logging import get_logger
+
+# v5.11: Define PYQTGRAPH_AVAILABLE for backward compatibility
+# This module is deprecated - use raster_histogram_interactive.py instead
+PYQTGRAPH_AVAILABLE = False
 
 logger = get_logger(__name__)
 
@@ -68,7 +75,7 @@ class RasterHistogramWidget(QWidget):
         layout.addWidget(self._histogram_widget)
 
         # Info label (optionnel)
-        self._info_label = QLabel("Histogram (QGIS native)")
+        self._info_label = QLabel(self.tr("Histogram (QGIS native)"))
         self._info_label.setAlignment(Qt.AlignCenter)
         self._info_label.setStyleSheet("font-size: 9px; color: #666;")
         layout.addWidget(self._info_label)
@@ -81,10 +88,10 @@ class RasterHistogramWidget(QWidget):
         self._band_index = band_index
         if layer is None:
             self._histogram_widget.clear()
-            self._info_label.setText("No raster layer selected")
+            self._info_label.setText(self.tr("No raster layer selected"))
             return
         self._histogram_widget.setRasterLayer(layer, band_index)
-        self._info_label.setText(f"Histogram: {layer.name()} (Band {band_index})")
+        self._info_label.setText(self.tr("Histogram: {} (Band {})").format(layer.name(), band_index))
     
     def force_compute(self):
         """v5.0: Force histogram computation even for large rasters.
@@ -95,7 +102,7 @@ class RasterHistogramWidget(QWidget):
             return
         
         logger.info(f"v5.0: Force computing histogram for {self._layer.name()}")
-        self._info_label.setText("Computing histogram...")
+        self._info_label.setText(self.tr("Computing histogram..."))
         
         # Process events to show message before computation
         from qgis.PyQt.QtWidgets import QApplication
@@ -115,7 +122,7 @@ class RasterHistogramWidget(QWidget):
         
         # Show informative message
         pixels = layer.width() * layer.height()
-        msg = f"Large raster ({pixels:,} px)\nClick ↻ Refresh for histogram"
+        msg = self.tr("Large raster ({:,} px)\nClick ↻ Refresh for histogram").format(pixels)
         self._info_label.setText(msg)
         self._info_label.setStyleSheet("font-size: 9px; color: #888; font-style: italic;")
     
@@ -372,7 +379,7 @@ class RasterHistogramWidget(QWidget):
             return
         if self._histogram_data is None:
             logger.warning("_update_display: no histogram data - showing message")
-            self._info_label.setText("Could not compute histogram\nTry selecting a different band")
+            self._info_label.setText(self.tr("Could not compute histogram\nTry selecting a different band"))
             self._info_label.setStyleSheet("font-size: 9px; color: #888; font-style: italic;")
             return
         
@@ -420,7 +427,7 @@ class RasterHistogramWidget(QWidget):
         self._histogram_data = None
         self._bin_edges = None
         self._histogram_item.setOpts(x=[0], height=[0], width=1)
-        self._info_label.setText("No raster layer selected")
+        self._info_label.setText(self.tr("No raster layer selected"))
     
     def _on_region_changed(self):
         """Handle region change (while dragging)."""

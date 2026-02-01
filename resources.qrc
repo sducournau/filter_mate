@@ -3,5 +3,11 @@
         <file>icon.png</file>
         <file>icons/vector.png</file>
         <file>icons/raster.png</file>
+        <file>icons/raster_pipette.png</file>
+        <file>icons/raster_rectangle_picker.png</file>
+        <file>icons/raster_sync.png</file>
+        <file>icons/raster_all_bands.png</file>
+        <file>icons/raster_reset_bands.png</file>
+        <file>icons/parameters.png</file>
     </qresource>
 </RCC>

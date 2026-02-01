@@ -198,18 +198,24 @@ class PostgresInfoDialog(QDialog):
         # Auto-cleanup checkbox
         self._auto_cleanup_cb = QCheckBox(self.tr("Auto-cleanup on close"))
         self._auto_cleanup_cb.setChecked(self._session_manager.auto_cleanup)
-        self._auto_cleanup_cb.setToolTip(
-            self.tr("Automatically cleanup temporary views when FilterMate closes.")
-        )
+        self._auto_cleanup_cb.setToolTip(self.tr(
+            "Auto-cleanup on close\n\n"
+            "Automatically remove temporary views when FilterMate closes.\n"
+            "Keeps your PostgreSQL database clean.\n"
+            "Recommended for production environments."
+        ))
         self._auto_cleanup_cb.stateChanged.connect(self._on_auto_cleanup_changed)
         cleanup_layout.addWidget(self._auto_cleanup_cb)
         
         # Cleanup button
         button_layout = QHBoxLayout()
         self._cleanup_btn = QPushButton(self.tr("🗑️ Cleanup Now"))
-        self._cleanup_btn.setToolTip(
-            self.tr("Drop all temporary views created by FilterMate in this session.")
-        )
+        self._cleanup_btn.setToolTip(self.tr(
+            "Cleanup Now\n\n"
+            "Drop all temporary views created by FilterMate in this session.\n"
+            "Views from other sessions are not affected.\n"
+            "Use this to free database resources immediately."
+        ))
         self._cleanup_btn.clicked.connect(self._on_cleanup_clicked)
         button_layout.addWidget(self._cleanup_btn)
         button_layout.addStretch()
