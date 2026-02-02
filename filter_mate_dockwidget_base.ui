@@ -10,13 +10,13 @@
     <x>0</x>
     <y>0</y>
     <width>443</width>
-    <height>909</height>
+    <height>600</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>356</width>
-    <height>909</height>
+    <width>280</width>
+    <height>320</height>
    </size>
   </property>
   <property name="baseSize">
@@ -178,7 +178,7 @@
             <property name="minimumSize">
              <size>
               <width>0</width>
-              <height>200</height>
+              <height>80</height>
              </size>
             </property>
             <property name="font">
@@ -262,19 +262,19 @@
                   </property>
                   <property name="minimumSize">
                    <size>
-                    <width>38</width>
-                    <height>60</height>
+                    <width>36</width>
+                    <height>32</height>
                    </size>
                   </property>
                   <property name="maximumSize">
                    <size>
-                    <width>48</width>
+                    <width>36</width>
                     <height>16777215</height>
                    </size>
                   </property>
                   <property name="baseSize">
                    <size>
-                    <width>48</width>
+                    <width>36</width>
                     <height>0</height>
                    </size>
                   </property>
@@ -295,7 +295,7 @@
                     <number>0</number>
                    </property>
                    <item>
-                    <layout class="QVBoxLayout" name="verticalLayout_exploring_content">
+                    <layout class="QVBoxLayout" name="verticalLayout_exploring_content" stretch="0,0,0,0,0,0,0,0,0,0,0">
                      <property name="spacing">
                       <number>2</number>
                      </property>
@@ -343,6 +343,10 @@
                        </property>
                        <property name="text">
                         <string/>
+                       </property>
+                       <property name="icon">
+                        <iconset resource="resources.qrc">
+                         <normaloff>:/plugins/filter_mate/icons/identify_alt.png</normaloff>:/plugins/filter_mate/icons/identify_alt.png</iconset>
                        </property>
                        <property name="iconSize">
                         <size>
@@ -415,6 +419,10 @@
                        </property>
                        <property name="text">
                         <string/>
+                       </property>
+                       <property name="icon">
+                        <iconset resource="resources.qrc">
+                         <normaloff>:/plugins/filter_mate/icons/zoom.png</normaloff>:/plugins/filter_mate/icons/zoom.png</iconset>
                        </property>
                        <property name="iconSize">
                         <size>
@@ -496,6 +504,10 @@
                        </property>
                        <property name="text">
                         <string/>
+                       </property>
+                       <property name="icon">
+                        <iconset resource="resources.qrc">
+                         <normaloff>:/plugins/filter_mate/icons/select_black.png</normaloff>:/plugins/filter_mate/icons/select_black.png</iconset>
                        </property>
                        <property name="iconSize">
                         <size>
@@ -581,6 +593,10 @@
                        <property name="text">
                         <string/>
                        </property>
+                       <property name="icon">
+                        <iconset resource="resources.qrc">
+                         <normaloff>:/plugins/filter_mate/icons/track.png</normaloff>:/plugins/filter_mate/icons/track.png</iconset>
+                       </property>
                        <property name="iconSize">
                         <size>
                          <width>16</width>
@@ -665,6 +681,10 @@
                        <property name="text">
                         <string/>
                        </property>
+                       <property name="icon">
+                        <iconset resource="resources.qrc">
+                         <normaloff>:/plugins/filter_mate/icons/link.png</normaloff>:/plugins/filter_mate/icons/link.png</iconset>
+                       </property>
                        <property name="iconSize">
                         <size>
                          <width>16</width>
@@ -742,6 +762,10 @@
                        </property>
                        <property name="text">
                         <string/>
+                       </property>
+                       <property name="icon">
+                        <iconset resource="resources.qrc">
+                         <normaloff>:/plugins/filter_mate/icons/reset_properties.png</normaloff>:/plugins/filter_mate/icons/reset_properties.png</iconset>
                        </property>
                        <property name="iconSize">
                         <size>
@@ -1408,7 +1432,7 @@ Build advanced filter expressions using QGIS expression builder.
                   <property name="minimumSize">
                    <size>
                     <width>38</width>
-                    <height>60</height>
+                    <height>32</height>
                    </size>
                   </property>
                   <property name="maximumSize">
@@ -2403,7 +2427,7 @@ Can be set manually or by dragging the histogram right handle.</string>
               <property name="minimumSize">
                <size>
                 <width>0</width>
-                <height>300</height>
+                <height>100</height>
                </size>
               </property>
               <property name="visible">
@@ -2422,7 +2446,7 @@ Can be set manually or by dragging the histogram right handle.</string>
               <property name="minimumSize">
                <size>
                 <width>0</width>
-                <height>150</height>
+                <height>100</height>
                </size>
               </property>
               <property name="maximumSize">
@@ -2472,13 +2496,25 @@ Can be set manually or by dragging the histogram right handle.</string>
                 </rect>
                </property>
                <attribute name="icon">
-                <iconset>
-                 <normaloff>icons/filter_multi.png</normaloff>icons/filter_multi.png</iconset>
+                <iconset resource="resources.qrc">
+                 <normaloff>:/plugins/filter_mate/icons/filter_multi.png</normaloff>:/plugins/filter_mate/icons/filter_multi.png</iconset>
                </attribute>
                <attribute name="label">
                 <string>FILTERING</string>
                </attribute>
                <layout class="QHBoxLayout" name="horizontalLayout_filtering_main">
+                <property name="leftMargin">
+                 <number>0</number>
+                </property>
+                <property name="topMargin">
+                 <number>0</number>
+                </property>
+                <property name="rightMargin">
+                 <number>0</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>0</number>
+                </property>
                 <item>
                  <layout class="QHBoxLayout" name="horizontalLayout_filtering_content">
                   <property name="spacing">
@@ -2506,19 +2542,19 @@ Can be set manually or by dragging the histogram right handle.</string>
                     </property>
                     <property name="minimumSize">
                      <size>
-                      <width>38</width>
-                      <height>60</height>
+                      <width>36</width>
+                      <height>32</height>
                      </size>
                     </property>
                     <property name="maximumSize">
                      <size>
-                      <width>48</width>
+                      <width>36</width>
                       <height>16777215</height>
                      </size>
                     </property>
                     <property name="baseSize">
                      <size>
-                      <width>48</width>
+                      <width>36</width>
                       <height>0</height>
                      </size>
                     </property>
@@ -2596,6 +2632,10 @@ Can be set manually or by dragging the histogram right handle.</string>
                          </property>
                          <property name="text">
                           <string/>
+                         </property>
+                         <property name="icon">
+                          <iconset resource="resources.qrc">
+                           <normaloff>:/plugins/filter_mate/icons/auto_layer_white.png</normaloff>:/plugins/filter_mate/icons/auto_layer_white.png</iconset>
                          </property>
                          <property name="iconSize">
                           <size>
@@ -2688,6 +2728,10 @@ which layers should be affected by the filter.</string>
                          <property name="text">
                           <string/>
                          </property>
+                         <property name="icon">
+                          <iconset resource="resources.qrc">
+                           <normaloff>:/plugins/filter_mate/icons/layers.png</normaloff>:/plugins/filter_mate/icons/layers.png</iconset>
+                         </property>
                          <property name="iconSize">
                           <size>
                            <width>16</width>
@@ -2778,6 +2822,10 @@ AND (intersection) or OR (union) combination logic.</string>
                          </property>
                          <property name="text">
                           <string/>
+                         </property>
+                         <property name="icon">
+                          <iconset resource="resources.qrc">
+                           <normaloff>:/plugins/filter_mate/icons/add_multi.png</normaloff>:/plugins/filter_mate/icons/add_multi.png</iconset>
                          </property>
                          <property name="iconSize">
                           <size>
@@ -3069,6 +3117,10 @@ intersects, contains, within, touches, crosses, overlaps.</string>
                          <property name="text">
                           <string/>
                          </property>
+                         <property name="icon">
+                          <iconset resource="resources.qrc">
+                           <normaloff>:/plugins/filter_mate/icons/geo_predicates.png</normaloff>:/plugins/filter_mate/icons/geo_predicates.png</iconset>
+                         </property>
                          <property name="iconSize">
                           <size>
                            <width>16</width>
@@ -3159,6 +3211,10 @@ intersects, contains, within, touches, crosses, overlaps.</string>
                          <property name="text">
                           <string/>
                          </property>
+                         <property name="icon">
+                          <iconset resource="resources.qrc">
+                           <normaloff>:/plugins/filter_mate/icons/buffer_value.png</normaloff>:/plugins/filter_mate/icons/buffer_value.png</iconset>
+                         </property>
                          <property name="iconSize">
                           <size>
                            <width>16</width>
@@ -3211,6 +3267,10 @@ intersects, contains, within, touches, crosses, overlaps.</string>
                          </property>
                          <property name="text">
                           <string/>
+                         </property>
+                         <property name="icon">
+                          <iconset resource="resources.qrc">
+                           <normaloff>:/plugins/filter_mate/icons/buffer_type.png</normaloff>:/plugins/filter_mate/icons/buffer_type.png</iconset>
                          </property>
                          <property name="iconSize">
                           <size>
@@ -3773,59 +3833,71 @@ intersects, contains, within, touches, crosses, overlaps.</string>
                 </rect>
                </property>
                <attribute name="icon">
-                <iconset>
-                 <normaloff>icons/save.png</normaloff>icons/save.png</iconset>
+                <iconset resource="resources.qrc">
+                 <normaloff>:/plugins/filter_mate/icons/save.png</normaloff>:/plugins/filter_mate/icons/save.png</iconset>
                </attribute>
                <attribute name="label">
                 <string>EXPORTING</string>
                </attribute>
                <layout class="QHBoxLayout" name="horizontalLayout_exporting_main">
+                <property name="leftMargin">
+                 <number>0</number>
+                </property>
+                <property name="topMargin">
+                 <number>0</number>
+                </property>
+                <property name="rightMargin">
+                 <number>0</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>0</number>
+                </property>
                 <item>
                  <layout class="QHBoxLayout" name="horizontalLayout_exporting_content">
                   <property name="spacing">
-                   <number>2</number>
+                   <number>4</number>
                   </property>
                   <property name="leftMargin">
-                   <number>1</number>
+                   <number>4</number>
                   </property>
                   <property name="topMargin">
-                   <number>1</number>
+                   <number>4</number>
                   </property>
                   <property name="rightMargin">
-                   <number>1</number>
+                   <number>4</number>
                   </property>
                   <property name="bottomMargin">
-                   <number>1</number>
+                   <number>4</number>
                   </property>
                   <item>
                    <widget class="QWidget" name="widget_exporting_keys" native="true">
                     <property name="sizePolicy">
-                     <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+                     <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                       <horstretch>0</horstretch>
                       <verstretch>0</verstretch>
                      </sizepolicy>
                     </property>
                     <property name="minimumSize">
                      <size>
-                      <width>38</width>
-                      <height>0</height>
+                      <width>36</width>
+                      <height>32</height>
                      </size>
                     </property>
                     <property name="maximumSize">
                      <size>
-                      <width>48</width>
+                      <width>36</width>
                       <height>16777215</height>
                      </size>
                     </property>
                     <property name="baseSize">
                      <size>
-                      <width>48</width>
+                      <width>36</width>
                       <height>0</height>
                      </size>
                     </property>
                     <layout class="QVBoxLayout" name="verticalLayout_exporting_keys_container">
                      <property name="spacing">
-                      <number>1</number>
+                      <number>2</number>
                      </property>
                      <property name="leftMargin">
                       <number>0</number>
@@ -3844,7 +3916,7 @@ intersects, contains, within, touches, crosses, overlaps.</string>
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_layers">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -3857,8 +3929,8 @@ intersects, contains, within, touches, crosses, overlaps.</string>
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
@@ -3893,6 +3965,10 @@ Only filtered features will be exported.</string>
                          <property name="text">
                           <string/>
                          </property>
+                         <property name="icon">
+                          <iconset resource="resources.qrc">
+                           <normaloff>:/plugins/filter_mate/icons/layers.png</normaloff>:/plugins/filter_mate/icons/layers.png</iconset>
+                         </property>
                          <property name="iconSize">
                           <size>
                            <width>16</width>
@@ -3926,7 +4002,7 @@ Only filtered features will be exported.</string>
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_projection">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -3939,14 +4015,14 @@ Only filtered features will be exported.</string>
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="baseSize">
                           <size>
-                           <width>0</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
@@ -3987,6 +4063,10 @@ Useful for standardizing outputs to a common projection.</string>
                          <property name="text">
                           <string/>
                          </property>
+                         <property name="icon">
+                          <iconset resource="resources.qrc">
+                           <normaloff>:/plugins/filter_mate/icons/projection_black.png</normaloff>:/plugins/filter_mate/icons/projection_black.png</iconset>
+                         </property>
                          <property name="iconSize">
                           <size>
                            <width>16</width>
@@ -4020,7 +4100,7 @@ Useful for standardizing outputs to a common projection.</string>
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_styles">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -4033,14 +4113,14 @@ Useful for standardizing outputs to a common projection.</string>
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="baseSize">
                           <size>
-                           <width>0</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
@@ -4078,6 +4158,10 @@ and rendering settings when sharing data.</string>
                          <property name="text">
                           <string/>
                          </property>
+                         <property name="icon">
+                          <iconset resource="resources.qrc">
+                           <normaloff>:/plugins/filter_mate/icons/styles_black.png</normaloff>:/plugins/filter_mate/icons/styles_black.png</iconset>
+                         </property>
                          <property name="iconSize">
                           <size>
                            <width>16</width>
@@ -4111,7 +4195,7 @@ and rendering settings when sharing data.</string>
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_datatype">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -4124,14 +4208,14 @@ and rendering settings when sharing data.</string>
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="baseSize">
                           <size>
-                           <width>0</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
@@ -4171,6 +4255,10 @@ Select the file format for exported data:
                          <property name="text">
                           <string/>
                          </property>
+                         <property name="icon">
+                          <iconset resource="resources.qrc">
+                           <normaloff>:/plugins/filter_mate/icons/datatype.png</normaloff>:/plugins/filter_mate/icons/datatype.png</iconset>
+                         </property>
                          <property name="iconSize">
                           <size>
                            <width>16</width>
@@ -4204,7 +4292,7 @@ Select the file format for exported data:
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_output_folder">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -4217,14 +4305,14 @@ Select the file format for exported data:
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="baseSize">
                           <size>
-                           <width>0</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
@@ -4262,6 +4350,10 @@ a folder or enter a path directly.</string>
                          <property name="text">
                           <string/>
                          </property>
+                         <property name="icon">
+                          <iconset resource="resources.qrc">
+                           <normaloff>:/plugins/filter_mate/icons/folder_black.png</normaloff>:/plugins/filter_mate/icons/folder_black.png</iconset>
+                         </property>
                          <property name="iconSize">
                           <size>
                            <width>16</width>
@@ -4295,7 +4387,7 @@ a folder or enter a path directly.</string>
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_zip">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -4308,14 +4400,14 @@ a folder or enter a path directly.</string>
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="baseSize">
                           <size>
-                           <width>0</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
@@ -4352,6 +4444,10 @@ Includes data files, styles, and metadata.</string>
                          </property>
                          <property name="text">
                           <string/>
+                         </property>
+                         <property name="icon">
+                          <iconset resource="resources.qrc">
+                           <normaloff>:/plugins/filter_mate/icons/zip.png</normaloff>:/plugins/filter_mate/icons/zip.png</iconset>
                          </property>
                          <property name="iconSize">
                           <size>
@@ -4876,8 +4972,8 @@ Includes data files, styles, and metadata.</string>
                 </rect>
                </property>
                <attribute name="icon">
-                <iconset>
-                 <normaloff>icons/parameters.png</normaloff>icons/parameters.png</iconset>
+                <iconset resource="resources.qrc">
+                 <normaloff>:/plugins/filter_mate/icons/parameters.png</normaloff>:/plugins/filter_mate/icons/parameters.png</iconset>
                </attribute>
                <attribute name="label">
                 <string>CONFIGURATION</string>
@@ -4999,6 +5095,10 @@ Use Reset to restore all features.</string>
              <property name="text">
               <string/>
              </property>
+             <property name="icon">
+              <iconset resource="resources.qrc">
+               <normaloff>:/plugins/filter_mate/icons/filter.png</normaloff>:/plugins/filter_mate/icons/filter.png</iconset>
+             </property>
              <property name="iconSize">
               <size>
                <width>35</width>
@@ -5062,6 +5162,16 @@ Hold Shift to see undo history.</string>
              <property name="text">
               <string/>
              </property>
+             <property name="icon">
+              <iconset resource="resources.qrc">
+               <normaloff>:/plugins/filter_mate/icons/undo.png</normaloff>:/plugins/filter_mate/icons/undo.png</iconset>
+             </property>
+             <property name="iconSize">
+              <size>
+               <width>24</width>
+               <height>24</height>
+              </size>
+             </property>
              <property name="flat">
               <bool>true</bool>
              </property>
@@ -5096,6 +5206,16 @@ Use this to step forward through your filter history.</string>
              </property>
              <property name="text">
               <string/>
+             </property>
+             <property name="icon">
+              <iconset resource="resources.qrc">
+               <normaloff>:/plugins/filter_mate/icons/redo.png</normaloff>:/plugins/filter_mate/icons/redo.png</iconset>
+             </property>
+             <property name="iconSize">
+              <size>
+               <width>24</width>
+               <height>24</height>
+              </size>
              </property>
              <property name="flat">
               <bool>true</bool>
@@ -5142,6 +5262,16 @@ This resets the layer to its original state.</string>
              <property name="text">
               <string/>
              </property>
+             <property name="icon">
+              <iconset resource="resources.qrc">
+               <normaloff>:/plugins/filter_mate/icons/unfilter.png</normaloff>:/plugins/filter_mate/icons/unfilter.png</iconset>
+             </property>
+             <property name="iconSize">
+              <size>
+               <width>24</width>
+               <height>24</height>
+              </size>
+             </property>
              <property name="flat">
               <bool>true</bool>
              </property>
@@ -5184,6 +5314,10 @@ in the EXPORTING panel before clicking.</string>
              <property name="text">
               <string/>
              </property>
+             <property name="icon">
+              <iconset resource="resources.qrc">
+               <normaloff>:/plugins/filter_mate/icons/export.png</normaloff>:/plugins/filter_mate/icons/export.png</iconset>
+             </property>
              <property name="iconSize">
               <size>
                <width>35</width>
@@ -5223,8 +5357,14 @@ and access settings and optimization options.</string>
               <string/>
              </property>
              <property name="icon">
-              <iconset>
-               <normaloff>icon.png</normaloff>icon.png</iconset>
+              <iconset resource="resources.qrc">
+               <normaloff>:/plugins/filter_mate/icons/icon.png</normaloff>:/plugins/filter_mate/icons/icon.png</iconset>
+             </property>
+             <property name="iconSize">
+              <size>
+               <width>24</width>
+               <height>24</height>
+              </size>
              </property>
              <property name="checkable">
               <bool>false</bool>

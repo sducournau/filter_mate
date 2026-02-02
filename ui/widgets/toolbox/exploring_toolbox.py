@@ -735,12 +735,12 @@ class RasterExploringPage(QWidget):
             btn.setMinimumSize(QSize(BUTTON_SIZE, BUTTON_SIZE))
             btn.setMaximumSize(QSize(BUTTON_SIZE, BUTTON_SIZE))
             
-            # Set icon
-            if self._icons_path and icon_name:
-                icon_path = os.path.join(self._icons_path, icon_name)
-                if os.path.exists(icon_path):
-                    btn.setIcon(QIcon(icon_path))
-                    btn.setIconSize(QSize(BUTTON_SIZE - 4, BUTTON_SIZE - 4))
+            # Set icon using Qt resources (always available, no path needed)
+            if icon_name:
+                # Use Qt resource path for icons (from resources.qrc)
+                qt_resource_path = f":/plugins/filter_mate/icons/{icon_name}"
+                btn.setIcon(QIcon(qt_resource_path))
+                btn.setIconSize(QSize(BUTTON_SIZE - 4, BUTTON_SIZE - 4))
             return btn
         
         # Button 1: Pixel Picker

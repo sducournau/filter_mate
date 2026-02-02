@@ -6,6 +6,7 @@ User interface components, widgets, and controllers.
 Submodules:
     - controllers: UI controllers (Filtering, Exploring, Exporting)
     - dialogs: Dialog windows
+    - icons: Icon utilities (compatibility module)
     - layout: Layout managers (MIG-060+)
     - styles: Styling utilities
     - widgets: Custom widgets
@@ -15,6 +16,7 @@ Submodules:
 # Layout managers (Phase 6 - MIG-060+)
 from . import layout
 from . import config
+from . import icons
 
 # Orchestrator (Phase 6 - MIG-087)
 from .orchestrator import DockWidgetOrchestrator, create_orchestrator
@@ -22,6 +24,7 @@ from .orchestrator import DockWidgetOrchestrator, create_orchestrator
 __all__ = [
     'layout',
     'config',
+    'icons',
     'DockWidgetOrchestrator',
     'create_orchestrator',
 ]

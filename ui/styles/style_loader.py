@@ -44,7 +44,9 @@ class StyleLoader:
         'default': {
             'color_bg_0': '#EFEFEF',      # BACKGROUND[0] - Frame background (darker for separation)
             'color_1': '#FFFFFF',         # BACKGROUND[1] - Widget background (pure white)
+            'color_bg_1': '#FFFFFF',      # Alias for color_1 (FIX 2026-02-02: added missing alias)
             'color_2': '#D0D0D0',         # BACKGROUND[2] - Borders/selected (clear contrast)
+            'color_bg_2': '#D0D0D0',      # Alias for color_2 (FIX 2026-02-02: added missing alias)
             'color_bg_3': '#2196F3',      # BACKGROUND[3] - Accent color
             'color_3': '#4A4A4A',         # FONT[1] - Text color (WCAG AA compliant)
             'color_font_0': '#1A1A1A',    # FONT[0] - Primary text (near-black, WCAG AA)
@@ -60,7 +62,9 @@ class StyleLoader:
         'dark': {
             'color_bg_0': '#1E1E1E',    # Dark frame background (harmonisé avec JsonView)
             'color_1': '#252526',       # Widget background (VS Code dark style)
+            'color_bg_1': '#252526',    # Alias for color_1 (FIX 2026-02-02: added missing alias)
             'color_2': '#37373D',       # Selected items (plus visible)
+            'color_bg_2': '#37373D',    # Alias for color_2 (FIX 2026-02-02: added missing alias)
             'color_bg_3': '#0E639C',    # Splitter hover (bleu plus sombre)
             'color_3': '#CCCCCC',       # Light text (légèrement plus doux)
             'color_font_0': '#D4D4D4',  # Primary text (plus confortable pour les yeux)
@@ -76,7 +80,9 @@ class StyleLoader:
         'light': {
             'color_bg_0': '#FFFFFF',    # Pure white frame background (maximum brightness)
             'color_1': '#F8F8F8',       # Widget background (subtle contrast)
+            'color_bg_1': '#F8F8F8',    # Alias for color_1 (FIX 2026-02-02: added missing alias)
             'color_2': '#CCCCCC',       # Borders (clearly visible)
+            'color_bg_2': '#CCCCCC',    # Alias for color_2 (FIX 2026-02-02: added missing alias)
             'color_bg_3': '#2196F3',    # Splitter hover
             'color_3': '#333333',       # Dark text (excellent readability)
             'color_font_0': '#000000',  # Primary text (pure black, maximum contrast)
@@ -206,11 +212,16 @@ class StyleLoader:
             font = get_font_colors(config_data) if not theme else get_theme_colors(config_data, active_theme).get("font", get_font_colors(config_data))
             accent = get_accent_colors(config_data) if not theme else get_theme_colors(config_data, active_theme).get("accent", get_accent_colors(config_data))
             
+            # Determine icon_filter based on theme (FIX 2026-02-02)
+            icon_filter = 'invert(100%)' if active_theme == 'dark' else 'none'
+            
             # Map config colors to stylesheet placeholders
             color_map = {
                 '{color_bg_0}': bg[0],      # Frame background
                 '{color_1}': bg[1],         # Widget background
+                '{color_bg_1}': bg[1],      # Alias for color_1 (FIX 2026-02-02)
                 '{color_2}': bg[2],         # Selected items
+                '{color_bg_2}': bg[2],      # Alias for color_2 (FIX 2026-02-02)
                 '{color_bg_3}': bg[3],      # Accent/hover color
                 '{color_3}': font[1],       # Secondary text color
                 '{color_font_0}': font[0],  # Primary text color
@@ -220,12 +231,21 @@ class StyleLoader:
                 '{color_accent_hover}': accent.get('HOVER', bg[3]),
                 '{color_accent_pressed}': accent.get('PRESSED', bg[3]),
                 '{color_accent_light_bg}': accent.get('LIGHT_BG', bg[2]),
-                '{color_accent_dark}': accent.get('DARK', bg[3])
+                '{color_accent_dark}': accent.get('DARK', bg[3]),
+                '{icon_filter}': icon_filter  # Icon filter based on theme (FIX 2026-02-02)
             }
             
             # Apply color replacements
             for placeholder, color_value in color_map.items():
                 stylesheet = stylesheet.replace(placeholder, color_value)
+            
+            # Debug: Check for unreplaced variables
+            import re
+            unreplaced = re.findall(r'\{[a-z_0-9]+\}', stylesheet)
+            if unreplaced:
+                logger.warning(f"🎨 StyleLoader: Unreplaced variables in stylesheet: {set(unreplaced)}")
+            else:
+                logger.info(f"🎨 StyleLoader: All variables replaced successfully")
             
             # Apply dynamic dimensions from UIConfig if available
             if UI_CONFIG_AVAILABLE:
@@ -233,8 +253,10 @@ class StyleLoader:
             
             return stylesheet
             
-        except (KeyError, IndexError) as e:
+        except (KeyError, IndexError, TypeError) as e:
             logger.warning(f"Error reading config colors: {e}")
+            import traceback
+            traceback.print_exc()
             # Fallback to default theme colors using load_stylesheet
             return cls.load_stylesheet('default')
     
@@ -245,22 +267,47 @@ class StyleLoader:
         
         Supports automatic QGIS theme synchronization when ACTIVE_THEME='auto'.
         
+        IMPORTANT (FIX 2026-02-02): The stylesheet uses #dockWidgetContents as prefix
+        for scoping. This means:
+        - If widget IS dockWidgetContents: selectors like #dockWidgetContents QComboBox WON'T work
+        - If widget is PARENT of dockWidgetContents: selectors WILL work correctly
+        
+        Always pass the QDockWidget (parent) as widget, not dockWidgetContents itself.
+        
         Args:
-            widget: Qt widget to apply stylesheet to
+            widget: Qt widget to apply stylesheet to (should be QDockWidget parent)
             config_data: Configuration dictionary
             theme: Theme name (None = use ACTIVE_THEME from config, 'auto' = detect from QGIS)
         """
+        logger.debug(f"StyleLoader.set_theme_from_config: widget={widget.objectName()}, theme_param={theme}")
         # Auto-detect theme from config if not specified
         if theme is None:
             theme = cls.get_active_theme_from_config(config_data)
+            logger.debug(f"StyleLoader: detected theme from config = {theme}")
         elif theme == 'auto':
             theme = cls.detect_qgis_theme()
+            logger.debug(f"StyleLoader: detected theme from QGIS = {theme}")
         
         stylesheet = cls.load_stylesheet_from_config(config_data, theme)
+        logger.debug(f"StyleLoader: stylesheet loaded, length = {len(stylesheet) if stylesheet else 0}")
         if stylesheet:
             widget.setStyleSheet(stylesheet)
             cls._current_theme = theme
-            logger.info(f"Applied theme '{theme}' from config")
+            
+            # FIX 2026-02-02: Force style refresh on all child widgets
+            # This ensures dynamically created widgets also get styled
+            from qgis.PyQt.QtWidgets import QWidget
+            for child in widget.findChildren(QWidget):
+                try:
+                    child.style().unpolish(child)
+                    child.style().polish(child)
+                    child.update()
+                except (RuntimeError, AttributeError):
+                    pass  # Widget may have been deleted
+            
+            logger.info(f"Applied theme '{theme}' from config to {widget.objectName()}")
+        else:
+            logger.warning(f"StyleLoader: NO STYLESHEET LOADED for theme '{theme}'!")
     
     @classmethod
     def set_theme(cls, widget, theme: str = 'default'):

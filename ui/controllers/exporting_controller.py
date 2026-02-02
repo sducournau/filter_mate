@@ -1956,7 +1956,11 @@ class ExportingController(BaseController):
             
             combo = self._dockwidget.mMapLayerComboBox_exporting_raster_mask
             # Filter to polygon layers only
-            combo.setFilters(QgsMapLayerProxyModel.PolygonLayer)
+            # QGIS 3.40+: setFilters() deprecated, use setProxyModelFilters()
+            if hasattr(combo, 'setProxyModelFilters'):
+                combo.setProxyModelFilters(QgsMapLayerProxyModel.PolygonLayer)
+            else:
+                combo.setFilters(QgsMapLayerProxyModel.PolygonLayer)
             
             # Update tooltip to show filter info
             self._update_mask_layer_tooltip()

@@ -815,14 +815,27 @@ class ConfigurationManager(QObject):
                     widget_obj.setToolTip(exporting_tooltips[widget_name])
                 
                 # Apply dimensions
-                icon_size = icons_sizes.get(widget_group, icons_sizes["OTHERS"])
+                # FIX 2026-02-02: Use correct button type for icon sizes
+                # ACTION buttons -> action_button (24px icon)
+                # Key column buttons (EXPLORING, FILTERING, EXPORTING) -> key_button (18px icon)
+                icon_size = icons_sizes.get(widget_group, icons_sizes.get("OTHERS", 18))
                 if UI_CONFIG_AVAILABLE:
-                    btn_type = "action_button" if widget_group == "ACTION" else ("tool_button" if widget_group in ["EXPLORING", "FILTERING", "EXPORTING"] else "button")
+                    if widget_group == "ACTION":
+                        btn_type = "action_button"
+                    elif widget_group in ["EXPLORING", "FILTERING", "EXPORTING", "RASTER_EXPLORING"]:
+                        btn_type = "key_button"
+                    else:
+                        btn_type = "button"
                     h = UIConfig.get_button_height(btn_type)
                     s = UIConfig.get_icon_size(btn_type)
                 else:
-                    h = 36 if widget_group in ["EXPLORING", "FILTERING", "EXPORTING"] else icon_size * 2
-                    s = icon_size
+                    # Fallback sizes
+                    if widget_group == "ACTION":
+                        h, s = 36, 24
+                    elif widget_group in ["EXPLORING", "FILTERING", "EXPORTING", "RASTER_EXPLORING"]:
+                        h, s = 32, 18
+                    else:
+                        h, s = 36, icon_size
                 
                 widget_obj.setMinimumSize(h, h)
                 widget_obj.setMaximumSize(h, h)
@@ -907,12 +920,60 @@ class ConfigurationManager(QObject):
         from qgis.core import QgsFieldProxyModel
         
         d = self.dockwidget
-        # Insert the multiple selection widget into the layout
-        d.horizontalLayout_exploring_multiple_feature_picker.insertWidget(
-            0, d.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, 1)
-        # Ensure visibility after insertion
-        d.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.show()
-        logger.debug(f"Inserted multiple selection widget into layout, count: {d.horizontalLayout_exploring_multiple_feature_picker.count()}")
+        logger.info("🔧 setup_exploring_tab_widgets: STARTED")
+        
+        # FIX 2026-02-02 v4: Use 'is not None' instead of boolean evaluation!
+        # QComboBox subclasses return False when empty (len() == 0)
+        widget_exists = hasattr(d, 'checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection')
+        widget_value = getattr(d, 'checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection', None) if widget_exists else None
+        layout_exists = hasattr(d, 'horizontalLayout_exploring_multiple_feature_picker')
+        
+        logger.info(f"  widget_exists={widget_exists}, widget_value={widget_value is not None}, layout_exists={layout_exists}")
+        
+        # FIX 2026-02-02 v4: Check 'is not None' explicitly
+        if widget_exists and widget_value is not None:
+            # Verify layout exists
+            if not layout_exists:
+                logger.error("  ❌ horizontalLayout_exploring_multiple_feature_picker does NOT exist!")
+                return
+            
+            layout = d.horizontalLayout_exploring_multiple_feature_picker
+            logger.info(f"  Layout count before insert: {layout.count()}")
+            
+            # FIX 2026-02-02 v3: Force minimum size BEFORE adding to layout
+            if widget_value.minimumHeight() < 100:
+                widget_value.setMinimumHeight(100)  # Match QgsCheckableComboBoxFeaturesListPickerWidget default
+            
+            # Insert the multiple selection widget into the layout with stretch factor
+            # FIX 2026-02-02 v3: DO NOT call setParent() after adding to layout!
+            # Qt automatically reparents widgets when they are added to a layout.
+            layout.insertWidget(0, widget_value, 1)
+            
+            # FIX 2026-02-02: Force layout update to ensure widget is properly displayed
+            layout.invalidate()
+            layout.activate()
+            layout.update()
+            
+            # Ensure visibility after insertion
+            widget_value.setVisible(True)
+            widget_value.show()
+            
+            # FIX 2026-02-02 v3: Force update of parent widget hierarchy
+            # Use mGroupBox_exploring_multiple_selection as the parent reference
+            parent_groupbox = d.mGroupBox_exploring_multiple_selection
+            parent_groupbox.updateGeometry()
+            parent_groupbox.update()
+            
+            logger.info(f"  ✅ Inserted multiple selection widget into layout, count after: {layout.count()}")
+            logger.info(f"  Widget visible: {widget_value.isVisible()}, size: {widget_value.size().width()}x{widget_value.size().height()}")
+            logger.info(f"  Widget minSize: {widget_value.minimumWidth()}x{widget_value.minimumHeight()}")
+            logger.info(f"  Widget parent: {widget_value.parent()}")
+            
+            # FIX 2026-02-02: Apply styles to ensure widget is styled correctly
+            if hasattr(d, '_apply_style_to_widget'):
+                d._apply_style_to_widget(widget_value)
+        else:
+            logger.warning("  ⚠️ checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection not found or is None")
         
         field_filters = QgsFieldProxyModel.AllTypes
         for widget in [d.mFieldExpressionWidget_exploring_single_selection,
@@ -949,18 +1010,18 @@ class ConfigurationManager(QObject):
         # This excludes tables without geometry (NoGeometry = 2)
         try:
             # Note: Accept both vector layers with geometry AND raster layers for unified exploring
-            # QGIS 3.40+: setFilters() deprecated, use setLayerFilters()
+            # QGIS 3.40+: setFilters() deprecated, use setProxyModelFilters()
             filters = QgsMapLayerProxyModel.HasGeometry | QgsMapLayerProxyModel.RasterLayer
-            if hasattr(d.comboBox_filtering_current_layer, 'setLayerFilters'):
-                d.comboBox_filtering_current_layer.setLayerFilters(filters)
+            if hasattr(d.comboBox_filtering_current_layer, 'setProxyModelFilters'):
+                d.comboBox_filtering_current_layer.setProxyModelFilters(filters)
             else:
                 d.comboBox_filtering_current_layer.setFilters(filters)
             logger.info("comboBox_filtering_current_layer: Filter set to HasGeometry | RasterLayer (vector + raster)")
         except Exception as e:
             logger.warning(f"Could not set HasGeometry | RasterLayer filter: {e}")
             # Fallback to VectorLayer only
-            if hasattr(d.comboBox_filtering_current_layer, 'setLayerFilters'):
-                d.comboBox_filtering_current_layer.setLayerFilters(QgsMapLayerProxyModel.VectorLayer)
+            if hasattr(d.comboBox_filtering_current_layer, 'setProxyModelFilters'):
+                d.comboBox_filtering_current_layer.setProxyModelFilters(QgsMapLayerProxyModel.VectorLayer)
             else:
                 d.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
         
@@ -992,19 +1053,124 @@ class ConfigurationManager(QObject):
             d.checkBox_filtering_use_centroids_distant_layers.setEnabled(False)
 
         
-        # Create horizontal layout and insert widgets
-        d.horizontalLayout_filtering_distant_layers = QtWidgets.QHBoxLayout()
-        d.horizontalLayout_filtering_distant_layers.setSpacing(4)
-        d.horizontalLayout_filtering_distant_layers.addWidget(d.checkableComboBoxLayer_filtering_layers_to_filter)
-        d.horizontalLayout_filtering_distant_layers.addWidget(d.checkBox_filtering_use_centroids_distant_layers)
+        logger.info("🔧 setup_filtering_tab_widgets: Setting up layers_to_filter widget")
         
-        # Insert into main vertical layout at position 2 (after current layer, before predicates)
-        if hasattr(d, 'verticalLayout_filtering_values'):
-            d.verticalLayout_filtering_values.insertLayout(2, d.horizontalLayout_filtering_distant_layers)
-            # Ensure visibility
-            d.checkableComboBoxLayer_filtering_layers_to_filter.show()
-            d.checkBox_filtering_use_centroids_distant_layers.show()
-            logger.debug(f"Inserted filtering layers layout, widget visible: {d.checkableComboBoxLayer_filtering_layers_to_filter.isVisible()}")
+        # FIX 2026-02-02 v4: Use 'is not None' instead of boolean evaluation!
+        # QComboBox subclasses return False when empty (len() == 0), so we must check explicitly
+        layers_widget_exists = hasattr(d, 'checkableComboBoxLayer_filtering_layers_to_filter') and d.checkableComboBoxLayer_filtering_layers_to_filter is not None
+        centroids_widget_exists = hasattr(d, 'checkBox_filtering_use_centroids_distant_layers') and d.checkBox_filtering_use_centroids_distant_layers is not None
+        layout_exists = hasattr(d, 'verticalLayout_filtering_values')
+        
+        logger.info(f"  layers_widget_exists={layers_widget_exists}, centroids_widget_exists={centroids_widget_exists}, layout_exists={layout_exists}")
+        
+        if not layers_widget_exists:
+            logger.error("  ❌ checkableComboBoxLayer_filtering_layers_to_filter not found - cannot setup filtering tab")
+            return
+        if not centroids_widget_exists:
+            logger.error("  ❌ checkBox_filtering_use_centroids_distant_layers not found - cannot setup filtering tab")
+            return
+        if not layout_exists:
+            logger.error("  ❌ verticalLayout_filtering_values not found - cannot setup filtering tab")
+            return
+        
+        layers_widget = d.checkableComboBoxLayer_filtering_layers_to_filter
+        centroids_widget = d.checkBox_filtering_use_centroids_distant_layers
+        vl = d.verticalLayout_filtering_values
+        
+        # FIX 2026-02-02 v6: Check if widget is already visible and in correct layout position
+        # If so, we don't need to do anything
+        if layers_widget.isVisible():
+            # Check if it's in the vertical layout (in any sub-layout)
+            for i in range(vl.count()):
+                item = vl.itemAt(i)
+                if item and item.layout() is not None:
+                    sub_layout = item.layout()
+                    for j in range(sub_layout.count()):
+                        sub_item = sub_layout.itemAt(j)
+                        if sub_item and sub_item.widget() is not None and sub_item.widget() == layers_widget:
+                            logger.info(f"  ✓ Widget already visible and in layout at position [{i}][{j}], skipping")
+                            return
+        
+        # FIX 2026-02-02 v8: Complete cleanup and fresh insertion
+        # The issue is that widgets may have been reparented to a wrong widget,
+        # causing insertLayout() to fail silently
+        
+        # Step 1: Remove old layout from vl AND cleanup reference
+        if hasattr(d, 'horizontalLayout_filtering_distant_layers'):
+            old_layout = d.horizontalLayout_filtering_distant_layers
+            if old_layout is not None:
+                logger.info(f"  Removing old layout (count={old_layout.count()}, parentWidget={old_layout.parentWidget()})")
+                
+                # Remove all widgets from old layout first
+                while old_layout.count():
+                    item = old_layout.takeAt(0)
+                
+                # Try to find and remove old layout from vl
+                for i in range(vl.count()):
+                    item = vl.itemAt(i)
+                    if item and item.layout() == old_layout:
+                        vl.takeAt(i)
+                        logger.info(f"  Removed old layout from vl at position {i}")
+                        break
+                
+                # Delete the reference
+                delattr(d, 'horizontalLayout_filtering_distant_layers')
+                logger.info("  Deleted old layout reference")
+        
+        # Step 2: Create new layout (WITHOUT widgets yet!)
+        logger.info("  Creating fresh horizontal layout (empty)...")
+        h_layout = QtWidgets.QHBoxLayout()
+        h_layout.setSpacing(4)
+        h_layout.setContentsMargins(0, 0, 0, 0)
+        logger.info(f"  h_layout parentWidget BEFORE insert: {h_layout.parentWidget()}")
+        
+        # Step 3: Insert EMPTY layout into vertical layout FIRST
+        # This establishes the correct parentWidget (FILTERING via vl)
+        logger.info(f"  vl count before insert: {vl.count()}")
+        vl.insertLayout(1, h_layout)
+        logger.info(f"  vl count after insert: {vl.count()}")
+        logger.info(f"  h_layout parentWidget AFTER insert: {h_layout.parentWidget()}")
+        
+        # Step 4: Store reference AFTER insertion
+        d.horizontalLayout_filtering_distant_layers = h_layout
+        
+        # Step 5: Set minimum size BEFORE adding to layout
+        if layers_widget.minimumHeight() < 26:
+            layers_widget.setMinimumHeight(26)
+        
+        # Step 6: NOW add widgets to the layout (after it's properly parented)
+        # When widgets are added to a layout that has a parentWidget, 
+        # Qt automatically reparents the widgets to that parentWidget
+        h_layout.addWidget(layers_widget, 1)  # Stretch factor 1
+        h_layout.addWidget(centroids_widget, 0)  # No stretch
+        
+        logger.info(f"  Added widgets to h_layout, count={h_layout.count()}")
+        logger.info(f"  layers_widget.parent() after addWidget: {layers_widget.parent()}")
+        
+        # Force layout update
+        vl.invalidate()
+        vl.activate()
+        vl.update()
+        
+        # Ensure visibility
+        layers_widget.setVisible(True)
+        layers_widget.show()
+        centroids_widget.setVisible(True)
+        centroids_widget.show()
+        
+        # Force update of parent widget
+        d.FILTERING.updateGeometry()
+        d.FILTERING.update()
+        
+        logger.info(f"  ✅ Setup complete")
+        logger.info(f"  layers_widget visible: {layers_widget.isVisible()}, size: {layers_widget.size().width()}x{layers_widget.size().height()}")
+        
+        # Apply styles
+        if hasattr(d, '_apply_style_to_widget'):
+            d._apply_style_to_widget(layers_widget)
+            d._apply_style_to_widget(centroids_widget)
+        else:
+            logger.error("  ❌ verticalLayout_filtering_values does NOT exist!")
         
         try:
             from ..config import UIConfig
@@ -1020,13 +1186,56 @@ class ConfigurationManager(QObject):
         from qgis.PyQt.QtGui import QColor
         
         d = self.dockwidget
-        # Widget already created in setupUiCustom() - just configure it
+        logger.info("🔧 setup_exporting_tab_widgets: STARTED")
         
-        if hasattr(d, 'verticalLayout_exporting_values'):
-            d.verticalLayout_exporting_values.insertWidget(0, d.checkableComboBoxLayer_exporting_layers)
+        # FIX 2026-02-02 v4: Use 'is not None' instead of boolean evaluation!
+        # QComboBox subclasses return False when empty (len() == 0)
+        widget_exists = hasattr(d, 'checkableComboBoxLayer_exporting_layers') and d.checkableComboBoxLayer_exporting_layers is not None
+        layout_exists = hasattr(d, 'verticalLayout_exporting_values')
+        
+        logger.info(f"  widget_exists={widget_exists}, layout_exists={layout_exists}")
+        
+        if not widget_exists:
+            logger.error("  ❌ checkableComboBoxLayer_exporting_layers not found - cannot setup exporting tab")
+            return
+        
+        if layout_exists:
+            layout = d.verticalLayout_exporting_values
+            logger.info(f"  Layout count before insert: {layout.count()}")
+            
+            # FIX 2026-02-02 v3: Force minimum size BEFORE adding to layout
+            if d.checkableComboBoxLayer_exporting_layers.minimumHeight() < 26:
+                d.checkableComboBoxLayer_exporting_layers.setMinimumHeight(26)
+            
+            # FIX 2026-02-02 v3: DO NOT call setParent() after adding to layout!
+            # Qt automatically reparents widgets when they are added to a layout.
+            
+            layout.insertWidget(0, d.checkableComboBoxLayer_exporting_layers)
+            
+            # FIX 2026-02-02: Force layout update to ensure widget is properly displayed
+            layout.invalidate()
+            layout.activate()
+            layout.update()
+            
+            d.checkableComboBoxLayer_exporting_layers.setVisible(True)
             d.checkableComboBoxLayer_exporting_layers.show()
-            logger.debug(f"Inserted exporting layers widget, visible: {d.checkableComboBoxLayer_exporting_layers.isVisible()}")
-            d.verticalLayout_exporting_values.insertItem(1, QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
+            
+            # FIX 2026-02-02 v3: Force update of parent widget hierarchy
+            d.EXPORTING.updateGeometry()
+            d.EXPORTING.update()
+            
+            logger.info(f"  ✅ Inserted exporting layers widget at position 0")
+            logger.info(f"  Widget visible: {d.checkableComboBoxLayer_exporting_layers.isVisible()}, size: {d.checkableComboBoxLayer_exporting_layers.size().width()}x{d.checkableComboBoxLayer_exporting_layers.size().height()}")
+            logger.info(f"  Widget minSize: {d.checkableComboBoxLayer_exporting_layers.minimumWidth()}x{d.checkableComboBoxLayer_exporting_layers.minimumHeight()}")
+            logger.info(f"  Widget parent: {d.checkableComboBoxLayer_exporting_layers.parent()}")
+            
+            layout.insertItem(1, QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
+            
+            # FIX 2026-02-02: Apply styles to newly inserted dynamic widget
+            if hasattr(d, '_apply_style_to_widget'):
+                d._apply_style_to_widget(d.checkableComboBoxLayer_exporting_layers)
+        else:
+            logger.error("  ❌ verticalLayout_exporting_values does NOT exist!")
         
         try:
             from ..config import UIConfig

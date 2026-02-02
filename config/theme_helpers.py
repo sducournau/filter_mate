@@ -45,10 +45,14 @@ def get_active_theme(config_data: Dict[str, Any]) -> str:
     """
     # Try new structure
     theme = get_config_value(config_data, "app", "active_theme")
-    if theme:
-        return theme
-    # Try old structure
-    theme = get_config_value(config_data, "APP", "DOCKWIDGET", "COLORS", "ACTIVE_THEME")
+    if theme is None:
+        # Try old structure
+        theme = get_config_value(config_data, "APP", "DOCKWIDGET", "COLORS", "ACTIVE_THEME")
+    
+    # FIX 2026-02-02: Config values can be dict with 'value' key or plain string
+    if isinstance(theme, dict):
+        theme = theme.get('value', 'default')
+    
     return theme or "default"
 
 
@@ -74,7 +78,7 @@ def get_theme_colors(config_data: Dict[str, Any], theme_name: str) -> Dict[str, 
     return {}
 
 
-def get_background_colors(config_data: Dict[str, Any]) -> Dict[str, str]:
+def get_background_colors(config_data: Dict[str, Any]) -> List[str]:
     """
     Get background colors from config.
     
@@ -82,14 +86,23 @@ def get_background_colors(config_data: Dict[str, Any]) -> Dict[str, str]:
         config_data: Configuration dictionary
     
     Returns:
-        Dictionary with primary and secondary background colors
+        List of background colors [bg0, bg1, bg2, bg3]
     """
     active_theme = get_active_theme(config_data)
     colors = get_theme_colors(config_data, active_theme)
-    return colors.get("background", {"primary": "#ffffff", "secondary": "#f5f5f5"})
+    # Try both cases: "BACKGROUND" (old) and "background" (new)
+    bg = colors.get("BACKGROUND") or colors.get("background")
+    if bg:
+        return bg
+    # Fallback to root BACKGROUND in COLORS section
+    bg = get_config_value(config_data, "APP", "DOCKWIDGET", "COLORS", "BACKGROUND")
+    if bg:
+        return bg
+    # Default fallback (light theme colors)
+    return ["#F5F5F5", "#FFFFFF", "#E0E0E0", "#2196F3"]
 
 
-def get_font_colors(config_data: Dict[str, Any]) -> Dict[str, str]:
+def get_font_colors(config_data: Dict[str, Any]) -> List[str]:
     """
     Get font colors from config.
     
@@ -97,11 +110,20 @@ def get_font_colors(config_data: Dict[str, Any]) -> Dict[str, str]:
         config_data: Configuration dictionary
     
     Returns:
-        Dictionary with primary and secondary font colors
+        List of font colors [font0, font1, font2]
     """
     active_theme = get_active_theme(config_data)
     colors = get_theme_colors(config_data, active_theme)
-    return colors.get("font", {"primary": "#000000", "secondary": "#666666"})
+    # Try both cases: "FONT" (old) and "font" (new)
+    font = colors.get("FONT") or colors.get("font")
+    if font:
+        return font
+    # Fallback to root FONT in COLORS section
+    font = get_config_value(config_data, "APP", "DOCKWIDGET", "COLORS", "FONT")
+    if font:
+        return font
+    # Default fallback (dark text for light theme)
+    return ["#212121", "#616161", "#BDBDBD"]
 
 
 def get_accent_colors(config_data: Dict[str, Any]) -> Dict[str, str]:
@@ -112,11 +134,26 @@ def get_accent_colors(config_data: Dict[str, Any]) -> Dict[str, str]:
         config_data: Configuration dictionary
     
     Returns:
-        Dictionary with primary and secondary accent colors
+        Dictionary with accent colors (PRIMARY, HOVER, PRESSED, LIGHT_BG, DARK)
     """
     active_theme = get_active_theme(config_data)
     colors = get_theme_colors(config_data, active_theme)
-    return colors.get("accent", {"primary": "#0078d7", "secondary": "#005a9e"})
+    # Try both cases: "ACCENT" (old) and "accent" (new)
+    accent = colors.get("ACCENT") or colors.get("accent")
+    if accent:
+        return accent
+    # Fallback to root ACCENT in COLORS section
+    accent = get_config_value(config_data, "APP", "DOCKWIDGET", "COLORS", "ACCENT")
+    if accent:
+        return accent
+    # Default fallback
+    return {
+        "PRIMARY": "#1976D2",
+        "HOVER": "#2196F3",
+        "PRESSED": "#0D47A1",
+        "LIGHT_BG": "#E3F2FD",
+        "DARK": "#01579B"
+    }
 
 
 def get_available_themes(config_data: Dict[str, Any]) -> List[str]:

@@ -78,7 +78,7 @@ from .infrastructure.utils import (
     GdalErrorHandler
 )
 from .infrastructure.logging import get_app_logger
-from .resources import *  # Qt resources must be imported with wildcard
+from . import resources_rc  # Qt resources
 
 # Get FilterMate logger BEFORE importing hexagonal services
 logger = get_app_logger()

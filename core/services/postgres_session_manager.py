@@ -111,7 +111,7 @@ class PostgresSessionManager(QObject):
     DEFAULT_SCHEMA = "filtermate_temp"
     
     # View prefix pattern (unified fm_temp_mv_ prefix v4.4.4)
-    VIEW_PREFIX = \"fm_temp_mv_\"
+    VIEW_PREFIX = "fm_temp_mv_"
     
     def __init__(
         self,

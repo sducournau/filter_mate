@@ -1,13 +1,63 @@
 <!DOCTYPE RCC><RCC version="1.0">
     <qresource prefix="/plugins/filter_mate">
         <file>icon.png</file>
-        <file>icons/vector.png</file>
+        <file>icons/add.png</file>
+        <file>icons/add_multi.png</file>
+        <file>icons/auto_layer_black.png</file>
+        <file>icons/auto_layer_white.png</file>
+        <file>icons/auto_save.png</file>
+        <file>icons/buffer_type.png</file>
+        <file>icons/buffer_value.png</file>
+        <file>icons/centroid.png</file>
+        <file>icons/datatype.png</file>
+        <file>icons/export.png</file>
+        <file>icons/filter.png</file>
+        <file>icons/filter_multi.png</file>
+        <file>icons/folder.png</file>
+        <file>icons/folder_black.png</file>
+        <file>icons/folder_white.png</file>
+        <file>icons/geo.png</file>
+        <file>icons/geo_predicates.png</file>
+        <file>icons/geo_tampon.png</file>
+        <file>icons/history.png</file>
+        <file>icons/icon.png</file>
+        <file>icons/identify.png</file>
+        <file>icons/identify_alt.png</file>
+        <file>icons/layer.png</file>
+        <file>icons/layers.png</file>
+        <file>icons/link.png</file>
+        <file>icons/link_alt.png</file>
+        <file>icons/logo.png</file>
+        <file>icons/map_black.png</file>
+        <file>icons/map_white.png</file>
+        <file>icons/parameters.png</file>
+        <file>icons/pointing_black.png</file>
+        <file>icons/pointing_white.png</file>
+        <file>icons/projection.png</file>
+        <file>icons/projection_black.png</file>
+        <file>icons/projection_white.png</file>
         <file>icons/raster.png</file>
+        <file>icons/raster_all_bands.png</file>
         <file>icons/raster_pipette.png</file>
         <file>icons/raster_rectangle_picker.png</file>
-        <file>icons/raster_sync.png</file>
-        <file>icons/raster_all_bands.png</file>
         <file>icons/raster_reset_bands.png</file>
-        <file>icons/parameters.png</file>
+        <file>icons/raster_sync.png</file>
+        <file>icons/redo.png</file>
+        <file>icons/reset.png</file>
+        <file>icons/reset_properties.png</file>
+        <file>icons/save.png</file>
+        <file>icons/save_properties.png</file>
+        <file>icons/select_black.png</file>
+        <file>icons/selection_white.png</file>
+        <file>icons/styles_black.png</file>
+        <file>icons/styles_white.png</file>
+        <file>icons/sync.png</file>
+        <file>icons/track.png</file>
+        <file>icons/undo.png</file>
+        <file>icons/unfilter.png</file>
+        <file>icons/unfilter_alt.png</file>
+        <file>icons/vector.png</file>
+        <file>icons/zip.png</file>
+        <file>icons/zoom.png</file>
     </qresource>
 </RCC>

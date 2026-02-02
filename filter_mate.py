@@ -26,8 +26,8 @@ from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMessageBox
 import weakref
 
-# Initialize Qt resources from file resources.py
-from .resources import *  # Qt resources must be imported with wildcard
+# Initialize Qt resources from file resources_rc.py
+from . import resources_rc  # Qt resources
 import os
 import os.path
 from .filter_mate_app import FilterMateApp

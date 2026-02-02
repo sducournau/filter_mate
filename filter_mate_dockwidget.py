@@ -120,7 +120,7 @@ from .infrastructure.cache import ExploringFeaturesCache
 from .filter_mate_dockwidget_base import Ui_FilterMateDockWidgetBase
 
 # Qt resources for icons (must be imported before UI is created)
-from . import resources  # noqa: F401
+from . import resources_rc  # noqa: F401
 
 # Import async expression evaluation for large layers (v2.5.10)
 # EPIC-1: Migrated to core/tasks/
@@ -553,6 +553,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         self.setupUiCustom()
         self.manage_ui_style()
+        # FIX 2026-02-02: Force style refresh on dynamic widgets created in setupUiCustom
+        self._refresh_dynamic_widget_styles()
+        
+        # FIX 2026-02-02 v3: Schedule a delayed geometry update AFTER Qt event loop processes
+        # This ensures all widgets are properly positioned after the dockwidget is fully initialized
+        from qgis.PyQt.QtCore import QTimer
+        QTimer.singleShot(100, self._delayed_widgets_geometry_update)
+        
         try: 
             self.manage_interactions()
         except Exception as e: 
@@ -661,19 +669,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 try: self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.reset(); self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.close(); self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.deleteLater()
                 except (RuntimeError, AttributeError):  # Widget may already be deleted - expected during cleanup
                     pass
-            # Recreate the widget
-            self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self.CONFIG_DATA, self)
+            # FIX 2026-02-02: Recreate the widget with correct parent (groupbox, not self)
+            self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self.CONFIG_DATA, self.mGroupBox_exploring_multiple_selection)
+            # FIX 2026-01-18 v14: Set dockwidget reference for sync protection checks
+            self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.setDockwidgetRef(self)
             if self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection:
                 layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, 1); layout.update()
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"] = {"TYPE": "CustomCheckableFeatureComboBox", "WIDGET": self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection,
                     "SIGNALS": [("updatingCheckedItemList", self.exploring_features_changed), ("filteringCheckedItemList", self.exploring_source_params_changed)]}
+                # FIX 2026-02-02: Apply styles to newly created widget
+                self._apply_style_to_widget(self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection)
         except Exception as e: logger.warning(f"reset_multiple_checkable_combobox failed: {e}")
 
     def _fix_toolbox_icons(self):
-        """v4.0 S18: Fix toolBox_tabTools icons with absolute paths."""
+        """v4.0 S18: Fix toolBox_tabTools icons using Qt resources.
+        
+        Note: Since v5.6, icons are defined in .ui file with Qt resources,
+        but this method ensures icons are loaded even if UI compilation fails.
+        """
         for idx, icon_file in {0: "filter_multi.png", 1: "save.png", 2: "parameters.png"}.items():
-            p = os.path.join(self.plugin_dir, "icons", icon_file)
-            if os.path.exists(p): self.toolBox_tabTools.setItemIcon(idx, get_themed_icon(p) if ICON_THEME_AVAILABLE else QtGui.QIcon(p))
+            # Use Qt resource path (from resources.qrc) - always available
+            qt_resource_path = f":/plugins/filter_mate/icons/{icon_file}"
+            self.toolBox_tabTools.setItemIcon(idx, get_themed_icon(qt_resource_path) if ICON_THEME_AVAILABLE else QtGui.QIcon(qt_resource_path))
 
 
     def setupUiCustom(self) -> None:
@@ -691,28 +708,56 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             Creates widgets before configure_widgets() can reference them.
         """
         # CRITICAL: Create all custom widgets FIRST (before configure_widgets() references them)
-        self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self.CONFIG_DATA, self)
+        logger.info("🔧 setupUiCustom: Creating custom widgets")
+        
+        # Verify mGroupBox_exploring_multiple_selection exists
+        if not hasattr(self, 'mGroupBox_exploring_multiple_selection'):
+            logger.error("❌ mGroupBox_exploring_multiple_selection does NOT exist after setupUi!")
+        else:
+            logger.info(f"  ✓ mGroupBox_exploring_multiple_selection exists: {self.mGroupBox_exploring_multiple_selection}")
+        
+        # FIX 2026-02-02: Use mGroupBox_exploring_multiple_selection as parent for correct hierarchy
+        self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self.CONFIG_DATA, self.mGroupBox_exploring_multiple_selection)
         # FIX 2026-01-18 v14: Set dockwidget reference for sync protection checks
         self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.setDockwidgetRef(self)
         # Don't override the widget's calculated minimum height - it knows its own size needs
         self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.show()
-        logger.debug(f"Created multiple selection widget: {self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection}")
+        logger.info(f"  ✓ Created multiple selection widget: {self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection}")
         
         # Create custom combobox widgets early so configure_widgets() can reference them
+        # FIX 2026-02-02: Use correct parent widget from the target layout
         from .ui.widgets.custom_widgets import QgsCheckableComboBoxLayer
-        self.checkableComboBoxLayer_filtering_layers_to_filter = QgsCheckableComboBoxLayer(self.dockWidgetContents)
+        
+        # Verify FILTERING page exists
+        if not hasattr(self, 'FILTERING'):
+            logger.error("❌ FILTERING page does NOT exist after setupUi!")
+        else:
+            logger.info(f"  ✓ FILTERING page exists: {self.FILTERING}")
+        
+        # Parent is FILTERING page (will be inserted into verticalLayout_filtering_values)
+        self.checkableComboBoxLayer_filtering_layers_to_filter = QgsCheckableComboBoxLayer(self.FILTERING)
+        self.checkableComboBoxLayer_filtering_layers_to_filter.setObjectName("checkableComboBoxLayer_filtering_layers_to_filter")
         # Height managed by QSS (20px standard)
         self.checkableComboBoxLayer_filtering_layers_to_filter.show()
-        logger.debug(f"Created filtering layers widget: {self.checkableComboBoxLayer_filtering_layers_to_filter}")
+        logger.info(f"  ✓ Created filtering layers widget: {self.checkableComboBoxLayer_filtering_layers_to_filter}")
         
-        self.checkableComboBoxLayer_exporting_layers = QgsCheckableComboBoxLayer(self.dockWidgetContents)
+        # Verify EXPORTING page exists
+        if not hasattr(self, 'EXPORTING'):
+            logger.error("❌ EXPORTING page does NOT exist after setupUi!")
+        else:
+            logger.info(f"  ✓ EXPORTING page exists: {self.EXPORTING}")
+        
+        # Parent is EXPORTING page (will be inserted into verticalLayout_exporting_values)
+        self.checkableComboBoxLayer_exporting_layers = QgsCheckableComboBoxLayer(self.EXPORTING)
+        self.checkableComboBoxLayer_exporting_layers.setObjectName("checkableComboBoxLayer_exporting_layers")
         # Height managed by QSS (20px standard)
         self.checkableComboBoxLayer_exporting_layers.show()
-        logger.debug(f"Created exporting layers widget: {self.checkableComboBoxLayer_exporting_layers}")
+        logger.info(f"  ✓ Created exporting layers widget: {self.checkableComboBoxLayer_exporting_layers}")
         
         # Create centroids checkbox BEFORE configure_widgets() to ensure it's in the registry
+        # FIX 2026-02-02: Use FILTERING page as parent (will be in horizontalLayout_filtering_distant_layers)
         from qgis.PyQt import QtWidgets
-        self.checkBox_filtering_use_centroids_distant_layers = QtWidgets.QCheckBox(self.dockWidgetContents)
+        self.checkBox_filtering_use_centroids_distant_layers = QtWidgets.QCheckBox(self.FILTERING)
         self.checkBox_filtering_use_centroids_distant_layers.setObjectName("checkBox_filtering_use_centroids_distant_layers")
         logger.debug(f"Created centroids distant layers checkbox: {self.checkBox_filtering_use_centroids_distant_layers}")
         
@@ -735,9 +780,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._fix_toolbox_icons()
         self._setup_backend_indicator()
         self._setup_action_bar_layout()
+        logger.info("🔧 setupUiCustom: Calling _setup_*_tab_widgets (ConfigurationManager should be ready)")
+        logger.info(f"  _configuration_manager is None: {self._configuration_manager is None}")
         self._setup_exploring_tab_widgets()
         self._setup_filtering_tab_widgets()
         self._setup_exporting_tab_widgets()
+        logger.info("🔧 setupUiCustom: _setup_*_tab_widgets completed")
+        
+        # FIX 2026-02-02: Force geometry update for all dynamically inserted widgets
+        # Qt needs explicit updateGeometry() calls after inserting widgets into existing layouts
+        self._force_dynamic_widgets_geometry_update()
         if 'CURRENT_PROJECT' in self.CONFIG_DATA:
             self.project_props = self.CONFIG_DATA["CURRENT_PROJECT"]
         self.manage_configuration_model()
@@ -745,22 +797,33 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._load_all_pushbutton_icons()
         self._load_raster_tool_icons()  # Explicit call to ensure raster icons are loaded
         self._setup_truncation_tooltips()
+        # FIX 2026-02-02: Refresh styles AFTER all widgets are configured and added to layouts
+        self._refresh_dynamic_widget_styles()
     
     def _load_all_pushbutton_icons(self):
         """v4.0 S16: Load icons from config.
         
         v4.0.3: Fixed icon sizes extraction to support both int and dict formats.
+        v5.3 FIX 2026-02-02: Harmonized icon sizes with UIConfig.
         """
         try:
             pb_cfg = self.CONFIG_DATA.get("APP", {}).get("DOCKWIDGET", {}).get("PushButton", {})
             icons, sizes = pb_cfg.get("ICONS", {}), pb_cfg.get("ICONS_SIZES", {})
             
-            # Extract sizes - support both int direct and dict with "value" key
-            sz_act_raw = sizes.get("ACTION", 24)
-            sz_act = sz_act_raw.get("value", 24) if isinstance(sz_act_raw, dict) else sz_act_raw
-            
-            sz_oth_raw = sizes.get("OTHERS", 20)
-            sz_oth = sz_oth_raw.get("value", 20) if isinstance(sz_oth_raw, dict) else sz_oth_raw
+            # FIX 2026-02-02: Use UIConfig as source of truth for icon sizes
+            try:
+                from .ui.config import UIConfig
+                sz_act = UIConfig.get_icon_size('action_button')  # 24px (normal) / 22px (compact)
+                sz_key = UIConfig.get_icon_size('key_button')     # 18px
+                logger.debug(f"Using UIConfig icon sizes: action={sz_act}, key={sz_key}")
+            except ImportError:
+                # Fallback to config.json values
+                sz_act_raw = sizes.get("ACTION", 24)
+                sz_act = sz_act_raw.get("value", 24) if isinstance(sz_act_raw, dict) else sz_act_raw
+                
+                sz_key_raw = sizes.get("OTHERS", 18)
+                sz_key = sz_key_raw.get("value", 18) if isinstance(sz_key_raw, dict) else sz_key_raw
+                logger.debug(f"Using config.json icon sizes: action={sz_act}, key={sz_key}")
             
             if not icons:
                 logger.warning("_load_all_pushbutton_icons: No icons found in CONFIG_DATA")
@@ -770,9 +833,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             loaded_count = 0
             for grp in ["ACTION", "EXPLORING", "FILTERING", "EXPORTING", "RASTER_EXPLORING"]:
-                sz = sz_act if grp == "ACTION" else sz_oth
+                # ACTION buttons get action_button size, all others get key_button size
+                sz = sz_act if grp == "ACTION" else sz_key
                 icons_grp = icons.get(grp, {})
-                logger.info(f"Group {grp}: {len(icons_grp)} icons configured")
+                logger.debug(f"Group {grp}: {len(icons_grp)} icons, size={sz}px")
                 for name, ico_file in icons_grp.items():
                     attr = self._get_widget_attr_name(grp, name)
                     if not attr:
@@ -789,9 +853,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     w.setIcon(icon)
                     w.setIconSize(QtCore.QSize(sz, sz))
                     loaded_count += 1
-                    logger.info(f"✓ {grp}.{name}: {ico_file}")
+                    logger.debug(f"✓ {grp}.{name}: {ico_file} ({sz}px)")
             
-            logger.info(f"_load_all_pushbutton_icons: Loaded {loaded_count} icons TOTAL")
+            logger.info(f"_load_all_pushbutton_icons: Loaded {loaded_count} icons (action={sz_act}px, key={sz_key}px)")
         except Exception as e:
             logger.error(f"_load_all_pushbutton_icons failed: {e}")
             import traceback
@@ -844,11 +908,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try:
             pb_cfg = self.CONFIG_DATA.get("APP", {}).get("DOCKWIDGET", {}).get("PushButton", {})
             icons = pb_cfg.get("ICONS", {})
-            sizes = pb_cfg.get("ICONS_SIZES", {})
             
-            # Get icon size for non-action buttons
-            sz_oth_raw = sizes.get("OTHERS", 20)
-            sz = sz_oth_raw.get("value", 20) if isinstance(sz_oth_raw, dict) else sz_oth_raw
+            # FIX 2026-02-02: Use UIConfig for consistent icon sizes
+            try:
+                from .ui.config import UIConfig
+                sz = UIConfig.get_icon_size('key_button')  # 18px - same as other key buttons
+            except ImportError:
+                sizes = pb_cfg.get("ICONS_SIZES", {})
+                sz_oth_raw = sizes.get("OTHERS", 18)
+                sz = sz_oth_raw.get("value", 18) if isinstance(sz_oth_raw, dict) else sz_oth_raw
             
             raster_icons = icons.get("RASTER_EXPLORING", {})
             if not raster_icons:
@@ -1148,6 +1216,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Insert the scroll area at the same position in the layout
             parent_layout.insertWidget(widget_index, self.scrollArea_raster_content)
             
+            # FIX 2026-02-02: Apply styles to newly created ScrollArea
+            self._apply_style_to_widget(self.scrollArea_raster_content)
+            
             logger.info("Raster content wrapped in ScrollArea for proper GroupBox display")
             
         except Exception as e:
@@ -1199,6 +1270,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # Replace reference
             self.comboBox_band = new_combo
+            
+            # FIX 2026-02-02: Apply styles to newly created widget
+            self._apply_style_to_widget(new_combo)
             
             logger.info("v5.10: comboBox_band replaced with QgsCheckableComboBoxBands")
             
@@ -1287,13 +1361,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             layout.setContentsMargins(0, 0, 0, 0)
             layout.setSpacing(0)
             
-            # Create interactive histogram widget
-            self._raster_histogram = RasterHistogramInteractiveWidget()
+            # Create interactive histogram widget with correct parent
+            # FIX 2026-02-02: Use widget_histogram_placeholder as parent for proper widget hierarchy
+            self._raster_histogram = RasterHistogramInteractiveWidget(self.widget_histogram_placeholder)
             self._raster_histogram.setMinimumHeight(80)
             self._raster_histogram.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             
             # Add to placeholder layout
             layout.addWidget(self._raster_histogram)
+            
+            # FIX 2026-02-02: Apply styles to newly created widget
+            self._apply_style_to_widget(self._raster_histogram)
             
             # Force visibility
             self._raster_histogram.setVisible(True)
@@ -4659,26 +4737,38 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Size policies work in conjunction with the splitter configuration
         to ensure proper resize behavior.
         """
-        from .ui.config import UIConfig
+        from .ui.config import UIConfig, DisplayProfile
         from qgis.PyQt.QtWidgets import QSizePolicy
         policy_map = {'Fixed': QSizePolicy.Fixed, 'Minimum': QSizePolicy.Minimum,
                       'Maximum': QSizePolicy.Maximum, 'Preferred': QSizePolicy.Preferred,
                       'Expanding': QSizePolicy.Expanding, 'MinimumExpanding': QSizePolicy.MinimumExpanding,
                       'Ignored': QSizePolicy.Ignored}
-        wk_min = UIConfig.get_config('widget_keys', 'min_width')
-        wk_max = UIConfig.get_config('widget_keys', 'max_width')
-        wk_cfg = UIConfig.get_config('widget_keys') or {}
-        wk_pad = wk_cfg.get('padding', 2)
+        
+        # FIX 2026-02-02: Calculate container width based on button size for perfect alignment
+        key_cfg = UIConfig.get_config('key_button') or {}
+        profile = UIConfig.get_profile()
+        if profile == DisplayProfile.COMPACT:
+            button_size = 32  # max_size for COMPACT
+        elif profile == DisplayProfile.HIDPI:
+            button_size = 44  # max_size for HIDPI
+        else:
+            button_size = key_cfg.get('max_size', 36)  # max_size for NORMAL
+        
+        # Container width = button size + small margin for border
+        wk_fixed = button_size + 4  # 4px for border/margin
+        
         for wn in ['widget_exploring_keys', 'widget_filtering_keys', 'widget_exporting_keys']:
             if hasattr(self, wn):
                 w = getattr(self, wn)
-                w.setMinimumWidth(wk_min)
-                w.setMaximumWidth(wk_max)
+                w.setFixedWidth(wk_fixed)  # FIX: Exact same width for all key containers
                 if w.layout():
-                    w.layout().setContentsMargins(wk_pad, wk_pad, wk_pad, wk_pad)
+                    w.layout().setContentsMargins(0, 0, 0, 0)
                     w.layout().setSpacing(0)
+                    # FIX: Set alignment for all items in layout
+                    from qgis.PyQt.QtCore import Qt
+                    w.layout().setAlignment(Qt.AlignHCenter | Qt.AlignTop)
         exp_cfg = UIConfig.get_config('frame_exploring') or {}
-        exp_min = exp_cfg.get('min_height', 120)
+        exp_min = exp_cfg.get('min_height', 80)  # FIX: Default matches COMPACT profile
         exp_max = exp_cfg.get('max_height', 350)
         exp_v_policy = exp_cfg.get('size_policy_v', 'Minimum')
         if hasattr(self, 'frame_exploring'):
@@ -4687,7 +4777,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.frame_exploring.setSizePolicy(policy_map.get(exp_cfg.get('size_policy_h', 'Preferred'), QSizePolicy.Preferred),
                                                policy_map.get(exp_v_policy, QSizePolicy.Minimum))
         ts_cfg = UIConfig.get_config('frame_toolset') or {}
-        ts_min = ts_cfg.get('min_height', 200)
+        ts_min = ts_cfg.get('min_height', 150)  # FIX: Default matches COMPACT profile
         ts_v_policy = ts_cfg.get('size_policy_v', 'Expanding')
         if hasattr(self, 'frame_toolset'):
             self.frame_toolset.setMinimumHeight(ts_min)
@@ -4696,8 +4786,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                              policy_map.get(ts_v_policy, QSizePolicy.Expanding))
         flt_cfg = UIConfig.get_config('frame_filtering') or {}
         if hasattr(self, 'frame_filtering'):
-            self.frame_filtering.setMinimumHeight(flt_cfg.get('min_height', 180))
-        logger.debug(f"Applied frame dimensions: exploring={exp_min}-{exp_max}px ({exp_v_policy}), toolset={ts_min}px+ ({ts_v_policy}), widget_keys={wk_min}-{wk_max}px")
+            self.frame_filtering.setMinimumHeight(flt_cfg.get('min_height', 120))  # FIX: Default matches COMPACT profile
+        logger.debug(f"Applied frame dimensions: exploring={exp_min}-{exp_max}px ({exp_v_policy}), toolset={ts_min}px+ ({ts_v_policy}), widget_keys width={wk_fixed}px")
     
     def _harmonize_checkable_pushbuttons(self):
         """
@@ -4735,17 +4825,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                        'pushButton_checkable_exporting_datatype', 'pushButton_checkable_exporting_output_folder',
                        'pushButton_checkable_exporting_zip']
             checkable_buttons = []
+            # FIX 2026-02-02: Use setFixedSize for perfect vertical alignment
+            fixed_size = max_size  # Use max_size as the fixed dimension for all buttons
             for name in buttons:
                 if hasattr(self, name):
                     btn = getattr(self, name)
                     if isinstance(btn, QPushButton):
-                        btn.setMinimumSize(min_size, min_size)
-                        btn.setMaximumSize(max_size, max_size)
+                        btn.setFixedSize(fixed_size, fixed_size)  # FIX: Exact same size for alignment
                         btn.setIconSize(QSize(icon_size, icon_size))
                         btn.setFlat(True)
                         btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
                         checkable_buttons.append(name)
-            logger.debug(f"Harmonized {len(checkable_buttons)} key pushbuttons in {mode_name} mode: {min_size}-{max_size}px (icon: {icon_size}px)")
+            logger.debug(f"Harmonized {len(checkable_buttons)} key pushbuttons in {mode_name} mode: {fixed_size}x{fixed_size}px fixed (icon: {icon_size}px)")
         except Exception as e:
             logger.warning(f"Could not harmonize checkable pushbuttons: {e}")
     
@@ -4783,9 +4874,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Apply spacing to exploring layouts
             for name in ['verticalLayout_exploring_single_selection', 'verticalLayout_exploring_multiple_selection', 'verticalLayout_exploring_custom_selection']:
                 if hasattr(self, name): getattr(self, name).setSpacing(layout_spacing)
-            # Apply button spacing to key layouts
+            # Apply button spacing to key layouts - FIX 2026-02-02: Also set margins to 0
             for name in ['verticalLayout_filtering_keys', 'verticalLayout_exporting_keys', 'verticalLayout_exploring_content', 'verticalLayout_raster_keys']:
-                if hasattr(self, name): getattr(self, name).setSpacing(button_spacing)
+                if hasattr(self, name):
+                    layout = getattr(self, name)
+                    layout.setSpacing(0)
+                    layout.setContentsMargins(0, 0, 0, 0)
             # Apply content spacing
             for name in ['verticalLayout_filtering_values', 'verticalLayout_exporting_values']:
                 if hasattr(self, name): getattr(self, name).setSpacing(content_spacing)
@@ -5743,8 +5837,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def _setup_filtering_tab_widgets(self):
         """v4.0 Sprint 16: Delegate to ConfigurationManager."""
+        logger.info(f"🔧 _setup_filtering_tab_widgets called, _configuration_manager={self._configuration_manager}")
         if self._configuration_manager:
-            self._configuration_manager.setup_filtering_tab_widgets()
+            try:
+                self._configuration_manager.setup_filtering_tab_widgets()
+                logger.info("  ✓ setup_filtering_tab_widgets completed")
+            except Exception as e:
+                logger.error(f"  ❌ setup_filtering_tab_widgets FAILED: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+        else:
+            logger.error("  ❌ _configuration_manager is None!")
 
     def _setup_exporting_tab_widgets(self):
         """v4.0 Sprint 16: Delegate to ConfigurationManager."""
@@ -6196,23 +6299,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=False, editable_values=True, plugin_dir=self.plugin_dir)
             
             # v4.0.7: Use SearchableJsonView with integrated search bar
+            # FIX 2026-02-02: Use CONFIGURATION as parent for proper widget hierarchy
             try:
                 from ui.widgets.json_view import SearchableJsonView
-                self.config_view_container = SearchableJsonView(self.config_model, self.plugin_dir)
+                self.config_view_container = SearchableJsonView(self.config_model, self.plugin_dir, parent=self.CONFIGURATION)
                 self.config_view = self.config_view_container.json_view  # For backward compatibility
                 self.CONFIGURATION.layout().insertWidget(0, self.config_view_container)
                 self.config_view_container.setAnimated(True)
                 self.config_view_container.setEnabled(True)
                 self.config_view_container.show()
+                # FIX 2026-02-02: Apply styles to newly created widget
+                self._apply_style_to_widget(self.config_view_container)
                 logger.debug("Using SearchableJsonView with search bar")
             except ImportError:
                 # Fallback to standard JsonView
-                self.config_view = JsonView(self.config_model, self.plugin_dir)
+                self.config_view = JsonView(self.config_model, self.plugin_dir, parent=self.CONFIGURATION)
                 self.config_view_container = None
                 self.CONFIGURATION.layout().insertWidget(0, self.config_view)
                 self.config_view.setAnimated(True)
                 self.config_view.setEnabled(True)
                 self.config_view.show()
+                # FIX 2026-02-02: Apply styles to newly created widget
+                self._apply_style_to_widget(self.config_view)
                 logger.debug("Using standard JsonView (SearchableJsonView not available)")
             
             # Connect signal using centralized method
@@ -6228,12 +6336,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _setup_reload_button(self):
         """Setup Reload Plugin button in config panel."""
         try:
-            self.pushButton_reload_plugin = QtWidgets.QPushButton("🔄 Reload Plugin"); self.pushButton_reload_plugin.setObjectName("pushButton_reload_plugin")
+            # FIX 2026-02-02: Use CONFIGURATION as parent for proper widget hierarchy
+            self.pushButton_reload_plugin = QtWidgets.QPushButton("🔄 Reload Plugin", self.CONFIGURATION)
+            self.pushButton_reload_plugin.setObjectName("pushButton_reload_plugin")
             self.pushButton_reload_plugin.setToolTip(QCoreApplication.translate("FilterMate", "Reload the plugin to apply layout changes (action bar position)"))
             self.pushButton_reload_plugin.setCursor(QtGui.QCursor(Qt.PointingHandCursor))
             # Height managed by QSS
             self.pushButton_reload_plugin.clicked.connect(self._on_reload_button_clicked)
-            if self.CONFIGURATION.layout(): self.CONFIGURATION.layout().insertWidget(self.CONFIGURATION.layout().count() - 1, self.pushButton_reload_plugin)
+            if self.CONFIGURATION.layout():
+                self.CONFIGURATION.layout().insertWidget(self.CONFIGURATION.layout().count() - 1, self.pushButton_reload_plugin)
+                # FIX 2026-02-02: Apply styles to newly created widget
+                self._apply_style_to_widget(self.pushButton_reload_plugin)
         except Exception as e: logger.error(f"Error setting up reload button: {e}")
 
     def _on_reload_button_clicked(self):
@@ -6825,11 +6938,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def _apply_stylesheet(self):
         """
-        DISABLED 2026-01-21: Testing without stylesheet to isolate display issue.
-        If expression builder displays correctly without this, the CSS is the problem.
+        Apply stylesheet to dockwidget using StyleLoader.
+        
+        This is the legacy fallback method when ThemeManager is not available.
+        
+        FIX 2026-02-02: Apply stylesheet to QDockWidget (self) instead of dockWidgetContents.
+        QSS selectors like #dockWidgetContents QComboBox require dockWidgetContents to be
+        a CHILD of the widget where stylesheet is applied, not the widget itself.
         """
-        logger.info("Stylesheet application DISABLED for testing")
-        # StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA)
+        logger.info("_apply_stylesheet: Applying stylesheet to QDockWidget (self)")
+        StyleLoader.set_theme_from_config(self, self.CONFIG_DATA)
 
     def _configure_pushbuttons(self, pushButton_config, icons_sizes, font):
         """Delegate to ConfigurationManager."""
@@ -6872,6 +6990,186 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self._button_styler:
             self._button_styler.setup()
     
+    def _force_dynamic_widgets_geometry_update(self):
+        """
+        FIX 2026-02-02: Force geometry update for dynamically inserted widgets.
+        
+        When widgets are created with one parent and then inserted into a layout
+        of another widget, Qt may not automatically recalculate their geometry.
+        This method forces the geometry update chain.
+        
+        CRITICAL: This must be called AFTER all _setup_*_tab_widgets() methods.
+        """
+        logger.debug("_force_dynamic_widgets_geometry_update: Starting forced geometry update")
+        
+        try:
+            # List of all dynamically created widgets that need geometry update
+            dynamic_widgets = [
+                ('checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection', 'mGroupBox_exploring_multiple_selection'),
+                ('checkableComboBoxLayer_filtering_layers_to_filter', 'FILTERING'),
+                ('checkableComboBoxLayer_exporting_layers', 'EXPORTING'),
+                ('checkBox_filtering_use_centroids_distant_layers', 'FILTERING'),
+            ]
+            
+            for widget_name, parent_name in dynamic_widgets:
+                if hasattr(self, widget_name):
+                    widget = getattr(self, widget_name)
+                    if widget is not None:
+                        # Ensure widget is visible
+                        widget.setVisible(True)
+                        
+                        # Force size hint recalculation
+                        widget.updateGeometry()
+                        
+                        # Force minimum size if widget has 0 size
+                        if widget.size().width() == 0 or widget.size().height() == 0:
+                            widget.resize(widget.sizeHint())
+                            logger.debug(f"  {widget_name}: Forced resize to sizeHint {widget.sizeHint().width()}x{widget.sizeHint().height()}")
+                        
+                        # Update parent widget to recalculate layout
+                        if hasattr(self, parent_name):
+                            parent = getattr(self, parent_name)
+                            if parent:
+                                parent.updateGeometry()
+                        
+                        logger.debug(f"  {widget_name}: visible={widget.isVisible()}, size={widget.size().width()}x{widget.size().height()}")
+            
+            # Force update on main containers
+            if hasattr(self, 'FILTERING'):
+                self.FILTERING.updateGeometry()
+                self.FILTERING.update()
+            if hasattr(self, 'EXPORTING'):
+                self.EXPORTING.updateGeometry()
+                self.EXPORTING.update()
+            if hasattr(self, 'mGroupBox_exploring_multiple_selection'):
+                self.mGroupBox_exploring_multiple_selection.updateGeometry()
+                self.mGroupBox_exploring_multiple_selection.update()
+            
+            # Process events to let Qt recalculate layouts
+            from qgis.PyQt.QtWidgets import QApplication
+            QApplication.processEvents()
+            
+            logger.info("_force_dynamic_widgets_geometry_update: Completed")
+            
+        except Exception as e:
+            logger.warning(f"_force_dynamic_widgets_geometry_update failed: {e}")
+
+    def _delayed_widgets_geometry_update(self):
+        """
+        FIX 2026-02-02 v3: Delayed geometry update for dynamic widgets.
+        
+        Called via QTimer.singleShot(100) after __init__ completes.
+        This ensures Qt has fully processed the initial layout before we
+        force another geometry pass.
+        
+        This is the final fix for widgets appearing with 0x0 size.
+        """
+        logger.debug("_delayed_widgets_geometry_update: Running delayed geometry update")
+        
+        try:
+            # Re-run geometry update after Qt event loop has processed
+            self._force_dynamic_widgets_geometry_update()
+            
+            # Also update specific layouts that contain dynamic widgets
+            layouts_to_update = [
+                'horizontalLayout_filtering_distant_layers',
+                'horizontalLayout_exploring_multiple_feature_picker',
+                'verticalLayout_exporting_values',
+                'verticalLayout_filtering_values',
+            ]
+            
+            for layout_name in layouts_to_update:
+                if hasattr(self, layout_name):
+                    layout = getattr(self, layout_name)
+                    if layout:
+                        layout.invalidate()
+                        layout.activate()
+                        layout.update()
+                        logger.debug(f"  Updated layout: {layout_name} (count={layout.count()})")
+            
+            # Log final widget states
+            widgets_to_check = [
+                ('checkableComboBoxLayer_filtering_layers_to_filter', 'filtering layers_to_filter'),
+                ('checkableComboBoxLayer_exporting_layers', 'exporting layers'),
+                ('checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection', 'multiple selection'),
+            ]
+            
+            for widget_attr, widget_desc in widgets_to_check:
+                if hasattr(self, widget_attr):
+                    w = getattr(self, widget_attr)
+                    if w:
+                        logger.info(f"  {widget_desc}: vis={w.isVisible()}, size={w.size().width()}x{w.size().height()}, parent={type(w.parent()).__name__ if w.parent() else 'None'}")
+            
+            logger.info("_delayed_widgets_geometry_update: Completed")
+            
+        except Exception as e:
+            logger.warning(f"_delayed_widgets_geometry_update failed: {e}")
+
+    def _refresh_dynamic_widget_styles(self):
+        """
+        FIX 2026-02-02: Force style refresh on dynamically created widgets.
+        
+        Qt stylesheets are applied to the widget tree at application time.
+        Widgets created AFTER the stylesheet is applied may not receive styles
+        until explicitly refreshed via unpolish/polish.
+        
+        This method forces a style refresh on:
+        - All widgets under dockWidgetContents
+        - Specific dynamic widgets created in setupUiCustom()
+        """
+        logger.debug("_refresh_dynamic_widget_styles: Refreshing styles on dynamic widgets")
+        
+        try:
+            from qgis.PyQt.QtWidgets import QWidget
+            
+            # Get the main container
+            container = self.dockWidgetContents if hasattr(self, 'dockWidgetContents') else self
+            
+            # Force unpolish/polish on all child widgets
+            refresh_count = 0
+            for child in container.findChildren(QWidget):
+                try:
+                    style = child.style()
+                    if style:
+                        style.unpolish(child)
+                        style.polish(child)
+                        child.update()
+                        refresh_count += 1
+                except (RuntimeError, AttributeError):
+                    pass  # Widget may have been deleted
+            
+            # Also refresh specific dynamic widgets that may have custom parents
+            dynamic_widgets = [
+                'checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection',
+                'checkableComboBoxLayer_filtering_layers_to_filter',
+                'checkableComboBoxLayer_exporting_layers',
+                'checkBox_filtering_use_centroids_distant_layers',
+                'comboBox_band',  # Raster band combobox (may be replaced dynamically)
+                '_raster_histogram',
+                'scrollArea_raster_content',
+            ]
+            
+            for widget_name in dynamic_widgets:
+                if hasattr(self, widget_name):
+                    widget = getattr(self, widget_name)
+                    if widget is not None:
+                        try:
+                            style = widget.style()
+                            if style:
+                                style.unpolish(widget)
+                                style.polish(widget)
+                                widget.update()
+                        except (RuntimeError, AttributeError):
+                            pass
+            
+            # Force container update
+            container.update()
+            
+            logger.info(f"_refresh_dynamic_widget_styles: Refreshed {refresh_count} widgets")
+            
+        except Exception as e:
+            logger.warning(f"_refresh_dynamic_widget_styles failed: {e}")
+    
     def _install_legacy_child_dialog_filter(self):
         """
         Install child dialog filter for legacy code path.
@@ -6903,10 +7201,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except Exception as e: logger.warning(f"Could not setup theme watcher: {e}")
     
     def _on_qgis_theme_changed(self, new_theme: str):
-        """Handle QGIS theme change event."""
+        """Handle QGIS theme change event.
+        
+        FIX 2026-02-02: Apply stylesheet to self (QDockWidget) not dockWidgetContents.
+        """
         try:
             if ICON_THEME_AVAILABLE: IconThemeManager.set_theme(new_theme)
-            StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA, new_theme); self._refresh_icons_for_theme()
+            StyleLoader.set_theme_from_config(self, self.CONFIG_DATA, new_theme); self._refresh_icons_for_theme()
             if hasattr(self, 'config_view') and self.config_view: self.config_view.refresh_theme_stylesheet(force_dark=(new_theme == 'dark'))
             show_info("FilterMate", f"Theme adapted: {'Dark mode' if new_theme == 'dark' else 'Light mode'}")
         except Exception as e: logger.error(f"Error applying theme change: {e}")
@@ -6924,6 +7225,43 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     if wi.get("TYPE") != "PushButton": continue
                     if (ip := wi.get("ICON") or wi.get("ICON_ON_FALSE")) and os.path.exists(ip): wi.get("WIDGET").setIcon(get_themed_icon(ip)); wi.get("WIDGET").setProperty('icon_path', ip)
         except Exception as e: logger.debug(f"refresh_button_icons cosmetic update: {e}")
+    
+    def _apply_style_to_widget(self, widget):
+        """
+        FIX 2026-02-02: Apply styles to a single widget and its children.
+        
+        Call this method after dynamically creating a widget to ensure
+        it receives the current stylesheet styling.
+        
+        Args:
+            widget: The widget to style (and all its children)
+        """
+        if widget is None:
+            return
+        try:
+            from qgis.PyQt.QtWidgets import QWidget
+            
+            # Apply to the widget itself
+            style = widget.style()
+            if style:
+                style.unpolish(widget)
+                style.polish(widget)
+                widget.update()
+            
+            # Apply to all children
+            for child in widget.findChildren(QWidget):
+                try:
+                    child_style = child.style()
+                    if child_style:
+                        child_style.unpolish(child)
+                        child_style.polish(child)
+                        child.update()
+                except (RuntimeError, AttributeError):
+                    pass
+                    
+            logger.debug(f"Applied styles to widget: {widget.objectName() or type(widget).__name__}")
+        except Exception as e:
+            logger.debug(f"_apply_style_to_widget failed: {e}")
 
     def set_widgets_enabled_state(self, state):
         """

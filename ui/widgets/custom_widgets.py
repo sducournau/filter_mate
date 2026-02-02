@@ -102,7 +102,7 @@ class ItemDelegate(QStyledItemDelegate):
 
     def __init__(self, parent=None, *args):
         QStyledItemDelegate.__init__(self, parent, *args)
-        self.parent = parent
+        self._parent_ref = parent  # FIX: Don't shadow Qt's parent() method
 
     def sizeHint(self, option, index):
         # BUGFIX: Return fixed size hint for consistent row height
@@ -201,11 +201,13 @@ class QgsCheckableComboBoxLayer(QComboBox):
     def __init__(self, parent=None):
         super(QgsCheckableComboBoxLayer, self).__init__(parent)
 
-        self.parent = parent
+        self._parent_ref = parent  # FIX: Don't shadow Qt's parent() method
         
-        # Dimensions managed by QSS (20px standard height from resources/styles/default.qss)
-        # Width and size policy still configured in Python for layout flexibility
+        # FIX 2026-02-02: Set explicit minimum height for visibility
+        # QComboBox needs a minimum height to be visible in layouts
+        # Match QGIS standard combobox height (26px from QSS)
         self.setMinimumWidth(30)
+        self.setMinimumHeight(26)  # CRITICAL: Without this, widget has 0 height
         self.setMaximumWidth(16777215)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.setCursor(Qt.PointingHandCursor)
@@ -635,25 +637,26 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         
         # Dynamic sizing based on config matching before_migration/UIConfig compact profile
         # before_migration: combobox.height = 36px, list.min_height = 225px
-        # New v4.0: combobox.height = 26px (from QSS), list.min_height = 225px (ratio 1.5x)
+        # FIX 2026-02-02: Reduced min height to fit in collapsible groupbox
         try:
             from ...config.config import ENV_VARS
             # Try to get from config, fallback to hardcoded defaults
             ui_config = ENV_VARS.get('CONFIG_DATA', {}).get('APP', {}).get('DOCKWIDGET', {})
             combobox_height = ui_config.get('combobox_height', 26)  # From QSS standard
-            list_min_height = ui_config.get('list_min_height', 225)  # From before_migration compact
+            list_min_height = ui_config.get('list_min_height', 100)  # Reduced from 225 for better fit
         except (AttributeError, TypeError, ValueError, ImportError, KeyError):
             combobox_height = 26  # Match QSS standard height
-            list_min_height = 225  # Match before_migration compact profile (ratio 1.5x for 5-6 items)
+            list_min_height = 100  # Reduced from 225 for better fit in groupbox
         
         # Calculate total height: 2 QLineEdit + spacing + list
         # Match before_migration formula: lineedit_height + list_min_height + 4
         lineedit_height = combobox_height * 2 + 2  # 2 lineEdit (26px each) + 2px spacing = 54px
-        total_min_height = lineedit_height + list_min_height + 4  # 54 + 225 + 4 = 283px
+        total_min_height = lineedit_height + list_min_height + 4  # 54 + 100 + 4 = 158px
         
         self.setMinimumWidth(30)
         self.setMaximumWidth(16777215)
         self.setMinimumHeight(total_min_height)
+        logger.debug(f"QgsCheckableComboBoxFeaturesListPickerWidget: min_height={total_min_height}px")
         # Remove setMaximumHeight to allow expansion (before_migration pattern)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setCursor(Qt.PointingHandCursor)

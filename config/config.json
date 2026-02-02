@@ -132,14 +132,14 @@
           }
         },
         "ICONS_SIZES": {
-          "description": "Icon sizes in pixels",
+          "description": "Icon sizes in pixels (harmonized with UIConfig)",
           "ACTION": {
-            "value": 25,
-            "description": "Size for action buttons (filter, export, etc.)"
+            "value": 24,
+            "description": "Size for action buttons (filter, export, undo, redo) - matches UIConfig action_button"
           },
           "OTHERS": {
-            "value": 20,
-            "description": "Size for status/info icons"
+            "value": 18,
+            "description": "Size for key buttons (exploring, filtering, exporting) - matches UIConfig key_button"
           }
         },
         "ICONS": {
