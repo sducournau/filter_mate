@@ -26,9 +26,6 @@ from .toolbox import (
     ToolBoxIntegrationBridge,
     DualToolBoxContainer
 )
-# Raster Tools Keys Widget
-from .raster_tools_keys import RasterToolsKeysWidget
-
 __all__ = [
     'FavoritesWidget',
     'BackendIndicatorWidget',
@@ -49,6 +46,4 @@ __all__ = [
     'ConfigurationPage',
     'ToolBoxIntegrationBridge',
     'DualToolBoxContainer',
-    # Raster Tools
-    'RasterToolsKeysWidget',
 ]

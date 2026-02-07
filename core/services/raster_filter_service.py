@@ -33,19 +33,9 @@ from qgis.core import (
 )
 
 from infrastructure.logging import get_logger
+from ..domain.filter_criteria import RasterPredicate
 
 logger = get_logger(__name__)
-
-
-class RasterPredicate(Enum):
-    """Predicates for raster value filtering."""
-    WITHIN_RANGE = "within_range"       # min <= value <= max
-    OUTSIDE_RANGE = "outside_range"     # value < min OR value > max
-    ABOVE_VALUE = "above_value"         # value > min
-    BELOW_VALUE = "below_value"         # value < max
-    EQUALS_VALUE = "equals_value"       # value == min (tolerance)
-    IS_NODATA = "is_nodata"             # value is NoData
-    IS_NOT_NODATA = "is_not_nodata"     # value is not NoData
 
 
 class SamplingMethod(Enum):
@@ -618,18 +608,35 @@ class RasterFilterService(QObject):
         nodata_value: float,
         invert: bool = False
     ) -> Optional[str]:
-        """Mask raster pixels using vector."""
+        """Mask raster pixels using vector.
+        
+        Args:
+            raster: Source raster layer
+            mask: Vector mask layer
+            output_path: Output file path
+            nodata_value: NoData value for masked pixels
+            invert: If True (MASK_INSIDE), mask pixels inside the vector 
+                    (keep outside). If False (MASK_OUTSIDE), keep inside.
+        """
         try:
             import processing
             
+            effective_mask = mask
+            
+            if invert:
+                effective_mask = self._create_inverted_mask(raster, mask)
+                if effective_mask is None:
+                    logger.error("Failed to create inverted mask, falling back to normal mask")
+                    effective_mask = mask
+            
             params = {
                 'INPUT': raster,
-                'MASK': mask,
+                'MASK': effective_mask,
                 'SOURCE_CRS': raster.crs(),
                 'TARGET_CRS': raster.crs(),
                 'NODATA': nodata_value,
                 'ALPHA_BAND': False,
-                'CROP_TO_CUTLINE': False,  # Don't crop for mask
+                'CROP_TO_CUTLINE': False,
                 'KEEP_RESOLUTION': True,
                 'SET_RESOLUTION': False,
                 'OPTIONS': '',
@@ -637,17 +644,83 @@ class RasterFilterService(QObject):
                 'OUTPUT': output_path
             }
             
-            # For MASK_INSIDE, we need to invert the mask
-            if invert:
-                # Create inverted mask using difference with extent
-                # For now, use clip with inverted flag (if available)
-                pass  # TODO: Implement proper inversion
-            
             result = processing.run("gdal:cliprasterbymasklayer", params)
             return result.get('OUTPUT')
             
         except Exception as e:
             logger.error(f"Mask raster failed: {e}")
+            return None
+
+    def _create_inverted_mask(
+        self,
+        raster: QgsRasterLayer,
+        mask_layer: QgsVectorLayer
+    ) -> Optional[QgsVectorLayer]:
+        """Create an inverted mask layer (raster extent minus mask polygons).
+        
+        Used for MASK_INSIDE operations: pixels inside the mask are set to NoData
+        by clipping with the inverse geometry (extent minus polygons).
+        
+        Args:
+            raster: Source raster layer (provides extent and CRS)
+            mask_layer: Original vector mask layer
+            
+        Returns:
+            Memory vector layer with inverted geometry, or None on failure
+        """
+        try:
+            from qgis.core import QgsVectorLayer, QgsFeature, QgsFields
+            
+            extent_geom = QgsGeometry.fromRect(raster.extent())
+            
+            transform = None
+            if mask_layer.crs() != raster.crs():
+                transform = QgsCoordinateTransform(
+                    mask_layer.crs(), raster.crs(), QgsProject.instance()
+                )
+            
+            combined = QgsGeometry()
+            for feature in mask_layer.getFeatures():
+                geom = feature.geometry()
+                if geom.isEmpty():
+                    continue
+                if transform:
+                    geom.transform(transform)
+                if not geom.isGeosValid():
+                    geom = geom.makeValid()
+                if combined.isEmpty():
+                    combined = geom
+                else:
+                    combined = combined.combine(geom)
+            
+            if combined.isEmpty():
+                logger.warning("Mask layer has no valid geometries, cannot invert")
+                return None
+            
+            if not combined.isGeosValid():
+                combined = combined.makeValid()
+            
+            inverted = extent_geom.difference(combined)
+            
+            if inverted.isEmpty():
+                logger.warning("Inverted mask is empty (mask covers entire raster extent)")
+                return None
+            
+            crs_id = raster.crs().authid()
+            temp_layer = QgsVectorLayer(
+                f"Polygon?crs={crs_id}", "fm_inverted_mask", "memory"
+            )
+            provider = temp_layer.dataProvider()
+            feat = QgsFeature()
+            feat.setGeometry(inverted)
+            provider.addFeature(feat)
+            temp_layer.updateExtents()
+            
+            logger.debug(f"Created inverted mask layer with CRS {crs_id}")
+            return temp_layer
+            
+        except Exception as e:
+            logger.error(f"Failed to create inverted mask: {e}")
             return None
     
     def _compute_zonal_stats(

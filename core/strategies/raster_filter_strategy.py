@@ -72,6 +72,11 @@ class RasterFilterStrategy(AbstractFilterStrategy):
         super().__init__(context)
         self._raster_service = None
         self._raster_exporter = None
+
+    @property
+    def supported_layer_type(self) -> LayerType:
+        """Return RASTER as the supported layer type."""
+        return LayerType.RASTER
     
     def _get_raster_service(self):
         """Lazy-load RasterFilterService to avoid circular imports."""
@@ -173,8 +178,8 @@ class RasterFilterStrategy(AbstractFilterStrategy):
     ) -> UnifiedFilterResult:
         """Apply raster filter.
         
-        For raster filtering, this creates a filtered output based on
-        the specified criteria (value range, mask, etc.).
+        For value-range filtering, performs pixel-level analysis (count matching pixels).
+        For mask operations, delegates to RasterFilterService.apply_vector_to_raster().
         
         Args:
             criteria: RasterFilterCriteria with filter parameters
@@ -200,10 +205,13 @@ class RasterFilterStrategy(AbstractFilterStrategy):
             
             self._report_progress(10, f"Processing raster: {layer.name()}")
             
-            # Get raster statistics for the band
+            # Delegate mask operations to service
+            if criteria.has_mask:
+                return self._apply_mask_filter(criteria, layer, project, start_time)
+            
+            # Value-range analysis (inline, works correctly)
             stats = self._get_band_statistics(layer, criteria.band_index)
             
-            # Calculate pixel count matching criteria
             matching_pixels, total_pixels = self._count_matching_pixels(
                 layer, criteria, stats
             )
@@ -212,12 +220,11 @@ class RasterFilterStrategy(AbstractFilterStrategy):
             
             elapsed = (time.time() - start_time) * 1000
             
-            # Build expression description
             expression = criteria.to_display_string()
             
             return UnifiedFilterResult.raster_success(
                 layer_id=criteria.layer_id,
-                output_path=None,  # No output yet, just analysis
+                output_path=None,
                 pixel_count=matching_pixels,
                 statistics={
                     "total_pixels": total_pixels,
@@ -239,6 +246,81 @@ class RasterFilterStrategy(AbstractFilterStrategy):
         except Exception as e:
             logger.exception(f"Error in raster filter: {e}")
             return self._create_error_result(criteria, str(e))
+
+    def _apply_mask_filter(
+        self,
+        criteria: RasterFilterCriteria,
+        layer,
+        project,
+        start_time: float
+    ) -> UnifiedFilterResult:
+        """Delegate mask operations to RasterFilterService.
+        
+        Args:
+            criteria: Filter criteria with mask parameters
+            layer: Source raster layer
+            project: QGIS project instance
+            start_time: Operation start time for elapsed calculation
+            
+        Returns:
+            UnifiedFilterResult with mask operation results
+        """
+        from ..services.raster_filter_service import (
+            VectorFilterRequest, RasterOperation
+        )
+        
+        service = self._get_raster_service()
+        if service is None:
+            return self._create_error_result(
+                criteria, "RasterFilterService not available"
+            )
+        
+        # Get mask layer from project
+        mask_layer = project.mapLayer(criteria.mask_layer_id)
+        if not mask_layer:
+            return self._create_error_result(
+                criteria,
+                f"Mask layer not found: {criteria.mask_layer_id}"
+            )
+        
+        self._report_progress(20, f"Applying mask from {mask_layer.name()}")
+        
+        # Build service request
+        request = VectorFilterRequest(
+            vector_layer=mask_layer,
+            raster_layer=layer,
+            operation=RasterOperation.MASK_OUTSIDE,
+            feature_ids=(
+                list(criteria.mask_feature_ids) 
+                if criteria.mask_feature_ids else None
+            ),
+            nodata_value=-9999.0
+        )
+        
+        self._report_progress(40, "Running mask operation")
+        
+        result = service.apply_vector_to_raster(request)
+        
+        elapsed = (time.time() - start_time) * 1000
+        
+        if result.success:
+            self._report_progress(100, "Mask operation complete")
+            return UnifiedFilterResult.raster_success(
+                layer_id=criteria.layer_id,
+                output_path=result.output_path,
+                pixel_count=0,
+                statistics={
+                    'operation': 'mask',
+                    'mask_layer': criteria.mask_layer_id,
+                    'execution_time_ms': elapsed
+                },
+                execution_time_ms=elapsed
+            )
+        else:
+            return self._create_error_result(
+                criteria, 
+                result.error_message or "Mask operation failed"
+            )
     
     def get_preview(
         self, 

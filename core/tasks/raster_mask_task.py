@@ -94,13 +94,17 @@ class RasterMaskTask(QgsTask):
         """
         super().__init__(task_description, QgsTask.CanCancel)
         
-        # Store parameters
-        self.source_layer = source_layer
+        # Store thread-safe layer metadata (strings only, no QObject references)
         self.source_layer_id = source_layer.id()
         self.source_layer_name = source_layer.name()
-        self.mask_layer = mask_layer
+        self.source_layer_uri = source_layer.dataProvider().dataSourceUri()
+        self.source_layer_crs = source_layer.crs().authid()
         self.mask_layer_id = mask_layer.id()
         self.mask_layer_name = mask_layer.name()
+        self.mask_layer_uri = mask_layer.dataProvider().dataSourceUri()
+        self.mask_layer_provider = mask_layer.dataProvider().name()
+        self.mask_geometry_type = mask_layer.geometryType()
+        
         self.default_opacity = default_opacity / 100.0  # Convert to 0-1 range
         self.crop_to_cutline = crop_to_cutline
         self.keep_resolution = keep_resolution
@@ -121,10 +125,11 @@ class RasterMaskTask(QgsTask):
         """
         Execute task in background thread.
         
-        THREAD SAFETY WARNING:
-        - Do NOT access QGIS UI elements (iface, messageBar, etc.)
-        - Do NOT call QgsProject.instance().addMapLayer() here
-        - Only prepare data, defer UI updates to finished()
+        THREAD SAFETY:
+        - Recreates layers from URI (no shared QObject references)
+        - Does NOT access QGIS UI elements (iface, messageBar, etc.)
+        - Does NOT call QgsProject.instance().addMapLayer() here
+        - Only prepares data, defers UI updates to finished()
         
         Returns:
             bool: True on success, False on failure
@@ -137,18 +142,27 @@ class RasterMaskTask(QgsTask):
                 logger.info("Task cancelled before execution")
                 return False
             
-            # Validate source layer
-            if not self.source_layer or not self.source_layer.isValid():
-                raise ValueError(f"Source layer '{self.source_layer_name}' is invalid")
-            
-            # Validate mask layer
-            if not self.mask_layer or not self.mask_layer.isValid():
-                raise ValueError(f"Mask layer '{self.mask_layer_name}' is invalid")
-            
-            # Check mask geometry type
-            if self.mask_layer.geometryType() != 2:  # 2 = Polygon
+            # Recreate layers from URI in background thread (thread-safe)
+            source_layer = QgsRasterLayer(
+                self.source_layer_uri, self.source_layer_name, 'gdal'
+            )
+            if not source_layer.isValid():
                 raise ValueError(
-                    f"Mask layer must be polygon type, got {self.mask_layer.geometryType()}"
+                    f"Source layer '{self.source_layer_name}' cannot be loaded from URI"
+                )
+            
+            mask_layer = QgsVectorLayer(
+                self.mask_layer_uri, self.mask_layer_name, self.mask_layer_provider
+            )
+            if not mask_layer.isValid():
+                raise ValueError(
+                    f"Mask layer '{self.mask_layer_name}' cannot be loaded from URI"
+                )
+            
+            # Check mask geometry type (stored at init time for fast validation)
+            if self.mask_geometry_type != 2:  # 2 = Polygon
+                raise ValueError(
+                    f"Mask layer must be polygon type, got {self.mask_geometry_type}"
                 )
             
             # Progress: 10%
@@ -156,7 +170,7 @@ class RasterMaskTask(QgsTask):
             
             # Create output path in temp directory
             temp_dir = tempfile.gettempdir()
-            output_filename = f"filtermate_masked_{self.source_layer_id[:8]}.tif"
+            output_filename = f"fm_masked_{self.source_layer_id[:8]}.tif"
             self.output_path = os.path.join(temp_dir, output_filename)
             
             logger.info(f"Output will be saved to: {self.output_path}")
@@ -164,16 +178,16 @@ class RasterMaskTask(QgsTask):
             # Progress: 20%
             self.setProgress(20)
             
-            # Prepare GDAL clip parameters
+            # Prepare GDAL clip parameters using recreated layers
             params = {
-                'INPUT': self.source_layer,
-                'MASK': self.mask_layer,
+                'INPUT': source_layer,
+                'MASK': mask_layer,
                 'OUTPUT': self.output_path,
                 'CROP_TO_CUTLINE': self.crop_to_cutline,
                 'KEEP_RESOLUTION': self.keep_resolution,
-                'NODATA': -9999,  # NoData value for areas outside mask
-                'ALPHA_BAND': False,  # Don't create alpha band (use nodata instead)
-                'MULTITHREADING': True,  # Enable GDAL multithreading
+                'NODATA': -9999,
+                'ALPHA_BAND': False,
+                'MULTITHREADING': True,
             }
             
             # Progress: 30%
@@ -182,7 +196,6 @@ class RasterMaskTask(QgsTask):
             # Create processing feedback for progress reporting
             feedback = QgsProcessingFeedback()
             
-            # Connect feedback progress to task progress
             # Map GDAL progress (0-100) to task progress (30-90)
             feedback.progressChanged.connect(
                 lambda progress: self.setProgress(30 + int(progress * 0.6))

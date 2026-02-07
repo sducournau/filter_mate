@@ -2592,17 +2592,53 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """Update raster filter based on current UI state.
         
         v5.11: Called when combobox values change while their groupbox is active.
+        Creates RasterFilterCriteria from current UI values and updates
+        the histogram range visualization.
         """
         try:
             # Get current values from UI
-            min_val = self.doubleSpinBox_min.value() if hasattr(self, 'doubleSpinBox_min') else 0
-            max_val = self.doubleSpinBox_max.value() if hasattr(self, 'doubleSpinBox_max') else 0
+            min_val = self.doubleSpinBox_min.value() if hasattr(self, 'doubleSpinBox_min') else None
+            max_val = self.doubleSpinBox_max.value() if hasattr(self, 'doubleSpinBox_max') else None
             predicate_idx = self.comboBox_predicate.currentIndex() if hasattr(self, 'comboBox_predicate') else 0
             
-            logger.debug(f"Updating raster filter: range=[{min_val}, {max_val}], predicate={predicate_idx}")
+            # Map combo index to RasterPredicate
+            from core.domain.filter_criteria import RasterPredicate, RasterFilterCriteria
+            predicates = list(RasterPredicate)
+            predicate = predicates[predicate_idx] if predicate_idx < len(predicates) else RasterPredicate.WITHIN_RANGE
             
-            # Emit signal or call filter service here if needed
-            # This is a placeholder for the actual filter update logic
+            logger.debug(f"Updating raster filter: range=[{min_val}, {max_val}], predicate={predicate.value}")
+            
+            # Update histogram range visualization
+            if hasattr(self, '_raster_histogram') and self._raster_histogram:
+                if min_val is not None and max_val is not None:
+                    self._raster_histogram.set_range(min_val, max_val)
+            
+            # Get current layer
+            layer = self._get_current_exploring_layer()
+            if layer is None:
+                return
+            
+            from qgis.core import QgsRasterLayer
+            if not isinstance(layer, QgsRasterLayer):
+                return
+            
+            # Get current band index
+            band_index = 1
+            if hasattr(self, 'comboBox_band'):
+                band_index = self.comboBox_band.currentIndex() + 1
+                if band_index < 1:
+                    band_index = 1
+            
+            # Create filter criteria and store for later application
+            self._current_raster_criteria = RasterFilterCriteria(
+                layer_id=layer.id(),
+                band_index=band_index,
+                min_value=min_val,
+                max_value=max_val,
+                predicate=predicate
+            )
+            
+            logger.info(f"Raster filter criteria updated: {self._current_raster_criteria.to_display_string()}")
             
         except Exception as e:
             logger.warning(f"Error updating raster filter: {e}")
