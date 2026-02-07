@@ -117,7 +117,7 @@ class UIConfig:
             'action_button': {
                 'height': 36,
                 'min_width': 36,
-                'icon_size': 24,
+                'icon_size': 28,
                 'padding': {'top': 5, 'right': 8, 'bottom': 5, 'left': 8},
                 'border_radius': 6,
             },
@@ -842,7 +842,7 @@ class UIConfig:
         if config and isinstance(config, dict):
             return config.get('icon_size', 18)
         # Fallback based on button type
-        fallbacks = {'action_button': 20, 'tool_button': 22, 'key_button': 16, 'button': 18}
+        fallbacks = {'action_button': 28, 'tool_button': 22, 'key_button': 16, 'button': 18}
         return fallbacks.get(button_type, 18)
     
     @classmethod

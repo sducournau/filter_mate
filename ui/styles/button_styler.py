@@ -70,12 +70,12 @@ class ButtonStyler(StylerBase):
     ICON_SIZES = {
         'compact': {
             'standard': 16,
-            'action': 20,
+            'action': 22,
             'tool': 14,
         },
         'normal': {
             'standard': 20,
-            'action': 24,
+            'action': 28,
             'tool': 18,
         }
     }
