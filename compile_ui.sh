@@ -1,118 +1,40 @@
 #!/bin/bash
-# Script to compile .ui files to Python with pyuic5
+# compile_ui.sh - Compile .ui and .qrc files with automatic fixes
 # Usage: ./compile_ui.sh
 
-echo "============================================================"
-echo "FilterMate UI Compilation"
-echo "============================================================"
+echo "=== FilterMate UI Compilation Script ==="
 echo ""
 
-# Get script directory (plugin root)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
-
-echo "Working directory: $SCRIPT_DIR"
-echo ""
-
-# UI file to compile
-UI_FILE="filter_mate_dockwidget_base.ui"
-PY_FILE="filter_mate_dockwidget_base.py"
-
-# Check if .ui file exists
-if [ ! -f "$UI_FILE" ]; then
-    echo "ERROR: $UI_FILE not found"
-    exit 1
-fi
-
-echo "Source file: $UI_FILE"
-echo "Target file: $PY_FILE"
-echo ""
-
-# Create backup of existing .py file
-if [ -f "$PY_FILE" ]; then
-    echo "Creating backup: ${PY_FILE}.backup"
-    cp "$PY_FILE" "${PY_FILE}.backup"
-fi
-
-echo ""
-echo "Running pyuic5..."
-echo ""
-
-# Try to find pyuic5
-if command -v pyuic5 &> /dev/null; then
-    PYUIC5_CMD="pyuic5"
-elif command -v python3 &> /dev/null; then
-    # Try using python3 -m PyQt5.uic.pyuic
-    PYUIC5_CMD="python3 -m PyQt5.uic.pyuic"
-else
-    echo "ERROR: pyuic5 not found. Please install PyQt5 tools:"
-    echo "  pip install PyQt5"
-    echo "  # or on Ubuntu/Debian:"
-    echo "  sudo apt install pyqt5-dev-tools"
-    exit 1
-fi
-
-# Clear Python cache to prevent stale bytecode issues
-echo "Cleaning Python cache..."
-find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-find . -name "*.pyc" -delete 2>/dev/null || true
-echo "  - Cache cleared"
-echo ""
-
-# Run pyuic5
-$PYUIC5_CMD -x "$UI_FILE" -o "$PY_FILE"
-
-# Check result
+# Compile .ui file
+echo "1. Compiling filter_mate_dockwidget_base.ui..."
+pyuic5 -o filter_mate_dockwidget_base.py filter_mate_dockwidget_base.ui
 if [ $? -eq 0 ]; then
-    echo ""
-    echo "Post-processing: Fixing resource imports..."
-    
-    # Fix the import statement: replace 'import resources_rc' with 'from . import resources'
-    # This is required for QGIS plugin relative imports to work correctly
-    # Handle all variations that pyuic5 might generate (with/without trailing whitespace, comments, etc.)
-    # Use a more robust pattern that matches any 'import resources_rc' line
-    sed -i 's/^import resources_rc.*$/from . import resources  # Qt resources (was: import resources_rc)/' "$PY_FILE"
-    
-    # Verify the fix was applied
-    if grep -q "from . import resources" "$PY_FILE"; then
-        echo "  - Fixed: 'import resources_rc' -> 'from . import resources'"
-    elif grep -q "import resources_rc" "$PY_FILE"; then
-        echo "  - WARNING: 'import resources_rc' still present! Trying alternative fix..."
-        # Fallback: use perl for more robust replacement
-        perl -i -pe 's/^import resources_rc.*$/from . import resources  # Qt resources (was: import resources_rc)/' "$PY_FILE"
-        if grep -q "from . import resources" "$PY_FILE"; then
-            echo "  - Fixed with perl fallback"
-        else
-            echo "  - ERROR: Could not fix import statement!"
-        fi
-    else
-        echo "  - Note: No resources_rc import found (may already be correct)"
-    fi
-    
-    echo ""
-    echo "============================================================"
-    echo "SUCCESS: File compiled successfully!"
-    echo "============================================================"
-    echo ""
-    echo "Generated file: $PY_FILE"
-    echo ""
-    
-    # Show file info
-    if [ -f "$PY_FILE" ]; then
-        echo "File size: $(wc -l < "$PY_FILE") lines"
-    fi
+    echo "   ✅ .ui compiled successfully"
 else
-    echo ""
-    echo "============================================================"
-    echo "ERROR: Compilation failed"
-    echo "============================================================"
-    echo ""
-    
-    # Restore backup if exists
-    if [ -f "${PY_FILE}.backup" ]; then
-        echo "Restoring backup..."
-        cp "${PY_FILE}.backup" "$PY_FILE"
-        echo "Backup restored."
-    fi
+    echo "   ❌ .ui compilation failed"
     exit 1
 fi
+
+# Fix resources_rc import (pyuic5 generates absolute import, we need relative)
+echo "2. Fixing resources_rc import..."
+sed -i 's/^import resources_rc$/from . import resources_rc/' filter_mate_dockwidget_base.py
+echo "   ✅ Import fixed to relative"
+
+# Compile .qrc file (if needed)
+if [ -f resources.qrc ]; then
+    echo "3. Compiling resources.qrc..."
+    pyrcc5 -o resources_rc.py resources.qrc
+    if [ $? -eq 0 ]; then
+        echo "   ✅ .qrc compiled successfully"
+    else
+        echo "   ⚠️  .qrc compilation failed (may already be up to date)"
+    fi
+else
+    echo "3. Skipping .qrc compilation (resources.qrc not found)"
+fi
+
+echo ""
+echo "=== Compilation Complete ==="
+echo ""
+echo "✅ All files compiled and fixed"
+echo "   You can now reload the plugin in QGIS"

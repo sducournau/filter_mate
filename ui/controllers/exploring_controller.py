@@ -126,15 +126,16 @@ class ExploringController(BaseController, LayerSelectionMixin):
             return
         
         # Configure to show only vector layers
+        # FIX 2026-02-07: Use Qgis.LayerFilter (QGIS 3.34+) to avoid deprecation warning
         try:
-            from qgis.gui import QgsMapLayerProxyModel
-            # QGIS 3.40+: setFilters() deprecated, use setProxyModelFilters()
-            if hasattr(combo, 'setProxyModelFilters'):
-                combo.setProxyModelFilters(QgsMapLayerProxyModel.VectorLayer)
-            else:
-                combo.setFilters(QgsMapLayerProxyModel.VectorLayer)
-        except (ImportError, AttributeError):
-            pass
+            from qgis.core import Qgis
+            combo.setFilters(Qgis.LayerFilter.VectorLayer)
+        except AttributeError:
+            try:
+                from qgis.gui import QgsMapLayerProxyModel
+            except ImportError:
+                from qgis.core import QgsMapLayerProxyModel
+            combo.setFilters(QgsMapLayerProxyModel.VectorLayer)
 
     def _get_layer_combo(self):
         """Get the layer combo box widget from dockwidget."""

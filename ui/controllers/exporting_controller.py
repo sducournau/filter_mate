@@ -1952,15 +1952,16 @@ class ExportingController(BaseController):
             return
         
         try:
-            from qgis.core import QgsMapLayerProxyModel
-            
+            # FIX 2026-02-07: Use Qgis.LayerFilter (QGIS 3.34+) to avoid deprecation warning
+            try:
+                from qgis.core import Qgis
+                _PolygonLayer = Qgis.LayerFilter.PolygonLayer
+            except AttributeError:
+                from qgis.core import QgsMapLayerProxyModel
+                _PolygonLayer = QgsMapLayerProxyModel.PolygonLayer
+
             combo = self._dockwidget.mMapLayerComboBox_exporting_raster_mask
-            # Filter to polygon layers only
-            # QGIS 3.40+: setFilters() deprecated, use setProxyModelFilters()
-            if hasattr(combo, 'setProxyModelFilters'):
-                combo.setProxyModelFilters(QgsMapLayerProxyModel.PolygonLayer)
-            else:
-                combo.setFilters(QgsMapLayerProxyModel.PolygonLayer)
+            combo.setFilters(_PolygonLayer)
             
             # Update tooltip to show filter info
             self._update_mask_layer_tooltip()
