@@ -652,34 +652,31 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return widget.isSignalConnected(self.getSignal(widget, signal_name))
 
     def reset_multiple_checkable_combobox(self) -> None:
-        """Reset and recreate the multiple selection checkable combobox widget.
+        """Reset the multiple selection checkable combobox widget.
 
-        Destroys the existing widget and creates a fresh instance. Used when
-        the current layer changes to ensure the feature list is properly refreshed.
+        FIX 2026-02-05: Since v5.7, widgets are created via placeholder replacement pattern
+        in setupUiCustom(). This method now only resets the existing widget instead of
+        recreating it from scratch.
 
         Note:
             Handles RuntimeError gracefully if widget is already deleted.
             Automatically reconnects signals to exploring_features_changed.
         """
         try:
-            layout = self.horizontalLayout_exploring_multiple_feature_picker
-            if layout.count() > 0 and (item := layout.itemAt(0)) and item.widget():
-                layout.removeWidget(item.widget()); item.widget().deleteLater()
-            if hasattr(self, 'checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection') and self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection:
-                try: self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.reset(); self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.close(); self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.deleteLater()
-                except (RuntimeError, AttributeError):  # Widget may already be deleted - expected during cleanup
-                    pass
-            # FIX 2026-02-02: Recreate the widget with correct parent (groupbox, not self)
-            self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self.CONFIG_DATA, self.mGroupBox_exploring_multiple_selection)
-            # FIX 2026-01-18 v14: Set dockwidget reference for sync protection checks
-            self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.setDockwidgetRef(self)
-            if self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection:
-                layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, 1); layout.update()
-                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"] = {"TYPE": "CustomCheckableFeatureComboBox", "WIDGET": self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection,
-                    "SIGNALS": [("updatingCheckedItemList", self.exploring_features_changed), ("filteringCheckedItemList", self.exploring_source_params_changed)]}
-                # FIX 2026-02-02: Apply styles to newly created widget
-                self._apply_style_to_widget(self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection)
-        except Exception as e: logger.warning(f"reset_multiple_checkable_combobox failed: {e}")
+            # FIX 2026-02-05: Don't recreate widget - just reset it if it exists
+            if hasattr(self, 'checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection') and \
+               self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection:
+                try:
+                    # Reset the existing widget
+                    self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.reset()
+                    logger.debug("Reset multiple checkable combobox widget")
+                except (RuntimeError, AttributeError) as e:
+                    # Widget may already be deleted - log but don't fail
+                    logger.warning(f"Could not reset widget: {e}")
+            else:
+                logger.warning("reset_multiple_checkable_combobox: Widget not found (may not be initialized yet)")
+        except Exception as e:
+            logger.warning(f"reset_multiple_checkable_combobox failed: {e}")
 
     def _fix_toolbox_icons(self):
         """v4.0 S18: Fix toolBox_tabTools icons using Qt resources.
@@ -707,59 +704,141 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             Must be called after setupUi() from Qt Designer generated code.
             Creates widgets before configure_widgets() can reference them.
         """
-        # CRITICAL: Create all custom widgets FIRST (before configure_widgets() references them)
-        logger.info("🔧 setupUiCustom: Creating custom widgets")
-        
-        # Verify mGroupBox_exploring_multiple_selection exists
-        if not hasattr(self, 'mGroupBox_exploring_multiple_selection'):
-            logger.error("❌ mGroupBox_exploring_multiple_selection does NOT exist after setupUi!")
-        else:
-            logger.info(f"  ✓ mGroupBox_exploring_multiple_selection exists: {self.mGroupBox_exploring_multiple_selection}")
-        
-        # FIX 2026-02-02: Use mGroupBox_exploring_multiple_selection as parent for correct hierarchy
-        self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self.CONFIG_DATA, self.mGroupBox_exploring_multiple_selection)
-        # FIX 2026-01-18 v14: Set dockwidget reference for sync protection checks
-        self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.setDockwidgetRef(self)
-        # Don't override the widget's calculated minimum height - it knows its own size needs
-        self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.show()
-        logger.info(f"  ✓ Created multiple selection widget: {self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection}")
-        
-        # Create custom combobox widgets early so configure_widgets() can reference them
-        # FIX 2026-02-02: Use correct parent widget from the target layout
-        from .ui.widgets.custom_widgets import QgsCheckableComboBoxLayer
-        
-        # Verify FILTERING page exists
-        if not hasattr(self, 'FILTERING'):
-            logger.error("❌ FILTERING page does NOT exist after setupUi!")
-        else:
-            logger.info(f"  ✓ FILTERING page exists: {self.FILTERING}")
-        
-        # Parent is FILTERING page (will be inserted into verticalLayout_filtering_values)
-        self.checkableComboBoxLayer_filtering_layers_to_filter = QgsCheckableComboBoxLayer(self.FILTERING)
-        self.checkableComboBoxLayer_filtering_layers_to_filter.setObjectName("checkableComboBoxLayer_filtering_layers_to_filter")
-        # Height managed by QSS (20px standard)
-        self.checkableComboBoxLayer_filtering_layers_to_filter.show()
-        logger.info(f"  ✓ Created filtering layers widget: {self.checkableComboBoxLayer_filtering_layers_to_filter}")
-        
-        # Verify EXPORTING page exists
-        if not hasattr(self, 'EXPORTING'):
-            logger.error("❌ EXPORTING page does NOT exist after setupUi!")
-        else:
-            logger.info(f"  ✓ EXPORTING page exists: {self.EXPORTING}")
-        
-        # Parent is EXPORTING page (will be inserted into verticalLayout_exporting_values)
-        self.checkableComboBoxLayer_exporting_layers = QgsCheckableComboBoxLayer(self.EXPORTING)
-        self.checkableComboBoxLayer_exporting_layers.setObjectName("checkableComboBoxLayer_exporting_layers")
-        # Height managed by QSS (20px standard)
-        self.checkableComboBoxLayer_exporting_layers.show()
-        logger.info(f"  ✓ Created exporting layers widget: {self.checkableComboBoxLayer_exporting_layers}")
-        
-        # Create centroids checkbox BEFORE configure_widgets() to ensure it's in the registry
-        # FIX 2026-02-02: Use FILTERING page as parent (will be in horizontalLayout_filtering_distant_layers)
-        from qgis.PyQt import QtWidgets
-        self.checkBox_filtering_use_centroids_distant_layers = QtWidgets.QCheckBox(self.FILTERING)
-        self.checkBox_filtering_use_centroids_distant_layers.setObjectName("checkBox_filtering_use_centroids_distant_layers")
-        logger.debug(f"Created centroids distant layers checkbox: {self.checkBox_filtering_use_centroids_distant_layers}")
+        # FIX 2026-02-05: Replace placeholder widgets with custom widgets
+        # This is the ROBUST pattern - placeholders are defined in .ui file with correct
+        # parent/layout relationships, and we simply replace them at runtime.
+        logger.info("🔧 setupUiCustom: Replacing placeholder widgets with custom widgets")
+
+        from .ui.widgets.custom_widgets import (
+            QgsCheckableComboBoxLayer,
+            QgsCheckableComboBoxFeaturesListPickerWidget
+        )
+
+        # ============================================================================
+        # 1. EXPLORING: Replace placeholder_exploring_multiple_selection
+        # ============================================================================
+        try:
+            if hasattr(self, 'placeholder_exploring_multiple_selection'):
+                placeholder = self.placeholder_exploring_multiple_selection
+
+                # FIX 2026-02-05 v2: Use the known layout name instead of parentWidget().layout()
+                # This is more reliable than trying to find the layout from the parent
+                if hasattr(self, 'horizontalLayout_exploring_multiple_feature_picker'):
+                    layout = self.horizontalLayout_exploring_multiple_feature_picker
+
+                    # Get placeholder position in layout
+                    index = -1
+                    for i in range(layout.count()):
+                        if layout.itemAt(i).widget() == placeholder:
+                            index = i
+                            break
+
+                    if index >= 0:
+                        # Remove placeholder from layout
+                        layout.removeWidget(placeholder)
+                        placeholder.deleteLater()
+
+                        # Create custom widget with correct parent (from layout)
+                        parent_widget = layout.parentWidget()
+                        self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = \
+                            QgsCheckableComboBoxFeaturesListPickerWidget(self.CONFIG_DATA, parent_widget)
+                        self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.setDockwidgetRef(self)
+
+                        # Insert at same position with stretch factor
+                        layout.insertWidget(index, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, 1)
+                        logger.info(f"  ✅ Replaced placeholder_exploring_multiple_selection at index {index}")
+                    else:
+                        logger.error("  ❌ Could not find placeholder in layout")
+                else:
+                    logger.error("  ❌ horizontalLayout_exploring_multiple_feature_picker not found")
+            else:
+                logger.error("  ❌ placeholder_exploring_multiple_selection not found in .ui file")
+        except Exception as e:
+            logger.error(f"  ❌ Failed to replace placeholder_exploring_multiple_selection: {e}", exc_info=True)
+
+        # ============================================================================
+        # 2. FILTERING: Replace placeholder_filtering_layers_to_filter
+        # ============================================================================
+        try:
+            if hasattr(self, 'placeholder_filtering_layers_to_filter'):
+                placeholder = self.placeholder_filtering_layers_to_filter
+
+                # FIX 2026-02-05 v2: Use the known layout name
+                if hasattr(self, 'horizontalLayout_filtering_distant_layers'):
+                    layout = self.horizontalLayout_filtering_distant_layers
+
+                    # Get placeholder position
+                    index = -1
+                    for i in range(layout.count()):
+                        if layout.itemAt(i).widget() == placeholder:
+                            index = i
+                            break
+
+                    if index >= 0:
+                        # Remove placeholder
+                        layout.removeWidget(placeholder)
+                        placeholder.deleteLater()
+
+                        # Create custom widget with correct parent
+                        parent_widget = layout.parentWidget()
+                        self.checkableComboBoxLayer_filtering_layers_to_filter = QgsCheckableComboBoxLayer(parent_widget)
+                        self.checkableComboBoxLayer_filtering_layers_to_filter.setObjectName("checkableComboBoxLayer_filtering_layers_to_filter")
+                        self.checkableComboBoxLayer_filtering_layers_to_filter.setMinimumHeight(26)
+
+                        # Insert at same position with stretch factor
+                        layout.insertWidget(index, self.checkableComboBoxLayer_filtering_layers_to_filter, 1)
+                        logger.info(f"  ✅ Replaced placeholder_filtering_layers_to_filter at index {index}")
+                    else:
+                        logger.error("  ❌ Could not find placeholder in layout")
+                else:
+                    logger.error("  ❌ horizontalLayout_filtering_distant_layers not found")
+            else:
+                logger.error("  ❌ placeholder_filtering_layers_to_filter not found in .ui file")
+        except Exception as e:
+            logger.error(f"  ❌ Failed to replace placeholder_filtering_layers_to_filter: {e}", exc_info=True)
+
+        # ============================================================================
+        # 3. EXPORTING: Replace placeholder_exporting_layers
+        # ============================================================================
+        try:
+            if hasattr(self, 'placeholder_exporting_layers'):
+                placeholder = self.placeholder_exporting_layers
+
+                # FIX 2026-02-05 v2: Use the known layout name
+                if hasattr(self, 'verticalLayout_exporting_values'):
+                    layout = self.verticalLayout_exporting_values
+
+                    # Get placeholder position
+                    index = -1
+                    for i in range(layout.count()):
+                        if layout.itemAt(i).widget() == placeholder:
+                            index = i
+                            break
+
+                    if index >= 0:
+                        # Remove placeholder
+                        layout.removeWidget(placeholder)
+                        placeholder.deleteLater()
+
+                        # Create custom widget with correct parent
+                        parent_widget = layout.parentWidget()
+                        self.checkableComboBoxLayer_exporting_layers = QgsCheckableComboBoxLayer(parent_widget)
+                        self.checkableComboBoxLayer_exporting_layers.setObjectName("checkableComboBoxLayer_exporting_layers")
+                        self.checkableComboBoxLayer_exporting_layers.setMinimumHeight(26)
+
+                        # Insert at same position (no stretch factor for exporting)
+                        layout.insertWidget(index, self.checkableComboBoxLayer_exporting_layers)
+                        logger.info(f"  ✅ Replaced placeholder_exporting_layers at index {index}")
+                    else:
+                        logger.error("  ❌ Could not find placeholder in layout")
+                else:
+                    logger.error("  ❌ verticalLayout_exporting_values not found")
+            else:
+                logger.error("  ❌ placeholder_exporting_layers not found in .ui file")
+        except Exception as e:
+            logger.error(f"  ❌ Failed to replace placeholder_exporting_layers: {e}", exc_info=True)
+
+        logger.info("🔧 setupUiCustom: Custom widget replacement complete")
         
         # Initialize ConfigurationManager BEFORE tab widget setup (needed for custom widget creation)
         from .ui.managers.configuration_manager import ConfigurationManager
@@ -1075,12 +1154,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     self.comboBox_band.checkedBandsChanged.connect(self._on_raster_bands_changed)
                 else:
                     self.comboBox_band.currentIndexChanged.connect(self._on_raster_band_changed)
-            if hasattr(self, 'doubleSpinBox_min'):
-                self.doubleSpinBox_min.valueChanged.connect(self._on_raster_range_changed)
-            if hasattr(self, 'doubleSpinBox_max'):
-                self.doubleSpinBox_max.valueChanged.connect(self._on_raster_range_changed)
-            if hasattr(self, 'comboBox_predicate'):
-                self.comboBox_predicate.currentIndexChanged.connect(self._on_raster_predicate_changed)
+            # FIX 2026-02-05: REMOVED duplicate signal connections
+            # These signals are now connected in _connect_raster_combobox_triggers() (lines ~2354-2360)
+            # with proper groupbox activation guards. Keeping them here caused 2× handler calls.
+            # OLD CODE (removed):
+            # - doubleSpinBox_min.valueChanged → _on_raster_range_changed
+            # - doubleSpinBox_max.valueChanged → _on_raster_range_changed
+            # - comboBox_predicate.currentIndexChanged → _on_raster_predicate_changed
             if hasattr(self, 'pushButton_refresh_stats'):
                 self.pushButton_refresh_stats.clicked.connect(self._on_refresh_raster_stats)
             # Note: pushButton_pixel_picker removed - using pushButton_raster_pixel_picker in keys
@@ -1391,7 +1471,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._raster_histogram = None
     
     def _on_histogram_range_changed(self, min_val: float, max_val: float):
-        """Synchronise la sélection interactive de l'histogramme avec les spinbox min/max."""
+        """Synchronise la sélection interactive de l'histogramme avec les spinbox min/max.
+
+        Called during live drag on histogram. Only updates spinboxes, no filter application.
+        """
         if hasattr(self, 'doubleSpinBox_min'):
             self.doubleSpinBox_min.blockSignals(True)
             self.doubleSpinBox_min.setValue(min_val)
@@ -1400,12 +1483,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.doubleSpinBox_max.blockSignals(True)
             self.doubleSpinBox_max.setValue(max_val)
             self.doubleSpinBox_max.blockSignals(False)
-    
+
     def _on_histogram_range_finished(self, min_val: float, max_val: float):
-        """Applique le filtre raster après sélection interactive (drag terminé)."""
+        """Applique le filtre raster après sélection interactive (drag terminé).
+
+        FIX 2026-02-05: Removed redundant call to _on_histogram_range_changed().
+        The rangeChanged signal already updates spinboxes during drag, so this
+        handler only needs to do final processing (filter application, etc.).
+        """
         logger.debug(f"Note: Histogram range selected: [{min_val:.2f}, {max_val:.2f}]")
-        self._on_histogram_range_changed(min_val, max_val)
-        # Ici, tu peux déclencher l'application du filtre raster si besoin
+        # FIX: Don't call _on_histogram_range_changed() here - it's already called by rangeChanged signal
+        # Only do final processing here (e.g., trigger filter application if needed)
+        # self._on_histogram_range_changed(min_val, max_val)  # REMOVED: redundant
+        # TODO: Trigger filter application here if automatic filtering is desired
 
     def _on_histogram_groupbox_toggled(self, checked: bool):
         """v5.11: Handle histogram groupbox toggle to compute/update histogram.
@@ -2333,38 +2423,74 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _connect_raster_combobox_triggers(self):
         """Connect combobox triggers for active groupboxes.
-        
+
         v5.11 FIX: When a combobox value changes, only trigger action if
         the parent groupbox is currently active (checked).
-        
+        v5.12 FIX 2026-02-05: Added disconnect before connect to prevent signal accumulation.
+
         Mappings:
         - mGroupBox_raster_pixel_picker: No combobox (uses map tool)
         - mGroupBox_raster_rect_picker: doubleSpinBox_rect_min/max → apply range
         - mGroupBox_raster_histogram: comboBox_predicate → update filter
         """
         try:
+            # FIX 2026-02-05: Disconnect before connecting to prevent accumulation
+            # if this method is called multiple times (e.g., during re-initialization)
+
             # Histogram groupbox: predicate combobox triggers filter update
             if hasattr(self, 'comboBox_predicate') and hasattr(self, 'mGroupBox_raster_histogram'):
+                try:
+                    self.comboBox_predicate.currentIndexChanged.disconnect(
+                        self._on_raster_combobox_predicate_trigger
+                    )
+                except TypeError:
+                    pass  # Not connected yet, ignore
                 self.comboBox_predicate.currentIndexChanged.connect(
                     self._on_raster_combobox_predicate_trigger
                 )
-            
-            # Histogram groupbox: min/max spinboxes trigger range update  
+
+            # Histogram groupbox: min/max spinboxes trigger range update
             if hasattr(self, 'doubleSpinBox_min') and hasattr(self, 'mGroupBox_raster_histogram'):
+                try:
+                    self.doubleSpinBox_min.valueChanged.disconnect(
+                        self._on_raster_spinbox_range_trigger
+                    )
+                except TypeError:
+                    pass  # Not connected yet, ignore
                 self.doubleSpinBox_min.valueChanged.connect(
                     self._on_raster_spinbox_range_trigger
                 )
+
             if hasattr(self, 'doubleSpinBox_max') and hasattr(self, 'mGroupBox_raster_histogram'):
+                try:
+                    self.doubleSpinBox_max.valueChanged.disconnect(
+                        self._on_raster_spinbox_range_trigger
+                    )
+                except TypeError:
+                    pass  # Not connected yet, ignore
                 self.doubleSpinBox_max.valueChanged.connect(
                     self._on_raster_spinbox_range_trigger
                 )
-            
+
             # Rectangle picker groupbox: rect spinboxes trigger range update
             if hasattr(self, 'doubleSpinBox_rect_min') and hasattr(self, 'mGroupBox_raster_rect_picker'):
+                try:
+                    self.doubleSpinBox_rect_min.valueChanged.disconnect(
+                        self._on_raster_rect_spinbox_trigger
+                    )
+                except TypeError:
+                    pass  # Not connected yet, ignore
                 self.doubleSpinBox_rect_min.valueChanged.connect(
                     self._on_raster_rect_spinbox_trigger
                 )
+
             if hasattr(self, 'doubleSpinBox_rect_max') and hasattr(self, 'mGroupBox_raster_rect_picker'):
+                try:
+                    self.doubleSpinBox_rect_max.valueChanged.disconnect(
+                        self._on_raster_rect_spinbox_trigger
+                    )
+                except TypeError:
+                    pass  # Not connected yet, ignore
                 self.doubleSpinBox_rect_max.valueChanged.connect(
                     self._on_raster_rect_spinbox_trigger
                 )
@@ -2557,19 +2683,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Guard against recursive calls
         if hasattr(self, '_updating_raster_groupboxes') and self._updating_raster_groupboxes:
             return
-        
+
         if not checked:
-            # When unchecking, collapse this groupbox but keep it visible
-            current_groupbox.blockSignals(True)
-            current_groupbox.setCollapsed(True)
-            current_groupbox.blockSignals(False)
-            # Also uncheck associated button if any
-            for button, groupbox in self._raster_tool_bindings.items():
-                if groupbox == current_groupbox:
-                    button.blockSignals(True)
-                    button.setChecked(False)
-                    button.blockSignals(False)
-                    break
+            # FIX 2026-02-05: Set guard flag for collapse path to prevent signal loops
+            # when button.setChecked(False) triggers chain reactions
+            try:
+                self._updating_raster_groupboxes = True
+
+                # When unchecking, collapse this groupbox but keep it visible
+                current_groupbox.blockSignals(True)
+                current_groupbox.setCollapsed(True)
+                current_groupbox.blockSignals(False)
+                # Also uncheck associated button if any
+                for button, groupbox in self._raster_tool_bindings.items():
+                    if groupbox == current_groupbox:
+                        button.blockSignals(True)
+                        button.setChecked(False)
+                        button.blockSignals(False)
+                        break
+            finally:
+                self._updating_raster_groupboxes = False
             return
         
         try:
@@ -2988,6 +3121,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # Update min/max spinboxes with actual range
             if hasattr(self, 'doubleSpinBox_min') and hasattr(self, 'doubleSpinBox_max'):
+                # FIX 2026-02-05: Block signals during programmatic updates to prevent
+                # cascading handler calls (especially after duplicate connection removal)
+                self.doubleSpinBox_min.blockSignals(True)
+                self.doubleSpinBox_max.blockSignals(True)
+
                 self.doubleSpinBox_min.setMinimum(stats.minimumValue)
                 self.doubleSpinBox_min.setMaximum(stats.maximumValue)
                 self.doubleSpinBox_max.setMinimum(stats.minimumValue)
@@ -2995,6 +3133,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # Set default selection to full range
                 self.doubleSpinBox_min.setValue(stats.minimumValue)
                 self.doubleSpinBox_max.setValue(stats.maximumValue)
+
+                self.doubleSpinBox_min.blockSignals(False)
+                self.doubleSpinBox_max.blockSignals(False)
             
             # v5.3 FIX: Update histogram after statistics are computed
             self._update_raster_histogram(current_layer)
@@ -3097,12 +3238,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             )
             
             if hasattr(self, 'doubleSpinBox_min') and hasattr(self, 'doubleSpinBox_max'):
+                # FIX 2026-02-05: Block signals during programmatic updates
+                self.doubleSpinBox_min.blockSignals(True)
+                self.doubleSpinBox_max.blockSignals(True)
+
                 self.doubleSpinBox_min.setMinimum(stats.minimumValue)
                 self.doubleSpinBox_min.setMaximum(stats.maximumValue)
                 self.doubleSpinBox_max.setMinimum(stats.minimumValue)
                 self.doubleSpinBox_max.setMaximum(stats.maximumValue)
                 self.doubleSpinBox_min.setValue(stats.minimumValue)
                 self.doubleSpinBox_max.setValue(stats.maximumValue)
+
+                self.doubleSpinBox_min.blockSignals(False)
+                self.doubleSpinBox_max.blockSignals(False)
             
             # v5.3 FIX: Update histogram after stats computed
             self._update_raster_histogram(layer)
@@ -3146,6 +3294,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # Update min/max spinboxes with actual range
             if hasattr(self, 'doubleSpinBox_min') and hasattr(self, 'doubleSpinBox_max'):
+                # FIX 2026-02-07: Block signals during programmatic updates (async callback)
+                self.doubleSpinBox_min.blockSignals(True)
+                self.doubleSpinBox_max.blockSignals(True)
+
                 self.doubleSpinBox_min.setMinimum(stats['min'])
                 self.doubleSpinBox_min.setMaximum(stats['max'])
                 self.doubleSpinBox_max.setMinimum(stats['min'])
@@ -3153,7 +3305,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # Set default selection to full range
                 self.doubleSpinBox_min.setValue(stats['min'])
                 self.doubleSpinBox_max.setValue(stats['max'])
-            
+
+                self.doubleSpinBox_min.blockSignals(False)
+                self.doubleSpinBox_max.blockSignals(False)
+
             # v5.3 FIX: Update histogram after async stats computed
             layer = self._get_current_exploring_layer()
             if layer:
@@ -5993,13 +6148,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if not hasattr(self, '_raster_histogram') or self._raster_histogram is None:
                 logger.debug("🔌 Setting up raster histogram widget at startup...")
                 self._setup_raster_histogram_widget()
-                # Also connect the groupbox toggle signal
-                if hasattr(self, 'mGroupBox_raster_histogram'):
-                    try:
-                        self.mGroupBox_raster_histogram.toggled.disconnect(self._on_histogram_groupbox_toggled)
-                    except TypeError:
-                        pass  # Not connected yet
-                    self.mGroupBox_raster_histogram.toggled.connect(self._on_histogram_groupbox_toggled)
+                # FIX 2026-02-07: REMOVED duplicate connection of mGroupBox_raster_histogram.toggled
+                # This signal is already connected in _connect_native_exploring_toolbox_signals() (line ~1183)
+                # Connecting it again here caused 2× handler calls on every groupbox toggle.
                 logger.debug("✓ Raster histogram widget setup complete")
         except Exception as e:
             logger.warning(f"Could not setup raster histogram widget: {e}")
@@ -7308,12 +7459,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Note:
             Handles already-connected signals gracefully.
             Skips 'QGIS' group as those are managed separately.
+
+        FIX 2026-02-07: Log errors instead of swallowing them silently.
         """
+        connected_count, failed_count = 0, 0
         for grp in [g for g in self.widgets if g != 'QGIS']:
             for w in self.widgets[grp]:
-                try: self.manageSignal([grp, w], 'connect')
-                except Exception:  # Signal may already be connected - expected
-                    pass
+                try:
+                    self.manageSignal([grp, w], 'connect')
+                    connected_count += 1
+                except Exception as e:
+                    failed_count += 1
+                    logger.error(f"connect_widgets_signals: FAILED to connect {grp}.{w}: {e}")
+        logger.info(f"connect_widgets_signals: {connected_count} connected, {failed_count} failed")
 
     def disconnect_widgets_signals(self):
         """Disconnect all widget signals from their handlers.
@@ -7329,8 +7487,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         for grp in [g for g in self.widgets if g != 'QGIS']:
             for w in self.widgets[grp]:
                 try: self.manageSignal([grp, w], 'disconnect')
-                except Exception:  # Signal may already be disconnected - expected
-                    pass
+                except Exception as e:
+                    logger.debug(f"disconnect_widgets_signals: {grp}.{w}: {e}")
 
     def force_reconnect_action_signals(self):
         """v4.0 Sprint 8: Ultra-simplified - force reconnect ACTION signals bypassing cache.
@@ -7447,7 +7605,144 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.warning(f"force_reconnect_exporting_signals: Failed to connect {btn_name}: {e}")
         
         logger.debug(f"🔄 force_reconnect_exporting_signals COMPLETED: {connected_count}/2 signals connected")
-    
+
+    def force_reconnect_filtering_signals(self):
+        """FIX 2026-02-07: Force reconnect FILTERING checkable button signals bypassing cache.
+
+        Mirrors the pattern from force_reconnect_action_signals() and
+        force_reconnect_exporting_signals() for FILTERING pushbuttons.
+
+        These buttons use 'toggled' signal connected to layer_property_changed()
+        with custom_functions. The direct reconnect ensures they always work,
+        even if manageSignal() cache is stale or connect_widgets_signals() failed.
+        """
+        if 'FILTERING' not in self.widgets:
+            logger.warning("force_reconnect_filtering_signals: FILTERING category not in widgets")
+            return
+
+        # Map: widget_key → (signal_name, attr_name, handler_factory)
+        # For toggled buttons, we replicate the lambda from configure_widgets()
+        filtering_toggled_buttons = {
+            'HAS_LAYERS_TO_FILTER': (
+                'toggled',
+                'pushButton_checkable_filtering_layers_to_filter',
+                lambda: (lambda state, x='has_layers_to_filter', custom_functions={
+                    "ON_CHANGE": lambda x: self.filtering_layers_to_filter_state_changed()
+                }: self.layer_property_changed(x, state, custom_functions))
+            ),
+            'HAS_COMBINE_OPERATOR': (
+                'toggled',
+                'pushButton_checkable_filtering_current_layer_combine_operator',
+                lambda: (lambda state, x='has_combine_operator', custom_functions={
+                    "ON_CHANGE": lambda x: self.filtering_combine_operator_state_changed()
+                }: self.layer_property_changed(x, state, custom_functions))
+            ),
+            'HAS_GEOMETRIC_PREDICATES': (
+                'toggled',
+                'pushButton_checkable_filtering_geometric_predicates',
+                lambda: (lambda state, x='has_geometric_predicates', custom_functions={
+                    "ON_CHANGE": lambda x: self.filtering_geometric_predicates_state_changed()
+                }: self.layer_property_changed(x, state, custom_functions))
+            ),
+            'HAS_BUFFER_VALUE': (
+                'toggled',
+                'pushButton_checkable_filtering_buffer_value',
+                lambda: (lambda state, x='has_buffer_value', custom_functions={
+                    "ON_CHANGE": lambda x: self.filtering_buffer_value_state_changed()
+                }: self.layer_property_changed(x, state, custom_functions))
+            ),
+            'HAS_BUFFER_TYPE': (
+                'toggled',
+                'pushButton_checkable_filtering_buffer_type',
+                lambda: (lambda state, x='has_buffer_type', custom_functions={
+                    "ON_CHANGE": lambda x: self.filtering_buffer_type_state_changed()
+                }: self.layer_property_changed(x, state, custom_functions))
+            ),
+        }
+
+        # AUTO_CURRENT_LAYER uses 'clicked' not 'toggled'
+        filtering_clicked_buttons = {
+            'AUTO_CURRENT_LAYER': (
+                'clicked',
+                'pushButton_checkable_filtering_auto_current_layer',
+                lambda: (lambda state: self.filtering_auto_current_layer_changed(state))
+            ),
+        }
+
+        connected_count = 0
+
+        # Handle toggled buttons
+        for btn_key, (signal_name, attr_name, handler_factory) in filtering_toggled_buttons.items():
+            widget = getattr(self, attr_name, None)
+            if not widget:
+                logger.debug(f"force_reconnect_filtering_signals: {attr_name} not found")
+                continue
+
+            key = f"FILTERING.{btn_key}.{signal_name}"
+            self._signal_connection_states.pop(key, None)
+
+            try:
+                signal = getattr(widget, signal_name)
+                try:
+                    signal.disconnect()
+                except TypeError:
+                    pass
+
+                handler = handler_factory()
+                signal.connect(handler)
+                self._signal_connection_states[key] = True
+                connected_count += 1
+                logger.debug(f"✅ force_reconnect_filtering: {btn_key}.{signal_name} connected")
+            except Exception as e:
+                logger.warning(f"force_reconnect_filtering: Failed {btn_key}: {e}")
+
+        # Handle clicked buttons
+        for btn_key, (signal_name, attr_name, handler_factory) in filtering_clicked_buttons.items():
+            widget = getattr(self, attr_name, None)
+            if not widget:
+                continue
+
+            key = f"FILTERING.{btn_key}.{signal_name}"
+            self._signal_connection_states.pop(key, None)
+
+            try:
+                signal = getattr(widget, signal_name)
+                try:
+                    signal.disconnect()
+                except TypeError:
+                    pass
+
+                handler = handler_factory()
+                signal.connect(handler)
+                self._signal_connection_states[key] = True
+                connected_count += 1
+                logger.debug(f"✅ force_reconnect_filtering: {btn_key}.{signal_name} connected")
+            except Exception as e:
+                logger.warning(f"force_reconnect_filtering: Failed {btn_key}: {e}")
+
+        # Also reconnect non-button FILTERING widgets (comboboxes, spinboxes, checkboxes)
+        # These go through manageSignal which is more reliable for non-button widgets
+        non_button_widgets = [
+            'CURRENT_LAYER', 'LAYERS_TO_FILTER', 'SOURCE_LAYER_COMBINE_OPERATOR',
+            'OTHER_LAYERS_COMBINE_OPERATOR', 'GEOMETRIC_PREDICATES',
+            'USE_CENTROIDS_SOURCE_LAYER', 'USE_CENTROIDS_DISTANT_LAYERS',
+            'BUFFER_VALUE', 'BUFFER_VALUE_PROPERTY', 'BUFFER_TYPE', 'BUFFER_SEGMENTS'
+        ]
+        for w_key in non_button_widgets:
+            if w_key not in self.widgets.get('FILTERING', {}):
+                continue
+            # Clear cache to force reconnection
+            for s_tuple in self.widgets['FILTERING'][w_key].get("SIGNALS", []):
+                cache_key = f"FILTERING.{w_key}.{s_tuple[0]}"
+                self._signal_connection_states.pop(cache_key, None)
+            try:
+                self.manageSignal(['FILTERING', w_key], 'connect')
+                connected_count += 1
+            except Exception as e:
+                logger.warning(f"force_reconnect_filtering: manageSignal failed for {w_key}: {e}")
+
+        logger.info(f"🔄 force_reconnect_filtering_signals COMPLETED: {connected_count} signals connected")
+
     def diagnose_action_buttons(self):
         """
         v2026-01-17: DIAGNOSTIC method - call from QGIS console to test button signals.
@@ -7718,6 +8013,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.debug("🔌 Force reconnecting ACTION button signals...")
             self.force_reconnect_action_signals()
             logger.debug("✓ ACTION button signals reconnected")
+            # FIX 2026-02-07: CRITICAL - Force reconnect FILTERING checkable button signals
+            # Without this, toggling filtering pushbuttons (layers_to_filter, geometric_predicates,
+            # buffer_value, buffer_type, combine_operator) won't trigger their handlers
+            logger.debug("🔌 Force reconnecting FILTERING button signals...")
+            self.force_reconnect_filtering_signals()
+            logger.debug("✓ FILTERING button signals reconnected")
         else:
             self.set_widgets_enabled_state(False)
             for sp in [["DOCK", "SINGLE_SELECTION"], ["DOCK", "MULTIPLE_SELECTION"], ["DOCK", "CUSTOM_SELECTION"]]:
@@ -7765,7 +8066,64 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # This ensures raster-specific widgets are properly initialized at startup
             self.current_layer_changed(self.init_layer)
             logger.info(f"✓ Startup: Raster layer '{self.init_layer.name()}' initialized")
-    
+
+        # FIX 2026-02-07: Post-initialization validation of critical signal connections
+        self._validate_signal_connections()
+
+    def _validate_signal_connections(self):
+        """FIX 2026-02-07: Validate that all critical button signals are connected.
+
+        Checks every critical pushbutton to ensure it has at least one receiver.
+        Logs warnings for any disconnected buttons so issues are immediately visible
+        in the QGIS log panel.
+        """
+        critical_buttons = {
+            # ACTION buttons
+            'pushButton_action_filter': 'clicked',
+            'pushButton_action_unfilter': 'clicked',
+            'pushButton_action_undo_filter': 'clicked',
+            'pushButton_action_redo_filter': 'clicked',
+            'pushButton_action_export': 'clicked',
+            # EXPLORING buttons
+            'pushButton_exploring_identify': 'clicked',
+            'pushButton_exploring_zoom': 'clicked',
+            'pushButton_exploring_reset_layer_properties': 'clicked',
+            'pushButton_checkable_exploring_selecting': 'toggled',
+            'pushButton_checkable_exploring_tracking': 'toggled',
+            'pushButton_checkable_exploring_linking_widgets': 'toggled',
+            # FILTERING checkable buttons
+            'pushButton_checkable_filtering_auto_current_layer': 'clicked',
+            'pushButton_checkable_filtering_layers_to_filter': 'toggled',
+            'pushButton_checkable_filtering_current_layer_combine_operator': 'toggled',
+            'pushButton_checkable_filtering_geometric_predicates': 'toggled',
+            'pushButton_checkable_filtering_buffer_value': 'toggled',
+            'pushButton_checkable_filtering_buffer_type': 'toggled',
+            # EXPORTING checkable buttons
+            'pushButton_checkable_exporting_layers': 'toggled',
+            'pushButton_checkable_exporting_projection': 'toggled',
+            'pushButton_checkable_exporting_styles': 'toggled',
+            'pushButton_checkable_exporting_datatype': 'toggled',
+            'pushButton_checkable_exporting_output_folder': 'clicked',
+            'pushButton_checkable_exporting_zip': 'clicked',
+        }
+
+        connected_count, disconnected = 0, []
+        for btn_name, signal_name in critical_buttons.items():
+            widget = getattr(self, btn_name, None)
+            if not widget:
+                continue
+            signal = self.getSignal(widget, signal_name)
+            is_connected = widget.isSignalConnected(signal) if signal else False
+            if is_connected:
+                connected_count += 1
+            else:
+                disconnected.append(btn_name)
+
+        if disconnected:
+            logger.warning(f"⚠️ SIGNAL VALIDATION: {len(disconnected)} buttons DISCONNECTED: {disconnected}")
+        else:
+            logger.info(f"✅ SIGNAL VALIDATION: All {connected_count} critical buttons connected")
+
     def _setup_conditional_widget_states(self):
         """
         UX Enhancement: Setup conditional widget enable/disable based on pushbutton checkable states.
