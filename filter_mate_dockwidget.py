@@ -1154,13 +1154,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     self.comboBox_band.checkedBandsChanged.connect(self._on_raster_bands_changed)
                 else:
                     self.comboBox_band.currentIndexChanged.connect(self._on_raster_band_changed)
-            # FIX 2026-02-05: REMOVED duplicate signal connections
-            # These signals are now connected in _connect_raster_combobox_triggers() (lines ~2354-2360)
-            # with proper groupbox activation guards. Keeping them here caused 2× handler calls.
-            # OLD CODE (removed):
-            # - doubleSpinBox_min.valueChanged → _on_raster_range_changed
-            # - doubleSpinBox_max.valueChanged → _on_raster_range_changed
-            # - comboBox_predicate.currentIndexChanged → _on_raster_predicate_changed
+            # Spinbox/predicate signals connected in _connect_raster_combobox_triggers() with groupbox guards
             if hasattr(self, 'pushButton_refresh_stats'):
                 self.pushButton_refresh_stats.clicked.connect(self._on_refresh_raster_stats)
             # Note: pushButton_pixel_picker removed - using pushButton_raster_pixel_picker in keys
@@ -1216,24 +1210,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.warning(f"Could not setup toolBox manual switch blocking: {e}")
     
     def _enable_toolbox_page_for_switch(self, index: int):
-        """v5.2 FIX 2026-01-31: Switch to a page programmatically.
+        """Switch toolBox_exploring to the given page index.
         
-        v5.3 FIX 2026-01-31: Pages are now always enabled (active style).
-        We just need to mark this as a programmatic change and switch.
+        IMPORTANT: Caller must manage _programmatic_page_change flag.
+        This method only performs the setCurrentIndex call to avoid
+        a race condition where the inner finally block would reset
+        the flag before the caller finishes its work.
         """
         try:
             if not hasattr(self, 'toolBox_exploring') or self.toolBox_exploring is None:
                 return
-            
-            toolbox = self.toolBox_exploring
-            
-            # v5.3: Mark as programmatic change so handler doesn't revert it
-            self._programmatic_page_change = True
-            try:
-                toolbox.setCurrentIndex(index)
-            finally:
-                self._programmatic_page_change = False
-            
+            self.toolBox_exploring.setCurrentIndex(index)
         except Exception as e:
             logger.warning(f"Could not switch toolBox page: {e}")
     
@@ -1878,19 +1865,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     self._update_raster_histogram(layer)
     
     def _on_raster_range_changed(self, value: float):
-        """Synchronise la sélection des spinbox avec l'histogramme interactif."""
-        if hasattr(self, 'doubleSpinBox_min') and hasattr(self, 'doubleSpinBox_max'):
-            min_val = self.doubleSpinBox_min.value()
-            max_val = self.doubleSpinBox_max.value()
-            logger.debug(f"Note: Raster range changed: {min_val} - {max_val}")
-            if hasattr(self, '_raster_histogram') and self._raster_histogram:
-                self._raster_histogram.set_range(min_val, max_val)
+        """DEPRECATED 2026-02-05: Disconnected in Fix #1. Replaced by _on_raster_spinbox_range_trigger.
+        REMOVED 2026-02-07: Dead code - zero references. Method body deleted."""
+        pass
     
     def _on_raster_predicate_changed(self, index: int):
-        """Note: Handle predicate change for raster filtering."""
-        if hasattr(self, 'comboBox_predicate'):
-            predicate = self.comboBox_predicate.currentText()
-            logger.debug(f"Note: Raster predicate changed to: {predicate}")
+        """DEPRECATED 2026-02-05: Disconnected in Fix #1. Replaced by _on_raster_combobox_predicate_trigger.
+        REMOVED 2026-02-07: Dead code - zero references. Method body deleted."""
+        pass
     
     def _on_refresh_vector_stats(self):
         """v5.5: Refresh vector statistics for current layer.
@@ -2073,9 +2055,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Activate the tool
             iface.mapCanvas().setMapTool(self._pixel_picker_tool)
             
-            # Update button state to show it's active
+            # FIX 2026-02-07: blockSignals to prevent cascading buttonToggled chain
             if hasattr(self, 'pushButton_raster_pixel_picker'):
+                self.pushButton_raster_pixel_picker.blockSignals(True)
                 self.pushButton_raster_pixel_picker.setChecked(True)
+                self.pushButton_raster_pixel_picker.blockSignals(False)
             
             show_info("FilterMate", "Click on raster to pick value. Drag for range. Press Escape to cancel.")
             logger.info("Note: Pixel picker tool activated")
@@ -2096,17 +2080,25 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         logger.debug(f"Note: Pixel values picked: [{min_val:.2f}, {max_val:.2f}]")
         
-        # Update histogram groupbox spinboxes
-        if hasattr(self, 'doubleSpinBox_min'):
-            self.doubleSpinBox_min.setValue(min_val)
-        if hasattr(self, 'doubleSpinBox_max'):
-            self.doubleSpinBox_max.setValue(max_val)
+        # FIX 2026-02-07: blockSignals to prevent cascading handler calls
+        # (each setValue fires _on_raster_spinbox_range_trigger / _on_raster_rect_spinbox_trigger)
+        for sb_name in ('doubleSpinBox_min', 'doubleSpinBox_max', 'doubleSpinBox_rect_min', 'doubleSpinBox_rect_max'):
+            if hasattr(self, sb_name):
+                getattr(self, sb_name).blockSignals(True)
         
-        # Update rectangle picker groupbox spinboxes
-        if hasattr(self, 'doubleSpinBox_rect_min'):
-            self.doubleSpinBox_rect_min.setValue(min_val)
-        if hasattr(self, 'doubleSpinBox_rect_max'):
-            self.doubleSpinBox_rect_max.setValue(max_val)
+        try:
+            if hasattr(self, 'doubleSpinBox_min'):
+                self.doubleSpinBox_min.setValue(min_val)
+            if hasattr(self, 'doubleSpinBox_max'):
+                self.doubleSpinBox_max.setValue(max_val)
+            if hasattr(self, 'doubleSpinBox_rect_min'):
+                self.doubleSpinBox_rect_min.setValue(min_val)
+            if hasattr(self, 'doubleSpinBox_rect_max'):
+                self.doubleSpinBox_rect_max.setValue(max_val)
+        finally:
+            for sb_name in ('doubleSpinBox_min', 'doubleSpinBox_max', 'doubleSpinBox_rect_min', 'doubleSpinBox_rect_max'):
+                if hasattr(self, sb_name):
+                    getattr(self, sb_name).blockSignals(False)
         
         # Update histogram selection
         if hasattr(self, '_raster_histogram') and self._raster_histogram:
@@ -2188,7 +2180,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         If no range exists, sets both min and max to the pixel value.
         If a range exists, extends it to include the new value.
         """
-        logger.info("🔘 _on_add_pixel_to_selection_clicked: Button clicked!")
+        logger.info("_on_add_pixel_to_selection_clicked: Button clicked!")
         try:
             # Get current pixel value from label
             if not hasattr(self, 'label_pixel_value'):
@@ -2218,31 +2210,37 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 current_max = self.doubleSpinBox_rect_max.value()
             
             # Determine if this is the first value or extending existing range
-            # Check if both spinboxes are at their default (0.0) or same value
             is_first_value = (current_min == 0.0 and current_max == 0.0) or (current_min == current_max == 0.0)
             
             if is_first_value:
-                # First pixel: set both min and max to this value
                 new_min = pixel_value
                 new_max = pixel_value
             else:
-                # Extend the range to include the new value
                 new_min = min(current_min, pixel_value) if current_min is not None else pixel_value
                 new_max = max(current_max, pixel_value) if current_max is not None else pixel_value
             
-            # Update the spinboxes
+            # FIX 2026-02-07: blockSignals to prevent cascading _on_raster_rect_spinbox_trigger
             if hasattr(self, 'doubleSpinBox_rect_min'):
-                self.doubleSpinBox_rect_min.setValue(new_min)
+                self.doubleSpinBox_rect_min.blockSignals(True)
             if hasattr(self, 'doubleSpinBox_rect_max'):
-                self.doubleSpinBox_rect_max.setValue(new_max)
+                self.doubleSpinBox_rect_max.blockSignals(True)
+            
+            try:
+                if hasattr(self, 'doubleSpinBox_rect_min'):
+                    self.doubleSpinBox_rect_min.setValue(new_min)
+                if hasattr(self, 'doubleSpinBox_rect_max'):
+                    self.doubleSpinBox_rect_max.setValue(new_max)
+            finally:
+                if hasattr(self, 'doubleSpinBox_rect_min'):
+                    self.doubleSpinBox_rect_min.blockSignals(False)
+                if hasattr(self, 'doubleSpinBox_rect_max'):
+                    self.doubleSpinBox_rect_max.blockSignals(False)
             
             # Update histogram if available
             if hasattr(self, '_raster_histogram') and self._raster_histogram:
                 self._raster_histogram.set_range(new_min, new_max)
             
             logger.info(f"Added pixel value {pixel_value:.4f} to selection. Range: [{new_min:.4f}, {new_max:.4f}]")
-            
-            # v5.12 FIX: Show user feedback that the action was successful
             show_success("FilterMate", f"Pixel value {pixel_value:.4f} added to selection")
             
         except Exception as e:
@@ -2250,13 +2248,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             show_warning("FilterMate", f"Error adding pixel to selection: {str(e)}")
 
     def _on_pixel_picking_finished(self):
-        """Note: Handle pixel picking tool deactivation."""
-        logger.debug("Note: Pixel picker deactivated")
+        """Note: Handle pixel picking tool deactivation.
         
-        # Update button state - use new raster tool button
-        if hasattr(self, 'pushButton_raster_pixel_picker'):
-            self.pushButton_raster_pixel_picker.setChecked(False)
-        # Also uncheck the new raster tool buttons
+        FIX 2026-02-07: Use _uncheck_raster_tool_buttons() only (already handles
+        pixel_picker button). Removed redundant individual setChecked(False) that
+        caused double buttonToggled chain.
+        """
+        logger.debug("Note: Pixel picker deactivated")
         self._uncheck_raster_tool_buttons()
 
     # ================================================================
@@ -2780,6 +2778,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         v5.12 FIX: pushButton_raster_all_bands is NOT unchecked here - it's an
         independent toggle for multi-band mode, not part of the exclusive group.
+        FIX 2026-02-07: blockSignals to prevent cascading buttonToggled chains.
         """
         checkable_buttons = [
             'pushButton_raster_pixel_picker',
@@ -2791,7 +2790,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if hasattr(self, btn_name):
                 btn = getattr(self, btn_name)
                 if btn.isChecked():
+                    btn.blockSignals(True)
                     btn.setChecked(False)
+                    btn.blockSignals(False)
     
     def _initialize_raster_groupbox_exclusive_state(self):
         """Initialize raster groupboxes to exclusive state.
@@ -2909,7 +2910,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if not layer or not isinstance(layer, QgsRasterLayer):
                 show_warning("FilterMate", "Please select a raster layer first")
                 if hasattr(self, 'pushButton_raster_rect_picker'):
+                    self.pushButton_raster_rect_picker.blockSignals(True)
                     self.pushButton_raster_rect_picker.setChecked(False)
+                    self.pushButton_raster_rect_picker.blockSignals(False)
                 return
             
             # Create or reuse pixel picker tool
@@ -3053,11 +3056,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 data_max = self._current_raster_stats.get('max')
             
             if data_min is not None and data_max is not None:
-                # Update spinboxes
+                # FIX 2026-02-07: blockSignals to prevent cascading _on_raster_spinbox_range_trigger
                 if hasattr(self, 'doubleSpinBox_min'):
-                    self.doubleSpinBox_min.setValue(data_min)
+                    self.doubleSpinBox_min.blockSignals(True)
                 if hasattr(self, 'doubleSpinBox_max'):
-                    self.doubleSpinBox_max.setValue(data_max)
+                    self.doubleSpinBox_max.blockSignals(True)
+                
+                try:
+                    if hasattr(self, 'doubleSpinBox_min'):
+                        self.doubleSpinBox_min.setValue(data_min)
+                    if hasattr(self, 'doubleSpinBox_max'):
+                        self.doubleSpinBox_max.setValue(data_max)
+                finally:
+                    if hasattr(self, 'doubleSpinBox_min'):
+                        self.doubleSpinBox_min.blockSignals(False)
+                    if hasattr(self, 'doubleSpinBox_max'):
+                        self.doubleSpinBox_max.blockSignals(False)
                 
                 # Update histogram
                 if hasattr(self, '_raster_histogram') and self._raster_histogram:
@@ -5554,7 +5568,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if not hasattr(self, attr): setattr(self, attr, {})
                 getattr(self, attr)[layer.id()] = True
                 if key == 'reduce_buffer_segments':
+                    self.mQgsSpinBox_filtering_buffer_segments.blockSignals(True)
                     self.mQgsSpinBox_filtering_buffer_segments.setValue(3)
+                    self.mQgsSpinBox_filtering_buffer_segments.blockSignals(False)
                 applied.append(label)
         if applied:
             show_success("FilterMate", self.tr("Applied to '{0}':\n{1}").format(layer.name(), "\n".join(f"• {a}" for a in applied)))
@@ -6491,22 +6507,24 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 from ui.widgets.json_view import SearchableJsonView
                 self.config_view_container = SearchableJsonView(self.config_model, self.plugin_dir, parent=self.CONFIGURATION)
                 self.config_view = self.config_view_container.json_view  # For backward compatibility
-                self.CONFIGURATION.layout().insertWidget(0, self.config_view_container)
+                # FIX 2026-02-07: stretch=1 so tree view expands to fill available space
+                self.CONFIGURATION.layout().insertWidget(0, self.config_view_container, 1)
+                self.config_view_container.setMinimumHeight(200)
                 self.config_view_container.setAnimated(True)
                 self.config_view_container.setEnabled(True)
                 self.config_view_container.show()
-                # FIX 2026-02-02: Apply styles to newly created widget
                 self._apply_style_to_widget(self.config_view_container)
                 logger.debug("Using SearchableJsonView with search bar")
             except ImportError:
                 # Fallback to standard JsonView
                 self.config_view = JsonView(self.config_model, self.plugin_dir, parent=self.CONFIGURATION)
                 self.config_view_container = None
-                self.CONFIGURATION.layout().insertWidget(0, self.config_view)
+                # FIX 2026-02-07: stretch=1 so tree view expands to fill available space
+                self.CONFIGURATION.layout().insertWidget(0, self.config_view, 1)
+                self.config_view.setMinimumHeight(200)
                 self.config_view.setAnimated(True)
                 self.config_view.setEnabled(True)
                 self.config_view.show()
-                # FIX 2026-02-02: Apply styles to newly created widget
                 self._apply_style_to_widget(self.config_view)
                 logger.debug("Using standard JsonView (SearchableJsonView not available)")
             
@@ -6983,11 +7001,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 datatype_widget.addItems(ogr_driver_list)
                 logger.info(f"_populate_export_combobox_direct: Added {len(ogr_driver_list)} export formats")
                 
+                # FIX 2026-02-07: blockSignals during programmatic population
+                datatype_widget.blockSignals(True)
                 if datatype_to_export:
                     idx = datatype_widget.findText(datatype_to_export)
                     datatype_widget.setCurrentIndex(idx if idx >= 0 else datatype_widget.findText('GPKG'))
                 else:
                     datatype_widget.setCurrentIndex(datatype_widget.findText('GPKG'))
+                datatype_widget.blockSignals(False)
             except ImportError:
                 logger.warning("_populate_export_combobox_direct: OGR not available")
             
@@ -11360,7 +11381,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def reset_export_output_path(self):
         """v4.0 S18: Reset export output path."""
         if not self.widgets_initialized or not self.has_loaded_layers or self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].text(): return
-        self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear(); self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].setChecked(False)
+        self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear()
+        w = self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"]; w.blockSignals(True); w.setChecked(False); w.blockSignals(False)
         self.project_property_changed('has_output_folder_to_export', False); self.project_property_changed('output_folder_to_export', '')
 
     def dialog_export_output_pathzip(self):
@@ -11383,7 +11405,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def reset_export_output_pathzip(self):
         """v4.0 S18: Reset zip export path."""
         if not self.widgets_initialized or not self.has_loaded_layers or self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].text(): return
-        self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].clear(); self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].setChecked(False)
+        self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].clear()
+        w = self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"]; w.blockSignals(True); w.setChecked(False); w.blockSignals(False)
         self.project_property_changed('has_zip_to_export', False); self.project_property_changed('zip_to_export', '')
 
     def filtering_auto_current_layer_changed(self, state=None):
@@ -11396,7 +11419,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if not self._is_ui_ready(): return
         if state is None:
             state = self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"]
-        self.widgets["FILTERING"]["AUTO_CURRENT_LAYER"]["WIDGET"].setChecked(state)
+        # FIX 2026-02-07: blockSignals to prevent re-firing toggled signal
+        auto_widget = self.widgets["FILTERING"]["AUTO_CURRENT_LAYER"]["WIDGET"]
+        auto_widget.blockSignals(True)
+        auto_widget.setChecked(state)
+        auto_widget.blockSignals(False)
         self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"] = state
         
         # v5.0: When enabling auto sync, immediately sync current layer with active layer
