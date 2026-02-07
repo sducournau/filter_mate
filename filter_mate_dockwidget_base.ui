@@ -15,8 +15,8 @@
   </property>
   <property name="minimumSize">
    <size>
-    <width>280</width>
-    <height>320</height>
+    <width>350</width>
+    <height>327</height>
    </size>
   </property>
   <property name="baseSize">
@@ -208,8 +208,8 @@
               <rect>
                <x>0</x>
                <y>0</y>
-               <width>433</width>
-               <height>290</height>
+               <width>420</width>
+               <height>213</height>
               </rect>
              </property>
              <attribute name="icon">
@@ -238,19 +238,19 @@
               <item>
                <layout class="QGridLayout" name="gridLayout_main_actions">
                 <property name="leftMargin">
-                 <number>4</number>
+                 <number>0</number>
                 </property>
                 <property name="topMargin">
-                 <number>4</number>
+                 <number>0</number>
                 </property>
                 <property name="rightMargin">
-                 <number>4</number>
+                 <number>0</number>
                 </property>
                 <property name="bottomMargin">
-                 <number>4</number>
+                 <number>0</number>
                 </property>
                 <property name="spacing">
-                 <number>4</number>
+                 <number>2</number>
                 </property>
                 <item row="0" column="0">
                  <widget class="QWidget" name="widget_exploring_keys" native="true">
@@ -262,19 +262,19 @@
                   </property>
                   <property name="minimumSize">
                    <size>
-                    <width>36</width>
+                    <width>32</width>
                     <height>32</height>
                    </size>
                   </property>
                   <property name="maximumSize">
                    <size>
-                    <width>36</width>
+                    <width>32</width>
                     <height>16777215</height>
                    </size>
                   </property>
                   <property name="baseSize">
                    <size>
-                    <width>36</width>
+                    <width>32</width>
                     <height>0</height>
                    </size>
                   </property>
@@ -350,8 +350,8 @@
                        </property>
                        <property name="iconSize">
                         <size>
-                         <width>16</width>
-                         <height>16</height>
+                         <width>22</width>
+                         <height>22</height>
                         </size>
                        </property>
                        <property name="flat">
@@ -426,8 +426,8 @@
                        </property>
                        <property name="iconSize">
                         <size>
-                         <width>16</width>
-                         <height>16</height>
+                         <width>22</width>
+                         <height>22</height>
                         </size>
                        </property>
                        <property name="flat">
@@ -511,8 +511,8 @@
                        </property>
                        <property name="iconSize">
                         <size>
-                         <width>16</width>
-                         <height>16</height>
+                         <width>22</width>
+                         <height>22</height>
                         </size>
                        </property>
                        <property name="checkable">
@@ -599,8 +599,8 @@
                        </property>
                        <property name="iconSize">
                         <size>
-                         <width>16</width>
-                         <height>16</height>
+                         <width>22</width>
+                         <height>22</height>
                         </size>
                        </property>
                        <property name="checkable">
@@ -687,8 +687,8 @@
                        </property>
                        <property name="iconSize">
                         <size>
-                         <width>16</width>
-                         <height>16</height>
+                         <width>22</width>
+                         <height>22</height>
                         </size>
                        </property>
                        <property name="checkable">
@@ -769,8 +769,8 @@
                        </property>
                        <property name="iconSize">
                         <size>
-                         <width>16</width>
-                         <height>16</height>
+                         <width>22</width>
+                         <height>22</height>
                         </size>
                        </property>
                        <property name="checkable">
@@ -1444,19 +1444,19 @@ Build advanced filter expressions using QGIS expression builder.
                   </property>
                   <property name="minimumSize">
                    <size>
-                    <width>38</width>
+                    <width>32</width>
                     <height>32</height>
                    </size>
                   </property>
                   <property name="maximumSize">
                    <size>
-                    <width>48</width>
+                    <width>32</width>
                     <height>16777215</height>
                    </size>
                   </property>
                   <property name="baseSize">
                    <size>
-                    <width>48</width>
+                    <width>32</width>
                     <height>0</height>
                    </size>
                   </property>
@@ -1541,8 +1541,8 @@ The picked value will be used as filter criteria.</string>
                        </property>
                        <property name="iconSize">
                         <size>
-                         <width>16</width>
-                         <height>16</height>
+                         <width>22</width>
+                         <height>22</height>
                         </size>
                        </property>
                        <property name="checkable">
@@ -1628,8 +1628,8 @@ Useful for selecting value ranges based on spatial regions of interest.</string>
                        </property>
                        <property name="iconSize">
                         <size>
-                         <width>16</width>
-                         <height>16</height>
+                         <width>22</width>
+                         <height>22</height>
                         </size>
                        </property>
                        <property name="checkable">
@@ -1715,8 +1715,8 @@ The synced values will be used when applying the raster filter.</string>
                        </property>
                        <property name="iconSize">
                         <size>
-                         <width>16</width>
-                         <height>16</height>
+                         <width>22</width>
+                         <height>22</height>
                         </size>
                        </property>
                        <property name="checkable">
@@ -1806,8 +1806,8 @@ Use the band dropdown to select which bands to include.</string>
                        </property>
                        <property name="iconSize">
                         <size>
-                         <width>16</width>
-                         <height>16</height>
+                         <width>22</width>
+                         <height>22</height>
                         </size>
                        </property>
                        <property name="checkable">
@@ -1893,8 +1893,8 @@ Histogram selection will also be reset to show full range.</string>
                        </property>
                        <property name="iconSize">
                         <size>
-                         <width>16</width>
-                         <height>16</height>
+                         <width>22</width>
+                         <height>22</height>
                         </size>
                        </property>
                        <property name="flat">
@@ -2504,8 +2504,8 @@ Can be set manually or by dragging the histogram right handle.</string>
                 <rect>
                  <x>0</x>
                  <y>0</y>
-                 <width>429</width>
-                 <height>379</height>
+                 <width>416</width>
+                 <height>199</height>
                 </rect>
                </property>
                <attribute name="icon">
@@ -2531,19 +2531,19 @@ Can be set manually or by dragging the histogram right handle.</string>
                 <item>
                  <layout class="QHBoxLayout" name="horizontalLayout_filtering_content">
                   <property name="spacing">
-                   <number>4</number>
+                   <number>2</number>
                   </property>
                   <property name="leftMargin">
-                   <number>4</number>
+                   <number>0</number>
                   </property>
                   <property name="topMargin">
-                   <number>4</number>
+                   <number>0</number>
                   </property>
                   <property name="rightMargin">
-                   <number>4</number>
+                   <number>0</number>
                   </property>
                   <property name="bottomMargin">
-                   <number>4</number>
+                   <number>0</number>
                   </property>
                   <item>
                    <widget class="QWidget" name="widget_filtering_keys" native="true">
@@ -2555,19 +2555,19 @@ Can be set manually or by dragging the histogram right handle.</string>
                     </property>
                     <property name="minimumSize">
                      <size>
-                      <width>36</width>
+                      <width>32</width>
                       <height>32</height>
                      </size>
                     </property>
                     <property name="maximumSize">
                      <size>
-                      <width>36</width>
+                      <width>32</width>
                       <height>16777215</height>
                      </size>
                     </property>
                     <property name="baseSize">
                      <size>
-                      <width>36</width>
+                      <width>32</width>
                       <height>0</height>
                      </size>
                     </property>
@@ -2652,8 +2652,8 @@ Can be set manually or by dragging the histogram right handle.</string>
                          </property>
                          <property name="iconSize">
                           <size>
-                           <width>16</width>
-                           <height>16</height>
+                           <width>22</width>
+                           <height>22</height>
                           </size>
                          </property>
                          <property name="checkable">
@@ -2747,8 +2747,8 @@ which layers should be affected by the filter.</string>
                          </property>
                          <property name="iconSize">
                           <size>
-                           <width>16</width>
-                           <height>16</height>
+                           <width>22</width>
+                           <height>22</height>
                           </size>
                          </property>
                          <property name="checkable">
@@ -2842,8 +2842,8 @@ AND (intersection) or OR (union) combination logic.</string>
                          </property>
                          <property name="iconSize">
                           <size>
-                           <width>16</width>
-                           <height>16</height>
+                           <width>22</width>
+                           <height>22</height>
                           </size>
                          </property>
                          <property name="checkable">
@@ -3136,8 +3136,8 @@ intersects, contains, within, touches, crosses, overlaps.</string>
                          </property>
                          <property name="iconSize">
                           <size>
-                           <width>16</width>
-                           <height>16</height>
+                           <width>22</width>
+                           <height>22</height>
                           </size>
                          </property>
                          <property name="checkable">
@@ -3230,8 +3230,8 @@ intersects, contains, within, touches, crosses, overlaps.</string>
                          </property>
                          <property name="iconSize">
                           <size>
-                           <width>16</width>
-                           <height>16</height>
+                           <width>22</width>
+                           <height>22</height>
                           </size>
                          </property>
                          <property name="checkable">
@@ -3287,8 +3287,8 @@ intersects, contains, within, touches, crosses, overlaps.</string>
                          </property>
                          <property name="iconSize">
                           <size>
-                           <width>16</width>
-                           <height>16</height>
+                           <width>22</width>
+                           <height>22</height>
                           </size>
                          </property>
                          <property name="checkable">
@@ -3421,6 +3421,22 @@ intersects, contains, within, touches, crosses, overlaps.</string>
                      </layout>
                     </item>
                     <item>
+                     <spacer name="spacer_filtering_before_layers">
+                      <property name="orientation">
+                       <enum>Qt::Vertical</enum>
+                      </property>
+                      <property name="sizeType">
+                       <enum>QSizePolicy::Expanding</enum>
+                      </property>
+                      <property name="sizeHint" stdset="0">
+                       <size>
+                        <width>20</width>
+                        <height>4</height>
+                       </size>
+                      </property>
+                     </spacer>
+                    </item>
+                    <item>
                      <layout class="QHBoxLayout" name="horizontalLayout_filtering_distant_layers">
                       <property name="spacing">
                        <number>4</number>
@@ -3457,7 +3473,12 @@ intersects, contains, within, touches, crosses, overlaps.</string>
                           <family>Segoe UI</family>
                           <pointsize>8</pointsize>
                           <weight>75</weight>
+                          <italic>false</italic>
                           <bold>true</bold>
+                          <underline>false</underline>
+                          <strikeout>false</strikeout>
+                          <stylestrategy>PreferAntialias</stylestrategy>
+                          <kerning>true</kerning>
                          </font>
                         </property>
                         <property name="cursor">
@@ -3477,23 +3498,7 @@ intersects, contains, within, touches, crosses, overlaps.</string>
                      </layout>
                     </item>
                     <item>
-                     <spacer name="verticalSpacer_filtering_values_search_top">
-                      <property name="orientation">
-                       <enum>Qt::Vertical</enum>
-                      </property>
-                      <property name="sizeType">
-                       <enum>QSizePolicy::Expanding</enum>
-                      </property>
-                      <property name="sizeHint" stdset="0">
-                       <size>
-                        <width>20</width>
-                        <height>4</height>
-                       </size>
-                      </property>
-                     </spacer>
-                    </item>
-                    <item>
-                     <spacer name="verticalSpacer_filtering_values_search_bottom">
+                     <spacer name="spacer_filtering_after_layers">
                       <property name="orientation">
                        <enum>Qt::Vertical</enum>
                       </property>
@@ -3610,7 +3615,7 @@ intersects, contains, within, touches, crosses, overlaps.</string>
                      </layout>
                     </item>
                     <item>
-                     <spacer name="verticalSpacer_filtering_values_buttons_top">
+                     <spacer name="spacer_filtering_after_combine_operators">
                       <property name="orientation">
                        <enum>Qt::Vertical</enum>
                       </property>
@@ -3897,8 +3902,8 @@ intersects, contains, within, touches, crosses, overlaps.</string>
                 <rect>
                  <x>0</x>
                  <y>0</y>
-                 <width>429</width>
-                 <height>379</height>
+                 <width>416</width>
+                 <height>183</height>
                 </rect>
                </property>
                <attribute name="icon">
@@ -3924,19 +3929,19 @@ intersects, contains, within, touches, crosses, overlaps.</string>
                 <item>
                  <layout class="QHBoxLayout" name="horizontalLayout_exporting_content">
                   <property name="spacing">
-                   <number>4</number>
+                   <number>2</number>
                   </property>
                   <property name="leftMargin">
-                   <number>4</number>
+                   <number>0</number>
                   </property>
                   <property name="topMargin">
-                   <number>4</number>
+                   <number>0</number>
                   </property>
                   <property name="rightMargin">
-                   <number>4</number>
+                   <number>0</number>
                   </property>
                   <property name="bottomMargin">
-                   <number>4</number>
+                   <number>0</number>
                   </property>
                   <item>
                    <widget class="QWidget" name="widget_exporting_keys" native="true">
@@ -3948,19 +3953,19 @@ intersects, contains, within, touches, crosses, overlaps.</string>
                     </property>
                     <property name="minimumSize">
                      <size>
-                      <width>36</width>
+                      <width>32</width>
                       <height>32</height>
                      </size>
                     </property>
                     <property name="maximumSize">
                      <size>
-                      <width>36</width>
+                      <width>32</width>
                       <height>16777215</height>
                      </size>
                     </property>
                     <property name="baseSize">
                      <size>
-                      <width>36</width>
+                      <width>32</width>
                       <height>0</height>
                      </size>
                     </property>
@@ -4040,8 +4045,8 @@ Only filtered features will be exported.</string>
                          </property>
                          <property name="iconSize">
                           <size>
-                           <width>16</width>
-                           <height>16</height>
+                           <width>22</width>
+                           <height>22</height>
                           </size>
                          </property>
                          <property name="checkable">
@@ -4138,8 +4143,8 @@ Useful for standardizing outputs to a common projection.</string>
                          </property>
                          <property name="iconSize">
                           <size>
-                           <width>16</width>
-                           <height>16</height>
+                           <width>22</width>
+                           <height>22</height>
                           </size>
                          </property>
                          <property name="checkable">
@@ -4233,8 +4238,8 @@ and rendering settings when sharing data.</string>
                          </property>
                          <property name="iconSize">
                           <size>
-                           <width>16</width>
-                           <height>16</height>
+                           <width>22</width>
+                           <height>22</height>
                           </size>
                          </property>
                          <property name="checkable">
@@ -4330,8 +4335,8 @@ Select the file format for exported data:
                          </property>
                          <property name="iconSize">
                           <size>
-                           <width>16</width>
-                           <height>16</height>
+                           <width>22</width>
+                           <height>22</height>
                           </size>
                          </property>
                          <property name="checkable">
@@ -4425,8 +4430,8 @@ a folder or enter a path directly.</string>
                          </property>
                          <property name="iconSize">
                           <size>
-                           <width>16</width>
-                           <height>16</height>
+                           <width>22</width>
+                           <height>22</height>
                           </size>
                          </property>
                          <property name="checkable">
@@ -4520,8 +4525,8 @@ Includes data files, styles, and metadata.</string>
                          </property>
                          <property name="iconSize">
                           <size>
-                           <width>16</width>
-                           <height>16</height>
+                           <width>22</width>
+                           <height>22</height>
                           </size>
                          </property>
                          <property name="checkable">
@@ -4572,6 +4577,22 @@ Includes data files, styles, and metadata.</string>
                        <string>This placeholder will be replaced by custom widget at runtime</string>
                       </property>
                      </widget>
+                    </item>
+                    <item>
+                     <spacer name="spacer_exporting_after_layers">
+                      <property name="orientation">
+                       <enum>Qt::Vertical</enum>
+                      </property>
+                      <property name="sizeType">
+                       <enum>QSizePolicy::Expanding</enum>
+                      </property>
+                      <property name="sizeHint" stdset="0">
+                       <size>
+                        <width>20</width>
+                        <height>4</height>
+                       </size>
+                      </property>
+                     </spacer>
                     </item>
                     <item>
                      <widget class="QgsProjectionSelectionWidget" name="mQgsProjectionSelectionWidget_exporting_projection">
@@ -5056,7 +5077,7 @@ Includes data files, styles, and metadata.</string>
                  <x>0</x>
                  <y>0</y>
                  <width>429</width>
-                 <height>379</height>
+                 <height>171</height>
                 </rect>
                </property>
                <attribute name="icon">
@@ -5189,8 +5210,8 @@ Use Reset to restore all features.</string>
              </property>
              <property name="iconSize">
               <size>
-               <width>28</width>
-               <height>28</height>
+               <width>32</width>
+               <height>32</height>
               </size>
              </property>
              <property name="flat">
@@ -5256,8 +5277,8 @@ Hold Shift to see undo history.</string>
              </property>
              <property name="iconSize">
               <size>
-               <width>28</width>
-               <height>28</height>
+               <width>32</width>
+               <height>32</height>
               </size>
              </property>
              <property name="flat">
@@ -5301,8 +5322,8 @@ Use this to step forward through your filter history.</string>
              </property>
              <property name="iconSize">
               <size>
-               <width>28</width>
-               <height>28</height>
+               <width>32</width>
+               <height>32</height>
               </size>
              </property>
              <property name="flat">
@@ -5356,8 +5377,8 @@ This resets the layer to its original state.</string>
              </property>
              <property name="iconSize">
               <size>
-               <width>28</width>
-               <height>28</height>
+               <width>32</width>
+               <height>32</height>
               </size>
              </property>
              <property name="flat">
@@ -5408,8 +5429,8 @@ in the EXPORTING panel before clicking.</string>
              </property>
              <property name="iconSize">
               <size>
-               <width>28</width>
-               <height>28</height>
+               <width>32</width>
+               <height>32</height>
               </size>
              </property>
              <property name="flat">
@@ -5450,8 +5471,8 @@ and access settings and optimization options.</string>
              </property>
              <property name="iconSize">
               <size>
-               <width>28</width>
-               <height>28</height>
+               <width>32</width>
+               <height>32</height>
               </size>
              </property>
              <property name="checkable">

@@ -69,14 +69,14 @@ class ButtonStyler(StylerBase):
     # Icon sizes by profile
     ICON_SIZES = {
         'compact': {
-            'standard': 16,
-            'action': 22,
-            'tool': 14,
+            'standard': 20,
+            'action': 26,
+            'tool': 18,
         },
         'normal': {
-            'standard': 20,
-            'action': 28,
-            'tool': 18,
+            'standard': 24,
+            'action': 32,
+            'tool': 22,
         }
     }
     

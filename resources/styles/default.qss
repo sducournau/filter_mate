@@ -214,7 +214,7 @@ END OF REMOVED SECTION */
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 4px;
-    padding: 4px 8px 8px 8px;
+    padding: 6px 8px 6px 8px;
     margin: 0px;
     color: {color_font_0};
     font-weight: normal;
@@ -225,13 +225,13 @@ END OF REMOVED SECTION */
 #dockWidgetContents QToolBox QToolButton {
     background-color: transparent;
     border: none;
-    padding: 4px 10px 8px 28px;
+    padding: 6px 10px 6px 32px;
     margin: 0px;
     min-height: 24px;
     color: {color_font_0};
     font-weight: normal;
     text-align: left;
-    qproperty-iconSize: 16px 16px;
+    qproperty-iconSize: 20px 20px;
 }
 
 #dockWidgetContents QToolBox::tab:selected {
@@ -786,7 +786,9 @@ QPushButton[objectName^="pushButton_exporting_"],
 QPushButton[objectName^="pushButton_checkable_exporting_"] {
     /* Dimensions are set dynamically by UIConfig in filter_mate_dockwidget.py */
     /* Do NOT set min/max-width/height here to avoid conflicts */
-    padding: 4px;
+    /* FIX 2026-02-07: Removed padding for tight icon centering */
+    padding: 0px;
+    margin: 0px;
 }
 
 /* SpinBox & DoubleSpinBox - Enhanced focus visibility - SCOPED to FilterMate */
@@ -967,17 +969,16 @@ QLabel#label_backend_indicator {
 }
 
 /* Widget Keys Panels - Sidebar buttons with responsive layout */
-/* Enhanced styling for better alignment and visual hierarchy */
+/* FIX 2026-02-07: Removed border and padding for tight icon centering */
 QWidget#widget_exploring_keys,
 QWidget#widget_raster_keys,
 QWidget#widget_filtering_keys,
 QWidget#widget_exporting_keys {
-    background-color: {color_1};
-    border: 1px solid {color_2};
-    border-radius: 4px;
+    background-color: transparent;
+    border: none;
+    border-radius: 0px;
     padding: 0px;
     margin: 0px;
-    /* FIX 2026-02-02: Zero padding/margin for compact layout */
 }
 
 /* Buttons inside widget_exploring_keys and widget_raster_keys - Non-checkable - Harmonized with filtering_keys */
@@ -1152,8 +1153,6 @@ QWidget#widget_exporting_keys QPushButton:checkable:checked:pressed {
     border: 2px solid {color_accent_dark};
     padding: 0px;
     margin: 0px;
-}
-    box-shadow: 0 1px 3px rgba(25, 118, 210, 0.3);
 }
 
 /* ========================================================================
@@ -1506,4 +1505,97 @@ QFrame#frame_actions QSpacerItem {
     color: {color_font_0};
     font-weight: normal;
     padding: 2px 0px;
+}
+
+/* ========================================================================
+   FILTERING RASTER SECTION - Stacked widget for vector/raster filtering pages
+   Added: 2026-02-07 (v6.0 raster filtering integration)
+   ======================================================================== */
+
+/* Stacked widget container - transparent, seamless */
+#stackedWidget_filtering {
+    background-color: transparent;
+    border: none;
+}
+
+/* Page containers - transparent backgrounds */
+#page_filtering_vector,
+#page_filtering_raster {
+    background-color: transparent;
+    border: none;
+}
+
+/* Band selector combo in filtering section */
+#comboBox_band_filtering {
+    background-color: {color_1};
+    border: 1px solid {color_2};
+    border-radius: 4px;
+    padding: 4px 8px;
+    color: {color_font_0};
+    min-height: 26px;
+    max-height: 26px;
+}
+
+#comboBox_band_filtering:hover {
+    border: 2px solid {color_accent};
+    padding: 3px 7px;
+}
+
+#comboBox_band_filtering:focus {
+    border: 2px solid {color_accent};
+    padding: 3px 7px;
+}
+
+/* Histogram container in filtering section */
+#widget_filtering_histogram {
+    background-color: {color_1};
+    border: 1px solid {color_2};
+    border-radius: 4px;
+    padding: 2px;
+    min-height: 80px;
+}
+
+/* Min/Max spinboxes in filtering section */
+#doubleSpinBox_filtering_min,
+#doubleSpinBox_filtering_max {
+    background-color: {color_1};
+    border: 1px solid {color_2};
+    border-radius: 4px;
+    padding: 4px 6px;
+    color: {color_font_0};
+    min-height: 26px;
+    max-height: 26px;
+}
+
+#doubleSpinBox_filtering_min:hover,
+#doubleSpinBox_filtering_max:hover {
+    border: 2px solid {color_accent};
+    padding: 3px 5px;
+}
+
+#doubleSpinBox_filtering_min:focus,
+#doubleSpinBox_filtering_max:focus {
+    border: 2px solid {color_accent};
+    padding: 3px 5px;
+}
+
+/* Predicate selector combo in filtering section */
+#comboBox_filtering_predicate {
+    background-color: {color_1};
+    border: 1px solid {color_2};
+    border-radius: 4px;
+    padding: 4px 8px;
+    color: {color_font_0};
+    min-height: 26px;
+    max-height: 26px;
+}
+
+#comboBox_filtering_predicate:hover {
+    border: 2px solid {color_accent};
+    padding: 3px 7px;
+}
+
+#comboBox_filtering_predicate:focus {
+    border: 2px solid {color_accent};
+    padding: 3px 7px;
 }

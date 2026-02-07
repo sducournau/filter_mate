@@ -49,6 +49,11 @@ class SearchableJsonView(QtWidgets.QWidget):
         super(SearchableJsonView, self).__init__(parent)
         self.plugin_dir = plugin_dir
         self._source_model = model
+        # FIX: Ensure the widget expands vertically to fill available space
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.Preferred,
+            QtWidgets.QSizePolicy.Expanding
+        )
         self._setup_ui()
         self._setup_filter()
         self._connect_signals()

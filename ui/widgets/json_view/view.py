@@ -116,6 +116,7 @@ class JsonView(QtWidgets.QTreeView):
                     alternate-background-color: #f5f5f5;
                     selection-background-color: #0078d4;
                     selection-color: white;
+                    color: #1E1E1E;
                     border: 2px solid #999999;
                     gridline-color: #d0d0d0;
                 }
@@ -142,6 +143,7 @@ class JsonView(QtWidgets.QTreeView):
                     font-weight: bold;
                     font-size: 9pt;
                     min-height: 24px;
+                    color: #333333;
                 }
                 QHeaderView::section:first {
                     border-left: 1px solid #c0c0c0;

@@ -676,6 +676,15 @@ class FilterMateApp:
         max_queue = STABILITY_CONSTANTS['MAX_ADD_LAYERS_QUEUE']
         if len(self._add_layers_queue) > max_queue: self._add_layers_queue = self._add_layers_queue[-max_queue:]; flags_reset = True
         if self._pending_add_layers_tasks < 0 or self._pending_add_layers_tasks > 10: self._pending_add_layers_tasks = 0; flags_reset = True
+        # FIX 2026-02-07: Check comboBox blockSignals stuck True (can happen if filter task terminated)
+        if self.dockwidget and hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
+            try:
+                if self.dockwidget.comboBox_filtering_current_layer.signalsBlocked() and not getattr(self.dockwidget, '_filtering_in_progress', False):
+                    logger.warning("🔧 STABILITY: comboBox_filtering_current_layer blockSignals stuck True without filtering - resetting")
+                    self.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
+                    flags_reset = True
+            except Exception:
+                pass
         return flags_reset
 
     def _set_flag_with_timestamp(self, flag_name: str, value: bool):
@@ -1141,10 +1150,17 @@ class FilterMateApp:
         
         # Connect completion handler
         self.appTasks[task_name].taskCompleted.connect(
-            lambda tn=task_name, cl=current_layer, tp=task_parameters: 
+            lambda tn=task_name, cl=current_layer, tp=task_parameters:
                 self.filter_engine_task_completed(tn, cl, tp)
         )
-        
+
+        # FIX 2026-02-07: Connect taskTerminated to cleanup protection flags
+        # Without this, blockSignals(True) and _filtering_in_progress stay stuck if the task fails
+        self.appTasks[task_name].taskTerminated.connect(
+            lambda tn=task_name: self._handle_filter_task_terminated(tn),
+            Qt.QueuedConnection
+        )
+
         # Cancel conflicting tasks and add to task manager
         self._cancel_conflicting_tasks()
         QgsApplication.taskManager().addTask(self.appTasks[task_name])
@@ -1436,6 +1452,41 @@ class FilterMateApp:
             service.cancel_layer_tasks(layer_id, self.dockwidget)
         else:
             logger.warning("TaskManagementService not available, cannot cancel layer tasks")
+
+    def _handle_filter_task_terminated(self, task_name):
+        """FIX 2026-02-07: Cleanup protection flags when a filter task fails/terminates.
+
+        Without this handler, blockSignals(True) on comboBox_filtering_current_layer
+        and _filtering_in_progress=True stay stuck permanently, preventing any further
+        layer switching or filtering.
+        """
+        logger.warning(f"⚠️ Filter task '{task_name}' TERMINATED - cleaning up protection flags")
+        if not self.dockwidget:
+            return
+        try:
+            # Reset filtering flag
+            self.dockwidget._filtering_in_progress = False
+            # Unblock comboBox signals
+            if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
+                self.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
+            # Reconnect CURRENT_LAYER.layerChanged signal
+            if hasattr(self.dockwidget, 'manageSignal'):
+                cache_key = "FILTERING.CURRENT_LAYER.layerChanged"
+                self.dockwidget._signal_connection_states.pop(cache_key, None)
+                if hasattr(self.dockwidget, '_signal_manager') and self.dockwidget._signal_manager:
+                    self.dockwidget._signal_manager._signal_connection_states.pop(cache_key, None)
+                self.dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
+            # Reconnect LAYER_TREE_VIEW if auto-current-layer is enabled
+            try:
+                auto_flag = self.dockwidget.project_props.get("OPTIONS", {}).get("LAYERS", {}).get(
+                    "LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG", False)
+                if auto_flag:
+                    self.dockwidget.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect')
+            except Exception:
+                pass
+            logger.info(f"✅ Filter task cleanup complete - signals restored")
+        except Exception as e:
+            logger.error(f"❌ _handle_filter_task_terminated cleanup failed: {e}")
 
     def _handle_layer_task_terminated(self, task_name):
         """Handle layer management task termination (failure or cancellation) to prevent stuck UI."""

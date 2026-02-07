@@ -865,13 +865,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._setup_filtering_tab_widgets()
         self._setup_exporting_tab_widgets()
         logger.info("🔧 setupUiCustom: _setup_*_tab_widgets completed")
-        
+
         # FIX 2026-02-02: Force geometry update for all dynamically inserted widgets
         # Qt needs explicit updateGeometry() calls after inserting widgets into existing layouts
         self._force_dynamic_widgets_geometry_update()
         if 'CURRENT_PROJECT' in self.CONFIG_DATA:
             self.project_props = self.CONFIG_DATA["CURRENT_PROJECT"]
-        self.manage_configuration_model()
+        # FIX 2026-02-07: Wrap in try/except so configuration model is always created
+        try:
+            self.manage_configuration_model()
+        except Exception as e:
+            logger.error(f"manage_configuration_model FAILED: {e}", exc_info=True)
         self.dockwidget_widgets_configuration()
         self._load_all_pushbutton_icons()
         self._load_raster_tool_icons()  # Explicit call to ensure raster icons are loaded
@@ -1175,7 +1179,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # v5.11: Connect histogram groupbox toggle to trigger histogram computation
             if hasattr(self, 'mGroupBox_raster_histogram'):
                 self.mGroupBox_raster_histogram.toggled.connect(self._on_histogram_groupbox_toggled)
-            
+
+            # v6.0: Setup filtering stacked widget (vector/raster pages) and connect signals
+            self._setup_filtering_stacked_widget()
+            self._connect_filtering_raster_signals()
+
             logger.info("Note: Native exploring toolbox signals connected")
             
         except Exception as e:
@@ -1290,6 +1298,449 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
         except Exception as e:
             logger.warning(f"Could not setup raster scrollarea: {e}", exc_info=True)
+
+    def _setup_filtering_stacked_widget(self):
+        """v6.0: Create a stacked-like filtering UI with vector and raster pages.
+        
+        Moves existing vector filtering widgets into a container (page 0)
+        and creates new raster filtering widgets in a second container (page 1).
+        Uses QStackedWidget for clean page switching when layer type changes.
+        
+        Called during widget initialization, after the .ui widgets are created.
+        Follows the same runtime-wrapping pattern as _setup_raster_scrollarea().
+        """
+        try:
+            from qgis.PyQt.QtWidgets import (
+                QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget,
+                QComboBox, QDoubleSpinBox, QLabel, QSizePolicy, QFrame
+            )
+            from qgis.PyQt.QtCore import Qt
+            from qgis.PyQt.QtGui import QFont
+
+            layout = self.verticalLayout_filtering_values
+            if layout is None or layout.count() < 2:
+                logger.warning("verticalLayout_filtering_values not ready for stacked widget setup")
+                return
+
+            # === Create QStackedWidget ===
+            self.stackedWidget_filtering = QStackedWidget()
+            self.stackedWidget_filtering.setObjectName("stackedWidget_filtering")
+
+            # === Page 0: Vector content (move existing items) ===
+            self.page_filtering_vector = QWidget()
+            self.page_filtering_vector.setObjectName("page_filtering_vector")
+            vector_layout = QVBoxLayout(self.page_filtering_vector)
+            vector_layout.setContentsMargins(0, 0, 0, 0)
+            vector_layout.setSpacing(4)
+
+            # Move all items after index 0 (source layer row stays in main layout)
+            while layout.count() > 1:
+                item = layout.takeAt(1)
+                if item.widget():
+                    vector_layout.addWidget(item.widget())
+                elif item.layout():
+                    vector_layout.addLayout(item.layout())
+                elif item.spacerItem():
+                    vector_layout.addItem(item)
+
+            self.stackedWidget_filtering.addWidget(self.page_filtering_vector)
+
+            # === Page 1: Raster filtering content (new widgets) ===
+            self.page_filtering_raster = QWidget()
+            self.page_filtering_raster.setObjectName("page_filtering_raster")
+            raster_layout = QVBoxLayout(self.page_filtering_raster)
+            raster_layout.setContentsMargins(0, 0, 0, 0)
+            raster_layout.setSpacing(4)
+
+            # --- Band selector ---
+            band_row = QHBoxLayout()
+            band_row.setSpacing(4)
+            band_label = QLabel("Band:")
+            band_label.setFont(QFont("Segoe UI", 8, QFont.Bold))
+            band_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            self.comboBox_band_filtering = QComboBox()
+            self.comboBox_band_filtering.setObjectName("comboBox_band_filtering")
+            self.comboBox_band_filtering.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            self.comboBox_band_filtering.setMinimumHeight(24)
+            self.comboBox_band_filtering.setCursor(Qt.PointingHandCursor)
+            band_row.addWidget(band_label)
+            band_row.addWidget(self.comboBox_band_filtering)
+            raster_layout.addLayout(band_row)
+
+            # --- Histogram widget ---
+            self._filtering_histogram_container = QWidget()
+            self._filtering_histogram_container.setObjectName("widget_filtering_histogram")
+            self._filtering_histogram_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            self._filtering_histogram_container.setMinimumHeight(80)
+            hist_layout = QVBoxLayout(self._filtering_histogram_container)
+            hist_layout.setContentsMargins(0, 0, 0, 0)
+            hist_layout.setSpacing(0)
+
+            try:
+                from ui.widgets.raster_histogram_interactive import RasterHistogramInteractiveWidget
+                self._filtering_raster_histogram = RasterHistogramInteractiveWidget(
+                    self._filtering_histogram_container
+                )
+                self._filtering_raster_histogram.setMinimumHeight(80)
+                self._filtering_raster_histogram.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+                hist_layout.addWidget(self._filtering_raster_histogram)
+            except ImportError as e:
+                logger.warning(f"Could not import histogram widget for filtering: {e}")
+                self._filtering_raster_histogram = None
+                fallback_label = QLabel("Histogram unavailable")
+                fallback_label.setAlignment(Qt.AlignCenter)
+                hist_layout.addWidget(fallback_label)
+
+            raster_layout.addWidget(self._filtering_histogram_container)
+
+            # --- Min/Max range spinboxes ---
+            range_row = QHBoxLayout()
+            range_row.setSpacing(4)
+            min_label = QLabel("Min:")
+            min_label.setFont(QFont("Segoe UI", 8, QFont.Bold))
+            min_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            self.doubleSpinBox_filtering_min = QDoubleSpinBox()
+            self.doubleSpinBox_filtering_min.setObjectName("doubleSpinBox_filtering_min")
+            self.doubleSpinBox_filtering_min.setMinimumHeight(24)
+            self.doubleSpinBox_filtering_min.setDecimals(4)
+            self.doubleSpinBox_filtering_min.setRange(-1e10, 1e10)
+            self.doubleSpinBox_filtering_min.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+            max_label = QLabel("Max:")
+            max_label.setFont(QFont("Segoe UI", 8, QFont.Bold))
+            max_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            self.doubleSpinBox_filtering_max = QDoubleSpinBox()
+            self.doubleSpinBox_filtering_max.setObjectName("doubleSpinBox_filtering_max")
+            self.doubleSpinBox_filtering_max.setMinimumHeight(24)
+            self.doubleSpinBox_filtering_max.setDecimals(4)
+            self.doubleSpinBox_filtering_max.setRange(-1e10, 1e10)
+            self.doubleSpinBox_filtering_max.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+            range_row.addWidget(min_label)
+            range_row.addWidget(self.doubleSpinBox_filtering_min)
+            range_row.addWidget(max_label)
+            range_row.addWidget(self.doubleSpinBox_filtering_max)
+            raster_layout.addLayout(range_row)
+
+            # --- Predicate selector ---
+            predicate_row = QHBoxLayout()
+            predicate_row.setSpacing(4)
+            pred_label = QLabel("Predicate:")
+            pred_label.setFont(QFont("Segoe UI", 8, QFont.Bold))
+            pred_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            self.comboBox_filtering_predicate = QComboBox()
+            self.comboBox_filtering_predicate.setObjectName("comboBox_filtering_predicate")
+            self.comboBox_filtering_predicate.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            self.comboBox_filtering_predicate.setMinimumHeight(24)
+            self.comboBox_filtering_predicate.setCursor(Qt.PointingHandCursor)
+            predicate_row.addWidget(pred_label)
+            predicate_row.addWidget(self.comboBox_filtering_predicate)
+            raster_layout.addLayout(predicate_row)
+
+            # Stretch at bottom
+            raster_layout.addStretch(1)
+
+            self.stackedWidget_filtering.addWidget(self.page_filtering_raster)
+
+            # === Add stacked widget to main layout ===
+            layout.addWidget(self.stackedWidget_filtering)
+
+            # Default to vector page
+            self.stackedWidget_filtering.setCurrentIndex(0)
+
+            # Apply styles
+            self._apply_style_to_widget(self.stackedWidget_filtering)
+
+            logger.info("Filtering stacked widget created: page 0=vector, page 1=raster")
+
+        except Exception as e:
+            logger.error(f"Failed to setup filtering stacked widget: {e}", exc_info=True)
+            self.stackedWidget_filtering = None
+
+    def _auto_switch_filtering_page(self, layer):
+        """v6.0: Auto-switch filtering stackedWidget between vector/raster pages.
+        
+        Switches stackedWidget_filtering to page 0 (vector) or page 1 (raster)
+        based on layer type. Also triggers raster widget sync when switching
+        to the raster page.
+        
+        Called from _auto_switch_exploring_page() for unified layer-type switching.
+        
+        Args:
+            layer: QgsVectorLayer or QgsRasterLayer
+        """
+        if not layer:
+            return
+
+        if not hasattr(self, 'stackedWidget_filtering') or self.stackedWidget_filtering is None:
+            return
+
+        try:
+            is_raster = isinstance(layer, QgsRasterLayer)
+            target_index = 1 if is_raster else 0
+
+            current_index = self.stackedWidget_filtering.currentIndex()
+            if current_index != target_index:
+                self.stackedWidget_filtering.setCurrentIndex(target_index)
+                logger.info(
+                    f"Filtering page switched to {'raster' if is_raster else 'vector'} "
+                    f"for layer '{layer.name()}'"
+                )
+
+            if is_raster:
+                self._sync_filtering_raster_widgets_with_layer(layer)
+            else:
+                # FIX 2026-02-07: When switching to vector page, ensure layers_to_filter is populated
+                # This handles the raster→vector transition where _synchronize_layer_widgets
+                # may not have run yet (it runs later in current_layer_changed)
+                try:
+                    widget = self.widgets.get("FILTERING", {}).get("LAYERS_TO_FILTER", {}).get("WIDGET")
+                    if widget and widget.count() == 0 and self.PROJECT_LAYERS:
+                        logger.info("layers_to_filter empty after vector page switch - populating")
+                        self.filtering_populate_layers_chekableCombobox(layer)
+                except Exception as e:
+                    logger.debug(f"Could not populate layers_to_filter during page switch: {e}")
+
+        except Exception as e:
+            logger.warning(f"Failed to auto-switch filtering page: {e}")
+
+    def _sync_filtering_raster_widgets_with_layer(self, layer):
+        """v6.0: Sync filtering section raster widgets with the given raster layer.
+        
+        Populates band combobox, predicate combobox, updates spinbox ranges,
+        and defers histogram computation to avoid QGIS freeze.
+        
+        Args:
+            layer: QgsRasterLayer to sync with
+        """
+        from qgis.core import QgsRasterLayer
+
+        if not layer or not isinstance(layer, QgsRasterLayer):
+            return
+
+        try:
+            # Populate band combobox
+            self._populate_filtering_raster_band_combobox(layer)
+
+            # Populate predicate combobox (only if empty)
+            if hasattr(self, 'comboBox_filtering_predicate'):
+                if self.comboBox_filtering_predicate.count() == 0:
+                    self._populate_filtering_raster_predicate_combobox()
+
+            # Update spinbox ranges from band statistics
+            band_index = 1
+            if hasattr(self, 'comboBox_band_filtering'):
+                band_index = self.comboBox_band_filtering.currentIndex() + 1
+                if band_index < 1:
+                    band_index = 1
+
+            provider = layer.dataProvider()
+            if provider:
+                from qgis.core import QgsRasterBandStats, Qgis
+                stats = provider.bandStatistics(band_index, QgsRasterBandStats.All)
+                if stats.minimumValue != stats.maximumValue:
+                    self.doubleSpinBox_filtering_min.blockSignals(True)
+                    self.doubleSpinBox_filtering_max.blockSignals(True)
+                    self.doubleSpinBox_filtering_min.setRange(stats.minimumValue, stats.maximumValue)
+                    self.doubleSpinBox_filtering_max.setRange(stats.minimumValue, stats.maximumValue)
+                    self.doubleSpinBox_filtering_min.setValue(stats.minimumValue)
+                    self.doubleSpinBox_filtering_max.setValue(stats.maximumValue)
+                    self.doubleSpinBox_filtering_min.blockSignals(False)
+                    self.doubleSpinBox_filtering_max.blockSignals(False)
+
+            # Defer histogram update (100ms) to prevent QGIS freeze
+            import weakref
+            from qgis.PyQt.QtCore import QTimer
+
+            weak_self = weakref.ref(self)
+            captured_layer_id = layer.id()
+
+            def deferred_filtering_histogram_update():
+                self_ref = weak_self()
+                if not self_ref:
+                    return
+                try:
+                    from qgis.core import QgsProject, QgsRasterLayer as QRL
+                    fresh_layer = QgsProject.instance().mapLayer(captured_layer_id)
+                    if fresh_layer and isinstance(fresh_layer, QRL):
+                        self_ref._update_filtering_raster_histogram(fresh_layer)
+                except Exception as e:
+                    logger.warning(f"Deferred filtering histogram update failed: {e}")
+
+            QTimer.singleShot(100, deferred_filtering_histogram_update)
+
+            logger.info(f"Filtering raster widgets synced with layer '{layer.name()}'")
+
+        except Exception as e:
+            logger.error(f"Failed to sync filtering raster widgets: {e}", exc_info=True)
+
+    def _populate_filtering_raster_band_combobox(self, layer):
+        """v6.0: Populate the filtering band combobox with bands from raster layer."""
+        from qgis.core import QgsRasterLayer
+
+        if not hasattr(self, 'comboBox_band_filtering'):
+            return
+
+        self.comboBox_band_filtering.blockSignals(True)
+        self.comboBox_band_filtering.clear()
+
+        if layer and isinstance(layer, QgsRasterLayer):
+            band_count = layer.bandCount()
+            for i in range(1, band_count + 1):
+                band_name = layer.bandName(i) if layer.bandName(i) else f"Band {i}"
+                self.comboBox_band_filtering.addItem(f"{i} - {band_name}")
+
+        self.comboBox_band_filtering.blockSignals(False)
+
+    def _populate_filtering_raster_predicate_combobox(self):
+        """v6.0: Populate the filtering predicate combobox with RasterPredicate values."""
+        if not hasattr(self, 'comboBox_filtering_predicate'):
+            return
+
+        self.comboBox_filtering_predicate.blockSignals(True)
+        self.comboBox_filtering_predicate.clear()
+
+        predicates = [
+            ("within_range", "Within Range (min ≤ val ≤ max)"),
+            ("outside_range", "Outside Range (val < min OR val > max)"),
+            ("above_value", "Above Value (val > min)"),
+            ("below_value", "Below Value (val < max)"),
+            ("equals_value", "Equals Value (val = min)"),
+            ("is_nodata", "Is NoData"),
+            ("is_not_nodata", "Is Not NoData"),
+        ]
+
+        for key, label in predicates:
+            self.comboBox_filtering_predicate.addItem(label, key)
+
+        self.comboBox_filtering_predicate.blockSignals(False)
+
+    def _update_filtering_raster_histogram(self, layer):
+        """v6.0: Update the filtering section histogram for the given raster layer."""
+        if not hasattr(self, '_filtering_raster_histogram') or self._filtering_raster_histogram is None:
+            return
+
+        try:
+            band_index = 1
+            if hasattr(self, 'comboBox_band_filtering'):
+                band_index = self.comboBox_band_filtering.currentIndex() + 1
+                if band_index < 1:
+                    band_index = 1
+
+            self._filtering_raster_histogram.set_layer(layer, band_index)
+
+            # Sync histogram range with current spinbox values
+            if hasattr(self, 'doubleSpinBox_filtering_min') and hasattr(self, 'doubleSpinBox_filtering_max'):
+                min_val = self.doubleSpinBox_filtering_min.value()
+                max_val = self.doubleSpinBox_filtering_max.value()
+                self._filtering_raster_histogram.set_range(min_val, max_val)
+
+            logger.debug(f"Filtering histogram updated for band {band_index}")
+
+        except Exception as e:
+            logger.warning(f"Failed to update filtering histogram: {e}")
+
+    def _on_filtering_histogram_range_changed(self, min_val: float, max_val: float):
+        """v6.0: Sync filtering histogram interactive range to filtering spinboxes."""
+        if hasattr(self, 'doubleSpinBox_filtering_min'):
+            self.doubleSpinBox_filtering_min.blockSignals(True)
+            self.doubleSpinBox_filtering_min.setValue(min_val)
+            self.doubleSpinBox_filtering_min.blockSignals(False)
+        if hasattr(self, 'doubleSpinBox_filtering_max'):
+            self.doubleSpinBox_filtering_max.blockSignals(True)
+            self.doubleSpinBox_filtering_max.setValue(max_val)
+            self.doubleSpinBox_filtering_max.blockSignals(False)
+
+    def _on_filtering_histogram_range_finished(self, min_val: float, max_val: float):
+        """v6.0: Apply raster filter criteria after interactive histogram selection."""
+        self._on_filtering_histogram_range_changed(min_val, max_val)
+        self._update_raster_filter_from_filtering_ui()
+
+    def _on_filtering_raster_band_changed(self, index: int):
+        """v6.0: Handle band change in filtering section — refresh histogram and stats."""
+        layer = self._get_current_exploring_layer()
+        if layer and isinstance(layer, QgsRasterLayer):
+            self._sync_filtering_raster_widgets_with_layer(layer)
+
+    def _on_filtering_raster_predicate_changed(self, index: int):
+        """v6.0: Handle predicate change in filtering section — update criteria."""
+        self._update_raster_filter_from_filtering_ui()
+
+    def _update_raster_filter_from_filtering_ui(self):
+        """v6.0: Create RasterFilterCriteria from FILTERING section UI state.
+        
+        Reads from filtering-specific widgets (band, min/max, predicate)
+        and stores criteria in _current_raster_criteria for task execution.
+        """
+        try:
+            min_val = self.doubleSpinBox_filtering_min.value() if hasattr(self, 'doubleSpinBox_filtering_min') else None
+            max_val = self.doubleSpinBox_filtering_max.value() if hasattr(self, 'doubleSpinBox_filtering_max') else None
+            predicate_idx = self.comboBox_filtering_predicate.currentIndex() if hasattr(self, 'comboBox_filtering_predicate') else 0
+
+            from core.domain.filter_criteria import RasterPredicate, RasterFilterCriteria
+            predicates = list(RasterPredicate)
+            predicate = predicates[predicate_idx] if predicate_idx < len(predicates) else RasterPredicate.WITHIN_RANGE
+
+            # Update filtering histogram visualization
+            if hasattr(self, '_filtering_raster_histogram') and self._filtering_raster_histogram:
+                if min_val is not None and max_val is not None:
+                    self._filtering_raster_histogram.set_range(min_val, max_val)
+
+            layer = self._get_current_exploring_layer()
+            if not layer or not isinstance(layer, QgsRasterLayer):
+                return
+
+            band_index = 1
+            if hasattr(self, 'comboBox_band_filtering'):
+                band_index = self.comboBox_band_filtering.currentIndex() + 1
+                if band_index < 1:
+                    band_index = 1
+
+            self._current_raster_criteria = RasterFilterCriteria(
+                layer_id=layer.id(),
+                band_index=band_index,
+                min_value=min_val,
+                max_value=max_val,
+                predicate=predicate
+            )
+
+            logger.info(f"Raster filter criteria updated from filtering UI: {self._current_raster_criteria.to_display_string()}")
+
+        except Exception as e:
+            logger.warning(f"Error updating raster filter from filtering UI: {e}")
+
+    def _connect_filtering_raster_signals(self):
+        """v6.0: Connect signals for the filtering section raster widgets."""
+        try:
+            if hasattr(self, '_filtering_raster_histogram') and self._filtering_raster_histogram:
+                self._filtering_raster_histogram.rangeChanged.connect(
+                    self._on_filtering_histogram_range_changed
+                )
+                self._filtering_raster_histogram.rangeSelectionFinished.connect(
+                    self._on_filtering_histogram_range_finished
+                )
+
+            if hasattr(self, 'doubleSpinBox_filtering_min'):
+                self.doubleSpinBox_filtering_min.valueChanged.connect(
+                    self._update_raster_filter_from_filtering_ui
+                )
+            if hasattr(self, 'doubleSpinBox_filtering_max'):
+                self.doubleSpinBox_filtering_max.valueChanged.connect(
+                    self._update_raster_filter_from_filtering_ui
+                )
+            if hasattr(self, 'comboBox_filtering_predicate'):
+                self.comboBox_filtering_predicate.currentIndexChanged.connect(
+                    self._on_filtering_raster_predicate_changed
+                )
+            if hasattr(self, 'comboBox_band_filtering'):
+                self.comboBox_band_filtering.currentIndexChanged.connect(
+                    self._on_filtering_raster_band_changed
+                )
+
+            logger.info("Filtering raster widget signals connected")
+
+        except Exception as e:
+            logger.warning(f"Failed to connect filtering raster signals: {e}")
     
     def _setup_checkable_band_combobox(self):
         """v5.10: Replace standard comboBox_band with QgsCheckableComboBoxBands.
@@ -1548,19 +1999,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         page_names = {0: 'vector', 1: 'raster'}
         page_name = page_names.get(index, 'unknown')
         logger.debug(f"Note: Exploring page changed to {page_name} (index {index})")
-        print(f"🔧🔧🔧 _on_native_exploring_page_changed: index={index} ({page_name}), programmatic={getattr(self, '_programmatic_page_change', False)}")
+        logger.debug(f"_on_native_exploring_page_changed: index={index} ({page_name}), programmatic={getattr(self, '_programmatic_page_change', False)}")
         
         # v5.3 FIX: If manual click (not programmatic), switch to best layer of that type
         if not getattr(self, '_programmatic_page_change', False):
             # User manually clicked on a page - switch to best layer of that type
             # v5.4.1: Always try to switch to best layer of target type
             target_layer = self._get_default_layer_for_page(index)
-            print(f"🔧🔧🔧 _on_native_exploring_page_changed: target_layer={target_layer.name() if target_layer else 'None'}")
+            logger.debug(f"_on_native_exploring_page_changed: target_layer={target_layer.name() if target_layer else 'None'}")
             
             if target_layer:
                 # Get current layer to check if we actually need to switch
                 current_layer = self._get_current_exploring_layer()
-                print(f"🔧🔧🔧 _on_native_exploring_page_changed: current_layer={current_layer.name() if current_layer else 'None'}")
+                logger.debug(f"_on_native_exploring_page_changed: current_layer={current_layer.name() if current_layer else 'None'}")
                 
                 # v5.4.2 FIX: Check if current layer type matches target page
                 # If user clicked on raster page, we need a raster layer
@@ -1570,32 +2021,32 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     is_raster_page = (index == 1)
                     current_is_raster = isinstance(current_layer, QgsRasterLayer)
                     current_is_wrong_type = (is_raster_page != current_is_raster)
-                    print(f"🔧🔧🔧 _on_native_exploring_page_changed: is_raster_page={is_raster_page}, current_is_raster={current_is_raster}, wrong_type={current_is_wrong_type}")
+                    logger.debug(f"_on_native_exploring_page_changed: is_raster_page={is_raster_page}, current_is_raster={current_is_raster}, wrong_type={current_is_wrong_type}")
                 
                 # v5.4.2: Switch if no current layer OR different ID OR wrong type for this page
                 if current_layer is None or current_layer.id() != target_layer.id() or current_is_wrong_type:
                     logger.info(f"🔄 Manual switch to {page_name} - updating comboBox to: {target_layer.name()}")
-                    print(f"🔧🔧🔧 _on_native_exploring_page_changed: CALLING _switch_to_layer({target_layer.name()})")
+                    logger.debug(f"_on_native_exploring_page_changed: CALLING _switch_to_layer({target_layer.name()})")
                     # Switch the combobox to the target layer (this updates comboBox_filtering_current_layer)
                     self._switch_to_layer(target_layer)
                 else:
                     logger.debug(f"🔄 Manual switch to {page_name} - already on correct layer: {target_layer.name()}")
-                    print(f"🔧🔧🔧 _on_native_exploring_page_changed: SKIPPING - already on correct layer")
+                    logger.debug(f"_on_native_exploring_page_changed: SKIPPING - already on correct layer")
             else:
                 # No layer of that type available - revert to current page if possible
-                print(f"🔧🔧🔧 _on_native_exploring_page_changed: NO TARGET LAYER FOUND for {page_name}")
+                logger.debug(f"_on_native_exploring_page_changed: NO TARGET LAYER FOUND for {page_name}")
                 layer = self._get_current_exploring_layer()
                 if layer:
                     is_raster = isinstance(layer, QgsRasterLayer)
                     current_type_index = 1 if is_raster else 0
                     if current_type_index >= 0 and current_type_index != index:
                         logger.warning(f"🔒 No {page_name} layer available - staying on current page")
-                        print(f"🔧🔧🔧 _on_native_exploring_page_changed: REVERTING to page {current_type_index}")
+                        logger.debug(f"_on_native_exploring_page_changed: REVERTING to page {current_type_index}")
                         self._programmatic_page_change = True
                         QTimer.singleShot(0, lambda: self._revert_toolbox_page(current_type_index))
                 else:
                     logger.warning(f"🔒 No {page_name} layer available and no current layer")
-                    print(f"🔧🔧🔧 _on_native_exploring_page_changed: NO CURRENT LAYER either")
+                    logger.debug(f"_on_native_exploring_page_changed: NO CURRENT LAYER either")
         
         # Notify the bridge if available
         if hasattr(self, '_toolbox_bridge') and self._toolbox_bridge:
@@ -1662,19 +2113,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.warning("_switch_to_layer: layer is None, skipping")
                 return False
             
-            print(f"🔧🔧🔧 _switch_to_layer: layer={layer.name()}, type={type(layer).__name__}")
+            logger.debug(f"_switch_to_layer: layer={layer.name()}, type={type(layer).__name__}")
                 
             if hasattr(self, 'comboBox_filtering_current_layer') and self.comboBox_filtering_current_layer:
                 # v5.4.2: Check current layer before setLayer
                 old_layer = self.comboBox_filtering_current_layer.currentLayer()
-                print(f"🔧🔧🔧 _switch_to_layer: old_layer={old_layer.name() if old_layer else 'None'}")
+                logger.debug(f"_switch_to_layer: old_layer={old_layer.name() if old_layer else 'None'}")
                 
                 # Use setLayer() which is the proper method for QgsMapLayerComboBox
                 self.comboBox_filtering_current_layer.setLayer(layer)
                 
                 # v5.4.2: Verify the layer was actually set
                 new_layer = self.comboBox_filtering_current_layer.currentLayer()
-                print(f"🔧🔧🔧 _switch_to_layer: new_layer after setLayer={new_layer.name() if new_layer else 'None'}")
+                logger.debug(f"_switch_to_layer: new_layer after setLayer={new_layer.name() if new_layer else 'None'}")
                 
                 if new_layer and new_layer.id() == layer.id():
                     logger.info(f"✓ Switched comboBox_filtering_current_layer to: {layer.name()}")
@@ -1685,7 +2136,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # because setLayer() may not emit layerChanged signal if layer was already set
                 # or if signals are blocked
                 try:
-                    print(f"🔧🔧🔧 _switch_to_layer: calling current_layer_changed({layer.name()})")
+                    logger.debug(f"_switch_to_layer: calling current_layer_changed({layer.name()})")
                     self.current_layer_changed(layer, manual_change=True)
                     logger.debug(f"✓ Explicitly called current_layer_changed for: {layer.name()}")
                 except Exception as e:
@@ -1815,31 +2266,31 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try:
             target_type = QgsVectorLayer if page_index == 0 else QgsRasterLayer
             type_name = "vector" if page_index == 0 else "raster"
-            print(f"🔧🔧🔧 _get_default_layer_for_page: page_index={page_index} ({type_name})")
+            logger.debug(f"_get_default_layer_for_page: page_index={page_index} ({type_name})")
             
             # 1. Check if QGIS active layer is the right type
             active_layer = self.iface.activeLayer() if hasattr(self, 'iface') and self.iface else None
             if active_layer and isinstance(active_layer, target_type):
-                print(f"🔧🔧🔧 _get_default_layer_for_page: returning QGIS active layer: {active_layer.name()}")
+                logger.debug(f"_get_default_layer_for_page: returning QGIS active layer: {active_layer.name()}")
                 return active_layer
             
             # 2. Try last used layer of this type
             last_layer = self._get_last_layer_by_type(page_index)
             if last_layer:
-                print(f"🔧🔧🔧 _get_default_layer_for_page: returning last used {type_name} layer: {last_layer.name()}")
+                logger.debug(f"_get_default_layer_for_page: returning last used {type_name} layer: {last_layer.name()}")
                 return last_layer
             
             # 3. Fall back to first layer of this type
             vector_layers, raster_layers = self._get_project_layers_by_type()
-            print(f"🔧🔧🔧 _get_default_layer_for_page: found {len(vector_layers)} vector, {len(raster_layers)} raster layers")
+            logger.debug(f"_get_default_layer_for_page: found {len(vector_layers)} vector, {len(raster_layers)} raster layers")
             if page_index == 0 and vector_layers:
-                print(f"🔧🔧🔧 _get_default_layer_for_page: returning first vector layer: {vector_layers[0].name()}")
+                logger.debug(f"_get_default_layer_for_page: returning first vector layer: {vector_layers[0].name()}")
                 return vector_layers[0]
             elif page_index == 1 and raster_layers:
-                print(f"🔧🔧🔧 _get_default_layer_for_page: returning first raster layer: {raster_layers[0].name()}")
+                logger.debug(f"_get_default_layer_for_page: returning first raster layer: {raster_layers[0].name()}")
                 return raster_layers[0]
             
-            print(f"🔧🔧🔧 _get_default_layer_for_page: no {type_name} layer found, returning None")
+            logger.debug(f"_get_default_layer_for_page: no {type_name} layer found, returning None")
             return None
         except Exception as e:
             logger.warning(f"Error getting default layer for page {page_index}: {e}")
@@ -3670,7 +4121,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # v5.2 FIX: Check toolBox_exploring existence with detailed logging
             has_toolbox = hasattr(self, 'toolBox_exploring')
             toolbox_not_none = self.toolBox_exploring is not None if has_toolbox else False
-            print(f"🔧🔧🔧 _auto_switch_exploring_page: has_toolbox={has_toolbox}, toolbox_not_none={toolbox_not_none}")
+            logger.debug(f"_auto_switch_exploring_page: has_toolbox={has_toolbox}, toolbox_not_none={toolbox_not_none}")
             
             if has_toolbox and toolbox_not_none:
                 # v5.2 FIX: Log toolbox state for debugging
@@ -3683,7 +4134,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 try:
                     if is_raster:
                         # Switch to raster page (index 1)
-                        print(f"🔧🔧🔧 _auto_switch_exploring_page: SWITCHING TO RASTER (index 1)")
+                        logger.debug(f"_auto_switch_exploring_page: SWITCHING TO RASTER (index 1)")
                         # v5.2 FIX: Use helper method that temporarily enables the page
                         self._enable_toolbox_page_for_switch(1)
                         logger.info(f"🔧 Toolbox: Auto-switched to RASTER exploring page (index 1) for '{layer.name()}'")
@@ -3697,7 +4148,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         
                     elif is_vector:
                         # Switch to vector page (index 0)
-                        print(f"🔧🔧🔧 _auto_switch_exploring_page: SWITCHING TO VECTOR (index 0)")
+                        logger.debug(f"_auto_switch_exploring_page: SWITCHING TO VECTOR (index 0)")
                         # v5.2 FIX: Use helper method that temporarily enables the page
                         self._enable_toolbox_page_for_switch(0)
                         logger.info(f"🔧 Toolbox: Auto-switched to VECTOR exploring page (index 0) for '{layer.name()}'")
@@ -3709,26 +4160,29 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         if DUAL_TOOLBOX_ENABLED and self._dual_toolbox_container:
                             self._sync_toolbox_exploring_with_layer(layer)
                     else:
-                        print(f"🔧🔧🔧 _auto_switch_exploring_page: UNKNOWN TYPE - defaulting to vector")
+                        logger.debug(f"_auto_switch_exploring_page: UNKNOWN TYPE - defaulting to vector")
                         logger.warning(f"🔧 Toolbox: Unknown layer type for '{layer.name()}', defaulting to vector page")
                         # v5.2 FIX: Use helper method that temporarily enables the page
                         self._enable_toolbox_page_for_switch(0)
                     
                     # v5.2 FIX: Confirm the switch happened
                     new_idx = self.toolBox_exploring.currentIndex()
-                    print(f"🔧🔧🔧 _auto_switch_exploring_page: RESULT new_index={new_idx} (expected: {1 if is_raster else 0})")
+                    logger.debug(f"_auto_switch_exploring_page: RESULT new_index={new_idx} (expected: {1 if is_raster else 0})")
                     logger.info(f"🔧 toolBox_exploring: new_index={new_idx} (expected: {1 if is_raster else 0})")
                 finally:
                     self._programmatic_page_change = False
             else:
-                print(f"🔧🔧🔧 _auto_switch_exploring_page: toolBox_exploring NOT AVAILABLE")
+                logger.debug(f"_auto_switch_exploring_page: toolBox_exploring NOT AVAILABLE")
                 logger.warning("🔧 toolBox_exploring NOT FOUND - cannot switch pages")
             
+            # v6.0: Auto-switch filtering stacked pages based on layer type
+            self._auto_switch_filtering_page(layer)
+
             # v5.0: Sync FilteringPage source context when layer changes
             self._sync_filtering_page_with_layer(layer)
             
         except Exception as e:
-            print(f"🔧🔧🔧 _auto_switch_exploring_page: EXCEPTION: {e}")
+            logger.debug(f"_auto_switch_exploring_page: EXCEPTION: {e}")
             import traceback
             traceback.print_exc()
             logger.error(f"Toolbox: Error in _auto_switch_exploring_page: {e}")
@@ -4959,8 +5413,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         else:
             button_size = key_cfg.get('max_size', 36)  # max_size for NORMAL
         
-        # Container width = button size + small margin for border
-        wk_fixed = button_size + 4  # 4px for border/margin
+        # FIX 2026-02-07: Container width = button size exactly (no border/margin padding)
+        wk_fixed = button_size
         
         for wn in ['widget_exploring_keys', 'widget_filtering_keys', 'widget_exporting_keys']:
             if hasattr(self, wn):
@@ -5063,10 +5517,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     getattr(self, name).setContentsMargins(main_margins, main_margins, main_margins, main_margins)
                     getattr(self, name).setSpacing(4)
             # Apply minimal margins to exploring content layouts
+            # FIX 2026-02-07: Set 0 margins on gridLayout_main_actions for tight icon centering
             for name in ['verticalLayout_main_content', 'gridLayout_main_header', 'gridLayout_main_actions']:
                 if hasattr(self, name):
-                    getattr(self, name).setContentsMargins(2, 2, 2, 2)
-                    getattr(self, name).setSpacing(4)
+                    getattr(self, name).setContentsMargins(0, 0, 0, 0)
+                    getattr(self, name).setSpacing(2)
             # Configure column stretch for proper groupbox display
             if hasattr(self, 'gridLayout_main_actions'):
                 self.gridLayout_main_actions.setColumnStretch(0, 0)  # Keys: fixed
@@ -6058,8 +6513,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def _setup_exporting_tab_widgets(self):
         """v4.0 Sprint 16: Delegate to ConfigurationManager."""
+        logger.info(f"_setup_exporting_tab_widgets called, _configuration_manager={self._configuration_manager}")
         if self._configuration_manager:
-            self._configuration_manager.setup_exporting_tab_widgets()
+            try:
+                self._configuration_manager.setup_exporting_tab_widgets()
+                logger.info("  setup_exporting_tab_widgets completed")
+            except Exception as e:
+                logger.error(f"  setup_exporting_tab_widgets FAILED: {e}", exc_info=True)
 
     def _index_to_combine_operator(self, index):
         """v4.0 Sprint 5: Delegates to FilteringController."""
@@ -6170,10 +6630,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Connect comboBox_filtering_current_layer.layerChanged signal
             # This is CRITICAL for exploring widgets to update when current layer changes
             result = self.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
-            print(f"🔧🔧🔧 _connect_initial_widget_signals: CURRENT_LAYER.layerChanged connect result={result}")
+            logger.debug(f"_connect_initial_widget_signals: CURRENT_LAYER.layerChanged connect result={result}")
             logger.info(f"✓ Connected FILTERING.CURRENT_LAYER.layerChanged signal via manageSignal (result={result})")
         except Exception as e:
-            print(f"🔧🔧🔧 _connect_initial_widget_signals ERROR: {e}")
+            logger.debug(f"_connect_initial_widget_signals ERROR: {e}")
             logger.warning(f"Could not connect CURRENT_LAYER signal: {e}")
         
         # FIX 2026-01-16: CRITICAL - Connect ACTION button signals at startup
@@ -6212,7 +6672,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # restore the state at startup based on saved project settings
         try:
             auto_current_layer_enabled = self.project_props.get("OPTIONS", {}).get("LAYERS", {}).get("LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG", False)
-            print(f"🔧🔧🔧 LAYER_TREE_VIEW: auto_current_layer_enabled={auto_current_layer_enabled}")
+            logger.debug(f"LAYER_TREE_VIEW: auto_current_layer_enabled={auto_current_layer_enabled}")
             if auto_current_layer_enabled:
                 # Clear cache for LAYER_TREE_VIEW as well
                 cache_key = "QGIS.LAYER_TREE_VIEW.currentLayerChanged"
@@ -6220,13 +6680,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     del self._signal_connection_states[cache_key]
                 
                 result = self.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect', 'currentLayerChanged')
-                print(f"🔧🔧🔧 LAYER_TREE_VIEW: signal connected={result}, flag={self._layer_tree_view_signal_connected}")
+                logger.debug(f"LAYER_TREE_VIEW: signal connected={result}, flag={self._layer_tree_view_signal_connected}")
                 logger.debug("✓ Connected QGIS.LAYER_TREE_VIEW.currentLayerChanged signal (AUTO_CURRENT_LAYER enabled)")
             else:
-                print(f"🔧🔧🔧 LAYER_TREE_VIEW: NOT connected (AUTO_CURRENT_LAYER disabled)")
+                logger.debug(f"LAYER_TREE_VIEW: NOT connected (AUTO_CURRENT_LAYER disabled)")
                 logger.debug("QGIS.LAYER_TREE_VIEW signal not connected (AUTO_CURRENT_LAYER disabled)")
         except Exception as e:
-            print(f"🔧🔧🔧 LAYER_TREE_VIEW ERROR: {e}")
+            logger.debug(f"LAYER_TREE_VIEW ERROR: {e}")
             logger.warning(f"Could not check/connect LAYER_TREE_VIEW signal: {e}")
 
     def _on_combo_layer_changed(self, layer):
@@ -6500,33 +6960,40 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._disconnect_config_model_signal()
             
             self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=False, editable_values=True, plugin_dir=self.plugin_dir)
+            logger.info(f"Config model created: {self.config_model.rowCount()} top-level items")
+            
+            config_layout = self.CONFIGURATION.layout()
+            if config_layout is None:
+                logger.error("CONFIGURATION widget has no layout!")
+                return
             
             # v4.0.7: Use SearchableJsonView with integrated search bar
             # FIX 2026-02-02: Use CONFIGURATION as parent for proper widget hierarchy
             try:
-                from ui.widgets.json_view import SearchableJsonView
+                from .ui.widgets.json_view import SearchableJsonView
                 self.config_view_container = SearchableJsonView(self.config_model, self.plugin_dir, parent=self.CONFIGURATION)
                 self.config_view = self.config_view_container.json_view  # For backward compatibility
                 # FIX 2026-02-07: stretch=1 so tree view expands to fill available space
-                self.CONFIGURATION.layout().insertWidget(0, self.config_view_container, 1)
+                config_layout.insertWidget(0, self.config_view_container, 1)
                 self.config_view_container.setMinimumHeight(200)
                 self.config_view_container.setAnimated(True)
                 self.config_view_container.setEnabled(True)
                 self.config_view_container.show()
                 self._apply_style_to_widget(self.config_view_container)
-                logger.debug("Using SearchableJsonView with search bar")
-            except ImportError:
+                logger.info(f"SearchableJsonView created: visible={self.config_view_container.isVisible()}, size={self.config_view_container.size().width()}x{self.config_view_container.size().height()}")
+            except Exception as e_searchable:
+                logger.warning(f"SearchableJsonView failed ({type(e_searchable).__name__}: {e_searchable}), falling back to JsonView")
                 # Fallback to standard JsonView
                 self.config_view = JsonView(self.config_model, self.plugin_dir, parent=self.CONFIGURATION)
                 self.config_view_container = None
                 # FIX 2026-02-07: stretch=1 so tree view expands to fill available space
-                self.CONFIGURATION.layout().insertWidget(0, self.config_view, 1)
+                config_layout.insertWidget(0, self.config_view, 1)
                 self.config_view.setMinimumHeight(200)
                 self.config_view.setAnimated(True)
                 self.config_view.setEnabled(True)
                 self.config_view.show()
                 self._apply_style_to_widget(self.config_view)
-                logger.debug("Using standard JsonView (SearchableJsonView not available)")
+                logger.info(f"JsonView fallback created: visible={self.config_view.isVisible()}, size={self.config_view.size().width()}x{self.config_view.size().height()}")
             
             # Connect signal using centralized method
             self._connect_config_model_signal()
@@ -6536,7 +7003,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.buttonBox.setEnabled(False)
                 self.buttonBox.accepted.connect(self.on_config_buttonbox_accepted)
                 self.buttonBox.rejected.connect(self.on_config_buttonbox_rejected)
-        except Exception as e: logger.error(f"Error creating configuration model: {e}")
+            
+            logger.info(f"manage_configuration_model complete: layout has {config_layout.count()} items")
+        except Exception as e:
+            import traceback
+            logger.error(f"Error creating configuration model: {e}\n{traceback.format_exc()}")
 
     def _setup_reload_button(self):
         """Setup Reload Plugin button in config panel."""
@@ -6706,13 +7177,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """Populate layers-to-filter combobox.
         
         FIX 2026-01-16: Fallback to direct method if controller delegation fails.
-        This ensures the list is always populated, even if PROJECT_LAYERS is incomplete.
+        FIX 2026-02-07: Verify actual widget item count after controller delegation.
+        If controller returns True but widget is empty, force direct fallback.
         """
         logger.info(f"🔍 filtering_populate_layers_chekableCombobox called for layer: {layer.name() if layer else 'None'}")
         logger.info(f"🔍   widgets_initialized={self.widgets_initialized}, _controller_integration={self._controller_integration is not None}")
         logger.info(f"🔍   PROJECT_LAYERS count={len(self.PROJECT_LAYERS) if self.PROJECT_LAYERS else 0}")
-        if self.PROJECT_LAYERS:
-            logger.info(f"🔍   PROJECT_LAYERS keys={list(self.PROJECT_LAYERS.keys())[:5]}...")  # First 5
         
         success = False
         
@@ -6721,21 +7191,30 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             result = self._controller_integration.delegate_populate_layers_checkable_combobox(layer)
             logger.info(f"🔍   Controller delegation returned: {result}")
             if result:
-                success = True
-                # Force visual refresh of the combobox
+                # FIX 2026-02-07: Verify that items were actually added
                 if "FILTERING" in self.widgets and "LAYERS_TO_FILTER" in self.widgets["FILTERING"]:
                     widget = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
                     if widget:
-                        logger.info(f"🔍   Widget count after controller population: {widget.count()}")
-                        widget.update()
-                        widget.repaint()
+                        count = widget.count()
+                        logger.info(f"🔍   Widget count after controller population: {count}")
+                        if count > 0:
+                            success = True
+                            widget.update()
+                            widget.repaint()
+                        else:
+                            logger.warning("⚠️ Controller returned True but widget has 0 items")
+                else:
+                    success = True
         
-        # FALLBACK: Use direct method if controller failed
+        # FALLBACK: Use direct method if controller failed or returned 0 items
         if not success:
-            logger.warning(f"⚠️  Controller delegation failed or unavailable - using direct fallback method")
+            logger.warning(f"⚠️  Controller delegation failed or returned 0 items - using direct fallback method")
             try:
                 self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
                 target_layer = layer or self.current_layer
+                # FIX 2026-02-07: Also try init_layer as fallback
+                if not target_layer:
+                    target_layer = getattr(self, 'init_layer', None)
                 if target_layer:
                     result = self._populate_filtering_layers_direct(target_layer)
                     logger.info(f"🔍   Direct fallback returned: {result}")
@@ -6799,12 +7278,44 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         FIX v4.0.7: Use controller delegation methods for full logic (PostgreSQL/remote layers).
         REGRESSION FIX: Direct methods bypassed controller logic for missing layers.
+        
+        FIX 2026-02-07: Fallback to init_layer or combobox layer when current_layer is None.
+        This fixes layers_to_filter combobox being empty when PROJECT_LAYERS was empty
+        during manage_interactions() (current_layer_changed never called).
         """
         logger.info(f"🔔 _on_project_layers_ready: PROJECT_LAYERS has {len(self.PROJECT_LAYERS) if self.PROJECT_LAYERS else 0} layers")
         logger.info(f"🔧 widgets_initialized={self.widgets_initialized}, _controller_integration={self._controller_integration is not None}")
         
         # Ensure flags are set
         self.has_loaded_layers = True
+        
+        # FIX 2026-02-07: Enable widgets if they were disabled during init
+        # (manage_interactions sets False when PROJECT_LAYERS was empty at startup)
+        if self.widgets_initialized:
+            self.set_widgets_enabled_state(True)
+        
+        # FIX 2026-02-07: Resolve current layer with fallback chain
+        # current_layer may be None if current_layer_changed() was never called
+        layer = self.current_layer
+        if not layer:
+            # Fallback 1: init_layer (set during _initialize_layer_state)
+            layer = getattr(self, 'init_layer', None)
+        if not layer:
+            # Fallback 2: comboBox_filtering_current_layer selected layer
+            try:
+                combo = self.widgets.get("FILTERING", {}).get("CURRENT_LAYER", {}).get("WIDGET")
+                if combo and hasattr(combo, 'currentLayer'):
+                    layer = combo.currentLayer()
+            except Exception:
+                pass
+        if not layer:
+            # Fallback 3: QGIS active layer
+            layer = self.iface.activeLayer() if hasattr(self, 'iface') and self.iface else None
+        
+        if layer and not self.current_layer:
+            # Set current_layer so subsequent operations have a valid reference
+            self.current_layer = layer
+            logger.info(f"🔧 Set current_layer from fallback: {layer.name()}")
         
         # Check if we can use controller delegation (preferred method)
         can_use_controllers = (
@@ -6828,8 +7339,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     logger.warning("⚠️ Controller populate_export_combobox returned False")
                 
                 # FIX 2026-01-22: Sync HAS_LAYERS_TO_EXPORT after loading project
-                # If layers are already checked in the widget (from saved project state),
-                # we need to update HAS_LAYERS_TO_EXPORT accordingly
                 try:
                     layers_to_export = self.get_layers_to_export()
                     current_has_layers = self.project_props.get('EXPORTING', {}).get('HAS_LAYERS_TO_EXPORT', False)
@@ -6839,7 +7348,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         
                         if has_layers != current_has_layers:
                             self.project_props['EXPORTING']['HAS_LAYERS_TO_EXPORT'] = has_layers
-                            # Update button widget
                             has_layers_widget = self.widgets.get('EXPORTING', {}).get('HAS_LAYERS_TO_EXPORT', {}).get('WIDGET')
                             if has_layers_widget and hasattr(has_layers_widget, 'setChecked'):
                                 has_layers_widget.blockSignals(True)
@@ -6854,15 +7362,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # Populate filtering layers combobox via controller
             try:
-                layer = self.current_layer
                 if layer:
                     self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
                     success = self._controller_integration.delegate_populate_layers_checkable_combobox(layer)
                     self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
                     if success:
                         logger.info("✅ Filtering layers combobox populated via controller")
+                        # FIX 2026-02-07: Verify population actually added items
+                        widget = self.widgets.get("FILTERING", {}).get("LAYERS_TO_FILTER", {}).get("WIDGET")
+                        if widget and widget.count() == 0 and len(self.PROJECT_LAYERS) > 1:
+                            logger.warning("⚠️ Controller returned True but widget has 0 items - using direct fallback")
+                            self._populate_filtering_layers_direct(layer)
                     else:
-                        logger.warning("⚠️ Controller populate_layers_checkable_combobox returned False")
+                        logger.warning("⚠️ Controller populate_layers_checkable_combobox returned False - using direct fallback")
+                        self._populate_filtering_layers_direct(layer)
                 else:
                     logger.warning("⚠️ No current layer - skipping filtering layers population")
             except Exception as e:
@@ -6879,7 +7392,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             except Exception as e:
                 logger.error(f"❌ Fallback direct method failed: {e}", exc_info=True)
             try:
-                layer = self.current_layer
                 if layer:
                     success = self._populate_filtering_layers_direct(layer)
                     if success:
@@ -6892,8 +7404,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Synchronise l'état des widgets dépendants du bouton checkable après chargement des layers
         self.filtering_layers_to_filter_state_changed()
         
+        # FIX 2026-02-07: Also connect widget signals if they weren't connected during manage_interactions
+        # (happens when PROJECT_LAYERS was empty at startup)
+        try:
+            self.connect_widgets_signals()
+        except Exception as e:
+            logger.warning(f"⚠️ connect_widgets_signals in _on_project_layers_ready: {e}")
+        
         # v5.4 FIX 2026-02-01: Update exploring pages availability when layers change
-        # This ensures Vector/Raster pages are enabled/disabled based on layer types in project
         try:
             self._update_exploring_pages_availability()
             logger.info("✅ Updated exploring pages availability after layers ready")
@@ -8180,6 +8698,58 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.warning(f"⚠️ SIGNAL VALIDATION: {len(disconnected)} buttons DISCONNECTED: {disconnected}")
         else:
             logger.info(f"✅ SIGNAL VALIDATION: All {connected_count} critical buttons connected")
+
+        # FIX 2026-02-07: Validate comboBox_filtering_current_layer.layerChanged signal
+        # This is the MOST critical signal - without it, changing the source layer does nothing
+        self._validate_and_force_reconnect_current_layer_signal()
+
+    def _validate_and_force_reconnect_current_layer_signal(self):
+        """FIX 2026-02-07: Validate and force reconnect comboBox_filtering_current_layer.layerChanged.
+
+        This signal is critical for the entire filtering workflow:
+        - Without it, changing the source layer combobox does NOTHING
+        - No exploring page switch (vector/raster)
+        - No filtering page switch (stackedWidget_filtering)
+        - No layers_to_filter population
+
+        Also ensures blockSignals is False on the comboBox (can get stuck True
+        if a filtering operation fails between _protect_current_layer_during_filter
+        and filter_result_handler).
+        """
+        try:
+            combo = getattr(self, 'comboBox_filtering_current_layer', None)
+            if not combo:
+                logger.warning("⚠️ comboBox_filtering_current_layer not found")
+                return
+
+            # Safety: ensure blockSignals is False (can get stuck if filtering fails mid-way)
+            if combo.signalsBlocked():
+                logger.warning("⚠️ CRITICAL: comboBox_filtering_current_layer has blockSignals=True! Resetting.")
+                combo.blockSignals(False)
+
+            # Check actual Qt signal state (bypass cache)
+            signal_meta = self.getSignal(combo, 'layerChanged')
+            is_connected = combo.isSignalConnected(signal_meta) if signal_meta else False
+
+            if is_connected:
+                logger.info("✅ comboBox_filtering_current_layer.layerChanged: connected")
+            else:
+                logger.warning("⚠️ CRITICAL: comboBox_filtering_current_layer.layerChanged DISCONNECTED! Force reconnecting...")
+                # Clear cache to force actual reconnection
+                cache_key = "FILTERING.CURRENT_LAYER.layerChanged"
+                self._signal_connection_states.pop(cache_key, None)
+                if hasattr(self, '_signal_manager') and self._signal_manager:
+                    self._signal_manager._signal_connection_states.pop(cache_key, None)
+                # Force reconnect
+                self.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
+                # Verify
+                is_now_connected = combo.isSignalConnected(signal_meta) if signal_meta else False
+                if is_now_connected:
+                    logger.info("✅ Force reconnected comboBox_filtering_current_layer.layerChanged")
+                else:
+                    logger.error("❌ FAILED to reconnect comboBox_filtering_current_layer.layerChanged")
+        except Exception as e:
+            logger.error(f"❌ _validate_and_force_reconnect_current_layer_signal failed: {e}")
 
     def _setup_conditional_widget_states(self):
         """
@@ -10663,7 +11233,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         import traceback
         # v5.2 DEBUG: Print to console for debugging autoswitch issues
-        print(f"🔧🔧🔧 current_layer_changed: layer={layer.name() if layer else 'None'}, manual={manual_change}, type={type(layer).__name__ if layer else 'None'}")
+        logger.debug(f"current_layer_changed: layer={layer.name() if layer else 'None'}, manual={manual_change}, type={type(layer).__name__ if layer else 'None'}")
         logger.info(f"=== current_layer_changed ENTRY === layer: {layer.name() if layer else 'None'}, manual: {manual_change}")
         logger.debug(f"Flags: _updating={self._updating_current_layer}, _filtering={self._filtering_in_progress}, _busy={self._plugin_busy}")
         logger.debug(f"Caller stack:\n{''.join(traceback.format_stack()[-4:-1])}")
@@ -10732,16 +11302,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try:
             should_continue, validated_layer, layer_props = self._validate_and_prepare_layer(layer)
             
-            # v5.2 FIX 2026-01-31: ALWAYS switch exploring page based on layer type
-            # Even if validation fails, UI should reflect the user's layer selection
-            # This ensures toolBox_exploring shows Vector/Raster page correctly
-            if layer is not None:
-                try:
-                    self._auto_switch_exploring_page(layer)
-                    logger.info(f"✓ Step 0: Exploring page auto-switched for '{layer.name()}'")
-                except Exception as e:
-                    logger.warning(f"Failed to auto-switch exploring page: {e}")
-            
+            # v6.0: Post-validation auto-switch removed (redundant with pre-validation call above)
+
             if not should_continue:
                 logger.debug("current_layer_changed: Validation failed, returning after auto-switch")
                 return
@@ -11792,6 +12354,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             - Attempts to recover current_layer from saved ID or combobox if None
             - Export task syncs HAS_LAYERS_TO_EXPORT flag before execution
         """
+        # FIX 2026-02-07: Safety reset - ensure comboBox blockSignals is not stuck True
+        # This can happen if a previous filter operation failed mid-way
+        try:
+            if hasattr(self, 'comboBox_filtering_current_layer') and self.comboBox_filtering_current_layer.signalsBlocked():
+                logger.warning("⚠️ launchTaskEvent: comboBox_filtering_current_layer blockSignals stuck True - resetting")
+                self.comboBox_filtering_current_layer.blockSignals(False)
+        except Exception:
+            pass
+
         # FIX 2026-01-17 v3 + 2026-01-22: Define user action tasks early (needed for recovery logic)
         user_action_tasks = ('undo', 'redo', 'unfilter', 'reset', 'export')
         is_user_action = task_name in user_action_tasks
@@ -11910,11 +12481,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.launchingTask.emit(task_name)
             return
         
+        # v6.0: Raster filter task — uses _current_raster_criteria instead of PROJECT_LAYERS
+        if task_name == 'filter' and self.current_layer and isinstance(self.current_layer, QgsRasterLayer):
+            if not self.widgets_initialized:
+                logger.warning("launchTaskEvent BLOCKED for raster filter: widgets not initialized")
+                return
+            # Ensure criteria is up-to-date from filtering UI
+            if not hasattr(self, '_current_raster_criteria') or self._current_raster_criteria is None:
+                self._update_raster_filter_from_filtering_ui()
+            if hasattr(self, '_current_raster_criteria') and self._current_raster_criteria is not None:
+                logger.info(f"Launching raster filter: {self._current_raster_criteria.to_display_string()}")
+                self.launchingTask.emit(task_name)
+            else:
+                logger.warning("No raster filter criteria available — cannot launch filter")
+            return
+
         # Standard validation for other tasks (filter, undo, redo, etc.)
         if not self.widgets_initialized or not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS:
             logger.warning(f"launchTaskEvent BLOCKED: widgets_initialized={self.widgets_initialized}, current_layer={self.current_layer is not None}, in_PROJECT_LAYERS={self.current_layer.id() in self.PROJECT_LAYERS if self.current_layer else False}")
             return
-        
+
         self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = self.get_layers_to_filter()
         self.setLayerVariableEvent(self.current_layer, [("filtering", "layers_to_filter")])
         self.launchingTask.emit(task_name)

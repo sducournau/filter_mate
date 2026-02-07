@@ -575,6 +575,10 @@ class FilteringController(BaseController, LayerSelectionMixin):
             
             logger.info(f"✓ populate_layers_checkable_combobox: Added {item_index} layers (source layer '{layer.name()}' excluded)")
             logger.info(f"=== populate_layers_checkable_combobox END ===")
+            # FIX 2026-02-07: Return False when 0 items added so fallback can trigger
+            if item_index == 0 and len(dockwidget.PROJECT_LAYERS) > 1:
+                logger.warning("⚠️ populate_layers_checkable_combobox: 0 items added despite multiple layers - returning False")
+                return False
             return True
             
         except Exception as e:
