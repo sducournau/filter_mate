@@ -866,6 +866,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._setup_exporting_tab_widgets()
         logger.info("🔧 setupUiCustom: _setup_*_tab_widgets completed")
 
+        # FIX 2026-02-08: Setup filtering stacked widget AFTER setup_filtering_tab_widgets()
+        # MUST run after setup_filtering_tab_widgets() to avoid initialization order conflict:
+        # _setup_filtering_stacked_widget() moves widgets from verticalLayout_filtering_values
+        # into a QStackedWidget. If it runs BEFORE setup_filtering_tab_widgets(), the latter
+        # can't find layers_to_filter in the layout and recreates it outside the stacked widget.
+        try:
+            self._setup_filtering_stacked_widget()
+            self._connect_filtering_raster_signals()
+        except Exception as e:
+            logger.error(f"Failed to setup filtering stacked widget: {e}", exc_info=True)
+
         # FIX 2026-02-02: Force geometry update for all dynamically inserted widgets
         # Qt needs explicit updateGeometry() calls after inserting widgets into existing layouts
         self._force_dynamic_widgets_geometry_update()
@@ -1137,6 +1148,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         This method connects the widgets defined in the .ui file (toolBox_exploring,
         page_exploring_vector, page_exploring_raster) to the filter engine.
+        
+        NOTE: _setup_filtering_stacked_widget() and _connect_filtering_raster_signals()
+        are NOT called here. They are called from setupUiCustom() AFTER
+        setup_filtering_tab_widgets() to avoid initialization order conflicts.
         """
         try:
             # Connect toolBox_exploring page changes for auto-switch
@@ -1179,10 +1194,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # v5.11: Connect histogram groupbox toggle to trigger histogram computation
             if hasattr(self, 'mGroupBox_raster_histogram'):
                 self.mGroupBox_raster_histogram.toggled.connect(self._on_histogram_groupbox_toggled)
-
-            # v6.0: Setup filtering stacked widget (vector/raster pages) and connect signals
-            self._setup_filtering_stacked_widget()
-            self._connect_filtering_raster_signals()
 
             logger.info("Note: Native exploring toolbox signals connected")
             
@@ -1708,6 +1719,52 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         except Exception as e:
             logger.warning(f"Error updating raster filter from filtering UI: {e}")
+
+    def _handle_raster_unfilter_reset(self, task_name: str):
+        """v6.1: Handle unfilter/reset for raster layers.
+        
+        Since raster filtering modifies the layer renderer (not a SQL expression),
+        unfilter/reset restores the original renderer from the layer's style manager
+        or resets the contrast enhancement to defaults.
+        
+        Args:
+            task_name: 'unfilter' or 'reset'
+        """
+        try:
+            from qgis.core import QgsRasterLayer
+
+            layer = self.current_layer
+            if not layer or not isinstance(layer, QgsRasterLayer):
+                logger.warning(f"_handle_raster_unfilter_reset: No valid raster layer")
+                return
+
+            # Strategy 1: Try to restore 'default' named style
+            style_manager = layer.styleManager()
+            restored = False
+            if style_manager and 'default' in style_manager.styles():
+                style_manager.setCurrentStyle('default')
+                restored = True
+                logger.info(f"Raster {task_name}: restored 'default' style for '{layer.name()}'")
+
+            if not restored:
+                # Strategy 2: Reset contrast enhancement to defaults
+                # This resets the renderer to QGIS default based on user settings
+                layer.setDefaultContrastEnhancement()
+                logger.info(f"Raster {task_name}: reset contrast enhancement for '{layer.name()}'")
+
+            # Clear stored criteria
+            self._current_raster_criteria = None
+
+            # Reset exploring range spinboxes to full data extent
+            self._on_raster_reset_range_clicked()
+
+            # Trigger repaint
+            layer.triggerRepaint()
+
+            logger.info(f"Raster {task_name} completed for layer '{layer.name()}'")
+
+        except Exception as e:
+            logger.error(f"Error in raster {task_name}: {e}", exc_info=True)
 
     def _connect_filtering_raster_signals(self):
         """v6.0: Connect signals for the filtering section raster widgets."""
@@ -2551,9 +2608,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if hasattr(self, sb_name):
                     getattr(self, sb_name).blockSignals(False)
         
-        # Update histogram selection
+        # Update exploring histogram selection
         if hasattr(self, '_raster_histogram') and self._raster_histogram:
             self._raster_histogram.set_range(min_val, max_val)
+
+        # v6.1: Sync to filtering widgets and update criteria
+        self._sync_range_to_filtering_widgets(min_val, max_val)
+        self._update_raster_filter_from_filtering_ui()
     
     def _on_single_pixel_picked(self, value: float):
         """Note: Handle single pixel value picked.
@@ -2626,7 +2687,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """Handle click on 'Add pixel to selection' button.
         
         Takes the currently displayed pixel value and adds it to the
-        range selection (doubleSpinBox_rect_min/max).
+        range selection (all exploring spinboxes + filtering widgets).
         
         If no range exists, sets both min and max to the pixel value.
         If a range exists, extends it to include the new value.
@@ -2651,14 +2712,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 show_warning("FilterMate", f"Invalid pixel value: {value_text}")
                 return
             
-            # Get current range values
+            # Get current range values from histogram spinboxes (primary source)
             current_min = None
             current_max = None
             
-            if hasattr(self, 'doubleSpinBox_rect_min'):
-                current_min = self.doubleSpinBox_rect_min.value()
-            if hasattr(self, 'doubleSpinBox_rect_max'):
-                current_max = self.doubleSpinBox_rect_max.value()
+            if hasattr(self, 'doubleSpinBox_min'):
+                current_min = self.doubleSpinBox_min.value()
+            if hasattr(self, 'doubleSpinBox_max'):
+                current_max = self.doubleSpinBox_max.value()
             
             # Determine if this is the first value or extending existing range
             is_first_value = (current_min == 0.0 and current_max == 0.0) or (current_min == current_max == 0.0)
@@ -2670,26 +2731,33 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 new_min = min(current_min, pixel_value) if current_min is not None else pixel_value
                 new_max = max(current_max, pixel_value) if current_max is not None else pixel_value
             
-            # FIX 2026-02-07: blockSignals to prevent cascading _on_raster_rect_spinbox_trigger
-            if hasattr(self, 'doubleSpinBox_rect_min'):
-                self.doubleSpinBox_rect_min.blockSignals(True)
-            if hasattr(self, 'doubleSpinBox_rect_max'):
-                self.doubleSpinBox_rect_max.blockSignals(True)
+            # v6.1: Block ALL spinboxes (exploring + rect) to prevent cascading
+            all_spinboxes = ('doubleSpinBox_min', 'doubleSpinBox_max', 'doubleSpinBox_rect_min', 'doubleSpinBox_rect_max')
+            for sb_name in all_spinboxes:
+                if hasattr(self, sb_name):
+                    getattr(self, sb_name).blockSignals(True)
             
             try:
+                if hasattr(self, 'doubleSpinBox_min'):
+                    self.doubleSpinBox_min.setValue(new_min)
+                if hasattr(self, 'doubleSpinBox_max'):
+                    self.doubleSpinBox_max.setValue(new_max)
                 if hasattr(self, 'doubleSpinBox_rect_min'):
                     self.doubleSpinBox_rect_min.setValue(new_min)
                 if hasattr(self, 'doubleSpinBox_rect_max'):
                     self.doubleSpinBox_rect_max.setValue(new_max)
             finally:
-                if hasattr(self, 'doubleSpinBox_rect_min'):
-                    self.doubleSpinBox_rect_min.blockSignals(False)
-                if hasattr(self, 'doubleSpinBox_rect_max'):
-                    self.doubleSpinBox_rect_max.blockSignals(False)
+                for sb_name in all_spinboxes:
+                    if hasattr(self, sb_name):
+                        getattr(self, sb_name).blockSignals(False)
             
-            # Update histogram if available
+            # Update exploring histogram
             if hasattr(self, '_raster_histogram') and self._raster_histogram:
                 self._raster_histogram.set_range(new_min, new_max)
+            
+            # v6.1: Sync to filtering widgets and update criteria
+            self._sync_range_to_filtering_widgets(new_min, new_max)
+            self._update_raster_filter_from_filtering_ui()
             
             logger.info(f"Added pixel value {pixel_value:.4f} to selection. Range: [{new_min:.4f}, {new_max:.4f}]")
             show_success("FilterMate", f"Pixel value {pixel_value:.4f} added to selection")
@@ -2697,6 +2765,82 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except Exception as e:
             logger.error(f"Error adding pixel to selection: {e}")
             show_warning("FilterMate", f"Error adding pixel to selection: {str(e)}")
+
+    def _on_apply_rect_range_clicked(self):
+        """v6.1: Apply rect picker min/max values to histogram selection and filtering widgets.
+        
+        Takes the current values from doubleSpinBox_rect_min/max and:
+        1. Applies them to exploring histogram spinboxes (doubleSpinBox_min/max)
+        2. Updates the exploring histogram widget
+        3. Syncs to filtering widgets (doubleSpinBox_filtering_min/max + histogram)
+        4. Updates _current_raster_criteria
+        """
+        try:
+            rect_min = self.doubleSpinBox_rect_min.value() if hasattr(self, 'doubleSpinBox_rect_min') else None
+            rect_max = self.doubleSpinBox_rect_max.value() if hasattr(self, 'doubleSpinBox_rect_max') else None
+
+            if rect_min is None or rect_max is None:
+                return
+
+            if rect_min > rect_max:
+                rect_min, rect_max = rect_max, rect_min
+
+            # Update exploring histogram spinboxes
+            for sb_name in ('doubleSpinBox_min', 'doubleSpinBox_max'):
+                if hasattr(self, sb_name):
+                    getattr(self, sb_name).blockSignals(True)
+            try:
+                if hasattr(self, 'doubleSpinBox_min'):
+                    self.doubleSpinBox_min.setValue(rect_min)
+                if hasattr(self, 'doubleSpinBox_max'):
+                    self.doubleSpinBox_max.setValue(rect_max)
+            finally:
+                for sb_name in ('doubleSpinBox_min', 'doubleSpinBox_max'):
+                    if hasattr(self, sb_name):
+                        getattr(self, sb_name).blockSignals(False)
+
+            # Update exploring histogram
+            if hasattr(self, '_raster_histogram') and self._raster_histogram:
+                self._raster_histogram.set_range(rect_min, rect_max)
+
+            # Sync to filtering widgets
+            self._sync_range_to_filtering_widgets(rect_min, rect_max)
+
+            # Update criteria
+            self._update_raster_filter_from_filtering_ui()
+
+            logger.info(f"Rect range applied: [{rect_min:.4f}, {rect_max:.4f}]")
+
+        except Exception as e:
+            logger.error(f"Error applying rect range: {e}")
+
+    def _sync_range_to_filtering_widgets(self, min_val: float, max_val: float):
+        """v6.1: Sync a range from exploring to filtering raster widgets.
+        
+        Updates filtering spinboxes and histogram with the given range.
+        Uses blockSignals to prevent cascading handler calls.
+        
+        Args:
+            min_val: Minimum range value
+            max_val: Maximum range value
+        """
+        # Update filtering spinboxes
+        for sb_name in ('doubleSpinBox_filtering_min', 'doubleSpinBox_filtering_max'):
+            if hasattr(self, sb_name):
+                getattr(self, sb_name).blockSignals(True)
+        try:
+            if hasattr(self, 'doubleSpinBox_filtering_min'):
+                self.doubleSpinBox_filtering_min.setValue(min_val)
+            if hasattr(self, 'doubleSpinBox_filtering_max'):
+                self.doubleSpinBox_filtering_max.setValue(max_val)
+        finally:
+            for sb_name in ('doubleSpinBox_filtering_min', 'doubleSpinBox_filtering_max'):
+                if hasattr(self, sb_name):
+                    getattr(self, sb_name).blockSignals(False)
+
+        # Update filtering histogram
+        if hasattr(self, '_filtering_raster_histogram') and self._filtering_raster_histogram:
+            self._filtering_raster_histogram.set_range(min_val, max_val)
 
     def _on_pixel_picking_finished(self):
         """Note: Handle pixel picking tool deactivation.
@@ -2829,6 +2973,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.info("✅ pushButton_add_pixel_to_selection connected to _on_add_pixel_to_selection_clicked")
             else:
                 logger.warning("⚠️ pushButton_add_pixel_to_selection NOT FOUND - cannot connect!")
+
+            # v6.1: Apply rect range button (in rect picker groupbox)
+            if hasattr(self, 'pushButton_apply_rect_range'):
+                self.pushButton_apply_rect_range.clicked.connect(
+                    self._on_apply_rect_range_clicked
+                )
+                logger.info("✅ pushButton_apply_rect_range connected to _on_apply_rect_range_clicked")
             
             # === STEP 6: Connect combobox triggers when groupbox is checked ===
             # v5.11 FIX: Combobox changes only trigger action when their groupbox is active
@@ -2972,6 +3123,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         v5.11: Triggers filter update when min/max spinbox changes AND
         mGroupBox_raster_histogram is currently active.
+        v6.1: Also syncs to filtering widgets and updates criteria.
         """
         try:
             if not hasattr(self, 'mGroupBox_raster_histogram'):
@@ -2979,12 +3131,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # Only trigger if histogram groupbox is checked
             if self.mGroupBox_raster_histogram.isChecked():
-                logger.debug(f"Histogram range changed (histogram active)")
-                # Update histogram widget if available
+                min_val = self.doubleSpinBox_min.value() if hasattr(self, 'doubleSpinBox_min') else 0
+                max_val = self.doubleSpinBox_max.value() if hasattr(self, 'doubleSpinBox_max') else 0
+                logger.debug(f"Histogram range changed (histogram active): [{min_val}, {max_val}]")
+                # Update exploring histogram widget
                 if hasattr(self, '_raster_histogram') and self._raster_histogram:
-                    min_val = self.doubleSpinBox_min.value() if hasattr(self, 'doubleSpinBox_min') else 0
-                    max_val = self.doubleSpinBox_max.value() if hasattr(self, 'doubleSpinBox_max') else 0
                     self._raster_histogram.set_range(min_val, max_val)
+                # v6.1: Sync to filtering widgets and update criteria
+                self._sync_range_to_filtering_widgets(min_val, max_val)
+                self._update_raster_filter_from_filtering_ui()
         except Exception as e:
             logger.warning(f"Error in range trigger: {e}")
     
@@ -3411,6 +3566,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         by the toggled signal in STEP 2. This method only performs the sync action
         when the button is clicked (regardless of check state).
         
+        v6.1: Also syncs filtering histogram and updates criteria.
+        
         Synchronizes spinbox values with histogram selection.
         """
         try:
@@ -3422,13 +3579,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # Button unchecked - no sync needed
                 return
             
+            min_val = self.doubleSpinBox_min.value() if hasattr(self, 'doubleSpinBox_min') else 0
+            max_val = self.doubleSpinBox_max.value() if hasattr(self, 'doubleSpinBox_max') else 0
+
+            # Update exploring histogram
             if hasattr(self, '_raster_histogram') and self._raster_histogram:
-                min_val = self.doubleSpinBox_min.value() if hasattr(self, 'doubleSpinBox_min') else 0
-                max_val = self.doubleSpinBox_max.value() if hasattr(self, 'doubleSpinBox_max') else 0
-                
-                # Update histogram selection to match spinboxes
                 self._raster_histogram.set_range(min_val, max_val)
-                
+
+                # v6.1: Sync to filtering widgets and update criteria
+                self._sync_range_to_filtering_widgets(min_val, max_val)
+                self._update_raster_filter_from_filtering_ui()
+
                 show_info("FilterMate", f"Histogram synchronized: [{min_val:.2f}, {max_val:.2f}]")
                 logger.debug(f"Histogram synced to range [{min_val:.2f}, {max_val:.2f}]")
             else:
@@ -3496,6 +3657,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """Handle click on reset range button.
         
         Resets min/max spinboxes to the full data range from statistics.
+        v6.1: Also resets filtering widgets and criteria.
         """
         try:
             # v5.6: Get statistics from stored values
@@ -3524,9 +3686,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     if hasattr(self, 'doubleSpinBox_max'):
                         self.doubleSpinBox_max.blockSignals(False)
                 
-                # Update histogram
+                # Update exploring histogram
                 if hasattr(self, '_raster_histogram') and self._raster_histogram:
                     self._raster_histogram.set_range(data_min, data_max)
+
+                # v6.1: Sync to filtering widgets and update criteria
+                self._sync_range_to_filtering_widgets(data_min, data_max)
+                self._update_raster_filter_from_filtering_ui()
                 
                 show_info("FilterMate", f"Range reset to data bounds: [{data_min:.2f}, {data_max:.2f}]")
                 logger.info(f"Range reset to [{data_min:.2f}, {data_max:.2f}]")
@@ -4099,6 +4265,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Args:
             layer: QgsVectorLayer or QgsRasterLayer to switch page for
         """
+        # FIX 2026-02-08: DIAGNOSTIC print()
+        print(f"🔧 _auto_switch_exploring_page: layer={layer.name() if layer else 'None'}, type={type(layer).__name__ if layer else 'None'}")
         if not layer:
             logger.debug("_auto_switch_exploring_page: No layer provided, returning early")
             return
@@ -11232,6 +11400,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             - Note: Supports both vector and raster layers with auto-switch
         """
         import traceback
+        # FIX 2026-02-08: DIAGNOSTIC print() — shows in QGIS Python console immediately
+        print(f"🔧 current_layer_changed CALLED: layer={layer.name() if layer else 'None'}, manual={manual_change}, type={type(layer).__name__ if layer else 'None'}, blocked={self.comboBox_filtering_current_layer.signalsBlocked() if hasattr(self, 'comboBox_filtering_current_layer') else '?'}")
         # v5.2 DEBUG: Print to console for debugging autoswitch issues
         logger.debug(f"current_layer_changed: layer={layer.name() if layer else 'None'}, manual={manual_change}, type={type(layer).__name__ if layer else 'None'}")
         logger.info(f"=== current_layer_changed ENTRY === layer: {layer.name() if layer else 'None'}, manual: {manual_change}")
@@ -12494,6 +12664,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.launchingTask.emit(task_name)
             else:
                 logger.warning("No raster filter criteria available — cannot launch filter")
+            return
+
+        # v6.1: Raster unfilter/reset — clear criteria and reset raster renderer
+        if task_name in ('unfilter', 'reset') and self.current_layer and isinstance(self.current_layer, QgsRasterLayer):
+            if not self.widgets_initialized:
+                logger.warning(f"launchTaskEvent BLOCKED for raster {task_name}: widgets not initialized")
+                return
+            self._handle_raster_unfilter_reset(task_name)
             return
 
         # Standard validation for other tasks (filter, undo, redo, etc.)

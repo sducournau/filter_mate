@@ -716,12 +716,13 @@ class RasterExploringPage(QWidget):
         # Create tools column widget
         self.widget_raster_keys = QWidget()
         self.widget_raster_keys.setObjectName("widget_raster_keys")
-        self.widget_raster_keys.setMinimumWidth(42)
-        self.widget_raster_keys.setMaximumWidth(50)
-        
+        self.widget_raster_keys.setMinimumSize(32, 32)
+        self.widget_raster_keys.setMaximumSize(32, 16777215)
+        self.widget_raster_keys.setBaseSize(32, 0)
+
         tools_layout = QVBoxLayout(self.widget_raster_keys)
-        tools_layout.setContentsMargins(2, 4, 2, 4)
-        tools_layout.setSpacing(4)
+        tools_layout.setContentsMargins(0, 0, 0, 0)
+        tools_layout.setSpacing(2)
         
         BUTTON_SIZE = 32
         

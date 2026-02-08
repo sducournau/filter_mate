@@ -974,7 +974,7 @@ QWidget#widget_exploring_keys,
 QWidget#widget_raster_keys,
 QWidget#widget_filtering_keys,
 QWidget#widget_exporting_keys {
-    background-color: transparent;
+    background-color: {color_1};
     border: none;
     border-radius: 0px;
     padding: 0px;

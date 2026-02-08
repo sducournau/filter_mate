@@ -660,8 +660,11 @@ class RasterFilterStrategy(AbstractFilterStrategy):
     ) -> Dict[str, Any]:
         """Export using RasterExporter service.
         
+        Note: Value range filtering is applied by apply_filter() before export.
+        The exporter handles format conversion, masking, and CRS transformation.
+        
         Args:
-            layer: Source raster layer
+            layer: Source raster layer (already filtered if range was applied)
             criteria: Filter criteria
             output_path: Output file path
             mask_layer: Optional mask layer
@@ -679,16 +682,9 @@ class RasterFilterStrategy(AbstractFilterStrategy):
             config = RasterExportConfig(
                 layer=layer,
                 output_path=output_path,
-                format=RasterExportFormat[options.get("format", "GEOTIFF")]
+                format=RasterExportFormat[options.get("format", "GEOTIFF")],
+                mask_layer=mask_layer
             )
-            
-            # Set value range if specified
-            if criteria.min_value is not None or criteria.max_value is not None:
-                config.value_range = (criteria.min_value, criteria.max_value)
-            
-            # Set mask if specified
-            if mask_layer:
-                config.clip_layer = mask_layer
             
             # Execute export
             result = exporter.export(config)

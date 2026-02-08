@@ -108,97 +108,117 @@ class TestPredicateChecking(unittest.TestCase):
             value=50.0,
             predicate=self.RasterPredicate.WITHIN_RANGE,
             min_val=0.0,
-            max_val=100.0
+            max_val=100.0,
+            nodata_value=None,
+            tolerance=0.001
         )
         self.assertTrue(result)
-    
+
     def test_within_range_false(self):
         """Test WITHIN_RANGE predicate returns False for value outside range."""
         result = self.service._check_predicate(
             value=150.0,
             predicate=self.RasterPredicate.WITHIN_RANGE,
             min_val=0.0,
-            max_val=100.0
+            max_val=100.0,
+            nodata_value=None,
+            tolerance=0.001
         )
         self.assertFalse(result)
-    
+
     def test_within_range_boundary(self):
         """Test WITHIN_RANGE predicate includes boundary values."""
         result_min = self.service._check_predicate(
             value=0.0,
             predicate=self.RasterPredicate.WITHIN_RANGE,
             min_val=0.0,
-            max_val=100.0
+            max_val=100.0,
+            nodata_value=None,
+            tolerance=0.001
         )
         result_max = self.service._check_predicate(
             value=100.0,
             predicate=self.RasterPredicate.WITHIN_RANGE,
             min_val=0.0,
-            max_val=100.0
+            max_val=100.0,
+            nodata_value=None,
+            tolerance=0.001
         )
         self.assertTrue(result_min)
         self.assertTrue(result_max)
-    
+
     def test_outside_range_true(self):
         """Test OUTSIDE_RANGE predicate returns True for value outside range."""
         result = self.service._check_predicate(
             value=150.0,
             predicate=self.RasterPredicate.OUTSIDE_RANGE,
             min_val=0.0,
-            max_val=100.0
+            max_val=100.0,
+            nodata_value=None,
+            tolerance=0.001
         )
         self.assertTrue(result)
-    
+
     def test_outside_range_false(self):
         """Test OUTSIDE_RANGE predicate returns False for value in range."""
         result = self.service._check_predicate(
             value=50.0,
             predicate=self.RasterPredicate.OUTSIDE_RANGE,
             min_val=0.0,
-            max_val=100.0
+            max_val=100.0,
+            nodata_value=None,
+            tolerance=0.001
         )
         self.assertFalse(result)
-    
+
     def test_above_value_true(self):
         """Test ABOVE_VALUE predicate returns True for value above threshold."""
         result = self.service._check_predicate(
             value=150.0,
             predicate=self.RasterPredicate.ABOVE_VALUE,
             min_val=100.0,
-            max_val=100.0
+            max_val=100.0,
+            nodata_value=None,
+            tolerance=0.001
         )
         self.assertTrue(result)
-    
+
     def test_above_value_false(self):
         """Test ABOVE_VALUE predicate returns False for value at or below threshold."""
         result = self.service._check_predicate(
             value=100.0,
             predicate=self.RasterPredicate.ABOVE_VALUE,
             min_val=100.0,
-            max_val=100.0
+            max_val=100.0,
+            nodata_value=None,
+            tolerance=0.001
         )
         self.assertFalse(result)
-    
+
     def test_below_value_true(self):
         """Test BELOW_VALUE predicate returns True for value below threshold."""
         result = self.service._check_predicate(
             value=50.0,
             predicate=self.RasterPredicate.BELOW_VALUE,
             min_val=0.0,
-            max_val=100.0
+            max_val=100.0,
+            nodata_value=None,
+            tolerance=0.001
         )
         self.assertTrue(result)
-    
+
     def test_below_value_false(self):
         """Test BELOW_VALUE predicate returns False for value at or above threshold."""
         result = self.service._check_predicate(
             value=100.0,
             predicate=self.RasterPredicate.BELOW_VALUE,
             min_val=0.0,
-            max_val=100.0
+            max_val=100.0,
+            nodata_value=None,
+            tolerance=0.001
         )
         self.assertFalse(result)
-    
+
     def test_equals_value_true(self):
         """Test EQUALS_VALUE predicate returns True for equal value."""
         result = self.service._check_predicate(
@@ -206,10 +226,11 @@ class TestPredicateChecking(unittest.TestCase):
             predicate=self.RasterPredicate.EQUALS_VALUE,
             min_val=100.0,
             max_val=100.0,
+            nodata_value=None,
             tolerance=0.001
         )
         self.assertTrue(result)
-    
+
     def test_equals_value_with_tolerance(self):
         """Test EQUALS_VALUE predicate respects tolerance."""
         result = self.service._check_predicate(
@@ -217,10 +238,11 @@ class TestPredicateChecking(unittest.TestCase):
             predicate=self.RasterPredicate.EQUALS_VALUE,
             min_val=100.0,
             max_val=100.0,
+            nodata_value=None,
             tolerance=0.001
         )
         self.assertTrue(result)
-    
+
     def test_equals_value_false(self):
         """Test EQUALS_VALUE predicate returns False for different value."""
         result = self.service._check_predicate(
@@ -228,20 +250,23 @@ class TestPredicateChecking(unittest.TestCase):
             predicate=self.RasterPredicate.EQUALS_VALUE,
             min_val=100.0,
             max_val=100.0,
+            nodata_value=None,
             tolerance=0.001
         )
         self.assertFalse(result)
-    
+
     def test_is_nodata_true(self):
         """Test IS_NODATA predicate returns True for None value."""
         result = self.service._check_predicate(
             value=None,
             predicate=self.RasterPredicate.IS_NODATA,
             min_val=0.0,
-            max_val=100.0
+            max_val=100.0,
+            nodata_value=None,
+            tolerance=0.001
         )
         self.assertTrue(result)
-    
+
     def test_is_nodata_with_nodata_value(self):
         """Test IS_NODATA predicate detects nodata value."""
         result = self.service._check_predicate(
@@ -249,30 +274,35 @@ class TestPredicateChecking(unittest.TestCase):
             predicate=self.RasterPredicate.IS_NODATA,
             min_val=0.0,
             max_val=100.0,
-            nodata_value=-9999.0
+            nodata_value=-9999.0,
+            tolerance=0.001
         )
         self.assertTrue(result)
-    
+
     def test_is_not_nodata_true(self):
         """Test IS_NOT_NODATA predicate returns True for valid value."""
         result = self.service._check_predicate(
             value=50.0,
             predicate=self.RasterPredicate.IS_NOT_NODATA,
             min_val=0.0,
-            max_val=100.0
+            max_val=100.0,
+            nodata_value=None,
+            tolerance=0.001
         )
         self.assertTrue(result)
-    
+
     def test_is_not_nodata_false(self):
         """Test IS_NOT_NODATA predicate returns False for nodata value."""
         result = self.service._check_predicate(
             value=None,
             predicate=self.RasterPredicate.IS_NOT_NODATA,
             min_val=0.0,
-            max_val=100.0
+            max_val=100.0,
+            nodata_value=None,
+            tolerance=0.001
         )
         self.assertFalse(result)
-    
+
     def test_nodata_values_excluded_from_range_predicates(self):
         """Test that nodata values are excluded from range predicates."""
         # None value should return False for WITHIN_RANGE
@@ -280,17 +310,20 @@ class TestPredicateChecking(unittest.TestCase):
             value=None,
             predicate=self.RasterPredicate.WITHIN_RANGE,
             min_val=0.0,
-            max_val=100.0
+            max_val=100.0,
+            nodata_value=None,
+            tolerance=0.001
         )
         self.assertFalse(result)
-        
+
         # Nodata value should return False for WITHIN_RANGE
         result = self.service._check_predicate(
             value=-9999.0,
             predicate=self.RasterPredicate.WITHIN_RANGE,
             min_val=0.0,
             max_val=100.0,
-            nodata_value=-9999.0
+            nodata_value=-9999.0,
+            tolerance=0.001
         )
         self.assertFalse(result)
 
@@ -370,7 +403,7 @@ class TestRasterFilterRequest(unittest.TestCase):
         
         self.assertEqual(request.raster_layer, mock_raster)
         self.assertEqual(request.vector_layer, mock_vector)
-        self.assertEqual(request.band, 1)
+        self.assertEqual(request.band_index, 1)
         self.assertEqual(request.predicate, self.RasterPredicate.WITHIN_RANGE)
         self.assertEqual(request.sampling_method, self.SamplingMethod.CENTROID)
     
@@ -382,14 +415,14 @@ class TestRasterFilterRequest(unittest.TestCase):
         request = self.RasterFilterRequest(
             raster_layer=mock_raster,
             vector_layer=mock_vector,
-            band=2,
+            band_index=2,
             min_value=10.0,
             max_value=50.0,
             predicate=self.RasterPredicate.OUTSIDE_RANGE,
             sampling_method=self.SamplingMethod.MEAN
         )
-        
-        self.assertEqual(request.band, 2)
+
+        self.assertEqual(request.band_index, 2)
         self.assertEqual(request.min_value, 10.0)
         self.assertEqual(request.max_value, 50.0)
         self.assertEqual(request.predicate, self.RasterPredicate.OUTSIDE_RANGE)
@@ -424,7 +457,7 @@ class TestVectorFilterRequest(unittest.TestCase):
         self.assertEqual(request.vector_layer, mock_vector)
         self.assertEqual(request.raster_layer, mock_raster)
         self.assertEqual(request.operation, self.RasterOperation.CLIP)
-        self.assertTrue(request.use_selected_features)
+        self.assertTrue(request.use_selected_only)
     
     def test_create_request_with_feature_ids(self):
         """Test creating a request with specific feature IDs."""
@@ -460,15 +493,16 @@ class TestRasterFilterResult(unittest.TestCase):
         """Test creating a successful result."""
         result = self.RasterFilterResult(
             success=True,
-            matched_count=100,
-            total_count=500,
+            matching_feature_ids=[1, 2, 3],
+            total_features=500,
+            matching_count=100,
             expression="$id IN (1, 2, 3)"
         )
-        
+
         self.assertTrue(result.success)
-        self.assertEqual(result.matched_count, 100)
-        self.assertEqual(result.total_count, 500)
-        self.assertIsNone(result.error_message)
+        self.assertEqual(result.matching_count, 100)
+        self.assertEqual(result.total_features, 500)
+        self.assertEqual(result.error_message, "")
     
     def test_failed_result(self):
         """Test creating a failed result."""

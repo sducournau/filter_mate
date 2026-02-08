@@ -2467,7 +2467,11 @@ class FilterMateApp:
                 # HasGeometry = PointLayer | LineLayer | PolygonLayer (excludes NoGeometry tables)
                 filters = _HasGeometry | _RasterLayer
                 combo = self.dockwidget.comboBox_filtering_current_layer
-                combo.setFilters(filters)
+                # FIX 2026-02-08: Prefer setProxyModelFilters() (QGIS 3.40+) over deprecated setFilters()
+                if hasattr(combo, 'setProxyModelFilters'):
+                    combo.setProxyModelFilters(filters)
+                else:
+                    combo.setFilters(filters)
         except Exception as e: logger.debug(f"ComboBox filter setup (non-critical): {e}")
         
         # Trigger layer change with active or first layer

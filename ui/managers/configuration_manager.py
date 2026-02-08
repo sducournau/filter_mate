@@ -1030,11 +1030,20 @@ class ConfigurationManager(QObject):
         # HasGeometry = PointLayer | LineLayer | PolygonLayer (excludes NoGeometry tables)
         try:
             filters = _HasGeometry | _RasterLayer
-            d.comboBox_filtering_current_layer.setFilters(filters)
+            combo = d.comboBox_filtering_current_layer
+            # FIX 2026-02-08: Prefer setProxyModelFilters() (QGIS 3.40+) over deprecated setFilters()
+            if hasattr(combo, 'setProxyModelFilters'):
+                combo.setProxyModelFilters(filters)
+            else:
+                combo.setFilters(filters)
             logger.info("comboBox_filtering_current_layer: Filter set to HasGeometry | RasterLayer (vector + raster)")
         except Exception as e:
             logger.warning(f"Could not set HasGeometry | RasterLayer filter: {e}")
-            d.comboBox_filtering_current_layer.setFilters(_VectorLayer)
+            combo = d.comboBox_filtering_current_layer
+            if hasattr(combo, 'setProxyModelFilters'):
+                combo.setProxyModelFilters(_VectorLayer)
+            else:
+                combo.setFilters(_VectorLayer)
         
         # Apply themed icon to centroids checkbox
         try:
