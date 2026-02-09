@@ -2559,10 +2559,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except Exception as e:
             logger.exception(f"Vector export error: {e}")
     
-    def _on_export_progress(self, progress: int):
+    def _on_export_progress(self, progress: int, message: str = ""):
         """Handle export progress update."""
         # TODO: Update progress bar if available
-        logger.debug(f"Export progress: {progress}%")
+        logger.debug(f"Export progress: {progress}% {message}")
     
     def _on_toolbox_config_changed(self, key: str, value):
         """Note: Handle config change from new QToolBox.
