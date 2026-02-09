@@ -56,8 +56,7 @@ test_*.py
 !tests/test_*.py
 !tests/**/test_*.py
 
-# BMAD output (artifacts d'implémentation)
-_bmad-output/
+# BMAD output - tracked for project documentation
 
 # SQLite temporary files
 *.sqlite-wal

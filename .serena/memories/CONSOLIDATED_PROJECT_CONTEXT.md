@@ -1,8 +1,9 @@
 # FilterMate - Consolidated Project Context
 
-**Version:** 5.4.0 (Production Release)  
-**Last Updated:** February 1, 2026  
-**Codebase:** ~243,284 lines / 529 Python files (~130,000 production + ~52,000 tests)
+**Version:** 6.0.0-dev (Consolidation In Progress — Phases 1-4 COMPLETE)  
+**Last Updated:** February 9, 2026  
+**Codebase:** ~243,284 lines / 549 Python files (~130,000 production + ~52,000 tests)
+**Consolidation v6.0:** ~4,500 lines reduced so far (Phases 1-4 of 6 complete, target: ~19,000)
 
 ---
 
@@ -49,7 +50,7 @@ FilterMate is a QGIS plugin providing an intuitive interface for filtering and e
 |               CORE LAYER (~50,000 lines)                      |
 |  core/ (28 services, tasks, domain, strategies)               |
 |  - services/ (28 services)                                    |
-|  - tasks/ (filter_task.py 5,851 lines)                        |
+|  - tasks/ (filter_task.py 4,499 lines + handlers/)             |
 |  - domain/, filter/, geometry/, optimization/                 |
 +---------------------------+-----------------------------------+
                             |
@@ -152,7 +153,7 @@ filter_mate/
 | **TOTAL (prod)** | | **~130,000** | **100%** | **~314** |
 | **TOTAL (all)** | | **~243,284** | - | **529** |
 
-### Quality Metrics (v5.4.0)
+### Quality Metrics (v6.0.0-dev)
 
 | Metric | Value | Target |
 |--------|-------|--------|
@@ -160,7 +161,7 @@ filter_mate/
 | Automated Tests | 396 | - |
 | Bare Excepts | 0 ✅ | 0 |
 | Debug Prints | 0 ✅ | 0 |
-| Services | 28 | - |
+| Services | 28 (30 pre-consolidation) | 18-20 (P5) |
 | Controllers | 13 | - |
 | Backends | 4 | - |
 | Languages | 22 | - |
@@ -383,12 +384,14 @@ else:
 - [ ] Performance optimization for very large rasters
 - [ ] Documentation improvements
 
-### v6.0 Future
-- [ ] Plugin API for extensibility
-- [ ] Parallel processing improvements
-- [ ] Advanced raster analytics
-- [ ] Cloud data source support
-- [ ] Quality score: 8.5 → 9.0
+### v6.0 IN PROGRESS (Consolidation — February 2026)
+- [x] **P1**: Cleanup — ~110 unused imports, dead files, deprecation markers (`213e794`)
+- [x] **P2**: Expression builders — PredicateRegistry, dead code removal, PK consolidation (`21ebb47`..`519d4d3`)
+- [x] **P3.1**: Extract RasterExploringManager from dockwidget (-1,822 lines) (`1ff21fd`)
+- [x] **P4**: Extract backend handlers from FilterEngineTask (-1,371 lines) (`70886b5`)
+- [ ] **P5**: Merge redundant services (30 → 18-20)
+- [ ] **P6**: Remove dual toolbox system (-5,000 lines expected)
+- **Total reduced so far:** ~4,500 lines / ~19,000 target
 
 ---
 
@@ -398,8 +401,12 @@ else:
 |----------|-----------|-------|
 | Entry | `filter_mate.py` | ~300 |
 | App | `filter_mate_app.py` | 2,383 |
-| UI | `filter_mate_dockwidget.py` | 6,925 |
-| Main Task | `core/tasks/filter_task.py` | 5,851 |
+| UI | `filter_mate_dockwidget.py` | 9,994 (was 11,836) |
+| Main Task | `core/tasks/filter_task.py` | 4,499 (was 5,870) |
+| PG Handler | `core/tasks/handlers/postgresql_handler.py` | 851 (NEW v6.0-P4) |
+| SL Handler | `core/tasks/handlers/spatialite_handler.py` | 348 (NEW v6.0-P4) |
+| OGR Handler | `core/tasks/handlers/ogr_handler.py` | 224 (NEW v6.0-P4) |
+| Raster Mgr | `ui/managers/raster_exploring_manager.py` | 1,462 (NEW v6.0-P3.1) |
 | PostgreSQL Backend | `adapters/backends/postgresql/expression_builder.py` | ~1,500 |
 | Raster Tools | `ui/tools/raster_pixel_picker_tool.py` | ~800 |
 | Signal Manager | `ui/widgets/dockwidget_signal_manager.py` | 778 |
@@ -454,4 +461,4 @@ output_folder: "{project-root}/_bmad-output"
 - metadata.txt (v4.4.5)
 - Translation audit (Feb 1, 2026)
 
-**Last Consolidation:** February 1, 2026
+**Last Consolidation:** February 9, 2026 (v6.0 Phases 1-4 complete)
