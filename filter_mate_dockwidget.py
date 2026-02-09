@@ -829,6 +829,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             ("EXPORTING", "HAS_DATATYPE_TO_EXPORT"): "pushButton_checkable_exporting_datatype",
             ("EXPORTING", "HAS_OUTPUT_FOLDER_TO_EXPORT"): "pushButton_checkable_exporting_output_folder",
             ("EXPORTING", "HAS_ZIP_TO_EXPORT"): "pushButton_checkable_exporting_zip",
+            # RASTER FILTERING buttons (v5.4)
+            ("FILTERING", "HAS_RASTER_SOURCE"): "pushButton_checkable_filtering_raster_source",
+            ("FILTERING", "HAS_RASTER_LAYERS_TO_FILTER"): "pushButton_checkable_filtering_raster_layers_to_filter",
+            ("FILTERING", "HAS_RASTER_COMBINE_OPERATOR"): "pushButton_checkable_filtering_raster_combine_operator",
+            ("FILTERING", "HAS_RASTER_PREDICATES"): "pushButton_checkable_filtering_raster_predicates",
+            ("FILTERING", "HAS_SAMPLING_METHOD"): "pushButton_checkable_filtering_sampling_method",
             # RASTER_EXPLORING buttons
             ("RASTER_EXPLORING", "PIXEL_PICKER"): "pushButton_raster_pixel_picker",
             ("RASTER_EXPLORING", "RECT_PICKER"): "pushButton_raster_rect_picker",
@@ -3867,6 +3873,35 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Trigger legacy filter
         self.launchingTask.emit('filter')
     
+    def _split_filter_targets_by_type(self):
+        """Split checked layers_to_filter into vector and raster target lists.
+
+        v5.5: Separates raster targets from vector targets so that the filter
+        button can route each type to the appropriate execution backend.
+
+        Returns:
+            tuple: (vector_targets, raster_targets) where each is a list of
+                   (QgsMapLayer, operation_str) tuples.
+        """
+        from qgis.core import QgsProject, QgsVectorLayer, QgsRasterLayer
+
+        layers_to_filter = self.get_layers_to_filter()
+        project = QgsProject.instance()
+
+        vector_targets = []
+        raster_targets = []
+
+        for layer_id in layers_to_filter:
+            layer = project.mapLayer(layer_id)
+            if not layer or not layer.isValid():
+                continue
+            if isinstance(layer, QgsVectorLayer):
+                vector_targets.append((layer, 'spatial_predicate'))
+            elif isinstance(layer, QgsRasterLayer):
+                raster_targets.append((layer, 'Clip'))
+
+        return vector_targets, raster_targets
+
     def _dispatch_raster_operations(self, source_layer, raster_targets: list, options: dict = None):
         """v5.0 EPIC-6: Dispatch vector-to-raster operations (Clip/Mask/Zonal).
         
@@ -3898,13 +3933,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 
                 raster_op = op_map.get(operation, RasterOperation.CLIP)
                 
+                # v5.5: Fall back to all features when none are selected
+                has_selection = (hasattr(source_layer, 'selectedFeatureCount')
+                                 and source_layer.selectedFeatureCount() > 0)
+
                 request = VectorFilterRequest(
                     vector_layer=source_layer,
                     raster_layer=raster_layer,
                     operation=raster_op,
-                    use_selected_only=True,
+                    use_selected_only=has_selection,
                     nodata_value=options.get('nodata_value', -9999),
-                    output_to_memory=options.get('output_to_memory', True),
                 )
                 
                 logger.info(f"EPIC-6: {operation} on {raster_layer.name()} with options {options}")
@@ -5751,13 +5789,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self._configuration_manager:
             self._configuration_manager.setup_filtering_tab_widgets()
         # v5.4: Add raster value filter section to the filtering page
-        self._setup_raster_filtering_section()
+        try:
+            self._setup_raster_filtering_section()
+        except Exception as e:
+            logger.error(f"_setup_raster_filtering_section failed: {e}", exc_info=True)
 
     def _setup_raster_filtering_section(self):
         """v5.4: Create and inject the Raster Value Filter section into the Filtering page.
 
         Adds 5 new widget lines (L1-L5) after the existing vector filtering widgets,
         separated by a horizontal line. Follows the same Keys+Values pattern.
+
+        v5.5 FIX: Added icons, tooltips, and fixed spacers (Expanding→Fixed) to
+        align with the vector filtering keys layout.
 
         Widgets created:
           L1: Raster Source Layer + Band selector
@@ -5774,11 +5818,32 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         keys_layout = self.verticalLayout_filtering_keys
         values_layout = self.verticalLayout_filtering_values
 
+        # v5.5 FIX: Remove the trailing expanding spacer from keys_layout
+        # The base .ui file adds an Expanding spacer at the end of the keys column.
+        # Items added after it would be pushed beyond the visible area.
+        last_idx = keys_layout.count() - 1
+        if last_idx >= 0:
+            item = keys_layout.itemAt(last_idx)
+            if item and item.spacerItem():
+                keys_layout.removeItem(item)
+
+        # --- Load icons ---
+        icons_dir = os.path.join(self.plugin_dir, "icons") if hasattr(self, 'plugin_dir') else ""
+        def _load_icon(filename):
+            path = os.path.join(icons_dir, filename)
+            if os.path.exists(path):
+                try:
+                    from .ui.icons import get_themed_icon
+                    return get_themed_icon(path)
+                except Exception:
+                    return QtGui.QIcon(path)
+            return QtGui.QIcon()
+
         # --- Helper: create a key pushbutton (checkable, flat, 32x32) ---
-        def _make_key_button(name: str) -> QtWidgets.QPushButton:
+        def _make_key_button(name: str, icon_file: str = "", tooltip: str = "") -> QtWidgets.QPushButton:
             btn = QtWidgets.QPushButton(self.widget_filtering_keys)
             btn.setObjectName(name)
-            sp = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+            sp = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
             btn.setSizePolicy(sp)
             btn.setMinimumSize(QtCore.QSize(32, 32))
             btn.setMaximumSize(QtCore.QSize(32, 32))
@@ -5790,6 +5855,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             btn.setIconSize(QtCore.QSize(16, 16))
             btn.setCheckable(True)
             btn.setFlat(True)
+            if icon_file:
+                icon = _load_icon(icon_file)
+                if not icon.isNull():
+                    btn.setIcon(icon)
+                    btn.setProperty('icon_name', icon_file)
+            if tooltip:
+                btn.setToolTip(tooltip)
             return btn
 
         # --- Separator ---
@@ -5804,8 +5876,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         # ===== L1: Raster Source Layer + Band =====
         self.pushButton_checkable_filtering_raster_source = _make_key_button(
-            "pushButton_checkable_filtering_raster_source")
+            "pushButton_checkable_filtering_raster_source",
+            icon_file="raster.png",
+            tooltip="Raster Source Layer\n\nSelect the raster layer and band\nfor raster value filtering.")
         keys_layout.addWidget(self.pushButton_checkable_filtering_raster_source, 0, QtCore.Qt.AlignHCenter)
+        keys_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
 
         l1_layout = QtWidgets.QHBoxLayout()
         l1_layout.setSpacing(4)
@@ -5836,22 +5911,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         l1_layout.addWidget(self.comboBox_filtering_raster_band)
 
         values_layout.addLayout(l1_layout)
-        values_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
+        values_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed))
 
         # ===== L2: Vector Layers to Filter =====
         self.pushButton_checkable_filtering_raster_layers_to_filter = _make_key_button(
-            "pushButton_checkable_filtering_raster_layers_to_filter")
+            "pushButton_checkable_filtering_raster_layers_to_filter",
+            icon_file="layers.png",
+            tooltip="Target Layers\n\nSelect vector layers to filter\nbased on raster values.")
         keys_layout.addWidget(self.pushButton_checkable_filtering_raster_layers_to_filter, 0, QtCore.Qt.AlignHCenter)
+        keys_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
 
         # The QgsCheckableComboBoxLayer was already created in _create_custom_widgets_early()
         # Just add it to the values layout
         values_layout.addWidget(self.checkableComboBoxLayer_filtering_raster_layers_to_filter)
-        values_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
+        values_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed))
 
         # ===== L3: Combine Operators =====
         self.pushButton_checkable_filtering_raster_combine_operator = _make_key_button(
-            "pushButton_checkable_filtering_raster_combine_operator")
+            "pushButton_checkable_filtering_raster_combine_operator",
+            icon_file="filter_multi.png",
+            tooltip="Combine Operators\n\nCombine raster filter with existing filters\nusing AND, AND NOT, or OR.")
         keys_layout.addWidget(self.pushButton_checkable_filtering_raster_combine_operator, 0, QtCore.Qt.AlignHCenter)
+        keys_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
 
         l3_layout = QtWidgets.QHBoxLayout()
         l3_layout.setObjectName("horizontalLayout_filtering_raster_combine")
@@ -5877,12 +5958,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         l3_layout.addWidget(self.comboBox_filtering_raster_other_combine_operator)
 
         values_layout.addLayout(l3_layout)
-        values_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
+        values_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed))
 
         # ===== L4: Raster Predicates =====
         self.pushButton_checkable_filtering_raster_predicates = _make_key_button(
-            "pushButton_checkable_filtering_raster_predicates")
+            "pushButton_checkable_filtering_raster_predicates",
+            icon_file="geo_predicates.png",
+            tooltip="Raster Predicates\n\nFilter condition for raster values:\nWithin Range, Above/Below, NoData, etc.")
         keys_layout.addWidget(self.pushButton_checkable_filtering_raster_predicates, 0, QtCore.Qt.AlignHCenter)
+        keys_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
 
         from qgis.gui import QgsCheckableComboBox
         self.comboBox_filtering_raster_predicates = QgsCheckableComboBox(self.FILTERING)
@@ -5900,11 +5984,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         ])
         self.comboBox_filtering_raster_predicates.setObjectName("comboBox_filtering_raster_predicates")
         values_layout.addWidget(self.comboBox_filtering_raster_predicates)
-        values_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
+        values_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed))
 
         # ===== L5: Sampling Method =====
         self.pushButton_checkable_filtering_sampling_method = _make_key_button(
-            "pushButton_checkable_filtering_sampling_method")
+            "pushButton_checkable_filtering_sampling_method",
+            icon_file="centroid.png",
+            tooltip="Sampling Method\n\nHow raster values are sampled at features:\nCentroid, Vertices, Zonal statistics.")
         keys_layout.addWidget(self.pushButton_checkable_filtering_sampling_method, 0, QtCore.Qt.AlignHCenter)
 
         self.comboBox_filtering_sampling_method = QtWidgets.QComboBox(self.FILTERING)
@@ -5925,7 +6011,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Final spacer
         keys_layout.addItem(QtWidgets.QSpacerItem(20, 0, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
 
-        logger.info("v5.4: Raster Value Filter section added to Filtering page (5 lines)")
+        logger.info("v5.5: Raster Value Filter section added to Filtering page (5 lines, with icons)")
 
     def _setup_exporting_tab_widgets(self):
         """v4.0 Sprint 16: Delegate to ConfigurationManager."""
@@ -11467,6 +11553,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = self.get_layers_to_filter()
         self.setLayerVariableEvent(self.current_layer, [("filtering", "layers_to_filter")])
+
+        # v5.5: Route raster targets to RasterFilterService before emitting filter task
+        if task_name == 'filter':
+            from qgis.core import QgsVectorLayer
+            if isinstance(self.current_layer, QgsVectorLayer):
+                vector_targets, raster_targets = self._split_filter_targets_by_type()
+                if raster_targets:
+                    logger.info(f"v5.5: Dispatching {len(raster_targets)} raster target(s) via RasterFilterService")
+                    self._dispatch_raster_operations(self.current_layer, raster_targets)
+                if not vector_targets:
+                    logger.info("v5.5: Only raster targets - skipping FilterEngineTask")
+                    return
+                # Update layers_to_filter with vector-only IDs for FilterEngineTask
+                vector_only_ids = [layer.id() for layer, _ in vector_targets]
+                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = vector_only_ids
+
         self.launchingTask.emit(task_name)
     
     def _setup_truncation_tooltips(self):

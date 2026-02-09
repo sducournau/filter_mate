@@ -2318,7 +2318,7 @@ from qgsmaplayercombobox import QgsMapLayerComboBox
 from qgsprojectionselectionwidget import QgsProjectionSelectionWidget
 from qgspropertyoverridebutton import QgsPropertyOverrideButton
 from qgsspinbox import QgsSpinBox
-from . import resources_rc
+from . import resources  # Qt resources (was: import resources_rc)
 
 
 if __name__ == "__main__":
