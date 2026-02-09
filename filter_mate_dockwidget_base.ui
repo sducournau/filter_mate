@@ -25,18 +25,6 @@
     <height>0</height>
    </size>
   </property>
-  <property name="font">
-   <font>
-    <family>Segoe UI</family>
-    <pointsize>12</pointsize>
-    <weight>75</weight>
-    <italic>false</italic>
-    <bold>true</bold>
-    <underline>false</underline>
-    <strikeout>false</strikeout>
-    <kerning>true</kerning>
-   </font>
-  </property>
   <property name="acceptDrops">
    <bool>true</bool>
   </property>
@@ -4397,6 +4385,22 @@ Includes data files, styles, and metadata.</string>
                     <property name="bottomMargin">
                      <number>0</number>
                     </property>
+                    <item>
+                     <spacer name="verticalSpacer_exporting_values_layers_top">
+                      <property name="orientation">
+                       <enum>Qt::Vertical</enum>
+                      </property>
+                      <property name="sizeType">
+                       <enum>QSizePolicy::Expanding</enum>
+                      </property>
+                      <property name="sizeHint" stdset="0">
+                       <size>
+                        <width>20</width>
+                        <height>4</height>
+                       </size>
+                      </property>
+                     </spacer>
+                    </item>
                     <item>
                      <widget class="QgsProjectionSelectionWidget" name="mQgsProjectionSelectionWidget_exporting_projection">
                       <property name="sizePolicy">
