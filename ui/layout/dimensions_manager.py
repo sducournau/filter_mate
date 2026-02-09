@@ -56,7 +56,6 @@ class DimensionsManager(LayoutManagerBase):
     Extracted methods from dockwidget:
     - apply_dynamic_dimensions() -> apply()
     - _apply_dockwidget_dimensions()
-    - _apply_widget_dimensions()
     - _apply_frame_dimensions()
     - _apply_qgis_widget_dimensions()
     - _harmonize_checkable_pushbuttons()
@@ -140,7 +139,6 @@ class DimensionsManager(LayoutManagerBase):
             self.apply_dockwidget_dimensions()
             
             # Apply dimensions in logical groups
-            self.apply_widget_dimensions()
             self.apply_frame_dimensions()
             self.harmonize_checkable_pushbuttons()
             self.apply_layout_spacing()
@@ -187,22 +185,6 @@ class DimensionsManager(LayoutManagerBase):
             if current_size.width() > preferred_width or current_size.height() > preferred_height:
                 self.dockwidget.resize(preferred_width, preferred_height)
                 logger.debug(f"Resized dockwidget to preferred size: {preferred_width}x{preferred_height}px")
-    
-    def apply_widget_dimensions(self) -> None:
-        """
-        [DEPRECATED v4.0.3] Widget dimensions now managed by QSS.
-        
-        All widget heights (ComboBox, LineEdit, SpinBox, GroupBox) are defined in
-        resources/styles/default.qss with standardized 20px height.
-        
-        This function is kept for backward compatibility but does nothing.
-        QSS rules override any Python-side dimension settings.
-        
-        TODO Note: Remove this function and entire DimensionsManager class.
-        """
-        # Widget dimensions managed by QSS - no Python intervention needed
-        logger.debug("Widget dimensions managed by QSS (20px standard)")
-        pass
     
     def _apply_exploring_groupbox_dimensions(self) -> None:
         """

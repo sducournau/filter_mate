@@ -15,16 +15,10 @@ FilterMate Application Orchestrator
 from qgis.PyQt.QtCore import Qt, QTimer
 import weakref
 import sip
-from qgis.PyQt.QtWidgets import QApplication
 from qgis.core import (
     QgsApplication,
-    QgsCoordinateReferenceSystem,
-    QgsCoordinateTransformContext,
-    QgsExpressionContextUtils,
     QgsProject,
     QgsRasterLayer,  # v5.0: Added for unified vector/raster layer support
-    QgsTask,
-    QgsVectorFileWriter,
     QgsVectorLayer
 )
 # QGIS 3.34+: Use Qgis.LayerFilter enum flags instead of deprecated QgsMapLayerProxyModel int flags
@@ -39,32 +33,18 @@ except (ImportError, AttributeError):
         from qgis.core import QgsMapLayerProxyModel as _LayerFilter
     _LayerFilters = None
 from qgis.utils import iface
-from qgis import processing
-from osgeo import ogr
 
 import os.path
-import logging
 from .config.config import init_env_vars, ENV_VARS
 import json
-
-# Core tasks (migrated from modules/tasks/)
-from .core.tasks import (
-    FilterEngineTask,
-    LayersManagementEngineTask,
-)
-from .infrastructure.utils import spatialite_connect
 
 # Infrastructure utilities (migrated from modules/appUtils)
 from .infrastructure.utils import (
     POSTGRESQL_AVAILABLE,
-    get_data_source_uri,
-    get_datasource_connexion_from_layer,
     is_layer_source_available,
-    detect_layer_provider_type,
-    validate_and_cleanup_postgres_layers,  # v2.8.1: Orphaned MV cleanup on project load
 )
-from .infrastructure.database.sql_utils import sanitize_sql_identifier, safe_set_subset_string
-from .infrastructure.field_utils import clean_buffer_value, cleanup_corrupted_layer_filters
+from .infrastructure.database.sql_utils import safe_set_subset_string
+from .infrastructure.field_utils import cleanup_corrupted_layer_filters
 from .utils.type_utils import return_typed_value
 from .infrastructure.feedback import (
     show_backend_info, show_success_with_backend,
@@ -73,7 +53,6 @@ from .infrastructure.feedback import (
 from .core.services.history_service import HistoryService
 from .core.services.favorites_service import FavoritesService
 from .core.services.favorites_migration_service import FavoritesMigrationService
-from .ui.config import UIConfig, DisplayProfile
 
 # Config helpers (migrated to config/)
 from .config.config import get_optimization_thresholds
@@ -81,7 +60,6 @@ from .config.config import get_optimization_thresholds
 # Object safety utilities (migrated to infrastructure/utils/)
 from .infrastructure.utils import (
     is_sip_deleted, is_layer_valid as is_valid_layer, is_qgis_alive,
-    GdalErrorHandler
 )
 from .infrastructure.logging import get_app_logger
 from .resources import *  # Qt resources must be imported with wildcard
@@ -182,8 +160,6 @@ def safe_show_message(level, title, message):
         return True
     except (RuntimeError, AttributeError): return False
 
-
-from .filter_mate_dockwidget import FilterMateDockWidget
 
 MESSAGE_TASKS_CATEGORIES = {'filter':'FilterLayers', 'unfilter':'FilterLayers', 'reset':'FilterLayers', 'export':'ExportLayers',
     'add_layers':'ManageLayers', 'remove_layers':'ManageLayers', 'remove_all_layers':'ManageLayers',

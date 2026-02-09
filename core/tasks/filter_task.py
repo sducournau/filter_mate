@@ -29,25 +29,14 @@ import os
 import uuid
 import re
 import sqlite3
-import zipfile
-from collections import OrderedDict
-from pathlib import Path
-from functools import partial
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional
 
 from qgis.core import (
     Qgis,
     QgsCoordinateReferenceSystem,
-    QgsCoordinateTransform,
-    QgsExpression,
-    QgsExpressionContext,
-    QgsExpressionContextUtils,
     QgsFeature,
     QgsFeatureRequest,
-    QgsFeatureSource,
-    QgsField,
     QgsGeometry,
-    QgsMemoryProviderUtils,
     QgsMessageLog,
     QgsProcessing,
     QgsProcessingContext,
@@ -55,36 +44,20 @@ from qgis.core import (
     QgsProject,
     QgsProperty,
     QgsTask,
-    QgsUnitTypes,
-    QgsVectorFileWriter,
     QgsVectorLayer,
-    QgsWkbTypes
 )
 from qgis.PyQt.QtCore import pyqtSignal
 from qgis.utils import iface
 from qgis import processing
 
 # Import logging configuration (migrated to infrastructure.logging)
-from ...infrastructure.logging import setup_logger, safe_log
+from ...infrastructure.logging import setup_logger
 from ...config.config import ENV_VARS
 
 # EPIC-1 Phase E12: Import extracted orchestration modules (relative import in core/)
 from ..filter.filter_orchestrator import FilterOrchestrator
 from ..filter.expression_builder import ExpressionBuilder
-from ..filter.result_processor import ResultProcessor
 
-# EPIC-1 Phase E5: Import source filter builder functions (relative import in core/)
-from ..filter.source_filter_builder import (
-    should_skip_source_subset,
-    get_primary_key_field as sfb_get_primary_key_field,
-    get_source_table_name as sfb_get_source_table_name,
-    extract_feature_ids,
-    build_source_filter_inline,
-    build_source_filter_with_mv,
-    get_visible_feature_ids,
-    get_source_wkt_and_srid,
-    get_source_feature_count,
-)
 
 # Setup logger with rotation
 logger = setup_logger(
@@ -94,7 +67,7 @@ logger = setup_logger(
 )
 
 # PostgreSQL availability check - EPIC-1 E13: Use BackendServices facade
-from ..ports.backend_services import get_backend_services, get_postgresql_available
+from ..ports.backend_services import get_backend_services
 
 # Lazy load psycopg2 and availability flags via facade
 _backend_services = get_backend_services()
@@ -105,12 +78,7 @@ POSTGRESQL_AVAILABLE = _pg_availability.postgresql_available
 
 # Import constants (migrated to infrastructure)
 from ...infrastructure.constants import (
-    PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR, PROVIDER_MEMORY,
-    PREDICATE_INTERSECTS, PREDICATE_WITHIN, PREDICATE_CONTAINS,
-    PREDICATE_OVERLAPS, PREDICATE_CROSSES, PREDICATE_TOUCHES,
-    PREDICATE_DISJOINT, PREDICATE_EQUALS,
-    get_provider_name, should_warn_performance,
-    LONG_QUERY_WARNING_THRESHOLD, VERY_LONG_QUERY_WARNING_THRESHOLD
+    PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR,
 )
 
 # Backend architecture (migrated to adapters.backends)
@@ -118,19 +86,13 @@ from ...infrastructure.constants import (
 # Import utilities (migrated to infrastructure)
 from ...infrastructure.utils import (
     safe_set_subset_string,
-    get_source_table_name,
     get_datasource_connexion_from_layer,
-    get_primary_key_name,
     detect_layer_provider_type,
-    geometry_type_to_string,
-    sanitize_sql_identifier,
-    sanitize_filename,
-    clean_buffer_value,  # v3.0.12: Clean buffer values from float precision errors
 )
 
 # Import object safety utilities (v2.3.9 - stability fix, migrated to infrastructure)
 from ...infrastructure.utils import (
-    is_sip_deleted, is_layer_valid as is_valid_layer, safe_disconnect
+    is_layer_valid as is_valid_layer,
 )
 
 # Import prepared statements manager (migrated to infrastructure/database/)
@@ -139,33 +101,9 @@ from ...infrastructure.database.prepared_statements import create_prepared_state
 # Import task utilities (Phase 3a - migrated to infrastructure)
 from ...infrastructure.utils import (
     spatialite_connect,
-    safe_spatialite_connect,
-    sqlite_execute_with_retry,
     ensure_db_directory_exists,
     get_best_metric_crs,
-    should_reproject_layer,
-    needs_metric_conversion,
-    SQLITE_TIMEOUT,
-    SQLITE_MAX_RETRIES,
-    MESSAGE_TASKS_CATEGORIES
-)
-
-# Import geometry safety module (v2.3.9 - stability fix, migrated to core/geometry)
-from ..geometry.geometry_safety import (
-    validate_geometry,
-    validate_geometry_for_geos,
-    safe_as_geometry_collection,
-    safe_as_polygon,
-    safe_buffer,
-    safe_buffer_metric,
-    safe_buffer_with_crs_check,
-    safe_unary_union,
-    safe_collect_geometry,
-    safe_convert_to_multi_polygon,
-    extract_polygons_from_collection,
-    repair_geometry,
-    get_geometry_type_name,
-    create_geos_safe_layer
+    MESSAGE_TASKS_CATEGORIES,
 )
 
 # Import CRS utilities (v2.5.7 - improved CRS compatibility, migrated to core/geometry)
@@ -174,10 +112,7 @@ try:
         is_geographic_crs,
         is_metric_crs,
         get_optimal_metric_crs,
-        CRSTransformer,
-        create_metric_buffer,
-        get_crs_units,
-        get_layer_crs_info
+        get_layer_crs_info,
     )
     CRS_UTILS_AVAILABLE = True
 except ImportError:
@@ -185,12 +120,12 @@ except ImportError:
     logger.warning("crs_utils module not available - using legacy CRS handling")
 
 # Import from infrastructure (EPIC-1 migration)
-from ...infrastructure.cache import SourceGeometryCache, QueryExpressionCache, get_query_cache
+from ...infrastructure.cache import SourceGeometryCache
 from ...infrastructure.streaming import StreamingExporter, StreamingConfig
 from ...infrastructure.parallel import ParallelFilterExecutor, ParallelConfig
 
 # Import from core (EPIC-1 migration - relative import now that we're in core/)
-from ..optimization import get_combined_query_optimizer, optimize_combined_filter
+from ..optimization import get_combined_query_optimizer
 
 # Phase E13: Import extracted classes (January 2026)
 from .executors.attribute_filter_executor import AttributeFilterExecutor
@@ -201,7 +136,7 @@ from .connectors.backend_connector import BackendConnector
 from .builders.subset_string_builder import SubsetStringBuilder
 from .collectors.feature_collector import FeatureCollector
 from .dispatchers.action_dispatcher import (
-    ActionDispatcher, ActionContext, create_dispatcher_for_task, create_action_context_from_task
+    create_dispatcher_for_task, create_action_context_from_task
 )
 
 # E6: Task completion handler functions (relative import, same package)

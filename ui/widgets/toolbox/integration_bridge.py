@@ -2,6 +2,11 @@
 """
 FilterMate - QToolBox Integration Bridge
 
+DEPRECATED (v6.0 Phase 1.5): This module is part of the dual toolbox system
+planned for complete removal in Phase 6. Contains 6 hardcoded TODO placeholders
+(selection_type, selection_value, predicate, band, data_type) that will not be
+resolved since the entire ui/widgets/toolbox/ package will be removed.
+
 This module provides the bridge between the new Dual QToolBox architecture
 and the existing FilterMate dockwidget. It handles:
 - Signal routing between old and new components

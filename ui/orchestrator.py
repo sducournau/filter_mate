@@ -1,6 +1,9 @@
 """
 FilterMate DockWidget Orchestrator.
 
+DEPRECATED (v6.0 Phase 1.4): Not used at runtime. Marked for removal in Phase 6.
+Kept only for test backward compatibility until Phase 6 completes.
+
 Minimal orchestrator that coordinates between extracted components.
 This is the target structure after Phase 6 refactoring.
 

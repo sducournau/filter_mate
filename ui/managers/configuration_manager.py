@@ -1125,24 +1125,29 @@ class ConfigurationManager(QObject):
             # v5.2 FIX 2026-01-31: Disable by default - enabled only when HAS_LAYERS_TO_FILTER is checked
             d.checkBox_filtering_use_centroids_distant_layers.setEnabled(False)
 
-        # Create horizontal layout and insert widgets into verticalLayout_filtering_values
-        # FIX 2026-02-09: Do NOT call setParent() before addWidget() — it hides the widget
-        # and Qt may not correctly restore visibility when the toolbox page becomes active.
-        # Let addWidget() + insertLayout() handle reparenting through the layout chain.
-        d.horizontalLayout_filtering_distant_layers = QtWidgets.QHBoxLayout()
-        d.horizontalLayout_filtering_distant_layers.setSpacing(4)
-        d.horizontalLayout_filtering_distant_layers.addWidget(d.checkableComboBoxLayer_filtering_layers_to_filter)
-        d.horizontalLayout_filtering_distant_layers.addWidget(d.checkBox_filtering_use_centroids_distant_layers)
-
+        # FIX 2026-02-09c: Insert widgets DIRECTLY into the vertical layout.
+        # Using insertWidget on a layout connected to the widget tree guarantees
+        # proper reparenting and visibility. Sub-layouts caused silent failures.
         if hasattr(d, 'verticalLayout_filtering_values'):
-            d.verticalLayout_filtering_values.insertLayout(2, d.horizontalLayout_filtering_distant_layers)
-            # Force show after layout insertion — insertLayout triggers reparenting
+            # Create a container widget to hold combobox + centroids checkbox side by side
+            d.widget_filtering_distant_layers = QtWidgets.QWidget(d.FILTERING)
+            d.widget_filtering_distant_layers.setObjectName("widget_filtering_distant_layers")
+            hlayout = QtWidgets.QHBoxLayout(d.widget_filtering_distant_layers)
+            hlayout.setContentsMargins(0, 0, 0, 0)
+            hlayout.setSpacing(4)
+            hlayout.addWidget(d.checkableComboBoxLayer_filtering_layers_to_filter)
+            hlayout.addWidget(d.checkBox_filtering_use_centroids_distant_layers)
+            # Insert the container widget directly (insertWidget guarantees reparenting)
+            d.verticalLayout_filtering_values.insertWidget(2, d.widget_filtering_distant_layers)
+            d.widget_filtering_distant_layers.show()
             d.checkableComboBoxLayer_filtering_layers_to_filter.show()
             d.checkBox_filtering_use_centroids_distant_layers.show()
-            logger.debug(f"Inserted filtering layers layout at position 2, "
-                         f"widget visible: {d.checkableComboBoxLayer_filtering_layers_to_filter.isVisible()}")
+            logger.info(f"Inserted filtering layers container at position 2, "
+                        f"parent={d.widget_filtering_distant_layers.parent().objectName()}")
         else:
             logger.warning("verticalLayout_filtering_values not found - filtering layers widget NOT inserted")
+        # Keep reference for _ensure_dynamic_widgets_layout compatibility
+        d.horizontalLayout_filtering_distant_layers = None
         
         try:
             from ..config import UIConfig

@@ -34,14 +34,11 @@ from qgis.PyQt.QtCore import (
     pyqtSignal,
     QTimer
 )
-from qgis.PyQt.QtGui import QColor, QFont
+from qgis.PyQt.QtGui import QColor
 from qgis.core import (
     QgsCoordinateReferenceSystem,
-    QgsCoordinateTransform,
     QgsExpression,
-    QgsFeature,
     QgsFeatureRequest,
-    QgsGeometry,
     QgsLayerItem,
     QgsProject,
     QgsProperty,
@@ -54,7 +51,6 @@ from qgis.gui import (
     QgsCheckableComboBox,
     QgsCollapsibleGroupBox,
     QgsFeaturePickerWidget,
-    QgsFieldComboBox,
     QgsFieldExpressionWidget,
     QgsMapLayerComboBox,
     QgsProjectionSelectionWidget
@@ -84,15 +80,10 @@ except ImportError:
             TiledSceneLayer = 2048
             All = -1
 
-try: from qgis.gui import QgsFieldProxyModel
-except ImportError:
-    try: from qgis.core import QgsFieldProxyModel
-    except ImportError:
-        class QgsFieldProxyModel: AllTypes = 0
 from qgis.utils import iface
 
 import webbrowser
-from .ui.widgets import QgsCheckableComboBoxFeaturesListPickerWidget, QgsCheckableComboBoxLayer, QgsCheckableComboBoxBands
+from .ui.widgets import QgsCheckableComboBoxFeaturesListPickerWidget, QgsCheckableComboBoxBands
 from .ui.widgets.json_view.model import JsonModel
 from .ui.widgets.json_view.view import JsonView
 
@@ -103,7 +94,6 @@ from .infrastructure.utils import (
     is_layer_source_available
 )
 from .core.domain.exceptions import SignalStateChangeError
-from .infrastructure.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR, get_geometry_type_string
 from .ui.styles import StyleLoader, QGISThemeWatcher
 from .infrastructure.feedback import show_info, show_warning, show_error, show_success
 
@@ -114,7 +104,7 @@ except ImportError:
     def should_show_message(category): return True
 
 # Config helpers (migrated to config/)
-from .config.config import get_optimization_thresholds, save_config_value, get_config_value, reset_config_to_defaults
+from .config.config import get_optimization_thresholds, save_config_value, get_config_value
 
 from .infrastructure.cache import ExploringFeaturesCache
 from .filter_mate_dockwidget_base import Ui_FilterMateDockWidgetBase
@@ -131,7 +121,7 @@ except ImportError:
     ASYNC_EXPRESSION_AVAILABLE = False; get_expression_manager = None
 
 # CRS utilities (migrated to core/geometry/)
-try: from .core.geometry.crs_utils import is_geographic_crs, get_optimal_metric_crs, DEFAULT_METRIC_CRS; CRS_UTILS_AVAILABLE = True
+try: from .core.geometry.crs_utils import DEFAULT_METRIC_CRS; CRS_UTILS_AVAILABLE = True
 except ImportError: CRS_UTILS_AVAILABLE = False; DEFAULT_METRIC_CRS = "EPSG:3857"
 
 # Icon utilities for dark mode (migrated to ui/)
@@ -740,25 +730,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         logger.debug(f"Created multiple selection widget: {self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection}")
         
         # Create custom combobox widgets early so configure_widgets() can reference them
+        # FIX 2026-02-09b: Create dynamic widgets with the CORRECT parent widget
+        # (FILTERING/EXPORTING page), NOT dockWidgetContents. Widgets parented to
+        # dockWidgetContents are invisible inside QToolBox pages because Qt clips
+        # rendering to the widget's actual parent, not to the layout owner.
         from .ui.widgets.custom_widgets import QgsCheckableComboBoxLayer
-        self.checkableComboBoxLayer_filtering_layers_to_filter = QgsCheckableComboBoxLayer(self.dockWidgetContents)
-        # Height managed by QSS (20px standard)
+        self.checkableComboBoxLayer_filtering_layers_to_filter = QgsCheckableComboBoxLayer(self.FILTERING)
         self.checkableComboBoxLayer_filtering_layers_to_filter.show()
         logger.debug(f"Created filtering layers widget: {self.checkableComboBoxLayer_filtering_layers_to_filter}")
-        
-        self.checkableComboBoxLayer_exporting_layers = QgsCheckableComboBoxLayer(self.dockWidgetContents)
-        # Height managed by QSS (20px standard)
+
+        self.checkableComboBoxLayer_exporting_layers = QgsCheckableComboBoxLayer(self.EXPORTING)
         self.checkableComboBoxLayer_exporting_layers.show()
         logger.debug(f"Created exporting layers widget: {self.checkableComboBoxLayer_exporting_layers}")
 
         # v5.4: Create raster filtering section custom widgets
-        self.checkableComboBoxLayer_filtering_raster_layers_to_filter = QgsCheckableComboBoxLayer(self.dockWidgetContents)
+        self.checkableComboBoxLayer_filtering_raster_layers_to_filter = QgsCheckableComboBoxLayer(self.FILTERING)
         self.checkableComboBoxLayer_filtering_raster_layers_to_filter.show()
         logger.debug(f"Created raster filtering layers widget: {self.checkableComboBoxLayer_filtering_raster_layers_to_filter}")
 
-        # Create centroids checkbox BEFORE configure_widgets() to ensure it's in the registry
+        # Create centroids checkbox with correct parent
         from qgis.PyQt import QtWidgets
-        self.checkBox_filtering_use_centroids_distant_layers = QtWidgets.QCheckBox(self.dockWidgetContents)
+        self.checkBox_filtering_use_centroids_distant_layers = QtWidgets.QCheckBox(self.FILTERING)
         self.checkBox_filtering_use_centroids_distant_layers.setObjectName("checkBox_filtering_use_centroids_distant_layers")
         logger.debug(f"Created centroids distant layers checkbox: {self.checkBox_filtering_use_centroids_distant_layers}")
         
@@ -4647,7 +4639,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         try:
             self._apply_dockwidget_dimensions()
-            self._apply_widget_dimensions()
             self._apply_frame_dimensions()
             self._harmonize_checkable_pushbuttons()
             
@@ -4698,22 +4689,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # v4.0.2: Apply minimum width to groupboxes to prevent overlap when splitter is resized
         self._apply_groupbox_minimum_widths()
-    
-    def _apply_widget_dimensions(self):
-        """
-        [DEPRECATED v4.0.3] Widget dimensions now managed by QSS.
-        
-        All widget heights (ComboBox, LineEdit, SpinBox, GroupBox) are defined in
-        resources/styles/default.qss with standardized 20px height.
-        
-        This function is kept for backward compatibility but does nothing.
-        QSS rules override any Python-side dimension settings.
-        
-        TODO Note: Remove this function entirely.
-        """
-        # Widget dimensions managed by QSS - no Python intervention needed
-        logger.debug("Widget dimensions managed by QSS (20px standard)")
-        pass
     
     def _apply_frame_dimensions(self):
         """
@@ -8249,63 +8224,41 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.debug(f"_ensure_key_widgets_visible: {e}")
 
     def _ensure_dynamic_widgets_layout(self):
-        """FIX 2026-02-09: Verify dynamic widgets are in their target layouts.
+        """FIX 2026-02-09c: Verify dynamic widgets are in their target layouts.
         
         After manage_ui_style() applies themes/stylesheets, dynamically-inserted
-        widgets can lose their layout positions. This method checks each widget 
-        and re-inserts it if needed, then forces visibility and geometry update.
+        widgets can be hidden or removed from layouts. This method checks layout
+        membership and re-inserts widgets if needed, then forces visibility.
         """
-        from qgis.PyQt import QtWidgets
-        
         try:
             # 1. Exploring: multiple selection feature picker
             if hasattr(self, 'checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection'):
                 w = self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection
                 layout = getattr(self, 'horizontalLayout_exploring_multiple_feature_picker', None)
                 if layout is not None and layout.indexOf(w) < 0:
-                    logger.warning("FIX-2026-02-09: Re-inserting exploring feature picker into layout")
+                    logger.warning("FIX: Re-inserting exploring feature picker into layout")
                     layout.insertWidget(0, w, 1)
                 w.show()
             
-            # 2. Filtering: layers to filter combobox
+            # 2. Filtering: layers to filter container widget
+            container = getattr(self, 'widget_filtering_distant_layers', None)
+            target_layout = getattr(self, 'verticalLayout_filtering_values', None)
+            if container is not None and target_layout is not None:
+                if target_layout.indexOf(container) < 0:
+                    logger.warning("FIX: Re-inserting filtering layers container at position 2")
+                    target_layout.insertWidget(2, container)
+                container.show()
             if hasattr(self, 'checkableComboBoxLayer_filtering_layers_to_filter'):
-                w = self.checkableComboBoxLayer_filtering_layers_to_filter
-                target_layout = getattr(self, 'verticalLayout_filtering_values', None)
-                hlayout = getattr(self, 'horizontalLayout_filtering_distant_layers', None)
-                
-                if target_layout is not None:
-                    # Check if the horizontal layout is in the vertical layout
-                    if hlayout is not None:
-                        found = False
-                        for i in range(target_layout.count()):
-                            item = target_layout.itemAt(i)
-                            if item and item.layout() == hlayout:
-                                found = True
-                                break
-                        if not found:
-                            logger.warning("FIX-2026-02-09: Re-inserting filtering layers layout at position 2")
-                            target_layout.insertLayout(2, hlayout)
-                    elif hlayout is None:
-                        # Layout was never created — create and insert now
-                        logger.warning("FIX-2026-02-09: Creating filtering layers layout from scratch")
-                        self.horizontalLayout_filtering_distant_layers = QtWidgets.QHBoxLayout()
-                        self.horizontalLayout_filtering_distant_layers.setSpacing(4)
-                        self.horizontalLayout_filtering_distant_layers.addWidget(w)
-                        if hasattr(self, 'checkBox_filtering_use_centroids_distant_layers'):
-                            self.horizontalLayout_filtering_distant_layers.addWidget(
-                                self.checkBox_filtering_use_centroids_distant_layers)
-                        target_layout.insertLayout(2, self.horizontalLayout_filtering_distant_layers)
-                
-                w.show()
-                if hasattr(self, 'checkBox_filtering_use_centroids_distant_layers'):
-                    self.checkBox_filtering_use_centroids_distant_layers.show()
+                self.checkableComboBoxLayer_filtering_layers_to_filter.show()
+            if hasattr(self, 'checkBox_filtering_use_centroids_distant_layers'):
+                self.checkBox_filtering_use_centroids_distant_layers.show()
             
             # 3. Exporting: layers to export combobox
             if hasattr(self, 'checkableComboBoxLayer_exporting_layers'):
                 w = self.checkableComboBoxLayer_exporting_layers
                 target_layout = getattr(self, 'verticalLayout_exporting_values', None)
                 if target_layout is not None and target_layout.indexOf(w) < 0:
-                    logger.warning("FIX-2026-02-09: Re-inserting exporting layers widget at position 0")
+                    logger.warning("FIX: Re-inserting exporting layers widget at position 0")
                     target_layout.insertWidget(0, w)
                 w.show()
             
