@@ -21,9 +21,17 @@ from qgis.core import (
     QgsRectangle,
     QgsCoordinateTransform,
     QgsProject,
-    Qgis
+    Qgis,
+    QgsWkbTypes
 )
 from qgis.gui import QgsMapTool, QgsMapCanvas, QgsRubberBand
+
+# Compatibility: Qgis.GeometryType.Polygon requires QGIS 3.30+
+# Fall back to QgsWkbTypes.PolygonGeometry for older versions.
+try:
+    _POLYGON_GEOM = Qgis.GeometryType.Polygon
+except AttributeError:
+    _POLYGON_GEOM = QgsWkbTypes.PolygonGeometry
 
 from ...infrastructure.logging import get_logger
 
@@ -67,7 +75,7 @@ class RasterPixelPickerTool(QgsMapTool):
         self._current_max: float = 0.0
         
         # Rubber band for rectangle selection
-        self._rubber_band = QgsRubberBand(canvas, Qgis.GeometryType.Polygon)
+        self._rubber_band = QgsRubberBand(canvas, _POLYGON_GEOM)
         self._rubber_band.setColor(QColor(255, 165, 0, 100))  # Orange
         self._rubber_band.setStrokeColor(QColor(255, 140, 0))
         self._rubber_band.setWidth(2)
@@ -131,7 +139,7 @@ class RasterPixelPickerTool(QgsMapTool):
         # Get map point
         self._start_point = self.toMapCoordinates(event.pos())
         self._is_dragging = True
-        self._rubber_band.reset(Qgis.GeometryType.Polygon)
+        self._rubber_band.reset(_POLYGON_GEOM)
     
     def canvasMoveEvent(self, event):
         """Handle mouse move on canvas (for drag selection)."""
@@ -347,14 +355,19 @@ class RasterPixelPickerTool(QgsMapTool):
         
         # Get statistics for the rectangle
         from qgis.core import QgsRasterBandStats
-        
+        try:
+            from qgis.core import Qgis
+            _stat_min_max = Qgis.RasterBandStatistic.Min | Qgis.RasterBandStatistic.Max
+        except AttributeError:
+            _stat_min_max = QgsRasterBandStats.Min | QgsRasterBandStats.Max
+
         provider = self._layer.dataProvider()
         if not provider:
             return (None, None)
-        
+
         stats = provider.bandStatistics(
             self._band_index,
-            QgsRasterBandStats.Min | QgsRasterBandStats.Max,
+            _stat_min_max,
             rect,
             0  # Sample size
         )
@@ -368,7 +381,7 @@ class RasterPixelPickerTool(QgsMapTool):
             start_point: Start corner
             end_point: Current corner
         """
-        self._rubber_band.reset(Qgis.GeometryType.Polygon)
+        self._rubber_band.reset(_POLYGON_GEOM)
         
         # Create rectangle corners
         self._rubber_band.addPoint(QgsPointXY(start_point.x(), start_point.y()), False)

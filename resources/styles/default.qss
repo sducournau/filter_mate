@@ -80,7 +80,7 @@ END OF REMOVED SECTION */
    QGIS Widgets - Common Styling with better spacing
    SCOPED to FilterMate only to avoid polluting global QGIS styles
    ======================================================================== */
-/* Simple widgets with fixed height */
+/* Simple widgets with fixed height - harmonized at 26px across all sections */
 #dockWidgetContents QgsProjectionSelectionWidget,
 #dockWidgetContents QgsMapLayerComboBox,
 #dockWidgetContents QgsFieldComboBox,
@@ -92,8 +92,8 @@ END OF REMOVED SECTION */
     border-radius: 4px;
     padding: 4px 8px;
     color: {color_font_0};
-    min-height: 20px;
-    max-height: 20px;
+    min-height: 26px;
+    max-height: 26px;
 }
 
 /* Composite widgets (with navigation/expression buttons) - NO max-height constraint */
@@ -182,15 +182,15 @@ END OF REMOVED SECTION */
 }
 
 /* ========================================================================
-   INPUT FIELDS - Standardized 20px height
+   INPUT FIELDS - Harmonized 26px height (matches comboboxes)
    SCOPED to FilterMate only
    ======================================================================== */
 
 #dockWidgetContents QLineEdit,
 #dockWidgetContents QSpinBox,
 #dockWidgetContents QDoubleSpinBox {
-    min-height: 20px;
-    max-height: 20px;
+    min-height: 26px;
+    max-height: 26px;
 }
 
 #dockWidgetContents QgsCheckableComboBox::indicator:checked {
@@ -209,29 +209,19 @@ END OF REMOVED SECTION */
     padding: 4px;
 }
 
-/* Style pour les onglets du QToolBox */
+/* Style pour les onglets du QToolBox
+   NOTE: padding vertical=0 to fix Qt5 icon/text vertical misalignment.
+   Qt5 CE_ToolBoxTabLabel top-aligns icons but vcenters text in the content rect.
+   Zero vertical padding minimizes the content rect, reducing the offset.
+   Visual spacing is achieved via margin instead. */
 #dockWidgetContents QToolBox::tab {
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 4px;
-    padding: 0px 0px 0px 0px;
-    margin: 2px 0px 0px 0px;
+    padding: 0px 8px;
+    margin: 2px 0px;
     color: {color_font_0};
     font-weight: normal;
-    min-height: 24px;
-}
-
-/* Style pour les boutons à l'intérieur des onglets - alignement icône/texte */
-#dockWidgetContents QToolBox QToolButton {
-    background-color: transparent;
-    border: none;
-    padding: 0px 0px 0px 0px;
-    margin: 2px 0px 0px 0px;
-    min-height: 24px;
-    color: {color_font_0};
-    font-weight: normal;
-    text-align: left;
-    qproperty-iconSize: 16px 16px;
 }
 
 #dockWidgetContents QToolBox::tab:selected {
@@ -242,18 +232,9 @@ END OF REMOVED SECTION */
     border-left: 4px solid {color_accent};
 }
 
-#dockWidgetContents QToolBox QToolButton:checked {
-    background-color: transparent;
-    font-weight: 500;
-}
-
 #dockWidgetContents QToolBox::tab:hover {
     background-color: {color_2};
     color: {color_font_1};
-}
-
-#dockWidgetContents QToolBox QToolButton:hover {
-    background-color: transparent;
 }
 
 /* DockWidget - REMOVED: Generic rules affected all QGIS dockwidgets
@@ -337,23 +318,7 @@ QFrame#frame_filtering {
     margin: 2px;
 }
 
-/* FILTERING section - Harmonized widget heights for alignment */
-/* ComboBox in filtering section - height to match buttons (32px total) */
-QWidget#FILTERING QgsMapLayerComboBox,
-QWidget#FILTERING QgsCheckableComboBox,
-QWidget#FILTERING QComboBox {
-    min-height: 26px;
-    max-height: 26px;
-}
-
-/* SpinBox in filtering section */
-QWidget#FILTERING QgsDoubleSpinBox,
-QWidget#FILTERING QgsSpinBox,
-QWidget#FILTERING QDoubleSpinBox,
-QWidget#FILTERING QSpinBox {
-    min-height: 26px;
-    max-height: 26px;
-}
+/* NOTE: FILTERING section height overrides removed - now handled by generic 26px rule */
 
 /* Frame Exporting - Export options area */
 QFrame#frame_exporting {
@@ -397,31 +362,7 @@ QWidget#widget_exporting_content {
     color: {color_font_0};
 }
 
-/* Collapsible Group Box */
-#dockWidgetContents QgsCollapsibleGroupBox {
-    background-color: {color_1};
-    border: 1px solid {color_2};
-    border-radius: 4px;
-    padding: 4px;
-    padding-top: 20px;
-    margin: 0px;
-    color: {color_font_0};
-    min-height: 40px;
-}
-
-#dockWidgetContents QgsCollapsibleGroupBox::title {
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    padding: 2px 6px;
-    margin-left: 20px;
-    margin-top: 1px;
-    left: 0px;
-    top: 3px;
-    max-width: 340px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    overflow: hidden;
-}
+/* Collapsible Group Box — see "GROUPBOX" section below for full styling */
 
 /* Property Override Button */
 #dockWidgetContents QgsPropertyOverrideButton {
@@ -617,9 +558,9 @@ QWidget#widget_exporting_content {
     border: 1px solid {color_2};
     border-radius: 6px;
     padding: 10px;
-    padding-top: 42px;
-    margin-top: 12px;
-    margin-bottom: 4px;
+    padding-top: 30px;
+    margin-top: 6px;
+    margin-bottom: 2px;
     margin-left: 0px;
     margin-right: 0px;
     color: {color_font_0};
@@ -786,7 +727,9 @@ QPushButton[objectName^="pushButton_exporting_"],
 QPushButton[objectName^="pushButton_checkable_exporting_"] {
     /* Dimensions are set dynamically by UIConfig in filter_mate_dockwidget.py */
     /* Do NOT set min/max-width/height here to avoid conflicts */
-    padding: 4px;
+    /* FIX 2026-02-07: Removed padding for tight icon centering */
+    padding: 0px;
+    margin: 0px;
 }
 
 /* SpinBox & DoubleSpinBox - Enhanced focus visibility - SCOPED to FilterMate */
@@ -967,17 +910,16 @@ QLabel#label_backend_indicator {
 }
 
 /* Widget Keys Panels - Sidebar buttons with responsive layout */
-/* Enhanced styling for better alignment and visual hierarchy */
+/* FIX 2026-02-07: Removed border and padding for tight icon centering */
 QWidget#widget_exploring_keys,
 QWidget#widget_raster_keys,
 QWidget#widget_filtering_keys,
 QWidget#widget_exporting_keys {
     background-color: {color_1};
-    border: 1px solid {color_2};
-    border-radius: 6px;
-    padding: 3px 3px;
-    margin: 0px 0px;
-    /* Smooth transitions for responsive behavior */
+    border: none;
+    border-radius: 0px;
+    padding: 0px;
+    margin: 0px;
 }
 
 /* Buttons inside widget_exploring_keys and widget_raster_keys - Non-checkable - Harmonized with filtering_keys */
@@ -985,32 +927,30 @@ QWidget#widget_exploring_keys QPushButton:!checkable,
 QWidget#widget_raster_keys QPushButton:!checkable {
     background-color: {color_1};
     border: 1px solid {color_2};
-    border-radius: 6px;
-    padding: 2px;
-    margin: 1px 0px;
+    border-radius: 4px;
+    padding: 0px;
+    margin: 0px;
     /* Dimensions managed by UIConfig for profile-specific sizing */
+    /* FIX 2026-02-02: Zero padding/margin for compact layout */
 }
 
-QWidget#widget_exploring_keys QPushButton:!checkable::icon,
-QWidget#widget_raster_keys QPushButton:!checkable::icon {
-    filter: {icon_filter};
-}
+/* NOTE: ::icon { filter: } removed - CSS filter not supported in Qt, use Python IconManager instead */
 
 QWidget#widget_exploring_keys QPushButton:!checkable:hover,
 QWidget#widget_raster_keys QPushButton:!checkable:hover {
     background-color: {color_accent_light_bg};
     border: 2px solid {color_accent};
-    padding: 2px;
-    margin: 1px 0px;
-    /* Subtle scale effect on hover */
+    padding: 0px;
+    margin: 0px;
+    /* FIX 2026-02-02: Removed margin on hover */
 }
 
 QWidget#widget_exploring_keys QPushButton:!checkable:pressed,
 QWidget#widget_raster_keys QPushButton:!checkable:pressed {
     background-color: {color_accent_pressed};
     border: 2px solid {color_accent_dark};
-    padding: 2px;
-    margin: 1px 0px;
+    padding: 0px;
+    margin: 0px;
 }
 
 /* Buttons inside widget_exploring_keys and widget_raster_keys - Checkable - Harmonized with filtering_keys */
@@ -1018,58 +958,52 @@ QWidget#widget_exploring_keys QPushButton:checkable,
 QWidget#widget_raster_keys QPushButton:checkable {
     background-color: {color_1};
     border: 1px solid {color_2};
-    border-radius: 6px;
-    padding: 2px;
-    margin: 1px 0px;
-    /* Dimensions managed by UIConfig for profile-specific sizing */
+    border-radius: 4px;
+    padding: 0px;
+    margin: 0px;
+    /* FIX 2026-02-02: Zero padding/margin */
 }
 
-QWidget#widget_exploring_keys QPushButton:checkable::icon,
-QWidget#widget_raster_keys QPushButton:checkable::icon {
-    filter: {icon_filter};
-}
+/* NOTE: ::icon { filter: } removed - CSS filter not supported in Qt */
 
 QWidget#widget_exploring_keys QPushButton:checkable:hover:!checked,
 QWidget#widget_raster_keys QPushButton:checkable:hover:!checked {
     background-color: {color_accent_light_bg};
     border: 2px solid {color_accent};
-    padding: 2px;
-    margin: 1px 0px;
+    padding: 0px;
+    margin: 0px;
 }
 
 QWidget#widget_exploring_keys QPushButton:checkable:checked,
 QWidget#widget_raster_keys QPushButton:checkable:checked {
     background-color: {color_accent};
     border: 2px solid {color_accent_dark};
-    padding: 2px;
-    margin: 1px 0px;
-    box-shadow: 0 2px 6px rgba(25, 118, 210, 0.45);
+    padding: 0px;
+    margin: 0px;
 }
 
 QWidget#widget_exploring_keys QPushButton:checkable:checked:hover,
 QWidget#widget_raster_keys QPushButton:checkable:checked:hover {
     background-color: {color_accent_hover};
     border: 2px solid {color_accent_dark};
-    padding: 2px;
-    margin: 1px 0px;
-    box-shadow: 0 3px 10px rgba(33, 150, 243, 0.65);
+    padding: 0px;
+    margin: 0px;
 }
 
 QWidget#widget_exploring_keys QPushButton:checkable:pressed,
 QWidget#widget_raster_keys QPushButton:checkable:pressed {
     background-color: {color_accent_pressed};
     border: 2px solid {color_accent_dark};
-    padding: 2px;
-    margin: 1px 0px;
+    padding: 0px;
+    margin: 0px;
 }
 
 QWidget#widget_exploring_keys QPushButton:checkable:checked:pressed,
 QWidget#widget_raster_keys QPushButton:checkable:checked:pressed {
     background-color: {color_accent_pressed};
     border: 2px solid {color_accent_dark};
-    padding: 2px;
-    margin: 1px 0px;
-    box-shadow: 0 1px 3px rgba(25, 118, 210, 0.3);
+    padding: 0px;
+    margin: 0px;
 }
 
 /* Buttons inside widget_filtering_keys - Checkable only - Harmonized style */
@@ -1077,51 +1011,44 @@ QWidget#widget_filtering_keys QPushButton:checkable {
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 6px;
-    padding: 2px;
-    margin: 1px 0px;
-    /* Dimensions managed by UIConfig for profile-specific sizing */
-}
-
-QWidget#widget_filtering_keys QPushButton:checkable::icon {
-    filter: {icon_filter};
+    padding: 0px;
+    margin: 0px;
+    /* FIX 2026-02-02: Zero padding/margin */
 }
 
 QWidget#widget_filtering_keys QPushButton:checkable:hover:!checked {
     background-color: {color_accent_light_bg};
     border: 2px solid {color_accent};
-    padding: 2px;
-    margin: 1px 0px;
+    padding: 0px;
+    margin: 0px;
 }
 
 QWidget#widget_filtering_keys QPushButton:checkable:checked {
     background-color: {color_accent};
     border: 2px solid {color_accent_dark};
-    padding: 2px;
-    margin: 1px 0px;
-    box-shadow: 0 2px 6px rgba(25, 118, 210, 0.45);
+    padding: 0px;
+    margin: 0px;
 }
 
 QWidget#widget_filtering_keys QPushButton:checkable:checked:hover {
     background-color: {color_accent_hover};
     border: 2px solid {color_accent_dark};
-    padding: 2px;
-    margin: 1px 0px;
-    box-shadow: 0 3px 10px rgba(33, 150, 243, 0.65);
+    padding: 0px;
+    margin: 0px;
 }
 
 QWidget#widget_filtering_keys QPushButton:checkable:pressed {
     background-color: {color_accent_pressed};
     border: 2px solid {color_accent_dark};
-    padding: 2px;
-    margin: 1px 0px;
+    padding: 0px;
+    margin: 0px;
 }
 
 QWidget#widget_filtering_keys QPushButton:checkable:checked:pressed {
     background-color: {color_accent_pressed};
     border: 2px solid {color_accent_dark};
-    padding: 2px;
-    margin: 1px 0px;
-    box-shadow: 0 1px 3px rgba(25, 118, 210, 0.3);
+    padding: 0px;
+    margin: 0px;
 }
 
 /* Buttons inside widget_exporting_keys - Checkable only - Harmonized style */
@@ -1129,51 +1056,44 @@ QWidget#widget_exporting_keys QPushButton:checkable {
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 6px;
-    padding: 2px;
-    margin: 1px 0px;
-    /* Dimensions managed by UIConfig for profile-specific sizing */
-}
-
-QWidget#widget_exporting_keys QPushButton:checkable::icon {
-    filter: {icon_filter};
+    padding: 0px;
+    margin: 0px;
+    /* FIX 2026-02-02: Zero padding/margin */
 }
 
 QWidget#widget_exporting_keys QPushButton:checkable:hover:!checked {
     background-color: {color_accent_light_bg};
     border: 2px solid {color_accent};
-    padding: 2px;
-    margin: 1px 0px;
+    padding: 0px;
+    margin: 0px;
 }
 
 QWidget#widget_exporting_keys QPushButton:checkable:checked {
     background-color: {color_accent};
     border: 2px solid {color_accent_dark};
-    padding: 2px;
-    margin: 1px 0px;
-    box-shadow: 0 2px 6px rgba(25, 118, 210, 0.45);
+    padding: 0px;
+    margin: 0px;
 }
 
 QWidget#widget_exporting_keys QPushButton:checkable:checked:hover {
     background-color: {color_accent_hover};
     border: 2px solid {color_accent_dark};
-    padding: 2px;
-    margin: 1px 0px;
-    box-shadow: 0 3px 10px rgba(33, 150, 243, 0.65);
+    padding: 0px;
+    margin: 0px;
 }
 
 QWidget#widget_exporting_keys QPushButton:checkable:pressed {
     background-color: {color_accent_pressed};
     border: 2px solid {color_accent_dark};
-    padding: 2px;
-    margin: 1px 0px;
+    padding: 0px;
+    margin: 0px;
 }
 
 QWidget#widget_exporting_keys QPushButton:checkable:checked:pressed {
     background-color: {color_accent_pressed};
     border: 2px solid {color_accent_dark};
-    padding: 2px;
-    margin: 1px 0px;
-    box-shadow: 0 1px 3px rgba(25, 118, 210, 0.3);
+    padding: 0px;
+    margin: 0px;
 }
 
 /* ========================================================================
@@ -1225,15 +1145,11 @@ QFrame#frame_actions {
 
 /* Action buttons - Responsive sizing managed by UIConfig */
 QFrame#frame_actions QPushButton:!checkable {
-    background-color: {color_1};
-    border: 1px solid {color_2};
+    background-color: transparent;
+    border: 1px solid transparent;
     border-radius: 6px;
     padding: 6px;
     /* Dimensions managed by UIConfig for profile-specific sizing */
-}
-
-QFrame#frame_actions QPushButton:!checkable::icon {
-    filter: {icon_filter};
 }
 
 QFrame#frame_actions QPushButton:!checkable:hover {
@@ -1363,7 +1279,7 @@ QFrame#frame_actions QSpacerItem {
     font-size: 10pt;
 }
 
-/* Raster source layer combo */
+/* Raster source layer combo - harmonized 26px height */
 #comboBox_raster_source_layer,
 #comboBox_vector_mask_layer {
     background-color: {color_1};
@@ -1371,8 +1287,8 @@ QFrame#frame_actions QSpacerItem {
     border-radius: 4px;
     padding: 4px 8px;
     color: {color_font_0};
-    min-height: 22px;
-    max-height: 22px;
+    min-height: 26px;
+    max-height: 26px;
 }
 
 #comboBox_raster_source_layer:hover,
@@ -1387,15 +1303,15 @@ QFrame#frame_actions QSpacerItem {
     padding: 3px 7px;
 }
 
-/* Band selector combo */
+/* Band selector combo - harmonized 26px height */
 #comboBox_raster_band {
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 4px;
     padding: 4px 8px;
     color: {color_font_0};
-    min-height: 20px;
-    max-height: 20px;
+    min-height: 26px;
+    max-height: 26px;
 }
 
 #comboBox_raster_band:hover {
@@ -1408,7 +1324,7 @@ QFrame#frame_actions QSpacerItem {
     padding: 3px 7px;
 }
 
-/* Double spin boxes for min/max values */
+/* Double spin boxes for min/max values - harmonized 26px height */
 #doubleSpinBox_raster_min,
 #doubleSpinBox_raster_max {
     background-color: {color_1};
@@ -1416,8 +1332,8 @@ QFrame#frame_actions QSpacerItem {
     border-radius: 4px;
     padding: 4px 6px;
     color: {color_font_0};
-    min-height: 20px;
-    max-height: 20px;
+    min-height: 26px;
+    max-height: 26px;
 }
 
 #doubleSpinBox_raster_min:hover,
@@ -1531,3 +1447,26 @@ QFrame#frame_actions QSpacerItem {
     font-weight: normal;
     padding: 2px 0px;
 }
+
+/* ========================================================================
+   FILTERING RASTER SECTION - Unified raster widgets within filtering layout
+   Updated: 2026-02-08 (v9.0 unified filtering widgets)
+   ======================================================================== */
+
+/* v9.0: Sampling method combobox (visible only for raster layers) */
+#comboBox_filtering_sampling_method {
+    min-height: 24px;
+}
+
+#label_filtering_sampling_method {
+    min-width: 80px;
+    max-width: 120px;
+}
+
+/* v9.0: Raster filter result label */
+#label_filtering_raster_result {
+    padding: 6px;
+    min-height: 20px;
+    border-radius: 3px;
+}
+

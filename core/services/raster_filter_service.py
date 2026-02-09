@@ -32,20 +32,10 @@ from qgis.core import (
     Qgis
 )
 
-from infrastructure.logging import get_logger
+from ...infrastructure.logging import get_logger
+from ..domain.filter_criteria import RasterPredicate
 
 logger = get_logger(__name__)
-
-
-class RasterPredicate(Enum):
-    """Predicates for raster value filtering."""
-    WITHIN_RANGE = "within_range"       # min <= value <= max
-    OUTSIDE_RANGE = "outside_range"     # value < min OR value > max
-    ABOVE_VALUE = "above_value"         # value > min
-    BELOW_VALUE = "below_value"         # value < max
-    EQUALS_VALUE = "equals_value"       # value == min (tolerance)
-    IS_NODATA = "is_nodata"             # value is NoData
-    IS_NOT_NODATA = "is_not_nodata"     # value is not NoData
 
 
 class SamplingMethod(Enum):
@@ -89,6 +79,7 @@ class VectorFilterRequest:
     output_path: Optional[str] = None  # If None, create memory layer
     use_selected_only: bool = True
     nodata_value: float = -9999.0
+    band_index: int = 1  # Band index for zonal stats (1-based)
 
 
 @dataclass
@@ -283,8 +274,9 @@ class RasterFilterService(QObject):
         if geom.isEmpty():
             return None
         
-        # Transform geometry if needed
+        # FIX 2026-02-08 C4: Clone geometry before transform to avoid mutating source features
         if transform:
+            geom = QgsGeometry(geom)
             geom.transform(transform)
         
         if method == SamplingMethod.CENTROID:
@@ -413,20 +405,24 @@ class RasterFilterService(QObject):
         return False
     
     def _build_id_expression(self, feature_ids: List[int], layer: QgsVectorLayer) -> str:
-        """Build a filter expression from feature IDs."""
+        """Build a filter expression from feature IDs.
+        
+        Uses the real primary key field when available, falling back
+        to $id only when no PK is detected. No size threshold — the
+        same logic applies regardless of feature count.
+        """
         if not feature_ids:
             return "1=0"  # Match nothing
         
         # Get primary key field name
-        from infrastructure.utils.layer_utils import get_primary_key_name
-        pk_field = get_primary_key_name(layer) or "$id"
-        
-        if len(feature_ids) <= 100:
+        pk_attrs = layer.primaryKeyAttributes()
+        if pk_attrs:
+            pk_field = layer.fields().field(pk_attrs[0]).name()
             ids_str = ", ".join(str(fid) for fid in feature_ids)
-            return f'"{pk_field}" IN ({ids_str})' if pk_field != "$id" else f"$id IN ({ids_str})"
+            return f'"{pk_field}" IN ({ids_str})'
         else:
-            # For large sets, use a different approach
-            return f"$id IN ({', '.join(str(fid) for fid in feature_ids)})"
+            ids_str = ", ".join(str(fid) for fid in feature_ids)
+            return f"$id IN ({ids_str})"
     
     # =========================================================================
     # VECTOR → RASTER OPERATIONS
@@ -498,7 +494,7 @@ class RasterFilterService(QObject):
                 result = self._mask_raster(raster, mask_layer, output_path,
                                           request.nodata_value, invert=True)
             elif request.operation == RasterOperation.ZONAL_STATS:
-                result = self._compute_zonal_stats(raster, mask_layer)
+                result = self._compute_zonal_stats(raster, mask_layer, request.band_index)
                 elapsed = (time.time() - start_time) * 1000
                 return VectorRasterResult(
                     success=True,
@@ -615,18 +611,35 @@ class RasterFilterService(QObject):
         nodata_value: float,
         invert: bool = False
     ) -> Optional[str]:
-        """Mask raster pixels using vector."""
+        """Mask raster pixels using vector.
+        
+        Args:
+            raster: Source raster layer
+            mask: Vector mask layer
+            output_path: Output file path
+            nodata_value: NoData value for masked pixels
+            invert: If True (MASK_INSIDE), mask pixels inside the vector 
+                    (keep outside). If False (MASK_OUTSIDE), keep inside.
+        """
         try:
             import processing
             
+            effective_mask = mask
+            
+            if invert:
+                effective_mask = self._create_inverted_mask(raster, mask)
+                if effective_mask is None:
+                    logger.error("Failed to create inverted mask, falling back to normal mask")
+                    effective_mask = mask
+            
             params = {
                 'INPUT': raster,
-                'MASK': mask,
+                'MASK': effective_mask,
                 'SOURCE_CRS': raster.crs(),
                 'TARGET_CRS': raster.crs(),
                 'NODATA': nodata_value,
                 'ALPHA_BAND': False,
-                'CROP_TO_CUTLINE': False,  # Don't crop for mask
+                'CROP_TO_CUTLINE': False,
                 'KEEP_RESOLUTION': True,
                 'SET_RESOLUTION': False,
                 'OPTIONS': '',
@@ -634,32 +647,105 @@ class RasterFilterService(QObject):
                 'OUTPUT': output_path
             }
             
-            # For MASK_INSIDE, we need to invert the mask
-            if invert:
-                # Create inverted mask using difference with extent
-                # For now, use clip with inverted flag (if available)
-                pass  # TODO: Implement proper inversion
-            
             result = processing.run("gdal:cliprasterbymasklayer", params)
             return result.get('OUTPUT')
             
         except Exception as e:
             logger.error(f"Mask raster failed: {e}")
             return None
+
+    def _create_inverted_mask(
+        self,
+        raster: QgsRasterLayer,
+        mask_layer: QgsVectorLayer
+    ) -> Optional[QgsVectorLayer]:
+        """Create an inverted mask layer (raster extent minus mask polygons).
+        
+        Used for MASK_INSIDE operations: pixels inside the mask are set to NoData
+        by clipping with the inverse geometry (extent minus polygons).
+        
+        Args:
+            raster: Source raster layer (provides extent and CRS)
+            mask_layer: Original vector mask layer
+            
+        Returns:
+            Memory vector layer with inverted geometry, or None on failure
+        """
+        try:
+            from qgis.core import QgsVectorLayer, QgsFeature, QgsFields
+            
+            extent_geom = QgsGeometry.fromRect(raster.extent())
+            
+            transform = None
+            if mask_layer.crs() != raster.crs():
+                transform = QgsCoordinateTransform(
+                    mask_layer.crs(), raster.crs(), QgsProject.instance()
+                )
+            
+            combined = QgsGeometry()
+            for feature in mask_layer.getFeatures():
+                geom = feature.geometry()
+                if geom.isEmpty():
+                    continue
+                if transform:
+                    geom.transform(transform)
+                if not geom.isGeosValid():
+                    geom = geom.makeValid()
+                if combined.isEmpty():
+                    combined = geom
+                else:
+                    combined = combined.combine(geom)
+            
+            if combined.isEmpty():
+                logger.warning("Mask layer has no valid geometries, cannot invert")
+                return None
+            
+            if not combined.isGeosValid():
+                combined = combined.makeValid()
+            
+            inverted = extent_geom.difference(combined)
+            
+            if inverted.isEmpty():
+                logger.warning("Inverted mask is empty (mask covers entire raster extent)")
+                return None
+            
+            crs_id = raster.crs().authid()
+            temp_layer = QgsVectorLayer(
+                f"Polygon?crs={crs_id}", "fm_inverted_mask", "memory"
+            )
+            provider = temp_layer.dataProvider()
+            feat = QgsFeature()
+            feat.setGeometry(inverted)
+            provider.addFeature(feat)
+            temp_layer.updateExtents()
+            
+            logger.debug(f"Created inverted mask layer with CRS {crs_id}")
+            return temp_layer
+            
+        except Exception as e:
+            logger.error(f"Failed to create inverted mask: {e}")
+            return None
     
     def _compute_zonal_stats(
         self, 
         raster: QgsRasterLayer, 
-        zones: QgsVectorLayer
+        zones: QgsVectorLayer,
+        band_index: int = 1
     ) -> Dict[str, Any]:
-        """Compute zonal statistics."""
+        """Compute zonal statistics.
+        
+        Args:
+            raster: Source raster layer
+            zones: Vector layer with zone polygons
+            band_index: Raster band to compute stats for (1-based)
+        """
         try:
             import processing
             
             params = {
                 'INPUT': zones,
                 'INPUT_RASTER': raster,
-                'RASTER_BAND': 1,
+                'RASTER_BAND': band_index,
                 'COLUMN_PREFIX': 'zonal_',
                 'STATISTICS': [0, 1, 2, 3, 4, 5, 6],  # count, sum, mean, median, stddev, min, max
                 'OUTPUT': 'TEMPORARY_OUTPUT'
