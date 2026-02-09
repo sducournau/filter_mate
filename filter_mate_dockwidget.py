@@ -551,12 +551,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # The palette with alpha=0 colors was removed from filter_mate_dockwidget_base.ui/.py
         # No need to reset palette here anymore - dockwidget now inherits QGIS default palette.
         
-        self.setupUiCustom()
+        try:
+            self.setupUiCustom()
+        except Exception as e:
+            logger.error(f"setupUiCustom failed: {e}", exc_info=True)
+
         self.manage_ui_style()
-        try: 
+
+        try:
             self.manage_interactions()
-        except Exception as e: 
+        except Exception as e:
             logger.error(f"Error in manage_interactions: {e}", exc_info=True)
+            from qgis.utils import iface
+            iface.messageBar().pushCritical("FilterMate", self.tr("Initialization error: {}").format(str(e)))
             from qgis.utils import iface
             iface.messageBar().pushCritical("FilterMate", self.tr("Initialization error: {}").format(str(e)))
 
@@ -4801,19 +4808,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             from .ui.config import UIConfig
             layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 8
             content_spacing = UIConfig.get_config('layout', 'spacing_content') or 6
-            main_margins = UIConfig.get_config('layout', 'margins_main') or 2
+            main_margins = UIConfig.get_config('layout', 'margins_main') or 4
             key_cfg = UIConfig.get_config('key_button') or {}
-            button_spacing = key_cfg.get('spacing', 2)
-            # Apply reduced margins to main layouts (verticalLayout_8, verticalLayout_main)
+            button_spacing = key_cfg.get('spacing', 4)
+            # Apply margins to main layouts (verticalLayout_8, verticalLayout_main)
             for name in ['verticalLayout_8', 'verticalLayout_main']:
                 if hasattr(self, name):
-                    getattr(self, name).setContentsMargins(main_margins, 0, main_margins, 0)
-                    getattr(self, name).setSpacing(0)
-            # Apply zero margins to exploring content layouts
+                    getattr(self, name).setContentsMargins(main_margins, main_margins, main_margins, main_margins)
+                    getattr(self, name).setSpacing(4)
+            # Apply minimal margins to exploring content layouts
             for name in ['verticalLayout_main_content', 'gridLayout_main_header', 'gridLayout_main_actions']:
                 if hasattr(self, name):
-                    getattr(self, name).setContentsMargins(0, 0, 0, 0)
-                    getattr(self, name).setSpacing(2)
+                    getattr(self, name).setContentsMargins(2, 2, 2, 2)
+                    getattr(self, name).setSpacing(4)
             # Configure column stretch for proper groupbox display
             if hasattr(self, 'gridLayout_main_actions'):
                 self.gridLayout_main_actions.setColumnStretch(0, 0)  # Keys: fixed
@@ -4821,8 +4828,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Apply minimal margins to groupbox content layouts
             for name in ['verticalLayout_exploring_tabs_content']:
                 if hasattr(self, name):
-                    getattr(self, name).setContentsMargins(0, 0, 0, 0)
-                    getattr(self, name).setSpacing(2)
+                    getattr(self, name).setContentsMargins(4, 4, 4, 4)
+                    getattr(self, name).setSpacing(4)
             # Apply spacing to exploring layouts
             for name in ['verticalLayout_exploring_single_selection', 'verticalLayout_exploring_multiple_selection', 'verticalLayout_exploring_custom_selection']:
                 if hasattr(self, name): getattr(self, name).setSpacing(layout_spacing)
@@ -5816,8 +5823,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try:
             from qgis.core import Qgis
             _LayerFilter = Qgis.LayerFilter
+            _LayerFilters = Qgis.LayerFilters  # QFlags wrapper to avoid deprecated setFilters(int)
         except (ImportError, AttributeError):
-            _LayerFilter = QgsMapLayerProxyModel
+            try:
+                from qgis.gui import QgsMapLayerProxyModel as _LayerFilter
+            except ImportError:
+                from qgis.core import QgsMapLayerProxyModel as _LayerFilter
+            _LayerFilters = None
 
         # --- Locate insertion targets ---
         keys_layout = self.verticalLayout_filtering_keys
@@ -5892,7 +5904,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         l1_layout.setObjectName("horizontalLayout_filtering_raster_source")
 
         self.comboBox_filtering_raster_source_layer = QgsMapLayerComboBox(self.FILTERING)
-        self.comboBox_filtering_raster_source_layer.setFilters(_LayerFilter.RasterLayer)
+        self.comboBox_filtering_raster_source_layer.setFilters(
+            _LayerFilters(_LayerFilter.RasterLayer) if _LayerFilters else _LayerFilter.RasterLayer)
         self.comboBox_filtering_raster_source_layer.setShowCrs(True)
         sp = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
         sp.setHorizontalStretch(1)
@@ -7097,11 +7110,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def _apply_stylesheet(self):
         """
-        DISABLED 2026-01-21: Testing without stylesheet to isolate display issue.
-        If expression builder displays correctly without this, the CSS is the problem.
+        Apply stylesheet to dockwidget using StyleLoader.
+
+        This is the legacy fallback method when ThemeManager is not available.
+
+        FIX 2026-02-02: Apply stylesheet to QDockWidget (self) instead of dockWidgetContents.
+        QSS selectors like #dockWidgetContents QComboBox require dockWidgetContents to be
+        a CHILD of the widget where stylesheet is applied, not the widget itself.
         """
-        logger.info("Stylesheet application DISABLED for testing")
-        # StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA)
+        logger.info("_apply_stylesheet: Applying stylesheet to QDockWidget (self)")
+        StyleLoader.set_theme_from_config(self, self.CONFIG_DATA)
 
     def _configure_pushbuttons(self, pushButton_config, icons_sizes, font):
         """Delegate to ConfigurationManager."""
@@ -7127,13 +7145,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             Uses manager classes if available, falls back to legacy methods.
             Installs child dialog filter to prevent style bleeding.
         """
+        theme_applied = False
         if self._theme_manager:
-            self._theme_manager.setup()
-        else:
+            try:
+                self._theme_manager.setup()
+                theme_applied = self._theme_manager._initialized
+            except Exception as e:
+                logger.warning(f"ThemeManager.setup() failed: {e}")
+
+        if not theme_applied:
+            logger.info("Falling back to legacy stylesheet application")
             self._apply_auto_configuration()
             self._apply_stylesheet()
             self._setup_theme_watcher()
-            # FIX 2026-01-21: Install child dialog filter for legacy path
             self._install_legacy_child_dialog_filter()
         
         if self._icon_manager:

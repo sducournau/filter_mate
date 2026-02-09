@@ -529,113 +529,123 @@ class ConfigurationManager(QObject):
                     lambda state, x='buffer_segments': d.layer_property_changed(x, state)
                 )]
             },
-            # v5.4: Raster Value Filter section widgets
-            "HAS_RASTER_SOURCE": {
-                "TYPE": "PushButton",
-                "WIDGET": d.pushButton_checkable_filtering_raster_source,
-                "SIGNALS": [(
-                    "toggled",
-                    lambda state, x='has_raster_source': d.layer_property_changed(x, state)
-                )],
-                "ICON": None
-            },
-            "RASTER_SOURCE_LAYER": {
-                "TYPE": "ComboBox",
-                "WIDGET": d.comboBox_filtering_raster_source_layer,
-                "SIGNALS": [(
-                    "layerChanged",
-                    lambda layer, x='raster_source_layer_id': d.layer_property_changed(
-                        x, layer.id() if layer else None)
-                )]
-            },
-            "RASTER_BAND": {
-                "TYPE": "ComboBox",
-                "WIDGET": d.comboBox_filtering_raster_band,
-                "SIGNALS": [(
-                    "currentIndexChanged",
-                    lambda index, x='raster_band': d.layer_property_changed(x, index)
-                )]
-            },
-            "HAS_RASTER_LAYERS_TO_FILTER": {
-                "TYPE": "PushButton",
-                "WIDGET": d.pushButton_checkable_filtering_raster_layers_to_filter,
-                "SIGNALS": [(
-                    "toggled",
-                    lambda state, x='has_raster_layers_to_filter': d.layer_property_changed(x, state)
-                )],
-                "ICON": None
-            },
-            "RASTER_LAYERS_TO_FILTER": {
-                "TYPE": "CustomCheckableLayerComboBox",
-                "WIDGET": d.checkableComboBoxLayer_filtering_raster_layers_to_filter,
-                "SIGNALS": [(
-                    "checkedItemsChanged",
-                    lambda state, x='raster_layers_to_filter': d.layer_property_changed(x, state)
-                )]
-            },
-            "HAS_RASTER_COMBINE_OPERATOR": {
-                "TYPE": "PushButton",
-                "WIDGET": d.pushButton_checkable_filtering_raster_combine_operator,
-                "SIGNALS": [(
-                    "toggled",
-                    lambda state, x='has_raster_combine_operator': d.layer_property_changed(x, state)
-                )],
-                "ICON": None
-            },
-            "RASTER_SOURCE_COMBINE_OPERATOR": {
-                "TYPE": "ComboBox",
-                "WIDGET": d.comboBox_filtering_raster_source_combine_operator,
-                "SIGNALS": [(
-                    "currentIndexChanged",
-                    lambda index, x='raster_source_combine_operator': d.layer_property_changed(
-                        x, d._index_to_combine_operator(index))
-                )]
-            },
-            "RASTER_OTHER_COMBINE_OPERATOR": {
-                "TYPE": "ComboBox",
-                "WIDGET": d.comboBox_filtering_raster_other_combine_operator,
-                "SIGNALS": [(
-                    "currentIndexChanged",
-                    lambda index, x='raster_other_combine_operator': d.layer_property_changed(
-                        x, d._index_to_combine_operator(index))
-                )]
-            },
-            "HAS_RASTER_PREDICATES": {
-                "TYPE": "PushButton",
-                "WIDGET": d.pushButton_checkable_filtering_raster_predicates,
-                "SIGNALS": [(
-                    "toggled",
-                    lambda state, x='has_raster_predicates': d.layer_property_changed(x, state)
-                )],
-                "ICON": None
-            },
-            "RASTER_PREDICATES": {
-                "TYPE": "CheckableComboBox",
-                "WIDGET": d.comboBox_filtering_raster_predicates,
-                "SIGNALS": [(
-                    "checkedItemsChanged",
-                    lambda state, x='raster_predicates': d.layer_property_changed(x, state)
-                )]
-            },
-            "HAS_SAMPLING_METHOD": {
-                "TYPE": "PushButton",
-                "WIDGET": d.pushButton_checkable_filtering_sampling_method,
-                "SIGNALS": [(
-                    "toggled",
-                    lambda state, x='has_sampling_method': d.layer_property_changed(x, state)
-                )],
-                "ICON": None
-            },
-            "SAMPLING_METHOD": {
-                "TYPE": "ComboBox",
-                "WIDGET": d.comboBox_filtering_sampling_method,
-                "SIGNALS": [(
-                    "currentTextChanged",
-                    lambda state, x='sampling_method': d.layer_property_changed(x, state)
-                )]
-            }
         }
-        
+
+        # v5.4: Raster Value Filter section widgets (conditionally registered)
+        # These widgets are created dynamically in _setup_raster_filtering_section().
+        # If that method fails, the widgets won't exist - skip registration to avoid
+        # crashing the entire configure_widgets() and losing all pushbutton icons.
+        if hasattr(d, 'pushButton_checkable_filtering_raster_source'):
+            widgets["FILTERING"].update({
+                "HAS_RASTER_SOURCE": {
+                    "TYPE": "PushButton",
+                    "WIDGET": d.pushButton_checkable_filtering_raster_source,
+                    "SIGNALS": [(
+                        "toggled",
+                        lambda state, x='has_raster_source': d.layer_property_changed(x, state)
+                    )],
+                    "ICON": None
+                },
+                "RASTER_SOURCE_LAYER": {
+                    "TYPE": "ComboBox",
+                    "WIDGET": d.comboBox_filtering_raster_source_layer,
+                    "SIGNALS": [(
+                        "layerChanged",
+                        lambda layer, x='raster_source_layer_id': d.layer_property_changed(
+                            x, layer.id() if layer else None)
+                    )]
+                },
+                "RASTER_BAND": {
+                    "TYPE": "ComboBox",
+                    "WIDGET": d.comboBox_filtering_raster_band,
+                    "SIGNALS": [(
+                        "currentIndexChanged",
+                        lambda index, x='raster_band': d.layer_property_changed(x, index)
+                    )]
+                },
+                "HAS_RASTER_LAYERS_TO_FILTER": {
+                    "TYPE": "PushButton",
+                    "WIDGET": d.pushButton_checkable_filtering_raster_layers_to_filter,
+                    "SIGNALS": [(
+                        "toggled",
+                        lambda state, x='has_raster_layers_to_filter': d.layer_property_changed(x, state)
+                    )],
+                    "ICON": None
+                },
+                "RASTER_LAYERS_TO_FILTER": {
+                    "TYPE": "CustomCheckableLayerComboBox",
+                    "WIDGET": d.checkableComboBoxLayer_filtering_raster_layers_to_filter,
+                    "SIGNALS": [(
+                        "checkedItemsChanged",
+                        lambda state, x='raster_layers_to_filter': d.layer_property_changed(x, state)
+                    )]
+                },
+                "HAS_RASTER_COMBINE_OPERATOR": {
+                    "TYPE": "PushButton",
+                    "WIDGET": d.pushButton_checkable_filtering_raster_combine_operator,
+                    "SIGNALS": [(
+                        "toggled",
+                        lambda state, x='has_raster_combine_operator': d.layer_property_changed(x, state)
+                    )],
+                    "ICON": None
+                },
+                "RASTER_SOURCE_COMBINE_OPERATOR": {
+                    "TYPE": "ComboBox",
+                    "WIDGET": d.comboBox_filtering_raster_source_combine_operator,
+                    "SIGNALS": [(
+                        "currentIndexChanged",
+                        lambda index, x='raster_source_combine_operator': d.layer_property_changed(
+                            x, d._index_to_combine_operator(index))
+                    )]
+                },
+                "RASTER_OTHER_COMBINE_OPERATOR": {
+                    "TYPE": "ComboBox",
+                    "WIDGET": d.comboBox_filtering_raster_other_combine_operator,
+                    "SIGNALS": [(
+                        "currentIndexChanged",
+                        lambda index, x='raster_other_combine_operator': d.layer_property_changed(
+                            x, d._index_to_combine_operator(index))
+                    )]
+                },
+                "HAS_RASTER_PREDICATES": {
+                    "TYPE": "PushButton",
+                    "WIDGET": d.pushButton_checkable_filtering_raster_predicates,
+                    "SIGNALS": [(
+                        "toggled",
+                        lambda state, x='has_raster_predicates': d.layer_property_changed(x, state)
+                    )],
+                    "ICON": None
+                },
+                "RASTER_PREDICATES": {
+                    "TYPE": "CheckableComboBox",
+                    "WIDGET": d.comboBox_filtering_raster_predicates,
+                    "SIGNALS": [(
+                        "checkedItemsChanged",
+                        lambda state, x='raster_predicates': d.layer_property_changed(x, state)
+                    )]
+                },
+                "HAS_SAMPLING_METHOD": {
+                    "TYPE": "PushButton",
+                    "WIDGET": d.pushButton_checkable_filtering_sampling_method,
+                    "SIGNALS": [(
+                        "toggled",
+                        lambda state, x='has_sampling_method': d.layer_property_changed(x, state)
+                    )],
+                    "ICON": None
+                },
+                "SAMPLING_METHOD": {
+                    "TYPE": "ComboBox",
+                    "WIDGET": d.comboBox_filtering_sampling_method,
+                    "SIGNALS": [(
+                        "currentTextChanged",
+                        lambda state, x='sampling_method': d.layer_property_changed(x, state)
+                    )]
+                }
+            })
+            logger.info("v5.4: Raster filtering widgets registered in FILTERING group")
+        else:
+            logger.warning("v5.4: Raster filtering widgets NOT found - skipping registration")
+
         # EXPORTING widgets - Export configuration
         widgets["EXPORTING"] = {
             "HAS_LAYERS_TO_EXPORT": {
@@ -1068,21 +1078,26 @@ class ConfigurationManager(QObject):
         try:
             from qgis.core import Qgis
             _LayerFilter = Qgis.LayerFilter
+            _LayerFilters = Qgis.LayerFilters  # QFlags wrapper to avoid deprecated setFilters(int)
         except (ImportError, AttributeError):
             try:
                 from qgis.gui import QgsMapLayerProxyModel as _LayerFilter
             except ImportError:
                 from qgis.core import QgsMapLayerProxyModel as _LayerFilter
+            _LayerFilters = None
 
         d = self.dockwidget
         # Filter: vector layers WITH geometry + raster layers (excludes NoGeometry tables)
         try:
             filters = _LayerFilter.HasGeometry | _LayerFilter.RasterLayer
-            d.comboBox_filtering_current_layer.setFilters(filters)
+            d.comboBox_filtering_current_layer.setFilters(
+                _LayerFilters(filters) if _LayerFilters else filters)
             logger.info("comboBox_filtering_current_layer: Filter set to HasGeometry | RasterLayer (vector + raster)")
         except Exception as e:
             logger.warning(f"Could not set HasGeometry | RasterLayer filter: {e}")
-            d.comboBox_filtering_current_layer.setFilters(_LayerFilter.VectorLayer)
+            fallback = _LayerFilter.VectorLayer
+            d.comboBox_filtering_current_layer.setFilters(
+                _LayerFilters(fallback) if _LayerFilters else fallback)
         
         # Apply themed icon to centroids checkbox
         try:

@@ -131,9 +131,12 @@ class ExploringController(BaseController, LayerSelectionMixin):
             try:
                 from qgis.core import Qgis
                 _LayerFilter = Qgis.LayerFilter
+                _LayerFilters = Qgis.LayerFilters
             except (ImportError, AttributeError):
                 from qgis.gui import QgsMapLayerProxyModel as _LayerFilter
-            combo.setFilters(_LayerFilter.VectorLayer)
+                _LayerFilters = None
+            filters = _LayerFilter.VectorLayer
+            combo.setFilters(_LayerFilters(filters) if _LayerFilters else filters)
         except (ImportError, AttributeError):
             pass
 

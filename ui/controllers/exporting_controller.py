@@ -1956,12 +1956,15 @@ class ExportingController(BaseController):
             try:
                 from qgis.core import Qgis
                 _LayerFilter = Qgis.LayerFilter
+                _LayerFilters = Qgis.LayerFilters
             except (ImportError, AttributeError):
                 from qgis.core import QgsMapLayerProxyModel as _LayerFilter
+                _LayerFilters = None
 
             combo = self._dockwidget.mMapLayerComboBox_exporting_raster_mask
             # Filter to polygon layers only
-            combo.setFilters(_LayerFilter.PolygonLayer)
+            filters = _LayerFilter.PolygonLayer
+            combo.setFilters(_LayerFilters(filters) if _LayerFilters else filters)
             
             # Update tooltip to show filter info
             self._update_mask_layer_tooltip()

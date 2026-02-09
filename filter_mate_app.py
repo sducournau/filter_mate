@@ -31,11 +31,13 @@ from qgis.core import (
 try:
     from qgis.core import Qgis
     _LayerFilter = Qgis.LayerFilter
+    _LayerFilters = Qgis.LayerFilters  # QFlags wrapper to avoid deprecated setFilters(int)
 except (ImportError, AttributeError):
     try:
         from qgis.gui import QgsMapLayerProxyModel as _LayerFilter
     except ImportError:
         from qgis.core import QgsMapLayerProxyModel as _LayerFilter
+    _LayerFilters = None
 from qgis.utils import iface
 from qgis import processing
 from osgeo import ogr
@@ -2412,7 +2414,8 @@ class FilterMateApp:
                 # HasGeometry = PointLayer | LineLayer | PolygonLayer (excludes NoGeometry tables)
                 filters = _LayerFilter.HasGeometry | _LayerFilter.RasterLayer
                 combo = self.dockwidget.comboBox_filtering_current_layer
-                combo.setFilters(filters)
+                combo.setFilters(
+                    _LayerFilters(filters) if _LayerFilters else filters)
         except Exception as e: logger.debug(f"ComboBox filter setup (non-critical): {e}")
         
         # Trigger layer change with active or first layer

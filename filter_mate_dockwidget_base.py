@@ -15,8 +15,8 @@ class Ui_FilterMateDockWidgetBase(object):
     def setupUi(self, FilterMateDockWidgetBase):
         FilterMateDockWidgetBase.setObjectName("FilterMateDockWidgetBase")
         FilterMateDockWidgetBase.setWindowModality(QtCore.Qt.NonModal)
-        FilterMateDockWidgetBase.resize(443, 799)
-        FilterMateDockWidgetBase.setMinimumSize(QtCore.QSize(356, 317))
+        FilterMateDockWidgetBase.resize(443, 909)
+        FilterMateDockWidgetBase.setMinimumSize(QtCore.QSize(356, 909))
         FilterMateDockWidgetBase.setBaseSize(QtCore.QSize(160, 0))
         font = QtGui.QFont()
         font.setFamily("Segoe UI")
