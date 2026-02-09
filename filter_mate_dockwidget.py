@@ -709,7 +709,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Height managed by QSS (20px standard)
         self.checkableComboBoxLayer_exporting_layers.show()
         logger.debug(f"Created exporting layers widget: {self.checkableComboBoxLayer_exporting_layers}")
-        
+
+        # v5.4: Create raster filtering section custom widgets
+        self.checkableComboBoxLayer_filtering_raster_layers_to_filter = QgsCheckableComboBoxLayer(self.dockWidgetContents)
+        self.checkableComboBoxLayer_filtering_raster_layers_to_filter.show()
+        logger.debug(f"Created raster filtering layers widget: {self.checkableComboBoxLayer_filtering_raster_layers_to_filter}")
+
         # Create centroids checkbox BEFORE configure_widgets() to ensure it's in the registry
         from qgis.PyQt import QtWidgets
         self.checkBox_filtering_use_centroids_distant_layers = QtWidgets.QCheckBox(self.dockWidgetContents)
@@ -5745,6 +5750,182 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 Sprint 16: Delegate to ConfigurationManager."""
         if self._configuration_manager:
             self._configuration_manager.setup_filtering_tab_widgets()
+        # v5.4: Add raster value filter section to the filtering page
+        self._setup_raster_filtering_section()
+
+    def _setup_raster_filtering_section(self):
+        """v5.4: Create and inject the Raster Value Filter section into the Filtering page.
+
+        Adds 5 new widget lines (L1-L5) after the existing vector filtering widgets,
+        separated by a horizontal line. Follows the same Keys+Values pattern.
+
+        Widgets created:
+          L1: Raster Source Layer + Band selector
+          L2: Vector Layers to Filter (checkable combobox)
+          L3: Combine Operators (source + other)
+          L4: Raster Predicates (checkable combobox)
+          L5: Sampling Method
+        """
+        from qgis.PyQt import QtWidgets, QtCore, QtGui
+        from qgis.gui import QgsMapLayerComboBox
+        from qgis.core import QgsMapLayerProxyModel
+
+        # --- Locate insertion targets ---
+        keys_layout = self.verticalLayout_filtering_keys
+        values_layout = self.verticalLayout_filtering_values
+
+        # --- Helper: create a key pushbutton (checkable, flat, 32x32) ---
+        def _make_key_button(name: str) -> QtWidgets.QPushButton:
+            btn = QtWidgets.QPushButton(self.widget_filtering_keys)
+            btn.setObjectName(name)
+            sp = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+            btn.setSizePolicy(sp)
+            btn.setMinimumSize(QtCore.QSize(32, 32))
+            btn.setMaximumSize(QtCore.QSize(32, 32))
+            font = QtGui.QFont("Segoe UI", 10, QtGui.QFont.Bold)
+            btn.setFont(font)
+            btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+            btn.setFocusPolicy(QtCore.Qt.ClickFocus)
+            btn.setText("")
+            btn.setIconSize(QtCore.QSize(16, 16))
+            btn.setCheckable(True)
+            btn.setFlat(True)
+            return btn
+
+        # --- Separator ---
+        separator = QtWidgets.QFrame(self.FILTERING)
+        separator.setFrameShape(QtWidgets.QFrame.HLine)
+        separator.setFrameShadow(QtWidgets.QFrame.Sunken)
+        separator.setObjectName("line_raster_filter_separator")
+        values_layout.addWidget(separator)
+
+        # Keys spacer before raster section
+        keys_layout.addItem(QtWidgets.QSpacerItem(20, 8, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed))
+
+        # ===== L1: Raster Source Layer + Band =====
+        self.pushButton_checkable_filtering_raster_source = _make_key_button(
+            "pushButton_checkable_filtering_raster_source")
+        keys_layout.addWidget(self.pushButton_checkable_filtering_raster_source, 0, QtCore.Qt.AlignHCenter)
+
+        l1_layout = QtWidgets.QHBoxLayout()
+        l1_layout.setSpacing(4)
+        l1_layout.setObjectName("horizontalLayout_filtering_raster_source")
+
+        self.comboBox_filtering_raster_source_layer = QgsMapLayerComboBox(self.FILTERING)
+        self.comboBox_filtering_raster_source_layer.setFilters(QgsMapLayerProxyModel.RasterLayer)
+        self.comboBox_filtering_raster_source_layer.setShowCrs(True)
+        sp = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        sp.setHorizontalStretch(1)
+        self.comboBox_filtering_raster_source_layer.setSizePolicy(sp)
+        font = QtGui.QFont("Segoe UI Semibold", 10, QtGui.QFont.Bold)
+        self.comboBox_filtering_raster_source_layer.setFont(font)
+        self.comboBox_filtering_raster_source_layer.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.comboBox_filtering_raster_source_layer.setMaxVisibleItems(20)
+        self.comboBox_filtering_raster_source_layer.setIconSize(QtCore.QSize(36, 20))
+        self.comboBox_filtering_raster_source_layer.setObjectName("comboBox_filtering_raster_source_layer")
+        l1_layout.addWidget(self.comboBox_filtering_raster_source_layer)
+
+        self.comboBox_filtering_raster_band = QtWidgets.QComboBox(self.FILTERING)
+        sp_band = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
+        self.comboBox_filtering_raster_band.setSizePolicy(sp_band)
+        self.comboBox_filtering_raster_band.setMinimumSize(QtCore.QSize(80, 0))
+        font_band = QtGui.QFont("Segoe UI Semibold", 8, QtGui.QFont.Bold)
+        self.comboBox_filtering_raster_band.setFont(font_band)
+        self.comboBox_filtering_raster_band.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.comboBox_filtering_raster_band.setObjectName("comboBox_filtering_raster_band")
+        l1_layout.addWidget(self.comboBox_filtering_raster_band)
+
+        values_layout.addLayout(l1_layout)
+        values_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
+
+        # ===== L2: Vector Layers to Filter =====
+        self.pushButton_checkable_filtering_raster_layers_to_filter = _make_key_button(
+            "pushButton_checkable_filtering_raster_layers_to_filter")
+        keys_layout.addWidget(self.pushButton_checkable_filtering_raster_layers_to_filter, 0, QtCore.Qt.AlignHCenter)
+
+        # The QgsCheckableComboBoxLayer was already created in _create_custom_widgets_early()
+        # Just add it to the values layout
+        values_layout.addWidget(self.checkableComboBoxLayer_filtering_raster_layers_to_filter)
+        values_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
+
+        # ===== L3: Combine Operators =====
+        self.pushButton_checkable_filtering_raster_combine_operator = _make_key_button(
+            "pushButton_checkable_filtering_raster_combine_operator")
+        keys_layout.addWidget(self.pushButton_checkable_filtering_raster_combine_operator, 0, QtCore.Qt.AlignHCenter)
+
+        l3_layout = QtWidgets.QHBoxLayout()
+        l3_layout.setObjectName("horizontalLayout_filtering_raster_combine")
+
+        self.comboBox_filtering_raster_source_combine_operator = QtWidgets.QComboBox(self.FILTERING)
+        sp_combo = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        self.comboBox_filtering_raster_source_combine_operator.setSizePolicy(sp_combo)
+        font_combo = QtGui.QFont("Segoe UI Semibold", 8, QtGui.QFont.Bold)
+        self.comboBox_filtering_raster_source_combine_operator.setFont(font_combo)
+        self.comboBox_filtering_raster_source_combine_operator.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.comboBox_filtering_raster_source_combine_operator.setMaxVisibleItems(20)
+        self.comboBox_filtering_raster_source_combine_operator.addItems(["AND", "AND NOT", "OR"])
+        self.comboBox_filtering_raster_source_combine_operator.setObjectName("comboBox_filtering_raster_source_combine_operator")
+        l3_layout.addWidget(self.comboBox_filtering_raster_source_combine_operator)
+
+        self.comboBox_filtering_raster_other_combine_operator = QtWidgets.QComboBox(self.FILTERING)
+        self.comboBox_filtering_raster_other_combine_operator.setSizePolicy(sp_combo)
+        font_combo2 = QtGui.QFont("Segoe UI Semibold", 10, QtGui.QFont.Bold)
+        self.comboBox_filtering_raster_other_combine_operator.setFont(font_combo2)
+        self.comboBox_filtering_raster_other_combine_operator.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.comboBox_filtering_raster_other_combine_operator.addItems(["AND", "AND NOT", "OR"])
+        self.comboBox_filtering_raster_other_combine_operator.setObjectName("comboBox_filtering_raster_other_combine_operator")
+        l3_layout.addWidget(self.comboBox_filtering_raster_other_combine_operator)
+
+        values_layout.addLayout(l3_layout)
+        values_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
+
+        # ===== L4: Raster Predicates =====
+        self.pushButton_checkable_filtering_raster_predicates = _make_key_button(
+            "pushButton_checkable_filtering_raster_predicates")
+        keys_layout.addWidget(self.pushButton_checkable_filtering_raster_predicates, 0, QtCore.Qt.AlignHCenter)
+
+        from qgis.gui import QgsCheckableComboBox
+        self.comboBox_filtering_raster_predicates = QgsCheckableComboBox(self.FILTERING)
+        sp_pred = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        sp_pred.setHorizontalStretch(1)
+        self.comboBox_filtering_raster_predicates.setSizePolicy(sp_pred)
+        font_pred = QtGui.QFont("Segoe UI Semibold", 8, QtGui.QFont.Bold)
+        self.comboBox_filtering_raster_predicates.setFont(font_pred)
+        self.comboBox_filtering_raster_predicates.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.comboBox_filtering_raster_predicates.setMaxVisibleItems(20)
+        self.comboBox_filtering_raster_predicates.setIconSize(QtCore.QSize(36, 20))
+        self.comboBox_filtering_raster_predicates.addItems([
+            "Within Range", "Outside Range", "Above Value",
+            "Below Value", "Equals Value", "Is NoData", "Is Not NoData"
+        ])
+        self.comboBox_filtering_raster_predicates.setObjectName("comboBox_filtering_raster_predicates")
+        values_layout.addWidget(self.comboBox_filtering_raster_predicates)
+        values_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
+
+        # ===== L5: Sampling Method =====
+        self.pushButton_checkable_filtering_sampling_method = _make_key_button(
+            "pushButton_checkable_filtering_sampling_method")
+        keys_layout.addWidget(self.pushButton_checkable_filtering_sampling_method, 0, QtCore.Qt.AlignHCenter)
+
+        self.comboBox_filtering_sampling_method = QtWidgets.QComboBox(self.FILTERING)
+        sp_samp = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        sp_samp.setHorizontalStretch(1)
+        self.comboBox_filtering_sampling_method.setSizePolicy(sp_samp)
+        font_samp = QtGui.QFont("Segoe UI Semibold", 8, QtGui.QFont.Bold)
+        self.comboBox_filtering_sampling_method.setFont(font_samp)
+        self.comboBox_filtering_sampling_method.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.comboBox_filtering_sampling_method.setMaxVisibleItems(20)
+        self.comboBox_filtering_sampling_method.addItems([
+            "Centroid", "All Vertices", "Zonal Mean",
+            "Zonal Max", "Zonal Min", "Zonal Majority"
+        ])
+        self.comboBox_filtering_sampling_method.setObjectName("comboBox_filtering_sampling_method")
+        values_layout.addWidget(self.comboBox_filtering_sampling_method)
+
+        # Final spacer
+        keys_layout.addItem(QtWidgets.QSpacerItem(20, 0, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
+
+        logger.info("v5.4: Raster Value Filter section added to Filtering page (5 lines)")
 
     def _setup_exporting_tab_widgets(self):
         """v4.0 Sprint 16: Delegate to ConfigurationManager."""
@@ -7467,6 +7648,24 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 'comboBox_filtering_buffer_type',
                 'mQgsSpinBox_filtering_buffer_segments'
             ],
+            # v5.4: Raster Value Filter section
+            'pushButton_checkable_filtering_raster_source': [
+                'comboBox_filtering_raster_source_layer',
+                'comboBox_filtering_raster_band'
+            ],
+            'pushButton_checkable_filtering_raster_layers_to_filter': [
+                'checkableComboBoxLayer_filtering_raster_layers_to_filter'
+            ],
+            'pushButton_checkable_filtering_raster_combine_operator': [
+                'comboBox_filtering_raster_source_combine_operator',
+                'comboBox_filtering_raster_other_combine_operator'
+            ],
+            'pushButton_checkable_filtering_raster_predicates': [
+                'comboBox_filtering_raster_predicates'
+            ],
+            'pushButton_checkable_filtering_sampling_method': [
+                'comboBox_filtering_sampling_method'
+            ],
             
             # EXPORTING Section
             'pushButton_checkable_exporting_layers': [
@@ -7590,7 +7789,117 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         _on_predicates_toggled(initial_state)
         
         logger.info(f"✓ Buffer buttons dependency configured ({len(buffer_buttons)} buttons)")
-    
+
+        # v5.4: Setup raster source cascade dependency and Exploring↔Filtering sync
+        self._setup_raster_filter_dependencies()
+
+    def _setup_raster_filter_dependencies(self):
+        """v5.4: Setup cascade dependency for raster filtering section.
+
+        - L2-L5 buttons disabled unless L1 (raster_source) is checked.
+        - Bidirectional sync between Exploring Raster and Filtering Raster widgets.
+        """
+        if not hasattr(self, 'pushButton_checkable_filtering_raster_source'):
+            logger.warning("_setup_raster_filter_dependencies: raster_source button not found")
+            return
+
+        master_btn = self.pushButton_checkable_filtering_raster_source
+
+        # Collect dependent buttons (L2-L5)
+        dependent_button_names = [
+            'pushButton_checkable_filtering_raster_layers_to_filter',
+            'pushButton_checkable_filtering_raster_combine_operator',
+            'pushButton_checkable_filtering_raster_predicates',
+            'pushButton_checkable_filtering_sampling_method'
+        ]
+        dependent_buttons = []
+        for name in dependent_button_names:
+            if hasattr(self, name):
+                dependent_buttons.append(getattr(self, name))
+
+        def _on_raster_source_toggled(checked):
+            for btn in dependent_buttons:
+                btn.setEnabled(checked)
+                if not checked and btn.isChecked():
+                    btn.setChecked(False)
+            logger.debug(f"Raster filter buttons {'enabled' if checked else 'disabled'}")
+
+        master_btn.toggled.connect(_on_raster_source_toggled)
+        _on_raster_source_toggled(master_btn.isChecked())
+        logger.info(f"✓ Raster filter cascade dependency configured ({len(dependent_buttons)} buttons)")
+
+        # --- Bidirectional sync: Exploring Raster ↔ Filtering Raster ---
+        self._setup_raster_exploring_filtering_sync()
+
+    def _setup_raster_exploring_filtering_sync(self):
+        """v5.4: Bidirectional sync between Exploring Raster and Filtering Raster widgets.
+
+        - comboBox_raster_source_layer ↔ comboBox_filtering_raster_source_layer
+        - comboBox_raster_band ↔ comboBox_filtering_raster_band
+        """
+        # Raster layer sync: Exploring → Filtering
+        if hasattr(self, 'comboBox_raster_source_layer') and hasattr(self, 'comboBox_filtering_raster_source_layer'):
+            self.comboBox_raster_source_layer.layerChanged.connect(
+                lambda layer: self._sync_raster_layer_to_filtering(layer))
+            self.comboBox_filtering_raster_source_layer.layerChanged.connect(
+                lambda layer: self._sync_raster_layer_to_exploring(layer))
+            logger.debug("✓ Raster layer sync connected (Exploring ↔ Filtering)")
+
+        # Band sync: Exploring → Filtering
+        if hasattr(self, 'comboBox_raster_band') and hasattr(self, 'comboBox_filtering_raster_band'):
+            self.comboBox_raster_band.currentIndexChanged.connect(
+                lambda idx: self._sync_raster_band_to_filtering(idx))
+            self.comboBox_filtering_raster_band.currentIndexChanged.connect(
+                lambda idx: self._sync_raster_band_to_exploring(idx))
+            logger.debug("✓ Raster band sync connected (Exploring ↔ Filtering)")
+
+        # Raster layer change in Filtering → populate band selector
+        if hasattr(self, 'comboBox_filtering_raster_source_layer'):
+            self.comboBox_filtering_raster_source_layer.layerChanged.connect(
+                self._on_filtering_raster_layer_changed)
+
+    def _sync_raster_layer_to_filtering(self, layer):
+        """Sync raster layer from Exploring to Filtering (avoid signal loop)."""
+        target = self.comboBox_filtering_raster_source_layer
+        if target.currentLayer() != layer:
+            target.blockSignals(True)
+            target.setLayer(layer)
+            target.blockSignals(False)
+
+    def _sync_raster_layer_to_exploring(self, layer):
+        """Sync raster layer from Filtering to Exploring (avoid signal loop)."""
+        target = self.comboBox_raster_source_layer
+        if target.currentLayer() != layer:
+            target.blockSignals(True)
+            target.setLayer(layer)
+            target.blockSignals(False)
+
+    def _sync_raster_band_to_filtering(self, index):
+        """Sync band index from Exploring to Filtering (avoid signal loop)."""
+        target = self.comboBox_filtering_raster_band
+        if target.currentIndex() != index and 0 <= index < target.count():
+            target.blockSignals(True)
+            target.setCurrentIndex(index)
+            target.blockSignals(False)
+
+    def _sync_raster_band_to_exploring(self, index):
+        """Sync band index from Filtering to Exploring (avoid signal loop)."""
+        target = self.comboBox_raster_band
+        if target.currentIndex() != index and 0 <= index < target.count():
+            target.blockSignals(True)
+            target.setCurrentIndex(index)
+            target.blockSignals(False)
+
+    def _on_filtering_raster_layer_changed(self, layer):
+        """Populate band selector when raster source layer changes in Filtering."""
+        from qgis.core import QgsRasterLayer
+        self.comboBox_filtering_raster_band.clear()
+        if layer and isinstance(layer, QgsRasterLayer) and layer.isValid():
+            for i in range(1, layer.bandCount() + 1):
+                band_name = layer.bandName(i) or f"Band {i}"
+                self.comboBox_filtering_raster_band.addItem(band_name)
+            logger.debug(f"Filtering raster band selector updated: {layer.bandCount()} bands")
+
     def _toggle_associated_widgets(self, enabled, widgets):
         """
         Enable or disable a list of widgets based on pushbutton toggle state.
