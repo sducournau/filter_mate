@@ -230,7 +230,7 @@ class RasterExploringManager(QObject):
 
             raster_icons = icons.get("RASTER_EXPLORING", {})
             if not raster_icons:
-                logger.warning("No RASTER_EXPLORING icons in config")
+                logger.debug("RASTER_EXPLORING icons not yet available in config, will retry later")
                 return
 
             button_font = QtGui.QFont()
