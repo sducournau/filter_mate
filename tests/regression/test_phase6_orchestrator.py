@@ -1,5 +1,5 @@
 """
-Phase 6 Regression Tests - Orchestrator & Utils.
+Phase 6 Regression Tests - Utils & Components.
 
 Story: MIG-089
 Tests for Sprint 9 (Final Refactoring) components.
@@ -7,7 +7,6 @@ Tests for Sprint 9 (Final Refactoring) components.
 
 import pytest
 import warnings
-from unittest.mock import Mock, MagicMock, patch
 import sys
 from pathlib import Path
 
@@ -25,47 +24,6 @@ class MockDockWidget:
     """Mock dockwidget for testing."""
     pass
 
-
-class MockApp:
-    """Mock FilterMateApp."""
-    pass
-
-
-class MockIface:
-    """Mock QGIS iface."""
-    pass
-
-
-# ─────────────────────────────────────────────────────────────────
-# Test DockWidgetOrchestrator
-# ─────────────────────────────────────────────────────────────────
-
-class TestDockWidgetOrchestratorRegression:
-    """Regression tests for DockWidgetOrchestrator."""
-    
-    def test_import(self):
-        """Test DockWidgetOrchestrator can be imported."""
-        from ui import DockWidgetOrchestrator
-        assert DockWidgetOrchestrator is not None
-    
-    def test_init(self):
-        """Test DockWidgetOrchestrator initialization."""
-        from ui import DockWidgetOrchestrator
-        dw = MockDockWidget()
-        app = MockApp()
-        iface = MockIface()
-        
-        orch = DockWidgetOrchestrator(dw, app, iface)
-        
-        assert orch is not None
-        assert not orch.is_initialized
-    
-    def test_factory_function(self):
-        """Test create_orchestrator factory function."""
-        from ui import create_orchestrator
-        
-        assert create_orchestrator is not None
-        assert callable(create_orchestrator)
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -360,13 +318,6 @@ class TestPhase6Summary:
             components.append(('PostgresInfoDialog', True))
         except ImportError:
             components.append(('PostgresInfoDialog', False))
-        
-        # Orchestrator (Sprint 9)
-        try:
-            from ui import DockWidgetOrchestrator
-            components.append(('DockWidgetOrchestrator', True))
-        except ImportError:
-            components.append(('DockWidgetOrchestrator', False))
         
         # Deprecation (Sprint 9)
         try:
