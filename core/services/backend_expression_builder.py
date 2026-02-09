@@ -1,13 +1,13 @@
 """
 Backend Expression Builder Service
 
-Extracted from filter_task.py (Phase 14.1 - God Class Reduction)
-January 12, 2026
+DEPRECATED (v6.0 Phase 2.3): This service is dead code.
+Expression building now goes through FilterOrchestrator → ExpressionBuilder.build_backend_expression()
+(core/filter/expression_builder.py). The FilterEngineTask methods that called this service
+(_build_backend_expression, _build_backend_expression_v2) have been removed.
 
-This service handles building filter expressions for different backends:
-- PostgreSQL (with EXISTS mode, MV optimization)
-- Spatialite
-- OGR
+Original: Extracted from filter_task.py (Phase 14.1 - God Class Reduction), January 2026.
+Will be removed in a future cleanup phase.
 
 Location: core/services/backend_expression_builder.py
 """

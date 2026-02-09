@@ -3377,74 +3377,9 @@ class FilterEngineTask(QgsTask):
             return None, None, None, None
         return layer_table, primary_key, geom_field, layer_schema
 
-    def _build_backend_expression_v2(self, backend, layer_props, source_geom):
-        """
-        Build filter expression using backend - PHASE 14.1 REFACTORED VERSION.
-        
-        Delegates to BackendExpressionBuilder service to reduce God Class size.
-        Extracted 426 lines to core/services/backend_expression_builder.py .
-        
-        Args:
-            backend: Backend instance
-            layer_props: Layer properties dict
-            source_geom: Prepared source geometry
-            
-        Returns:
-            str: Filter expression or None on error
-        """
-        # PHASE 14.1: Delegate to BackendExpressionBuilder service
-        from ..services.backend_expression_builder import create_expression_builder
-        
-        # Create builder with all required dependencies
-        builder = create_expression_builder(
-            source_layer=self.source_layer,
-            task_parameters=self.task_parameters,
-            expr_cache=self.expr_cache,
-            format_pk_values_callback=self._format_pk_values_for_sql,
-            get_optimization_thresholds_callback=self._get_optimization_thresholds
-        )
-        
-        # Transfer task state to builder
-        builder.param_buffer_value = self.param_buffer_value
-        builder.param_buffer_expression = self.param_buffer_expression
-        builder.param_use_centroids_distant_layers = self.param_use_centroids_distant_layers
-        builder.param_use_centroids_source_layer = self.param_use_centroids_source_layer
-        builder.param_source_table = self.param_source_table
-        builder.param_source_geom = self.param_source_geom
-        builder.current_predicates = self.current_predicates
-        builder.approved_optimizations = self.approved_optimizations
-        builder.auto_apply_optimizations = self.auto_apply_optimizations
-        builder.spatialite_source_geom = self.spatialite_source_geom
-        builder.ogr_source_geom = self.ogr_source_geom
-        builder.source_layer_crs_authid = self.source_layer_crs_authid
-        
-        # Build expression
-        expression = builder.build(backend, layer_props, source_geom)
-        
-        # Collect created MVs for cleanup
-        created_mvs = builder.get_created_mvs()
-        if created_mvs:
-            self._source_selection_mvs.extend(created_mvs)
-        
-        return expression
-
-    def _build_backend_expression(self, backend, layer_props, source_geom):
-        """
-        Build filter expression using backend.
-        
-        PHASE 14.1 GOD CLASS REDUCTION: Delegates to _build_backend_expression_v2().
-        Wrapper method for backward compatibility - all logic moved to service-based v2.
-        
-        Args:
-            backend: Backend instance
-            layer_props: Layer properties dict
-            source_geom: Prepared source geometry
-            
-        Returns:
-            str: Filter expression or None on error
-        """
-        # PHASE 14.1: Simple delegation to refactored version
-        return self._build_backend_expression_v2(backend, layer_props, source_geom)
+    # v6.0 Phase 2.3: Removed _build_backend_expression() and _build_backend_expression_v2()
+    # Dead code - expression building goes through FilterOrchestrator → ExpressionBuilder.build_backend_expression()
+    # BackendExpressionBuilder service (core/services/backend_expression_builder.py) is also dead.
 
     def _combine_with_old_filter(self, expression, layer):
         """Delegates to core.filter.expression_combiner.combine_with_old_filter()."""
