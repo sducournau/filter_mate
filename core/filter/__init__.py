@@ -40,6 +40,14 @@ from .expression_combiner import (
     CombineOperator,
 )
 
+# Predicate registry (Phase 2.1 - v6.0)
+from .predicate_registry import (
+    get_predicate_function,
+    get_predicate_functions,
+    get_selectivity_order,
+    sort_predicates_by_selectivity,
+)
+
 # Source filter builders (Phase E5)
 from .source_filter_builder import (
     should_skip_source_subset,
@@ -67,6 +75,11 @@ __all__ = [
     'apply_combine_operator',
     'combine_with_old_subset',
     'CombineOperator',
+    # Predicate registry (v6.0)
+    'get_predicate_function',
+    'get_predicate_functions',
+    'get_selectivity_order',
+    'sort_predicates_by_selectivity',
     # Source filter builders (Phase E5)
     'should_skip_source_subset',
     'get_primary_key_field',

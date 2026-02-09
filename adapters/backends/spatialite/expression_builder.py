@@ -44,6 +44,12 @@ except ImportError:
         except Exception:
             return False
 
+# v6.0 Phase 2.1: Import unified predicate registry
+try:
+    from ....core.filter.predicate_registry import get_predicate_functions
+except ImportError:
+    get_predicate_functions = None
+
 # Sentinel value for OGR fallback
 USE_OGR_FALLBACK = "__USE_OGR_FALLBACK__"
 
@@ -74,18 +80,13 @@ class SpatialiteExpressionBuilder(GeometricFilterPort):
         )
     """
     
-    # Spatialite predicate mapping
-    PREDICATE_FUNCTIONS = {
-        'intersects': 'Intersects',
-        'contains': 'Contains',
-        'within': 'Within',
-        'touches': 'Touches',
-        'overlaps': 'Overlaps',
-        'crosses': 'Crosses',
-        'disjoint': 'Disjoint',
-        'equals': 'Equals',
-        'covers': 'Covers',
-        'coveredby': 'CoveredBy',
+    # v6.0: Predicate mappings from unified registry (core/filter/predicate_registry.py)
+    PREDICATE_FUNCTIONS = get_predicate_functions('spatialite') if get_predicate_functions else {
+        'intersects': 'Intersects', 'contains': 'Contains',
+        'within': 'Within', 'touches': 'Touches',
+        'overlaps': 'Overlaps', 'crosses': 'Crosses',
+        'disjoint': 'Disjoint', 'equals': 'Equals',
+        'covers': 'Covers', 'coveredby': 'CoveredBy',
     }
     
     def __init__(self, task_params: Dict[str, Any]):

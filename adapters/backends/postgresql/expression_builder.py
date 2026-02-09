@@ -45,6 +45,16 @@ except ImportError:
         except Exception:
             return False
 
+# v6.0 Phase 2.1: Import unified predicate registry
+try:
+    from ....core.filter.predicate_registry import (
+        get_predicate_functions, get_selectivity_order, SELECTIVITY_ORDER
+    )
+except ImportError:
+    get_predicate_functions = None
+    get_selectivity_order = None
+    SELECTIVITY_ORDER = None
+
 # v4.2.10: Import filter chain optimizer for MV-based optimization
 try:
     from .filter_chain_optimizer import (
@@ -91,30 +101,17 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
     MAX_WKT_LENGTH = 100000     # Max WKT length before switching to EXISTS
     WKT_SIMPLIFY_THRESHOLD = 500000  # Warn about very large geometries
     
-    # Predicate optimization order (most selective first)
-    PREDICATE_ORDER = {
-        'within': 1,       # Most selective - target fully inside source
-        'contains': 2,     # Target fully contains source
-        'disjoint': 3,     # Inverse of intersects
-        'equals': 4,       # Exact match
-        'touches': 5,      # Border contact only
-        'crosses': 6,      # Lines crossing
-        'overlaps': 7,     # Partial overlap
-        'intersects': 8,   # Least selective - any overlap
+    # v6.0: Predicate mappings from unified registry (core/filter/predicate_registry.py)
+    PREDICATE_ORDER = SELECTIVITY_ORDER if SELECTIVITY_ORDER else {
+        'within': 1, 'contains': 2, 'disjoint': 3, 'equals': 4,
+        'touches': 5, 'crosses': 6, 'overlaps': 7, 'intersects': 8,
     }
-    
-    # PostGIS predicate mapping
-    PREDICATE_FUNCTIONS = {
-        'intersects': 'ST_Intersects',
-        'contains': 'ST_Contains',
-        'within': 'ST_Within',
-        'touches': 'ST_Touches',
-        'overlaps': 'ST_Overlaps',
-        'crosses': 'ST_Crosses',
-        'disjoint': 'ST_Disjoint',
-        'equals': 'ST_Equals',
-        'covers': 'ST_Covers',
-        'coveredby': 'ST_CoveredBy',
+    PREDICATE_FUNCTIONS = get_predicate_functions('postgresql') if get_predicate_functions else {
+        'intersects': 'ST_Intersects', 'contains': 'ST_Contains',
+        'within': 'ST_Within', 'touches': 'ST_Touches',
+        'overlaps': 'ST_Overlaps', 'crosses': 'ST_Crosses',
+        'disjoint': 'ST_Disjoint', 'equals': 'ST_Equals',
+        'covers': 'ST_Covers', 'coveredby': 'ST_CoveredBy',
     }
     
     def __init__(self, task_params: Dict[str, Any]):

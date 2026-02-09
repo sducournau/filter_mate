@@ -29,6 +29,12 @@ from qgis.core import QgsVectorLayer, QgsExpression
 
 logger = logging.getLogger('FilterMate.Backend.OGR.ExpressionBuilder')
 
+# v6.0 Phase 2.1: Import unified predicate registry
+try:
+    from ....core.filter.predicate_registry import get_predicate_functions
+except ImportError:
+    get_predicate_functions = None
+
 # Import the port interface
 try:
     from ....core.ports.geometric_filter_port import GeometricFilterPort
@@ -132,16 +138,10 @@ class OGRExpressionBuilder(GeometricFilterPort):
         builder.apply_filter(layer, expr)
     """
     
-    # QGIS predicate codes for selectbylocation
-    PREDICATE_CODES = {
-        'intersects': 0,
-        'contains': 1,
-        'disjoint': 2,
-        'equals': 3,
-        'touches': 4,
-        'overlaps': 5,
-        'within': 6,
-        'crosses': 7,
+    # v6.0: Predicate codes from unified registry (core/filter/predicate_registry.py)
+    PREDICATE_CODES = get_predicate_functions('ogr') if get_predicate_functions else {
+        'intersects': 0, 'contains': 1, 'disjoint': 2, 'equals': 3,
+        'touches': 4, 'overlaps': 5, 'within': 6, 'crosses': 7,
     }
     
     def __init__(self, task_params: Dict[str, Any]):

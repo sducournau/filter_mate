@@ -10870,10 +10870,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
         is_checked = self.widgets["FILTERING"]["HAS_LAYERS_TO_FILTER"]["WIDGET"].isChecked()
         
-        # v4.0.3: Disable entire row layout (includes all widgets in the row)
-        self._set_layout_widgets_enabled('horizontalLayout_filtering_distant_layers', is_checked)
+        # FIX 2026-02-09d: Use container widget instead of removed hlayout
+        container = getattr(self, 'widget_filtering_distant_layers', None)
+        if container is not None:
+            for child in container.findChildren(QtWidgets.QWidget):
+                child.setEnabled(is_checked)
         
-        # Also set individual widgets that may not be in the layout
+        # Also set individual widgets directly
         self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].setEnabled(is_checked)
         self.widgets["FILTERING"]["USE_CENTROIDS_DISTANT_LAYERS"]["WIDGET"].setEnabled(is_checked)
         
@@ -11068,6 +11071,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return
         
         layout = getattr(self, layout_name)
+        if layout is None:
+            return
+        
         for i in range(layout.count()):
             item = layout.itemAt(i)
             if item and item.widget():
