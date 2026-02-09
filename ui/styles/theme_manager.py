@@ -448,7 +448,9 @@ class ThemeManager(StylerBase):
         'default': {
             'color_bg_0': '#EFEFEF',
             'color_1': '#FFFFFF',
+            'color_bg_1': '#FFFFFF',      # Alias for color_1
             'color_2': '#D0D0D0',
+            'color_bg_2': '#D0D0D0',      # Alias for color_2
             'color_bg_3': '#2196F3',
             'color_3': '#4A4A4A',
             'color_font_0': '#1A1A1A',
@@ -464,7 +466,9 @@ class ThemeManager(StylerBase):
         'dark': {
             'color_bg_0': '#1E1E1E',
             'color_1': '#252526',
+            'color_bg_1': '#252526',      # Alias for color_1
             'color_2': '#37373D',
+            'color_bg_2': '#37373D',      # Alias for color_2
             'color_bg_3': '#0E639C',
             'color_3': '#CCCCCC',
             'color_font_0': '#D4D4D4',
@@ -480,7 +484,9 @@ class ThemeManager(StylerBase):
         'light': {
             'color_bg_0': '#FFFFFF',
             'color_1': '#F8F8F8',
+            'color_bg_1': '#F8F8F8',      # Alias for color_1
             'color_2': '#CCCCCC',
+            'color_bg_2': '#CCCCCC',      # Alias for color_2
             'color_bg_3': '#2196F3',
             'color_3': '#333333',
             'color_font_0': '#000000',
@@ -556,6 +562,7 @@ class ThemeManager(StylerBase):
         Auto-detects theme from QGIS if auto-detect is enabled.
         Installs event filter to protect child dialogs from style inheritance.
         """
+        logger.debug(f"ThemeManager.setup(): STARTING, _auto_detect={self._auto_detect}")
         # Try to load config
         self._load_config()
         
@@ -566,7 +573,9 @@ class ThemeManager(StylerBase):
         if self._auto_detect:
             detected = self.detect_system_theme()
             self._current_theme = detected
+            logger.debug(f"ThemeManager.setup(): auto-detected theme = {detected}")
         
+        logger.debug(f"ThemeManager.setup(): calling apply() with theme = {self._current_theme}")
         success = self.apply()
         if not success:
             logger.warning("ThemeManager: Initial theme application failed")
@@ -595,27 +604,58 @@ class ThemeManager(StylerBase):
     def apply(self) -> bool:
         """
         Apply current theme to dockwidget.
-
-        FIX 2026-02-09: Apply to QDockWidget (self.dockwidget), NOT dockWidgetContents.
-        QSS selectors like '#dockWidgetContents QGroupBox' require dockWidgetContents
-        to be a CHILD of the widget where the stylesheet is set. If the stylesheet is
-        set ON dockWidgetContents itself, Qt looks for a child named dockWidgetContents
-        inside it and finds nothing — so no styles are applied.
-
+        
+        CRITICAL: The stylesheet uses #dockWidgetContents as prefix for scoping.
+        We must apply it to the parent (QDockWidget) so that #dockWidgetContents
+        selectors can match the child widget with that objectName.
+        
+        Qt CSS selector rules:
+        - #id selectors match widgets by objectName
+        - When stylesheet is set on widget X, selectors resolve from X's children
+        - "#dockWidgetContents QComboBox" needs dockWidgetContents to be a CHILD
+        
         Returns:
             bool: True if theme applied successfully, False otherwise
         """
         try:
+            logger.info(f"ThemeManager.apply(): loading stylesheet for theme '{self._current_theme}'")
             stylesheet = self._load_stylesheet(self._current_theme)
-            if stylesheet:
-                # Apply to QDockWidget so that #dockWidgetContents selectors
-                # correctly match the child widget named dockWidgetContents.
-                self.dockwidget.setStyleSheet(stylesheet)
-                logger.debug(f"Applied theme '{self._current_theme}' to QDockWidget")
-                return True
-            else:
-                logger.warning(f"ThemeManager: No stylesheet loaded for theme '{self._current_theme}'")
+            
+            if not stylesheet:
+                logger.error(f"ThemeManager.apply(): FAILED - No stylesheet loaded for theme '{self._current_theme}'")
                 return False
+            
+            logger.info(f"ThemeManager.apply(): stylesheet loaded ({len(stylesheet)} chars)")
+            
+            # FIX 2026-02-02: Apply stylesheet to the QDockWidget (parent)
+            # This allows #dockWidgetContents selectors to work correctly
+            # because dockWidgetContents is a CHILD of the QDockWidget
+            target_widget = self.dockwidget
+            
+            logger.info(f"ThemeManager.apply(): applying to '{target_widget.objectName()}' ({type(target_widget).__name__})")
+            
+            # Apply stylesheet to the QDockWidget
+            target_widget.setStyleSheet(stylesheet)
+            
+            # Force update of dockWidgetContents and all its children
+            contents = self.dockwidget.dockWidgetContents
+            contents.update()
+            contents.style().unpolish(contents)
+            contents.style().polish(contents)
+            
+            # Also update all child widgets
+            child_count = 0
+            for child in contents.findChildren(QWidget):
+                try:
+                    child.style().unpolish(child)
+                    child.style().polish(child)
+                    child.update()
+                    child_count += 1
+                except (RuntimeError, AttributeError):
+                    pass
+            
+            logger.info(f"ThemeManager.apply(): ✓ SUCCESS - Applied theme '{self._current_theme}' to {child_count} widgets")
+            return True
         except Exception as e:
             logger.error(f"ThemeManager: Error applying theme '{self._current_theme}': {e}", exc_info=True)
             return False
@@ -726,15 +766,34 @@ class ThemeManager(StylerBase):
     def _load_config(self) -> None:
         """Load configuration from dockwidget or config file."""
         try:
-            if hasattr(self.dockwidget, 'config_data'):
-                self._config_data = self.dockwidget.config_data
+            # FIX 2026-02-02: Support both CONFIG_DATA (uppercase, actual attribute) 
+            # and config_data (lowercase, for compatibility)
+            config_data = None
+            if hasattr(self.dockwidget, 'CONFIG_DATA'):
+                config_data = self.dockwidget.CONFIG_DATA
+            elif hasattr(self.dockwidget, 'config_data'):
+                config_data = self.dockwidget.config_data
+            
+            if config_data:
+                self._config_data = config_data
                 
                 # Check for auto-detect setting
-                if self._config_data:
-                    active_theme = self._config_data.get('app', {}).get('active_theme', 'auto')
-                    self._auto_detect = (active_theme == 'auto')
-                    if not self._auto_detect:
-                        self._current_theme = active_theme
+                # Support both new structure (app.active_theme) and old (APP.DOCKWIDGET.COLORS.ACTIVE_THEME)
+                # FIX 2026-02-02: Config values can be dict with 'value' key or plain string
+                active_theme = config_data.get('app', {}).get('active_theme', None)
+                if active_theme is None:
+                    active_theme = config_data.get('APP', {}).get('DOCKWIDGET', {}).get('COLORS', {}).get('ACTIVE_THEME', 'auto')
+                
+                # Extract 'value' if active_theme is a dict (new config format)
+                if isinstance(active_theme, dict):
+                    active_theme = active_theme.get('value', 'auto')
+                
+                self._auto_detect = (active_theme == 'auto')
+                if not self._auto_detect:
+                    self._current_theme = active_theme
+                logger.debug(f"ThemeManager: config loaded, active_theme={active_theme}, auto_detect={self._auto_detect}")
+            else:
+                logger.warning("ThemeManager: No config_data found on dockwidget")
         except Exception as e:
             logger.debug(f"Could not load theme config: {e}")
     
@@ -748,7 +807,7 @@ class ThemeManager(StylerBase):
         Returns:
             Stylesheet content with colors applied
         """
-        # Check cache
+        # Check cache first
         if theme in self._styles_cache:
             return self._styles_cache[theme]
         
@@ -761,6 +820,12 @@ class ThemeManager(StylerBase):
         colors = self.COLOR_SCHEMES.get(theme, self.COLOR_SCHEMES['default'])
         for key, value in colors.items():
             stylesheet = stylesheet.replace(f'{{{key}}}', value)
+        
+        # Check for unreplaced variables (debug)
+        import re
+        unreplaced = re.findall(r'\{[a-z_0-9]+\}', stylesheet)
+        if unreplaced:
+            logger.warning(f"Unreplaced variables in stylesheet: {set(unreplaced)}")
         
         # Cache result
         self._styles_cache[theme] = stylesheet
@@ -778,27 +843,36 @@ class ThemeManager(StylerBase):
             Raw stylesheet content
         """
         plugin_dir = self.get_plugin_dir()
+        logger.info(f"_load_raw_stylesheet: plugin_dir = {plugin_dir}")
+        
         if not plugin_dir:
-            # Try to determine from dockwidget location
+            # Final fallback: use __file__ from this module
             try:
-                import filter_mate_dockwidget
-                plugin_dir = os.path.dirname(filter_mate_dockwidget.__file__)
-            except (ImportError, AttributeError):
-                return ""  # Cannot determine plugin directory
+                current_file = os.path.abspath(__file__)
+                # Go up from ui/styles/theme_manager.py to plugin root
+                plugin_dir = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
+                logger.info(f"_load_raw_stylesheet: fallback plugin_dir from __file__ = {plugin_dir}")
+            except Exception as e:
+                logger.error(f"_load_raw_stylesheet: CANNOT determine plugin_dir! {e}")
+                return ""
         
         style_file = os.path.join(plugin_dir, 'resources', 'styles', f'{theme}.qss')
+        logger.info(f"_load_raw_stylesheet: looking for {style_file}")
         
-        # Fallback to default
+        # Fallback to default theme
         if not os.path.exists(style_file):
             style_file = os.path.join(plugin_dir, 'resources', 'styles', 'default.qss')
+            logger.info(f"_load_raw_stylesheet: fallback to {style_file}")
         
         if not os.path.exists(style_file):
-            logger.warning(f"Stylesheet not found: {style_file}")
+            logger.error(f"Stylesheet NOT FOUND: {style_file}")
             return ""
         
         try:
             with open(style_file, 'r', encoding='utf-8') as f:
-                return f.read()
+                content = f.read()
+                logger.info(f"_load_raw_stylesheet: ✓ Loaded {len(content)} chars from {os.path.basename(style_file)}")
+                return content
         except Exception as e:
             logger.error(f"Error loading stylesheet: {e}")
             return ""
