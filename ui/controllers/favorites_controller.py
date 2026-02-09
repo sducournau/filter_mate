@@ -1076,22 +1076,23 @@ class FavoritesController(BaseController):
     def _cleanup_orphan_projects(self) -> None:
         """Clean up orphan projects from the database."""
         try:
-            from ...core.services.favorites_migration_service import FavoritesMigrationService
+            from ...core.services.favorites_service import FavoritesService
             from ...config.config import ENV_VARS
             import os
-            
+
             db_path = os.path.normpath(
                 ENV_VARS.get("PLUGIN_CONFIG_DIRECTORY", "") + os.sep + 'filterMate_db.sqlite'
             )
-            
-            migration_service = FavoritesMigrationService(db_path)
-            deleted_count, deleted_ids = migration_service.cleanup_orphan_projects()
-            
+
+            service = FavoritesService()
+            service.set_database(db_path)
+            deleted_count, deleted_ids = service.cleanup_orphan_projects()
+
             if deleted_count > 0:
                 self._show_success(self.tr("Cleaned up {} orphan project(s)").format(deleted_count))
             else:
                 self._show_success(self.tr("No orphan projects to clean up"))
-                
+
         except Exception as e:
             logger.error(f"Error cleaning up orphan projects: {e}")
             self._show_warning(self.tr("Error: {}").format(e))
@@ -1099,21 +1100,22 @@ class FavoritesController(BaseController):
     def _show_database_stats(self) -> None:
         """Show database statistics dialog."""
         try:
-            from ...core.services.favorites_migration_service import FavoritesMigrationService
+            from ...core.services.favorites_service import FavoritesService
             from ...config.config import ENV_VARS
             import os
-            
+
             db_path = os.path.normpath(
                 ENV_VARS.get("PLUGIN_CONFIG_DIRECTORY", "") + os.sep + 'filterMate_db.sqlite'
             )
-            
-            migration_service = FavoritesMigrationService(db_path)
-            stats = migration_service.get_database_statistics()
-            
+
+            service = FavoritesService()
+            service.set_database(db_path)
+            stats = service.get_database_statistics()
+
             if 'error' in stats:
                 self._show_warning(self.tr("Error: {}").format(stats['error']))
                 return
-            
+
             # Format statistics message - build translatable parts
             db_file = os.path.basename(stats.get('database_path', 'N/A'))
             db_size = stats.get('database_size_kb', 0)
@@ -1122,29 +1124,29 @@ class FavoritesController(BaseController):
             total_favorites = stats.get('total_favorites', 0)
             orphan_favorites = stats.get('orphan_favorites', 0)
             global_favorites = stats.get('global_favorites', 0)
-            
-            msg = self.tr("📊 FilterMate Database Statistics") + "\n\n"
-            msg += self.tr("📁 File: {}").format(db_file) + "\n"
-            msg += self.tr("💾 Size: {:.1f} KB").format(db_size) + "\n\n"
-            msg += self.tr("📂 Projects: {}").format(total_projects) + "\n"
-            msg += self.tr("   └─ Orphans: {}").format(orphan_projects) + "\n\n"
-            msg += self.tr("⭐ Favorites: {}").format(total_favorites) + "\n"
-            msg += self.tr("   ├─ Orphans: {}").format(orphan_favorites) + "\n"
-            msg += self.tr("   └─ Global: {}").format(global_favorites) + "\n"
-            
+
+            msg = self.tr("FilterMate Database Statistics") + "\n\n"
+            msg += self.tr("File: {}").format(db_file) + "\n"
+            msg += self.tr("Size: {:.1f} KB").format(db_size) + "\n\n"
+            msg += self.tr("Projects: {}").format(total_projects) + "\n"
+            msg += self.tr("   Orphans: {}").format(orphan_projects) + "\n\n"
+            msg += self.tr("Favorites: {}").format(total_favorites) + "\n"
+            msg += self.tr("   Orphans: {}").format(orphan_favorites) + "\n"
+            msg += self.tr("   Global: {}").format(global_favorites) + "\n"
+
             # Add top projects
             top_projects = stats.get('top_projects', [])
             if top_projects:
-                msg += "\n" + self.tr("🏆 Projects with most favorites:") + "\n"
+                msg += "\n" + self.tr("Projects with most favorites:") + "\n"
                 for proj in top_projects[:3]:
-                    msg += f"   • {proj['name']}: {proj['favorites']}\n"
-            
+                    msg += f"   - {proj['name']}: {proj['favorites']}\n"
+
             QMessageBox.information(
                 self.dockwidget,
                 self.tr("FilterMate Statistics"),
                 msg
             )
-            
+
         except Exception as e:
             logger.error(f"Error showing database stats: {e}")
             self._show_warning(self.tr("Error: {}").format(e))

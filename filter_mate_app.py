@@ -52,7 +52,6 @@ from .infrastructure.feedback import (
 )
 from .core.services.history_service import HistoryService
 from .core.services.favorites_service import FavoritesService
-from .core.services.favorites_migration_service import FavoritesMigrationService
 
 # Config helpers (migrated to config/)
 from .config.config import get_optimization_thresholds
@@ -90,12 +89,7 @@ try:
         LayerLifecycleConfig
     )
     logger.debug("✓ layer_lifecycle_service")
-    from .core.services.task_management_service import (  # v4.0: Task management extraction
-        TaskManagementService,
-        TaskManagementConfig
-    )
-    logger.debug("✓ task_management_service")
-    from .adapters.undo_redo_handler import UndoRedoHandler  # v4.0: Undo/Redo extraction
+from .adapters.undo_redo_handler import UndoRedoHandler  # v4.0: Undo/Redo extraction
     logger.debug("✓ undo_redo_handler")
     from .adapters.database_manager import DatabaseManager  # v4.0: Database operations extraction
     logger.debug("✓ database_manager")
@@ -134,7 +128,7 @@ except ImportError as e:
     logger.error(f"Traceback: {traceback.format_exc()}")
     HEXAGONAL_AVAILABLE = False
     TaskParameterBuilder = LayerRefreshManager = LayerTaskCompletionHandler = None
-    LayerLifecycleService = LayerLifecycleConfig = TaskManagementService = TaskManagementConfig = None
+    LayerLifecycleService = LayerLifecycleConfig = None
     UndoRedoHandler = DatabaseManager = VariablesPersistenceManager = TaskOrchestrator = None
     OptimizationManager = FilterResultHandler = AppInitializer = DatasourceManager = LayerFilterBuilder = None
     LayerValidator = FilterApplicationService = RasterFilterController = None
@@ -218,14 +212,12 @@ class FilterMateApp:
         return self._lifecycle_service
     
     def _get_task_management_service(self):
-        """Get or create TaskManagementService instance (lazy initialization)."""
-        if not hasattr(self, '_task_mgmt_service') or self._task_mgmt_service is None:
-            if TaskManagementService:
-                config = TaskManagementConfig()
-                self._task_mgmt_service = TaskManagementService(config)
-            else:
-                self._task_mgmt_service = None
-        return self._task_mgmt_service
+        """Get TaskOrchestrator instance (backward-compatible accessor).
+        
+        Deprecated: Use self._task_orchestrator directly.
+        Retained for backward compatibility during Phase 5 consolidation.
+        """
+        return self._task_orchestrator
 
     def _get_task_builder(self):
         """Get TaskParameterBuilder instance if available."""
@@ -405,9 +397,8 @@ class FilterMateApp:
         self.favorites_manager = FavoritesService()
         logger.info(f"FilterMate: FavoritesService initialized ({self.favorites_manager.get_favorites_count()} favorites)")
         
-        # v4.0.7: FavoritesMigrationService for orphan favorites handling
-        self._favorites_migration_service = FavoritesMigrationService()
-        logger.debug("FilterMate: FavoritesMigrationService initialized")
+        # v4.0.7: Migration service consolidated into FavoritesService (Phase 5)
+        self._favorites_migration_service = self.favorites_manager  # backward compat alias
         
         # Spatialite cache
         try:
@@ -1399,20 +1390,18 @@ class FilterMateApp:
 
 
     def _safe_cancel_all_tasks(self):
-        """Safely cancel all tasks via TaskManagementService."""
-        service = self._get_task_management_service()
-        if service:
-            service.safe_cancel_all_tasks()
+        """Safely cancel all tasks via TaskOrchestrator."""
+        if self._task_orchestrator:
+            self._task_orchestrator.safe_cancel_all_tasks()
         else:
-            logger.warning("TaskManagementService unavailable - cannot cancel tasks safely")
+            logger.warning("TaskOrchestrator unavailable - cannot cancel tasks safely")
 
     def _cancel_layer_tasks(self, layer_id):
-        """Cancel all tasks for layer_id via TaskManagementService."""
-        service = self._get_task_management_service()
-        if service:
-            service.cancel_layer_tasks(layer_id, self.dockwidget)
+        """Cancel all tasks for layer_id via TaskOrchestrator."""
+        if self._task_orchestrator:
+            self._task_orchestrator.cancel_layer_tasks(layer_id)
         else:
-            logger.warning("TaskManagementService not available, cannot cancel layer tasks")
+            logger.warning("TaskOrchestrator not available, cannot cancel layer tasks")
 
     def _handle_layer_task_terminated(self, task_name):
         """Handle layer management task termination (failure or cancellation) to prevent stuck UI."""

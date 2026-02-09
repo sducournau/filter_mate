@@ -178,14 +178,31 @@ def layer_lifecycle_service():
 
 @pytest.fixture
 def task_management_service():
-    """Create a TaskManagementService instance for testing."""
-    from core.services.task_management_service import TaskManagementService, TaskManagementConfig
-    
-    config = TaskManagementConfig(
-        max_queue_size=10,
-        retry_delay_ms=10  # Fast for tests
+    """Create a TaskOrchestrator instance for testing (formerly TaskManagementService).
+
+    Phase 5 consolidation: TaskManagementService merged into TaskOrchestrator.
+    Fixture name kept for backward compatibility with existing tests.
+    """
+    from unittest.mock import Mock
+    from core.services.task_orchestrator import TaskOrchestrator
+
+    return TaskOrchestrator(
+        get_dockwidget=Mock(return_value=None),
+        get_project_layers=Mock(return_value={}),
+        get_config_data=Mock(return_value={}),
+        get_project=Mock(return_value=None),
+        check_reset_stale_flags=Mock(),
+        set_loading_flag=Mock(),
+        set_initializing_flag=Mock(),
+        get_task_parameters=Mock(return_value=None),
+        handle_filter_task=Mock(),
+        handle_layer_task=Mock(),
+        handle_undo=Mock(),
+        handle_redo=Mock(),
+        force_reload_layers=Mock(),
+        handle_remove_all_layers=Mock(),
+        handle_project_initialization=Mock(),
     )
-    return TaskManagementService(config=config)
 
 
 @pytest.fixture

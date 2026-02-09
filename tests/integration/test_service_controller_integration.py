@@ -109,12 +109,21 @@ class TestServiceIntegration:
                     assert len(usable) == 1
     
     def test_task_management_with_layer_lifecycle(self):
-        """Test TaskManagement coordinates with LayerLifecycle."""
-        from core.services.task_management_service import TaskManagementService
+        """Test TaskOrchestrator coordinates with LayerLifecycle."""
+        from unittest.mock import Mock
+        from core.services.task_orchestrator import TaskOrchestrator
         from core.services.layer_lifecycle_service import LayerLifecycleService
-        
+
         # Arrange
-        task_service = TaskManagementService()
+        task_service = TaskOrchestrator(
+            get_dockwidget=Mock(return_value=None), get_project_layers=Mock(return_value={}),
+            get_config_data=Mock(return_value={}), get_project=Mock(return_value=None),
+            check_reset_stale_flags=Mock(), set_loading_flag=Mock(), set_initializing_flag=Mock(),
+            get_task_parameters=Mock(return_value=None), handle_filter_task=Mock(),
+            handle_layer_task=Mock(), handle_undo=Mock(), handle_redo=Mock(),
+            force_reload_layers=Mock(), handle_remove_all_layers=Mock(),
+            handle_project_initialization=Mock(),
+        )
         lifecycle_service = LayerLifecycleService()
         
         layers = [create_mock_layer(f"layer_{i}") for i in range(3)]
@@ -235,12 +244,21 @@ class TestEndToEndWorkflows:
     
     def test_cleanup_workflow(self):
         """Test cleanup workflow: all services clean up properly."""
+        from unittest.mock import Mock
         from core.services.layer_lifecycle_service import LayerLifecycleService
-        from core.services.task_management_service import TaskManagementService
-        
+        from core.services.task_orchestrator import TaskOrchestrator
+
         # Arrange
         lifecycle = LayerLifecycleService()
-        task_mgmt = TaskManagementService()
+        task_mgmt = TaskOrchestrator(
+            get_dockwidget=Mock(return_value=None), get_project_layers=Mock(return_value={}),
+            get_config_data=Mock(return_value={}), get_project=Mock(return_value=None),
+            check_reset_stale_flags=Mock(), set_loading_flag=Mock(), set_initializing_flag=Mock(),
+            get_task_parameters=Mock(return_value=None), handle_filter_task=Mock(),
+            handle_layer_task=Mock(), handle_undo=Mock(), handle_redo=Mock(),
+            force_reload_layers=Mock(), handle_remove_all_layers=Mock(),
+            handle_project_initialization=Mock(),
+        )
         
         # Add some state
         task_mgmt.enqueue_add_layers([create_mock_layer()])
@@ -278,39 +296,57 @@ class TestErrorRecovery:
     
     def test_queue_overflow_recovery(self):
         """Test recovery from queue overflow."""
-        from core.services.task_management_service import TaskManagementService, TaskManagementConfig
-        
-        # Arrange - Small queue
-        config = TaskManagementConfig(max_queue_size=2)
-        service = TaskManagementService(config=config)
-        
-        # Act - Fill queue
-        assert service.enqueue_add_layers([create_mock_layer()])  # 1
-        assert service.enqueue_add_layers([create_mock_layer()])  # 2
-        result = service.enqueue_add_layers([create_mock_layer()])  # 3 - overflow
-        
-        # Assert - Overflow handled gracefully
-        assert result is False
-        assert service.get_queue_size() == 2
-        
-        # Recovery - Clear and retry
-        service.clear_queue()
-        assert service.enqueue_add_layers([create_mock_layer()])  # Success
+        from unittest.mock import Mock, patch
+        from core.services.task_orchestrator import TaskOrchestrator, StabilityConstants
+
+        # Arrange - Small queue (patch constant for entire test)
+        with patch.object(StabilityConstants, 'MAX_ADD_LAYERS_QUEUE', 2):
+            service = TaskOrchestrator(
+                get_dockwidget=Mock(return_value=None), get_project_layers=Mock(return_value={}),
+                get_config_data=Mock(return_value={}), get_project=Mock(return_value=None),
+                check_reset_stale_flags=Mock(), set_loading_flag=Mock(), set_initializing_flag=Mock(),
+                get_task_parameters=Mock(return_value=None), handle_filter_task=Mock(),
+                handle_layer_task=Mock(), handle_undo=Mock(), handle_redo=Mock(),
+                force_reload_layers=Mock(), handle_remove_all_layers=Mock(),
+                handle_project_initialization=Mock(),
+            )
+
+            # Act - Fill queue
+            assert service.enqueue_add_layers([create_mock_layer()])  # 1
+            assert service.enqueue_add_layers([create_mock_layer()])  # 2
+            result = service.enqueue_add_layers([create_mock_layer()])  # 3 - overflow
+
+            # Assert - Overflow handled gracefully
+            assert result is False
+            assert service.get_queue_size() == 2
+
+            # Recovery - Clear and retry
+            service.clear_queue()
+            assert service.enqueue_add_layers([create_mock_layer()])  # Success
     
     def test_concurrent_task_cancellation(self):
         """Test safe handling of concurrent task cancellation."""
-        from core.services.task_management_service import TaskManagementService
-        
+        from unittest.mock import Mock
+        from core.services.task_orchestrator import TaskOrchestrator
+
         # Arrange
-        service = TaskManagementService()
-        
+        service = TaskOrchestrator(
+            get_dockwidget=Mock(return_value=None), get_project_layers=Mock(return_value={}),
+            get_config_data=Mock(return_value={}), get_project=Mock(return_value=None),
+            check_reset_stale_flags=Mock(), set_loading_flag=Mock(), set_initializing_flag=Mock(),
+            get_task_parameters=Mock(return_value=None), handle_filter_task=Mock(),
+            handle_layer_task=Mock(), handle_undo=Mock(), handle_redo=Mock(),
+            force_reload_layers=Mock(), handle_remove_all_layers=Mock(),
+            handle_project_initialization=Mock(),
+        )
+
         # Act - Cancel with no tasks (should not raise)
         try:
             service.safe_cancel_all_tasks()
             success = True
         except Exception:
             success = False
-        
+
         # Assert
         assert success is True
 
@@ -338,19 +374,28 @@ class TestPerformanceScenarios:
     
     def test_rapid_queue_operations(self):
         """Test rapid enqueue/dequeue operations."""
-        from core.services.task_management_service import TaskManagementService
-        
+        from unittest.mock import Mock
+        from core.services.task_orchestrator import TaskOrchestrator
+
         # Arrange
-        service = TaskManagementService()
-        
+        service = TaskOrchestrator(
+            get_dockwidget=Mock(return_value=None), get_project_layers=Mock(return_value={}),
+            get_config_data=Mock(return_value={}), get_project=Mock(return_value=None),
+            check_reset_stale_flags=Mock(), set_loading_flag=Mock(), set_initializing_flag=Mock(),
+            get_task_parameters=Mock(return_value=None), handle_filter_task=Mock(),
+            handle_layer_task=Mock(), handle_undo=Mock(), handle_redo=Mock(),
+            force_reload_layers=Mock(), handle_remove_all_layers=Mock(),
+            handle_project_initialization=Mock(),
+        )
+
         # Act - Rapid operations
         for i in range(10):
             service.enqueue_add_layers([create_mock_layer(f"layer_{i}")])
-        
+
         for i in range(5):
             service.clear_queue()
             service.enqueue_add_layers([create_mock_layer(f"new_layer_{i}")])
-        
+
         # Assert - State is consistent
         assert service.get_queue_size() >= 0  # Valid state
 
