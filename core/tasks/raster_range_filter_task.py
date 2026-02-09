@@ -91,16 +91,10 @@ class RasterRangeFilterTask(QgsTask):
         """
         super().__init__(task_description, QgsTask.CanCancel)
         
-        # Store thread-safe layer metadata (strings only, no QObject references)
+        # Store parameters
+        self.source_layer = source_layer
         self.source_layer_id = source_layer.id()
         self.source_layer_name = source_layer.name()
-        self.source_layer_uri = source_layer.dataProvider().dataSourceUri()
-        self.source_layer_crs = source_layer.crs().authid()
-        self.source_layer_width = source_layer.width()
-        self.source_layer_height = source_layer.height()
-        self.source_layer_band_count = source_layer.bandCount()
-        
-        # Filter parameters
         self.min_value = min_value
         self.max_value = max_value
         self.band = band
@@ -123,11 +117,10 @@ class RasterRangeFilterTask(QgsTask):
         """
         Execute task in background thread.
         
-        THREAD SAFETY:
-        - Recreates layer from URI (no shared QObject references)
-        - Does NOT access QGIS UI elements (iface, messageBar, etc.)
-        - Does NOT call QgsProject.instance().addMapLayer() here
-        - Only prepares data, defers UI updates to finished()
+        THREAD SAFETY WARNING:
+        - Do NOT access QGIS UI elements (iface, messageBar, etc.)
+        - Do NOT call QgsProject.instance().addMapLayer() here
+        - Only prepare data, defer UI updates to finished()
         
         Returns:
             bool: True on success, False on failure
@@ -140,19 +133,15 @@ class RasterRangeFilterTask(QgsTask):
                 logger.info("Task cancelled before execution")
                 return False
             
-            # Recreate source layer from URI in background thread (thread-safe)
-            source_layer = QgsRasterLayer(self.source_layer_uri, self.source_layer_name, 'gdal')
-            if not source_layer.isValid():
-                raise ValueError(
-                    f"Source layer '{self.source_layer_name}' cannot be loaded from URI: "
-                    f"{self.source_layer_uri}"
-                )
+            # Validate source layer
+            if not self.source_layer or not self.source_layer.isValid():
+                raise ValueError(f"Source layer '{self.source_layer_name}' is invalid")
             
             # Progress: 10%
             self.setProgress(10)
             
             # Validate band number
-            band_count = source_layer.bandCount()
+            band_count = self.source_layer.bandCount()
             if self.band < 1 or self.band > band_count:
                 raise ValueError(
                     f"Band {self.band} out of range (layer has {band_count} bands)"
@@ -173,7 +162,7 @@ class RasterRangeFilterTask(QgsTask):
             # Progress: 30%
             self.setProgress(30)
             
-            # Create filtered layer (distinct copy, never the source)
+            # Create filtered layer
             if use_file_based:
                 self.result_layer = self._create_file_based_layer()
             else:
@@ -185,7 +174,7 @@ class RasterRangeFilterTask(QgsTask):
             if not self.result_layer or not self.result_layer.isValid():
                 raise RuntimeError("Failed to create filtered raster layer")
             
-            # Apply transparency to the COPY (not the source)
+            # Apply transparency (this happens in-memory, fast)
             self._apply_transparency()
             
             # Progress: 90%
@@ -253,18 +242,22 @@ class RasterRangeFilterTask(QgsTask):
     
     def _estimate_layer_size_mb(self) -> float:
         """
-        Estimate raster layer size in MB using stored metadata.
-        
-        Uses dimensions stored at init time (thread-safe, no layer access).
+        Estimate raster layer size in MB.
         
         Returns:
             float: Estimated size in megabytes
         """
         try:
+            # Get raster dimensions
+            width = self.source_layer.width()
+            height = self.source_layer.height()
+            band_count = self.source_layer.bandCount()
+            
             # Estimate: width * height * bands * 4 bytes (float32)
-            size_bytes = (self.source_layer_width * self.source_layer_height 
-                         * self.source_layer_band_count * 4)
+            # Real size varies by data type, but float32 is safe upper bound
+            size_bytes = width * height * band_count * 4
             size_mb = size_bytes / (1024 * 1024)
+            
             return size_mb
             
         except Exception as e:
@@ -273,38 +266,19 @@ class RasterRangeFilterTask(QgsTask):
     
     def _create_memory_layer(self) -> Optional[QgsRasterLayer]:
         """
-        Create VRT-based copy of source layer for non-destructive filtering.
+        Create in-memory copy of source layer.
         
-        Uses GDAL BuildVRT to create a virtual raster referencing the source data,
-        ensuring the original layer is never modified.
+        Fast for small rasters (< threshold MB).
         
         Returns:
             QgsRasterLayer or None if failed
         """
         try:
-            import tempfile
-            from osgeo import gdal
-            
-            vrt_path = os.path.join(
-                tempfile.gettempdir(),
-                f"fm_range_{self.source_layer_id[:8]}_{self.band}.vrt"
-            )
-            
-            vrt_ds = gdal.BuildVRT(vrt_path, [self.source_layer_uri])
-            if vrt_ds is None:
-                raise RuntimeError(f"GDAL BuildVRT failed: {gdal.GetLastErrorMsg()}")
-            vrt_ds.FlushCache()
-            vrt_ds = None  # Close dataset
-            
-            layer_name = f"{self.source_layer_name}_filtered"
-            result = QgsRasterLayer(vrt_path, layer_name, 'gdal')
-            
-            if result.isValid():
-                logger.info(f"Created VRT layer for non-destructive filtering: {vrt_path}")
-                return result
-            else:
-                logger.error(f"VRT layer is invalid: {vrt_path}")
-                return None
+            # For memory-based, we actually use the SAME source layer
+            # and just modify its renderer settings
+            # This avoids memory duplication
+            logger.info("Using source layer with modified transparency (memory approach)")
+            return self.source_layer
             
         except Exception as e:
             logger.error(f"Failed to create memory layer: {e}")
@@ -312,38 +286,22 @@ class RasterRangeFilterTask(QgsTask):
     
     def _create_file_based_layer(self) -> Optional[QgsRasterLayer]:
         """
-        Create file-based copy of source layer for large rasters.
+        Create file-based copy of source layer.
         
-        Uses GDAL Translate to create a real GeoTIFF copy, ensuring the
-        original layer is never modified.
+        Required for large rasters (> threshold MB) to avoid memory issues.
         
         Returns:
             QgsRasterLayer or None if failed
         """
         try:
-            import tempfile
-            from osgeo import gdal
-            
-            output_path = os.path.join(
-                tempfile.gettempdir(),
-                f"fm_range_file_{self.source_layer_id[:8]}_{self.band}.tif"
+            # TODO Sprint 2 Day 2: Implement GDAL VRT (Virtual Raster) approach
+            # For now, use source layer directly (same as memory)
+            # VRT allows on-the-fly filtering without duplication
+            logger.warning(
+                "File-based filtering not yet implemented, using source layer. "
+                "TODO: Create GDAL VRT with transparency."
             )
-            
-            ds = gdal.Translate(output_path, self.source_layer_uri)
-            if ds is None:
-                raise RuntimeError(f"GDAL Translate failed: {gdal.GetLastErrorMsg()}")
-            ds.FlushCache()
-            ds = None  # Close dataset
-            
-            layer_name = f"{self.source_layer_name}_filtered"
-            result = QgsRasterLayer(output_path, layer_name, 'gdal')
-            
-            if result.isValid():
-                logger.info(f"Created file-based layer copy: {output_path}")
-                return result
-            else:
-                logger.error(f"File-based layer is invalid: {output_path}")
-                return None
+            return self.source_layer
             
         except Exception as e:
             logger.error(f"Failed to create file-based layer: {e}")
@@ -354,11 +312,6 @@ class RasterRangeFilterTask(QgsTask):
         Apply transparency based on value range.
         
         Sets pixels outside [min_value, max_value] to transparent.
-        
-        FIX 2026-02-08 C6: Removed triggerRepaint() — called from run() (background thread).
-        Repaint happens automatically when layer is added to project in finished() (main thread).
-        FIX 2026-02-08 C7: Use 3-argument TransparentSingleValuePixel constructor (universal QGIS compat)
-        with 100.0 (100% transparent) instead of 0.0.
         """
         try:
             # Get renderer
@@ -375,12 +328,7 @@ class RasterRangeFilterTask(QgsTask):
             transparent_pixels = []
             
             # Get band statistics for range
-            try:
-                _stat_all = Qgis.RasterBandStatistic.All
-            except AttributeError:
-                from qgis.core import QgsRasterBandStats
-                _stat_all = QgsRasterBandStats.All
-            stats = self.result_layer.dataProvider().bandStatistics(self.band, _stat_all)
+            stats = self.result_layer.dataProvider().bandStatistics(self.band)
             min_band_value = stats.minimumValue
             max_band_value = stats.maximumValue
             
@@ -388,36 +336,37 @@ class RasterRangeFilterTask(QgsTask):
                 f"Band {self.band} value range: [{min_band_value}, {max_band_value}]"
             )
             
-            # Add transparency rules (3-arg constructor for QGIS version compatibility):
-            # 1. Values below min_value → 100% transparent
+            # Add transparency rules:
+            # 1. Values below min_value → transparent (0% opacity)
             if self.min_value > min_band_value:
                 transparent_pixels.append(
                     QgsRasterTransparency.TransparentSingleValuePixel(
-                        min_band_value,
-                        self.min_value - 0.001,
-                        100.0
+                        min_band_value,  # min
+                        self.min_value - 0.001,  # max (just below threshold)
+                        0.0,  # percent transparent (0 = fully transparent)
+                        True  # include values
                     )
                 )
             
-            # 2. Values above max_value → 100% transparent
+            # 2. Values above max_value → transparent
             if self.max_value < max_band_value:
                 transparent_pixels.append(
                     QgsRasterTransparency.TransparentSingleValuePixel(
-                        self.max_value + 0.001,
-                        max_band_value,
-                        100.0
+                        self.max_value + 0.001,  # min (just above threshold)
+                        max_band_value,  # max
+                        0.0,  # percent transparent
+                        True
                     )
                 )
-            
-            if not transparent_pixels:
-                logger.info("No transparency rules needed (filter range covers full band range)")
-                return
             
             # Set transparency list
             transparency.setTransparentSingleValuePixelList(transparent_pixels)
             
-            # Apply to renderer (repaint deferred to finished() on main thread)
+            # Apply to renderer
             renderer.setRasterTransparency(transparency)
+            
+            # Trigger layer update
+            self.result_layer.triggerRepaint()
             
             logger.info(
                 f"Applied transparency: {len(transparent_pixels)} rules "

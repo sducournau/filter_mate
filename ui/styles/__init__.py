@@ -21,7 +21,6 @@ from .icon_manager import IconManager
 from .button_styler import ButtonStyler
 from .style_loader import StyleLoader
 from .theme_watcher import QGISThemeWatcher
-from .toolbox_style import ToolBoxIconAlignStyle
 
 __all__ = [
     'StylerBase',
@@ -30,5 +29,4 @@ __all__ = [
     'ButtonStyler',
     'StyleLoader',
     'QGISThemeWatcher',
-    'ToolBoxIconAlignStyle',
 ]

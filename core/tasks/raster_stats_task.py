@@ -13,11 +13,6 @@ from qgis.core import (
     QgsRasterLayer,
     QgsRasterBandStats,
 )
-try:
-    from qgis.core import Qgis
-    _StatAll = Qgis.RasterBandStatistic.All
-except AttributeError:
-    _StatAll = QgsRasterBandStats.All
 from qgis.PyQt.QtCore import pyqtSignal
 import logging
 
@@ -153,7 +148,7 @@ class RasterStatsTask(QgsTask):
             
             stats = provider.bandStatistics(
                 self._band_index,
-                _StatAll,
+                QgsRasterBandStats.All,
                 self._extent,
                 self._sample_size
             )

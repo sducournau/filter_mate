@@ -117,21 +117,6 @@ class StylerBase(ABC):
         Returns:
             Path to plugin directory or None if not available
         """
-        # Try dockwidget.plugin_dir first
-        if hasattr(self._dockwidget, 'plugin_dir') and self._dockwidget.plugin_dir:
+        if hasattr(self._dockwidget, 'plugin_dir'):
             return self._dockwidget.plugin_dir
-        
-        # Fallback: determine from module location
-        try:
-            import os
-            # Get the filter_mate package root directory
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            # Go up from ui/styles/ to the plugin root
-            plugin_dir = os.path.dirname(os.path.dirname(current_dir))
-            if os.path.exists(os.path.join(plugin_dir, 'filter_mate.py')):
-                logger.debug(f"get_plugin_dir: Using fallback path: {plugin_dir}")
-                return plugin_dir
-        except Exception as e:
-            logger.debug(f"get_plugin_dir fallback failed: {e}")
-        
         return None

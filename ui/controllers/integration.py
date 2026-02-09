@@ -781,6 +781,14 @@ class ControllerIntegration:
                     self._filtering_controller.populate_layers_checkable_combobox(layer)
                     dw.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
                     logger.debug("Filtering layers combobox populated via controller")
+
+                    # v5.4: Also populate raster filtering layers-to-filter combobox
+                    # (same data, different widget - shows vector layers as targets)
+                    if hasattr(dw, 'checkableComboBoxLayer_filtering_raster_layers_to_filter'):
+                        try:
+                            self._populate_raster_filtering_layers(dw, layer)
+                        except Exception as re:
+                            logger.debug(f"Could not populate raster filtering layers: {re}")
             except Exception as e:
                 logger.debug(f"Could not populate filtering layers: {e}")
 
@@ -800,6 +808,74 @@ class ControllerIntegration:
         Could show loading indicator.
         """
         logger.debug("⏳ Loading project layers...")
+
+    def _populate_raster_filtering_layers(self, dw, layer) -> None:
+        """Populate the raster filtering 'layers to filter' combobox with vector layers only.
+
+        v5.4: The raster→vector filter targets only vector layers (excluding
+        the current source layer).  This mirrors the logic of
+        ``populate_layers_checkable_combobox`` but writes to the dedicated
+        raster-target widget and only includes vector layers.
+
+        Args:
+            dw: The dockwidget instance.
+            layer: The current source layer.
+        """
+        from qgis.core import QgsVectorLayer, QgsProject
+        from qgis.PyQt.QtCore import Qt
+        from ...infrastructure.utils.validation_utils import is_layer_source_available
+
+        widget = dw.checkableComboBoxLayer_filtering_raster_layers_to_filter
+        widget.clear()
+
+        project = QgsProject.instance()
+        source_id = layer.id() if layer else None
+
+        # Read saved state from layer properties
+        layer_props = dw.PROJECT_LAYERS.get(source_id, {}) if source_id else {}
+        has_layers = layer_props.get("filtering", {}).get("has_raster_layers_to_filter", False)
+        saved_ids = layer_props.get("filtering", {}).get("raster_layers_to_filter", [])
+
+        item_index = 0
+        for key, props in dw.PROJECT_LAYERS.items():
+            if key == source_id:
+                continue
+
+            if "infos" not in props:
+                continue
+
+            info = props["infos"]
+            lid = info.get("layer_id")
+            if not lid:
+                continue
+
+            layer_obj = project.mapLayer(lid)
+            if not layer_obj or not isinstance(layer_obj, QgsVectorLayer):
+                continue
+
+            if not layer_obj.isSpatial():
+                continue
+
+            if not is_layer_source_available(layer_obj, require_psycopg2=False):
+                continue
+
+            layer_name = info.get("layer_name", layer_obj.name())
+            layer_crs = info.get("layer_crs_authid", layer_obj.crs().authid())
+            geom_type = info.get("layer_geometry_type", "")
+            layer_icon = dw.icon_per_geometry_type(geom_type)
+
+            display_name = f"{layer_name} [{layer_crs}]"
+            item_data = {"layer_id": key, "layer_geometry_type": geom_type}
+            widget.addItem(layer_icon, display_name, item_data)
+
+            item = widget.model().item(item_index)
+            if has_layers and lid in saved_ids:
+                item.setCheckState(Qt.Checked)
+            else:
+                item.setCheckState(Qt.Unchecked)
+            item_index += 1
+
+        logger.debug(f"Raster filtering layers populated: {item_index} vector layers")
 
     def _cleanup_on_error(self) -> None:
         """Cleanup after setup error."""
@@ -1340,10 +1416,28 @@ class ControllerIntegration:
         return False
 
     def delegate_execute_filter(self) -> bool:
-        """Delegate filter execution to filtering controller."""
+        """Delegate filter execution to filtering controller.
+
+        v5.4: Also triggers raster→vector filtering when the raster
+        filter section is enabled (pushButton_checkable_filtering_raster_source
+        is checked).
+        """
         handled = False
         if self._filtering_controller:
             handled = self._filtering_controller.execute_filter()
+
+        # v5.4: Execute raster filter if raster source section is active
+        if self._filtering_controller and self._dockwidget:
+            raster_btn = getattr(self._dockwidget, 'pushButton_checkable_filtering_raster_source', None)
+            if raster_btn and raster_btn.isChecked():
+                try:
+                    raster_handled = self._filtering_controller.execute_raster_filter()
+                    if raster_handled:
+                        handled = True
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).error(f"Raster filter execution failed: {e}", exc_info=True)
+
         return handled
     
     def delegate_execute_unfilter(self) -> bool:

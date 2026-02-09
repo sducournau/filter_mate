@@ -352,47 +352,20 @@ class RasterExploringManager(QObject):
             logger.error(f"Failed to connect raster tool buttons: {e}")
 
     def _connect_combobox_triggers(self):
-        """Connect combobox triggers for active groupboxes.
-
-        FIX: Disconnect before connecting to prevent signal accumulation
-        if this method is called multiple times (e.g., during re-initialization).
-        """
+        """Connect combobox triggers for active groupboxes."""
         d = self.dockwidget
         try:
-            # Histogram groupbox: predicate combobox triggers filter update
             if hasattr(d, 'comboBox_predicate') and hasattr(d, 'mGroupBox_raster_histogram'):
-                try:
-                    d.comboBox_predicate.currentIndexChanged.disconnect(self._on_combobox_predicate_trigger)
-                except TypeError:
-                    pass  # Not connected yet
                 d.comboBox_predicate.currentIndexChanged.connect(self._on_combobox_predicate_trigger)
 
-            # Histogram groupbox: min/max spinboxes trigger range update
             if hasattr(d, 'doubleSpinBox_min') and hasattr(d, 'mGroupBox_raster_histogram'):
-                try:
-                    d.doubleSpinBox_min.valueChanged.disconnect(self._on_spinbox_range_trigger)
-                except TypeError:
-                    pass
                 d.doubleSpinBox_min.valueChanged.connect(self._on_spinbox_range_trigger)
             if hasattr(d, 'doubleSpinBox_max') and hasattr(d, 'mGroupBox_raster_histogram'):
-                try:
-                    d.doubleSpinBox_max.valueChanged.disconnect(self._on_spinbox_range_trigger)
-                except TypeError:
-                    pass
                 d.doubleSpinBox_max.valueChanged.connect(self._on_spinbox_range_trigger)
 
-            # Rectangle picker groupbox: rect spinboxes trigger range update
             if hasattr(d, 'doubleSpinBox_rect_min') and hasattr(d, 'mGroupBox_raster_rect_picker'):
-                try:
-                    d.doubleSpinBox_rect_min.valueChanged.disconnect(self._on_rect_spinbox_trigger)
-                except TypeError:
-                    pass
                 d.doubleSpinBox_rect_min.valueChanged.connect(self._on_rect_spinbox_trigger)
             if hasattr(d, 'doubleSpinBox_rect_max') and hasattr(d, 'mGroupBox_raster_rect_picker'):
-                try:
-                    d.doubleSpinBox_rect_max.valueChanged.disconnect(self._on_rect_spinbox_trigger)
-                except TypeError:
-                    pass
                 d.doubleSpinBox_rect_max.valueChanged.connect(self._on_rect_spinbox_trigger)
 
             logger.debug("Raster combobox triggers connected")
@@ -400,14 +373,7 @@ class RasterExploringManager(QObject):
             logger.warning(f"Error connecting raster combobox triggers: {e}")
 
     def _initialize_groupbox_exclusive_state(self):
-        """Initialize raster groupboxes to exclusive state (pixel picker default).
-
-        At startup, expand only the Pixel Picker groupbox (default tool),
-        collapse all others.
-
-        FIX: Do NOT use blockSignals on buttons - use guard flag so QButtonGroup
-        tracks which button is checked.
-        """
+        """Initialize raster groupboxes to exclusive state (pixel picker default)."""
         d = self.dockwidget
         try:
             default_groupbox = None
@@ -424,14 +390,10 @@ class RasterExploringManager(QObject):
                     gb.setCollapsed(True)
                 gb.blockSignals(False)
 
-            # Sync buttons - do NOT use blockSignals, so QButtonGroup tracks
-            # which button is checked. Guard prevents cascading.
-            self._updating_groupboxes = True
-            try:
-                for button, groupbox in self._tool_bindings.items():
-                    button.setChecked(groupbox == default_groupbox)
-            finally:
-                self._updating_groupboxes = False
+            for button, groupbox in self._tool_bindings.items():
+                button.blockSignals(True)
+                button.setChecked(groupbox == default_groupbox)
+                button.blockSignals(False)
 
             logger.debug("Raster groupboxes initialized to exclusive state")
         except Exception as e:
@@ -560,23 +522,18 @@ class RasterExploringManager(QObject):
             logger.warning(f"Error updating groupbox state: {e}")
 
     def _on_groupbox_collapsed_changed(self, groupbox, collapsed):
-        """Handle raster groupbox expand/collapse change for exclusive behavior.
-
-        When user manually expands a collapsed groupbox (by clicking the arrow),
-        this triggers exclusive behavior - all other groupboxes are collapsed.
-
-        FIX: Do NOT set the guard here - _ensure_exclusive_groupbox manages
-        its own guard internally. Setting it before calling caused the method
-        to return immediately, making groupbox-arrow expansion non-functional.
-        """
+        """Handle raster groupbox expand/collapse for exclusive behavior."""
         if collapsed:
             return
         if self._updating_groupboxes:
             return
         try:
+            self._updating_groupboxes = True
             self._ensure_exclusive_groupbox(groupbox, True)
         except Exception as e:
             logger.warning(f"Error handling raster groupbox collapse change: {e}")
+        finally:
+            self._updating_groupboxes = False
 
     def _on_pixel_picker_button_clicked(self):
         """Handle click on raster pixel picker button."""
@@ -749,10 +706,7 @@ class RasterExploringManager(QObject):
         pass
 
     def _on_reset_range_clicked(self):
-        """Reset min/max spinboxes to full data range from statistics.
-
-        FIX: blockSignals to prevent cascading _on_spinbox_range_trigger.
-        """
+        """Reset min/max spinboxes to full data range from statistics."""
         d = self.dockwidget
         try:
             data_min = None
@@ -763,63 +717,29 @@ class RasterExploringManager(QObject):
 
             if data_min is not None and data_max is not None:
                 if hasattr(d, 'doubleSpinBox_min'):
-                    d.doubleSpinBox_min.blockSignals(True)
+                    d.doubleSpinBox_min.setValue(data_min)
                 if hasattr(d, 'doubleSpinBox_max'):
-                    d.doubleSpinBox_max.blockSignals(True)
-
-                try:
-                    if hasattr(d, 'doubleSpinBox_min'):
-                        d.doubleSpinBox_min.setValue(data_min)
-                    if hasattr(d, 'doubleSpinBox_max'):
-                        d.doubleSpinBox_max.setValue(data_max)
-                finally:
-                    if hasattr(d, 'doubleSpinBox_min'):
-                        d.doubleSpinBox_min.blockSignals(False)
-                    if hasattr(d, 'doubleSpinBox_max'):
-                        d.doubleSpinBox_max.blockSignals(False)
-
+                    d.doubleSpinBox_max.setValue(data_max)
                 if self._histogram:
                     self._histogram.set_range(data_min, data_max)
-
-                # Reset pixel range flag so next pixel pick starts fresh
-                self._pixel_range_initialized = False
-
                 show_info("FilterMate", f"Range reset to data bounds: [{data_min:.2f}, {data_max:.2f}]")
-                logger.info(f"Range reset to [{data_min:.2f}, {data_max:.2f}]")
             else:
                 show_warning("FilterMate", "Statistics not available. Click Refresh first.")
         except Exception as e:
             logger.error(f"Error resetting range: {e}")
 
     def _on_pixel_values_picked(self, min_val: float, max_val: float):
-        """Handle min/max values picked from raster.
-
-        FIX: blockSignals to prevent cascading handler calls
-        (each setValue fires _on_spinbox_range_trigger / _on_rect_spinbox_trigger).
-        """
+        """Handle min/max values picked from raster."""
         d = self.dockwidget
         logger.debug(f"Pixel values picked: [{min_val:.2f}, {max_val:.2f}]")
-
-        # Block ALL spinboxes to prevent cascading
-        all_spinboxes = ('doubleSpinBox_min', 'doubleSpinBox_max', 'doubleSpinBox_rect_min', 'doubleSpinBox_rect_max')
-        for sb_name in all_spinboxes:
-            if hasattr(d, sb_name):
-                getattr(d, sb_name).blockSignals(True)
-
-        try:
-            if hasattr(d, 'doubleSpinBox_min'):
-                d.doubleSpinBox_min.setValue(min_val)
-            if hasattr(d, 'doubleSpinBox_max'):
-                d.doubleSpinBox_max.setValue(max_val)
-            if hasattr(d, 'doubleSpinBox_rect_min'):
-                d.doubleSpinBox_rect_min.setValue(min_val)
-            if hasattr(d, 'doubleSpinBox_rect_max'):
-                d.doubleSpinBox_rect_max.setValue(max_val)
-        finally:
-            for sb_name in all_spinboxes:
-                if hasattr(d, sb_name):
-                    getattr(d, sb_name).blockSignals(False)
-
+        if hasattr(d, 'doubleSpinBox_min'):
+            d.doubleSpinBox_min.setValue(min_val)
+        if hasattr(d, 'doubleSpinBox_max'):
+            d.doubleSpinBox_max.setValue(max_val)
+        if hasattr(d, 'doubleSpinBox_rect_min'):
+            d.doubleSpinBox_rect_min.setValue(min_val)
+        if hasattr(d, 'doubleSpinBox_rect_max'):
+            d.doubleSpinBox_rect_max.setValue(max_val)
         if self._histogram:
             self._histogram.set_range(min_val, max_val)
 
@@ -852,12 +772,7 @@ class RasterExploringManager(QObject):
         show_info("FilterMate - Pixel Values", message)
 
     def _on_add_pixel_to_selection_clicked(self):
-        """Add currently displayed pixel value to range selection.
-
-        FIX: Use _pixel_range_initialized flag instead of checking value == 0.0
-        (avoids false positive when raster legitimately contains pixel value 0.0).
-        FIX: blockSignals on all spinboxes to prevent cascading.
-        """
+        """Add currently displayed pixel value to range selection."""
         d = self.dockwidget
         try:
             if not hasattr(d, 'label_pixel_value'):
@@ -878,35 +793,18 @@ class RasterExploringManager(QObject):
             current_min = d.doubleSpinBox_rect_min.value() if hasattr(d, 'doubleSpinBox_rect_min') else None
             current_max = d.doubleSpinBox_rect_max.value() if hasattr(d, 'doubleSpinBox_rect_max') else None
 
-            has_existing_range = getattr(self, '_pixel_range_initialized', False)
-            if not has_existing_range:
+            is_first_value = (current_min == 0.0 and current_max == 0.0)
+            if is_first_value:
                 new_min = pixel_value
                 new_max = pixel_value
-                self._pixel_range_initialized = True
             else:
                 new_min = min(current_min, pixel_value) if current_min is not None else pixel_value
                 new_max = max(current_max, pixel_value) if current_max is not None else pixel_value
 
-            # Block ALL spinboxes to prevent cascading
-            all_spinboxes = ('doubleSpinBox_min', 'doubleSpinBox_max', 'doubleSpinBox_rect_min', 'doubleSpinBox_rect_max')
-            for sb_name in all_spinboxes:
-                if hasattr(d, sb_name):
-                    getattr(d, sb_name).blockSignals(True)
-
-            try:
-                if hasattr(d, 'doubleSpinBox_min'):
-                    d.doubleSpinBox_min.setValue(new_min)
-                if hasattr(d, 'doubleSpinBox_max'):
-                    d.doubleSpinBox_max.setValue(new_max)
-                if hasattr(d, 'doubleSpinBox_rect_min'):
-                    d.doubleSpinBox_rect_min.setValue(new_min)
-                if hasattr(d, 'doubleSpinBox_rect_max'):
-                    d.doubleSpinBox_rect_max.setValue(new_max)
-            finally:
-                for sb_name in all_spinboxes:
-                    if hasattr(d, sb_name):
-                        getattr(d, sb_name).blockSignals(False)
-
+            if hasattr(d, 'doubleSpinBox_rect_min'):
+                d.doubleSpinBox_rect_min.setValue(new_min)
+            if hasattr(d, 'doubleSpinBox_rect_max'):
+                d.doubleSpinBox_rect_max.setValue(new_max)
             if self._histogram:
                 self._histogram.set_range(new_min, new_max)
 
@@ -1105,11 +1003,7 @@ class RasterExploringManager(QObject):
             self.clear_statistics_display()
 
     def _on_stats_computed(self, stats: dict):
-        """Handle async raster statistics completion.
-
-        FIX: blockSignals on spinboxes during programmatic setValue
-        to prevent cascading _on_spinbox_range_trigger.
-        """
+        """Handle async raster statistics completion."""
         d = self.dockwidget
         try:
             self._update_statistics_display(
@@ -1119,18 +1013,12 @@ class RasterExploringManager(QObject):
             )
 
             if hasattr(d, 'doubleSpinBox_min') and hasattr(d, 'doubleSpinBox_max'):
-                d.doubleSpinBox_min.blockSignals(True)
-                d.doubleSpinBox_max.blockSignals(True)
-                try:
-                    d.doubleSpinBox_min.setMinimum(stats['min'])
-                    d.doubleSpinBox_min.setMaximum(stats['max'])
-                    d.doubleSpinBox_max.setMinimum(stats['min'])
-                    d.doubleSpinBox_max.setMaximum(stats['max'])
-                    d.doubleSpinBox_min.setValue(stats['min'])
-                    d.doubleSpinBox_max.setValue(stats['max'])
-                finally:
-                    d.doubleSpinBox_min.blockSignals(False)
-                    d.doubleSpinBox_max.blockSignals(False)
+                d.doubleSpinBox_min.setMinimum(stats['min'])
+                d.doubleSpinBox_min.setMaximum(stats['max'])
+                d.doubleSpinBox_max.setMinimum(stats['min'])
+                d.doubleSpinBox_max.setMaximum(stats['max'])
+                d.doubleSpinBox_min.setValue(stats['min'])
+                d.doubleSpinBox_max.setValue(stats['max'])
 
             layer = d._get_current_exploring_layer()
             if layer:
@@ -1343,48 +1231,25 @@ class RasterExploringManager(QObject):
     # ================================================================
 
     def _ensure_exclusive_groupbox(self, current_groupbox, checked):
-        """Ensure only one raster groupbox is expanded/checked at a time.
-
-        When a groupbox is checked, all others are collapsed and unchecked.
-        Also updates the associated buttons to stay in sync.
-
-        FIX: Do NOT use blockSignals on buttons - let QButtonGroup track
-        which button is checked. Use guard flag to prevent cascading.
-        FIX: Removed erroneous histogram special case that unchecked ALL buttons.
-        FIX: Disable histogram painting during transition to prevent access violation.
-        """
+        """Ensure only one raster groupbox is expanded/checked at a time."""
         d = self.dockwidget
         if self._updating_groupboxes:
             return
 
         if not checked:
-            # FIX: Set guard flag for collapse path to prevent signal loops
-            try:
-                self._updating_groupboxes = True
-
-                current_groupbox.blockSignals(True)
-                current_groupbox.setCollapsed(True)
-                current_groupbox.blockSignals(False)
-                # Do NOT blockSignals on buttons - let QButtonGroup track the change
-                for button, groupbox in self._tool_bindings.items():
-                    if groupbox == current_groupbox:
-                        if button.isChecked():
-                            button.setChecked(False)
-                        break
-            finally:
-                self._updating_groupboxes = False
+            current_groupbox.blockSignals(True)
+            current_groupbox.setCollapsed(True)
+            current_groupbox.blockSignals(False)
+            for button, groupbox in self._tool_bindings.items():
+                if groupbox == current_groupbox:
+                    button.blockSignals(True)
+                    button.setChecked(False)
+                    button.blockSignals(False)
+                    break
             return
 
         try:
             self._updating_groupboxes = True
-
-            # Disable painting on histogram canvas BEFORE setCollapsed(False).
-            # Qt's setCollapsed triggers moveRect -> drawWidget -> paintEvent
-            # synchronously, but the widget's backing store may not be ready.
-            histogram_widget = self._histogram
-            if histogram_widget:
-                histogram_widget.setUpdatesEnabled(False)
-
             for gb in self._exclusive_groupboxes:
                 gb.blockSignals(True)
                 if gb == current_groupbox:
@@ -1395,50 +1260,35 @@ class RasterExploringManager(QObject):
                     gb.setCollapsed(True)
                 gb.blockSignals(False)
 
-            # Sync ALL checkable buttons - do NOT blockSignals so QButtonGroup
-            # stays in sync. Guard flag prevents cascading side effects.
             for button, groupbox in self._tool_bindings.items():
-                target_state = (groupbox == current_groupbox)
-                if button.isChecked() != target_state:
-                    button.setChecked(target_state)
+                button.blockSignals(True)
+                button.setChecked(groupbox == current_groupbox)
+                button.blockSignals(False)
 
-            # Re-enable painting after the transition is complete.
-            # QTimer.singleShot(0) executes at next event loop iteration,
-            # after setCollapsed has finished its internal geometry changes.
-            if histogram_widget:
-                from qgis.PyQt.QtCore import QTimer
-                QTimer.singleShot(0, lambda w=histogram_widget: w.setUpdatesEnabled(True))
+            if hasattr(d, 'mGroupBox_raster_histogram') and current_groupbox == d.mGroupBox_raster_histogram:
+                for button in self._tool_bindings.keys():
+                    button.blockSignals(True)
+                    button.setChecked(False)
+                    button.blockSignals(False)
 
         except Exception as e:
             logger.warning(f"Error ensuring exclusive groupbox: {e}")
-            # Ensure updates re-enabled even on error
-            if histogram_widget:
-                histogram_widget.setUpdatesEnabled(True)
         finally:
             self._updating_groupboxes = False
 
     def _uncheck_tool_buttons(self):
-        """Uncheck all checkable raster tool buttons (exclusive group only).
-
-        pushButton_raster_all_bands is NOT unchecked here - it's an
-        independent toggle for multi-band mode, not part of the exclusive group.
-        FIX: Do NOT blockSignals - use guard so QButtonGroup stays in sync.
-        """
+        """Uncheck all checkable raster tool buttons (exclusive group only)."""
         d = self.dockwidget
-        self._updating_groupboxes = True
-        try:
-            checkable_buttons = [
-                'pushButton_raster_pixel_picker',
-                'pushButton_raster_rect_picker',
-                'pushButton_raster_sync_histogram',
-            ]
-            for btn_name in checkable_buttons:
-                if hasattr(d, btn_name):
-                    btn = getattr(d, btn_name)
-                    if btn.isChecked():
-                        btn.setChecked(False)
-        finally:
-            self._updating_groupboxes = False
+        checkable_buttons = [
+            'pushButton_raster_pixel_picker',
+            'pushButton_raster_rect_picker',
+            'pushButton_raster_sync_histogram',
+        ]
+        for btn_name in checkable_buttons:
+            if hasattr(d, btn_name):
+                btn = getattr(d, btn_name)
+                if btn.isChecked():
+                    btn.setChecked(False)
 
     def _trigger_combobox_for_groupbox(self, groupbox):
         """Trigger appropriate combobox action when a groupbox becomes active."""
@@ -1460,18 +1310,11 @@ class RasterExploringManager(QObject):
             logger.warning(f"Error triggering combobox for groupbox: {e}")
 
     def _sync_button_from_groupbox(self, button, checked):
-        """Sync raster tool button state from groupbox change.
-
-        FIX: Do NOT blockSignals - let QButtonGroup track the change.
-        The guard prevents _ensure_exclusive_groupbox from cascading.
-        """
+        """Sync raster tool button state from groupbox change."""
         try:
-            if button.isChecked() != checked:
-                self._updating_groupboxes = True
-                try:
-                    button.setChecked(checked)
-                finally:
-                    self._updating_groupboxes = False
+            button.blockSignals(True)
+            button.setChecked(checked)
+            button.blockSignals(False)
         except Exception as e:
             logger.warning(f"Error syncing button state: {e}")
 

@@ -1387,7 +1387,7 @@ class ExportingController(BaseController):
             exporter = RasterExporter()
             
             # Connect progress signal
-            def on_progress(value: int, message: str = ""):
+            def on_progress(value: int):
                 self._export_progress = value / 100.0
                 self._notify_progress(self._export_progress)
             

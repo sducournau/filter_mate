@@ -56,7 +56,6 @@ class DimensionsManager(LayoutManagerBase):
     Extracted methods from dockwidget:
     - apply_dynamic_dimensions() -> apply()
     - _apply_dockwidget_dimensions()
-    - _apply_widget_dimensions()
     - _apply_frame_dimensions()
     - _apply_qgis_widget_dimensions()
     - _harmonize_checkable_pushbuttons()
@@ -140,7 +139,6 @@ class DimensionsManager(LayoutManagerBase):
             self.apply_dockwidget_dimensions()
             
             # Apply dimensions in logical groups
-            self.apply_widget_dimensions()
             self.apply_frame_dimensions()
             self.harmonize_checkable_pushbuttons()
             self.apply_layout_spacing()
@@ -187,22 +185,6 @@ class DimensionsManager(LayoutManagerBase):
             if current_size.width() > preferred_width or current_size.height() > preferred_height:
                 self.dockwidget.resize(preferred_width, preferred_height)
                 logger.debug(f"Resized dockwidget to preferred size: {preferred_width}x{preferred_height}px")
-    
-    def apply_widget_dimensions(self) -> None:
-        """
-        [DEPRECATED v4.0.3] Widget dimensions now managed by QSS.
-        
-        All widget heights (ComboBox, LineEdit, SpinBox, GroupBox) are defined in
-        resources/styles/default.qss with standardized 20px height.
-        
-        This function is kept for backward compatibility but does nothing.
-        QSS rules override any Python-side dimension settings.
-        
-        TODO Note: Remove this function and entire DimensionsManager class.
-        """
-        # Widget dimensions managed by QSS - no Python intervention needed
-        logger.debug("Widget dimensions managed by QSS (20px standard)")
-        pass
     
     def _apply_exploring_groupbox_dimensions(self) -> None:
         """
@@ -283,16 +265,18 @@ class DimensionsManager(LayoutManagerBase):
         # Get widget_keys padding from config (widget_keys_config already loaded above)
         widget_keys_padding = widget_keys_config.get('padding', 2) if widget_keys_config else 2
         
-        # Apply to widget keys containers - FIX 2026-02-07: Zero padding/margin for tight icon centering
+        # Apply to widget keys containers with enhanced styling
         for widget_name in ['widget_exploring_keys', 'widget_raster_keys', 'widget_filtering_keys', 'widget_exporting_keys']:
             if hasattr(self.dockwidget, widget_name):
                 widget = getattr(self.dockwidget, widget_name)
                 widget.setMinimumWidth(widget_keys_min_width)
                 widget.setMaximumWidth(widget_keys_max_width)
+                # Apply consistent padding via layout margins (0 for raster_keys)
                 layout = widget.layout()
                 if layout:
-                    layout.setContentsMargins(0, 0, 0, 0)
-                    layout.setSpacing(0)
+                    padding = 0 if widget_name == 'widget_raster_keys' else widget_keys_padding
+                    layout.setContentsMargins(padding, padding, padding, padding)
+                    layout.setSpacing(0)  # No extra spacing in container
         
         # Apply to frame_exploring with size policy
         if hasattr(self.dockwidget, 'frame_exploring'):
@@ -348,19 +332,19 @@ class DimensionsManager(LayoutManagerBase):
             else:
                 # Fallback values based on profile if config not available
                 if current_profile == DisplayProfile.COMPACT:
-                    pushbutton_min_size = 28
-                    pushbutton_max_size = 34
-                    pushbutton_icon_size = 22
-                    button_spacing = 1
-                elif current_profile == DisplayProfile.HIDPI:
-                    pushbutton_min_size = 44
-                    pushbutton_max_size = 52
-                    pushbutton_icon_size = 32
+                    pushbutton_min_size = 26
+                    pushbutton_max_size = 32
+                    pushbutton_icon_size = 16
                     button_spacing = 2
+                elif current_profile == DisplayProfile.HIDPI:
+                    pushbutton_min_size = 36
+                    pushbutton_max_size = 44
+                    pushbutton_icon_size = 24
+                    button_spacing = 6
                 else:  # NORMAL
                     pushbutton_min_size = 30
                     pushbutton_max_size = 36
-                    pushbutton_icon_size = 22
+                    pushbutton_icon_size = 18
                     button_spacing = 4
             
             # Get all checkable pushbuttons with consistent naming pattern
@@ -811,17 +795,17 @@ class DimensionsManager(LayoutManagerBase):
                             layout.setAlignment(item.widget(), Qt.AlignHCenter)
             
             # Apply consistent styling to parent container layouts
-            # FIX 2026-02-07: Zero margins for tight icon centering
             container_layouts = [
                 ('verticalLayout_exploring_container', 'exploring'),
                 ('verticalLayout_filtering_keys_container', 'filtering'),
                 ('verticalLayout_exporting_keys_container', 'exporting')
             ]
-
+            
             for layout_name, section in container_layouts:
                 if hasattr(self.dockwidget, layout_name):
                     layout = getattr(self.dockwidget, layout_name)
-                    layout.setContentsMargins(0, 0, 0, 0)
+                    layout.setContentsMargins(widget_keys_padding, widget_keys_padding, 
+                                            widget_keys_padding, widget_keys_padding)
                     layout.setSpacing(0)
             
             # Apply consistent margins to parent horizontal/grid layouts
@@ -857,15 +841,16 @@ class DimensionsManager(LayoutManagerBase):
             for widget_name, section in parent_widgets:
                 if hasattr(self.dockwidget, widget_name):
                     widget = getattr(self.dockwidget, widget_name)
-                    min_width = widget_keys_config.get('min_width', 32) if widget_keys_config else 32
-                    max_width = widget_keys_config.get('max_width', 32) if widget_keys_config else 32
+                    min_width = widget_keys_config.get('min_width', 34) if widget_keys_config else 34
+                    max_width = widget_keys_config.get('max_width', 40) if widget_keys_config else 40
                     widget.setMinimumWidth(min_width)
                     widget.setMaximumWidth(max_width)
-
+                    
                     parent_layout = widget.layout()
                     if parent_layout:
-                        # FIX 2026-02-07: Zero margins for all widget_keys
-                        parent_layout.setContentsMargins(0, 0, 0, 0)
+                        # Apply 0 margins for widget_raster_keys
+                        padding = 0 if widget_name == 'widget_raster_keys' else widget_keys_padding
+                        parent_layout.setContentsMargins(padding, padding, padding, padding)
                         parent_layout.setAlignment(Qt.AlignCenter)
             
             # Apply consistent spacing to content layouts
@@ -891,9 +876,8 @@ class DimensionsManager(LayoutManagerBase):
             for layout_name, description in main_page_layouts:
                 if hasattr(self.dockwidget, layout_name):
                     layout = getattr(self.dockwidget, layout_name)
-                    # FIX 2026-02-07: Zero margins for tight layout
-                    layout.setContentsMargins(0, 0, 0, 0)
-                    layout.setSpacing(2)
+                    layout.setContentsMargins(2, 2, 2, 2)
+                    layout.setSpacing(4)
             
             logger.debug(f"Aligned key layouts with {button_spacing}px spacing, {widget_keys_padding}px padding")
             

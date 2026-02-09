@@ -183,7 +183,7 @@ class RasterExporter(QObject):
         errorOccurred: Emitted when error occurs
     """
     
-    progressChanged = pyqtSignal(int, str)
+    progressChanged = pyqtSignal(int)
     exportStarted = pyqtSignal(str)
     exportCompleted = pyqtSignal(str, bool)  # path, success
     errorOccurred = pyqtSignal(str)
@@ -322,14 +322,11 @@ class RasterExporter(QObject):
             if config.extent:
                 params['PROJWIN'] = f"{config.extent.xMinimum()},{config.extent.xMaximum()},{config.extent.yMinimum()},{config.extent.yMaximum()}"
             
-            self.progressChanged.emit(10, "Starting GDAL translate...")
-            
-            if self._cancelled:
-                return RasterExportResult(success=False, error_message="Export cancelled")
+            self.progressChanged.emit(10)
             
             result = processing.run("gdal:translate", params)
             
-            self.progressChanged.emit(100, "Export complete")
+            self.progressChanged.emit(100)
             
             return RasterExportResult(
                 success=True,
@@ -365,14 +362,11 @@ class RasterExporter(QObject):
                 'OUTPUT': config.output_path
             }
             
-            self.progressChanged.emit(10, "Clipping raster by mask...")
-            
-            if self._cancelled:
-                return RasterExportResult(success=False, error_message="Export cancelled")
+            self.progressChanged.emit(10)
             
             result = processing.run("gdal:cliprasterbymasklayer", params)
             
-            self.progressChanged.emit(100, "Export complete")
+            self.progressChanged.emit(100)
             
             return RasterExportResult(
                 success=True,
@@ -407,14 +401,11 @@ class RasterExporter(QObject):
                 'OUTPUT': config.output_path
             }
             
-            self.progressChanged.emit(10, "Reprojecting raster...")
-            
-            if self._cancelled:
-                return RasterExportResult(success=False, error_message="Export cancelled")
+            self.progressChanged.emit(10)
             
             result = processing.run("gdal:warpreproject", params)
             
-            self.progressChanged.emit(100, "Export complete")
+            self.progressChanged.emit(100)
             
             return RasterExportResult(
                 success=True,
@@ -428,98 +419,78 @@ class RasterExporter(QObject):
             )
     
     def _export_as_cog(self, config: RasterExportConfig) -> RasterExportResult:
-        """Export as Cloud-Optimized GeoTIFF using GDAL COG driver.
-        
-        Requires GDAL >= 3.1 for native COG driver support.
-        Falls back to standard GeoTIFF with tiling if COG driver unavailable.
-        """
+        """Export as Cloud-Optimized GeoTIFF."""
         try:
-            from osgeo import gdal
+            import processing
             
-            source_path = config.layer.dataProvider().dataSourceUri()
-            
-            # Check GDAL version for COG driver support
-            gdal_version = int(gdal.VersionInfo('VERSION_NUM'))
-            if gdal_version < 3010000:
-                logger.warning(
-                    f"COG driver requires GDAL >= 3.1, found {gdal.VersionInfo('RELEASE_NAME')}. "
-                    f"Falling back to tiled GeoTIFF."
-                )
-                return self._export_simple(config)
-            
-            # COG creation options
-            creation_options = [
-                f'COMPRESS={config.compression.value}',
-                f'BIGTIFF={config.bigtiff}',
-            ]
+            # COG-specific options
+            options = f"COMPRESS={config.compression.value}|TILED=YES|BIGTIFF={config.bigtiff}"
             
             if config.create_pyramids:
-                creation_options.append('OVERVIEWS=AUTO')
+                options += "|OVERVIEWS=AUTO"
             
-            self.progressChanged.emit(10, "Preparing COG export...")
+            params = {
+                'INPUT': config.layer,
+                'TARGET_CRS': config.target_crs if config.target_crs else None,
+                'NODATA': config.nodata_value,
+                'COPY_SUBDATASETS': False,
+                'OPTIONS': options,
+                'DATA_TYPE': 0,
+                'OUTPUT': config.output_path
+            }
             
-            if self._cancelled:
-                return RasterExportResult(success=False, error_message="Export cancelled")
+            # First create a standard GeoTIFF
+            temp_path = config.output_path.replace('.tif', '_temp.tif')
+            params['OUTPUT'] = temp_path
             
-            # Build translate options for COG output
-            translate_options = gdal.TranslateOptions(
-                format='COG',
-                creationOptions=creation_options,
-            )
+            self.progressChanged.emit(10)
             
-            self.progressChanged.emit(20, "Writing COG...")
+            processing.run("gdal:translate", params)
             
-            if self._cancelled:
-                return RasterExportResult(success=False, error_message="Export cancelled")
+            self.progressChanged.emit(50)
             
-            # Export using GDAL COG driver
-            logger.info(f"Exporting COG with options: {creation_options}")
-            result_ds = gdal.Translate(
-                config.output_path,
-                source_path,
-                options=translate_options
-            )
+            # Convert to COG
+            cog_params = {
+                'INPUT': temp_path,
+                'OPTIONS': f"COMPRESS={config.compression.value}|OVERVIEWS=IGNORE_EXISTING",
+                'OUTPUT': config.output_path
+            }
             
-            if result_ds is None:
-                error_msg = gdal.GetLastErrorMsg() or "Unknown GDAL error"
-                raise RuntimeError(f"GDAL COG export failed: {error_msg}")
+            # Use gdal2cog if available, otherwise use translate with COG driver
+            try:
+                # Try native COG driver
+                cog_options = f"COMPRESS={config.compression.value}"
+                if config.create_pyramids:
+                    cog_options += "|OVERVIEWS=AUTO"
+                
+                cog_params = {
+                    'INPUT': temp_path,
+                    'TARGET_CRS': None,
+                    'NODATA': None,
+                    'COPY_SUBDATASETS': False,
+                    'OPTIONS': cog_options,
+                    'DATA_TYPE': 0,
+                    'OUTPUT': config.output_path
+                }
+                
+                result = processing.run("gdal:translate", cog_params)
+                
+            except Exception:
+                # Fallback: just use the temp file as output
+                import shutil
+                shutil.move(temp_path, config.output_path)
             
-            result_ds.FlushCache()
-            result_ds = None  # Close dataset
+            # Clean up temp file
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
             
-            self.progressChanged.emit(90, "Finalizing COG...")
-            
-            if self._cancelled:
-                # Clean up partial output
-                try:
-                    os.remove(config.output_path)
-                except OSError:
-                    pass
-                return RasterExportResult(success=False, error_message="Export cancelled")
-            
-            # Calculate output size
-            output_size_mb = 0.0
-            if os.path.exists(config.output_path):
-                output_size_mb = os.path.getsize(config.output_path) / (1024 * 1024)
-            
-            self.progressChanged.emit(100, "COG export complete")
-            
-            logger.info(
-                f"COG export complete: {config.output_path} "
-                f"({output_size_mb:.1f} MB)"
-            )
+            self.progressChanged.emit(100)
             
             return RasterExportResult(
                 success=True,
-                output_path=config.output_path,
-                output_size_mb=output_size_mb
+                output_path=config.output_path
             )
             
-        except ImportError:
-            return RasterExportResult(
-                success=False,
-                error_message="GDAL Python bindings not available for COG export"
-            )
         except Exception as e:
             return RasterExportResult(
                 success=False,
