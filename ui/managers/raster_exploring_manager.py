@@ -77,6 +77,90 @@ class RasterExploringManager(QObject):
         self._setup_tool_buttons()  # includes _load_tool_icons() and signal connections
         logger.info("RasterExploringManager setup complete")
 
+    def teardown(self):
+        """Disconnect all signals connected during setup(). Call on plugin close/reload."""
+        d = self.dockwidget
+        try:
+            # QButtonGroup signal
+            if self._tool_button_group:
+                try:
+                    self._tool_button_group.buttonToggled.disconnect(self._on_button_group_toggled)
+                except (TypeError, RuntimeError):
+                    pass
+
+            # Groupbox toggled/collapsed lambdas (blanket disconnect needed for lambdas)
+            for button, groupbox in self._tool_bindings.items():
+                try:
+                    groupbox.toggled.disconnect()  # Blanket: connexion via lambda, pas de ref au slot précédent
+                except (TypeError, RuntimeError):
+                    pass
+            for gb in self._exclusive_groupboxes:
+                try:
+                    gb.collapsedStateChanged.disconnect()  # Blanket: connexion via lambda, pas de ref au slot précédent
+                except (TypeError, RuntimeError):
+                    pass
+
+            # Action buttons
+            button_slot_pairs = [
+                ('pushButton_raster_sync_histogram', 'clicked', self._on_sync_histogram_action),
+                ('pushButton_raster_reset_range', 'clicked', self._on_reset_range_clicked),
+                ('pushButton_raster_pixel_picker', 'clicked', self._on_pixel_picker_button_clicked),
+                ('pushButton_raster_rect_picker', 'clicked', self._on_rect_picker_clicked),
+                ('pushButton_raster_all_bands', 'toggled', self._on_all_bands_toggled),
+                ('pushButton_add_pixel_to_selection', 'clicked', self._on_add_pixel_to_selection_clicked),
+            ]
+            for widget_name, signal_name, slot in button_slot_pairs:
+                if hasattr(d, widget_name):
+                    try:
+                        getattr(getattr(d, widget_name), signal_name).disconnect(slot)
+                    except (TypeError, RuntimeError):
+                        pass
+
+            # Combobox triggers
+            combobox_slot_pairs = [
+                ('comboBox_predicate', 'currentIndexChanged', self._on_combobox_predicate_trigger),
+                ('doubleSpinBox_min', 'valueChanged', self._on_spinbox_range_trigger),
+                ('doubleSpinBox_max', 'valueChanged', self._on_spinbox_range_trigger),
+                ('doubleSpinBox_rect_min', 'valueChanged', self._on_rect_spinbox_trigger),
+                ('doubleSpinBox_rect_max', 'valueChanged', self._on_rect_spinbox_trigger),
+            ]
+            for widget_name, signal_name, slot in combobox_slot_pairs:
+                if hasattr(d, widget_name):
+                    try:
+                        getattr(getattr(d, widget_name), signal_name).disconnect(slot)
+                    except (TypeError, RuntimeError):
+                        pass
+
+            # Histogram signals
+            if self._histogram:
+                try:
+                    self._histogram.rangeChanged.disconnect(self._on_histogram_range_changed)
+                except (TypeError, RuntimeError):
+                    pass
+                try:
+                    self._histogram.rangeSelectionFinished.disconnect(self._on_histogram_range_finished)
+                except (TypeError, RuntimeError):
+                    pass
+
+            # Cancel pending async task
+            if self._stats_task:
+                try:
+                    self._stats_task.cancel()
+                except Exception:
+                    pass
+
+            self._pixel_picker_tool = None
+            self._histogram = None
+            self._stats_task = None
+            self._tool_button_group = None
+            self._tool_bindings = {}
+            self._exclusive_groupboxes = []
+
+            logger.info("RasterExploringManager teardown complete")
+
+        except Exception as e:
+            logger.error(f"RasterExploringManager teardown failed: {e}")
+
     # ================================================================
     # SETUP METHODS
     # ================================================================
@@ -430,23 +514,6 @@ class RasterExploringManager(QObject):
                 self._refresh_statistics(layer=layer)
                 self._update_histogram(layer)
 
-    def _on_range_changed(self, value: float):
-        """Synchronize spinbox range with interactive histogram."""
-        d = self.dockwidget
-        if hasattr(d, 'doubleSpinBox_min') and hasattr(d, 'doubleSpinBox_max'):
-            min_val = d.doubleSpinBox_min.value()
-            max_val = d.doubleSpinBox_max.value()
-            logger.debug(f"Raster range changed: {min_val} - {max_val}")
-            if self._histogram:
-                self._histogram.set_range(min_val, max_val)
-
-    def _on_predicate_changed(self, index: int):
-        """Handle predicate change for raster filtering."""
-        d = self.dockwidget
-        if hasattr(d, 'comboBox_predicate'):
-            predicate = d.comboBox_predicate.currentText()
-            logger.debug(f"Raster predicate changed to: {predicate}")
-
     def _on_refresh_stats(self):
         """Refresh raster statistics for current layer/band."""
         d = self.dockwidget
@@ -587,7 +654,9 @@ class RasterExploringManager(QObject):
             iface.mapCanvas().setMapTool(self._pixel_picker_tool)
 
             if hasattr(d, 'pushButton_raster_pixel_picker'):
+                d.pushButton_raster_pixel_picker.blockSignals(True)
                 d.pushButton_raster_pixel_picker.setChecked(True)
+                d.pushButton_raster_pixel_picker.blockSignals(False)
 
             show_info("FilterMate", "Click on raster to pick value. Drag for range. Press Escape to cancel.")
             logger.info("Pixel picker tool activated")
@@ -619,7 +688,9 @@ class RasterExploringManager(QObject):
             if not layer or not isinstance(layer, QgsRasterLayer):
                 show_warning("FilterMate", "Please select a raster layer first")
                 if hasattr(d, 'pushButton_raster_rect_picker'):
+                    d.pushButton_raster_rect_picker.blockSignals(True)
                     d.pushButton_raster_rect_picker.setChecked(False)
+                    d.pushButton_raster_rect_picker.blockSignals(False)
                 return
 
             if self._pixel_picker_tool is None:
@@ -717,9 +788,13 @@ class RasterExploringManager(QObject):
 
             if data_min is not None and data_max is not None:
                 if hasattr(d, 'doubleSpinBox_min'):
+                    d.doubleSpinBox_min.blockSignals(True)
                     d.doubleSpinBox_min.setValue(data_min)
+                    d.doubleSpinBox_min.blockSignals(False)
                 if hasattr(d, 'doubleSpinBox_max'):
+                    d.doubleSpinBox_max.blockSignals(True)
                     d.doubleSpinBox_max.setValue(data_max)
+                    d.doubleSpinBox_max.blockSignals(False)
                 if self._histogram:
                     self._histogram.set_range(data_min, data_max)
                 show_info("FilterMate", f"Range reset to data bounds: [{data_min:.2f}, {data_max:.2f}]")
@@ -733,13 +808,21 @@ class RasterExploringManager(QObject):
         d = self.dockwidget
         logger.debug(f"Pixel values picked: [{min_val:.2f}, {max_val:.2f}]")
         if hasattr(d, 'doubleSpinBox_min'):
+            d.doubleSpinBox_min.blockSignals(True)
             d.doubleSpinBox_min.setValue(min_val)
+            d.doubleSpinBox_min.blockSignals(False)
         if hasattr(d, 'doubleSpinBox_max'):
+            d.doubleSpinBox_max.blockSignals(True)
             d.doubleSpinBox_max.setValue(max_val)
+            d.doubleSpinBox_max.blockSignals(False)
         if hasattr(d, 'doubleSpinBox_rect_min'):
+            d.doubleSpinBox_rect_min.blockSignals(True)
             d.doubleSpinBox_rect_min.setValue(min_val)
+            d.doubleSpinBox_rect_min.blockSignals(False)
         if hasattr(d, 'doubleSpinBox_rect_max'):
+            d.doubleSpinBox_rect_max.blockSignals(True)
             d.doubleSpinBox_rect_max.setValue(max_val)
+            d.doubleSpinBox_rect_max.blockSignals(False)
         if self._histogram:
             self._histogram.set_range(min_val, max_val)
 
@@ -802,9 +885,13 @@ class RasterExploringManager(QObject):
                 new_max = max(current_max, pixel_value) if current_max is not None else pixel_value
 
             if hasattr(d, 'doubleSpinBox_rect_min'):
+                d.doubleSpinBox_rect_min.blockSignals(True)
                 d.doubleSpinBox_rect_min.setValue(new_min)
+                d.doubleSpinBox_rect_min.blockSignals(False)
             if hasattr(d, 'doubleSpinBox_rect_max'):
+                d.doubleSpinBox_rect_max.blockSignals(True)
                 d.doubleSpinBox_rect_max.setValue(new_max)
+                d.doubleSpinBox_rect_max.blockSignals(False)
             if self._histogram:
                 self._histogram.set_range(new_min, new_max)
 
@@ -820,7 +907,9 @@ class RasterExploringManager(QObject):
         d = self.dockwidget
         logger.debug("Pixel picker deactivated")
         if hasattr(d, 'pushButton_raster_pixel_picker'):
+            d.pushButton_raster_pixel_picker.blockSignals(True)
             d.pushButton_raster_pixel_picker.setChecked(False)
+            d.pushButton_raster_pixel_picker.blockSignals(False)
         self._uncheck_tool_buttons()
 
     def _on_histogram_range_changed(self, min_val: float, max_val: float):
@@ -917,12 +1006,16 @@ class RasterExploringManager(QObject):
             )
 
             if hasattr(d, 'doubleSpinBox_min') and hasattr(d, 'doubleSpinBox_max'):
+                d.doubleSpinBox_min.blockSignals(True)
+                d.doubleSpinBox_max.blockSignals(True)
                 d.doubleSpinBox_min.setMinimum(stats.minimumValue)
                 d.doubleSpinBox_min.setMaximum(stats.maximumValue)
                 d.doubleSpinBox_max.setMinimum(stats.minimumValue)
                 d.doubleSpinBox_max.setMaximum(stats.maximumValue)
                 d.doubleSpinBox_min.setValue(stats.minimumValue)
                 d.doubleSpinBox_max.setValue(stats.maximumValue)
+                d.doubleSpinBox_min.blockSignals(False)
+                d.doubleSpinBox_max.blockSignals(False)
 
             self._update_histogram(current_layer)
 
@@ -989,12 +1082,16 @@ class RasterExploringManager(QObject):
             )
 
             if hasattr(d, 'doubleSpinBox_min') and hasattr(d, 'doubleSpinBox_max'):
+                d.doubleSpinBox_min.blockSignals(True)
+                d.doubleSpinBox_max.blockSignals(True)
                 d.doubleSpinBox_min.setMinimum(stats.minimumValue)
                 d.doubleSpinBox_min.setMaximum(stats.maximumValue)
                 d.doubleSpinBox_max.setMinimum(stats.minimumValue)
                 d.doubleSpinBox_max.setMaximum(stats.maximumValue)
                 d.doubleSpinBox_min.setValue(stats.minimumValue)
                 d.doubleSpinBox_max.setValue(stats.maximumValue)
+                d.doubleSpinBox_min.blockSignals(False)
+                d.doubleSpinBox_max.blockSignals(False)
 
             self._update_histogram(layer)
 
@@ -1013,12 +1110,16 @@ class RasterExploringManager(QObject):
             )
 
             if hasattr(d, 'doubleSpinBox_min') and hasattr(d, 'doubleSpinBox_max'):
+                d.doubleSpinBox_min.blockSignals(True)
+                d.doubleSpinBox_max.blockSignals(True)
                 d.doubleSpinBox_min.setMinimum(stats['min'])
                 d.doubleSpinBox_min.setMaximum(stats['max'])
                 d.doubleSpinBox_max.setMinimum(stats['min'])
                 d.doubleSpinBox_max.setMaximum(stats['max'])
                 d.doubleSpinBox_min.setValue(stats['min'])
                 d.doubleSpinBox_max.setValue(stats['max'])
+                d.doubleSpinBox_min.blockSignals(False)
+                d.doubleSpinBox_max.blockSignals(False)
 
             layer = d._get_current_exploring_layer()
             if layer:
@@ -1078,7 +1179,9 @@ class RasterExploringManager(QObject):
             return
 
         if QgsCheckableComboBoxBands and isinstance(d.comboBox_band, QgsCheckableComboBoxBands):
+            d.comboBox_band.blockSignals(True)
             d.comboBox_band.setLayer(layer)
+            d.comboBox_band.blockSignals(False)
         else:
             d.comboBox_band.blockSignals(True)
             d.comboBox_band.clear()
@@ -1288,7 +1391,9 @@ class RasterExploringManager(QObject):
             if hasattr(d, btn_name):
                 btn = getattr(d, btn_name)
                 if btn.isChecked():
+                    btn.blockSignals(True)
                     btn.setChecked(False)
+                    btn.blockSignals(False)
 
     def _trigger_combobox_for_groupbox(self, groupbox):
         """Trigger appropriate combobox action when a groupbox becomes active."""

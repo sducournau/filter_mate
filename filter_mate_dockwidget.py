@@ -1025,12 +1025,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     self.comboBox_band.checkedBandsChanged.connect(self._on_raster_bands_changed)
                 else:
                     self.comboBox_band.currentIndexChanged.connect(self._on_raster_band_changed)
-            if hasattr(self, 'doubleSpinBox_min'):
-                self.doubleSpinBox_min.valueChanged.connect(self._on_raster_range_changed)
-            if hasattr(self, 'doubleSpinBox_max'):
-                self.doubleSpinBox_max.valueChanged.connect(self._on_raster_range_changed)
-            if hasattr(self, 'comboBox_predicate'):
-                self.comboBox_predicate.currentIndexChanged.connect(self._on_raster_predicate_changed)
+            # H4/H5 fix: doubleSpinBox_min/max.valueChanged and comboBox_predicate.currentIndexChanged
+            # are already connected in RasterExploringManager._connect_combobox_triggers() with proper
+            # groupbox-active checks. Removed duplicate connections here to prevent double signal firing.
             if hasattr(self, 'pushButton_refresh_stats'):
                 self.pushButton_refresh_stats.clicked.connect(self._on_refresh_raster_stats)
 
@@ -1038,8 +1035,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if hasattr(self, 'pushButton_vector_refresh_stats'):
                 self.pushButton_vector_refresh_stats.clicked.connect(self._on_refresh_vector_stats)
 
-            # v5.11: Connect histogram groupbox toggle
+            # v5.11: Connect histogram groupbox toggle (disconnect first to avoid duplication)
             if hasattr(self, 'mGroupBox_raster_histogram'):
+                try:
+                    self.mGroupBox_raster_histogram.toggled.disconnect(self._on_histogram_groupbox_toggled)
+                except (TypeError, RuntimeError):
+                    pass
                 self.mGroupBox_raster_histogram.toggled.connect(self._on_histogram_groupbox_toggled)
             
             logger.info("Note: Native exploring toolbox signals connected")
@@ -1192,21 +1193,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     if current_type_index >= 0 and current_type_index != index:
                         logger.warning(f"🔒 No {page_name} layer available - staying on current page")
                         self._programmatic_page_change = True
-                        QTimer.singleShot(0, lambda: self._revert_toolbox_page(current_type_index))
+                        try:
+                            self.toolBox_exploring.blockSignals(True)
+                            self.toolBox_exploring.setCurrentIndex(current_type_index)
+                        finally:
+                            self.toolBox_exploring.blockSignals(False)
+                            self._programmatic_page_change = False
                 else:
                     logger.warning(f"🔒 No {page_name} layer available and no current layer")
         
         # Notify the bridge if available
         if hasattr(self, '_toolbox_bridge') and self._toolbox_bridge:
             self._toolbox_bridge.layerSwitched.emit(page_name)
-    
-    def _revert_toolbox_page(self, expected_index: int):
-        """v5.2 FIX 2026-01-31: Helper to revert toolbox to correct page."""
-        try:
-            if hasattr(self, 'toolBox_exploring') and self.toolBox_exploring is not None:
-                self.toolBox_exploring.setCurrentIndex(expected_index)
-        finally:
-            self._programmatic_page_change = False
     
     def _get_last_layer_by_type(self, page_index: int):
         """v5.3 FIX 2026-01-31: Get the last used layer of the specified type.
@@ -1439,16 +1437,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """Phase 3.1: Delegated to RasterExploringManager."""
         if self._raster_manager:
             self._raster_manager._on_band_changed(index)
-
-    def _on_raster_range_changed(self, value: float):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_range_changed(value)
-
-    def _on_raster_predicate_changed(self, index: int):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_predicate_changed(index)
 
     def _on_refresh_vector_stats(self):
         """v5.5: Refresh vector statistics for current layer.
@@ -2664,7 +2652,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     
                     # Connect signals from vector page to existing filter logic
                     try:
-                        vector_page.filterRequested.disconnect()
+                        vector_page.filterRequested.disconnect(self._on_toolbox_vector_page_filter)
                     except (TypeError, RuntimeError):
                         pass
                     vector_page.filterRequested.connect(self._on_toolbox_vector_page_filter)
@@ -3171,10 +3159,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 S16: Create header with indicators."""
         self.frame_header = QtWidgets.QFrame(self.dockWidgetContents)
         self.frame_header.setObjectName("frame_header"); self.frame_header.setFrameShape(QtWidgets.QFrame.NoFrame)
-        self.frame_header.setFixedHeight(13)  # v4.0: Compact layout, closer to frame_exploring
+        self.frame_header.setMinimumHeight(24)  # Enough for 18px indicators + padding
         hl = QtWidgets.QHBoxLayout(self.frame_header)
-        hl.setContentsMargins(2,0,2,0); hl.setSpacing(3)  # v4.0: Slight spacing increase for better visual
-        hl.addSpacerItem(QtWidgets.QSpacerItem(40,6,QtWidgets.QSizePolicy.Expanding,QtWidgets.QSizePolicy.Minimum))
+        hl.setContentsMargins(4,2,4,2); hl.setSpacing(6)
+        hl.addSpacerItem(QtWidgets.QSpacerItem(0,0,QtWidgets.QSizePolicy.Expanding,QtWidgets.QSizePolicy.Minimum))
         self.plugin_title_label = None
         # v4.0: Softer "mousse" style with rounded corners
         bb = "color:white;font-size:8pt;font-weight:500;padding:2px 8px;border-radius:10px;border:none;"
@@ -3684,7 +3672,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._schedule_expression_change("single_selection", field_name)
         
         try:
-            self.mFieldExpressionWidget_exploring_single_selection.fieldChanged.disconnect()
+            self.mFieldExpressionWidget_exploring_single_selection.fieldChanged.disconnect()  # Blanket: closure locale, pas de ref au slot précédent
         except (TypeError, RuntimeError):
             pass
         self.mFieldExpressionWidget_exploring_single_selection.fieldChanged.connect(on_single_field_changed)
@@ -3697,7 +3685,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._schedule_expression_change("multiple_selection", field_name)
         
         try:
-            self.mFieldExpressionWidget_exploring_multiple_selection.fieldChanged.disconnect()
+            self.mFieldExpressionWidget_exploring_multiple_selection.fieldChanged.disconnect()  # Blanket: closure locale, pas de ref au slot précédent
         except (TypeError, RuntimeError):
             pass
         self.mFieldExpressionWidget_exploring_multiple_selection.fieldChanged.connect(on_multiple_field_changed)
@@ -3710,7 +3698,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._schedule_expression_change("custom_selection", field_name)
         
         try:
-            self.mFieldExpressionWidget_exploring_custom_selection.fieldChanged.disconnect()
+            self.mFieldExpressionWidget_exploring_custom_selection.fieldChanged.disconnect()  # Blanket: closure locale, pas de ref au slot précédent
         except (TypeError, RuntimeError):
             pass
         self.mFieldExpressionWidget_exploring_custom_selection.fieldChanged.connect(on_custom_field_changed)
@@ -3836,7 +3824,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     if hasattr(picker, 'setFilterExpression'):
                         picker.setFilterExpression("")
                     
-                    # Reconnect signal
+                    # Reconnect signal (disconnect first to prevent accumulation)
+                    try:
+                        picker.featureChanged.disconnect(self.exploring_features_changed)
+                    except (TypeError, RuntimeError):
+                        pass
                     picker.featureChanged.connect(self.exploring_features_changed)
                     
                     # Force visual update
@@ -4297,9 +4289,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.warning("⚠️ _controller_integration is None - using legacy code paths only")
         
         if self.current_layer and not self.current_layer_selection_connection:
-            try: self.current_layer.selectionChanged.connect(self.on_layer_selection_changed); self.current_layer_selection_connection = True
-            except Exception:  # Signal may already be connected - expected
-                pass
+            self._ensure_layer_signals_connected(self.current_layer)
         self.widgetsInitialized.emit(); self._setup_keyboard_shortcuts()
         if self._pending_layers_update:
             self._pending_layers_update = False; pl, pr, weak_self = self.PROJECT_LAYERS, self.PROJECT, weakref.ref(self)
@@ -4891,6 +4881,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             try:
                 self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
                 target_layer = layer or self.current_layer
+                # FIX 2026-02-09: Additional fallback when both layer and current_layer are None
+                if target_layer is None and hasattr(self, 'iface') and self.iface:
+                    target_layer = self.iface.activeLayer()
+                if target_layer is None and self.PROJECT_LAYERS:
+                    from qgis.core import QgsProject
+                    first_id = list(self.PROJECT_LAYERS.keys())[0]
+                    target_layer = QgsProject.instance().mapLayer(first_id)
                 if target_layer:
                     result = self._populate_filtering_layers_direct(target_layer)
                     logger.info(f"🔍   Direct fallback returned: {result}")
@@ -5106,61 +5103,65 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             layers_widget = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"]
             logger.info(f"🔍 _populate_export_combobox_direct: layers_widget = {layers_widget}, type = {type(layers_widget).__name__}")
+            layers_widget.blockSignals(True)
             layers_widget.clear()
             item_index = 0
-            
+
             for key in list(self.PROJECT_LAYERS.keys()):
                 if key not in self.PROJECT_LAYERS or "infos" not in self.PROJECT_LAYERS[key]:
                     continue
-                
+
                 layer_info = self.PROJECT_LAYERS[key]["infos"]
                 required_keys = ["layer_id", "layer_name", "layer_crs_authid", "layer_geometry_type"]
                 if any(k not in layer_info or layer_info[k] is None for k in required_keys):
                     continue
-                
+
                 layer_id = layer_info["layer_id"]
                 layer_name = layer_info["layer_name"]
                 layer_crs_authid = layer_info["layer_crs_authid"]
                 geom_type = layer_info["layer_geometry_type"]
                 layer_icon = self.icon_per_geometry_type(geom_type)
-                
+
                 # Validate layer - v5.1: Support both vector and raster
                 layer_obj = project.mapLayer(layer_id)
                 if not layer_obj:
                     continue
-                
+
                 is_vector = isinstance(layer_obj, QgsVectorLayer)
                 is_raster = isinstance(layer_obj, QgsRasterLayer)
-                
+
                 if (is_vector or is_raster) and is_layer_source_available(layer_obj, require_psycopg2=False):
                     # v5.1: Update geometry type for raster layers
                     if is_raster:
                         geom_type = "GeometryType.Raster"
                         layer_icon = self.icon_per_geometry_type(geom_type)
-                    
+
                     display_name = f"{layer_name} [{layer_crs_authid}]"
                     item_data = {"layer_id": key, "layer_geometry_type": geom_type}
                     layers_widget.addItem(layer_icon, display_name, item_data)
                     item = layers_widget.model().item(item_index)
                     item.setCheckState(Qt.Checked if key in layers_to_export else Qt.Unchecked)
                     item_index += 1
-            
+
+            layers_widget.blockSignals(False)
             logger.info(f"✅ _populate_export_combobox_direct: Added {item_index} layers to combobox")
-            
+
             # Populate datatype/format combobox
             try:
                 from osgeo import ogr
                 datatype_widget = self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"]
+                datatype_widget.blockSignals(True)
                 datatype_widget.clear()
                 ogr_driver_list = sorted([ogr.GetDriver(i).GetDescription() for i in range(ogr.GetDriverCount())])
                 datatype_widget.addItems(ogr_driver_list)
                 logger.info(f"_populate_export_combobox_direct: Added {len(ogr_driver_list)} export formats")
-                
+
                 if datatype_to_export:
                     idx = datatype_widget.findText(datatype_to_export)
                     datatype_widget.setCurrentIndex(idx if idx >= 0 else datatype_widget.findText('GPKG'))
                 else:
                     datatype_widget.setCurrentIndex(datatype_widget.findText('GPKG'))
+                datatype_widget.blockSignals(False)
             except ImportError:
                 logger.warning("_populate_export_combobox_direct: OGR not available")
             
@@ -5522,10 +5523,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             try:
                 # FIX 2026-01-17 v4: Disconnect ALL receivers to ensure clean state
                 try:
-                    widget.clicked.disconnect()
+                    widget.clicked.disconnect()  # Blanket: closure locale (make_handler), pas de ref au slot précédent
                 except TypeError:
                     pass  # No receivers connected, which is fine
-                
+
                 # FIX 2026-01-17 v4: Connect using a closure that captures task_name
                 # This avoids relying on potentially stale lambdas from widgets dict
                 def make_handler(task):
@@ -5581,11 +5582,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             try:
                 # Disconnect all existing receivers
                 try:
-                    widget.clicked.disconnect()
+                    widget.clicked.disconnect()  # Blanket: closure locale (make_handler), pas de ref au slot précédent
                     logger.debug(f"  Disconnected all receivers from {btn_name}.clicked")
                 except TypeError:
                     pass  # No receivers connected, which is fine
-                
+
                 # FIX 2026-01-22: Connect clicked signal to dialog handler
                 # The lambda gets the widget's checked state and calls the dialog handler
                 # which will call project_property_changed with custom_functions containing ON_CHANGE
@@ -5702,21 +5703,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # FIX 2026-01-15: Connect IDENTIFY and ZOOM buttons FIRST
         # These must be connected directly, NOT via changeSignalState which can break them
         try:
-            self.pushButton_exploring_identify.clicked.disconnect()
+            self.pushButton_exploring_identify.clicked.disconnect(self.exploring_identify_clicked)
         except (TypeError, RuntimeError):
             pass
         self.pushButton_exploring_identify.clicked.connect(self.exploring_identify_clicked)
         logger.debug("✓ Connected pushButton_exploring_identify.clicked DIRECTLY")
-        
+
         try:
-            self.pushButton_exploring_zoom.clicked.disconnect()
+            self.pushButton_exploring_zoom.clicked.disconnect(self.exploring_zoom_clicked)
         except (TypeError, RuntimeError):
             pass
         self.pushButton_exploring_zoom.clicked.connect(self.exploring_zoom_clicked)
         logger.debug("✓ Connected pushButton_exploring_zoom.clicked DIRECTLY")
         
         try:
-            self.pushButton_exploring_reset_layer_properties.clicked.disconnect()
+            self.pushButton_exploring_reset_layer_properties.clicked.disconnect()  # Blanket: lambda, pas de ref au slot précédent
         except (TypeError, RuntimeError):
             pass
         self.pushButton_exploring_reset_layer_properties.clicked.connect(
@@ -5727,7 +5728,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # IS_SELECTING: Activate selection tool on canvas + sync features
         btn_selecting = self.pushButton_checkable_exploring_selecting
         try:
-            btn_selecting.toggled.disconnect()
+            btn_selecting.toggled.disconnect()  # Blanket: closure locale (_on_selecting_toggled), pas de ref au slot précédent
         except (TypeError, RuntimeError):
             pass  # No connection to disconnect
         
@@ -5767,10 +5768,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # IS_TRACKING: Enable auto-zoom on selection change
         btn_tracking = self.pushButton_checkable_exploring_tracking
         try:
-            btn_tracking.toggled.disconnect()
+            btn_tracking.toggled.disconnect()  # Blanket: closure locale (_on_tracking_toggled), pas de ref au slot précédent
         except (TypeError, RuntimeError):
             pass
-        
+
         # FIX v2: Sync initial state from button to PROJECT_LAYERS
         if self.current_layer and self.widgets_initialized:
             layer_id = self.current_layer.id()
@@ -5802,10 +5803,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # IS_LINKING: Synchronize single/multiple selection expressions
         btn_linking = self.pushButton_checkable_exploring_linking_widgets
         try:
-            btn_linking.toggled.disconnect()
+            btn_linking.toggled.disconnect()  # Blanket: closure locale (_on_linking_toggled), pas de ref au slot précédent
         except (TypeError, RuntimeError):
             pass
-        
+
         # FIX v2: Sync initial state from button to PROJECT_LAYERS
         if self.current_layer and self.widgets_initialized:
             layer_id = self.current_layer.id()
@@ -6095,7 +6096,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 btn.setEnabled(checked)
                 # Force uncheck when disabling to maintain consistency
                 if not checked and btn.isChecked():
+                    btn.blockSignals(True)
                     btn.setChecked(False)
+                    btn.blockSignals(False)
             
             logger.debug(f"Buffer buttons {'enabled' if checked else 'disabled'} (geometric_predicates={checked})")
         
@@ -6138,7 +6141,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             for btn in dependent_buttons:
                 btn.setEnabled(checked)
                 if not checked and btn.isChecked():
+                    btn.blockSignals(True)
                     btn.setChecked(False)
+                    btn.blockSignals(False)
             logger.debug(f"Raster filter buttons {'enabled' if checked else 'disabled'}")
 
         master_btn.toggled.connect(_on_raster_source_toggled)
@@ -6154,20 +6159,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         - comboBox_raster_source_layer ↔ comboBox_filtering_raster_source_layer
         - comboBox_raster_band ↔ comboBox_filtering_raster_band
         """
-        # Raster layer sync: Exploring → Filtering
+        # Raster layer sync: Exploring → Filtering (direct connect, no lambda)
         if hasattr(self, 'comboBox_raster_source_layer') and hasattr(self, 'comboBox_filtering_raster_source_layer'):
-            self.comboBox_raster_source_layer.layerChanged.connect(
-                lambda layer: self._sync_raster_layer_to_filtering(layer))
-            self.comboBox_filtering_raster_source_layer.layerChanged.connect(
-                lambda layer: self._sync_raster_layer_to_exploring(layer))
-            logger.debug("✓ Raster layer sync connected (Exploring ↔ Filtering)")
+            self.comboBox_raster_source_layer.layerChanged.connect(self._sync_raster_layer_to_filtering)
+            self.comboBox_filtering_raster_source_layer.layerChanged.connect(self._sync_raster_layer_to_exploring)
+            logger.debug("Raster layer sync connected (Exploring <-> Filtering)")
 
-        # Band sync: Exploring → Filtering
+        # Band sync: Exploring → Filtering (direct connect, no lambda)
         if hasattr(self, 'comboBox_raster_band') and hasattr(self, 'comboBox_filtering_raster_band'):
-            self.comboBox_raster_band.currentIndexChanged.connect(
-                lambda idx: self._sync_raster_band_to_filtering(idx))
-            self.comboBox_filtering_raster_band.currentIndexChanged.connect(
-                lambda idx: self._sync_raster_band_to_exploring(idx))
+            self.comboBox_raster_band.currentIndexChanged.connect(self._sync_raster_band_to_filtering)
+            self.comboBox_filtering_raster_band.currentIndexChanged.connect(self._sync_raster_band_to_exploring)
             logger.debug("✓ Raster band sync connected (Exploring ↔ Filtering)")
 
         # Raster layer change in Filtering → populate band selector
@@ -6210,12 +6211,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _on_filtering_raster_layer_changed(self, layer):
         """Populate band selector when raster source layer changes in Filtering."""
         from qgis.core import QgsRasterLayer
+        self.comboBox_filtering_raster_band.blockSignals(True)
         self.comboBox_filtering_raster_band.clear()
         if layer and isinstance(layer, QgsRasterLayer) and layer.isValid():
             for i in range(1, layer.bandCount() + 1):
                 band_name = layer.bandName(i) or f"Band {i}"
                 self.comboBox_filtering_raster_band.addItem(band_name)
             logger.debug(f"Filtering raster band selector updated: {layer.bandCount()} bands")
+        self.comboBox_filtering_raster_band.blockSignals(False)
 
     def _toggle_associated_widgets(self, enabled, widgets):
         """
@@ -6279,18 +6282,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             for gb, _ in gbs:
                 try:
                     gb.blockSignals(True)
-                    try: 
-                        gb.toggled.disconnect()
-                        gb.collapsedStateChanged.disconnect()
+                    try:
+                        gb.toggled.disconnect()  # Blanket: connexion via functools.partial, pas de ref au slot précédent
+                        gb.collapsedStateChanged.disconnect()  # Blanket: connexion via functools.partial, pas de ref au slot précédent
                     except TypeError:  # Signals not connected yet - expected on first setup
                         pass
                 finally:
                     gb.blockSignals(False)  # Always unblock even if disconnect fails
             
-            # Now connect new signals
-            for gb, name in gbs: 
-                gb.toggled.connect(lambda c, n=name: self._on_groupbox_clicked(n, c))
-                gb.collapsedStateChanged.connect(lambda col, n=name: self._on_groupbox_collapse_changed(n, col))
+            # Now connect new signals (use functools.partial instead of lambdas
+            # so connections can be individually disconnected if needed)
+            from functools import partial
+            for gb, name in gbs:
+                gb.toggled.connect(partial(self._on_groupbox_clicked, name))
+                gb.collapsedStateChanged.connect(partial(self._on_groupbox_collapse_changed, name))
                 
             logger.debug("_connect_groupbox_signals_directly: Signals connected successfully")
         except Exception as e: 
@@ -7471,27 +7476,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _ensure_selection_changed_connected(self):
         """
         FIX 2026-01-15 v9: Ensure the selectionChanged signal is connected to on_layer_selection_changed.
-        
+
         This is called when IS_TRACKING or IS_SELECTING are activated to ensure
         the signal remains connected for auto-zoom/sync functionality.
+
+        Delegates to _ensure_layer_signals_connected() for safe disconnect-then-connect.
         """
-        logger.debug(f"🔌 _ensure_selection_changed_connected CALLED: current_layer={self.current_layer.name() if self.current_layer else 'None'}, connection_flag={self.current_layer_selection_connection}")
-        
         if not self.current_layer:
-            logger.warning("⚠️ _ensure_selection_changed_connected: No current layer")
+            logger.warning("_ensure_selection_changed_connected: No current layer")
             return
-        
-        try:
-            # Check if signal needs to be connected
-            if not self.current_layer_selection_connection:
-                self.current_layer.selectionChanged.connect(self.on_layer_selection_changed)
-                self.current_layer_selection_connection = True
-                logger.debug(f"✅ _ensure_selection_changed_connected: Connected selectionChanged signal for layer '{self.current_layer.name()}'")
-            else:
-                logger.debug(f"ℹ️ _ensure_selection_changed_connected: Signal already connected for layer '{self.current_layer.name()}'")
-        except (TypeError, RuntimeError) as e:
-            # Signal might already be connected, or layer deleted
-            logger.warning(f"⚠️ _ensure_selection_changed_connected error: {e}")
+        self._ensure_layer_signals_connected(self.current_layer)
 
     def on_layer_selection_changed(self, selected, deselected, clearAndSelect):
         """
@@ -7501,19 +7495,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         The signal can be disconnected during layer changes and not always reconnected,
         causing tracking to only work for the first feature change.
         """
-        # FIX v10: DEBUG - Confirm signal is triggered
-        logger.info(f"🔔 on_layer_selection_changed TRIGGERED: selected={len(selected)}, deselected={len(deselected)}, clearAndSelect={clearAndSelect}")
-        
-        # FIX v5: Ensure signal stays connected (self-healing)
+        logger.info(f"on_layer_selection_changed TRIGGERED: selected={len(selected)}, deselected={len(deselected)}, clearAndSelect={clearAndSelect}")
+
+        # Note: self-healing connect removed - _ensure_layer_signals_connected() is the single entry point
+        # The flag is set to True to keep compatibility with code that reads it
         if self.current_layer and not self.current_layer_selection_connection:
-            try:
-                self.current_layer.selectionChanged.connect(self.on_layer_selection_changed)
-                self.current_layer_selection_connection = True
-                logger.debug("on_layer_selection_changed: Re-connected selectionChanged signal (self-healing)")
-            except (TypeError, RuntimeError):
-                pass
-        
-        # FIX v10: DEBUG - Check delegation
+            self.current_layer_selection_connection = True
+
+        # Check delegation
         if self._controller_integration:
             logger.info("🔀 Delegating to ExploringController.handle_layer_selection_changed")
             if self._controller_integration.delegate_handle_layer_selection_changed(selected, deselected, clearAndSelect):
@@ -8243,11 +8232,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         if self._exploring_ctrl:
             logger.debug("Delegating to ExploringController")
-            if is_large_layer:
-                # Defer to prevent freeze
-                self._deferred_reload_exploration_widgets(layer, layer_props)
-            else:
-                self._exploring_ctrl._reload_exploration_widgets(layer, layer_props)
+            try:
+                if is_large_layer:
+                    self._deferred_reload_exploration_widgets(layer, layer_props)
+                else:
+                    self._exploring_ctrl._reload_exploration_widgets(layer, layer_props)
+            except Exception as e:
+                # FIX 2026-02-09: Fallback to direct widget update when controller fails
+                logger.warning(f"ExploringController._reload_exploration_widgets failed: {e}, using fallback")
+                if is_large_layer:
+                    self._deferred_reload_exploration_widgets(layer, layer_props)
+                else:
+                    self._fallback_reload_exploration_widgets(layer, layer_props)
         else:
             logger.warning("ExploringController NOT available - using fallback")
             if is_large_layer:
@@ -8483,13 +8479,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             except Exception:
                 pass
         
-        # Connect selectionChanged for tracking
+        # Connect selectionChanged for tracking (delegate to single entry point)
         if self.current_layer:
-            try:
-                self.current_layer.selectionChanged.connect(self.on_layer_selection_changed)
-                self.current_layer_selection_connection = True
-            except Exception:
-                pass
+            self._ensure_layer_signals_connected(self.current_layer)
         
         # Restore exploring groupbox state
         if layer_props and "current_exploring_groupbox" in layer_props.get("exploring", {}):
@@ -9475,10 +9467,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # FIX 2026-01-14: Force reconnect exploring button signals (IS_SELECTING, IS_TRACKING, IS_LINKING)
                 self.force_reconnect_exploring_signals()
                 layer = self._determine_active_layer()
+                # FIX 2026-02-09: Set current_layer BEFORE emitting projectLayersReady
+                # _refresh_layer_specific_widgets → current_layer_changed is DEFERRED
+                # (_plugin_busy=True) so current_layer stays None at first load.
+                # The integration handler needs current_layer to populate filtering combobox.
+                if layer and self.current_layer is None:
+                    self.current_layer = layer
                 self._activate_layer_ui()
                 if layer: self._refresh_layer_specific_widgets(layer)
                 # v4.0.4: Emit signal after PROJECT_LAYERS is fully populated
-                logger.info(f"Emitting projectLayersReady signal ({len(self.PROJECT_LAYERS)} layers)")
+                logger.info(f"Emitting projectLayersReady signal ({len(self.PROJECT_LAYERS)} layers), current_layer={self.current_layer.name() if self.current_layer else 'None'}")
                 self.projectLayersReady.emit()
                 return
             if self.current_layer and self.current_layer.isValid():
@@ -9665,10 +9663,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try: self._disconnect_feature_picker_layer_deletion() if hasattr(self, '_disconnect_feature_picker_layer_deletion') else None
         except Exception:  # May already be disconnected - expected
             pass
-        try: self.comboBox_filtering_current_layer.setLayer(None) if hasattr(self, 'comboBox_filtering_current_layer') else None
+        try:
+            if hasattr(self, 'comboBox_filtering_current_layer'):
+                self.comboBox_filtering_current_layer.blockSignals(True)
+                self.comboBox_filtering_current_layer.setLayer(None)
+                self.comboBox_filtering_current_layer.blockSignals(False)
         except RuntimeError:  # Widget may already be deleted - expected during shutdown
             pass
-        try: self.mFeaturePickerWidget_exploring_single_selection.setLayer(None) if hasattr(self, 'mFeaturePickerWidget_exploring_single_selection') else None
+        try:
+            if hasattr(self, 'mFeaturePickerWidget_exploring_single_selection'):
+                self.mFeaturePickerWidget_exploring_single_selection.blockSignals(True)
+                self.mFeaturePickerWidget_exploring_single_selection.setLayer(None)
+                self.mFeaturePickerWidget_exploring_single_selection.blockSignals(False)
         except RuntimeError:  # Widget may already be deleted - expected during shutdown
             pass
         try: self._exploring_cache.invalidate_all() if hasattr(self, '_exploring_cache') else None
@@ -9680,7 +9686,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try: self._controller_integration.teardown() if self._controller_integration else None
         except Exception:  # Controller may already be torn down - expected
             pass
-        
+        try: self._raster_manager.teardown() if hasattr(self, '_raster_manager') and self._raster_manager else None
+        except Exception:  # Manager may already be torn down - expected
+            pass
+
         self.closingPlugin.emit()
         event.accept()
 

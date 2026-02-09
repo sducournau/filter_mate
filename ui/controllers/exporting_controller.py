@@ -1662,7 +1662,10 @@ class ExportingController(BaseController):
         if not self._dockwidget:
             logger.warning("ExportingController.setup: No dockwidget available")
             return
-            
+
+        # Disconnect first to prevent duplicate connections on repeated setup() calls
+        self._disconnect_all_signals()
+
         try:
             # --- Layer selection widget (critical for raster detection) ---
             # Connect to checkableComboBoxLayer_exporting_layers signal
@@ -1716,30 +1719,30 @@ class ExportingController(BaseController):
             logger.warning(f"ExportingController.setup: Failed to connect signals: {e}")
     
     def _disconnect_all_signals(self) -> None:
-        """Disconnect all UI signals safely."""
+        """Disconnect all UI signals safely (specific slot, not blanket)."""
         if not self._dockwidget:
             return
-            
+
         try:
             widgets_to_disconnect = [
-                ('checkableComboBoxLayer_exporting_layers', 'checkedItemsChanged'),
-                ('comboBox_exporting_raster_format', 'currentIndexChanged'),
-                ('comboBox_exporting_raster_compression', 'currentIndexChanged'),
-                ('checkBox_exporting_raster_cog', 'stateChanged'),
-                ('checkBox_exporting_raster_clip', 'stateChanged'),
-                ('mMapLayerComboBox_exporting_raster_mask', 'layerChanged'),
-                ('radioButton_exporting_raster_clip_bbox', 'toggled'),
+                ('checkableComboBoxLayer_exporting_layers', 'checkedItemsChanged', self._on_export_layers_changed),
+                ('comboBox_exporting_raster_format', 'currentIndexChanged', self._on_raster_format_changed),
+                ('comboBox_exporting_raster_compression', 'currentIndexChanged', self._on_raster_compression_changed),
+                ('checkBox_exporting_raster_cog', 'stateChanged', self._on_raster_cog_changed),
+                ('checkBox_exporting_raster_clip', 'stateChanged', self._on_raster_clip_changed),
+                ('mMapLayerComboBox_exporting_raster_mask', 'layerChanged', self._on_raster_mask_layer_changed),
+                ('radioButton_exporting_raster_clip_bbox', 'toggled', self._on_raster_clip_mode_changed),
             ]
-            
-            for widget_name, signal_name in widgets_to_disconnect:
+
+            for widget_name, signal_name, slot in widgets_to_disconnect:
                 if hasattr(self._dockwidget, widget_name):
                     widget = getattr(self._dockwidget, widget_name)
                     signal = getattr(widget, signal_name, None)
                     if signal:
                         try:
-                            signal.disconnect()
-                        except TypeError:
-                            pass  # No connections to disconnect
+                            signal.disconnect(slot)
+                        except (TypeError, RuntimeError):
+                            pass  # Not connected - expected on first setup
                             
             logger.debug("ExportingController._disconnect_all_signals: Signals disconnected")
             
@@ -1835,8 +1838,10 @@ class ExportingController(BaseController):
                 cog_visible = new_format in (RasterExportFormat.GEOTIFF, RasterExportFormat.COG)
                 self._dockwidget.checkBox_exporting_raster_cog.setVisible(cog_visible)
                 if new_format == RasterExportFormat.COG:
+                    self._dockwidget.checkBox_exporting_raster_cog.blockSignals(True)
                     self._dockwidget.checkBox_exporting_raster_cog.setChecked(True)
-            
+                    self._dockwidget.checkBox_exporting_raster_cog.blockSignals(False)
+
             # Update compression options based on format
             self._update_compression_for_format(new_format)
             
@@ -1853,10 +1858,11 @@ class ExportingController(BaseController):
             
         combo = self._dockwidget.comboBox_exporting_raster_compression
         current = combo.currentText()
-        
-        # Clear and repopulate
+
+        # Block signals to prevent cascading during clear/repopulate
+        combo.blockSignals(True)
         combo.clear()
-        
+
         if raster_format in (RasterExportFormat.GEOTIFF, RasterExportFormat.COG):
             # All compressions available for TIFF
             combo.addItems(['LZW', 'DEFLATE', 'ZSTD', 'JPEG', 'None'])
@@ -1866,11 +1872,12 @@ class ExportingController(BaseController):
         elif raster_format == RasterExportFormat.JPEG:
             # JPEG only supports JPEG compression
             combo.addItems(['JPEG'])
-        
+
         # Restore previous selection if possible
         idx = combo.findText(current)
         if idx >= 0:
             combo.setCurrentIndex(idx)
+        combo.blockSignals(False)
     
     def _on_raster_compression_changed(self, index: int) -> None:
         """Handle raster compression combo change."""

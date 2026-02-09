@@ -2680,9 +2680,11 @@ class ExploringController(BaseController, LayerSelectionMixin):
             # v4.0 SMART FIELD SELECTION: Upgrade primary-key-only expressions to better fields
             # Priority: 1) User's custom field (if set), 2) Best available field, 3) Primary key
             expressions_updated = False
-            single_expr = layer_props["exploring"]["single_selection_expression"]
-            multiple_expr = layer_props["exploring"]["multiple_selection_expression"]
-            custom_expr = layer_props["exploring"]["custom_selection_expression"]
+            # FIX 2026-02-09: Use .get() to prevent KeyError when exploring keys are missing
+            exploring = layer_props.get("exploring", {})
+            single_expr = exploring.get("single_selection_expression", "")
+            multiple_expr = exploring.get("multiple_selection_expression", "")
+            custom_expr = exploring.get("custom_selection_expression", "")
             
             # Get primary key to detect default (unset) expressions
             primary_key = layer_props.get("infos", {}).get("primary_key_name", "")
@@ -2724,22 +2726,28 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 # TOUJOURS mettre à jour les expressions, même si best_field == primary_key
                 # Ceci garantit que les combobox ne soient JAMAIS vides
                 if best_field:
+                    # FIX 2026-02-09: Ensure exploring dict exists before writing
+                    if "exploring" not in layer_props:
+                        layer_props["exploring"] = {}
+                    proj_exploring = self._dockwidget.PROJECT_LAYERS.get(layer.id(), {})
+                    if "exploring" not in proj_exploring:
+                        proj_exploring["exploring"] = {}
                     if should_upgrade_single:
                         layer_props["exploring"]["single_selection_expression"] = best_field
-                        self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["single_selection_expression"] = best_field
+                        proj_exploring["exploring"]["single_selection_expression"] = best_field
                         expressions_updated = True
                         logger.info(f"✨ Set single_selection to '{best_field}' for layer '{layer.name()}'")
                     if should_upgrade_multiple:
                         layer_props["exploring"]["multiple_selection_expression"] = best_field
-                        self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["multiple_selection_expression"] = best_field
+                        proj_exploring["exploring"]["multiple_selection_expression"] = best_field
                         expressions_updated = True
                         logger.info(f"✨ Set multiple_selection to '{best_field}' for layer '{layer.name()}'")
                     if should_upgrade_custom:
                         layer_props["exploring"]["custom_selection_expression"] = best_field
-                        self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["custom_selection_expression"] = best_field
+                        proj_exploring["exploring"]["custom_selection_expression"] = best_field
                         expressions_updated = True
                         logger.info(f"✨ Set custom_selection to '{best_field}' for layer '{layer.name()}'")
-                    
+
                     # Persist upgraded field to SQLite for future sessions
                     if expressions_updated:
                         logger.debug(f"Persisting field '{best_field}' to SQLite for layer {layer.name()}")
@@ -2761,40 +2769,49 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 logger.debug(f"Using user-customized expressions for layer '{layer.name()}': single={single_expr}, multiple={multiple_expr}")
             
             # Update expressions after potential auto-initialization
-            single_expr = layer_props["exploring"]["single_selection_expression"]
-            multiple_expr = layer_props["exploring"]["multiple_selection_expression"]
-            custom_expr = layer_props["exploring"]["custom_selection_expression"]
-            
+            # FIX 2026-02-09: Use .get() for safe access
+            exploring = layer_props.get("exploring", {})
+            single_expr = exploring.get("single_selection_expression", "")
+            multiple_expr = exploring.get("multiple_selection_expression", "")
+            custom_expr = exploring.get("custom_selection_expression", "")
+
             # FIX v4.1 Simon 2026-01-16: GARANTIR que les expressions ne sont JAMAIS vides
             # Fallback absolu si une expression est vide (dernier rempart avant les widgets)
+            # FIX 2026-02-09: Ensure exploring dict exists before writing fallbacks
+            if "exploring" not in layer_props:
+                layer_props["exploring"] = {}
+            proj_layer = self._dockwidget.PROJECT_LAYERS.get(layer.id(), {})
+            if "exploring" not in proj_layer:
+                proj_layer["exploring"] = {}
+
             if not single_expr:
                 fields = layer.fields()
                 if fields.count() > 0:
                     single_expr = fields[0].name()
                     layer_props["exploring"]["single_selection_expression"] = single_expr
-                    self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["single_selection_expression"] = single_expr
+                    proj_layer["exploring"]["single_selection_expression"] = single_expr
                     logger.warning(f"Emergency fallback: Set single_selection to first field '{single_expr}'")
                 else:
                     single_expr = "$id"
                     logger.error(f"CRITICAL: Layer '{layer.name()}' has no fields, using $id")
-            
+
             if not multiple_expr:
                 fields = layer.fields()
                 if fields.count() > 0:
                     multiple_expr = fields[0].name()
                     layer_props["exploring"]["multiple_selection_expression"] = multiple_expr
-                    self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["multiple_selection_expression"] = multiple_expr
+                    proj_layer["exploring"]["multiple_selection_expression"] = multiple_expr
                     logger.warning(f"Emergency fallback: Set multiple_selection to first field '{multiple_expr}'")
                 else:
                     multiple_expr = "$id"
                     logger.error(f"CRITICAL: Layer '{layer.name()}' has no fields, using $id")
-            
+
             if not custom_expr:
                 fields = layer.fields()
                 if fields.count() > 0:
                     custom_expr = fields[0].name()
                     layer_props["exploring"]["custom_selection_expression"] = custom_expr
-                    self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["custom_selection_expression"] = custom_expr
+                    proj_layer["exploring"]["custom_selection_expression"] = custom_expr
                     logger.warning(f"Emergency fallback: Set custom_selection to first field '{custom_expr}'")
                 else:
                     custom_expr = "$id"
@@ -3031,14 +3048,10 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 self._dockwidget._updating_qgis_selection_from_widget = False
                 return True
             
-            # FIX v5: Self-healing - ensure signal stays connected
+            # Note: self-healing connect removed - _ensure_layer_signals_connected() is the single entry point
             if self._dockwidget.current_layer and not self._dockwidget.current_layer_selection_connection:
-                try:
-                    self._dockwidget.current_layer.selectionChanged.connect(self._dockwidget.on_layer_selection_changed)
-                    self._dockwidget.current_layer_selection_connection = True
-                    logger.debug("handle_layer_selection_changed: Re-connected selectionChanged (self-healing)")
-                except (TypeError, RuntimeError):
-                    pass
+                if hasattr(self._dockwidget, '_ensure_layer_signals_connected'):
+                    self._dockwidget._ensure_layer_signals_connected(self._dockwidget.current_layer)
             # Check recursion prevention flag
             if getattr(self._dockwidget, '_syncing_from_qgis', False):
                 logger.debug("handle_layer_selection_changed: Skipping (sync in progress)")

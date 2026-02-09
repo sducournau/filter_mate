@@ -198,87 +198,6 @@ class SignalConnection:
         return False
 
 
-class ConnectionManager:
-    """
-    Manages multiple signal connections with automatic cleanup.
-    
-    Useful when you need to track and disconnect multiple connections
-    at once, such as when a widget is destroyed.
-    
-    Usage:
-        manager = ConnectionManager()
-        manager.connect(widget1.clicked, handler1)
-        manager.connect(widget2.valueChanged, handler2)
-        # ... later ...
-        manager.disconnect_all()
-    """
-    
-    def __init__(self):
-        """Initialize the connection manager."""
-        self._connections: List[tuple] = []
-    
-    def connect(self, signal, slot: Callable) -> bool:
-        """
-        Connect a signal to a slot and track the connection.
-        
-        Args:
-            signal: Qt signal to connect
-            slot: Function/method to connect to signal
-            
-        Returns:
-            True if connection was successful
-        """
-        try:
-            signal.connect(slot)
-            self._connections.append((signal, slot))
-            return True
-        except (AttributeError, TypeError, RuntimeError) as e:
-            logger.debug(f"Could not connect signal: {e}")
-            return False
-    
-    def disconnect(self, signal, slot: Callable) -> bool:
-        """
-        Disconnect a specific signal-slot pair.
-        
-        Args:
-            signal: Qt signal to disconnect
-            slot: Function/method to disconnect
-            
-        Returns:
-            True if disconnection was successful
-        """
-        try:
-            signal.disconnect(slot)
-            self._connections = [(s, sl) for s, sl in self._connections 
-                                if not (s is signal and sl is slot)]
-            return True
-        except (AttributeError, TypeError, RuntimeError) as e:
-            logger.debug(f"Could not disconnect signal: {e}")
-            return False
-    
-    def disconnect_all(self) -> int:
-        """
-        Disconnect all tracked connections.
-        
-        Returns:
-            Number of connections that were successfully disconnected
-        """
-        count = 0
-        for signal, slot in self._connections:
-            try:
-                signal.disconnect(slot)
-                count += 1
-            except (AttributeError, TypeError, RuntimeError):
-                pass
-        
-        self._connections.clear()
-        return count
-    
-    def __del__(self):
-        """Cleanup: disconnect all when manager is destroyed."""
-        self.disconnect_all()
-
-
 class SafeSignalEmitter:
     """
     Wrapper for safely emitting signals with error handling.
@@ -360,7 +279,6 @@ __all__ = [
     'SignalBlocker',
     'SignalBlockerGroup', 
     'SignalConnection',
-    'ConnectionManager',
     'SafeSignalEmitter',
     'block_signals',
     'block_signals_group',

@@ -329,10 +329,10 @@ class DockwidgetSignalManager:
             try:
                 # Disconnect ALL receivers to ensure clean state
                 try:
-                    widget.clicked.disconnect()
+                    widget.clicked.disconnect()  # Blanket: closure locale (make_handler), pas de ref au slot précédent
                 except TypeError:
                     pass  # No receivers connected, which is fine
-                
+
                 # Connect using a closure that captures task_name
                 def make_handler(task):
                     """Factory function to create handler with properly captured task name."""
@@ -392,10 +392,10 @@ class DockwidgetSignalManager:
             try:
                 # Disconnect all existing receivers
                 try:
-                    widget.clicked.disconnect()
+                    widget.clicked.disconnect()  # Blanket: closure locale (make_handler), pas de ref au slot précédent
                 except TypeError:
                     pass  # No receivers connected
-                
+
                 # Create handler with proper closure
                 def make_handler(handler_func, prop_name):
                     """Factory to create handler with proper closure."""
@@ -478,27 +478,27 @@ class DockwidgetSignalManager:
         
         # Connect IDENTIFY button
         try:
-            self.dockwidget.pushButton_exploring_identify.clicked.disconnect()
+            self.dockwidget.pushButton_exploring_identify.clicked.disconnect(self.dockwidget.exploring_identify_clicked)
         except (TypeError, RuntimeError):
             pass
         self.dockwidget.pushButton_exploring_identify.clicked.connect(
             self.dockwidget.exploring_identify_clicked
         )
         logger.debug("Connected pushButton_exploring_identify.clicked DIRECTLY")
-        
+
         # Connect ZOOM button
         try:
-            self.dockwidget.pushButton_exploring_zoom.clicked.disconnect()
+            self.dockwidget.pushButton_exploring_zoom.clicked.disconnect(self.dockwidget.exploring_zoom_clicked)
         except (TypeError, RuntimeError):
             pass
         self.dockwidget.pushButton_exploring_zoom.clicked.connect(
             self.dockwidget.exploring_zoom_clicked
         )
         logger.debug("Connected pushButton_exploring_zoom.clicked DIRECTLY")
-        
+
         # Connect RESET button
         try:
-            self.dockwidget.pushButton_exploring_reset_layer_properties.clicked.disconnect()
+            self.dockwidget.pushButton_exploring_reset_layer_properties.clicked.disconnect()  # Blanket: lambda, pas de ref au slot précédent
         except (TypeError, RuntimeError):
             pass
         self.dockwidget.pushButton_exploring_reset_layer_properties.clicked.connect(
@@ -520,10 +520,10 @@ class DockwidgetSignalManager:
         btn = self.dockwidget.pushButton_checkable_exploring_selecting
         
         try:
-            btn.toggled.disconnect()
+            btn.toggled.disconnect()  # Blanket: closure locale (_on_selecting_toggled), pas de ref au slot précédent
         except (TypeError, RuntimeError):
             pass
-        
+
         # Sync initial state from button to PROJECT_LAYERS
         current_layer = getattr(self.dockwidget, 'current_layer', None)
         project_layers = getattr(self.dockwidget, 'PROJECT_LAYERS', {})
@@ -561,12 +561,12 @@ class DockwidgetSignalManager:
     def _connect_is_tracking_toggle(self) -> None:
         """Connect IS_TRACKING button for auto-zoom."""
         btn = self.dockwidget.pushButton_checkable_exploring_tracking
-        
+
         try:
-            btn.toggled.disconnect()
+            btn.toggled.disconnect()  # Blanket: closure locale (_on_tracking_toggled), pas de ref au slot précédent
         except (TypeError, RuntimeError):
             pass
-        
+
         # Sync initial state
         current_layer = getattr(self.dockwidget, 'current_layer', None)
         project_layers = getattr(self.dockwidget, 'PROJECT_LAYERS', {})
@@ -600,12 +600,12 @@ class DockwidgetSignalManager:
     def _connect_is_linking_toggle(self) -> None:
         """Connect IS_LINKING button for expression sync."""
         btn = self.dockwidget.pushButton_checkable_exploring_linking
-        
+
         try:
-            btn.toggled.disconnect()
+            btn.toggled.disconnect()  # Blanket: closure locale (_on_linking_toggled), pas de ref au slot précédent
         except (TypeError, RuntimeError):
             pass
-        
+
         # Sync initial state
         current_layer = getattr(self.dockwidget, 'current_layer', None)
         project_layers = getattr(self.dockwidget, 'PROJECT_LAYERS', {})
@@ -664,8 +664,8 @@ class DockwidgetSignalManager:
                 try:
                     gb.blockSignals(True)
                     try:
-                        gb.toggled.disconnect()
-                        gb.collapsedStateChanged.disconnect()
+                        gb.toggled.disconnect()  # Blanket: connexion via functools.partial, pas de ref au slot précédent
+                        gb.collapsedStateChanged.disconnect()  # Blanket: connexion via functools.partial, pas de ref au slot précédent
                     except TypeError:
                         # Signals not connected yet - expected on first setup
                         pass

@@ -341,16 +341,18 @@ class RasterFilterController(QObject):
     @pyqtSlot('QgsMapLayer')
     def on_source_layer_changed(self, layer):
         """Handle source raster layer selection change."""
-        # Update band selector
+        # Update band selector (block signals to prevent cascading)
+        self.dockwidget.comboBox_raster_band.blockSignals(True)
         self.dockwidget.comboBox_raster_band.clear()
-        
+
         if layer and isinstance(layer, QgsRasterLayer) and layer.isValid():
             band_count = layer.bandCount()
             for i in range(1, band_count + 1):
                 band_name = layer.bandName(i) or f"Band {i}"
                 self.dockwidget.comboBox_raster_band.addItem(band_name)
-            
+
             logger.debug(f"Updated band selector: {band_count} bands")
+        self.dockwidget.comboBox_raster_band.blockSignals(False)
     
     # =========================================================================
     # TASK COMPLETION HANDLERS
@@ -562,6 +564,8 @@ class RasterFilterController(QObject):
     
     def cleanup_on_close(self):
         """Cleanup temporary layers when plugin closes."""
+        self.disconnect_layer_tree_signals()
+
         if not self.config.cleanup_on_close:
             return
         
@@ -586,6 +590,22 @@ class RasterFilterController(QObject):
             self._remove_layer(layer_id)
         
         logger.info(f"Cleaned up {len(layer_ids)} temporary layers on close")
+
+    def disconnect_layer_tree_signals(self):
+        """Disconnect QGIS singleton signals to prevent orphaned connections on reload."""
+        try:
+            layer_tree_root = QgsProject.instance().layerTreeRoot()
+            try:
+                layer_tree_root.visibilityChanged.disconnect(self.on_layer_tree_visibility_changed)
+            except (TypeError, RuntimeError):
+                pass
+            try:
+                QgsProject.instance().layerRemoved.disconnect(self.on_layer_removed_from_project)
+            except (TypeError, RuntimeError):
+                pass
+            logger.debug("Layer tree signals disconnected")
+        except Exception as e:
+            logger.warning(f"Error disconnecting layer tree signals: {e}")
 
 
 # Module exports

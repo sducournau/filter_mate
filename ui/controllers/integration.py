@@ -763,34 +763,87 @@ class ControllerIntegration:
             try:
                 dw.manageSignal(["EXPORTING", "LAYERS_TO_EXPORT"], 'disconnect')
                 if hasattr(self._exporting_controller, 'populate_export_combobox'):
-                    self._exporting_controller.populate_export_combobox()
-                    logger.debug("Export layers combobox populated via controller")
+                    result = self._exporting_controller.populate_export_combobox()
+                    logger.info(f"Export layers combobox populated via controller: result={result}")
                 elif hasattr(self._exporting_controller, 'refresh_layers'):
                     self._exporting_controller.refresh_layers()
-                    logger.debug("Export layers combobox populated via refresh_layers")
+                    logger.info("Export layers combobox populated via refresh_layers")
                 dw.manageSignal(["EXPORTING", "LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
             except Exception as e:
-                logger.debug(f"Could not populate export layers: {e}")
-        
-        # Step 3: Populate filtering layers combobox
-        if self._filtering_controller:
+                logger.warning(f"Could not populate export layers: {e}", exc_info=True)
+                # FIX 2026-02-09: Fallback to direct method if controller fails
+                try:
+                    if hasattr(dw, '_populate_export_combobox_direct'):
+                        dw.manageSignal(["EXPORTING", "LAYERS_TO_EXPORT"], 'disconnect')
+                        dw._populate_export_combobox_direct()
+                        dw.manageSignal(["EXPORTING", "LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
+                        logger.info("Export layers combobox populated via direct fallback")
+                except Exception as e2:
+                    logger.warning(f"Direct fallback for export also failed: {e2}")
+        else:
+            # FIX 2026-02-09: No controller - use direct method
+            logger.warning("_on_project_layers_ready: No exporting controller, using direct method")
             try:
-                layer = dw.current_layer
-                if layer:
-                    dw.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
-                    self._filtering_controller.populate_layers_checkable_combobox(layer)
-                    dw.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
-                    logger.debug("Filtering layers combobox populated via controller")
-
-                    # v5.4: Also populate raster filtering layers-to-filter combobox
-                    # (same data, different widget - shows vector layers as targets)
-                    if hasattr(dw, 'checkableComboBoxLayer_filtering_raster_layers_to_filter'):
-                        try:
-                            self._populate_raster_filtering_layers(dw, layer)
-                        except Exception as re:
-                            logger.debug(f"Could not populate raster filtering layers: {re}")
+                if hasattr(dw, '_populate_export_combobox_direct'):
+                    dw.manageSignal(["EXPORTING", "LAYERS_TO_EXPORT"], 'disconnect')
+                    dw._populate_export_combobox_direct()
+                    dw.manageSignal(["EXPORTING", "LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
             except Exception as e:
-                logger.debug(f"Could not populate filtering layers: {e}")
+                logger.warning(f"Direct export population failed: {e}")
+
+        # Step 3: Populate filtering layers combobox
+        # FIX 2026-02-09: Resolve active layer with fallback when current_layer is None
+        # (current_layer_changed is deferred due to _plugin_busy during initial load)
+        layer = dw.current_layer
+        if layer is None:
+            # Fallback: try iface.activeLayer or first PROJECT_LAYERS entry
+            if hasattr(dw, 'iface') and dw.iface and dw.iface.activeLayer():
+                layer = dw.iface.activeLayer()
+                logger.info(f"_on_project_layers_ready: current_layer was None, using iface.activeLayer={layer.name()}")
+            elif dw.PROJECT_LAYERS:
+                from qgis.core import QgsProject
+                first_id = list(dw.PROJECT_LAYERS.keys())[0]
+                layer = QgsProject.instance().mapLayer(first_id)
+                if layer:
+                    logger.info(f"_on_project_layers_ready: current_layer was None, using first PROJECT_LAYERS entry={layer.name()}")
+
+        if self._filtering_controller and layer:
+            try:
+                dw.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
+                self._filtering_controller.populate_layers_checkable_combobox(layer)
+                dw.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
+                logger.info("Filtering layers combobox populated via controller")
+
+                # v5.4: Also populate raster filtering layers-to-filter combobox
+                # (same data, different widget - shows vector layers as targets)
+                if hasattr(dw, 'checkableComboBoxLayer_filtering_raster_layers_to_filter'):
+                    try:
+                        self._populate_raster_filtering_layers(dw, layer)
+                    except Exception as re:
+                        logger.debug(f"Could not populate raster filtering layers: {re}")
+            except Exception as e:
+                logger.warning(f"Could not populate filtering layers via controller: {e}", exc_info=True)
+                # FIX 2026-02-09: Fallback to direct method
+                try:
+                    if hasattr(dw, '_populate_filtering_layers_direct'):
+                        dw.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
+                        dw._populate_filtering_layers_direct(layer)
+                        dw.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
+                        logger.info("Filtering layers combobox populated via direct fallback")
+                except Exception as e2:
+                    logger.warning(f"Direct fallback for filtering also failed: {e2}")
+        elif layer:
+            # FIX 2026-02-09: No controller - use direct method
+            logger.warning("_on_project_layers_ready: No filtering controller, using direct method")
+            try:
+                if hasattr(dw, '_populate_filtering_layers_direct'):
+                    dw.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
+                    dw._populate_filtering_layers_direct(layer)
+                    dw.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
+            except Exception as e:
+                logger.warning(f"Direct filtering population failed: {e}")
+        else:
+            logger.warning("_on_project_layers_ready: No layer available for filtering combobox population")
 
         # Step 4: Notify layer sync controller
         if self._layer_sync_controller:

@@ -1286,14 +1286,14 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         if is_layer_valid(self.layer) and self.layer.id() in self.list_widgets:
             if self.list_widgets[self.layer.id()].getTotalFeaturesListCount() == self.list_widgets[self.layer.id()].count():
                 try:
-                    self.filter_le.editingFinished.disconnect()
-                except TypeError:
+                    self.filter_le.editingFinished.disconnect(self.filter_items)
+                except (TypeError, RuntimeError):
                     pass
                 self.filter_le.textChanged.connect(self._on_filter_text_changed)
             else:
                 try:
-                    self.filter_le.textChanged.disconnect()
-                except TypeError:
+                    self.filter_le.textChanged.disconnect(self._on_filter_text_changed)
+                except (TypeError, RuntimeError):
                     pass
                 self.filter_le.editingFinished.connect(self.filter_items)
     
@@ -1423,8 +1423,13 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         
         self.list_widgets[self.layer.id()] = ListWidgetWrapper(pk_name, pk_is_numeric, self)
         self.list_widgets[self.layer.id()].viewport().installEventFilter(self)
-        self.layout.addWidget(self.list_widgets[self.layer.id()])
-        # FIX 2026-01-18: Ensure list widget is visible after adding to layout
+        # FIX 2026-02-09: Insert list widget BEFORE items_le so visual order is:
+        # filter_le (index 0) → QListWidget (index 1) → items_le (index 2)
+        items_le_index = self.layout.indexOf(self.items_le)
+        if items_le_index >= 0:
+            self.layout.insertWidget(items_le_index, self.list_widgets[self.layer.id()])
+        else:
+            self.layout.addWidget(self.list_widgets[self.layer.id()])
         self.list_widgets[self.layer.id()].setVisible(True)
         self.list_widgets[self.layer.id()].show()
 

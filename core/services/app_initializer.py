@@ -540,8 +540,9 @@ class AppInitializer:
             logger.info(f"Recovery: Found {len(current_layers)} usable layers, retrying add_layers")
             if self._manage_task:
                 QTimer.singleShot(100, lambda: self._manage_task('add_layers', current_layers))
-            # Set another safety timer
-            QTimer.singleShot(5000, lambda: self._ensure_ui_enabled_final(0))
+            # Set another safety timer - use weakref to avoid keeping self alive
+            self_ref = weakref.ref(self)
+            QTimer.singleShot(5000, lambda: self_ref() and self_ref()._ensure_ui_enabled_final(0))
         else:
             logger.warning(f"Recovery: No usable layers found from {len(all_layers)} total layers")
             # Update indicator to show waiting state
@@ -571,7 +572,8 @@ class AppInitializer:
                 dockwidget.get_project_layers_from_app(project_layers, project)
         elif retry_count < MAX_RETRIES:
             logger.info(f"Final safety timer: Deferring check (retry {retry_count + 1}/{MAX_RETRIES})")
-            QTimer.singleShot(3000, lambda: self._ensure_ui_enabled_final(retry_count + 1))
+            self_ref = weakref.ref(self)
+            QTimer.singleShot(3000, lambda: self_ref() and self_ref()._ensure_ui_enabled_final(retry_count + 1))
         else:
             logger.error("Final safety timer: Failed to load layers after recovery")
             iface.messageBar().pushWarning(
@@ -638,8 +640,8 @@ class AppInitializer:
         # Use layersAdded (batch) instead of layerWasAdded (per layer)
         if self._on_layers_added and self._manage_task:
             map_layer_store.layersAdded.connect(self._on_layers_added)
-            map_layer_store.layersWillBeRemoved.connect(lambda layers: self._manage_task('remove_layers', layers))
-            map_layer_store.allLayersRemoved.connect(lambda: self._manage_task('remove_all_layers'))
+            map_layer_store.layersWillBeRemoved.connect(self._on_layers_will_be_removed)
+            map_layer_store.allLayersRemoved.connect(self._on_all_layers_removed)
         
         if self._set_signals_connected:
             self._set_signals_connected(True)
@@ -661,7 +663,7 @@ class AppInitializer:
         
         # Connect task launching signal
         if self._manage_task:
-            dockwidget.launchingTask.connect(lambda x: self._manage_task(x))
+            dockwidget.launchingTask.connect(self._on_launching_task)
         
         # Connect current layer changed signal
         if self._update_undo_redo_buttons:
@@ -669,26 +671,56 @@ class AppInitializer:
         
         # Connect variable management signals
         if self._save_variables_from_layer and self._remove_variables_from_layer:
-            dockwidget.resettingLayerVariableOnError.connect(
-                lambda layer, properties: self._safe_layer_operation(layer, properties, self._remove_variables_from_layer)
-            )
-            dockwidget.settingLayerVariable.connect(
-                lambda layer, properties: self._safe_layer_operation(layer, properties, self._save_variables_from_layer)
-            )
-            dockwidget.resettingLayerVariable.connect(
-                lambda layer, properties: self._safe_layer_operation(layer, properties, self._remove_variables_from_layer)
-            )
+            dockwidget.resettingLayerVariableOnError.connect(self._on_resetting_layer_variable_on_error)
+            dockwidget.settingLayerVariable.connect(self._on_setting_layer_variable)
+            dockwidget.resettingLayerVariable.connect(self._on_resetting_layer_variable)
         
         # Connect project variables signal
         if self._save_project_variables:
             dockwidget.settingProjectVariables.connect(self._save_project_variables)
-            project.fileNameChanged.connect(lambda: self._save_project_variables())
+            project.fileNameChanged.connect(self._on_project_filename_changed)
         
         if self._set_dockwidget_signals_connected:
             self._set_dockwidget_signals_connected(True)
         
         logger.debug("Dockwidget signals connected successfully")
     
+    # ================================================================
+    # NAMED SIGNAL HANDLERS (replace lambdas for GC-safe connections)
+    # ================================================================
+
+    def _on_layers_will_be_removed(self, layers):
+        """Handle layersWillBeRemoved signal."""
+        if self._manage_task:
+            self._manage_task('remove_layers', layers)
+
+    def _on_all_layers_removed(self):
+        """Handle allLayersRemoved signal."""
+        if self._manage_task:
+            self._manage_task('remove_all_layers')
+
+    def _on_launching_task(self, x):
+        """Handle dockwidget.launchingTask signal."""
+        if self._manage_task:
+            self._manage_task(x)
+
+    def _on_resetting_layer_variable_on_error(self, layer, properties):
+        """Handle dockwidget.resettingLayerVariableOnError signal."""
+        self._safe_layer_operation(layer, properties, self._remove_variables_from_layer)
+
+    def _on_setting_layer_variable(self, layer, properties):
+        """Handle dockwidget.settingLayerVariable signal."""
+        self._safe_layer_operation(layer, properties, self._save_variables_from_layer)
+
+    def _on_resetting_layer_variable(self, layer, properties):
+        """Handle dockwidget.resettingLayerVariable signal."""
+        self._safe_layer_operation(layer, properties, self._remove_variables_from_layer)
+
+    def _on_project_filename_changed(self):
+        """Handle project.fileNameChanged signal."""
+        if self._save_project_variables:
+            self._save_project_variables()
+
     def _safe_layer_operation(self, layer: QgsVectorLayer, properties: Any, operation: Callable):
         """
         Safely execute a layer operation by deferring to Qt event loop.

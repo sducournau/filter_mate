@@ -232,6 +232,34 @@ class FilterMateApp:
         # Fallback: minimal validation
         return [l for l in layers if isinstance(l, QgsVectorLayer) and l.isValid() and is_layer_source_available(l)]
 
+    def _on_layers_will_be_removed(self, layers):
+        """Signal handler for layersWillBeRemoved (named method replaces lambda for GC safety)."""
+        self.manage_task('remove_layers', layers)
+
+    def _on_all_layers_removed(self):
+        """Signal handler for allLayersRemoved (named method replaces lambda for GC safety)."""
+        self.manage_task('remove_all_layers')
+
+    def _on_project_filename_changed(self):
+        """Signal handler for PROJECT.fileNameChanged (named method replaces lambda for GC safety)."""
+        self.save_project_variables()
+
+    def _on_launching_task(self, task_name):
+        """Signal handler for launchingTask (named method replaces lambda for GC safety)."""
+        self.manage_task(task_name)
+
+    def _on_setting_layer_variable(self, layer, properties):
+        """Signal handler for settingLayerVariable (named method replaces lambda for GC safety)."""
+        self._safe_layer_operation(layer, properties, self.save_variables_from_layer)
+
+    def _on_resetting_layer_variable(self, layer, properties):
+        """Signal handler for resettingLayerVariable (named method replaces lambda for GC safety)."""
+        self._safe_layer_operation(layer, properties, self.remove_variables_from_layer)
+
+    def _on_resetting_layer_variable_on_error(self, layer, properties):
+        """Signal handler for resettingLayerVariableOnError (named method replaces lambda for GC safety)."""
+        self._safe_layer_operation(layer, properties, self.remove_variables_from_layer)
+
     def _on_layers_added(self, layers):
         """Signal handler for layersAdded: ignore broken/invalid layers.
         
@@ -805,12 +833,8 @@ class FilterMateApp:
         logger.debug("Connecting layer store signals (layersAdded, layersWillBeRemoved...)")
         
         self.MapLayerStore.layersAdded.connect(self._on_layers_added)
-        self.MapLayerStore.layersWillBeRemoved.connect(
-            lambda layers: self.manage_task('remove_layers', layers)
-        )
-        self.MapLayerStore.allLayersRemoved.connect(
-            lambda: self.manage_task('remove_all_layers')
-        )
+        self.MapLayerStore.layersWillBeRemoved.connect(self._on_layers_will_be_removed)
+        self.MapLayerStore.allLayersRemoved.connect(self._on_all_layers_removed)
         
         self._signals_connected = True
         logger.debug("✓ Layer store signals connected")
@@ -837,41 +861,22 @@ class FilterMateApp:
         logger.debug("Connecting dockwidget signals...")
         
         # Task launching signal - triggers filter/unfilter/export tasks
-        self.dockwidget.launchingTask.connect(
-            lambda task_name: self.manage_task(task_name)
-        )
-        # FIX 2026-01-15: Log signal connection confirmation
+        self.dockwidget.launchingTask.connect(self._on_launching_task)
         logger.debug(f"✓ Connected launchingTask signal")
-        
+
         # Current layer changed - update undo/redo buttons
-        self.dockwidget.currentLayerChanged.connect(
-            self.update_undo_redo_buttons
-        )
-        
+        self.dockwidget.currentLayerChanged.connect(self.update_undo_redo_buttons)
+
         # Layer variable signals - persist layer properties
-        self.dockwidget.settingLayerVariable.connect(
-            lambda layer, properties: self._safe_layer_operation(
-                layer, properties, self.save_variables_from_layer
-            )
-        )
-        self.dockwidget.resettingLayerVariable.connect(
-            lambda layer, properties: self._safe_layer_operation(
-                layer, properties, self.remove_variables_from_layer
-            )
-        )
-        self.dockwidget.resettingLayerVariableOnError.connect(
-            lambda layer, properties: self._safe_layer_operation(
-                layer, properties, self.remove_variables_from_layer
-            )
-        )
+        self.dockwidget.settingLayerVariable.connect(self._on_setting_layer_variable)
+        self.dockwidget.resettingLayerVariable.connect(self._on_resetting_layer_variable)
+        self.dockwidget.resettingLayerVariableOnError.connect(self._on_resetting_layer_variable_on_error)
         
         # Project variable signals - persist project-level settings
         self.dockwidget.settingProjectVariables.connect(
             self.save_project_variables
         )
-        self.PROJECT.fileNameChanged.connect(
-            lambda: self.save_project_variables()
-        )
+        self.PROJECT.fileNameChanged.connect(self._on_project_filename_changed)
         
         # Widget initialization signal - sync state when widgets ready
         self.dockwidget.widgetsInitialized.connect(
@@ -888,31 +893,55 @@ class FilterMateApp:
         Called before plugin unload or project change to prevent
         access violations from stale signal connections.
         """
-        # Disconnect layer store signals
+        # Disconnect layer store signals (specific slots)
         if self._signals_connected and self.MapLayerStore:
             try:
-                self.MapLayerStore.layersAdded.disconnect()
-                self.MapLayerStore.layersWillBeRemoved.disconnect()
-                self.MapLayerStore.allLayersRemoved.disconnect()
-                self._signals_connected = False
-                logger.debug("Layer store signals disconnected")
-            except (TypeError, RuntimeError) as e:
-                logger.debug(f"Could not disconnect layer store signals: {e}")
-        
-        # Disconnect dockwidget signals
+                self.MapLayerStore.layersAdded.disconnect(self._on_layers_added)
+            except (TypeError, RuntimeError):
+                pass
+            try:
+                self.MapLayerStore.layersWillBeRemoved.disconnect(self._on_layers_will_be_removed)
+            except (TypeError, RuntimeError):
+                pass
+            try:
+                self.MapLayerStore.allLayersRemoved.disconnect(self._on_all_layers_removed)
+            except (TypeError, RuntimeError):
+                pass
+            self._signals_connected = False
+            logger.debug("Layer store signals disconnected")
+
+        # Disconnect dockwidget signals (specific slots)
         if self._dockwidget_signals_connected and self.dockwidget:
             try:
-                self.dockwidget.launchingTask.disconnect()
-                self.dockwidget.currentLayerChanged.disconnect()
-                self.dockwidget.settingLayerVariable.disconnect()
-                self.dockwidget.resettingLayerVariable.disconnect()
-                self.dockwidget.resettingLayerVariableOnError.disconnect()
-                self.dockwidget.settingProjectVariables.disconnect()
-                self.dockwidget.widgetsInitialized.disconnect()
-                self._dockwidget_signals_connected = False
-                logger.debug("Dockwidget signals disconnected")
-            except (TypeError, RuntimeError) as e:
-                logger.debug(f"Could not disconnect dockwidget signals: {e}")
+                self.dockwidget.launchingTask.disconnect(self._on_launching_task)
+            except (TypeError, RuntimeError):
+                pass
+            try:
+                self.dockwidget.currentLayerChanged.disconnect(self.update_undo_redo_buttons)
+            except (TypeError, RuntimeError):
+                pass
+            try:
+                self.dockwidget.settingLayerVariable.disconnect(self._on_setting_layer_variable)
+            except (TypeError, RuntimeError):
+                pass
+            try:
+                self.dockwidget.resettingLayerVariable.disconnect(self._on_resetting_layer_variable)
+            except (TypeError, RuntimeError):
+                pass
+            try:
+                self.dockwidget.resettingLayerVariableOnError.disconnect(self._on_resetting_layer_variable_on_error)
+            except (TypeError, RuntimeError):
+                pass
+            try:
+                self.dockwidget.settingProjectVariables.disconnect(self.save_project_variables)
+            except (TypeError, RuntimeError):
+                pass
+            try:
+                self.dockwidget.widgetsInitialized.disconnect(self._on_widgets_initialized)
+            except (TypeError, RuntimeError):
+                pass
+            self._dockwidget_signals_connected = False
+            logger.debug("Dockwidget signals disconnected")
 
     def _safe_layer_operation(self, layer, properties, operation):
         """Safely execute a layer operation by deferring to Qt event loop and re-fetching layer."""
@@ -1009,17 +1038,23 @@ class FilterMateApp:
         if new_layer_store and self._signals_connected:
             logger.debug(f"FilterMate: Disconnecting old layer store signals for {task_name}")
             try:
-                old_layer_store.layersAdded.disconnect()
-                old_layer_store.layersWillBeRemoved.disconnect()
-                old_layer_store.allLayersRemoved.disconnect()
-                logger.debug("FilterMate: Old layer store signals disconnected")
-            except (TypeError, RuntimeError) as e:
-                logger.debug(f"Could not disconnect old signals (expected): {e}")
+                old_layer_store.layersAdded.disconnect(self._on_layers_added)
+            except (TypeError, RuntimeError):
+                pass
+            try:
+                old_layer_store.layersWillBeRemoved.disconnect(self._on_layers_will_be_removed)
+            except (TypeError, RuntimeError):
+                pass
+            try:
+                old_layer_store.allLayersRemoved.disconnect(self._on_all_layers_removed)
+            except (TypeError, RuntimeError):
+                pass
+            logger.debug("FilterMate: Old layer store signals disconnected")
             
             self.MapLayerStore = new_layer_store
             self.MapLayerStore.layersAdded.connect(self._on_layers_added)
-            self.MapLayerStore.layersWillBeRemoved.connect(lambda layers: self.manage_task('remove_layers', layers))
-            self.MapLayerStore.allLayersRemoved.connect(lambda: self.manage_task('remove_all_layers'))
+            self.MapLayerStore.layersWillBeRemoved.connect(self._on_layers_will_be_removed)
+            self.MapLayerStore.allLayersRemoved.connect(self._on_all_layers_removed)
             logger.debug("FilterMate: Layer store signals reconnected to new project")
         elif new_layer_store:
             logger.debug("FilterMate: Updating MapLayerStore reference (signals not yet connected)")
@@ -1106,10 +1141,15 @@ class FilterMateApp:
         
         # Connect completion handler
         self.appTasks[task_name].taskCompleted.connect(
-            lambda tn=task_name, cl=current_layer, tp=task_parameters: 
+            lambda tn=task_name, cl=current_layer, tp=task_parameters:
                 self.filter_engine_task_completed(tn, cl, tp)
         )
-        
+
+        # Connect termination handler to unblock combobox on failure/cancellation
+        self.appTasks[task_name].taskTerminated.connect(
+            lambda tn=task_name: self._handle_filter_task_terminated(tn)
+        )
+
         # Cancel conflicting tasks and add to task manager
         self._cancel_conflicting_tasks()
         QgsApplication.taskManager().addTask(self.appTasks[task_name])
@@ -1244,6 +1284,25 @@ class FilterMateApp:
         except Exception:  # Signal may already be disconnected - expected during filtering protection
             pass
     
+    def _handle_filter_task_terminated(self, task_name):
+        """Handle filter task termination (failure/cancellation) - unblock combobox signals.
+
+        Without this handler, if a filter task fails or is cancelled, the combobox
+        signals remain blocked permanently (blockSignals(True) set in
+        _set_filter_protection_flags but never unblocked).
+        """
+        logger.warning(f"Filter task '{task_name}' was terminated - resetting protection flags")
+        if self.dockwidget is None:
+            return
+        try:
+            self.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
+            self.dockwidget._filtering_in_progress = False
+            self.dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
+            self.dockwidget.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect')
+            logger.info(f"Filter task '{task_name}' protection flags reset successfully")
+        except Exception as e:
+            logger.error(f"Error resetting filter protection flags after termination: {e}")
+
     def _show_filter_start_message(self, task_name, task_parameters, layers_props, layers, current_layer):
         """Show informational message about filtering operation starting."""
         # Determine dominant backend from distant layers
@@ -2365,10 +2424,10 @@ class FilterMateApp:
         # Reconnect PROJECT signals for project load
         if validate_postgres:
             try:
-                try: self.PROJECT.fileNameChanged.disconnect()
-                except TypeError:  # Signal not connected - expected on first project load
+                try: self.PROJECT.fileNameChanged.disconnect(self._on_project_filename_changed)
+                except (TypeError, RuntimeError):  # Signal not connected - expected on first project load
                     pass
-                self.PROJECT.fileNameChanged.connect(lambda: self.save_project_variables())
+                self.PROJECT.fileNameChanged.connect(self._on_project_filename_changed)
                 logger.debug("PROJECT signals reconnected")
             except Exception as e: logger.warning(f"Error reconnecting signals: {e}")
         

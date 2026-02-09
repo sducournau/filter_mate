@@ -1150,21 +1150,27 @@ class LayerSyncController(BaseController):
                     dw.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect')
 
     def _connect_layer_selection_signal(self) -> None:
-        """Connect selectionChanged signal for current layer."""
+        """Connect selectionChanged signal for current layer.
+
+        Delegates to dockwidget._ensure_layer_signals_connected() for safe
+        disconnect-then-connect pattern (prevents duplicate connections).
+        """
         dw = self.dockwidget
         current_layer = getattr(dw, 'current_layer', None)
-        
+
         if current_layer is None:
             return
-        
-        try:
-            if hasattr(dw, 'on_layer_selection_changed'):
-                current_layer.selectionChanged.connect(dw.on_layer_selection_changed)
-                dw.current_layer_selection_connection = True
-        except (TypeError, RuntimeError) as e:
-            logger.warning(f"Could not connect selectionChanged signal: {e}")
-            if hasattr(dw, 'current_layer_selection_connection'):
-                dw.current_layer_selection_connection = None
+
+        if hasattr(dw, '_ensure_layer_signals_connected'):
+            dw._ensure_layer_signals_connected(current_layer)
+        else:
+            # Fallback for backwards compatibility
+            try:
+                if hasattr(dw, 'on_layer_selection_changed'):
+                    current_layer.selectionChanged.connect(dw.on_layer_selection_changed)
+                    dw.current_layer_selection_connection = True
+            except (TypeError, RuntimeError) as e:
+                logger.warning(f"Could not connect selectionChanged signal: {e}")
 
     def _restore_exploring_groupbox_state(self, layer_props: dict) -> None:
         """

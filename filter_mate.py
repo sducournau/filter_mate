@@ -33,6 +33,7 @@ import os.path
 from .filter_mate_app import FilterMateApp
 from .config.config import reload_config
 from .infrastructure.logging import get_logger
+from .ui.dialogs.welcome_dialog import WelcomeDialog
 
 logger = get_logger(__name__)
 
@@ -1244,6 +1245,12 @@ class FilterMate:
             )
 
 
+    def _show_welcome_dialog(self):
+        """Show the Discord community dialog on first launch."""
+        if WelcomeDialog.should_show():
+            dialog = WelcomeDialog(self.iface.mainWindow())
+            dialog.exec_()
+
     def run(self):
         """Run method that loads and starts the plugin"""
 
@@ -1263,6 +1270,8 @@ class FilterMate:
                     self.app.run()
                     if self.app.dockwidget:
                         self.app.dockwidget.closingPlugin.connect(self.onClosePlugin)
+                    # Show welcome dialog on first launch
+                    self._show_welcome_dialog()
                 else:
                     # App already exists, call run() which will show the dockwidget
                     # and refresh layers if needed
