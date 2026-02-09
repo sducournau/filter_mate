@@ -18,7 +18,7 @@ from qgis.core import QgsRasterLayer, QgsProject
 from qgis.gui import QgsMapCanvas
 from qgis.utils import iface
 
-from infrastructure.logging import get_logger
+from ...infrastructure.logging import get_logger
 from .pixel_picker_tool import RasterPixelPickerTool
 
 logger = get_logger(__name__)

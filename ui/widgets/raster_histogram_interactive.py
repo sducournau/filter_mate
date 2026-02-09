@@ -19,7 +19,7 @@ from qgis.PyQt.QtGui import QPainter, QColor, QPen, QBrush
 
 from qgis.core import QgsRasterLayer, QgsRasterBandStats
 
-from infrastructure.logging import get_logger
+from ...infrastructure.logging import get_logger
 
 logger = get_logger(__name__)
 

@@ -23,7 +23,7 @@ from qgis.core import QgsRasterLayer, QgsRasterBandStats
 
 from qgis.gui import QgsHistogramWidget
 
-from infrastructure.logging import get_logger
+from ...infrastructure.logging import get_logger
 
 # v5.11: Define PYQTGRAPH_AVAILABLE for backward compatibility
 # This module is deprecated - use raster_histogram_interactive.py instead
