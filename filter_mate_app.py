@@ -89,7 +89,7 @@ try:
         LayerLifecycleConfig
     )
     logger.debug("✓ layer_lifecycle_service")
-from .adapters.undo_redo_handler import UndoRedoHandler  # v4.0: Undo/Redo extraction
+    from .adapters.undo_redo_handler import UndoRedoHandler  # v4.0: Undo/Redo extraction
     logger.debug("✓ undo_redo_handler")
     from .adapters.database_manager import DatabaseManager  # v4.0: Database operations extraction
     logger.debug("✓ database_manager")
