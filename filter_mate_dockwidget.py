@@ -3472,7 +3472,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if not hasattr(self, attr): setattr(self, attr, {})
                 getattr(self, attr)[layer.id()] = True
                 if key == 'reduce_buffer_segments':
+                    self.mQgsSpinBox_filtering_buffer_segments.blockSignals(True)
                     self.mQgsSpinBox_filtering_buffer_segments.setValue(3)
+                    self.mQgsSpinBox_filtering_buffer_segments.blockSignals(False)
                 applied.append(label)
         if applied:
             show_success("FilterMate", self.tr("Applied to '{0}':\n{1}").format(layer.name(), "\n".join(f"• {a}" for a in applied)))
@@ -5518,12 +5520,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 ogr_driver_list = sorted([ogr.GetDriver(i).GetDescription() for i in range(ogr.GetDriverCount())])
                 datatype_widget.addItems(ogr_driver_list)
                 logger.info(f"_populate_export_combobox_direct: Added {len(ogr_driver_list)} export formats")
-                
+
+                # blockSignals during programmatic population
+                datatype_widget.blockSignals(True)
                 if datatype_to_export:
                     idx = datatype_widget.findText(datatype_to_export)
                     datatype_widget.setCurrentIndex(idx if idx >= 0 else datatype_widget.findText('GPKG'))
                 else:
                     datatype_widget.setCurrentIndex(datatype_widget.findText('GPKG'))
+                datatype_widget.blockSignals(False)
             except ImportError:
                 logger.warning("_populate_export_combobox_direct: OGR not available")
             

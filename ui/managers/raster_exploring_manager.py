@@ -749,7 +749,10 @@ class RasterExploringManager(QObject):
         pass
 
     def _on_reset_range_clicked(self):
-        """Reset min/max spinboxes to full data range from statistics."""
+        """Reset min/max spinboxes to full data range from statistics.
+
+        FIX: blockSignals to prevent cascading _on_spinbox_range_trigger.
+        """
         d = self.dockwidget
         try:
             data_min = None
@@ -760,29 +763,63 @@ class RasterExploringManager(QObject):
 
             if data_min is not None and data_max is not None:
                 if hasattr(d, 'doubleSpinBox_min'):
-                    d.doubleSpinBox_min.setValue(data_min)
+                    d.doubleSpinBox_min.blockSignals(True)
                 if hasattr(d, 'doubleSpinBox_max'):
-                    d.doubleSpinBox_max.setValue(data_max)
+                    d.doubleSpinBox_max.blockSignals(True)
+
+                try:
+                    if hasattr(d, 'doubleSpinBox_min'):
+                        d.doubleSpinBox_min.setValue(data_min)
+                    if hasattr(d, 'doubleSpinBox_max'):
+                        d.doubleSpinBox_max.setValue(data_max)
+                finally:
+                    if hasattr(d, 'doubleSpinBox_min'):
+                        d.doubleSpinBox_min.blockSignals(False)
+                    if hasattr(d, 'doubleSpinBox_max'):
+                        d.doubleSpinBox_max.blockSignals(False)
+
                 if self._histogram:
                     self._histogram.set_range(data_min, data_max)
+
+                # Reset pixel range flag so next pixel pick starts fresh
+                self._pixel_range_initialized = False
+
                 show_info("FilterMate", f"Range reset to data bounds: [{data_min:.2f}, {data_max:.2f}]")
+                logger.info(f"Range reset to [{data_min:.2f}, {data_max:.2f}]")
             else:
                 show_warning("FilterMate", "Statistics not available. Click Refresh first.")
         except Exception as e:
             logger.error(f"Error resetting range: {e}")
 
     def _on_pixel_values_picked(self, min_val: float, max_val: float):
-        """Handle min/max values picked from raster."""
+        """Handle min/max values picked from raster.
+
+        FIX: blockSignals to prevent cascading handler calls
+        (each setValue fires _on_spinbox_range_trigger / _on_rect_spinbox_trigger).
+        """
         d = self.dockwidget
         logger.debug(f"Pixel values picked: [{min_val:.2f}, {max_val:.2f}]")
-        if hasattr(d, 'doubleSpinBox_min'):
-            d.doubleSpinBox_min.setValue(min_val)
-        if hasattr(d, 'doubleSpinBox_max'):
-            d.doubleSpinBox_max.setValue(max_val)
-        if hasattr(d, 'doubleSpinBox_rect_min'):
-            d.doubleSpinBox_rect_min.setValue(min_val)
-        if hasattr(d, 'doubleSpinBox_rect_max'):
-            d.doubleSpinBox_rect_max.setValue(max_val)
+
+        # Block ALL spinboxes to prevent cascading
+        all_spinboxes = ('doubleSpinBox_min', 'doubleSpinBox_max', 'doubleSpinBox_rect_min', 'doubleSpinBox_rect_max')
+        for sb_name in all_spinboxes:
+            if hasattr(d, sb_name):
+                getattr(d, sb_name).blockSignals(True)
+
+        try:
+            if hasattr(d, 'doubleSpinBox_min'):
+                d.doubleSpinBox_min.setValue(min_val)
+            if hasattr(d, 'doubleSpinBox_max'):
+                d.doubleSpinBox_max.setValue(max_val)
+            if hasattr(d, 'doubleSpinBox_rect_min'):
+                d.doubleSpinBox_rect_min.setValue(min_val)
+            if hasattr(d, 'doubleSpinBox_rect_max'):
+                d.doubleSpinBox_rect_max.setValue(max_val)
+        finally:
+            for sb_name in all_spinboxes:
+                if hasattr(d, sb_name):
+                    getattr(d, sb_name).blockSignals(False)
+
         if self._histogram:
             self._histogram.set_range(min_val, max_val)
 
@@ -815,7 +852,12 @@ class RasterExploringManager(QObject):
         show_info("FilterMate - Pixel Values", message)
 
     def _on_add_pixel_to_selection_clicked(self):
-        """Add currently displayed pixel value to range selection."""
+        """Add currently displayed pixel value to range selection.
+
+        FIX: Use _pixel_range_initialized flag instead of checking value == 0.0
+        (avoids false positive when raster legitimately contains pixel value 0.0).
+        FIX: blockSignals on all spinboxes to prevent cascading.
+        """
         d = self.dockwidget
         try:
             if not hasattr(d, 'label_pixel_value'):
@@ -836,18 +878,35 @@ class RasterExploringManager(QObject):
             current_min = d.doubleSpinBox_rect_min.value() if hasattr(d, 'doubleSpinBox_rect_min') else None
             current_max = d.doubleSpinBox_rect_max.value() if hasattr(d, 'doubleSpinBox_rect_max') else None
 
-            is_first_value = (current_min == 0.0 and current_max == 0.0)
-            if is_first_value:
+            has_existing_range = getattr(self, '_pixel_range_initialized', False)
+            if not has_existing_range:
                 new_min = pixel_value
                 new_max = pixel_value
+                self._pixel_range_initialized = True
             else:
                 new_min = min(current_min, pixel_value) if current_min is not None else pixel_value
                 new_max = max(current_max, pixel_value) if current_max is not None else pixel_value
 
-            if hasattr(d, 'doubleSpinBox_rect_min'):
-                d.doubleSpinBox_rect_min.setValue(new_min)
-            if hasattr(d, 'doubleSpinBox_rect_max'):
-                d.doubleSpinBox_rect_max.setValue(new_max)
+            # Block ALL spinboxes to prevent cascading
+            all_spinboxes = ('doubleSpinBox_min', 'doubleSpinBox_max', 'doubleSpinBox_rect_min', 'doubleSpinBox_rect_max')
+            for sb_name in all_spinboxes:
+                if hasattr(d, sb_name):
+                    getattr(d, sb_name).blockSignals(True)
+
+            try:
+                if hasattr(d, 'doubleSpinBox_min'):
+                    d.doubleSpinBox_min.setValue(new_min)
+                if hasattr(d, 'doubleSpinBox_max'):
+                    d.doubleSpinBox_max.setValue(new_max)
+                if hasattr(d, 'doubleSpinBox_rect_min'):
+                    d.doubleSpinBox_rect_min.setValue(new_min)
+                if hasattr(d, 'doubleSpinBox_rect_max'):
+                    d.doubleSpinBox_rect_max.setValue(new_max)
+            finally:
+                for sb_name in all_spinboxes:
+                    if hasattr(d, sb_name):
+                        getattr(d, sb_name).blockSignals(False)
+
             if self._histogram:
                 self._histogram.set_range(new_min, new_max)
 
@@ -1046,7 +1105,11 @@ class RasterExploringManager(QObject):
             self.clear_statistics_display()
 
     def _on_stats_computed(self, stats: dict):
-        """Handle async raster statistics completion."""
+        """Handle async raster statistics completion.
+
+        FIX: blockSignals on spinboxes during programmatic setValue
+        to prevent cascading _on_spinbox_range_trigger.
+        """
         d = self.dockwidget
         try:
             self._update_statistics_display(
@@ -1056,12 +1119,18 @@ class RasterExploringManager(QObject):
             )
 
             if hasattr(d, 'doubleSpinBox_min') and hasattr(d, 'doubleSpinBox_max'):
-                d.doubleSpinBox_min.setMinimum(stats['min'])
-                d.doubleSpinBox_min.setMaximum(stats['max'])
-                d.doubleSpinBox_max.setMinimum(stats['min'])
-                d.doubleSpinBox_max.setMaximum(stats['max'])
-                d.doubleSpinBox_min.setValue(stats['min'])
-                d.doubleSpinBox_max.setValue(stats['max'])
+                d.doubleSpinBox_min.blockSignals(True)
+                d.doubleSpinBox_max.blockSignals(True)
+                try:
+                    d.doubleSpinBox_min.setMinimum(stats['min'])
+                    d.doubleSpinBox_min.setMaximum(stats['max'])
+                    d.doubleSpinBox_max.setMinimum(stats['min'])
+                    d.doubleSpinBox_max.setMaximum(stats['max'])
+                    d.doubleSpinBox_min.setValue(stats['min'])
+                    d.doubleSpinBox_max.setValue(stats['max'])
+                finally:
+                    d.doubleSpinBox_min.blockSignals(False)
+                    d.doubleSpinBox_max.blockSignals(False)
 
             layer = d._get_current_exploring_layer()
             if layer:
