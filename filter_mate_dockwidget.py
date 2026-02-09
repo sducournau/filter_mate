@@ -813,7 +813,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except Exception as e:
             logger.error(f"setupUiCustom: dockwidget_widgets_configuration FAILED: {e}", exc_info=True)
         self._load_all_pushbutton_icons()
-        self._load_raster_tool_icons()
+        self._load_raster_tool_icons()  # Delegates to manager if available
         self._setup_truncation_tooltips()
     
     def _load_all_pushbutton_icons(self):
@@ -909,74 +909,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return widget_map.get((widget_group, widget_name), "")
 
     def _load_raster_tool_icons(self):
-        """Load icons and apply consistent styling for raster tool buttons.
-        
-        This method is called specifically after raster widgets are connected
-        to ensure icons are properly loaded on raster pushbuttons and that
-        their style matches the vector exploring buttons.
-        
-        v5.8: Added font styling to match vector button appearance.
-        """
-        try:
-            pb_cfg = self.CONFIG_DATA.get("APP", {}).get("DOCKWIDGET", {}).get("PushButton", {})
-            icons = pb_cfg.get("ICONS", {})
-            sizes = pb_cfg.get("ICONS_SIZES", {})
-            
-            # Get icon size for non-action buttons
-            sz_oth_raw = sizes.get("OTHERS", 20)
-            sz = sz_oth_raw.get("value", 20) if isinstance(sz_oth_raw, dict) else sz_oth_raw
-            
-            raster_icons = icons.get("RASTER_EXPLORING", {})
-            if not raster_icons:
-                logger.warning("_load_raster_tool_icons: No RASTER_EXPLORING icons in config")
-                return
-            
-            # Create font matching vector buttons style
-            button_font = QtGui.QFont()
-            button_font.setFamily("Segoe UI")
-            button_font.setPointSize(10)
-            button_font.setBold(True)
-            button_font.setItalic(False)
-            button_font.setUnderline(False)
-            button_font.setWeight(75)
-            button_font.setStrikeOut(False)
-            button_font.setKerning(True)
-            button_font.setStyleStrategy(QtGui.QFont.PreferAntialias)
-            
-            loaded_count = 0
-            for name, ico_file in raster_icons.items():
-                attr = self._get_widget_attr_name("RASTER_EXPLORING", name)
-                if not attr:
-                    logger.debug(f"_load_raster_tool_icons: No mapping for RASTER_EXPLORING.{name}")
-                    continue
-                if not hasattr(self, attr):
-                    logger.warning(f"_load_raster_tool_icons: Widget {attr} not found")
-                    continue
-                
-                widget = getattr(self, attr)
-                icon_path = os.path.join(self.plugin_dir, "icons", ico_file)
-                
-                if not os.path.exists(icon_path):
-                    logger.warning(f"_load_raster_tool_icons: Icon file not found: {icon_path}")
-                    continue
-                
-                # Apply icon
-                icon = get_themed_icon(icon_path) if ICON_THEME_AVAILABLE else QtGui.QIcon(icon_path)
-                widget.setIcon(icon)
-                widget.setIconSize(QtCore.QSize(sz, sz))
-                
-                # Apply font styling to match vector buttons
-                widget.setFont(button_font)
-                
-                loaded_count += 1
-                logger.info(f"✓ Raster icon loaded: {name} -> {ico_file}")
-            
-            logger.info(f"_load_raster_tool_icons: Loaded {loaded_count} raster icons with styling")
-            
-        except Exception as e:
-            logger.error(f"_load_raster_tool_icons failed: {e}")
-            import traceback
-            logger.debug(traceback.format_exc())
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._load_tool_icons()
 
     def _setup_dual_toolbox(self):
         """Note: Setup the new Dual QToolBox architecture.
@@ -1072,12 +1007,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # v5.2 FIX 2026-01-31: Disable manual page switching - depends on current layer type
                 self._disable_toolbox_manual_switch()
             
-            # v5.10: Replace standard comboBox_band with checkable version for multi-band support
-            self._setup_checkable_band_combobox()
-            
-            # Connect raster page widgets
+            # Phase 3.1: Initialize RasterExploringManager (handles all raster setup)
+            try:
+                from .ui.managers.raster_exploring_manager import RasterExploringManager
+                self._raster_manager = RasterExploringManager(self)
+                self._raster_manager.setup()
+            except ImportError:
+                logger.warning("RasterExploringManager not available, using inline setup")
+                self._raster_manager = None
+
+            # Connect raster page widgets to delegation stubs
             if hasattr(self, 'comboBox_band'):
-                # v5.10: Use checkedBandsChanged for multi-band, currentBandChanged for single
                 if isinstance(self.comboBox_band, QgsCheckableComboBoxBands):
                     self.comboBox_band.currentBandChanged.connect(self._on_raster_band_changed)
                     self.comboBox_band.checkedBandsChanged.connect(self._on_raster_bands_changed)
@@ -1091,22 +1031,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.comboBox_predicate.currentIndexChanged.connect(self._on_raster_predicate_changed)
             if hasattr(self, 'pushButton_refresh_stats'):
                 self.pushButton_refresh_stats.clicked.connect(self._on_refresh_raster_stats)
-            # Note: pushButton_pixel_picker removed - using pushButton_raster_pixel_picker in keys
-            
+
             # v5.5: Connect vector stats refresh button
             if hasattr(self, 'pushButton_vector_refresh_stats'):
                 self.pushButton_vector_refresh_stats.clicked.connect(self._on_refresh_vector_stats)
-            
-            # Connect new raster tool buttons (v5.4)
-            self._connect_raster_tool_buttons()
-            
-            # v5.9 FIX: Setup scrollarea for raster content to fix GroupBox display
-            self._setup_raster_scrollarea()
-            
-            # Note: Setup interactive histogram widget
-            self._setup_raster_histogram_widget()
-            
-            # v5.11: Connect histogram groupbox toggle to trigger histogram computation
+
+            # v5.11: Connect histogram groupbox toggle
             if hasattr(self, 'mGroupBox_raster_histogram'):
                 self.mGroupBox_raster_histogram.toggled.connect(self._on_histogram_groupbox_toggled)
             
@@ -1166,289 +1096,44 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.warning(f"Could not switch toolBox page: {e}")
     
     def _setup_raster_scrollarea(self):
-        """v5.9 FIX: Wrap raster content in a ScrollArea for proper GroupBox display.
-        
-        The QgsCollapsibleGroupBox widgets in the raster exploring page need a ScrollArea
-        to properly display their expanded content. Without it, the content is clipped
-        when groupboxes are expanded because the parent layout doesn't allow scrolling.
-        
-        This method wraps the existing widget_raster_content in a QScrollArea at runtime,
-        preserving all existing widgets and layouts.
-        """
-        try:
-            if not hasattr(self, 'widget_raster_content') or not hasattr(self, 'horizontalLayout_raster_main'):
-                logger.debug("Raster content widgets not found, skipping scrollarea setup")
-                return
-            
-            from qgis.PyQt.QtWidgets import QScrollArea, QSizePolicy, QFrame
-            from qgis.PyQt.QtCore import Qt
-            
-            # The widget_raster_content is in horizontalLayout_raster_main
-            parent_layout = self.horizontalLayout_raster_main
-            
-            # Find the index of widget_raster_content in the layout
-            widget_index = -1
-            for i in range(parent_layout.count()):
-                item = parent_layout.itemAt(i)
-                if item and item.widget() == self.widget_raster_content:
-                    widget_index = i
-                    break
-            
-            if widget_index < 0:
-                logger.warning("Could not find widget_raster_content in horizontalLayout_raster_main")
-                return
-            
-            # Remove widget_raster_content from its current layout (but don't delete it)
-            parent_layout.removeWidget(self.widget_raster_content)
-            
-            # Create a ScrollArea
-            self.scrollArea_raster_content = QScrollArea(self.page_exploring_raster)
-            self.scrollArea_raster_content.setObjectName("scrollArea_raster_content")
-            self.scrollArea_raster_content.setWidgetResizable(True)
-            self.scrollArea_raster_content.setFrameShape(QFrame.NoFrame)
-            self.scrollArea_raster_content.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-            self.scrollArea_raster_content.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-            
-            # Set size policy to expand
-            sizePolicy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            sizePolicy.setHorizontalStretch(1)
-            sizePolicy.setVerticalStretch(1)
-            self.scrollArea_raster_content.setSizePolicy(sizePolicy)
-            
-            # Set the existing widget_raster_content as the scroll area's widget
-            self.scrollArea_raster_content.setWidget(self.widget_raster_content)
-            
-            # Ensure the widget_raster_content has proper size policy for scrolling
-            self.widget_raster_content.setSizePolicy(QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred))
-            
-            # Insert the scroll area at the same position in the layout
-            parent_layout.insertWidget(widget_index, self.scrollArea_raster_content)
-            
-            logger.info("Raster content wrapped in ScrollArea for proper GroupBox display")
-            
-        except Exception as e:
-            logger.warning(f"Could not setup raster scrollarea: {e}", exc_info=True)
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._setup_scrollarea()
+
     def _setup_checkable_band_combobox(self):
-        """v5.10: Replace standard comboBox_band with QgsCheckableComboBoxBands.
-        
-        This method replaces the standard QComboBox for band selection with
-        a checkable version that supports multi-band selection when
-        pushButton_raster_all_bands is enabled.
-        """
-        try:
-            if not hasattr(self, 'comboBox_band') or not hasattr(self, 'horizontalLayout_band'):
-                logger.warning("comboBox_band or horizontalLayout_band not found, skipping checkable setup")
-                return
-            
-            # Store reference to old widget
-            old_combo = self.comboBox_band
-            parent_layout = self.horizontalLayout_band
-            
-            # Find the index of comboBox_band in the layout
-            widget_index = -1
-            for i in range(parent_layout.count()):
-                item = parent_layout.itemAt(i)
-                if item and item.widget() == old_combo:
-                    widget_index = i
-                    break
-            
-            if widget_index < 0:
-                logger.warning("Could not find comboBox_band in horizontalLayout_band")
-                return
-            
-            # Create the new checkable combobox
-            new_combo = QgsCheckableComboBoxBands(self.page_exploring_raster)
-            new_combo.setObjectName("comboBox_band")
-            
-            # Copy size policy and tooltip
-            new_combo.setSizePolicy(old_combo.sizePolicy())
-            new_combo.setToolTip(old_combo.toolTip())
-            
-            # Remove old widget from layout
-            parent_layout.removeWidget(old_combo)
-            old_combo.setParent(None)
-            old_combo.deleteLater()
-            
-            # Insert new widget at the same position
-            parent_layout.insertWidget(widget_index, new_combo)
-            
-            # Replace reference
-            self.comboBox_band = new_combo
-            
-            logger.info("v5.10: comboBox_band replaced with QgsCheckableComboBoxBands")
-            
-        except Exception as e:
-            logger.error(f"Failed to setup checkable band combobox: {e}", exc_info=True)
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._setup_checkable_band_combobox()
+
     def _on_raster_bands_changed(self, band_indices: list):
-        """v5.10: Handle multi-band selection change.
-        
-        Called when checked bands change in multi-select mode.
-        Updates the pixel picker tool and histogram with new bands.
-        
-        Args:
-            band_indices: List of checked band indices (1-based)
-        """
-        try:
-            logger.debug(f"Raster bands changed: {band_indices}")
-            
-            # Update pixel picker tool if active
-            if hasattr(self, '_pixel_picker_tool') and self._pixel_picker_tool:
-                self._pixel_picker_tool.set_bands(band_indices)
-            
-            # Update histogram if in multi-band mode
-            if hasattr(self, '_raster_histogram') and self._raster_histogram:
-                if len(band_indices) > 1:
-                    # Multi-band: show combined stats or first band
-                    self._raster_histogram.setBands(band_indices)
-                elif band_indices:
-                    # Single band
-                    self._raster_histogram.setBand(band_indices[0])
-            
-            # Refresh stats display
-            if band_indices:
-                self._refresh_raster_stats_for_bands(band_indices)
-                
-        except Exception as e:
-            logger.error(f"Error handling bands change: {e}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_bands_changed(band_indices)
+
     def _refresh_raster_stats_for_bands(self, band_indices: list):
-        """Refresh statistics display for multiple bands.
-        
-        Args:
-            band_indices: List of band indices (1-based)
-        """
-        if not band_indices:
-            return
-        
-        # For now, show stats of first selected band
-        # TODO: Show combined stats for multi-band
-        if hasattr(self, '_on_raster_band_changed'):
-            self._on_raster_band_changed(band_indices[0])
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._refresh_stats_for_bands(band_indices)
+
     def _setup_raster_histogram_widget(self):
-        """Note: Setup the interactive raster histogram widget.
-        
-        Creates and embeds the RasterHistogramWidget into the widget_histogram_placeholder
-        defined in the .ui file. Uses QPainter-based widget (no pyqtgraph dependency).
-        """
-        try:
-            from ui.widgets.raster_histogram_interactive import RasterHistogramInteractiveWidget
-            from qgis.PyQt.QtWidgets import QVBoxLayout, QSizePolicy
-            
-            # Note: RasterHistogramInteractiveWidget uses QPainter, no pyqtgraph needed
-            
-            if not hasattr(self, 'widget_histogram_placeholder'):
-                logger.warning("Note: widget_histogram_placeholder not found in UI")
-                return
-            
-            # v5.11: Ensure placeholder has proper size policy and is visible
-            self.widget_histogram_placeholder.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            self.widget_histogram_placeholder.setMinimumHeight(100)
-            
-            # Clear any existing layout first
-            existing_layout = self.widget_histogram_placeholder.layout()
-            if existing_layout is not None:
-                # Remove all widgets from existing layout
-                while existing_layout.count():
-                    item = existing_layout.takeAt(0)
-                    if item.widget():
-                        item.widget().deleteLater()
-            
-            # Create new layout if needed
-            layout = self.widget_histogram_placeholder.layout()
-            if layout is None:
-                layout = QVBoxLayout(self.widget_histogram_placeholder)
-            layout.setContentsMargins(0, 0, 0, 0)
-            layout.setSpacing(0)
-            
-            # Create interactive histogram widget
-            self._raster_histogram = RasterHistogramInteractiveWidget()
-            self._raster_histogram.setMinimumHeight(80)
-            self._raster_histogram.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            
-            # Add to placeholder layout
-            layout.addWidget(self._raster_histogram)
-            
-            # Force visibility
-            self._raster_histogram.setVisible(True)
-            self.widget_histogram_placeholder.setVisible(True)
-            
-            # Connect interactive histogram signals to spinboxes
-            self._raster_histogram.rangeChanged.connect(self._on_histogram_range_changed)
-            self._raster_histogram.rangeSelectionFinished.connect(self._on_histogram_range_finished)
-            
-            logger.info(f"Note: Raster histogram widget initialized. Placeholder size: {self.widget_histogram_placeholder.size()}")
-            
-        except ImportError as e:
-            logger.warning(f"Note: Could not import histogram widget: {e}")
-            self._raster_histogram = None
-        except Exception as e:
-            logger.error(f"Note: Failed to setup histogram widget: {e}", exc_info=True)
-            self._raster_histogram = None
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._setup_histogram_widget()
+
     def _on_histogram_range_changed(self, min_val: float, max_val: float):
-        """Synchronise la sélection interactive de l'histogramme avec les spinbox min/max."""
-        if hasattr(self, 'doubleSpinBox_min'):
-            self.doubleSpinBox_min.blockSignals(True)
-            self.doubleSpinBox_min.setValue(min_val)
-            self.doubleSpinBox_min.blockSignals(False)
-        if hasattr(self, 'doubleSpinBox_max'):
-            self.doubleSpinBox_max.blockSignals(True)
-            self.doubleSpinBox_max.setValue(max_val)
-            self.doubleSpinBox_max.blockSignals(False)
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_histogram_range_changed(min_val, max_val)
+
     def _on_histogram_range_finished(self, min_val: float, max_val: float):
-        """Applique le filtre raster après sélection interactive (drag terminé)."""
-        logger.debug(f"Note: Histogram range selected: [{min_val:.2f}, {max_val:.2f}]")
-        self._on_histogram_range_changed(min_val, max_val)
-        # Ici, tu peux déclencher l'application du filtre raster si besoin
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_histogram_range_finished(min_val, max_val)
 
     def _on_histogram_groupbox_toggled(self, checked: bool):
-        """v5.11: Handle histogram groupbox toggle to compute/update histogram.
-        
-        When user checks the histogram groupbox, compute the histogram for the
-        current raster layer if not already computed.
-        
-        Args:
-            checked: True if groupbox is now checked/enabled
-        """
-        logger.info(f"v5.11: Histogram groupbox toggled: checked={checked}")
-        
-        if not checked:
-            return
-            
-        try:
-            # Ensure histogram widget exists
-            if not hasattr(self, '_raster_histogram') or self._raster_histogram is None:
-                logger.warning("v5.11: Histogram widget not initialized, setting up now")
-                self._setup_raster_histogram_widget()
-            
-            # Get current raster layer
-            layer = self._get_current_exploring_layer()
-            if not layer:
-                logger.warning("v5.11: No layer selected for histogram")
-                return
-                
-            from qgis.core import QgsRasterLayer
-            if not isinstance(layer, QgsRasterLayer):
-                logger.warning(f"v5.11: Current layer '{layer.name()}' is not a raster layer")
-                return
-            
-            # Update histogram for current layer
-            logger.info(f"v5.11: Computing histogram for layer '{layer.name()}'")
-            self._update_raster_histogram(layer)
-            
-            # Force widget visibility and repaint
-            if self._raster_histogram:
-                self._raster_histogram.setVisible(True)
-                self._raster_histogram.update()
-                self._raster_histogram.repaint()
-                logger.info(f"v5.11: Histogram widget visible={self._raster_histogram.isVisible()}, size={self._raster_histogram.size()}")
-            
-        except Exception as e:
-            logger.error(f"v5.11: Error computing histogram on toggle: {e}", exc_info=True)
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_histogram_groupbox_toggled(checked)
 
     def _on_native_exploring_page_changed(self, index: int):
         """Note: Handle page change in native toolBox_exploring.
@@ -1749,39 +1434,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return None
     
     def _on_raster_band_changed(self, index: int):
-        """Note: Handle band selection change for raster filtering.
-        
-        v5.2 FIX 2026-01-31: Pass layer explicitly to _refresh_raster_statistics
-        for consistency with histogram update.
-        """
-        if hasattr(self, 'comboBox_band'):
-            band_name = self.comboBox_band.currentText()
-            logger.debug(f"Note: Raster band changed to: {band_name}")
-            
-            # Get current layer and update both stats and histogram
-            layer = self._get_current_exploring_layer()
-            if layer:
-                from qgis.core import QgsRasterLayer
-                if isinstance(layer, QgsRasterLayer):
-                    # v5.2 FIX: Pass layer explicitly
-                    self._refresh_raster_statistics(layer=layer)
-                    self._update_raster_histogram(layer)
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_band_changed(index)
+
     def _on_raster_range_changed(self, value: float):
-        """Synchronise la sélection des spinbox avec l'histogramme interactif."""
-        if hasattr(self, 'doubleSpinBox_min') and hasattr(self, 'doubleSpinBox_max'):
-            min_val = self.doubleSpinBox_min.value()
-            max_val = self.doubleSpinBox_max.value()
-            logger.debug(f"Note: Raster range changed: {min_val} - {max_val}")
-            if hasattr(self, '_raster_histogram') and self._raster_histogram:
-                self._raster_histogram.set_range(min_val, max_val)
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_range_changed(value)
+
     def _on_raster_predicate_changed(self, index: int):
-        """Note: Handle predicate change for raster filtering."""
-        if hasattr(self, 'comboBox_predicate'):
-            predicate = self.comboBox_predicate.currentText()
-            logger.debug(f"Note: Raster predicate changed to: {predicate}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_predicate_changed(index)
+
     def _on_refresh_vector_stats(self):
         """v5.5: Refresh vector statistics for current layer.
         
@@ -1882,1358 +1548,207 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.label_vector_metadata.setText(self.tr("Data: - | Geom: - | CRS: -"))
 
     def _on_refresh_raster_stats(self):
-        """Note: Refresh raster statistics for current layer/band.
-        
-        v5.2 FIX 2026-01-31: Pass layer explicitly to _refresh_raster_statistics.
-        """
-        logger.debug("Note: Refresh raster stats requested")
-        
-        # Get current layer
-        from qgis.core import QgsRasterLayer
-        layer = self._get_current_exploring_layer()
-        
-        if layer and isinstance(layer, QgsRasterLayer):
-            # v5.2 FIX: Pass layer explicitly
-            self._refresh_raster_statistics(layer=layer)
-            
-            # v5.0: Force histogram computation (even for large rasters)
-            if hasattr(self, '_raster_histogram') and self._raster_histogram:
-                # Set layer first if not set
-                band_index = 1
-                if hasattr(self, 'comboBox_band'):
-                    band_index = self.comboBox_band.currentIndex() + 1
-                    if band_index < 1:
-                        band_index = 1
-                # Store layer/band then force compute
-                self._raster_histogram._layer = layer
-                self._raster_histogram._band_index = band_index
-                self._raster_histogram.force_compute()
-        else:
-            logger.warning("Note: Cannot refresh stats - no raster layer selected")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_refresh_stats()
+
     def _on_pixel_picker_clicked(self):
-        """Note: Activate pixel picker map tool for raster value selection.
-        
-        Creates and activates the RasterPixelPickerTool which allows users to:
-        - Click on raster: Set min = max = pixel value
-        - Drag rectangle: Set min/max from area statistics
-        - Ctrl+click: Extend current range with new value
-        - Shift+click: Show all bands values
-        """
-        try:
-            from qgis.utils import iface
-            from ui.tools.pixel_picker_tool import RasterPixelPickerTool
-            
-            if not iface or not iface.mapCanvas():
-                show_warning("FilterMate", "Map canvas not available")
-                return
-            
-            layer = self._get_current_exploring_layer()
-            if not layer or not isinstance(layer, QgsRasterLayer):
-                show_warning("FilterMate", "Please select a raster layer first")
-                return
-            
-            # Create or reuse pixel picker tool
-            if not hasattr(self, '_pixel_picker_tool') or self._pixel_picker_tool is None:
-                self._pixel_picker_tool = RasterPixelPickerTool(iface.mapCanvas(), self)
-                
-                # Connect signals
-                self._pixel_picker_tool.valuesPicked.connect(self._on_pixel_values_picked)
-                self._pixel_picker_tool.valuePicked.connect(self._on_single_pixel_picked)
-                self._pixel_picker_tool.pixelPicked.connect(self._on_pixel_picked_with_coords)
-                self._pixel_picker_tool.allBandsPicked.connect(self._on_all_bands_picked)
-                self._pixel_picker_tool.pickingFinished.connect(self._on_pixel_picking_finished)
-            
-            # Configure for current layer and band
-            band_index = 1
-            if hasattr(self, 'comboBox_band'):
-                band_index = self.comboBox_band.currentIndex() + 1
-                if band_index < 1:
-                    band_index = 1
-            
-            self._pixel_picker_tool.set_layer(layer, band_index)
-            
-            # Set current range for Ctrl+click extend mode
-            if hasattr(self, 'doubleSpinBox_min') and hasattr(self, 'doubleSpinBox_max'):
-                self._pixel_picker_tool.set_current_range(
-                    self.doubleSpinBox_min.value(),
-                    self.doubleSpinBox_max.value()
-                )
-            
-            # Activate the tool
-            iface.mapCanvas().setMapTool(self._pixel_picker_tool)
-            
-            # Update button state to show it's active
-            if hasattr(self, 'pushButton_raster_pixel_picker'):
-                self.pushButton_raster_pixel_picker.setChecked(True)
-            
-            show_info("FilterMate", "Click on raster to pick value. Drag for range. Press Escape to cancel.")
-            logger.info("Note: Pixel picker tool activated")
-            
-        except ImportError as e:
-            logger.error(f"Note: Could not import pixel picker tool: {e}")
-            show_warning("FilterMate", "Pixel picker not available")
-        except Exception as e:
-            logger.error(f"Note: Failed to activate pixel picker: {e}", exc_info=True)
-            show_warning("FilterMate", f"Error activating pixel picker: {e}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_pixel_picker_button_clicked()
+
     def _on_pixel_values_picked(self, min_val: float, max_val: float):
-        """Note: Handle min/max values picked from raster.
-        
-        Args:
-            min_val: Minimum value from pick
-            max_val: Maximum value from pick
-        """
-        logger.debug(f"Note: Pixel values picked: [{min_val:.2f}, {max_val:.2f}]")
-        
-        # Update histogram groupbox spinboxes
-        if hasattr(self, 'doubleSpinBox_min'):
-            self.doubleSpinBox_min.setValue(min_val)
-        if hasattr(self, 'doubleSpinBox_max'):
-            self.doubleSpinBox_max.setValue(max_val)
-        
-        # Update rectangle picker groupbox spinboxes
-        if hasattr(self, 'doubleSpinBox_rect_min'):
-            self.doubleSpinBox_rect_min.setValue(min_val)
-        if hasattr(self, 'doubleSpinBox_rect_max'):
-            self.doubleSpinBox_rect_max.setValue(max_val)
-        
-        # Update histogram selection
-        if hasattr(self, '_raster_histogram') and self._raster_histogram:
-            self._raster_histogram.set_range(min_val, max_val)
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_pixel_values_picked(min_val, max_val)
+
     def _on_single_pixel_picked(self, value: float):
-        """Note: Handle single pixel value picked.
-        
-        Args:
-            value: Pixel value
-        """
-        logger.info(f"Note: Single pixel value picked: {value:.4f}")
-        
-        # Update pixel picker groupbox label
-        if hasattr(self, 'label_pixel_value'):
-            self.label_pixel_value.setText(f"{value:.4f}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_single_pixel_picked(value)
+
     def _on_pixel_picked_with_coords(self, value: float, x: float, y: float):
-        """Handle pixel value picked with coordinates.
-        
-        Updates the Pixel Picker groupbox with the picked value and coordinates.
-        
-        Args:
-            value: Pixel value at the clicked location
-            x: X coordinate (map units)
-            y: Y coordinate (map units)
-        """
-        logger.debug(f"Pixel picked: value={value:.4f} at ({x:.2f}, {y:.2f})")
-        
-        # Update pixel picker groupbox labels
-        if hasattr(self, 'label_pixel_value'):
-            self.label_pixel_value.setText(f"{value:.4f}")
-        
-        if hasattr(self, 'label_pixel_coords'):
-            self.label_pixel_coords.setText(f"{x:.2f}, {y:.2f}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_pixel_picked_with_coords(value, x, y)
+
     def _on_all_bands_picked(self, values: list):
-        """Note: Handle all bands values picked (Shift+click).
-        
-        Args:
-            values: List of values for each band
-        """
-        # Format values for display
-        band_info = []
-        for i, val in enumerate(values, 1):
-            if val is not None:
-                band_info.append(f"Band {i}: {val:.4f}")
-            else:
-                band_info.append(f"Band {i}: NoData")
-        
-        message = "\n".join(band_info)
-        logger.info(f"Note: All bands:\n{message}")
-        show_info("FilterMate - Pixel Values", message)
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_all_bands_picked(values)
+
     def _deactivate_pixel_picker_tool(self):
-        """v5.11: Deactivate the pixel picker tool and restore default tool.
-        
-        Called when user unchecks the pixel picker button.
-        """
-        try:
-            from qgis.utils import iface
-            
-            if iface and iface.mapCanvas():
-                # Unset the current tool (restores pan tool)
-                if hasattr(self, '_pixel_picker_tool') and self._pixel_picker_tool:
-                    iface.mapCanvas().unsetMapTool(self._pixel_picker_tool)
-                
-                logger.debug("v5.11: Pixel picker tool deactivated")
-            
-        except Exception as e:
-            logger.warning(f"v5.11: Error deactivating pixel picker: {e}")
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._deactivate_pixel_picker_tool()
     
     def _on_add_pixel_to_selection_clicked(self):
-        """Handle click on 'Add pixel to selection' button.
-        
-        Takes the currently displayed pixel value and adds it to the
-        range selection (doubleSpinBox_rect_min/max).
-        
-        If no range exists, sets both min and max to the pixel value.
-        If a range exists, extends it to include the new value.
-        """
-        logger.info("🔘 _on_add_pixel_to_selection_clicked: Button clicked!")
-        try:
-            # Get current pixel value from label
-            if not hasattr(self, 'label_pixel_value'):
-                logger.warning("_on_add_pixel_to_selection_clicked: label_pixel_value not found!")
-                show_warning("FilterMate", "No pixel value available")
-                return
-            
-            value_text = self.label_pixel_value.text()
-            logger.debug(f"_on_add_pixel_to_selection_clicked: value_text = '{value_text}'")
-            if value_text == "--" or not value_text:
-                show_warning("FilterMate", "Pick a pixel first using the pixel picker tool")
-                return
-            
-            try:
-                pixel_value = float(value_text)
-            except ValueError:
-                show_warning("FilterMate", f"Invalid pixel value: {value_text}")
-                return
-            
-            # Get current range values
-            current_min = None
-            current_max = None
-            
-            if hasattr(self, 'doubleSpinBox_rect_min'):
-                current_min = self.doubleSpinBox_rect_min.value()
-            if hasattr(self, 'doubleSpinBox_rect_max'):
-                current_max = self.doubleSpinBox_rect_max.value()
-            
-            # Determine if this is the first value or extending existing range
-            # Check if both spinboxes are at their default (0.0) or same value
-            is_first_value = (current_min == 0.0 and current_max == 0.0) or (current_min == current_max == 0.0)
-            
-            if is_first_value:
-                # First pixel: set both min and max to this value
-                new_min = pixel_value
-                new_max = pixel_value
-            else:
-                # Extend the range to include the new value
-                new_min = min(current_min, pixel_value) if current_min is not None else pixel_value
-                new_max = max(current_max, pixel_value) if current_max is not None else pixel_value
-            
-            # Update the spinboxes
-            if hasattr(self, 'doubleSpinBox_rect_min'):
-                self.doubleSpinBox_rect_min.setValue(new_min)
-            if hasattr(self, 'doubleSpinBox_rect_max'):
-                self.doubleSpinBox_rect_max.setValue(new_max)
-            
-            # Update histogram if available
-            if hasattr(self, '_raster_histogram') and self._raster_histogram:
-                self._raster_histogram.set_range(new_min, new_max)
-            
-            logger.info(f"Added pixel value {pixel_value:.4f} to selection. Range: [{new_min:.4f}, {new_max:.4f}]")
-            
-            # v5.12 FIX: Show user feedback that the action was successful
-            show_success("FilterMate", f"Pixel value {pixel_value:.4f} added to selection")
-            
-        except Exception as e:
-            logger.error(f"Error adding pixel to selection: {e}")
-            show_warning("FilterMate", f"Error adding pixel to selection: {str(e)}")
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_add_pixel_to_selection_clicked()
 
     def _on_pixel_picking_finished(self):
-        """Note: Handle pixel picking tool deactivation."""
-        logger.debug("Note: Pixel picker deactivated")
-        
-        # Update button state - use new raster tool button
-        if hasattr(self, 'pushButton_raster_pixel_picker'):
-            self.pushButton_raster_pixel_picker.setChecked(False)
-        # Also uncheck the new raster tool buttons
-        self._uncheck_raster_tool_buttons()
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_pixel_picking_finished()
 
-    # ================================================================
-    # RASTER TOOL BUTTONS (v5.4) - Keys-style buttons for raster exploring
-    # ================================================================
-    
     def _connect_raster_tool_buttons(self):
-        """Connect raster tool buttons to their handlers and groupboxes.
-        
-        v5.4: Added keys-style tool buttons for raster exploring, similar
-        to vector exploring keys.
-        
-        v5.5: Added exclusive groupbox binding - each button toggles its
-        associated groupbox, and groupboxes are mutually exclusive.
-        
-        v5.11: FIX - Added QButtonGroup for true exclusive behavior + combobox triggers
-        """
-        try:
-            from qgis.PyQt.QtWidgets import QButtonGroup
-            
-            # === STEP 0: Create QButtonGroup for exclusive pushbuttons ===
-            # v5.11 FIX: Use QButtonGroup to ensure only one button can be checked at a time
-            self._raster_tool_button_group = QButtonGroup(self)
-            self._raster_tool_button_group.setExclusive(True)
-            
-            # Add checkable buttons to the group
-            # v5.12 FIX: Only buttons with associated groupboxes should be in the exclusive group
-            # pushButton_raster_all_bands is an independent toggle (multi-band mode), NOT exclusive
-            checkable_tool_buttons = []
-            if hasattr(self, 'pushButton_raster_pixel_picker'):
-                checkable_tool_buttons.append(self.pushButton_raster_pixel_picker)
-            if hasattr(self, 'pushButton_raster_rect_picker'):
-                checkable_tool_buttons.append(self.pushButton_raster_rect_picker)
-            if hasattr(self, 'pushButton_raster_sync_histogram'):
-                checkable_tool_buttons.append(self.pushButton_raster_sync_histogram)
-            # NOTE: pushButton_raster_all_bands is NOT added - it's an independent toggle
-            
-            for i, btn in enumerate(checkable_tool_buttons):
-                self._raster_tool_button_group.addButton(btn, i)
-            
-            # Connect button group signal for exclusive handling
-            self._raster_tool_button_group.buttonToggled.connect(
-                self._on_raster_button_group_toggled
-            )
-            
-            # === STEP 1: Setup button → groupbox bindings ===
-            self._raster_tool_bindings = {}
-            
-            # Pixel Picker button → mGroupBox_raster_pixel_picker
-            if hasattr(self, 'pushButton_raster_pixel_picker') and hasattr(self, 'mGroupBox_raster_pixel_picker'):
-                self._raster_tool_bindings[self.pushButton_raster_pixel_picker] = self.mGroupBox_raster_pixel_picker
-            
-            # Rectangle Picker button → mGroupBox_raster_rect_picker
-            if hasattr(self, 'pushButton_raster_rect_picker') and hasattr(self, 'mGroupBox_raster_rect_picker'):
-                self._raster_tool_bindings[self.pushButton_raster_rect_picker] = self.mGroupBox_raster_rect_picker
-            
-            # Histogram button → mGroupBox_raster_histogram (v5.10: now checkable)
-            if hasattr(self, 'pushButton_raster_sync_histogram') and hasattr(self, 'mGroupBox_raster_histogram'):
-                self._raster_tool_bindings[self.pushButton_raster_sync_histogram] = self.mGroupBox_raster_histogram
-            
-            # List of all exclusive groupboxes
-            self._raster_exclusive_groupboxes = []
-            if hasattr(self, 'mGroupBox_raster_pixel_picker'):
-                self._raster_exclusive_groupboxes.append(self.mGroupBox_raster_pixel_picker)
-            if hasattr(self, 'mGroupBox_raster_rect_picker'):
-                self._raster_exclusive_groupboxes.append(self.mGroupBox_raster_rect_picker)
-            if hasattr(self, 'mGroupBox_raster_histogram'):
-                self._raster_exclusive_groupboxes.append(self.mGroupBox_raster_histogram)
-            
-            # === STEP 2: Connect groupbox toggled to sync button state ===
-            # v5.11: Removed duplicate toggled connection - now handled by button group
-            for button, groupbox in self._raster_tool_bindings.items():
-                # Groupbox toggled → sync button (needed if user clicks directly on groupbox title)
-                groupbox.toggled.connect(
-                    lambda checked, btn=button: self._sync_raster_button_from_groupbox(btn, checked)
-                )
-            
-            # === STEP 3: Connect collapsedStateChanged for exclusive behavior on expand ===
-            # v5.7 FIX: When user expands a groupbox (clicks arrow), ensure exclusive behavior
-            for gb in self._raster_exclusive_groupboxes:
-                gb.collapsedStateChanged.connect(
-                    lambda collapsed, groupbox=gb: self._on_raster_groupbox_collapsed_changed(groupbox, collapsed)
-                )
-            
-            # === STEP 4: Connect additional action for checkable buttons ===
-            # v5.10: Sync Histogram button is now checkable (toggle handled in STEP 2)
-            # The clicked signal triggers sync action when checked
-            if hasattr(self, 'pushButton_raster_sync_histogram'):
-                self.pushButton_raster_sync_histogram.clicked.connect(
-                    self._on_raster_sync_histogram_action
-                )
-            
-            # Reset Range button - action only (not in exclusive group)
-            if hasattr(self, 'pushButton_raster_reset_range'):
-                self.pushButton_raster_reset_range.clicked.connect(
-                    self._on_raster_reset_range_clicked
-                )
-            
-            # === STEP 5: Connect button clicks for map tool activation ===
-            if hasattr(self, 'pushButton_raster_pixel_picker'):
-                self.pushButton_raster_pixel_picker.clicked.connect(
-                    self._on_raster_pixel_picker_clicked
-                )
-            
-            if hasattr(self, 'pushButton_raster_rect_picker'):
-                self.pushButton_raster_rect_picker.clicked.connect(
-                    self._on_raster_rect_picker_clicked
-                )
-            
-            if hasattr(self, 'pushButton_raster_all_bands'):
-                # v5.10: All Bands button toggles multi-band mode on comboBox_band
-                self.pushButton_raster_all_bands.toggled.connect(
-                    self._on_raster_all_bands_toggled
-                )
-            
-            # Add pixel to selection button (in pixel picker groupbox)
-            if hasattr(self, 'pushButton_add_pixel_to_selection'):
-                self.pushButton_add_pixel_to_selection.clicked.connect(
-                    self._on_add_pixel_to_selection_clicked
-                )
-                logger.info("✅ pushButton_add_pixel_to_selection connected to _on_add_pixel_to_selection_clicked")
-            else:
-                logger.warning("⚠️ pushButton_add_pixel_to_selection NOT FOUND - cannot connect!")
-            
-            # === STEP 6: Connect combobox triggers when groupbox is checked ===
-            # v5.11 FIX: Combobox changes only trigger action when their groupbox is active
-            self._connect_raster_combobox_triggers()
-            
-            # Load icons for raster tool buttons
-            self._load_raster_tool_icons()
-            
-            # === STEP 7: Initialize exclusive state ===
-            # v5.6: Show only the first groupbox (Pixel Picker) by default
-            self._initialize_raster_groupbox_exclusive_state()
-            
-            logger.debug("Raster tool buttons connected with QButtonGroup + groupbox bindings")
-            
-        except Exception as e:
-            logger.error(f"Failed to connect raster tool buttons: {e}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._setup_tool_buttons()
+
     def _on_raster_button_group_toggled(self, button, checked):
-        """Handle QButtonGroup toggle - update associated groupbox.
-        
-        v5.11 FIX: This ensures true exclusive behavior via QButtonGroup.
-        When a button is toggled ON, its associated groupbox is expanded.
-        When a button is toggled OFF, its groupbox is collapsed.
-        
-        Args:
-            button: The QPushButton that was toggled
-            checked: Whether the button is now checked
-        """
-        try:
-            # Find associated groupbox
-            groupbox = self._raster_tool_bindings.get(button)
-            if groupbox:
-                self._ensure_raster_exclusive_groupbox(groupbox, checked)
-                
-                # Trigger combobox action if this groupbox is now active
-                if checked:
-                    self._trigger_raster_combobox_for_groupbox(groupbox)
-                    
-        except Exception as e:
-            logger.warning(f"Error in button group toggle: {e}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_button_group_toggled(button, checked)
+
     def _connect_raster_combobox_triggers(self):
-        """Connect combobox triggers for active groupboxes.
-        
-        v5.11 FIX: When a combobox value changes, only trigger action if
-        the parent groupbox is currently active (checked).
-        
-        Mappings:
-        - mGroupBox_raster_pixel_picker: No combobox (uses map tool)
-        - mGroupBox_raster_rect_picker: doubleSpinBox_rect_min/max → apply range
-        - mGroupBox_raster_histogram: comboBox_predicate → update filter
-        """
-        try:
-            # Histogram groupbox: predicate combobox triggers filter update
-            if hasattr(self, 'comboBox_predicate') and hasattr(self, 'mGroupBox_raster_histogram'):
-                self.comboBox_predicate.currentIndexChanged.connect(
-                    self._on_raster_combobox_predicate_trigger
-                )
-            
-            # Histogram groupbox: min/max spinboxes trigger range update  
-            if hasattr(self, 'doubleSpinBox_min') and hasattr(self, 'mGroupBox_raster_histogram'):
-                self.doubleSpinBox_min.valueChanged.connect(
-                    self._on_raster_spinbox_range_trigger
-                )
-            if hasattr(self, 'doubleSpinBox_max') and hasattr(self, 'mGroupBox_raster_histogram'):
-                self.doubleSpinBox_max.valueChanged.connect(
-                    self._on_raster_spinbox_range_trigger
-                )
-            
-            # Rectangle picker groupbox: rect spinboxes trigger range update
-            if hasattr(self, 'doubleSpinBox_rect_min') and hasattr(self, 'mGroupBox_raster_rect_picker'):
-                self.doubleSpinBox_rect_min.valueChanged.connect(
-                    self._on_raster_rect_spinbox_trigger
-                )
-            if hasattr(self, 'doubleSpinBox_rect_max') and hasattr(self, 'mGroupBox_raster_rect_picker'):
-                self.doubleSpinBox_rect_max.valueChanged.connect(
-                    self._on_raster_rect_spinbox_trigger
-                )
-                
-            logger.debug("Raster combobox triggers connected")
-            
-        except Exception as e:
-            logger.warning(f"Error connecting raster combobox triggers: {e}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._connect_combobox_triggers()
+
     def _on_raster_combobox_predicate_trigger(self, index):
-        """Handle predicate combobox change - only active if histogram groupbox is checked.
-        
-        v5.11: Triggers filter update when comboBox_predicate changes AND
-        mGroupBox_raster_histogram is currently active.
-        """
-        try:
-            if not hasattr(self, 'mGroupBox_raster_histogram'):
-                return
-            
-            # Only trigger if histogram groupbox is checked
-            if self.mGroupBox_raster_histogram.isChecked():
-                logger.debug(f"Predicate changed to index {index} (histogram active)")
-                # Trigger filter update if needed
-                self._update_raster_filter_from_ui()
-        except Exception as e:
-            logger.warning(f"Error in predicate trigger: {e}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_combobox_predicate_trigger(index)
+
     def _on_raster_spinbox_range_trigger(self, value):
-        """Handle histogram range spinbox change - only active if histogram groupbox is checked.
-        
-        v5.11: Triggers filter update when min/max spinbox changes AND
-        mGroupBox_raster_histogram is currently active.
-        """
-        try:
-            if not hasattr(self, 'mGroupBox_raster_histogram'):
-                return
-            
-            # Only trigger if histogram groupbox is checked
-            if self.mGroupBox_raster_histogram.isChecked():
-                logger.debug(f"Histogram range changed (histogram active)")
-                # Update histogram widget if available
-                if hasattr(self, '_raster_histogram') and self._raster_histogram:
-                    min_val = self.doubleSpinBox_min.value() if hasattr(self, 'doubleSpinBox_min') else 0
-                    max_val = self.doubleSpinBox_max.value() if hasattr(self, 'doubleSpinBox_max') else 0
-                    self._raster_histogram.set_range(min_val, max_val)
-        except Exception as e:
-            logger.warning(f"Error in range trigger: {e}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_spinbox_range_trigger(value)
+
     def _on_raster_rect_spinbox_trigger(self, value):
-        """Handle rectangle picker spinbox change - only active if rect groupbox is checked.
-        
-        v5.11: Triggers when rect min/max spinbox changes AND
-        mGroupBox_raster_rect_picker is currently active.
-        """
-        try:
-            if not hasattr(self, 'mGroupBox_raster_rect_picker'):
-                return
-            
-            # Only trigger if rect picker groupbox is checked
-            if self.mGroupBox_raster_rect_picker.isChecked():
-                logger.debug(f"Rect range changed (rect picker active)")
-                # Could sync with main histogram spinboxes here if needed
-        except Exception as e:
-            logger.warning(f"Error in rect trigger: {e}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_rect_spinbox_trigger(value)
+
     def _trigger_raster_combobox_for_groupbox(self, groupbox):
-        """Trigger appropriate combobox action when a groupbox becomes active.
-        
-        v5.11: Called when a groupbox is checked to initialize its combobox state.
-        v5.11 FIX: Force histogram refresh when histogram groupbox is activated.
-        """
-        try:
-            # When histogram groupbox is activated, ensure predicate is applied
-            if hasattr(self, 'mGroupBox_raster_histogram') and groupbox == self.mGroupBox_raster_histogram:
-                if hasattr(self, 'comboBox_predicate'):
-                    self._on_raster_combobox_predicate_trigger(self.comboBox_predicate.currentIndex())
-                
-                # v5.11 FIX: Force histogram refresh when groupbox is expanded
-                # The histogram widget may not have painted correctly if it was hidden
-                if hasattr(self, '_raster_histogram') and self._raster_histogram:
-                    layer = self._get_current_exploring_layer()
-                    if layer:
-                        from qgis.core import QgsRasterLayer
-                        if isinstance(layer, QgsRasterLayer):
-                            self._update_raster_histogram(layer)
-                            # Force widget repaint
-                            self._raster_histogram.update()
-                            if hasattr(self._raster_histogram, '_canvas'):
-                                self._raster_histogram._canvas.update()
-                    
-            # When rect picker is activated, could initialize rect range here
-            elif hasattr(self, 'mGroupBox_raster_rect_picker') and groupbox == self.mGroupBox_raster_rect_picker:
-                pass  # Rect picker uses map tool, no immediate trigger needed
-                
-        except Exception as e:
-            logger.warning(f"Error triggering combobox for groupbox: {e}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._trigger_combobox_for_groupbox(groupbox)
+
     def _update_raster_filter_from_ui(self):
-        """Update raster filter based on current UI state.
-        
-        v5.11: Called when combobox values change while their groupbox is active.
-        """
-        try:
-            # Get current values from UI
-            min_val = self.doubleSpinBox_min.value() if hasattr(self, 'doubleSpinBox_min') else 0
-            max_val = self.doubleSpinBox_max.value() if hasattr(self, 'doubleSpinBox_max') else 0
-            predicate_idx = self.comboBox_predicate.currentIndex() if hasattr(self, 'comboBox_predicate') else 0
-            
-            logger.debug(f"Updating raster filter: range=[{min_val}, {max_val}], predicate={predicate_idx}")
-            
-            # Emit signal or call filter service here if needed
-            # This is a placeholder for the actual filter update logic
-            
-        except Exception as e:
-            logger.warning(f"Error updating raster filter: {e}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._update_filter_from_ui()
+
     def _on_raster_tool_button_toggled(self, groupbox, checked):
-        """Handle raster tool button toggle - update associated groupbox.
-        
-        v5.6 FIX: Trigger exclusive behavior properly by using the exclusive
-        groupbox handler instead of just toggling collapsed state.
-        
-        Args:
-            groupbox: The QgsCollapsibleGroupBox to update
-            checked: Whether the button is now checked
-        """
-        try:
-            # Use the exclusive handler to ensure proper behavior
-            self._ensure_raster_exclusive_groupbox(groupbox, checked)
-        except Exception as e:
-            logger.warning(f"Error updating groupbox state: {e}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_tool_button_toggled(groupbox, checked)
+
     def _sync_raster_button_from_groupbox(self, button, checked):
-        """Sync raster tool button state from groupbox change.
-        
-        Args:
-            button: The QPushButton to sync
-            checked: Whether the groupbox is now checked
-        """
-        try:
-            button.blockSignals(True)
-            button.setChecked(checked)
-            button.blockSignals(False)
-        except Exception as e:
-            logger.warning(f"Error syncing button state: {e}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._sync_button_from_groupbox(button, checked)
+
     def _on_raster_groupbox_collapsed_changed(self, groupbox, collapsed):
-        """Handle raster groupbox expand/collapse change for exclusive behavior.
-        
-        v5.7 FIX: When user manually expands a collapsed groupbox (by clicking 
-        the arrow), this triggers exclusive behavior - all other groupboxes 
-        are collapsed and unchecked.
-        
-        Args:
-            groupbox: The QgsCollapsibleGroupBox that changed
-            collapsed: True if now collapsed, False if now expanded
-        """
-        if collapsed:
-            # Groupbox was collapsed - nothing to do for exclusivity
-            return
-        
-        # Guard against recursive calls during exclusive update
-        if hasattr(self, '_updating_raster_groupboxes') and self._updating_raster_groupboxes:
-            return
-        
-        try:
-            self._updating_raster_groupboxes = True
-            # Groupbox was EXPANDED - trigger exclusive behavior
-            # Check it and collapse all others
-            self._ensure_raster_exclusive_groupbox(groupbox, True)
-        except Exception as e:
-            logger.warning(f"Error handling raster groupbox collapse change: {e}")
-        finally:
-            self._updating_raster_groupboxes = False
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_groupbox_collapsed_changed(groupbox, collapsed)
+
     def _ensure_raster_exclusive_groupbox(self, current_groupbox, checked):
-        """Ensure only one raster groupbox is expanded/checked at a time (exclusive behavior).
-        
-        When a groupbox is checked, all others are collapsed and unchecked.
-        Also updates the associated buttons to stay in sync.
-        
-        v5.8 FIX: Do NOT use setVisible() - QgsCollapsibleGroupBox handles visibility
-        through its collapsed/checked state. Using setVisible() breaks the layout.
-        Instead, use only setChecked(False) and setCollapsed(True) for inactive groupboxes.
-        
-        Args:
-            current_groupbox: The groupbox that was just toggled
-            checked: Whether it's now checked
-        """
-        # Guard against recursive calls
-        if hasattr(self, '_updating_raster_groupboxes') and self._updating_raster_groupboxes:
-            return
-        
-        if not checked:
-            # When unchecking, collapse this groupbox but keep it visible
-            current_groupbox.blockSignals(True)
-            current_groupbox.setCollapsed(True)
-            current_groupbox.blockSignals(False)
-            # Also uncheck associated button if any
-            for button, groupbox in self._raster_tool_bindings.items():
-                if groupbox == current_groupbox:
-                    button.blockSignals(True)
-                    button.setChecked(False)
-                    button.blockSignals(False)
-                    break
-            return
-        
-        try:
-            self._updating_raster_groupboxes = True
-            # Expand current groupbox, collapse all others (but keep all visible)
-            for gb in self._raster_exclusive_groupboxes:
-                gb.blockSignals(True)
-                if gb == current_groupbox:
-                    # Active groupbox: checked and expanded
-                    gb.setChecked(True)
-                    gb.setCollapsed(False)
-                else:
-                    # Inactive groupboxes: unchecked and collapsed (but visible)
-                    gb.setChecked(False)
-                    gb.setCollapsed(True)
-                gb.blockSignals(False)
-            
-            # Sync ALL checkable buttons - uncheck all, then check the right one
-            for button, groupbox in self._raster_tool_bindings.items():
-                button.blockSignals(True)
-                button.setChecked(groupbox == current_groupbox)
-                button.blockSignals(False)
-            
-            # Special case: if histogram is shown, all checkable buttons should be unchecked
-            # (histogram has no checkable button)
-            if hasattr(self, 'mGroupBox_raster_histogram') and current_groupbox == self.mGroupBox_raster_histogram:
-                for button in self._raster_tool_bindings.keys():
-                    button.blockSignals(True)
-                    button.setChecked(False)
-                    button.blockSignals(False)
-                    
-        except Exception as e:
-            logger.warning(f"Error ensuring exclusive groupbox: {e}")
-        finally:
-            self._updating_raster_groupboxes = False
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._ensure_exclusive_groupbox(current_groupbox, checked)
+
     def _uncheck_raster_tool_buttons(self):
-        """Uncheck all checkable raster tool buttons (that are in the exclusive group).
-        
-        v5.12 FIX: pushButton_raster_all_bands is NOT unchecked here - it's an
-        independent toggle for multi-band mode, not part of the exclusive group.
-        """
-        checkable_buttons = [
-            'pushButton_raster_pixel_picker',
-            'pushButton_raster_rect_picker',
-            'pushButton_raster_sync_histogram',
-            # NOTE: pushButton_raster_all_bands is NOT here - it's independent
-        ]
-        for btn_name in checkable_buttons:
-            if hasattr(self, btn_name):
-                btn = getattr(self, btn_name)
-                if btn.isChecked():
-                    btn.setChecked(False)
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._uncheck_tool_buttons()
+
     def _initialize_raster_groupbox_exclusive_state(self):
-        """Initialize raster groupboxes to exclusive state.
-        
-        v5.8: At startup, expand only the Pixel Picker groupbox (default tool),
-        collapse all others. Do NOT use setVisible() - all groupboxes stay visible
-        but only one is expanded/checked at a time.
-        """
-        try:
-            if not hasattr(self, '_raster_exclusive_groupboxes'):
-                return
-            
-            # Default: expand only pixel picker, collapse others
-            default_groupbox = None
-            if hasattr(self, 'mGroupBox_raster_pixel_picker'):
-                default_groupbox = self.mGroupBox_raster_pixel_picker
-            
-            for gb in self._raster_exclusive_groupboxes:
-                gb.blockSignals(True)
-                if gb == default_groupbox:
-                    # Default active groupbox: checked and expanded
-                    gb.setChecked(True)
-                    gb.setCollapsed(False)
-                else:
-                    # Inactive groupboxes: unchecked and collapsed (but stay visible)
-                    gb.setChecked(False)
-                    gb.setCollapsed(True)
-                gb.blockSignals(False)
-            
-            # Sync buttons
-            for button, groupbox in self._raster_tool_bindings.items():
-                button.blockSignals(True)
-                button.setChecked(groupbox == default_groupbox)
-                button.blockSignals(False)
-            
-            logger.debug("Raster groupboxes initialized to exclusive state")
-            
-        except Exception as e:
-            logger.warning(f"Error initializing raster groupbox state: {e}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._initialize_groupbox_exclusive_state()
+
     def _update_raster_tool_buttons_state(self):
-        """Update enabled state of raster tool buttons based on current layer.
-        
-        Buttons are enabled only when a valid raster layer is selected.
-        """
-        layer = self._get_current_exploring_layer()
-        from qgis.core import QgsRasterLayer
-        is_raster = layer is not None and isinstance(layer, QgsRasterLayer)
-        
-        tool_buttons = [
-            'pushButton_raster_pixel_picker',
-            'pushButton_raster_rect_picker',
-            'pushButton_raster_sync_histogram',
-            'pushButton_raster_all_bands',
-            'pushButton_raster_reset_range',
-            'pushButton_add_pixel_to_selection'  # v5.12 FIX: Added missing button
-        ]
-        
-        for btn_name in tool_buttons:
-            if hasattr(self, btn_name):
-                btn = getattr(self, btn_name)
-                btn.setEnabled(is_raster)
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._update_tool_buttons_state()
+
     def _on_raster_pixel_picker_clicked(self):
-        """Handle click on raster pixel picker button (keys column).
-        
-        Activates the pixel picker tool in POINT mode.
-        v5.6: Button exclusivity is now handled by toggled signal,
-        this method only handles the map tool activation.
-        
-        v5.11 FIX: Only activate tool when button is checked.
-        When button is unchecked (clicking again), deactivate the tool.
-        """
-        try:
-            # v5.11 FIX: Check button state - only activate if checked
-            if hasattr(self, 'pushButton_raster_pixel_picker'):
-                if not self.pushButton_raster_pixel_picker.isChecked():
-                    # Button was unchecked - deactivate tool
-                    self._deactivate_pixel_picker_tool()
-                    return
-            
-            # Button is checked - activate tool
-            self._on_pixel_picker_clicked()
-            
-        except Exception as e:
-            logger.error(f"Error in raster pixel picker: {e}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_pixel_picker_button_clicked()
+
     def _on_raster_rect_picker_clicked(self):
-        """Handle click on rectangle range picker button.
-        
-        Activates the pixel picker tool in RECTANGLE mode for area statistics.
-        v5.6: Button exclusivity is now handled by toggled signal,
-        this method only handles the map tool activation.
-        
-        v5.11 FIX: Only activate tool when button is checked.
-        When button is unchecked (clicking again), deactivate the tool.
-        """
-        try:
-            # v5.11 FIX: Check button state - only activate if checked
-            if hasattr(self, 'pushButton_raster_rect_picker'):
-                if not self.pushButton_raster_rect_picker.isChecked():
-                    # Button was unchecked - deactivate tool
-                    self._deactivate_pixel_picker_tool()
-                    return
-            
-            from qgis.utils import iface
-            from qgis.core import QgsRasterLayer
-            from ui.tools.pixel_picker_tool import RasterPixelPickerTool
-            
-            if not iface or not iface.mapCanvas():
-                show_warning("FilterMate", "Map canvas not available")
-                return
-            
-            layer = self._get_current_exploring_layer()
-            if not layer or not isinstance(layer, QgsRasterLayer):
-                show_warning("FilterMate", "Please select a raster layer first")
-                if hasattr(self, 'pushButton_raster_rect_picker'):
-                    self.pushButton_raster_rect_picker.setChecked(False)
-                return
-            
-            # Create or reuse pixel picker tool
-            if not hasattr(self, '_pixel_picker_tool') or self._pixel_picker_tool is None:
-                self._pixel_picker_tool = RasterPixelPickerTool(iface.mapCanvas(), self)
-                self._pixel_picker_tool.valuesPicked.connect(self._on_pixel_values_picked)
-                self._pixel_picker_tool.valuePicked.connect(self._on_single_pixel_picked)
-                self._pixel_picker_tool.pixelPicked.connect(self._on_pixel_picked_with_coords)
-                self._pixel_picker_tool.allBandsPicked.connect(self._on_all_bands_picked)
-                self._pixel_picker_tool.pickingFinished.connect(self._on_pixel_picking_finished)
-            
-            # Configure for rectangle mode
-            band_index = 1
-            if hasattr(self, 'comboBox_band'):
-                band_index = self.comboBox_band.currentIndex() + 1
-                if band_index < 1:
-                    band_index = 1
-            
-            self._pixel_picker_tool.set_layer(layer, band_index)
-            
-            # Set current range for extension
-            if hasattr(self, 'doubleSpinBox_min') and hasattr(self, 'doubleSpinBox_max'):
-                self._pixel_picker_tool.set_current_range(
-                    self.doubleSpinBox_min.value(),
-                    self.doubleSpinBox_max.value()
-                )
-            
-            # Activate the tool
-            iface.mapCanvas().setMapTool(self._pixel_picker_tool)
-            
-            show_info("FilterMate", "Drag rectangle to select value range from area")
-            logger.info("Raster rectangle picker activated")
-            
-        except ImportError as e:
-            logger.error(f"Could not import pixel picker tool: {e}")
-            show_warning("FilterMate", "Pixel picker not available")
-        except Exception as e:
-            logger.error(f"Failed to activate rectangle picker: {e}", exc_info=True)
-            show_warning("FilterMate", f"Error: {e}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_rect_picker_clicked()
+
     def _on_raster_sync_histogram_action(self):
-        """Handle click on sync histogram button - performs sync action.
-        
-        v5.10: Button is now checkable - the toggle/groupbox exclusivity is handled
-        by the toggled signal in STEP 2. This method only performs the sync action
-        when the button is clicked (regardless of check state).
-        
-        Synchronizes spinbox values with histogram selection.
-        """
-        try:
-            # Only sync if histogram widget exists and button is checked (groupbox visible)
-            if not hasattr(self, 'pushButton_raster_sync_histogram'):
-                return
-            
-            if not self.pushButton_raster_sync_histogram.isChecked():
-                # Button unchecked - no sync needed
-                return
-            
-            if hasattr(self, '_raster_histogram') and self._raster_histogram:
-                min_val = self.doubleSpinBox_min.value() if hasattr(self, 'doubleSpinBox_min') else 0
-                max_val = self.doubleSpinBox_max.value() if hasattr(self, 'doubleSpinBox_max') else 0
-                
-                # Update histogram selection to match spinboxes
-                self._raster_histogram.set_range(min_val, max_val)
-                
-                show_info("FilterMate", f"Histogram synchronized: [{min_val:.2f}, {max_val:.2f}]")
-                logger.debug(f"Histogram synced to range [{min_val:.2f}, {max_val:.2f}]")
-            else:
-                show_warning("FilterMate", "Histogram widget not available")
-                
-        except Exception as e:
-            logger.error(f"Error syncing histogram: {e}")
-            show_warning("FilterMate", f"Sync error: {e}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_sync_histogram_action()
+
     def _on_raster_sync_histogram_clicked(self):
-        """DEPRECATED v5.10: Use _on_raster_sync_histogram_action instead.
-        
-        Kept for backward compatibility - redirects to new action method.
-        """
-        self._on_raster_sync_histogram_action()
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_sync_histogram_clicked()
+
     def _on_raster_all_bands_toggled(self, checked: bool):
-        """v5.10: Handle toggle of all bands button - enables/disables multi-band mode.
-        
-        When checked: comboBox_band becomes multi-select (checkable), tools work on all selected bands
-        When unchecked: comboBox_band is single-select, tools work on one band only
-        
-        Args:
-            checked: Whether the button is now checked
-        """
-        try:
-            # Update comboBox_band multi-select mode
-            if hasattr(self, 'comboBox_band') and isinstance(self.comboBox_band, QgsCheckableComboBoxBands):
-                self.comboBox_band.setMultiSelectEnabled(checked)
-                
-                if checked:
-                    show_info("FilterMate", self.tr("Multi-band mode enabled. Select bands in dropdown."))
-                    logger.info("Multi-band mode enabled")
-                else:
-                    show_info("FilterMate", self.tr("Single-band mode. Tools work on selected band only."))
-                    logger.info("Single-band mode enabled")
-            
-            # Update tool button tooltip
-            if hasattr(self, 'pushButton_raster_all_bands'):
-                if checked:
-                    self.pushButton_raster_all_bands.setToolTip(
-                        self.tr("Multi-Band Mode: ON\n\n"
-                               "Click to disable multi-band mode.\n"
-                               "Tools will work on all selected bands in the dropdown.")
-                    )
-                else:
-                    self.pushButton_raster_all_bands.setToolTip(
-                        self.tr("Multi-Band Mode: OFF\n\n"
-                               "Click to enable multi-band mode.\n"
-                               "Tools will work on multiple selected bands.")
-                    )
-                    
-        except Exception as e:
-            logger.error(f"Error toggling all bands mode: {e}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_all_bands_toggled(checked)
+
     def _on_raster_all_bands_clicked(self):
-        """DEPRECATED v5.10: All bands functionality moved to toggled signal.
-        
-        The pushButton_raster_all_bands now toggles multi-band mode via toggled signal.
-        This method is kept for backward compatibility but does nothing.
-        """
-        pass  # v5.10: All logic moved to _on_raster_all_bands_toggled
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_all_bands_clicked()
+
     def _on_raster_reset_range_clicked(self):
-        """Handle click on reset range button.
-        
-        Resets min/max spinboxes to the full data range from statistics.
-        """
-        try:
-            # v5.6: Get statistics from stored values
-            data_min = None
-            data_max = None
-            
-            if hasattr(self, '_current_raster_stats') and self._current_raster_stats:
-                data_min = self._current_raster_stats.get('min')
-                data_max = self._current_raster_stats.get('max')
-            
-            if data_min is not None and data_max is not None:
-                # Update spinboxes
-                if hasattr(self, 'doubleSpinBox_min'):
-                    self.doubleSpinBox_min.setValue(data_min)
-                if hasattr(self, 'doubleSpinBox_max'):
-                    self.doubleSpinBox_max.setValue(data_max)
-                
-                # Update histogram
-                if hasattr(self, '_raster_histogram') and self._raster_histogram:
-                    self._raster_histogram.set_range(data_min, data_max)
-                
-                show_info("FilterMate", f"Range reset to data bounds: [{data_min:.2f}, {data_max:.2f}]")
-                logger.info(f"Range reset to [{data_min:.2f}, {data_max:.2f}]")
-            else:
-                show_warning("FilterMate", "Statistics not available. Click Refresh first.")
-                
-        except Exception as e:
-            logger.error(f"Error resetting range: {e}")
-            show_warning("FilterMate", f"Reset error: {e}")
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_reset_range_clicked()
 
     def _refresh_raster_statistics(self, force_full_scan: bool = False, layer=None):
-        """Note: Calculate and display statistics for current raster layer/band.
-        
-        Uses QGIS QgsRasterBandStats to compute min, max, mean, stddev for the
-        selected band of the current raster layer. Updates UI labels accordingly.
-        
-        v5.0: Uses sampling for large rasters (VRT with many tiles) to avoid freezing.
-        v5.0.2: Uses async QgsTask for large rasters to prevent QGIS freeze.
-        v5.2 FIX 2026-01-31: Added optional layer parameter to allow explicit layer
-        specification, fixing issues where combobox layer doesn't match exploring page.
-        
-        Args:
-            force_full_scan: If True, compute stats on all pixels (slow for large rasters)
-            layer: Optional QgsRasterLayer to compute stats for. If None, uses
-                  current layer from combobox.
-        """
-        try:
-            from qgis.core import QgsRasterLayer, QgsRasterBandStats, Qgis, QgsApplication
-            
-            # v5.2 FIX: Use provided layer or fall back to combobox layer
-            current_layer = layer if layer else self._get_current_exploring_layer()
-            
-            if not current_layer or not isinstance(current_layer, QgsRasterLayer):
-                self._clear_raster_statistics_display()
-                logger.debug("Note: No raster layer selected for statistics")
-                return
-            
-            # Get selected band (1-indexed in QGIS)
-            band_index = 1
-            if hasattr(self, 'comboBox_band'):
-                band_index = self.comboBox_band.currentIndex() + 1
-                if band_index < 1:
-                    band_index = 1
-            
-            # Compute statistics
-            provider = current_layer.dataProvider()
-            if not provider:
-                self._clear_raster_statistics_display()
-                return
-            
-            # v5.0.2: Determine if async processing is needed for large rasters/VRT
-            width = current_layer.width()
-            height = current_layer.height()
-            total_pixels = width * height
-            
-            # Threshold: 10 million pixels (~3000x3000)
-            LARGE_RASTER_THRESHOLD = 10_000_000
-            
-            # v5.0.2: Use async task for large rasters to avoid QGIS freeze
-            if total_pixels > LARGE_RASTER_THRESHOLD and not force_full_scan:
-                logger.info(f"v5.0.2: Large raster detected ({total_pixels:,} pixels), using async QgsTask")
-                self._refresh_raster_statistics_async(current_layer, band_index, force_full_scan)
-                return
-            
-            # For small rasters, compute synchronously (fast enough)
-            # Sample size for large rasters (250k samples is usually sufficient)
-            SAMPLE_SIZE = 250_000
-            sample_size = SAMPLE_SIZE if total_pixels > LARGE_RASTER_THRESHOLD else 0
-            
-            # Get band statistics (compute if not cached)
-            stats = provider.bandStatistics(
-                band_index,
-                QgsRasterBandStats.All,
-                current_layer.extent(),
-                sample_size
-            )
-            
-            # Get NoData value
-            nodata_value = None
-            if provider.sourceHasNoDataValue(band_index):
-                nodata_value = provider.sourceNoDataValue(band_index)
-            
-            # Update UI labels
-            self._update_raster_statistics_display(
-                min_val=stats.minimumValue,
-                max_val=stats.maximumValue,
-                mean_val=stats.mean,
-                stddev_val=stats.stdDev,
-                nodata_val=nodata_value,
-                band_index=band_index,
-                layer=current_layer
-            )
-            
-            # Update min/max spinboxes with actual range
-            if hasattr(self, 'doubleSpinBox_min') and hasattr(self, 'doubleSpinBox_max'):
-                self.doubleSpinBox_min.setMinimum(stats.minimumValue)
-                self.doubleSpinBox_min.setMaximum(stats.maximumValue)
-                self.doubleSpinBox_max.setMinimum(stats.minimumValue)
-                self.doubleSpinBox_max.setMaximum(stats.maximumValue)
-                # Set default selection to full range
-                self.doubleSpinBox_min.setValue(stats.minimumValue)
-                self.doubleSpinBox_max.setValue(stats.maximumValue)
-            
-            # v5.3 FIX: Update histogram after statistics are computed
-            self._update_raster_histogram(current_layer)
-            
-            logger.info(f"Note: Raster stats computed for {current_layer.name()} band {band_index}: "
-                       f"min={stats.minimumValue:.2f}, max={stats.maximumValue:.2f}, "
-                       f"mean={stats.mean:.2f}, stddev={stats.stdDev:.2f}")
-            
-        except Exception as e:
-            logger.error(f"Note: Failed to compute raster statistics: {e}", exc_info=True)
-            self._clear_raster_statistics_display()
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._refresh_statistics(force_full_scan, layer)
+
     def _refresh_raster_statistics_async(self, layer, band_index: int, force_full_scan: bool = False):
-        """v5.0.2: Compute raster statistics asynchronously using QgsTask.
-        
-        This prevents QGIS freeze when loading large VRT files or rasters with many tiles.
-        Shows a loading indicator while computing, then updates UI on completion.
-        
-        Args:
-            layer: QgsRasterLayer to compute statistics for
-            band_index: Band index (1-based)
-            force_full_scan: If True, compute stats on all pixels
-        """
-        try:
-            from qgis.core import QgsApplication
-            from .core.tasks.raster_stats_task import RasterStatsTask
-            
-            # Cancel any pending stats task for this layer
-            if hasattr(self, '_raster_stats_task') and self._raster_stats_task:
-                try:
-                    self._raster_stats_task.cancel()
-                except Exception:
-                    pass
-            
-            # Show loading state in UI
-            self._show_raster_statistics_loading(layer.name(), band_index)
-            
-            # Create async task
-            self._raster_stats_task = RasterStatsTask(
-                layer=layer,
-                band_index=band_index,
-                force_full_scan=force_full_scan
-            )
-            
-            # Connect signals
-            self._raster_stats_task.statsComputed.connect(self._on_raster_stats_computed)
-            self._raster_stats_task.statsFailed.connect(self._on_raster_stats_failed)
-            
-            # Add to task manager
-            QgsApplication.taskManager().addTask(self._raster_stats_task)
-            
-            logger.info(f"v5.0.2: Started async raster stats task for {layer.name()} band {band_index}")
-            
-        except ImportError as e:
-            logger.warning(f"v5.0.2: RasterStatsTask not available, falling back to sync: {e}")
-            # Fallback to synchronous computation
-            self._refresh_raster_statistics_sync(layer, band_index, force_full_scan)
-        except Exception as e:
-            logger.error(f"v5.0.2: Failed to start async stats task: {e}", exc_info=True)
-            self._clear_raster_statistics_display()
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._refresh_statistics_async(layer, band_index, force_full_scan)
+
     def _refresh_raster_statistics_sync(self, layer, band_index: int, force_full_scan: bool = False):
-        """Synchronous fallback for raster statistics computation.
-        
-        Used when async task is not available or for small rasters.
-        """
-        try:
-            from qgis.core import QgsRasterBandStats
-            
-            provider = layer.dataProvider()
-            if not provider:
-                self._clear_raster_statistics_display()
-                return
-            
-            # Use sampling for large rasters
-            total_pixels = layer.width() * layer.height()
-            LARGE_RASTER_THRESHOLD = 10_000_000
-            SAMPLE_SIZE = 250_000
-            sample_size = SAMPLE_SIZE if (total_pixels > LARGE_RASTER_THRESHOLD and not force_full_scan) else 0
-            
-            stats = provider.bandStatistics(
-                band_index,
-                QgsRasterBandStats.All,
-                layer.extent(),
-                sample_size
-            )
-            
-            nodata_value = None
-            if provider.sourceHasNoDataValue(band_index):
-                nodata_value = provider.sourceNoDataValue(band_index)
-            
-            self._update_raster_statistics_display(
-                min_val=stats.minimumValue,
-                max_val=stats.maximumValue,
-                mean_val=stats.mean,
-                stddev_val=stats.stdDev,
-                nodata_val=nodata_value,
-                band_index=band_index,
-                layer=layer
-            )
-            
-            if hasattr(self, 'doubleSpinBox_min') and hasattr(self, 'doubleSpinBox_max'):
-                self.doubleSpinBox_min.setMinimum(stats.minimumValue)
-                self.doubleSpinBox_min.setMaximum(stats.maximumValue)
-                self.doubleSpinBox_max.setMinimum(stats.minimumValue)
-                self.doubleSpinBox_max.setMaximum(stats.maximumValue)
-                self.doubleSpinBox_min.setValue(stats.minimumValue)
-                self.doubleSpinBox_max.setValue(stats.maximumValue)
-            
-            # v5.3 FIX: Update histogram after stats computed
-            self._update_raster_histogram(layer)
-                
-        except Exception as e:
-            logger.error(f"Sync raster stats failed: {e}", exc_info=True)
-            self._clear_raster_statistics_display()
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._refresh_statistics_sync(layer, band_index, force_full_scan)
+
     def _show_raster_statistics_loading(self, layer_name: str, band_index: int):
-        """v5.0.2: Show loading indicator while computing raster statistics.
-        
-        Args:
-            layer_name: Name of layer being processed
-            band_index: Band index being processed
-        """
-        # v5.6: Update simplified stats label with loading state
-        if hasattr(self, 'label_stats_simplified'):
-            self.label_stats_simplified.setText(self.tr("📊 Computing statistics..."))
-        
-        logger.debug(f"v5.0.2: Showing loading indicator for {layer_name} band {band_index}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._show_statistics_loading(layer_name, band_index)
+
     def _on_raster_stats_computed(self, stats: dict):
-        """v5.0.2: Handle async raster statistics completion.
-        
-        Called on main thread when RasterStatsTask completes successfully.
-        
-        Args:
-            stats: Dictionary with computed statistics
-        """
-        try:
-            # Update UI with computed stats
-            self._update_raster_statistics_display(
-                min_val=stats['min'],
-                max_val=stats['max'],
-                mean_val=stats['mean'],
-                stddev_val=stats['stddev'],
-                nodata_val=stats['nodata'],
-                band_index=stats['band_index'],
-                layer=None  # Layer info is in stats dict
-            )
-            
-            # Update min/max spinboxes with actual range
-            if hasattr(self, 'doubleSpinBox_min') and hasattr(self, 'doubleSpinBox_max'):
-                self.doubleSpinBox_min.setMinimum(stats['min'])
-                self.doubleSpinBox_min.setMaximum(stats['max'])
-                self.doubleSpinBox_max.setMinimum(stats['min'])
-                self.doubleSpinBox_max.setMaximum(stats['max'])
-                # Set default selection to full range
-                self.doubleSpinBox_min.setValue(stats['min'])
-                self.doubleSpinBox_max.setValue(stats['max'])
-            
-            # v5.3 FIX: Update histogram after async stats computed
-            layer = self._get_current_exploring_layer()
-            if layer:
-                self._update_raster_histogram(layer)
-            
-            sampled_text = " (sampled)" if stats.get('was_sampled') else ""
-            logger.info(
-                f"v5.0.2: Async raster stats computed{sampled_text} for {stats['layer_name']} "
-                f"band {stats['band_index']}: min={stats['min']:.2f}, max={stats['max']:.2f}"
-            )
-            
-        except Exception as e:
-            logger.error(f"v5.0.2: Error handling computed stats: {e}", exc_info=True)
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_stats_computed(stats)
+
     def _on_raster_stats_failed(self, error_message: str):
-        """v5.0.2: Handle async raster statistics failure.
-        
-        Args:
-            error_message: Error description
-        """
-        logger.warning(f"v5.0.2: Async raster stats failed: {error_message}")
-        self._clear_raster_statistics_display()
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._on_stats_failed(error_message)
+
     def _update_raster_statistics_display(self, min_val, max_val, mean_val, stddev_val, 
                                           nodata_val, band_index, layer):
-        """Note: Update the statistics display labels in the UI.
-        
-        Args:
-            min_val: Minimum pixel value
-            max_val: Maximum pixel value
-            mean_val: Mean pixel value
-            stddev_val: Standard deviation
-            nodata_val: NoData value (or None)
-            band_index: Band index (1-based)
-            layer: The raster layer
-        """
-        # Format numbers for display
-        def fmt(val, decimals=2):
-            if val is None:
-                return "--"
-            return f"{val:.{decimals}f}"
-        
-        # Store stats for later use (e.g., reset range)
-        self._current_raster_stats = {
-            'min': min_val,
-            'max': max_val,
-            'mean': mean_val,
-            'stddev': stddev_val,
-            'nodata': nodata_val
-        }
-        
-        # v5.6: Update simplified stats label
-        nodata_str = fmt(nodata_val) if nodata_val is not None else "--"
-        if hasattr(self, 'label_stats_simplified'):
-            self.label_stats_simplified.setText(
-                f"📊 Min: {fmt(min_val)} | Max: {fmt(max_val)} | "
-                f"Mean: {fmt(mean_val)} | σ: {fmt(stddev_val)} | NoData: {nodata_str}"
-            )
-        
-        # v5.6: Update metadata label
-        if hasattr(self, 'label_raster_metadata') and layer and layer.dataProvider():
-            data_type = layer.dataProvider().dataType(band_index)
-            type_name = self._get_raster_data_type_name(data_type) if data_type else "Unknown"
-            width = layer.width()
-            height = layer.height()
-            res_x = layer.rasterUnitsPerPixelX()
-            res_y = layer.rasterUnitsPerPixelY()
-            self.label_raster_metadata.setText(
-                f"Data: {type_name} | Res: {res_x:.1f}×{res_y:.1f} | Size: {width}×{height}"
-            )
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._update_statistics_display(min_val, max_val, mean_val, stddev_val, nodata_val, band_index, layer)
+
     def _clear_raster_statistics_display(self):
-        """Note: Clear statistics display when no raster is selected."""
-        # Clear stored stats
-        self._current_raster_stats = None
-        
-        # v5.6: Clear simplified stats label
-        if hasattr(self, 'label_stats_simplified'):
-            self.label_stats_simplified.setText(self.tr("📊 Min: -- | Max: -- | Mean: -- | σ: -- | NoData: --"))
-        
-        # v5.6: Clear metadata label
-        if hasattr(self, 'label_raster_metadata'):
-            self.label_raster_metadata.setText(self.tr("Data: -- | Res: -- | Size: --"))
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager.clear_statistics_display()
+
     def _get_raster_data_type_name(self, data_type):
-        """Note: Convert QGIS raster data type to human-readable name."""
-        from qgis.core import Qgis
-        type_names = {
-            Qgis.Byte: "Byte",
-            Qgis.UInt16: "UInt16",
-            Qgis.Int16: "Int16",
-            Qgis.UInt32: "UInt32",
-            Qgis.Int32: "Int32",
-            Qgis.Float32: "Float32",
-            Qgis.Float64: "Float64",
-        }
-        return type_names.get(data_type, "Unknown")
-    
-    # ========== VECTOR STATISTICS DISPLAY (v5.6) ==========
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            return self._raster_manager._get_data_type_name(data_type)
+        return ""
+
     def _update_vector_statistics_display(self, layer=None):
         """Update vector layer statistics display.
         
@@ -3354,63 +1869,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return None
     
     def _populate_raster_band_combobox(self, layer):
-        """Note: Populate the band combobox with available bands from raster layer.
-        
-        v5.10: Updated to support QgsCheckableComboBoxBands for multi-band selection.
-        
-        Args:
-            layer: QgsRasterLayer to get bands from
-        """
-        from qgis.core import QgsRasterLayer
-        
-        if not hasattr(self, 'comboBox_band'):
-            return
-        
-        # v5.10: Use setLayer method for QgsCheckableComboBoxBands
-        if isinstance(self.comboBox_band, QgsCheckableComboBoxBands):
-            self.comboBox_band.setLayer(layer)
-        else:
-            # Legacy fallback for standard QComboBox
-            self.comboBox_band.blockSignals(True)
-            self.comboBox_band.clear()
-            
-            if layer and isinstance(layer, QgsRasterLayer):
-                band_count = layer.bandCount()
-                for i in range(1, band_count + 1):
-                    band_name = layer.bandName(i) if layer.bandName(i) else f"Band {i}"
-                    self.comboBox_band.addItem(f"{i} - {band_name}")
-            
-            self.comboBox_band.blockSignals(False)
-        
-        # v5.2 FIX 2026-01-31: Skip immediate stats refresh here since deferred_stats_update
-        # will be called from _sync_native_raster_widgets_with_layer. This avoids double
-        # computation and ensures the correct layer is used.
-        # Note: The deferred update in _sync_native_raster_widgets_with_layer now handles
-        # both statistics and histogram with explicit layer parameter.
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager.populate_band_combobox(layer)
+
     def _populate_raster_predicate_combobox(self):
-        """Note: Populate the predicate combobox with available filter predicates."""
-        if not hasattr(self, 'comboBox_predicate'):
-            return
-        
-        self.comboBox_predicate.blockSignals(True)
-        self.comboBox_predicate.clear()
-        
-        predicates = [
-            ("within_range", "Within Range (min ≤ val ≤ max)"),
-            ("outside_range", "Outside Range (val < min OR val > max)"),
-            ("above_value", "Above Value (val > min)"),
-            ("below_value", "Below Value (val < max)"),
-            ("equals_value", "Equals Value (val = min)"),
-            ("is_nodata", "Is NoData"),
-            ("is_not_nodata", "Is Not NoData"),
-        ]
-        
-        for key, label in predicates:
-            self.comboBox_predicate.addItem(label, key)
-        
-        self.comboBox_predicate.blockSignals(False)
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager.populate_predicate_combobox()
+
     def _auto_switch_exploring_page(self, layer):
         """Note: Auto-switch exploring toolbox page based on layer type.
         
@@ -3626,185 +2093,25 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.warning(f"v5.0: Failed to sync ExportingPage: {e}")
     
     def _sync_native_raster_widgets_with_layer(self, layer):
-        """Note: Synchronize native UI raster widgets with the current raster layer.
-        
-        Updates the band combobox, predicate combobox, statistics display, and range 
-        spinboxes based on the selected raster layer.
-        
-        v5.0: Defers expensive operations (stats, histogram) for large rasters/VRT
-        to avoid freezing QGIS.
-        v5.2 FIX 2026-01-31: Always defer stats/histogram to prevent QGIS freeze.
-        Removed duplicate setCurrentIndex call (already handled by _auto_switch_exploring_page).
-        
-        Args:
-            layer: QgsRasterLayer to sync widgets with
-        """
-        from qgis.core import QgsRasterLayer
-        from qgis.PyQt.QtCore import QTimer
-        
-        if not layer or not isinstance(layer, QgsRasterLayer):
-            self._clear_raster_statistics_display()
-            return
-        
-        try:
-            logger.info(f"Note: Syncing native raster widgets with layer '{layer.name()}'")
-            
-            # v5.2 FIX: Removed duplicate setCurrentIndex - already handled by _auto_switch_exploring_page
-            # This prevents redundant UI updates and improves performance
-            
-            # Populate band combobox (fast operation)
-            self._populate_raster_band_combobox(layer)
-            
-            # Populate predicate combobox (if not already done)
-            if hasattr(self, 'comboBox_predicate') and self.comboBox_predicate.count() == 0:
-                self._populate_raster_predicate_combobox()
-            
-            # v5.2 FIX 2026-01-31: CRITICAL - Defer expensive operations to prevent QGIS freeze
-            # Using QTimer.singleShot allows the UI to update and remain responsive
-            # This fixes the freeze when switching to raster layers with large files
-            import weakref
-            weak_self = weakref.ref(self)
-            captured_layer_id = layer.id()
-            
-            def deferred_stats_update():
-                """Deferred update of raster statistics and histogram.
-                
-                v5.2 FIX: Pass layer explicitly to _refresh_raster_statistics to avoid
-                relying on combobox state which may not match the exploring page.
-                """
-                self_ref = weak_self()
-                if not self_ref:
-                    return
-                try:
-                    from qgis.core import QgsProject, QgsRasterLayer
-                    fresh_layer = QgsProject.instance().mapLayer(captured_layer_id)
-                    if fresh_layer and isinstance(fresh_layer, QgsRasterLayer):
-                        # v5.2 FIX: Pass layer explicitly to avoid combobox mismatch
-                        self_ref._refresh_raster_statistics(layer=fresh_layer)
-                        self_ref._update_raster_histogram(fresh_layer)
-                        logger.debug(f"Note: Deferred raster stats/histogram completed for {fresh_layer.name()}")
-                except Exception as e:
-                    logger.warning(f"Note: Deferred raster update failed: {e}")
-            
-            # Defer the expensive operations by 100ms to allow UI to update first
-            QTimer.singleShot(100, deferred_stats_update)
-            
-            logger.info(f"Note: Native raster widgets sync started (stats deferred)")
-            
-        except Exception as e:
-            logger.error(f"Note: Failed to sync native raster widgets: {e}", exc_info=True)
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager.sync_with_layer(layer)
+
     def _is_large_raster(self, layer) -> bool:
-        """v5.0: Check if a raster is large enough to require deferred processing.
-        
-        Considers:
-        - Total pixel count (> 10M pixels)
-        - VRT format (often composed of many tiles)
-        - Source path characteristics
-        
-        Args:
-            layer: QgsRasterLayer to check
-            
-        Returns:
-            True if raster is considered large and should use deferred processing
-        """
-        try:
-            from qgis.core import QgsRasterLayer
-            if not layer or not isinstance(layer, QgsRasterLayer):
-                return False
-            
-            # Check total pixels
-            width = layer.width()
-            height = layer.height()
-            total_pixels = width * height
-            
-            # Threshold: 10 million pixels
-            LARGE_RASTER_THRESHOLD = 10_000_000
-            
-            if total_pixels > LARGE_RASTER_THRESHOLD:
-                logger.debug(f"v5.0: Raster {layer.name()} has {total_pixels:,} pixels (threshold: {LARGE_RASTER_THRESHOLD:,})")
-                return True
-            
-            # Check if VRT (Virtual Raster) - often composed of many tiles
-            source = layer.source()
-            if source.lower().endswith('.vrt'):
-                logger.debug(f"v5.0: Raster {layer.name()} is a VRT")
-                return True
-            
-            # Check provider type
-            provider = layer.dataProvider()
-            if provider:
-                provider_name = provider.name().lower()
-                if 'vrt' in provider_name or 'virtual' in provider_name:
-                    logger.debug(f"v5.0: Raster {layer.name()} uses VRT provider")
-                    return True
-            
-            return False
-            
-        except Exception as e:
-            logger.warning(f"v5.0: Error checking raster size: {e}")
-            return True  # Assume large on error to be safe
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            return self._raster_manager._is_large_raster(layer)
+        return False
+
     def _show_large_raster_placeholder(self, layer):
-        """v5.0: Show placeholder for large rasters instead of computing stats.
-        
-        Displays a message indicating the user should click Refresh to compute
-        statistics for large rasters.
-        
-        Args:
-            layer: The large raster layer
-        """
-        try:
-            # Clear current stats display
-            self._clear_raster_statistics_display()
-            
-            # Get layer size info for tooltip
-            width = layer.width()
-            height = layer.height()
-            total_pixels = width * height
-            
-            # v5.6: Update simplified stats label with placeholder and size info
-            if hasattr(self, 'label_stats_simplified'):
-                self.label_stats_simplified.setText(
-                    f"📊 Large raster ({width:,}×{height:,}) - Click 'Refresh' to compute stats"
-                )
-                self.label_stats_simplified.setToolTip(
-                    f"Total pixels: {total_pixels:,}\nClick 'Refresh' to compute statistics"
-                )
-            
-            logger.info(f"v5.0: Showing placeholder for large raster '{layer.name()}'")
-            
-        except Exception as e:
-            logger.warning(f"v5.0: Error showing large raster placeholder: {e}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._show_large_raster_placeholder(layer)
+
     def _update_raster_histogram(self, layer):
-        """Note: Update the interactive histogram widget with the current raster layer.
-        
-        Args:
-            layer: QgsRasterLayer to display histogram for
-        """
-        if not hasattr(self, '_raster_histogram') or self._raster_histogram is None:
-            return
-        
-        try:
-            from qgis.core import QgsRasterLayer
-            
-            if not layer or not isinstance(layer, QgsRasterLayer):
-                return
-            
-            # Get current band index
-            band_index = 1
-            if hasattr(self, 'comboBox_band'):
-                band_index = self.comboBox_band.currentIndex() + 1
-                if band_index < 1:
-                    band_index = 1
-            
-            # Update histogram
-            self._raster_histogram.set_layer(layer, band_index)
-            logger.debug(f"Note: Histogram updated for band {band_index}")
-            
-        except Exception as e:
-            logger.error(f"Note: Failed to update histogram: {e}")
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager._update_histogram(layer)
 
     def _connect_toolbox_bridge_signals(self):
         """Note: Connect the ToolBoxIntegrationBridge signals to dockwidget handlers."""
@@ -3943,74 +2250,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return vector_targets, raster_targets
 
     def _dispatch_raster_operations(self, source_layer, raster_targets: list, options: dict = None):
-        """v5.0 EPIC-6: Dispatch vector-to-raster operations (Clip/Mask/Zonal).
-        
-        Args:
-            source_layer: Source vector layer with geometry
-            raster_targets: List of (layer, operation) tuples
-            options: Dict with raster operation settings (nodata, compression, etc.)
-        """
-        options = options or {}
-        
-        try:
-            from core.services.raster_filter_service import (
-                RasterFilterService, VectorFilterRequest, RasterOperation
-            )
-            
-            service = RasterFilterService()
-            
-            # Operation mapping
-            op_map = {
-                'Clip': RasterOperation.CLIP,
-                'Mask Outside': RasterOperation.MASK_OUTSIDE,
-                'Mask Inside': RasterOperation.MASK_INSIDE,
-                'Zonal Stats': RasterOperation.ZONAL_STATS,
-            }
-            
-            for raster_layer, operation in raster_targets:
-                if operation == 'Skip':
-                    continue
-                
-                raster_op = op_map.get(operation, RasterOperation.CLIP)
-                
-                # v5.5: Fall back to all features when none are selected
-                has_selection = (hasattr(source_layer, 'selectedFeatureCount')
-                                 and source_layer.selectedFeatureCount() > 0)
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager.dispatch_operations(source_layer, raster_targets, options)
 
-                request = VectorFilterRequest(
-                    vector_layer=source_layer,
-                    raster_layer=raster_layer,
-                    operation=raster_op,
-                    use_selected_only=has_selection,
-                    nodata_value=options.get('nodata_value', -9999),
-                )
-                
-                logger.info(f"EPIC-6: {operation} on {raster_layer.name()} with options {options}")
-                
-                result = service.apply_vector_to_raster(request)
-                
-                if result.success:
-                    # Add output layer to project if requested
-                    if result.output_layer and options.get('add_to_project', True):
-                        QgsProject.instance().addMapLayer(result.output_layer)
-                    
-                    from qgis.utils import iface
-                    iface.messageBar().pushSuccess(
-                        "FilterMate",
-                        f"{operation}: {raster_layer.name()} ✓"
-                    )
-                else:
-                    from qgis.utils import iface
-                    iface.messageBar().pushWarning(
-                        "FilterMate",
-                        f"{operation} failed on {raster_layer.name()}: {result.error_message}"
-                    )
-                    
-        except ImportError as e:
-            logger.error(f"RasterFilterService not available: {e}")
-        except Exception as e:
-            logger.error(f"Raster operation failed: {e}", exc_info=True)
-    
     def _update_filtering_page_status(self, targets: list):
         """v5.0: Update FilteringPage target status after operations.
         
@@ -4249,76 +2492,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.warning(f"v5.0: Failed to sync export selection: {e}")
     
     def _export_raster_layer(self, layer: QgsRasterLayer, settings: dict):
-        """Note: Export a single raster layer.
-        
-        Args:
-            layer: Raster layer to export
-            settings: Export settings
-        """
-        try:
-            from core.export import (
-                RasterExporter, RasterExportConfig, RasterExportFormat, CompressionType
-            )
-            
-            format_str = settings.get('format', 'GeoTIFF (.tif)')
-            output_dir = settings.get('output_dir', '')
-            raster_opts = settings.get('raster', {})
-            
-            # Determine format
-            if 'COG' in format_str:
-                export_format = RasterExportFormat.COG
-            else:
-                export_format = RasterExportFormat.GEOTIFF
-            
-            # Build output path
-            filename = f"{layer.name()}.tif"
-            output_path = os.path.join(output_dir, filename)
-            
-            # Get compression
-            compression_str = raster_opts.get('compression', 'LZW').upper()
-            try:
-                compression = CompressionType[compression_str]
-            except KeyError:
-                compression = CompressionType.LZW
-            
-            # Create config
-            config = RasterExportConfig(
-                layer=layer,
-                output_path=output_path,
-                format=export_format,
-                compression=compression,
-                create_pyramids=raster_opts.get('create_pyramids', False),
-                include_world_file=raster_opts.get('include_world', False)
-            )
-            
-            # Add mask if clip_extent and we have a current vector selection
-            if raster_opts.get('clip_extent', False):
-                current_layer = self._get_current_exploring_layer()
-                if isinstance(current_layer, QgsVectorLayer):
-                    config.mask_layer = current_layer
-            
-            # Export
-            exporter = RasterExporter()
-            exporter.progressChanged.connect(self._on_export_progress)
-            result = exporter.export(config)
-            
-            from qgis.utils import iface
-            if result.success:
-                iface.messageBar().pushSuccess(
-                    "FilterMate", 
-                    f"Raster exported: {result.output_path} ({result.output_size_mb:.1f} MB)"
-                )
-            else:
-                iface.messageBar().pushCritical(
-                    "FilterMate",
-                    f"Export failed: {result.error_message}"
-                )
-                
-        except ImportError as e:
-            logger.error(f"Failed to import raster exporter: {e}")
-        except Exception as e:
-            logger.exception(f"Raster export error: {e}")
-    
+        """Phase 3.1: Delegated to RasterExploringManager."""
+        if self._raster_manager:
+            self._raster_manager.export_layer(layer, settings)
+
     def _export_vector_layer(self, layer: QgsVectorLayer, settings: dict):
         """Note: Export a single vector layer.
         
@@ -6185,18 +4362,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.warning(f"Could not connect EXPORTING signals at startup: {e}")
         
         # v5.11: Setup raster histogram widget if not already done
+        # Phase 3.1: Histogram is now managed by RasterExploringManager
         try:
-            if not hasattr(self, '_raster_histogram') or self._raster_histogram is None:
-                logger.debug("🔌 Setting up raster histogram widget at startup...")
+            if self._raster_manager and (not hasattr(self._raster_manager, '_histogram') or self._raster_manager._histogram is None):
+                logger.debug("Setting up raster histogram widget at startup...")
                 self._setup_raster_histogram_widget()
-                # Also connect the groupbox toggle signal
                 if hasattr(self, 'mGroupBox_raster_histogram'):
                     try:
                         self.mGroupBox_raster_histogram.toggled.disconnect(self._on_histogram_groupbox_toggled)
                     except TypeError:
-                        pass  # Not connected yet
+                        pass
                     self.mGroupBox_raster_histogram.toggled.connect(self._on_histogram_groupbox_toggled)
-                logger.debug("✓ Raster histogram widget setup complete")
         except Exception as e:
             logger.warning(f"Could not setup raster histogram widget: {e}")
         
