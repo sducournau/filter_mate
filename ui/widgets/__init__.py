@@ -28,6 +28,8 @@ from .toolbox import (
 )
 # Raster Tools Keys Widget
 from .raster_tools_keys import RasterToolsKeysWidget
+# Filtered Layer List Item
+from .filtered_layer_list_item import FilteredLayerListItem
 
 __all__ = [
     'FavoritesWidget',
@@ -51,4 +53,6 @@ __all__ = [
     'DualToolBoxContainer',
     # Raster Tools
     'RasterToolsKeysWidget',
+    # Filtered Layer List Item
+    'FilteredLayerListItem',
 ]

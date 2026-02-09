@@ -222,10 +222,10 @@ class ToolBoxIntegrationBridge(QObject):
         logger.debug("Clear requested from EXPLORING")
         self.resetAllFiltersRequested.emit()
     
-    @pyqtSlot(dict)
-    def _on_vector_selection_changed(self, selection_info: dict):
+    @pyqtSlot(str, object)
+    def _on_vector_selection_changed(self, field: str, value: object):
         """Handle vector selection change."""
-        logger.debug(f"Vector selection changed: {selection_info}")
+        logger.debug(f"Vector selection changed: field={field}, value={value}")
         self._update_toolset_source()
     
     @pyqtSlot(float, float)

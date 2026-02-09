@@ -282,6 +282,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._feature_picker_layer_connection = None  # Stores (layer, connection) tuple
         # Dual QToolBox Phase 2: Initialize signal manager for progressive migration
         self._signal_manager = DockwidgetSignalManager(self)
+        # Phase 3.1: RasterExploringManager (initialized later in _setup_page_components)
+        self._raster_manager = None
         self._initialize_layer_state()
     
     def _safe_get_layer_props(self, layer):
