@@ -179,28 +179,36 @@ class ButtonStyler(StylerBase):
     def _configure_pushbuttons(self) -> None:
         """
         Configure all pushbuttons in the dockwidget.
-        
+
         Sets up:
         - Size policies (expanding horizontally, fixed vertically)
         - Cursor styles (pointing hand)
         - Minimum heights based on profile
-        
+
+        FIX 2026-02-09: Skip key column buttons (checkable buttons in
+        widget_*_keys containers) — their dimensions are managed by
+        _harmonize_checkable_pushbuttons() and UIConfig.
+
         Extracted from filter_mate_dockwidget.py lines 1102-1153.
         """
         profile = self._get_profile()
         heights = self.BUTTON_HEIGHTS.get(profile, self.BUTTON_HEIGHTS['normal'])
-        
+
         # Find all QPushButtons
         for button in self.dockwidget.findChildren(QPushButton):
             # Set cursor to pointing hand
             button.setCursor(QCursor(Qt.PointingHandCursor))
-            
+
+            # Skip key column buttons — they have Fixed/Fixed sizing
+            if self._is_key_column_button(button):
+                continue
+
             # Set size policy: expand horizontally, fixed vertically
             button.setSizePolicy(
                 QSizePolicy.Expanding,
                 QSizePolicy.Fixed
             )
-            
+
             # Set minimum height based on button type
             if self._is_action_button(button):
                 button.setMinimumHeight(heights['action'])
@@ -242,29 +250,50 @@ class ButtonStyler(StylerBase):
         except ImportError:
             return False
 
+
+    def _is_key_column_button(self, button: QPushButton) -> bool:
+        """Check if button belongs to a key column container.
+
+        Key column buttons have Fixed/Fixed sizing managed by
+        _harmonize_checkable_pushbuttons and UIConfig.  They must not
+        be converted to Expanding/Fixed by _configure_pushbuttons.
+        """
+        key_container_names = (
+            'widget_exploring_keys', 'widget_filtering_keys',
+            'widget_exporting_keys', 'widget_raster_keys',
+        )
+        parent = button.parent()
+        while parent:
+            name = parent.objectName() if parent.objectName() else ''
+            if name in key_container_names:
+                return True
+            parent = parent.parent()
+        return False
+
     def _harmonize_checkable_pushbuttons(self) -> None:
         """
         Harmonize styling of checkable pushbuttons.
-        
-        Ensures consistent appearance for all checkable buttons:
-        - Same checked/unchecked styling
-        - Consistent icon placement
-        - Uniform size policy
-        
-        Extracted from filter_mate_dockwidget.py lines 1041-1100.
+
+        FIX 2026-02-09: Skip key column buttons whose dimensions are
+        already managed by the dockwidget's _harmonize_checkable_pushbuttons.
+        Do NOT set flat/icon-size on them — that would undo UIConfig sizing.
         """
         profile = self._get_profile()
         icon_sizes = self.ICON_SIZES.get(profile, self.ICON_SIZES['normal'])
-        
+
         for button in self.dockwidget.findChildren(QPushButton):
             if button.isCheckable():
+                # Skip key column buttons — already harmonized
+                if self._is_key_column_button(button):
+                    continue
+
                 # Set icon size
                 button.setIconSize(QSize(icon_sizes['standard'], icon_sizes['standard']))
-                
+
                 # Ensure flat appearance when not checked
                 if not button.isChecked():
                     button.setFlat(True)
-                
+
                 # Track for later updates
                 if button not in self._styled_buttons:
                     self._styled_buttons.append(button)
@@ -336,10 +365,15 @@ class ButtonStyler(StylerBase):
         return buttons
     
     def _is_action_button(self, button: QPushButton) -> bool:
-        """Check if button is an action button."""
-        action_names = ['filter', 'explore', 'export', 'undo', 'redo', 'reset', 'clear']
+        """Check if button is an action button (bottom bar only).
+
+        FIX 2026-02-09: Use prefix matching instead of substring matching
+        to avoid false positives on key column buttons like
+        pushButton_checkable_filtering_* or pushButton_checkable_exploring_*.
+        """
         obj_name = button.objectName().lower() if button.objectName() else ''
-        return any(name in obj_name for name in action_names)
+        # Only match actual action buttons (pushButton_action_*)
+        return obj_name.startswith('pushbutton_action_')
     
     def _apply_action_button_style(self, button: QPushButton) -> None:
         """

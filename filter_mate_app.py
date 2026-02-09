@@ -1202,7 +1202,10 @@ class FilterMateApp:
         task_parameters = self.get_task_parameters(task_name, data)
         if task_parameters is None:
             logger.error(f"❌ Cannot execute task {task_name}: parameters are None")
-            logger.error(f"   current_layer={self.dockwidget.current_layer if self.dockwidget else None}")
+            try:
+                logger.error(f"   current_layer={self.dockwidget.current_layer if self.dockwidget else None}")
+            except RuntimeError:
+                logger.error("   current_layer=<deleted C++ object>")
             logger.error(f"   widgets_ready={self._widgets_ready}")
             logger.error(f"   dockwidget_ready={self._is_dockwidget_ready_for_filtering()}")
             return

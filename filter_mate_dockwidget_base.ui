@@ -10,13 +10,13 @@
     <x>0</x>
     <y>0</y>
     <width>443</width>
-    <height>909</height>
+    <height>700</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>356</width>
-    <height>909</height>
+    <width>280</width>
+    <height>300</height>
    </size>
   </property>
   <property name="baseSize">
@@ -238,19 +238,19 @@
               <item>
                <layout class="QGridLayout" name="gridLayout_main_actions">
                 <property name="leftMargin">
-                 <number>4</number>
+                 <number>0</number>
                 </property>
                 <property name="topMargin">
-                 <number>4</number>
+                 <number>0</number>
                 </property>
                 <property name="rightMargin">
-                 <number>4</number>
+                 <number>0</number>
                 </property>
                 <property name="bottomMargin">
-                 <number>4</number>
+                 <number>0</number>
                 </property>
                 <property name="spacing">
-                 <number>4</number>
+                 <number>2</number>
                 </property>
                 <item row="0" column="0">
                  <widget class="QWidget" name="widget_exploring_keys" native="true">
@@ -262,19 +262,19 @@
                   </property>
                   <property name="minimumSize">
                    <size>
-                    <width>38</width>
-                    <height>60</height>
+                    <width>32</width>
+                    <height>32</height>
                    </size>
                   </property>
                   <property name="maximumSize">
                    <size>
-                    <width>48</width>
+                    <width>32</width>
                     <height>16777215</height>
                    </size>
                   </property>
                   <property name="baseSize">
                    <size>
-                    <width>48</width>
+                    <width>32</width>
                     <height>0</height>
                    </size>
                   </property>
@@ -1383,19 +1383,19 @@ Build advanced filter expressions using QGIS expression builder.
               <item>
                <layout class="QGridLayout" name="gridLayout_raster_main_actions">
                 <property name="leftMargin">
-                 <number>4</number>
+                 <number>0</number>
                 </property>
                 <property name="topMargin">
-                 <number>4</number>
+                 <number>0</number>
                 </property>
                 <property name="rightMargin">
-                 <number>4</number>
+                 <number>0</number>
                 </property>
                 <property name="bottomMargin">
-                 <number>4</number>
+                 <number>0</number>
                 </property>
                 <property name="spacing">
-                 <number>4</number>
+                 <number>2</number>
                 </property>
                 <item row="0" column="0">
                  <widget class="QWidget" name="widget_raster_keys" native="true">
@@ -1407,19 +1407,19 @@ Build advanced filter expressions using QGIS expression builder.
                   </property>
                   <property name="minimumSize">
                    <size>
-                    <width>38</width>
-                    <height>60</height>
+                    <width>32</width>
+                    <height>32</height>
                    </size>
                   </property>
                   <property name="maximumSize">
                    <size>
-                    <width>48</width>
+                    <width>32</width>
                     <height>16777215</height>
                    </size>
                   </property>
                   <property name="baseSize">
                    <size>
-                    <width>48</width>
+                    <width>32</width>
                     <height>0</height>
                    </size>
                   </property>
@@ -2472,29 +2472,41 @@ Can be set manually or by dragging the histogram right handle.</string>
                 </rect>
                </property>
                <attribute name="icon">
-                <iconset>
-                 <normaloff>icons/filter_multi.png</normaloff>icons/filter_multi.png</iconset>
+                <iconset resource="resources.qrc">
+                 <normaloff>:/plugins/filter_mate/icons/filter_multi.png</normaloff>:/plugins/filter_mate/icons/filter_multi.png</iconset>
                </attribute>
                <attribute name="label">
                 <string>FILTERING</string>
                </attribute>
                <layout class="QHBoxLayout" name="horizontalLayout_filtering_main">
+                <property name="leftMargin">
+                 <number>0</number>
+                </property>
+                <property name="topMargin">
+                 <number>0</number>
+                </property>
+                <property name="rightMargin">
+                 <number>0</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>0</number>
+                </property>
                 <item>
                  <layout class="QHBoxLayout" name="horizontalLayout_filtering_content">
                   <property name="spacing">
-                   <number>4</number>
+                   <number>2</number>
                   </property>
                   <property name="leftMargin">
-                   <number>4</number>
+                   <number>0</number>
                   </property>
                   <property name="topMargin">
-                   <number>4</number>
+                   <number>0</number>
                   </property>
                   <property name="rightMargin">
-                   <number>4</number>
+                   <number>0</number>
                   </property>
                   <property name="bottomMargin">
-                   <number>4</number>
+                   <number>0</number>
                   </property>
                   <item>
                    <widget class="QWidget" name="widget_filtering_keys" native="true">
@@ -2506,19 +2518,19 @@ Can be set manually or by dragging the histogram right handle.</string>
                     </property>
                     <property name="minimumSize">
                      <size>
-                      <width>38</width>
-                      <height>60</height>
+                      <width>32</width>
+                      <height>32</height>
                      </size>
                     </property>
                     <property name="maximumSize">
                      <size>
-                      <width>48</width>
+                      <width>32</width>
                       <height>16777215</height>
                      </size>
                     </property>
                     <property name="baseSize">
                      <size>
-                      <width>48</width>
+                      <width>32</width>
                       <height>0</height>
                      </size>
                     </property>
@@ -2539,7 +2551,7 @@ Can be set manually or by dragging the histogram right handle.</string>
                       <number>0</number>
                      </property>
                      <item>
-                      <layout class="QVBoxLayout" name="verticalLayout_filtering_keys" stretch="0,0,0,0,0,0,0,0,0,0,0,0">
+                      <layout class="QVBoxLayout" name="verticalLayout_filtering_keys" stretch="0,0,0,0,0,0,0,0,0,0,0">
                        <property name="spacing">
                         <number>2</number>
                        </property>
@@ -3226,22 +3238,6 @@ intersects, contains, within, touches, crosses, overlaps.</string>
                          </property>
                         </widget>
                        </item>
-                       <item>
-                        <spacer name="verticalSpacer_filtering_keys_field_end">
-                         <property name="orientation">
-                          <enum>Qt::Vertical</enum>
-                         </property>
-                         <property name="sizeType">
-                          <enum>QSizePolicy::Expanding</enum>
-                         </property>
-                         <property name="sizeHint" stdset="0">
-                          <size>
-                           <width>20</width>
-                           <height>0</height>
-                          </size>
-                         </property>
-                        </spacer>
-                       </item>
                       </layout>
                      </item>
                     </layout>
@@ -3773,59 +3769,71 @@ intersects, contains, within, touches, crosses, overlaps.</string>
                 </rect>
                </property>
                <attribute name="icon">
-                <iconset>
-                 <normaloff>icons/save.png</normaloff>icons/save.png</iconset>
+                <iconset resource="resources.qrc">
+                 <normaloff>:/plugins/filter_mate/icons/save.png</normaloff>:/plugins/filter_mate/icons/save.png</iconset>
                </attribute>
                <attribute name="label">
                 <string>EXPORTING</string>
                </attribute>
                <layout class="QHBoxLayout" name="horizontalLayout_exporting_main">
+                <property name="leftMargin">
+                 <number>0</number>
+                </property>
+                <property name="topMargin">
+                 <number>0</number>
+                </property>
+                <property name="rightMargin">
+                 <number>0</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>0</number>
+                </property>
                 <item>
                  <layout class="QHBoxLayout" name="horizontalLayout_exporting_content">
                   <property name="spacing">
                    <number>2</number>
                   </property>
                   <property name="leftMargin">
-                   <number>1</number>
+                   <number>0</number>
                   </property>
                   <property name="topMargin">
-                   <number>1</number>
+                   <number>0</number>
                   </property>
                   <property name="rightMargin">
-                   <number>1</number>
+                   <number>0</number>
                   </property>
                   <property name="bottomMargin">
-                   <number>1</number>
+                   <number>0</number>
                   </property>
                   <item>
                    <widget class="QWidget" name="widget_exporting_keys" native="true">
                     <property name="sizePolicy">
-                     <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+                     <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                       <horstretch>0</horstretch>
                       <verstretch>0</verstretch>
                      </sizepolicy>
                     </property>
                     <property name="minimumSize">
                      <size>
-                      <width>38</width>
-                      <height>0</height>
+                      <width>32</width>
+                      <height>32</height>
                      </size>
                     </property>
                     <property name="maximumSize">
                      <size>
-                      <width>48</width>
+                      <width>32</width>
                       <height>16777215</height>
                      </size>
                     </property>
                     <property name="baseSize">
                      <size>
-                      <width>48</width>
+                      <width>32</width>
                       <height>0</height>
                      </size>
                     </property>
                     <layout class="QVBoxLayout" name="verticalLayout_exporting_keys_container">
                      <property name="spacing">
-                      <number>1</number>
+                      <number>2</number>
                      </property>
                      <property name="leftMargin">
                       <number>0</number>
@@ -3844,7 +3852,7 @@ intersects, contains, within, touches, crosses, overlaps.</string>
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_layers">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -3857,8 +3865,8 @@ intersects, contains, within, touches, crosses, overlaps.</string>
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
@@ -3926,7 +3934,7 @@ Only filtered features will be exported.</string>
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_projection">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -3939,14 +3947,14 @@ Only filtered features will be exported.</string>
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="baseSize">
                           <size>
-                           <width>0</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
@@ -4020,7 +4028,7 @@ Useful for standardizing outputs to a common projection.</string>
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_styles">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -4033,14 +4041,14 @@ Useful for standardizing outputs to a common projection.</string>
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="baseSize">
                           <size>
-                           <width>0</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
@@ -4111,7 +4119,7 @@ and rendering settings when sharing data.</string>
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_datatype">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -4124,14 +4132,14 @@ and rendering settings when sharing data.</string>
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="baseSize">
                           <size>
-                           <width>0</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
@@ -4204,7 +4212,7 @@ Select the file format for exported data:
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_output_folder">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -4217,14 +4225,14 @@ Select the file format for exported data:
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="baseSize">
                           <size>
-                           <width>0</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
@@ -4295,7 +4303,7 @@ a folder or enter a path directly.</string>
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_zip">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -4308,14 +4316,14 @@ a folder or enter a path directly.</string>
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="baseSize">
                           <size>
-                           <width>0</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
@@ -4876,8 +4884,8 @@ Includes data files, styles, and metadata.</string>
                 </rect>
                </property>
                <attribute name="icon">
-                <iconset>
-                 <normaloff>icons/parameters.png</normaloff>icons/parameters.png</iconset>
+                <iconset resource="resources.qrc">
+                 <normaloff>:/plugins/filter_mate/icons/parameters.png</normaloff>:/plugins/filter_mate/icons/parameters.png</iconset>
                </attribute>
                <attribute name="label">
                 <string>CONFIGURATION</string>

@@ -558,14 +558,48 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         self.manage_ui_style()
 
+        # FIX 2026-02-09: After all styling is applied, verify that dynamically-
+        # inserted widgets are still in their layouts and visible. ThemeManager and
+        # ButtonStyler can trigger re-polish cycles that hide dynamic widgets.
+        self._ensure_dynamic_widgets_layout()
+
         try:
             self.manage_interactions()
         except Exception as e:
             logger.error(f"Error in manage_interactions: {e}", exc_info=True)
             from qgis.utils import iface
             iface.messageBar().pushCritical("FilterMate", self.tr("Initialization error: {}").format(str(e)))
-            from qgis.utils import iface
-            iface.messageBar().pushCritical("FilterMate", self.tr("Initialization error: {}").format(str(e)))
+
+    def showEvent(self, event):
+        """FIX 2026-02-09: Ensure key widgets visible and reload icons when shown."""
+        super().showEvent(event)
+        from qgis.PyQt.QtCore import QTimer
+        # Deferred: verify layout membership and visibility of dynamic widgets
+        QTimer.singleShot(0, self._ensure_key_widgets_visible)
+        # Reload icons after styling/layout has fully settled
+        QTimer.singleShot(300, self._deferred_icon_reload)
+
+    def _deferred_icon_reload(self):
+        """FIX 2026-02-09: Reload icons after layout settles.
+        
+        ThemeManager.apply() and ButtonStyler.setup() can trigger re-polishing
+        that sometimes interferes with programmatically set icons. This method
+        reloads all icons after the widget is shown and layout has settled.
+        """
+        try:
+            self._load_all_pushbutton_icons()
+            self._load_raster_tool_icons()
+            if self._icon_manager:
+                self._icon_manager.apply()
+            # Also ensure frame_actions is visible
+            if hasattr(self, 'frame_actions') and self.frame_actions:
+                if not self.frame_actions.isVisible():
+                    logger.warning("FIX-2026-02-09: frame_actions was hidden - restoring")
+                    self.frame_actions.setVisible(True)
+                self.frame_actions.updateGeometry()
+            logger.debug("_deferred_icon_reload: Icons reloaded after show")
+        except Exception as e:
+            logger.debug(f"_deferred_icon_reload: {e}")
 
     def getSignal(self, oObject: QObject, strSignalName: str):
         """v4.0 S16: Get signal from QObject by name with caching."""
@@ -747,67 +781,76 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._fix_toolbox_icons()
         self._setup_backend_indicator()
         self._setup_action_bar_layout()
-        self._setup_exploring_tab_widgets()
-        self._setup_filtering_tab_widgets()
-        self._setup_exporting_tab_widgets()
+        # FIX 2026-02-09: Protect each tab setup independently so failure in one
+        # does not prevent the others (and subsequent icon loading) from running.
+        for setup_fn in [self._setup_exploring_tab_widgets,
+                         self._setup_filtering_tab_widgets,
+                         self._setup_exporting_tab_widgets]:
+            try:
+                setup_fn()
+            except Exception as e:
+                logger.error(f"setupUiCustom: {setup_fn.__name__} FAILED: {e}", exc_info=True)
         if 'CURRENT_PROJECT' in self.CONFIG_DATA:
             self.project_props = self.CONFIG_DATA["CURRENT_PROJECT"]
         self.manage_configuration_model()
-        self.dockwidget_widgets_configuration()
+        try:
+            self.dockwidget_widgets_configuration()
+        except Exception as e:
+            logger.error(f"setupUiCustom: dockwidget_widgets_configuration FAILED: {e}", exc_info=True)
         self._load_all_pushbutton_icons()
-        self._load_raster_tool_icons()  # Explicit call to ensure raster icons are loaded
+        self._load_raster_tool_icons()
         self._setup_truncation_tooltips()
     
     def _load_all_pushbutton_icons(self):
         """v4.0 S16: Load icons from config.
-        
+
         v4.0.3: Fixed icon sizes extraction to support both int and dict formats.
         """
         try:
             pb_cfg = self.CONFIG_DATA.get("APP", {}).get("DOCKWIDGET", {}).get("PushButton", {})
             icons, sizes = pb_cfg.get("ICONS", {}), pb_cfg.get("ICONS_SIZES", {})
-            
+
             # Extract sizes - support both int direct and dict with "value" key
             sz_act_raw = sizes.get("ACTION", 24)
             sz_act = sz_act_raw.get("value", 24) if isinstance(sz_act_raw, dict) else sz_act_raw
-            
+
             sz_oth_raw = sizes.get("OTHERS", 20)
             sz_oth = sz_oth_raw.get("value", 20) if isinstance(sz_oth_raw, dict) else sz_oth_raw
-            
+
             if not icons:
-                logger.warning("_load_all_pushbutton_icons: No icons found in CONFIG_DATA")
-                logger.warning(f"CONFIG_DATA has APP: {bool(self.CONFIG_DATA.get('APP'))}")
-                logger.warning(f"PushButton config exists: {bool(pb_cfg)}")
+                logger.warning("_load_all_pushbutton_icons: No icons in CONFIG_DATA")
                 return
-            
+
             loaded_count = 0
+            missing_widgets = []
+            missing_files = []
             for grp in ["ACTION", "EXPLORING", "FILTERING", "EXPORTING", "RASTER_EXPLORING"]:
                 sz = sz_act if grp == "ACTION" else sz_oth
                 icons_grp = icons.get(grp, {})
-                logger.info(f"Group {grp}: {len(icons_grp)} icons configured")
                 for name, ico_file in icons_grp.items():
                     attr = self._get_widget_attr_name(grp, name)
                     if not attr:
-                        logger.debug(f"_load_all_pushbutton_icons: No mapping for {grp}.{name}")
                         continue
                     if not hasattr(self, attr):
-                        logger.warning(f"_load_all_pushbutton_icons: Widget {attr} not found for {grp}.{name}")
+                        missing_widgets.append(f"{grp}.{name}={attr}")
                         continue
                     w, p = getattr(self, attr), os.path.join(self.plugin_dir, "icons", ico_file)
                     if not os.path.exists(p):
-                        logger.warning(f"_load_all_pushbutton_icons: Icon file not found: {p}")
+                        missing_files.append(f"{ico_file}")
                         continue
                     icon = get_themed_icon(p) if ICON_THEME_AVAILABLE else QtGui.QIcon(p)
                     w.setIcon(icon)
                     w.setIconSize(QtCore.QSize(sz, sz))
                     loaded_count += 1
-                    logger.info(f"✓ {grp}.{name}: {ico_file}")
-            
-            logger.info(f"_load_all_pushbutton_icons: Loaded {loaded_count} icons TOTAL")
+
+            logger.info(f"_load_all_pushbutton_icons: Loaded {loaded_count} icons")
+            if missing_widgets:
+                logger.debug(f"Missing widgets: {missing_widgets}")
+            if missing_files:
+                logger.warning(f"Missing icon files: {missing_files}")
+
         except Exception as e:
-            logger.error(f"_load_all_pushbutton_icons failed: {e}")
-            import traceback
-            logger.debug(traceback.format_exc())
+            logger.error(f"_load_all_pushbutton_icons: {e}", exc_info=True)
     
     def _get_widget_attr_name(self, widget_group, widget_name):
         """v3.1 Sprint 14: Map config names to widget attribute names."""
@@ -1411,19 +1454,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         page_names = {0: 'vector', 1: 'raster'}
         page_name = page_names.get(index, 'unknown')
         logger.debug(f"Note: Exploring page changed to {page_name} (index {index})")
-        print(f"🔧🔧🔧 _on_native_exploring_page_changed: index={index} ({page_name}), programmatic={getattr(self, '_programmatic_page_change', False)}")
         
         # v5.3 FIX: If manual click (not programmatic), switch to best layer of that type
         if not getattr(self, '_programmatic_page_change', False):
             # User manually clicked on a page - switch to best layer of that type
             # v5.4.1: Always try to switch to best layer of target type
             target_layer = self._get_default_layer_for_page(index)
-            print(f"🔧🔧🔧 _on_native_exploring_page_changed: target_layer={target_layer.name() if target_layer else 'None'}")
             
             if target_layer:
                 # Get current layer to check if we actually need to switch
                 current_layer = self._get_current_exploring_layer()
-                print(f"🔧🔧🔧 _on_native_exploring_page_changed: current_layer={current_layer.name() if current_layer else 'None'}")
                 
                 # v5.4.2 FIX: Check if current layer type matches target page
                 # If user clicked on raster page, we need a raster layer
@@ -1433,32 +1473,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     is_raster_page = (index == 1)
                     current_is_raster = isinstance(current_layer, QgsRasterLayer)
                     current_is_wrong_type = (is_raster_page != current_is_raster)
-                    print(f"🔧🔧🔧 _on_native_exploring_page_changed: is_raster_page={is_raster_page}, current_is_raster={current_is_raster}, wrong_type={current_is_wrong_type}")
                 
                 # v5.4.2: Switch if no current layer OR different ID OR wrong type for this page
                 if current_layer is None or current_layer.id() != target_layer.id() or current_is_wrong_type:
                     logger.info(f"🔄 Manual switch to {page_name} - updating comboBox to: {target_layer.name()}")
-                    print(f"🔧🔧🔧 _on_native_exploring_page_changed: CALLING _switch_to_layer({target_layer.name()})")
                     # Switch the combobox to the target layer (this updates comboBox_filtering_current_layer)
                     self._switch_to_layer(target_layer)
                 else:
                     logger.debug(f"🔄 Manual switch to {page_name} - already on correct layer: {target_layer.name()}")
-                    print(f"🔧🔧🔧 _on_native_exploring_page_changed: SKIPPING - already on correct layer")
             else:
                 # No layer of that type available - revert to current page if possible
-                print(f"🔧🔧🔧 _on_native_exploring_page_changed: NO TARGET LAYER FOUND for {page_name}")
                 layer = self._get_current_exploring_layer()
                 if layer:
                     is_raster = isinstance(layer, QgsRasterLayer)
                     current_type_index = 1 if is_raster else 0
                     if current_type_index >= 0 and current_type_index != index:
                         logger.warning(f"🔒 No {page_name} layer available - staying on current page")
-                        print(f"🔧🔧🔧 _on_native_exploring_page_changed: REVERTING to page {current_type_index}")
                         self._programmatic_page_change = True
                         QTimer.singleShot(0, lambda: self._revert_toolbox_page(current_type_index))
                 else:
                     logger.warning(f"🔒 No {page_name} layer available and no current layer")
-                    print(f"🔧🔧🔧 _on_native_exploring_page_changed: NO CURRENT LAYER either")
         
         # Notify the bridge if available
         if hasattr(self, '_toolbox_bridge') and self._toolbox_bridge:
@@ -1525,19 +1559,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.warning("_switch_to_layer: layer is None, skipping")
                 return False
             
-            print(f"🔧🔧🔧 _switch_to_layer: layer={layer.name()}, type={type(layer).__name__}")
+            logger.debug(f"_switch_to_layer: layer={layer.name()}, type={type(layer).__name__}")
                 
             if hasattr(self, 'comboBox_filtering_current_layer') and self.comboBox_filtering_current_layer:
                 # v5.4.2: Check current layer before setLayer
                 old_layer = self.comboBox_filtering_current_layer.currentLayer()
-                print(f"🔧🔧🔧 _switch_to_layer: old_layer={old_layer.name() if old_layer else 'None'}")
                 
                 # Use setLayer() which is the proper method for QgsMapLayerComboBox
                 self.comboBox_filtering_current_layer.setLayer(layer)
                 
                 # v5.4.2: Verify the layer was actually set
                 new_layer = self.comboBox_filtering_current_layer.currentLayer()
-                print(f"🔧🔧🔧 _switch_to_layer: new_layer after setLayer={new_layer.name() if new_layer else 'None'}")
                 
                 if new_layer and new_layer.id() == layer.id():
                     logger.info(f"✓ Switched comboBox_filtering_current_layer to: {layer.name()}")
@@ -1548,7 +1580,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # because setLayer() may not emit layerChanged signal if layer was already set
                 # or if signals are blocked
                 try:
-                    print(f"🔧🔧🔧 _switch_to_layer: calling current_layer_changed({layer.name()})")
                     self.current_layer_changed(layer, manual_change=True)
                     logger.debug(f"✓ Explicitly called current_layer_changed for: {layer.name()}")
                 except Exception as e:
@@ -1678,31 +1709,25 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try:
             target_type = QgsVectorLayer if page_index == 0 else QgsRasterLayer
             type_name = "vector" if page_index == 0 else "raster"
-            print(f"🔧🔧🔧 _get_default_layer_for_page: page_index={page_index} ({type_name})")
             
             # 1. Check if QGIS active layer is the right type
             active_layer = self.iface.activeLayer() if hasattr(self, 'iface') and self.iface else None
             if active_layer and isinstance(active_layer, target_type):
-                print(f"🔧🔧🔧 _get_default_layer_for_page: returning QGIS active layer: {active_layer.name()}")
                 return active_layer
             
             # 2. Try last used layer of this type
             last_layer = self._get_last_layer_by_type(page_index)
             if last_layer:
-                print(f"🔧🔧🔧 _get_default_layer_for_page: returning last used {type_name} layer: {last_layer.name()}")
                 return last_layer
             
             # 3. Fall back to first layer of this type
             vector_layers, raster_layers = self._get_project_layers_by_type()
-            print(f"🔧🔧🔧 _get_default_layer_for_page: found {len(vector_layers)} vector, {len(raster_layers)} raster layers")
             if page_index == 0 and vector_layers:
-                print(f"🔧🔧🔧 _get_default_layer_for_page: returning first vector layer: {vector_layers[0].name()}")
                 return vector_layers[0]
             elif page_index == 1 and raster_layers:
-                print(f"🔧🔧🔧 _get_default_layer_for_page: returning first raster layer: {raster_layers[0].name()}")
                 return raster_layers[0]
             
-            print(f"🔧🔧🔧 _get_default_layer_for_page: no {type_name} layer found, returning None")
+            logger.debug(f"_get_default_layer_for_page: no {type_name} layer found")
             return None
         except Exception as e:
             logger.warning(f"Error getting default layer for page {page_index}: {e}")
@@ -3402,10 +3427,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             except Exception as e:
                 logger.debug(f"Could not update centroids checkboxes: {e}")
             
-            # v5.2 FIX: Check toolBox_exploring existence with detailed logging
+            # v5.2 FIX: Check toolBox_exploring existence
             has_toolbox = hasattr(self, 'toolBox_exploring')
             toolbox_not_none = self.toolBox_exploring is not None if has_toolbox else False
-            print(f"🔧🔧🔧 _auto_switch_exploring_page: has_toolbox={has_toolbox}, toolbox_not_none={toolbox_not_none}")
             
             if has_toolbox and toolbox_not_none:
                 # v5.2 FIX: Log toolbox state for debugging
@@ -3418,7 +3442,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 try:
                     if is_raster:
                         # Switch to raster page (index 1)
-                        print(f"🔧🔧🔧 _auto_switch_exploring_page: SWITCHING TO RASTER (index 1)")
                         # v5.2 FIX: Use helper method that temporarily enables the page
                         self._enable_toolbox_page_for_switch(1)
                         logger.info(f"🔧 Toolbox: Auto-switched to RASTER exploring page (index 1) for '{layer.name()}'")
@@ -3432,7 +3455,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         
                     elif is_vector:
                         # Switch to vector page (index 0)
-                        print(f"🔧🔧🔧 _auto_switch_exploring_page: SWITCHING TO VECTOR (index 0)")
                         # v5.2 FIX: Use helper method that temporarily enables the page
                         self._enable_toolbox_page_for_switch(0)
                         logger.info(f"🔧 Toolbox: Auto-switched to VECTOR exploring page (index 0) for '{layer.name()}'")
@@ -3444,26 +3466,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         if DUAL_TOOLBOX_ENABLED and self._dual_toolbox_container:
                             self._sync_toolbox_exploring_with_layer(layer)
                     else:
-                        print(f"🔧🔧🔧 _auto_switch_exploring_page: UNKNOWN TYPE - defaulting to vector")
                         logger.warning(f"🔧 Toolbox: Unknown layer type for '{layer.name()}', defaulting to vector page")
                         # v5.2 FIX: Use helper method that temporarily enables the page
                         self._enable_toolbox_page_for_switch(0)
                     
                     # v5.2 FIX: Confirm the switch happened
                     new_idx = self.toolBox_exploring.currentIndex()
-                    print(f"🔧🔧🔧 _auto_switch_exploring_page: RESULT new_index={new_idx} (expected: {1 if is_raster else 0})")
                     logger.info(f"🔧 toolBox_exploring: new_index={new_idx} (expected: {1 if is_raster else 0})")
                 finally:
                     self._programmatic_page_change = False
             else:
-                print(f"🔧🔧🔧 _auto_switch_exploring_page: toolBox_exploring NOT AVAILABLE")
                 logger.warning("🔧 toolBox_exploring NOT FOUND - cannot switch pages")
             
             # v5.0: Sync FilteringPage source context when layer changes
             self._sync_filtering_page_with_layer(layer)
             
         except Exception as e:
-            print(f"🔧🔧🔧 _auto_switch_exploring_page: EXCEPTION: {e}")
             import traceback
             traceback.print_exc()
             logger.error(f"Toolbox: Error in _auto_switch_exploring_page: {e}")
@@ -6145,10 +6163,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Connect comboBox_filtering_current_layer.layerChanged signal
             # This is CRITICAL for exploring widgets to update when current layer changes
             result = self.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
-            print(f"🔧🔧🔧 _connect_initial_widget_signals: CURRENT_LAYER.layerChanged connect result={result}")
             logger.info(f"✓ Connected FILTERING.CURRENT_LAYER.layerChanged signal via manageSignal (result={result})")
         except Exception as e:
-            print(f"🔧🔧🔧 _connect_initial_widget_signals ERROR: {e}")
             logger.warning(f"Could not connect CURRENT_LAYER signal: {e}")
         
         # FIX 2026-01-16: CRITICAL - Connect ACTION button signals at startup
@@ -6191,7 +6207,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # restore the state at startup based on saved project settings
         try:
             auto_current_layer_enabled = self.project_props.get("OPTIONS", {}).get("LAYERS", {}).get("LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG", False)
-            print(f"🔧🔧🔧 LAYER_TREE_VIEW: auto_current_layer_enabled={auto_current_layer_enabled}")
             if auto_current_layer_enabled:
                 # Clear cache for LAYER_TREE_VIEW as well
                 cache_key = "QGIS.LAYER_TREE_VIEW.currentLayerChanged"
@@ -6199,13 +6214,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     del self._signal_connection_states[cache_key]
                 
                 result = self.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect', 'currentLayerChanged')
-                print(f"🔧🔧🔧 LAYER_TREE_VIEW: signal connected={result}, flag={self._layer_tree_view_signal_connected}")
-                logger.debug("✓ Connected QGIS.LAYER_TREE_VIEW.currentLayerChanged signal (AUTO_CURRENT_LAYER enabled)")
+                logger.debug(f"✓ Connected QGIS.LAYER_TREE_VIEW.currentLayerChanged signal (AUTO_CURRENT_LAYER enabled, result={result})")
             else:
-                print(f"🔧🔧🔧 LAYER_TREE_VIEW: NOT connected (AUTO_CURRENT_LAYER disabled)")
                 logger.debug("QGIS.LAYER_TREE_VIEW signal not connected (AUTO_CURRENT_LAYER disabled)")
         except Exception as e:
-            print(f"🔧🔧🔧 LAYER_TREE_VIEW ERROR: {e}")
             logger.warning(f"Could not check/connect LAYER_TREE_VIEW signal: {e}")
 
     def _on_combo_layer_changed(self, layer):
@@ -7164,9 +7176,23 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._icon_manager.setup()
         elif ICON_THEME_AVAILABLE:
             IconThemeManager.set_theme(StyleLoader.detect_qgis_theme())
-        
+
         if self._button_styler:
             self._button_styler.setup()
+
+        # FIX 2026-02-09: Reload icons AFTER all styling operations complete.
+        # ThemeManager.apply() and ButtonStyler.setup() can interfere with
+        # programmatically set icons (size policy changes, re-polishing, etc.).
+        # Reloading icons last ensures they are always visible.
+        try:
+            self._load_all_pushbutton_icons()
+            self._load_raster_tool_icons()
+            if self._icon_manager:
+                self._icon_manager.apply()
+            logger.info("manage_ui_style: Icons reloaded after styling")
+        except Exception as e:
+            logger.warning(f"manage_ui_style: Icon reload failed: {e}")
+
     
     def _install_legacy_child_dialog_filter(self):
         """
@@ -8182,27 +8208,109 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             QTimer.singleShot(0, self._ensure_key_widgets_visible)
     
     def _ensure_key_widgets_visible(self):
-        """FIX 2026-01-19: Ensure key widgets remain visible after groupbox changes.
+        """FIX 2026-02-09: Ensure ALL key widgets, action frame, and dynamic widgets are visible.
         
-        When QgsCollapsibleGroupBox collapse/expand, the layout can get corrupted
-        causing widget_exploring_keys to disappear. This method forces visibility.
+        Forces visibility on key containers, the action buttons frame, and 
+        dynamic widgets. Also verifies that dynamic widgets are actually in 
+        their target layouts — if not, re-inserts them.
+        Called from showEvent and after groupbox changes.
         """
         try:
-            # Ensure exploring key widgets are visible
-            if hasattr(self, 'widget_exploring_keys') and self.widget_exploring_keys:
-                if not self.widget_exploring_keys.isVisible():
-                    logger.warning("FIX-2026-01-19: widget_exploring_keys was hidden - restoring visibility")
-                self.widget_exploring_keys.setVisible(True)
-                self.widget_exploring_keys.raise_()  # Bring to front
-                self.widget_exploring_keys.updateGeometry()
-                
-            # Force the parent frame to recalculate layout
-            if hasattr(self, 'frame_exploring') and self.frame_exploring:
-                self.frame_exploring.updateGeometry()
-                self.frame_exploring.update()
+            # Ensure all key widget containers are visible
+            for wname in ['widget_exploring_keys', 'widget_filtering_keys', 'widget_exporting_keys']:
+                if hasattr(self, wname):
+                    w = getattr(self, wname)
+                    if w and not w.isVisible():
+                        logger.warning(f"FIX-2026-02-09: {wname} was hidden - restoring visibility")
+                        w.setVisible(True)
+                        w.raise_()
+                        w.updateGeometry()
+            
+            # Ensure frame_actions is visible
+            if hasattr(self, 'frame_actions'):
+                fa = self.frame_actions
+                if fa and not fa.isVisible():
+                    logger.warning("FIX-2026-02-09: frame_actions was hidden - restoring visibility")
+                    fa.setVisible(True)
+                    fa.updateGeometry()
+            
+            # Ensure dynamic widgets are visible AND in their layouts
+            self._ensure_dynamic_widgets_layout()
+            
+            # Force parent frames to recalculate layout
+            for fname in ['frame_exploring', 'FILTERING', 'EXPORTING']:
+                if hasattr(self, fname):
+                    f = getattr(self, fname)
+                    if f:
+                        f.updateGeometry()
+                        f.update()
                 
         except Exception as e:
             logger.debug(f"_ensure_key_widgets_visible: {e}")
+
+    def _ensure_dynamic_widgets_layout(self):
+        """FIX 2026-02-09: Verify dynamic widgets are in their target layouts.
+        
+        After manage_ui_style() applies themes/stylesheets, dynamically-inserted
+        widgets can lose their layout positions. This method checks each widget 
+        and re-inserts it if needed, then forces visibility and geometry update.
+        """
+        from qgis.PyQt import QtWidgets
+        
+        try:
+            # 1. Exploring: multiple selection feature picker
+            if hasattr(self, 'checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection'):
+                w = self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection
+                layout = getattr(self, 'horizontalLayout_exploring_multiple_feature_picker', None)
+                if layout is not None and layout.indexOf(w) < 0:
+                    logger.warning("FIX-2026-02-09: Re-inserting exploring feature picker into layout")
+                    layout.insertWidget(0, w, 1)
+                w.show()
+            
+            # 2. Filtering: layers to filter combobox
+            if hasattr(self, 'checkableComboBoxLayer_filtering_layers_to_filter'):
+                w = self.checkableComboBoxLayer_filtering_layers_to_filter
+                target_layout = getattr(self, 'verticalLayout_filtering_values', None)
+                hlayout = getattr(self, 'horizontalLayout_filtering_distant_layers', None)
+                
+                if target_layout is not None:
+                    # Check if the horizontal layout is in the vertical layout
+                    if hlayout is not None:
+                        found = False
+                        for i in range(target_layout.count()):
+                            item = target_layout.itemAt(i)
+                            if item and item.layout() == hlayout:
+                                found = True
+                                break
+                        if not found:
+                            logger.warning("FIX-2026-02-09: Re-inserting filtering layers layout at position 2")
+                            target_layout.insertLayout(2, hlayout)
+                    elif hlayout is None:
+                        # Layout was never created — create and insert now
+                        logger.warning("FIX-2026-02-09: Creating filtering layers layout from scratch")
+                        self.horizontalLayout_filtering_distant_layers = QtWidgets.QHBoxLayout()
+                        self.horizontalLayout_filtering_distant_layers.setSpacing(4)
+                        self.horizontalLayout_filtering_distant_layers.addWidget(w)
+                        if hasattr(self, 'checkBox_filtering_use_centroids_distant_layers'):
+                            self.horizontalLayout_filtering_distant_layers.addWidget(
+                                self.checkBox_filtering_use_centroids_distant_layers)
+                        target_layout.insertLayout(2, self.horizontalLayout_filtering_distant_layers)
+                
+                w.show()
+                if hasattr(self, 'checkBox_filtering_use_centroids_distant_layers'):
+                    self.checkBox_filtering_use_centroids_distant_layers.show()
+            
+            # 3. Exporting: layers to export combobox
+            if hasattr(self, 'checkableComboBoxLayer_exporting_layers'):
+                w = self.checkableComboBoxLayer_exporting_layers
+                target_layout = getattr(self, 'verticalLayout_exporting_values', None)
+                if target_layout is not None and target_layout.indexOf(w) < 0:
+                    logger.warning("FIX-2026-02-09: Re-inserting exporting layers widget at position 0")
+                    target_layout.insertWidget(0, w)
+                w.show()
+            
+        except Exception as e:
+            logger.debug(f"_ensure_dynamic_widgets_layout: {e}")
 
     def _on_groupbox_clicked(self, groupbox, state):
         """v4.0 S18: Handle groupbox toggle for exclusive behavior.
@@ -10333,8 +10441,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             - Note: Supports both vector and raster layers with auto-switch
         """
         import traceback
-        # v5.2 DEBUG: Print to console for debugging autoswitch issues
-        print(f"🔧🔧🔧 current_layer_changed: layer={layer.name() if layer else 'None'}, manual={manual_change}, type={type(layer).__name__ if layer else 'None'}")
         logger.info(f"=== current_layer_changed ENTRY === layer: {layer.name() if layer else 'None'}, manual: {manual_change}")
         logger.debug(f"Flags: _updating={self._updating_current_layer}, _filtering={self._filtering_in_progress}, _busy={self._plugin_busy}")
         logger.debug(f"Caller stack:\n{''.join(traceback.format_stack()[-4:-1])}")

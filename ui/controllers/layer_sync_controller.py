@@ -147,8 +147,6 @@ class LayerSyncController(BaseController):
             True if layer change was accepted, False if blocked
         """
         layer_name = layer.name() if layer else "(None)"
-        # v5.2 FIX 2026-01-31: Enhanced logging for debugging
-        print(f"🔧🔧🔧 LayerSyncController.on_current_layer_changed: layer='{layer_name}', manual={manual_change}")
         logger.info(f"on_current_layer_changed called with layer='{layer_name}', manual={manual_change}")
 
         # v5.2 FIX: Check lock for reentrant calls with timeout protection

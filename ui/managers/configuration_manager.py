@@ -1113,7 +1113,6 @@ class ConfigurationManager(QObject):
             d.checkBox_filtering_use_centroids_source_layer.setLayoutDirection(QtCore.Qt.RightToLeft)
 
         # Configure centroids distant layers checkbox (created in setupUiCustom)
-        # Widget already created in setupUiCustom() - just configure appearance
         if hasattr(d, 'checkBox_filtering_use_centroids_distant_layers'):
             d.checkBox_filtering_use_centroids_distant_layers.setText("")
             d.checkBox_filtering_use_centroids_distant_layers.setToolTip(d.tr("Use centroids instead of full geometries for distant layers"))
@@ -1126,20 +1125,24 @@ class ConfigurationManager(QObject):
             # v5.2 FIX 2026-01-31: Disable by default - enabled only when HAS_LAYERS_TO_FILTER is checked
             d.checkBox_filtering_use_centroids_distant_layers.setEnabled(False)
 
-        
-        # Create horizontal layout and insert widgets
+        # Create horizontal layout and insert widgets into verticalLayout_filtering_values
+        # FIX 2026-02-09: Do NOT call setParent() before addWidget() — it hides the widget
+        # and Qt may not correctly restore visibility when the toolbox page becomes active.
+        # Let addWidget() + insertLayout() handle reparenting through the layout chain.
         d.horizontalLayout_filtering_distant_layers = QtWidgets.QHBoxLayout()
         d.horizontalLayout_filtering_distant_layers.setSpacing(4)
         d.horizontalLayout_filtering_distant_layers.addWidget(d.checkableComboBoxLayer_filtering_layers_to_filter)
         d.horizontalLayout_filtering_distant_layers.addWidget(d.checkBox_filtering_use_centroids_distant_layers)
-        
-        # Insert into main vertical layout at position 2 (after current layer, before predicates)
+
         if hasattr(d, 'verticalLayout_filtering_values'):
             d.verticalLayout_filtering_values.insertLayout(2, d.horizontalLayout_filtering_distant_layers)
-            # Ensure visibility
+            # Force show after layout insertion — insertLayout triggers reparenting
             d.checkableComboBoxLayer_filtering_layers_to_filter.show()
             d.checkBox_filtering_use_centroids_distant_layers.show()
-            logger.debug(f"Inserted filtering layers layout, widget visible: {d.checkableComboBoxLayer_filtering_layers_to_filter.isVisible()}")
+            logger.debug(f"Inserted filtering layers layout at position 2, "
+                         f"widget visible: {d.checkableComboBoxLayer_filtering_layers_to_filter.isVisible()}")
+        else:
+            logger.warning("verticalLayout_filtering_values not found - filtering layers widget NOT inserted")
         
         try:
             from ..config import UIConfig
@@ -1155,7 +1158,8 @@ class ConfigurationManager(QObject):
         from qgis.PyQt.QtGui import QColor
         
         d = self.dockwidget
-        # Widget already created in setupUiCustom() - just configure it
+        # Widget already created in setupUiCustom() - just configure and insert it.
+        # FIX 2026-02-09: Do NOT call setParent() — let insertWidget() handle reparenting.
         
         if hasattr(d, 'verticalLayout_exporting_values'):
             d.verticalLayout_exporting_values.insertWidget(0, d.checkableComboBoxLayer_exporting_layers)

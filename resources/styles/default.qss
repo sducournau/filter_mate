@@ -1225,8 +1225,8 @@ QFrame#frame_actions {
 
 /* Action buttons - Responsive sizing managed by UIConfig */
 QFrame#frame_actions QPushButton:!checkable {
-    background-color: transparent;
-    border: 1px solid transparent;
+    background-color: {color_1};
+    border: 1px solid {color_2};
     border-radius: 6px;
     padding: 6px;
     /* Dimensions managed by UIConfig for profile-specific sizing */

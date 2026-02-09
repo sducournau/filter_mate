@@ -102,7 +102,6 @@ class ItemDelegate(QStyledItemDelegate):
 
     def __init__(self, parent=None, *args):
         QStyledItemDelegate.__init__(self, parent, *args)
-        self.parent = parent
 
     def sizeHint(self, option, index):
         # BUGFIX: Return fixed size hint for consistent row height
@@ -200,8 +199,6 @@ class QgsCheckableComboBoxLayer(QComboBox):
 
     def __init__(self, parent=None):
         super(QgsCheckableComboBoxLayer, self).__init__(parent)
-
-        self.parent = parent
         
         # Dimensions managed by QSS (20px standard height from resources/styles/default.qss)
         # Width and size policy still configured in Python for layout flexibility
