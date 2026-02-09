@@ -1064,33 +1064,25 @@ class ConfigurationManager(QObject):
         import os
         from qgis.PyQt import QtGui, QtCore, QtWidgets
         
-        # FIX 2026-01-21: Import from correct location (gui in QGIS 3.30+, core in older versions)
+        # QGIS 3.34+: Use Qgis.LayerFilter enum flags instead of deprecated QgsMapLayerProxyModel int flags
         try:
-            from qgis.gui import QgsMapLayerProxyModel
-        except ImportError:
-            from qgis.core import QgsMapLayerProxyModel
-        
+            from qgis.core import Qgis
+            _LayerFilter = Qgis.LayerFilter
+        except (ImportError, AttributeError):
+            try:
+                from qgis.gui import QgsMapLayerProxyModel as _LayerFilter
+            except ImportError:
+                from qgis.core import QgsMapLayerProxyModel as _LayerFilter
+
         d = self.dockwidget
-        # Note: Filter to show vector layers WITH geometry AND raster layers
-        # HasGeometry = PointLayer | LineLayer | PolygonLayer = 4 | 8 | 16 = 28
-        # RasterLayer = 1
-        # This excludes tables without geometry (NoGeometry = 2)
+        # Filter: vector layers WITH geometry + raster layers (excludes NoGeometry tables)
         try:
-            # Note: Accept both vector layers with geometry AND raster layers for unified exploring
-            # QGIS 3.40+: setFilters() deprecated, use setLayerFilters()
-            filters = QgsMapLayerProxyModel.HasGeometry | QgsMapLayerProxyModel.RasterLayer
-            if hasattr(d.comboBox_filtering_current_layer, 'setLayerFilters'):
-                d.comboBox_filtering_current_layer.setLayerFilters(filters)
-            else:
-                d.comboBox_filtering_current_layer.setFilters(filters)
+            filters = _LayerFilter.HasGeometry | _LayerFilter.RasterLayer
+            d.comboBox_filtering_current_layer.setFilters(filters)
             logger.info("comboBox_filtering_current_layer: Filter set to HasGeometry | RasterLayer (vector + raster)")
         except Exception as e:
             logger.warning(f"Could not set HasGeometry | RasterLayer filter: {e}")
-            # Fallback to VectorLayer only
-            if hasattr(d.comboBox_filtering_current_layer, 'setLayerFilters'):
-                d.comboBox_filtering_current_layer.setLayerFilters(QgsMapLayerProxyModel.VectorLayer)
-            else:
-                d.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
+            d.comboBox_filtering_current_layer.setFilters(_LayerFilter.VectorLayer)
         
         # Apply themed icon to centroids checkbox
         try:

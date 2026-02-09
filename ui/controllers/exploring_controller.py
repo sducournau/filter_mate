@@ -127,12 +127,13 @@ class ExploringController(BaseController, LayerSelectionMixin):
         
         # Configure to show only vector layers
         try:
-            from qgis.gui import QgsMapLayerProxyModel
-            # QGIS 3.40+: setFilters() deprecated, use setProxyModelFilters()
-            if hasattr(combo, 'setProxyModelFilters'):
-                combo.setProxyModelFilters(QgsMapLayerProxyModel.VectorLayer)
-            else:
-                combo.setFilters(QgsMapLayerProxyModel.VectorLayer)
+            # QGIS 3.34+: Use Qgis.LayerFilter enum flags instead of deprecated QgsMapLayerProxyModel int flags
+            try:
+                from qgis.core import Qgis
+                _LayerFilter = Qgis.LayerFilter
+            except (ImportError, AttributeError):
+                from qgis.gui import QgsMapLayerProxyModel as _LayerFilter
+            combo.setFilters(_LayerFilter.VectorLayer)
         except (ImportError, AttributeError):
             pass
 

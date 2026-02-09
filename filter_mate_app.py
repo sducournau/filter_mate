@@ -27,11 +27,15 @@ from qgis.core import (
     QgsVectorFileWriter,
     QgsVectorLayer
 )
-# FIX 2026-01-21: Import from correct location (gui in QGIS 3.30+, core in older versions)
+# QGIS 3.34+: Use Qgis.LayerFilter enum flags instead of deprecated QgsMapLayerProxyModel int flags
 try:
-    from qgis.gui import QgsMapLayerProxyModel
-except ImportError:
-    from qgis.core import QgsMapLayerProxyModel
+    from qgis.core import Qgis
+    _LayerFilter = Qgis.LayerFilter
+except (ImportError, AttributeError):
+    try:
+        from qgis.gui import QgsMapLayerProxyModel as _LayerFilter
+    except ImportError:
+        from qgis.core import QgsMapLayerProxyModel as _LayerFilter
 from qgis.utils import iface
 from qgis import processing
 from osgeo import ogr
@@ -2406,14 +2410,9 @@ class FilterMateApp:
             if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
                 # v5.0: Filter to show vector layers WITH geometry AND raster layers
                 # HasGeometry = PointLayer | LineLayer | PolygonLayer (excludes NoGeometry tables)
-                # RasterLayer = 1 (raster layers for unified exploring)
-                # QGIS 3.40+: setFilters() deprecated, use setProxyModelFilters()
-                filters = QgsMapLayerProxyModel.HasGeometry | QgsMapLayerProxyModel.RasterLayer
+                filters = _LayerFilter.HasGeometry | _LayerFilter.RasterLayer
                 combo = self.dockwidget.comboBox_filtering_current_layer
-                if hasattr(combo, 'setProxyModelFilters'):
-                    combo.setProxyModelFilters(filters)
-                else:
-                    combo.setFilters(filters)
+                combo.setFilters(filters)
         except Exception as e: logger.debug(f"ComboBox filter setup (non-critical): {e}")
         
         # Trigger layer change with active or first layer

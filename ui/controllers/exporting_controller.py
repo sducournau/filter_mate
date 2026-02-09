@@ -1952,11 +1952,16 @@ class ExportingController(BaseController):
             return
         
         try:
-            from qgis.core import QgsMapLayerProxyModel
-            
+            # QGIS 3.34+: Use Qgis.LayerFilter enum flags instead of deprecated QgsMapLayerProxyModel int flags
+            try:
+                from qgis.core import Qgis
+                _LayerFilter = Qgis.LayerFilter
+            except (ImportError, AttributeError):
+                from qgis.core import QgsMapLayerProxyModel as _LayerFilter
+
             combo = self._dockwidget.mMapLayerComboBox_exporting_raster_mask
             # Filter to polygon layers only
-            combo.setFilters(QgsMapLayerProxyModel.PolygonLayer)
+            combo.setFilters(_LayerFilter.PolygonLayer)
             
             # Update tooltip to show filter info
             self._update_mask_layer_tooltip()
