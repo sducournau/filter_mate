@@ -1094,31 +1094,13 @@ class ExpressionBuilder:
         """
         Detect primary key field name from source layer.
         
-        Tries in order:
-        1. Layer's primaryKeyAttributes()
-        2. Common PK names: 'fid', 'id', 'gid', 'ogc_fid'
+        Delegates to the canonical implementation in layer_utils.
         
         Returns:
             Optional[str]: Primary key field name or None
         """
-        if not self.source_layer:
-            return None
-        
-        # Try to get from provider
-        try:
-            pk_attrs = self.source_layer.primaryKeyAttributes()
-            if pk_attrs:
-                fields = self.source_layer.fields()
-                return fields[pk_attrs[0]].name()
-        except Exception:
-            pass
-        
-        # Fallback: try common PK names
-        for common_pk in ['fid', 'id', 'gid', 'ogc_fid']:
-            if self.source_layer.fields().indexOf(common_pk) >= 0:
-                return common_pk
-        
-        return None
+        from infrastructure.utils.layer_utils import get_primary_key_name
+        return get_primary_key_name(self.source_layer)
     
     def _extract_feature_ids(
         self, 

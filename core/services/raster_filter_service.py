@@ -418,11 +418,8 @@ class RasterFilterService(QObject):
             return "1=0"  # Match nothing
         
         # Get primary key field name
-        pk_attrs = layer.primaryKeyAttributes()
-        if pk_attrs:
-            pk_field = layer.fields().field(pk_attrs[0]).name()
-        else:
-            pk_field = "$id"
+        from infrastructure.utils.layer_utils import get_primary_key_name
+        pk_field = get_primary_key_name(layer) or "$id"
         
         if len(feature_ids) <= 100:
             ids_str = ", ".join(str(fid) for fid in feature_ids)

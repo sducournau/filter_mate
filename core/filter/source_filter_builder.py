@@ -70,9 +70,7 @@ def get_primary_key_field(layer) -> Optional[str]:
     """
     Get the primary key field name from a layer.
     
-    Tries multiple methods to determine the PK:
-    1. Layer's primaryKeyAttributes()
-    2. Common PK names: fid, id, gid, ogc_fid
+    Delegates to the canonical implementation in layer_utils.
     
     Args:
         layer: QgsVectorLayer instance
@@ -80,24 +78,8 @@ def get_primary_key_field(layer) -> Optional[str]:
     Returns:
         str: Primary key field name, or None if not found
     """
-    if not layer:
-        return None
-    
-    # Try to get primary key from provider
-    try:
-        pk_attrs = layer.primaryKeyAttributes()
-        if pk_attrs:
-            fields = layer.fields()
-            return fields[pk_attrs[0]].name()
-    except Exception:
-        pass
-    
-    # Fallback: try common PK names
-    for common_pk in ['fid', 'id', 'gid', 'ogc_fid']:
-        if layer.fields().indexOf(common_pk) >= 0:
-            return common_pk
-    
-    return None
+    from infrastructure.utils.layer_utils import get_primary_key_name
+    return get_primary_key_name(layer)
 
 
 def get_source_table_name(layer, param_source_table: Optional[str] = None) -> Optional[str]:

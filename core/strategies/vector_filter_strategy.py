@@ -537,26 +537,16 @@ class VectorFilterStrategy(AbstractFilterStrategy):
     def _get_primary_key_field(self, layer) -> Optional[str]:
         """Get primary key field name for layer.
         
+        Delegates to the canonical implementation in layer_utils.
+        
         Args:
             layer: QgsVectorLayer
             
         Returns:
             Primary key field name or None
         """
-        try:
-            pk_indexes = layer.primaryKeyAttributes()
-            if pk_indexes:
-                return layer.fields().at(pk_indexes[0]).name()
-        except Exception:
-            pass
-        
-        # Fallback: look for common PK names
-        for name in ['id', 'fid', 'ogc_fid', 'gid', 'pk']:
-            idx = layer.fields().lookupField(name)
-            if idx >= 0:
-                return name
-        
-        return None
+        from infrastructure.utils.layer_utils import get_primary_key_name
+        return get_primary_key_name(layer)
     
     def _detect_backend(self, layer) -> str:
         """Detect the backend type for the layer.

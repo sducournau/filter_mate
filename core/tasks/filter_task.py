@@ -3377,9 +3377,8 @@ class FilterEngineTask(QgsTask):
             return None, None, None, None
         return layer_table, primary_key, geom_field, layer_schema
 
-    # v6.0 Phase 2.3: Removed _build_backend_expression() and _build_backend_expression_v2()
-    # Dead code - expression building goes through FilterOrchestrator → ExpressionBuilder.build_backend_expression()
-    # BackendExpressionBuilder service (core/services/backend_expression_builder.py) is also dead.
+    # v6.0 Phase 2.3: Removed dead expression building methods and BackendExpressionBuilder service.
+    # Active path: FilterOrchestrator → ExpressionBuilder.build_backend_expression()
 
     def _combine_with_old_filter(self, expression, layer):
         """Delegates to core.filter.expression_combiner.combine_with_old_filter()."""

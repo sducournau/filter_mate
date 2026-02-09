@@ -375,40 +375,16 @@ def _extract_primary_key(layer: 'QgsVectorLayer') -> str:
     """
     Extract primary key attribute name from layer.
     
+    Delegates to the canonical implementation in layer_utils.
+    
     Args:
         layer: QGIS vector layer
         
     Returns:
         Primary key field name or empty string
     """
-    try:
-        provider = layer.dataProvider()
-        
-        # Try to get PK from provider's pkAttributeIndexes
-        if hasattr(provider, 'pkAttributeIndexes'):
-            pk_indexes = provider.pkAttributeIndexes()
-            if pk_indexes:
-                fields = layer.fields()
-                if pk_indexes[0] < fields.count():
-                    return fields.at(pk_indexes[0]).name()
-        
-        # Fallback: look for common PK field names
-        fields = layer.fields()
-        common_pk_names = ['id', 'fid', 'gid', 'ogc_fid', 'pk', 'oid']
-        for field_name in common_pk_names:
-            idx = fields.indexOf(field_name)
-            if idx >= 0:
-                return field_name
-        
-        # Last resort: first integer field
-        for field in fields:
-            if field.type() in [2, 4]:  # Integer types in QVariant
-                return field.name()
-                
-    except Exception:
-        pass
-    
-    return ""
+    from infrastructure.utils.layer_utils import get_primary_key_name
+    return get_primary_key_name(layer) or ""
 
 # ============================================================================
 # Legacy Compatibility Functions

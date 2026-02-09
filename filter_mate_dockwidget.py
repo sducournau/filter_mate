@@ -581,6 +581,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._load_raster_tool_icons()
             if self._icon_manager:
                 self._icon_manager.apply()
+            # FIX 2026-02-09d: Restore centroid checkbox icons after re-polish
+            self._load_centroids_checkbox_icons()
             # Also ensure frame_actions is visible
             if hasattr(self, 'frame_actions') and self.frame_actions:
                 if not self.frame_actions.isVisible():
@@ -590,6 +592,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.debug("_deferred_icon_reload: Icons reloaded after show")
         except Exception as e:
             logger.debug(f"_deferred_icon_reload: {e}")
+
+    def _load_centroids_checkbox_icons(self):
+        """FIX 2026-02-09d: Reload centroid icons on both centroids checkboxes.
+        
+        Re-polishing can clear programmatically-set icons on QCheckBox widgets.
+        """
+        import os
+        from qgis.PyQt import QtGui
+        icon_path = os.path.join(self.plugin_dir, "icons", "centroid.png") if hasattr(self, 'plugin_dir') else ""
+        if not icon_path or not os.path.exists(icon_path):
+            return
+        try:
+            from .ui.icons import get_themed_icon, ICON_THEME_AVAILABLE
+        except ImportError:
+            ICON_THEME_AVAILABLE = False
+        icon = get_themed_icon(icon_path) if ICON_THEME_AVAILABLE else QtGui.QIcon(icon_path)
+        for cb_name in ('checkBox_filtering_use_centroids_source_layer',
+                        'checkBox_filtering_use_centroids_distant_layers'):
+            cb = getattr(self, cb_name, None)
+            if cb is not None:
+                cb.setIcon(icon)
 
     def getSignal(self, oObject: QObject, strSignalName: str):
         """v4.0 S16: Get signal from QObject by name with caching."""

@@ -224,13 +224,8 @@ class ExportTask(BaseFilterMateTask):
 
     def _get_pk_field(self, layer) -> str:
         """Get primary key field name."""
-        try:
-            pk_attrs = layer.primaryKeyAttributes()
-            if pk_attrs:
-                return layer.fields()[pk_attrs[0]].name()
-        except Exception:
-            pass
-        return "fid"
+        from infrastructure.utils.layer_utils import get_primary_key_name
+        return get_primary_key_name(layer) or "fid"
 
     @property
     def features_exported(self) -> int:
