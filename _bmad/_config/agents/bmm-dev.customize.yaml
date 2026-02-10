@@ -1,41 +1,27 @@
-# Agent Customization
-# Customize any section below - all are optional
+# Agent Customization for Amelia (Developer)
+# Maps to: Marco (tech-lead-gis) — our custom GIS Lead Developer agent
 
-# Override agent name
 agent:
   metadata:
     name: ""
 
-# Replace entire persona (not merged)
 persona:
   role: ""
   identity: ""
   communication_style: ""
   principles: []
 
-# Add custom critical actions (appended after standard config loading)
 critical_actions: []
 
-# Add persistent memories for the agent
-memories: []
-# Example:
-# memories:
-#   - "User prefers detailed technical explanations"
-#   - "Current project uses React and TypeScript"
+memories:
+  - "TEAM CONTEXT: This project uses a custom agent team. Amelia (BMAD Dev) aligns with Marco (tech-lead-gis), the Lead Developer"
+  - "Marco handles: coding, refactoring, code review, architecture, PostGIS, raster, PyQGIS"
+  - "Report scope questions to Jordan (jordan-po) — the Product Owner who defines acceptance criteria"
+  - "Send completed work to Beta (beta-tester) for testing before marking stories done"
+  - "Thread safety: store layer URI in __init__, recreate in QgsTask.run(). QGIS layers are NOT thread-safe"
+  - "Signal safety: blockSignals(True/False) around programmatic setValue() calls"
+  - "Hexagonal architecture: domain never imports infrastructure. Ports define the contract"
+  - "SpatiaLite: use context manager via _safe_spatialite_connect()"
 
-# Add custom menu items (appended to base menu)
-# Don't include * prefix or help/exit - auto-injected
 menu: []
-# Example:
-# menu:
-#   - trigger: my-workflow
-#     workflow: "{project-root}/custom/my.yaml"
-#     description: My custom workflow
-
-# Add custom prompts (for action="#id" handlers)
 prompts: []
-# Example:
-# prompts:
-# - id: my-prompt
-#   content: |
-#     Prompt instructions here

@@ -1,41 +1,28 @@
-# Agent Customization
-# Customize any section below - all are optional
+# Agent Customization for Mary (Business Analyst)
+# Maps to: Jordan (jordan-po) for requirements + Atlas (atlas-tech-watch) for research
 
-# Override agent name
 agent:
   metadata:
     name: ""
 
-# Replace entire persona (not merged)
 persona:
   role: ""
   identity: ""
   communication_style: ""
   principles: []
 
-# Add custom critical actions (appended after standard config loading)
 critical_actions: []
 
-# Add persistent memories for the agent
-memories: []
-# Example:
-# memories:
-#   - "User prefers detailed technical explanations"
-#   - "Current project uses React and TypeScript"
+memories:
+  - "TEAM CONTEXT: This project uses a custom agent team. Mary (BMAD Analyst) spans two custom roles:"
+  - "  Requirements & feasibility analysis -> aligns with Jordan (jordan-po), the Product Owner"
+  - "  Domain/market/tech research -> aligns with Atlas (atlas-tech-watch), the Tech Intelligence agent"
+  - "Jordan handles: MVP scoping, user stories, backlog prioritization, Go/No-Go decisions"
+  - "Atlas handles: tech watch, tool comparisons, GIS ecosystem exploration, open data guidance"
+  - "Marco (tech-lead-gis) provides technical feasibility assessments and complexity estimates"
+  - "Elder Scrolls (the-elder-scrolls) provides project history and past decision context"
+  - "FilterMate is a QGIS plugin for advanced multi-layer filtering with PostGIS/SpatiaLite support"
+  - "Target users: cartographers, GIS analysts, geographic data managers"
 
-# Add custom menu items (appended to base menu)
-# Don't include * prefix or help/exit - auto-injected
 menu: []
-# Example:
-# menu:
-#   - trigger: my-workflow
-#     workflow: "{project-root}/custom/my.yaml"
-#     description: My custom workflow
-
-# Add custom prompts (for action="#id" handlers)
 prompts: []
-# Example:
-# prompts:
-# - id: my-prompt
-#   content: |
-#     Prompt instructions here

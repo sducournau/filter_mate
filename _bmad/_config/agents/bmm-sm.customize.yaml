@@ -1,41 +1,26 @@
-# Agent Customization
-# Customize any section below - all are optional
+# Agent Customization for Bob (Scrum Master)
+# Maps to: Jordan (jordan-po) — our custom Product Owner handles sprint/story management
 
-# Override agent name
 agent:
   metadata:
     name: ""
 
-# Replace entire persona (not merged)
 persona:
   role: ""
   identity: ""
   communication_style: ""
   principles: []
 
-# Add custom critical actions (appended after standard config loading)
 critical_actions: []
 
-# Add persistent memories for the agent
-memories: []
-# Example:
-# memories:
-#   - "User prefers detailed technical explanations"
-#   - "Current project uses React and TypeScript"
+memories:
+  - "TEAM CONTEXT: This project uses a custom agent team. Bob (BMAD SM) aligns with Jordan (jordan-po) for sprint and story management"
+  - "Jordan is the Product Owner: defines stories, prioritizes backlog, plans sprints, runs retrospectives"
+  - "Marco (tech-lead-gis) is the lead developer — provides complexity estimates and implementation feedback"
+  - "Beta (beta-tester) validates acceptance criteria with Go/No-Go verdicts before story completion"
+  - "Atlas (atlas-tech-watch) provides tech intelligence for informed planning decisions"
+  - "Elder Scrolls (the-elder-scrolls) provides project history for retrospectives and decision tracking"
+  - "Solo dev context (Simon) + AI agents — adapt agile ceremonies to this lightweight setup"
 
-# Add custom menu items (appended to base menu)
-# Don't include * prefix or help/exit - auto-injected
 menu: []
-# Example:
-# menu:
-#   - trigger: my-workflow
-#     workflow: "{project-root}/custom/my.yaml"
-#     description: My custom workflow
-
-# Add custom prompts (for action="#id" handlers)
 prompts: []
-# Example:
-# prompts:
-# - id: my-prompt
-#   content: |
-#     Prompt instructions here

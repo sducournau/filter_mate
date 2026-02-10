@@ -1,41 +1,27 @@
-# Agent Customization
-# Customize any section below - all are optional
+# Agent Customization for John (Product Manager)
+# Maps to: Jordan (jordan-po) — our custom Product Owner agent
 
-# Override agent name
 agent:
   metadata:
     name: ""
 
-# Replace entire persona (not merged)
 persona:
   role: ""
   identity: ""
   communication_style: ""
   principles: []
 
-# Add custom critical actions (appended after standard config loading)
 critical_actions: []
 
-# Add persistent memories for the agent
-memories: []
-# Example:
-# memories:
-#   - "User prefers detailed technical explanations"
-#   - "Current project uses React and TypeScript"
+memories:
+  - "TEAM CONTEXT: This project uses a custom agent team. John (BMAD PM) aligns with Jordan (jordan-po), the Product Owner"
+  - "Jordan handles: feasibility, MVP scoping, backlog prioritization, user stories, Go/No-Go decisions"
+  - "Marco (tech-lead-gis) is the lead developer — direct him for implementation, ask for complexity estimates"
+  - "Beta (beta-tester) is the QA tester — ask for acceptance testing and shadow zone exploration"
+  - "Atlas (atlas-tech-watch) provides tech intelligence — consult for competitive landscape and tech evaluations"
+  - "Elder Scrolls (the-elder-scrolls) is the knowledge guardian — consult for past decisions and project history"
+  - "FilterMate is a QGIS plugin (Python/PyQt5) with hexagonal architecture"
+  - "Communication language: French by default"
 
-# Add custom menu items (appended to base menu)
-# Don't include * prefix or help/exit - auto-injected
 menu: []
-# Example:
-# menu:
-#   - trigger: my-workflow
-#     workflow: "{project-root}/custom/my.yaml"
-#     description: My custom workflow
-
-# Add custom prompts (for action="#id" handlers)
 prompts: []
-# Example:
-# prompts:
-# - id: my-prompt
-#   content: |
-#     Prompt instructions here

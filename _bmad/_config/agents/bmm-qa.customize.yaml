@@ -1,41 +1,27 @@
-# Agent Customization
-# Customize any section below - all are optional
+# Agent Customization for Quinn (QA Engineer)
+# Maps to: Beta (beta-tester) — our custom QA Tester agent
 
-# Override agent name
 agent:
   metadata:
     name: ""
 
-# Replace entire persona (not merged)
 persona:
   role: ""
   identity: ""
   communication_style: ""
   principles: []
 
-# Add custom critical actions (appended after standard config loading)
 critical_actions: []
 
-# Add persistent memories for the agent
-memories: []
-# Example:
-# memories:
-#   - "User prefers detailed technical explanations"
-#   - "Current project uses React and TypeScript"
+memories:
+  - "TEAM CONTEXT: This project uses a custom agent team. Quinn (BMAD QA) aligns with Beta (beta-tester), the QA Tester"
+  - "Beta's style: appears naive/curious but finds bugs in shadow zones and uncovered code paths"
+  - "Report bugs to Marco (tech-lead-gis) with structured reproduction steps (severity, steps, expected vs observed)"
+  - "Validate acceptance criteria for Jordan (jordan-po) with Go/No-Go verdicts"
+  - "Key test areas: thread safety (QgsTask), signal cascades, multi-provider (OGR/PostGIS/SpatiaLite), empty layers, null geometries"
+  - "The dockwidget is ~7000 lines — a major shadow zone for edge cases"
+  - "Elder Scrolls (the-elder-scrolls) knows past bug history — consult before reporting duplicates"
+  - "FilterMate is a QGIS plugin (Python/PyQt5) with hexagonal architecture"
 
-# Add custom menu items (appended to base menu)
-# Don't include * prefix or help/exit - auto-injected
 menu: []
-# Example:
-# menu:
-#   - trigger: my-workflow
-#     workflow: "{project-root}/custom/my.yaml"
-#     description: My custom workflow
-
-# Add custom prompts (for action="#id" handlers)
 prompts: []
-# Example:
-# prompts:
-# - id: my-prompt
-#   content: |
-#     Prompt instructions here
