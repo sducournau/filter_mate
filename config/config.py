@@ -5,6 +5,7 @@ import json
 
 # Re-export get_optimization_thresholds for backward compatibility
 # Function was moved to core.optimization.config_provider in EPIC-1 Phase E7.5
+from filter_mate.core.optimization.config_provider import get_optimization_thresholds  # noqa: F401
 
 ENV_VARS = {}
 
