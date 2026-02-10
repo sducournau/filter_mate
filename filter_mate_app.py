@@ -1033,6 +1033,39 @@ class FilterMateApp:
     # TASK EXECUTION METHODS (v4.1)
     # ========================================
 
+    def _disconnect_old_task_signals(self, task_name: str):
+        """Disconnect all signals from an existing task before replacing it.
+
+        Prevents stale lambda closures from firing when a new task is assigned
+        to appTasks[task_name]. Lambda-connected signals cannot be individually
+        disconnected (no slot reference), so we disconnect all receivers from
+        each known signal on the old task object.
+
+        Args:
+            task_name: Key in self.appTasks identifying the task to clean up.
+        """
+        old_task = self.appTasks.get(task_name)
+        if old_task is None:
+            return
+
+        # Collect all custom signal names that may have been connected.
+        # taskCompleted / taskTerminated / begun are inherited from QgsTask.
+        # resultingLayers / savingLayerVariable / removingLayerVariable are on
+        # LayersManagementEngineTask.
+        signal_names = [
+            'taskCompleted', 'taskTerminated', 'begun',
+            'resultingLayers', 'savingLayerVariable', 'removingLayerVariable',
+        ]
+        for name in signal_names:
+            sig = getattr(old_task, name, None)
+            if sig is not None:
+                try:
+                    sig.disconnect()
+                except (TypeError, RuntimeError):
+                    # TypeError: no connections to disconnect
+                    # RuntimeError: C++ object already deleted
+                    pass
+
     def _execute_filter_task(self, task_name: str, task_parameters: dict):
         """Execute filter/unfilter/reset task (callback for TaskOrchestrator)."""
         from .core.tasks import FilterEngineTask
@@ -1059,6 +1092,9 @@ class FilterMateApp:
         # When all layers are PostgreSQL, use PostgreSQL backend even for small datasets
         if self._backend_registry is not None:
             self._backend_registry.update_project_context(layers)
+
+        # Disconnect signals from the old task to prevent stale lambda closures
+        self._disconnect_old_task_signals(task_name)
 
         # Create task with backend registry for hexagonal architecture (v4.0.1)
         logger.info(f"📦 Creating FilterEngineTask with {len(task_parameters.get('task', {}).get('layers', []))} layers")
@@ -1092,6 +1128,9 @@ class FilterMateApp:
     def _execute_layer_task(self, task_name: str, task_parameters: dict):
         """Execute layer management task (callback for TaskOrchestrator)."""
         from .core.tasks import LayersManagementEngineTask
+
+        # Disconnect signals from the old task to prevent stale lambda closures
+        self._disconnect_old_task_signals(task_name)
 
         self.appTasks[task_name] = LayersManagementEngineTask(
             self.tasks_descriptions[task_name],

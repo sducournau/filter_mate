@@ -2914,14 +2914,10 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 self._dockwidget._updating_qgis_selection_from_widget = False
                 return True
 
-            # FIX v5: Self-healing - ensure signal stays connected
+            # FIX 2026-02-10 (C1): Centralized selectionChanged connection - flag sync only
+            # If this handler was invoked, the signal IS connected. Just sync the flag.
             if self._dockwidget.current_layer and not self._dockwidget.current_layer_selection_connection:
-                try:
-                    self._dockwidget.current_layer.selectionChanged.connect(self._dockwidget.on_layer_selection_changed)
-                    self._dockwidget.current_layer_selection_connection = True
-                    logger.debug("handle_layer_selection_changed: Re-connected selectionChanged (self-healing)")
-                except (TypeError, RuntimeError):
-                    pass
+                self._dockwidget.current_layer_selection_connection = True
             # Check recursion prevention flag
             if getattr(self._dockwidget, '_syncing_from_qgis', False):
                 logger.debug("handle_layer_selection_changed: Skipping (sync in progress)")

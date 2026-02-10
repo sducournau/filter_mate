@@ -85,7 +85,8 @@ from .ui.widgets.json_view.view import JsonView
 from .infrastructure.utils import is_layer_valid as is_valid_layer
 from .infrastructure.utils import (
     get_best_display_field,
-    is_layer_source_available
+    is_layer_source_available,
+    safe_disconnect
 )
 from .core.domain.exceptions import SignalStateChangeError
 from .ui.styles import StyleLoader, QGISThemeWatcher
@@ -325,34 +326,66 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return False
         return True
 
+    def _connect_selection_signal(self, layer=None) -> bool:
+        """
+        Centralized selectionChanged signal connection.
+
+        FIX 2026-02-10 (C1): Single entry point for connecting selectionChanged.
+        Uses safe_disconnect first to prevent signal stacking, then connects.
+
+        Args:
+            layer: The layer to connect. If None, uses self.current_layer.
+
+        Returns:
+            True if connected successfully, False otherwise.
+        """
+        target_layer = layer or self.current_layer
+        if not target_layer or not target_layer.isValid():
+            return False
+        try:
+            # Always disconnect first to prevent stacking
+            safe_disconnect(target_layer.selectionChanged, self.on_layer_selection_changed)
+            target_layer.selectionChanged.connect(self.on_layer_selection_changed)
+            self.current_layer_selection_connection = True
+            logger.debug(f"_connect_selection_signal: Connected for layer '{target_layer.name()}'")
+            return True
+        except (TypeError, RuntimeError) as e:
+            logger.error(f"_connect_selection_signal failed: {e}")
+            self.current_layer_selection_connection = False
+            return False
+
+    def _disconnect_selection_signal(self) -> bool:
+        """
+        Centralized selectionChanged signal disconnection.
+
+        FIX 2026-02-10 (C1): Single entry point for disconnecting selectionChanged.
+        Uses safe_disconnect for idempotent disconnection.
+
+        Returns:
+            True if disconnected (or was already disconnected), False on error.
+        """
+        if self.current_layer is None:
+            self.current_layer_selection_connection = None
+            return True
+        try:
+            safe_disconnect(self.current_layer.selectionChanged, self.on_layer_selection_changed)
+            self.current_layer_selection_connection = None
+            logger.debug(f"_disconnect_selection_signal: Disconnected for layer '{self.current_layer.name()}'")
+            return True
+        except (TypeError, RuntimeError) as e:
+            logger.warning(f"_disconnect_selection_signal failed: {e}")
+            self.current_layer_selection_connection = None
+            return True
+
     def _ensure_layer_signals_connected(self, layer) -> bool:
         """
         FIX 2026-01-15 (FIX-003): Ensure layer signals are connected.
 
-        CRITICAL: Layer signals (selectionChanged) get lost after reload/filter/widget rebuild.
-        This provides self-healing - call AFTER any operation touching the layer.
+        Delegates to _connect_selection_signal for centralized management.
 
         Returns: True if connected successfully
         """
-        if not layer or not layer.isValid():
-            return False
-        try:
-            # Disconnect first (idempotent)
-            try:
-                layer.selectionChanged.disconnect(self.on_layer_selection_changed)
-                was_connected = True
-            except TypeError:
-                was_connected = False
-            # Always reconnect
-            layer.selectionChanged.connect(self.on_layer_selection_changed)
-            self.current_layer_selection_connection = True
-            if not was_connected:
-                logger.warning(f"⚠️ selectionChanged NOT connected for {layer.name()} - reconnected")
-            return True
-        except Exception as e:
-            logger.error(f"❌ _ensure_layer_signals_connected failed: {e}")
-            self.current_layer_selection_connection = False
-            return False
+        return self._connect_selection_signal(layer)
 
     def _connect_feature_picker_layer_deletion(self, layer):
         """
@@ -2077,10 +2110,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         else:
             logger.warning("⚠️ _controller_integration is None - using legacy code paths only")
 
+        # FIX 2026-02-10 (C1): Centralized selectionChanged connection
         if self.current_layer and not self.current_layer_selection_connection:
-            try: self.current_layer.selectionChanged.connect(self.on_layer_selection_changed); self.current_layer_selection_connection = True
-            except Exception:  # Signal may already be connected - expected
-                pass
+            self._connect_selection_signal()
         self.widgetsInitialized.emit(); self._setup_keyboard_shortcuts()
         if self._pending_layers_update:
             self._pending_layers_update = False; pl, pr, weak_self = self.PROJECT_LAYERS, self.PROJECT, weakref.ref(self)
@@ -4886,26 +4918,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         FIX 2026-01-15 v9: Ensure the selectionChanged signal is connected to on_layer_selection_changed.
 
+        FIX 2026-02-10 (C1): Now delegates to _connect_selection_signal for centralized management.
         This is called when IS_TRACKING or IS_SELECTING are activated to ensure
         the signal remains connected for auto-zoom/sync functionality.
         """
-        logger.debug(f"🔌 _ensure_selection_changed_connected CALLED: current_layer={self.current_layer.name() if self.current_layer else 'None'}, connection_flag={self.current_layer_selection_connection}")
-
-        if not self.current_layer:
-            logger.warning("⚠️ _ensure_selection_changed_connected: No current layer")
-            return
-
-        try:
-            # Check if signal needs to be connected
-            if not self.current_layer_selection_connection:
-                self.current_layer.selectionChanged.connect(self.on_layer_selection_changed)
-                self.current_layer_selection_connection = True
-                logger.debug(f"✅ _ensure_selection_changed_connected: Connected selectionChanged signal for layer '{self.current_layer.name()}'")
-            else:
-                logger.debug(f"ℹ️ _ensure_selection_changed_connected: Signal already connected for layer '{self.current_layer.name()}'")
-        except (TypeError, RuntimeError) as e:
-            # Signal might already be connected, or layer deleted
-            logger.warning(f"⚠️ _ensure_selection_changed_connected error: {e}")
+        self._connect_selection_signal()
 
     def on_layer_selection_changed(self, selected, deselected, clearAndSelect):
         """
@@ -4918,14 +4935,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # FIX v10: DEBUG - Confirm signal is triggered
         logger.info(f"🔔 on_layer_selection_changed TRIGGERED: selected={len(selected)}, deselected={len(deselected)}, clearAndSelect={clearAndSelect}")
 
-        # FIX v5: Ensure signal stays connected (self-healing)
+        # FIX 2026-02-10 (C1): Self-healing removed - centralized in _connect_selection_signal
+        # The signal is already connected if this handler was invoked.
         if self.current_layer and not self.current_layer_selection_connection:
-            try:
-                self.current_layer.selectionChanged.connect(self.on_layer_selection_changed)
-                self.current_layer_selection_connection = True
-                logger.debug("on_layer_selection_changed: Re-connected selectionChanged signal (self-healing)")
-            except (TypeError, RuntimeError):
-                pass
+            self.current_layer_selection_connection = True
 
         # FIX v10: DEBUG - Check delegation
         if self._controller_integration:
@@ -5424,12 +5437,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 return (False, None, None)
         except (RuntimeError, AttributeError, OSError):
             return (False, None, None)  # Layer source check failed
+        # FIX 2026-02-10 (C1): Centralized selectionChanged disconnection
         if self.current_layer is not None and self.current_layer_selection_connection is not None:
-            try:
-                self.current_layer.selectionChanged.disconnect(self.on_layer_selection_changed)
-            except (TypeError, RuntimeError):
-                pass
-            self.current_layer_selection_connection = None
+            self._disconnect_selection_signal()
 
         self.current_layer = layer
 
@@ -5790,13 +5800,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             except Exception as e:
                 logger.debug(f"Ignored in legend link signal reconnection: {e}")
 
-        # Connect selectionChanged for tracking
+        # FIX 2026-02-10 (C1): Centralized selectionChanged connection
         if self.current_layer:
-            try:
-                self.current_layer.selectionChanged.connect(self.on_layer_selection_changed)
-                self.current_layer_selection_connection = True
-            except Exception as e:
-                logger.debug(f"Ignored in selectionChanged signal connection: {e}")
+            self._connect_selection_signal()
 
         # Restore exploring groupbox state
         if layer_props and "current_exploring_groupbox" in layer_props.get("exploring", {}):
