@@ -21,9 +21,10 @@
  ***************************************************************************/
 """
 
-from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
-from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QMessageBox
+from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, QSize, Qt, QUrl
+from qgis.PyQt.QtGui import QIcon, QDesktopServices, QPixmap
+from qgis.PyQt.QtWidgets import (QAction, QMessageBox, QCheckBox, QDialog,
+    QVBoxLayout, QHBoxLayout, QLabel, QPushButton)
 import weakref
 
 # Initialize Qt resources from file resources.py
@@ -1244,6 +1245,83 @@ class FilterMate:
             )
 
 
+    def _show_discord_welcome(self):
+        """Show a one-time welcome dialog inviting the user to join the Discord server."""
+        settings = QSettings()
+        if settings.value('FilterMate/discord_welcome_dismissed', False, type=bool):
+            return
+
+        DISCORD_URL = "https://discord.com/channels/1470496084441825303/1470497580520571133"
+
+        dlg = QDialog(self.iface.mainWindow())
+        dlg.setWindowTitle("FilterMate")
+        dlg.setFixedWidth(420)
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(12)
+        layout.setContentsMargins(24, 20, 24, 20)
+
+        # --- Header with logo ---
+        header = QHBoxLayout()
+        logo_label = QLabel()
+        logo_path = os.path.join(self.plugin_dir, 'icons', 'icon.png')
+        if os.path.exists(logo_path):
+            logo_label.setPixmap(QPixmap(logo_path).scaled(48, 48, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        title_label = QLabel("<h2 style='margin:0;'>FilterMate</h2>")
+        header.addWidget(logo_label)
+        header.addWidget(title_label)
+        header.addStretch()
+        layout.addLayout(header)
+
+        # --- Welcome text ---
+        text = QLabel(self.tr(
+            "<p style='font-size:13px;'>"
+            "Thank you for using <b>FilterMate</b>!<br>"
+            "Join our Discord community to:</p>"
+            "<ul style='margin-left:10px; font-size:12px;'>"
+            "<li>Get help and support</li>"
+            "<li>Report bugs and issues</li>"
+            "<li>Suggest new features</li>"
+            "<li>Share tips with other users</li>"
+            "</ul>"
+        ))
+        text.setWordWrap(True)
+        layout.addWidget(text)
+
+        # --- Discord button ---
+        discord_btn = QPushButton()
+        discord_btn.setText(self.tr("  Join us on Discord"))
+        discord_icon_path = os.path.join(self.plugin_dir, 'icons', 'discord.svg')
+        if os.path.exists(discord_icon_path):
+            discord_btn.setIcon(QIcon(discord_icon_path))
+            discord_btn.setIconSize(QSize(22, 22))
+        discord_btn.setCursor(Qt.PointingHandCursor)
+        discord_btn.setStyleSheet(
+            "QPushButton {"
+            "  background-color: #5865F2; color: white; border: none;"
+            "  border-radius: 6px; padding: 10px 20px;"
+            "  font-size: 14px; font-weight: bold;"
+            "}"
+            "QPushButton:hover { background-color: #4752C4; }"
+            "QPushButton:pressed { background-color: #3C45A5; }"
+        )
+        discord_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(DISCORD_URL)))
+        layout.addWidget(discord_btn)
+
+        # --- Checkbox + Close ---
+        bottom = QHBoxLayout()
+        cb = QCheckBox(self.tr("Don't show this again"))
+        bottom.addWidget(cb)
+        bottom.addStretch()
+        close_btn = QPushButton(self.tr("Close"))
+        close_btn.clicked.connect(dlg.accept)
+        bottom.addWidget(close_btn)
+        layout.addLayout(bottom)
+
+        dlg.exec_()
+
+        if cb.isChecked():
+            settings.setValue('FilterMate/discord_welcome_dismissed', True)
+
     def run(self):
         """Run method that loads and starts the plugin"""
 
@@ -1263,6 +1341,7 @@ class FilterMate:
                     self.app.run()
                     if self.app.dockwidget:
                         self.app.dockwidget.closingPlugin.connect(self.onClosePlugin)
+                        self._show_discord_welcome()
                 else:
                     # App already exists, call run() which will show the dockwidget
                     # and refresh layers if needed

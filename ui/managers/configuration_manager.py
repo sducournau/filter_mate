@@ -901,7 +901,6 @@ class ConfigurationManager(QObject):
     def setup_exporting_tab_widgets(self):
         """v4.0 Sprint 16: Configure widgets for Exporting tab (migrated from dockwidget)."""
         from qgis.PyQt import QtWidgets
-        from qgis.PyQt.QtGui import QColor
         
         d = self.dockwidget
         # Widget already created in setupUiCustom() - just configure it
@@ -926,4 +925,4 @@ class ConfigurationManager(QObject):
             if hasattr(d, btn):
                 getattr(d, btn).setEnabled(False)
         
-        d.iface.mapCanvas().setSelectionColor(QColor(237, 97, 62, 75))
+
