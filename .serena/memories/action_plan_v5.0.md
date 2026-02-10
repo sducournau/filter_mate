@@ -1,25 +1,18 @@
-# FilterMate Action Plan v5.4
+# FilterMate Action Plan (Updated 2026-02-10)
 
-**Last Updated:** February 1, 2026  
-**Current Version:** 5.4.0  
-**Status:** Production - Raster Tools Complete
+**Last Updated:** February 10, 2026
+**Current Version on main:** v4.4.5
+**Status:** Production (Vector only) - Raster integration PLANNED
+
+> **Audit 2026-02-10:** Previous v5.4.0 raster claims were branch-only (never merged).
+> No raster features exist on `main`. See `raster_integration_plan_atlas_2026_02_10`.
 
 ---
 
-## ✅ Recently Completed (Jan-Feb 2026)
+## ✅ Recently Completed on `main` (Jan 2026)
 
-### v5.4.0 (Feb 1, 2026) - Raster Exploring Tools ✅
-- [x] Added 5 interactive raster tool buttons
-- [x] Pixel Picker tool (click to pick value, Ctrl+click extends range)
-- [x] Rectangle Range tool (drag for area statistics)
-- [x] Sync Histogram tool (bidirectional spinbox ↔ histogram)
-- [x] All Bands Info tool (multi-band pixel values)
-- [x] Reset Range tool (reset to data range)
-- [x] UI consistency with vector exploring panel
-- [x] Checkable button mutual exclusion
-- [x] Theme-aware icons and tooltips
-
-**Impact:** Enhanced raster workflow, consistent UX with vector panel
+### ~~v5.4.0 - Raster Exploring Tools~~ BRANCH ONLY (never merged)
+> These existed on `fix/widget-visibility-and-styles-2026-02-02` only.
 
 ### v4.4.5 (Jan 25, 2026) - Primary Key Detection ✅
 - [x] Automatic PK detection from PostgreSQL metadata
@@ -92,65 +85,55 @@
 
 ---
 
-## 📋 Next Release: v5.5 (Planned March 2026)
+## 📋 Next Release: v5.5 (Planned March 2026) - Atlas Roadmap
 
-### EPIC-4: Raster Export UI
+### Raster Value Sampling (QUICK WIN - Foundation)
+- [ ] `RasterFilterService` in `core/services/` (hexagonal)
+- [ ] `RasterFilterCriteria` frozen dataclass in `core/domain/`
+- [ ] `provider.sample(QgsPointXY, band)` per feature centroid
+- [ ] Reuse existing predicate dropdown (Min/Max + between/>/< etc.)
+- [ ] Single "Apply to vector" button in raster UI panel
+- **Effort:** S (3-5 days) | **Impact:** HIGH | **UI Reuse:** 95%
 
-**User Stories:**
-- [ ] Export filtered raster to GeoTIFF
-- [ ] Export filtered raster to Cloud Optimized GeoTIFF (COG)
-- [ ] Export with value range clipping
-- [ ] Export multiple bands to separate files
-- [ ] Export with compression options
-- [ ] Export with NoData handling
-
-**Complexity:** High (8-13 story points each)  
-**Estimated:** 2-3 weeks
+### EPIC-4: Raster Export UI + Clip by Vector
+- [ ] Export filtered raster to GeoTIFF/COG
+- [ ] Clip raster by filtered vector features (`gdal.Warp` + `cutlineDSName`)
+- [ ] Export with compression/NoData options
+- **Effort:** M (2 weeks) | **Impact:** MED-HIGH
 
 ### Quality Improvements
+- [ ] Reduce dockwidget.py complexity
+- [ ] Test coverage: 75% → 80%
 
-- [ ] Reduce dockwidget.py complexity (~6,925 lines → split into modules)
-- [ ] Performance optimization for very large rasters
-- [ ] Memory usage profiling and optimization
-- [ ] Code coverage dashboard integration
+---
+
+## 📋 v5.6 (Planned April 2026) - Atlas Roadmap
+
+### Zonal Stats as Filter (DIFFERENTIATOR)
+- [ ] `QgsZonalStatistics` or GDAL-based stats per vector feature
+- [ ] "Show buildings where mean altitude > 500m" workflow
+- [ ] Non-destructive (temp memory layer, not modifying source)
+- [ ] Integrated with undo/redo and histogram preview
+- **Effort:** M (2-3 weeks) | **Impact:** VERY HIGH | **UNIQUE**
+
+### Raster-Driven Selection Highlight (UX Premium)
+- [ ] Real-time vector feature highlight as user adjusts raster range
+- [ ] Debounced (300ms) on range change signal
+- [ ] MVP: combine with Sampling (centroid) instead of full polygonization
+- **Effort:** M (1 week) | **Impact:** HIGH | **UNIQUE**
 
 ---
 
 ## 🔮 Future Roadmap: v6.0 (Q2-Q3 2026)
 
-### Major Features
+### Raster Features
+- [ ] Multi-Band Composite Filtering (AND/OR on multiple bands) -- 4 weeks, if demand confirmed
+- [ ] CAUTION: Do NOT recreate Raster Calculator (resist feature creep)
 
-#### 1. Plugin API for Extensibility
-- [ ] Define stable API for custom backends
-- [ ] Plugin system for custom filters
-- [ ] Extension points for UI customization
-- [ ] Documentation and example plugins
-
-**Benefit:** Community contributions, custom workflows
-
-#### 2. Advanced Raster Analytics
-- [ ] Raster calculator integration
-- [ ] Band math operations
-- [ ] Temporal raster series filtering
-- [ ] Multi-dimensional raster support (NetCDF)
-
-**Benefit:** Scientific workflows, time-series analysis
-
-#### 3. Cloud Data Sources
-- [ ] AWS S3 raster support
-- [ ] Azure Blob Storage integration
-- [ ] Google Cloud Storage support
-- [ ] STAC (SpatioTemporal Asset Catalog) integration
-
-**Benefit:** Cloud-native workflows, big data
-
-#### 4. Performance Optimization
-- [ ] Parallel raster processing
-- [ ] Lazy loading for large rasters
-- [ ] Tile-based processing
-- [ ] GPU acceleration (GDAL CUDA)
-
-**Benefit:** 10× speedup on large datasets
+### Other Features
+- [ ] Plugin API for Extensibility
+- [ ] Cloud Data Sources (S3, Azure, STAC)
+- [ ] Performance: tile-based processing for large rasters
 
 ---
 

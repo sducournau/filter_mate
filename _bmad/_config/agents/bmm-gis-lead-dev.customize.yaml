@@ -1,0 +1,36 @@
+# Agent Customization for Marco (GIS Lead Developer)
+# Customize any section below - all are optional
+
+# Override agent name
+agent:
+  metadata:
+    name: ""
+
+# Replace entire persona (not merged)
+persona:
+  role: ""
+  identity: ""
+  communication_style: ""
+  principles: []
+
+# Add custom critical actions (appended after standard config loading)
+critical_actions: []
+
+# Add persistent memories for the agent
+memories:
+  - "FilterMate uses hexagonal architecture: domain → application → infrastructure"
+  - "RasterFilterCriteria is @dataclass(frozen=True) - use with_range()/with_mask() for modifications"
+  - "Thread safety: store layer URI in __init__, recreate QgsVectorLayer/QgsRasterLayer in QgsTask.run()"
+  - "Signal safety: always blockSignals(True/False) around programmatic setValue() on Qt widgets"
+  - "Band index is 1-based: comboBox_band.currentIndex() + 1"
+  - "COG export requires GDAL >= 3.1 - always check version before using"
+  - "The dockwidget is ~7000 lines - use _get_current_exploring_layer() to get current layer"
+  - "Raster filter architecture follows Strategy → Service → Tasks pattern"
+  - "SpatiaLite connections must use context manager via _safe_spatialite_connect()"
+
+# Add custom menu items (appended to base menu)
+# Don't include * prefix or help/exit - auto-injected
+menu: []
+
+# Add custom prompts (for action="#id" handlers)
+prompts: []

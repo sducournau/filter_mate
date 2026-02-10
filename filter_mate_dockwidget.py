@@ -1640,19 +1640,464 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             layout_vector.addStretch()
             self._stacked_exploring.addWidget(page_vector)
 
-            # -- 3. Page 1: Raster (placeholder) --
+            # -- 3. Page 1: Raster (Phase 1 - Layer Info + Value Sampling) --
             page_raster = QtWidgets.QWidget()
             page_raster.setObjectName("page_exploring_raster")
             layout_raster = QtWidgets.QVBoxLayout(page_raster)
             layout_raster.setContentsMargins(4, 4, 4, 4)
             layout_raster.setSpacing(4)
 
-            lbl_placeholder = QtWidgets.QLabel(self.tr("Raster Exploring"))
-            lbl_placeholder.setAlignment(Qt.AlignCenter)
-            lbl_placeholder.setStyleSheet(
-                "color: palette(mid); font-style: italic; padding: 20px;"
+            # --- GroupBox 1: LAYER INFO (always expanded) ---
+            self.mGroupBox_raster_layer_info = QtWidgets.QGroupBox(
+                self.tr("Layer Info")
             )
-            layout_raster.addWidget(lbl_placeholder)
+            self.mGroupBox_raster_layer_info.setObjectName("mGroupBox_raster_layer_info")
+            info_layout = QtWidgets.QFormLayout(self.mGroupBox_raster_layer_info)
+            info_layout.setContentsMargins(6, 6, 6, 6)
+            info_layout.setSpacing(4)
+
+            # Layer info labels
+            self._lbl_raster_name = QtWidgets.QLabel("-")
+            self._lbl_raster_name.setWordWrap(True)
+            info_layout.addRow(self.tr("Name:"), self._lbl_raster_name)
+
+            self._lbl_raster_format = QtWidgets.QLabel("-")
+            info_layout.addRow(self.tr("Format:"), self._lbl_raster_format)
+
+            self._lbl_raster_size = QtWidgets.QLabel("-")
+            info_layout.addRow(self.tr("Size:"), self._lbl_raster_size)
+
+            self._lbl_raster_bands = QtWidgets.QLabel("-")
+            info_layout.addRow(self.tr("Bands:"), self._lbl_raster_bands)
+
+            self._lbl_raster_crs = QtWidgets.QLabel("-")
+            self._lbl_raster_crs.setWordWrap(True)
+            info_layout.addRow(self.tr("CRS:"), self._lbl_raster_crs)
+
+            self._lbl_raster_extent = QtWidgets.QLabel("-")
+            self._lbl_raster_extent.setWordWrap(True)
+            info_layout.addRow(self.tr("Extent:"), self._lbl_raster_extent)
+
+            layout_raster.addWidget(self.mGroupBox_raster_layer_info)
+
+            # --- GroupBox 2: VALUE SAMPLING (collapsible) ---
+            self.mGroupBox_raster_value_sampling = QtWidgets.QGroupBox(
+                self.tr("Value Sampling")
+            )
+            self.mGroupBox_raster_value_sampling.setObjectName(
+                "mGroupBox_raster_value_sampling"
+            )
+            self.mGroupBox_raster_value_sampling.setCheckable(True)
+            self.mGroupBox_raster_value_sampling.setChecked(True)
+            sampling_layout = QtWidgets.QFormLayout(
+                self.mGroupBox_raster_value_sampling
+            )
+            sampling_layout.setContentsMargins(6, 6, 6, 6)
+            sampling_layout.setSpacing(4)
+
+            # Raster layer combo (raster only)
+            try:
+                from qgis.gui import QgsMapLayerComboBox
+                self._combo_raster_layer = QgsMapLayerComboBox()
+                self._combo_raster_layer.setObjectName("combo_raster_layer")
+                # Filter to show only raster layers
+                try:
+                    from qgis.gui import QgsMapLayerProxyModel as GuiProxy
+                    self._combo_raster_layer.setFilters(GuiProxy.RasterLayer)
+                except ImportError:
+                    self._combo_raster_layer.setFilters(
+                        QgsMapLayerProxyModel.RasterLayer
+                    )
+            except ImportError:
+                self._combo_raster_layer = QtWidgets.QComboBox()
+                self._combo_raster_layer.setObjectName("combo_raster_layer")
+            sampling_layout.addRow(
+                self.tr("Raster layer:"), self._combo_raster_layer
+            )
+
+            # Band combo
+            self._combo_raster_band = QtWidgets.QComboBox()
+            self._combo_raster_band.setObjectName("combo_raster_band")
+            sampling_layout.addRow(self.tr("Band:"), self._combo_raster_band)
+
+            # Vector layer combo (vector only)
+            try:
+                from qgis.gui import QgsMapLayerComboBox
+                self._combo_sampling_vector = QgsMapLayerComboBox()
+                self._combo_sampling_vector.setObjectName("combo_sampling_vector")
+                try:
+                    from qgis.gui import QgsMapLayerProxyModel as GuiProxy
+                    self._combo_sampling_vector.setFilters(
+                        GuiProxy.PointLayer
+                        | GuiProxy.LineLayer
+                        | GuiProxy.PolygonLayer
+                    )
+                except ImportError:
+                    self._combo_sampling_vector.setFilters(
+                        QgsMapLayerProxyModel.PointLayer
+                        | QgsMapLayerProxyModel.LineLayer
+                        | QgsMapLayerProxyModel.PolygonLayer
+                    )
+            except ImportError:
+                self._combo_sampling_vector = QtWidgets.QComboBox()
+                self._combo_sampling_vector.setObjectName("combo_sampling_vector")
+            sampling_layout.addRow(
+                self.tr("Vector layer:"), self._combo_sampling_vector
+            )
+
+            # Sampling method combo
+            self._combo_sampling_method = QtWidgets.QComboBox()
+            self._combo_sampling_method.setObjectName("combo_sampling_method")
+            self._combo_sampling_method.addItem(
+                self.tr("Point on Surface"), "point_on_surface"
+            )
+            self._combo_sampling_method.addItem(
+                self.tr("Centroid"), "centroid"
+            )
+            sampling_layout.addRow(
+                self.tr("Method:"), self._combo_sampling_method
+            )
+
+            # Operator + threshold row
+            operator_threshold_widget = QtWidgets.QWidget()
+            operator_threshold_layout = QtWidgets.QHBoxLayout(
+                operator_threshold_widget
+            )
+            operator_threshold_layout.setContentsMargins(0, 0, 0, 0)
+            operator_threshold_layout.setSpacing(4)
+
+            self._combo_raster_operator = QtWidgets.QComboBox()
+            self._combo_raster_operator.setObjectName("combo_raster_operator")
+            self._combo_raster_operator.addItem("=", "=")
+            self._combo_raster_operator.addItem("!=", "!=")
+            self._combo_raster_operator.addItem(">", ">")
+            self._combo_raster_operator.addItem(">=", ">=")
+            self._combo_raster_operator.addItem("<", "<")
+            self._combo_raster_operator.addItem("<=", "<=")
+            self._combo_raster_operator.addItem("BETWEEN", "BETWEEN")
+            # Default to >=
+            self._combo_raster_operator.setCurrentIndex(3)
+            operator_threshold_layout.addWidget(self._combo_raster_operator)
+
+            self._spin_raster_threshold = QtWidgets.QDoubleSpinBox()
+            self._spin_raster_threshold.setObjectName("spin_raster_threshold")
+            self._spin_raster_threshold.setDecimals(4)
+            self._spin_raster_threshold.setRange(-1e12, 1e12)
+            self._spin_raster_threshold.setValue(0.0)
+            operator_threshold_layout.addWidget(self._spin_raster_threshold)
+
+            self._lbl_raster_between = QtWidgets.QLabel(self.tr("and"))
+            self._lbl_raster_between.setVisible(False)
+            operator_threshold_layout.addWidget(self._lbl_raster_between)
+
+            self._spin_raster_threshold_max = QtWidgets.QDoubleSpinBox()
+            self._spin_raster_threshold_max.setObjectName(
+                "spin_raster_threshold_max"
+            )
+            self._spin_raster_threshold_max.setDecimals(4)
+            self._spin_raster_threshold_max.setRange(-1e12, 1e12)
+            self._spin_raster_threshold_max.setValue(0.0)
+            self._spin_raster_threshold_max.setVisible(False)
+            operator_threshold_layout.addWidget(self._spin_raster_threshold_max)
+
+            sampling_layout.addRow(
+                self.tr("Filter:"), operator_threshold_widget
+            )
+
+            # Show/hide BETWEEN max threshold
+            self._combo_raster_operator.currentIndexChanged.connect(
+                self._on_raster_operator_changed
+            )
+
+            # Action buttons row
+            buttons_widget = QtWidgets.QWidget()
+            buttons_layout = QtWidgets.QHBoxLayout(buttons_widget)
+            buttons_layout.setContentsMargins(0, 0, 0, 0)
+            buttons_layout.setSpacing(4)
+
+            self._btn_raster_sample = QtWidgets.QPushButton(
+                self.tr("Sample")
+            )
+            self._btn_raster_sample.setObjectName("btn_raster_sample")
+            self._btn_raster_sample.setToolTip(
+                self.tr("Sample raster values at vector feature locations")
+            )
+            buttons_layout.addWidget(self._btn_raster_sample)
+
+            self._btn_raster_apply_filter = QtWidgets.QPushButton(
+                self.tr("Apply Filter")
+            )
+            self._btn_raster_apply_filter.setObjectName(
+                "btn_raster_apply_filter"
+            )
+            self._btn_raster_apply_filter.setToolTip(
+                self.tr("Select features matching the raster value criteria")
+            )
+            self._btn_raster_apply_filter.setEnabled(False)
+            buttons_layout.addWidget(self._btn_raster_apply_filter)
+
+            sampling_layout.addRow(buttons_widget)
+
+            # Result label
+            self._lbl_raster_result = QtWidgets.QLabel("")
+            self._lbl_raster_result.setObjectName("lbl_raster_result")
+            self._lbl_raster_result.setWordWrap(True)
+            self._lbl_raster_result.setStyleSheet(
+                "color: palette(mid); font-style: italic;"
+            )
+            sampling_layout.addRow(self._lbl_raster_result)
+
+            # Progress bar
+            self._progress_raster_sampling = QtWidgets.QProgressBar()
+            self._progress_raster_sampling.setObjectName(
+                "progress_raster_sampling"
+            )
+            self._progress_raster_sampling.setVisible(False)
+            self._progress_raster_sampling.setTextVisible(True)
+            sampling_layout.addRow(self._progress_raster_sampling)
+
+            layout_raster.addWidget(self.mGroupBox_raster_value_sampling)
+
+            # --- GroupBox 3: HISTOGRAM (collapsible, Phase 2) ---
+            self.mGroupBox_raster_histogram = QtWidgets.QGroupBox(
+                self.tr("Histogram")
+            )
+            self.mGroupBox_raster_histogram.setObjectName(
+                "mGroupBox_raster_histogram"
+            )
+            self.mGroupBox_raster_histogram.setCheckable(True)
+            self.mGroupBox_raster_histogram.setChecked(True)
+            histogram_layout = QtWidgets.QVBoxLayout(
+                self.mGroupBox_raster_histogram
+            )
+            histogram_layout.setContentsMargins(6, 6, 6, 6)
+            histogram_layout.setSpacing(4)
+
+            # Row: Band + Bins combos
+            hist_params_widget = QtWidgets.QWidget()
+            hist_params_layout = QtWidgets.QHBoxLayout(hist_params_widget)
+            hist_params_layout.setContentsMargins(0, 0, 0, 0)
+            hist_params_layout.setSpacing(4)
+
+            hist_params_layout.addWidget(
+                QtWidgets.QLabel(self.tr("Band:"))
+            )
+            self._combo_histogram_band = QtWidgets.QComboBox()
+            self._combo_histogram_band.setObjectName("combo_histogram_band")
+            hist_params_layout.addWidget(self._combo_histogram_band)
+
+            hist_params_layout.addWidget(
+                QtWidgets.QLabel(self.tr("Bins:"))
+            )
+            self._combo_histogram_bins = QtWidgets.QComboBox()
+            self._combo_histogram_bins.setObjectName("combo_histogram_bins")
+            for n_bins in (64, 128, 256, 512):
+                self._combo_histogram_bins.addItem(str(n_bins), n_bins)
+            # Default to 256
+            self._combo_histogram_bins.setCurrentIndex(2)
+            hist_params_layout.addWidget(self._combo_histogram_bins)
+
+            self._btn_compute_histogram = QtWidgets.QPushButton(
+                self.tr("Compute")
+            )
+            self._btn_compute_histogram.setObjectName("btn_compute_histogram")
+            self._btn_compute_histogram.setToolTip(
+                self.tr("Compute histogram for the selected band")
+            )
+            hist_params_layout.addWidget(self._btn_compute_histogram)
+
+            histogram_layout.addWidget(hist_params_widget)
+
+            # Histogram widget (custom QPainter)
+            try:
+                from .ui.widgets.raster_histogram_widget import (
+                    RasterHistogramWidget,
+                )
+                self._histogram_widget = RasterHistogramWidget(self)
+            except ImportError:
+                self._histogram_widget = QtWidgets.QWidget(self)
+                self._histogram_widget.setMinimumHeight(160)
+                logger.warning(
+                    "RasterHistogramWidget not available, using placeholder"
+                )
+            self._histogram_widget.setObjectName("histogram_widget")
+            histogram_layout.addWidget(self._histogram_widget)
+
+            # Range selection: min/max spinboxes
+            range_widget = QtWidgets.QWidget()
+            range_layout = QtWidgets.QHBoxLayout(range_widget)
+            range_layout.setContentsMargins(0, 0, 0, 0)
+            range_layout.setSpacing(4)
+
+            range_layout.addWidget(
+                QtWidgets.QLabel(self.tr("Min:"))
+            )
+            self._spin_histogram_min = QtWidgets.QDoubleSpinBox()
+            self._spin_histogram_min.setObjectName("spin_histogram_min")
+            self._spin_histogram_min.setDecimals(4)
+            self._spin_histogram_min.setRange(-1e12, 1e12)
+            range_layout.addWidget(self._spin_histogram_min)
+
+            range_layout.addWidget(
+                QtWidgets.QLabel(self.tr("Max:"))
+            )
+            self._spin_histogram_max = QtWidgets.QDoubleSpinBox()
+            self._spin_histogram_max.setObjectName("spin_histogram_max")
+            self._spin_histogram_max.setDecimals(4)
+            self._spin_histogram_max.setRange(-1e12, 1e12)
+            range_layout.addWidget(self._spin_histogram_max)
+
+            histogram_layout.addWidget(range_widget)
+
+            # Stats label
+            self._lbl_histogram_stats = QtWidgets.QLabel("")
+            self._lbl_histogram_stats.setObjectName("lbl_histogram_stats")
+            self._lbl_histogram_stats.setWordWrap(True)
+            self._lbl_histogram_stats.setStyleSheet(
+                "color: palette(mid); font-size: 9pt;"
+            )
+            histogram_layout.addWidget(self._lbl_histogram_stats)
+
+            # Apply as filter button
+            self._btn_histogram_apply_filter = QtWidgets.QPushButton(
+                self.tr("Apply range as vector filter")
+            )
+            self._btn_histogram_apply_filter.setObjectName(
+                "btn_histogram_apply_filter"
+            )
+            self._btn_histogram_apply_filter.setToolTip(
+                self.tr(
+                    "Select vector features whose sampled raster values "
+                    "fall within the selected range"
+                )
+            )
+            self._btn_histogram_apply_filter.setEnabled(False)
+            histogram_layout.addWidget(self._btn_histogram_apply_filter)
+
+            layout_raster.addWidget(self.mGroupBox_raster_histogram)
+
+            # --- GroupBox 6: BAND VIEWER (collapsible, Phase 2) ---
+            self.mGroupBox_raster_band_viewer = QtWidgets.QGroupBox(
+                self.tr("Band Viewer")
+            )
+            self.mGroupBox_raster_band_viewer.setObjectName(
+                "mGroupBox_raster_band_viewer"
+            )
+            self.mGroupBox_raster_band_viewer.setCheckable(True)
+            self.mGroupBox_raster_band_viewer.setChecked(True)
+            band_viewer_layout = QtWidgets.QVBoxLayout(
+                self.mGroupBox_raster_band_viewer
+            )
+            band_viewer_layout.setContentsMargins(6, 6, 6, 6)
+            band_viewer_layout.setSpacing(4)
+
+            # Band table (readonly)
+            self._table_band_info = QtWidgets.QTableWidget()
+            self._table_band_info.setObjectName("table_band_info")
+            self._table_band_info.setColumnCount(5)
+            self._table_band_info.setHorizontalHeaderLabels(
+                ["#", self.tr("Name"), self.tr("Type"),
+                 self.tr("Min"), self.tr("Max")]
+            )
+            self._table_band_info.setEditTriggers(
+                QtWidgets.QAbstractItemView.NoEditTriggers
+            )
+            self._table_band_info.setSelectionBehavior(
+                QtWidgets.QAbstractItemView.SelectRows
+            )
+            self._table_band_info.setSelectionMode(
+                QtWidgets.QAbstractItemView.SingleSelection
+            )
+            self._table_band_info.horizontalHeader().setStretchLastSection(True)
+            self._table_band_info.verticalHeader().setVisible(False)
+            self._table_band_info.setMaximumHeight(150)
+            band_viewer_layout.addWidget(self._table_band_info)
+
+            # Preset composition buttons
+            preset_label = QtWidgets.QLabel(self.tr("Presets:"))
+            preset_label.setStyleSheet("font-weight: bold;")
+            band_viewer_layout.addWidget(preset_label)
+
+            preset_btn_widget = QtWidgets.QWidget()
+            preset_btn_layout = QtWidgets.QHBoxLayout(preset_btn_widget)
+            preset_btn_layout.setContentsMargins(0, 0, 0, 0)
+            preset_btn_layout.setSpacing(3)
+
+            self._btn_preset_natural = QtWidgets.QPushButton(
+                self.tr("RGB")
+            )
+            self._btn_preset_natural.setObjectName("btn_preset_natural")
+            self._btn_preset_natural.setToolTip(
+                self.tr("Natural Color (Red-Green-Blue)")
+            )
+            self._btn_preset_natural.setProperty("preset_name", "natural_color")
+            preset_btn_layout.addWidget(self._btn_preset_natural)
+
+            self._btn_preset_irc = QtWidgets.QPushButton(
+                self.tr("IRC")
+            )
+            self._btn_preset_irc.setObjectName("btn_preset_irc")
+            self._btn_preset_irc.setToolTip(
+                self.tr("False Color Infrared (NIR-Red-Green)")
+            )
+            self._btn_preset_irc.setProperty("preset_name", "false_color_irc")
+            preset_btn_layout.addWidget(self._btn_preset_irc)
+
+            self._btn_preset_ndvi = QtWidgets.QPushButton(
+                self.tr("NDVI")
+            )
+            self._btn_preset_ndvi.setObjectName("btn_preset_ndvi")
+            self._btn_preset_ndvi.setToolTip(
+                self.tr("NDVI False Color (NIR-Green-Blue)")
+            )
+            self._btn_preset_ndvi.setProperty(
+                "preset_name", "ndvi_false_color"
+            )
+            preset_btn_layout.addWidget(self._btn_preset_ndvi)
+
+            band_viewer_layout.addWidget(preset_btn_widget)
+
+            # Custom R/G/B band assignment
+            rgb_label = QtWidgets.QLabel(self.tr("Custom composition:"))
+            rgb_label.setStyleSheet("font-weight: bold;")
+            band_viewer_layout.addWidget(rgb_label)
+
+            rgb_widget = QtWidgets.QWidget()
+            rgb_layout = QtWidgets.QHBoxLayout(rgb_widget)
+            rgb_layout.setContentsMargins(0, 0, 0, 0)
+            rgb_layout.setSpacing(4)
+
+            rgb_layout.addWidget(QtWidgets.QLabel("R:"))
+            self._combo_band_red = QtWidgets.QComboBox()
+            self._combo_band_red.setObjectName("combo_band_red")
+            rgb_layout.addWidget(self._combo_band_red)
+
+            rgb_layout.addWidget(QtWidgets.QLabel("G:"))
+            self._combo_band_green = QtWidgets.QComboBox()
+            self._combo_band_green.setObjectName("combo_band_green")
+            rgb_layout.addWidget(self._combo_band_green)
+
+            rgb_layout.addWidget(QtWidgets.QLabel("B:"))
+            self._combo_band_blue = QtWidgets.QComboBox()
+            self._combo_band_blue.setObjectName("combo_band_blue")
+            rgb_layout.addWidget(self._combo_band_blue)
+
+            band_viewer_layout.addWidget(rgb_widget)
+
+            # Apply custom composition button
+            self._btn_apply_band_composition = QtWidgets.QPushButton(
+                self.tr("Apply Composition")
+            )
+            self._btn_apply_band_composition.setObjectName(
+                "btn_apply_band_composition"
+            )
+            self._btn_apply_band_composition.setToolTip(
+                self.tr("Apply custom R/G/B band composition to the raster")
+            )
+            band_viewer_layout.addWidget(self._btn_apply_band_composition)
+
+            layout_raster.addWidget(self.mGroupBox_raster_band_viewer)
+
             layout_raster.addStretch()
             self._stacked_exploring.addWidget(page_raster)
 
@@ -1679,7 +2124,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             # Default to vector
             self._stacked_exploring.setCurrentIndex(DualMode.VECTOR)
-            logger.info("DualMode: dual mode exploring setup complete (Phase 0)")
+            logger.info("DualMode: dual mode exploring setup complete (Phase 2 - Histogram + Band Viewer)")
 
         except Exception as e:
             logger.error(f"_setup_dual_mode_exploring failed: {e}", exc_info=True)
@@ -1700,6 +2145,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Other layer types (mesh, point cloud): keep current mode
         except Exception as e:
             logger.debug(f"_on_dual_mode_layer_changed: {e}")
+
+    def _on_raster_operator_changed(self, index):
+        """Show/hide the max threshold spinbox when BETWEEN operator is selected."""
+        try:
+            is_between = (
+                self._combo_raster_operator.currentData() == "BETWEEN"
+            )
+            self._lbl_raster_between.setVisible(is_between)
+            self._spin_raster_threshold_max.setVisible(is_between)
+        except Exception as e:
+            logger.debug(f"_on_raster_operator_changed: {e}")
 
     def _schedule_expression_change(self, groupbox: str, expression: str):
         """v4.0 Sprint 16: Schedule debounced expression change."""
