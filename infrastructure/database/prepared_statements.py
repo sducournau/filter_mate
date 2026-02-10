@@ -16,8 +16,14 @@ Author: FilterMate Team
 Date: January 2026
 """
 import logging
+import sqlite3
 from abc import ABC, abstractmethod
 from typing import Any
+
+from .postgresql_support import psycopg2
+
+# Conditional exception type for psycopg2 operations
+_PsycopgError = psycopg2.Error if psycopg2 else Exception
 
 logger = logging.getLogger('FilterMate.PreparedStatements')
 
@@ -91,7 +97,7 @@ class PostgreSQLPreparedStatements(PreparedStatementManager):
             self._stmt_names.append('insert_subset_history_stmt')
             self._prepared = True
             return True
-        except Exception as e:
+        except _PsycopgError as e:
             logger.warning(f"Failed to prepare PostgreSQL statements: {e}")
             return False
 
@@ -114,7 +120,7 @@ class PostgreSQLPreparedStatements(PreparedStatementManager):
             )
             self.connection.commit()
             return True
-        except Exception as e:
+        except _PsycopgError as e:
             logger.warning(f"PostgreSQL prepared insert failed: {e}")
             return False
 
@@ -138,7 +144,7 @@ class PostgreSQLPreparedStatements(PreparedStatementManager):
             self.connection.commit()
             logger.debug(f"Deleted subset history for layer {layer_id}")
             return True
-        except Exception as e:
+        except _PsycopgError as e:
             logger.warning(f"PostgreSQL delete_subset_history failed: {e}")
             return False
 
@@ -149,7 +155,7 @@ class PostgreSQLPreparedStatements(PreparedStatementManager):
             for stmt_name in self._stmt_names:
                 cursor.execute(f"DEALLOCATE {stmt_name}")
             self._stmt_names.clear()
-        except Exception as e:
+        except _PsycopgError as e:
             logger.debug(f"Error deallocating prepared statements: {e}")
 
 
@@ -173,7 +179,7 @@ class SpatialitePreparedStatements(PreparedStatementManager):
             """
             self._prepared = True
             return True
-        except Exception as e:
+        except Exception as e:  # catch-all safety net (string assignment only)
             logger.warning(f"Failed to prepare Spatialite statements: {e}")
             return False
 
@@ -195,7 +201,7 @@ class SpatialitePreparedStatements(PreparedStatementManager):
             )
             self.connection.commit()
             return True
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.warning(f"Spatialite prepared insert failed: {e}")
             return False
 
@@ -219,7 +225,7 @@ class SpatialitePreparedStatements(PreparedStatementManager):
             self.connection.commit()
             logger.debug(f"Deleted subset history for layer {layer_id}")
             return True
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.warning(f"Spatialite delete_subset_history failed: {e}")
             return False
 

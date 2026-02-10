@@ -239,7 +239,7 @@ class BackendFactory:
                 logger.debug(f"   → Using LegacyAdapter (hexagonal: {'enabled' if new_backend_active else 'delegating to expression builder'})")
                 try:
                     return get_legacy_adapter(provider_type, task_params or {})
-                except Exception as e:
+                except (ImportError, AttributeError, RuntimeError) as e:
                     logger.warning(f"LegacyAdapter failed: {e}, falling back to direct expression builder")
 
             # Fallback: Return expression builders directly (v4.1.0)
@@ -431,7 +431,7 @@ class BackendFactory:
         except ImportError:
             logger.debug("QgsProject not available during initialization")
             return False
-        except Exception as e:
+        except (RuntimeError, AttributeError) as e:
             logger.debug(f"Could not detect project layers: {e}")
             return False
 
@@ -540,7 +540,7 @@ class BackendFactory:
         except ImportError as e:
             logger.warning(f"Failed to import backend for {provider_type}: {e}")
             return None
-        except Exception as e:
+        except (RuntimeError, AttributeError) as e:
             logger.error(f"Failed to create backend for {provider_type}: {e}")
             return None
 
@@ -578,7 +578,7 @@ class BackendFactory:
             try:
                 backend.cleanup()
                 logger.debug(f"Cleaned up {provider_type.value} backend")
-            except Exception as e:
+            except (RuntimeError, AttributeError) as e:
                 logger.warning(f"Error cleaning up {provider_type.value}: {e}")
 
         self._backends.clear()

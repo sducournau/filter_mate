@@ -47,7 +47,7 @@ except ImportError:
             try:
                 conn.load_extension(ext)
                 break
-            except Exception as e:
+            except sqlite3.OperationalError as e:
                 logger.debug(f"Ignored in spatialite extension load ({ext}): {e}")
                 continue
         return conn
@@ -312,7 +312,7 @@ class SpatialiteTempTableManager(MaterializedViewPort):
             )
             return table_name
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.error(f"[Spatialite] Failed to create temp table {table_name}: {e}")
             raise
 
@@ -337,7 +337,7 @@ class SpatialiteTempTableManager(MaterializedViewPort):
                             'XY'
                         )
                     """)
-                except Exception as e:
+                except sqlite3.Error as e:
                     logger.debug(f"[Spatialite] RecoverGeometryColumn skipped: {e}")
 
             # Create R-tree spatial index
@@ -351,7 +351,7 @@ class SpatialiteTempTableManager(MaterializedViewPort):
             )
             return True
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.warning(f"[Spatialite] Spatial index creation failed: {e}")
             return False
 
@@ -369,7 +369,7 @@ class SpatialiteTempTableManager(MaterializedViewPort):
                 f'ON "{table_name}" ("{column}")'
             )
             return True
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.warning(f"[Spatialite] Index creation failed: {e}")
             return False
 
@@ -403,7 +403,7 @@ class SpatialiteTempTableManager(MaterializedViewPort):
             logger.debug(f"[Spatialite] Refreshed temp table: {view_name}")
             return True
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.error(f"[Spatialite] Failed to refresh temp table {view_name}: {e}")
             return False
 
@@ -423,7 +423,7 @@ class SpatialiteTempTableManager(MaterializedViewPort):
             # Also drop spatial index if exists
             try:
                 cursor.execute(f"SELECT DisableSpatialIndex('{view_name}', 'geometry')")  # nosec B608
-            except Exception as e:
+            except sqlite3.Error as e:
                 logger.debug(f"Ignored in spatial index disable: {e}")
 
             conn.commit()
@@ -435,7 +435,7 @@ class SpatialiteTempTableManager(MaterializedViewPort):
             logger.debug(f"[Spatialite] Dropped temp table: {view_name}")
             return True
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.error(f"[Spatialite] Failed to drop temp table {view_name}: {e}")
             return False
 
@@ -452,7 +452,7 @@ class SpatialiteTempTableManager(MaterializedViewPort):
                 WHERE type='table' AND name=?
             """, (view_name,))
             return cursor.fetchone() is not None
-        except Exception:
+        except sqlite3.Error:
             return False
 
     def get_view_info(self, view_name: str) -> Optional[ViewInfo]:
@@ -491,7 +491,7 @@ class SpatialiteTempTableManager(MaterializedViewPort):
                 has_spatial_index=has_spatial_index
             )
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.warning(f"[Spatialite] Failed to get view info: {e}")
             return None
 
@@ -530,11 +530,11 @@ class SpatialiteTempTableManager(MaterializedViewPort):
                         try:
                             cursor.execute(f'DROP TABLE IF EXISTS "{table_name}"')  # nosec B608
                             dropped += 1
-                        except Exception as e:
+                        except sqlite3.Error as e:
                             logger.debug(f"Ignored in orphan table cleanup ({table_name}): {e}")
 
                 conn.commit()
-            except Exception as e:
+            except sqlite3.Error as e:
                 logger.warning(f"[Spatialite] Orphan cleanup error: {e}")
 
         logger.info(f"[Spatialite] Session cleanup: {dropped} tables dropped")
@@ -568,7 +568,7 @@ class SpatialiteTempTableManager(MaterializedViewPort):
             cursor.execute(query)
             return cursor.fetchall()
 
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.error(f"[Spatialite] Query failed: {e}")
             return []
 

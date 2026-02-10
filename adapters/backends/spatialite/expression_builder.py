@@ -44,7 +44,7 @@ except ImportError:
             return False
         try:
             return layer.setSubsetString(expression)
-        except Exception:
+        except Exception:  # catch-all safety net (QGIS layer API)
             return False
 
 # Sentinel value for OGR fallback
@@ -300,7 +300,7 @@ class SpatialiteExpressionBuilder(GeometricFilterPort):
 
             return success
 
-        except Exception as e:
+        except Exception as e:  # catch-all safety net
             self.log_error(f"Error applying filter: {e}")
             return False
 
@@ -387,7 +387,7 @@ class SpatialiteExpressionBuilder(GeometricFilterPort):
                 simplified = geom.simplify(tolerance)
                 if simplified and not simplified.isEmpty():
                     return simplified.asWkt()
-        except Exception as e:
+        except Exception as e:  # catch-all safety net (QGIS geometry simplification)
             self.log_warning(f"WKT simplification failed: {e}")
 
         return wkt

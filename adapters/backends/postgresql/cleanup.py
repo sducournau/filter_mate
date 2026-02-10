@@ -24,6 +24,13 @@ import logging
 from typing import Optional, List, Tuple
 from datetime import datetime
 
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
+
+from ....core.domain.exceptions import PostgreSQLError
+
 logger = logging.getLogger('FilterMate.Cleanup.PostgreSQL')
 
 
@@ -204,7 +211,7 @@ class PostgreSQLCleanupService:
 
                     logger.debug(f"[PostgreSQL] Dropped MV: {view_name}")
 
-                except Exception as e:
+                except (psycopg2.Error if psycopg2 else Exception) as e:
                     logger.warning(f"[PostgreSQL] Error dropping view {view_name}: {e}")
                     self._metrics['errors'] += 1
 
@@ -221,10 +228,10 @@ class PostgreSQLCleanupService:
 
             return (len(cleaned_views), cleaned_views)
 
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.error(f"[PostgreSQL] Error during session cleanup: {e}")
             self._record_failure()
-            raise
+            raise PostgreSQLError(f"Session cleanup failed: {e}") from e
 
     def cleanup_orphaned_views(
         self,
@@ -293,7 +300,7 @@ class PostgreSQLCleanupService:
                     cleaned.append(view_name)
                     self._metrics['views_cleaned'] += 1
                     logger.debug(f"[PostgreSQL] Dropped orphaned MV: {view_name}")
-                except Exception as e:
+                except (psycopg2.Error if psycopg2 else Exception) as e:
                     logger.warning(f"[PostgreSQL] Error dropping orphaned view {view_name}: {e}")
                     self._metrics['errors'] += 1
 
@@ -305,10 +312,10 @@ class PostgreSQLCleanupService:
             self._record_success()
             return (len(cleaned), cleaned)
 
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.error(f"[PostgreSQL] Error during orphaned view cleanup: {e}")
             self._record_failure()
-            raise
+            raise PostgreSQLError(f"Orphaned view cleanup failed: {e}") from e
 
     def cleanup_schema_if_empty(
         self,
@@ -380,7 +387,7 @@ class PostgreSQLCleanupService:
             self._record_success()
             return True
 
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.error(f"[PostgreSQL] Error dropping schema: {e}")
             self._record_failure()
             return False
@@ -407,7 +414,7 @@ class PostgreSQLCleanupService:
             self._record_success()
             return True
 
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.error(f"[PostgreSQL] Error creating schema: {e}")
             self._record_failure()
             return False
@@ -437,7 +444,7 @@ class PostgreSQLCleanupService:
 
             return cursor.fetchone()[0]
 
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.debug(f"[PostgreSQL] Error counting session views: {e}")
             return 0
 
@@ -475,7 +482,7 @@ class PostgreSQLCleanupService:
 
             return views
 
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.debug(f"[PostgreSQL] Error listing views: {e}")
             return []
 
@@ -556,7 +563,7 @@ class PostgreSQLCleanupService:
                                 cleaned_objects.append(f"MV: {full_name}")
                                 self._metrics['views_cleaned'] += 1
                                 logger.debug(f"Dropped MV: {full_name}")
-                            except Exception as e:
+                            except (psycopg2.Error if psycopg2 else Exception) as e:
                                 logger.warning(f"Error dropping {full_name}: {e}")
                                 self._metrics['errors'] += 1
 
@@ -582,7 +589,7 @@ class PostgreSQLCleanupService:
                                 )
                                 cleaned_objects.append(f"TABLE: {full_name}")
                                 logger.debug(f"Dropped TABLE: {full_name}")
-                            except Exception as e:
+                            except (psycopg2.Error if psycopg2 else Exception) as e:
                                 logger.warning(f"Error dropping table {full_name}: {e}")
 
             # Drop filtermate_temp schema if empty or force
@@ -591,7 +598,7 @@ class PostgreSQLCleanupService:
                     cursor.execute(f'DROP SCHEMA IF EXISTS "{self._schema}" CASCADE;')
                     cleaned_objects.append(f"SCHEMA: {self._schema}")
                     logger.info(f"Dropped schema: {self._schema}")
-                except Exception as e:
+                except (psycopg2.Error if psycopg2 else Exception) as e:
                     logger.warning(f"Could not drop schema {self._schema}: {e}")
 
             connexion.commit()
@@ -602,9 +609,9 @@ class PostgreSQLCleanupService:
             self._metrics['last_cleanup'] = datetime.now().isoformat()
             return (len(cleaned_objects), cleaned_objects)
 
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.error(f"[PostgreSQL] Error during full cleanup: {e}")
-            raise
+            raise PostgreSQLError(f"Full cleanup failed: {e}") from e
 
     def cleanup_src_sel_views(
         self,
@@ -654,7 +661,7 @@ class PostgreSQLCleanupService:
                         )
                         cleaned.append(view_name)
                         logger.debug(f"Dropped src_sel view: {view_name}")
-                    except Exception as e:
+                    except (psycopg2.Error if psycopg2 else Exception) as e:
                         logger.warning(f"Error dropping {view_name}: {e}")
 
             if not dry_run:
@@ -662,7 +669,7 @@ class PostgreSQLCleanupService:
 
             return (len(cleaned), cleaned)
 
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.error(f"Error cleaning src_sel views: {e}")
             return (0, [])
 

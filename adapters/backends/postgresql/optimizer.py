@@ -21,6 +21,11 @@ from typing import Optional, List, Tuple, Dict, Any
 from dataclasses import dataclass, field
 from enum import Enum
 
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
+
 logger = logging.getLogger('FilterMate.PostgreSQL.Optimizer')
 
 
@@ -227,7 +232,7 @@ class QueryOptimizer:
             cursor.execute(f"EXPLAIN (FORMAT JSON, ANALYZE false) {query}")
             result = cursor.fetchone()
             return result[0] if result else None
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.warning(f"[PostgreSQL] Failed to get execution plan: {e}")
             return None
 
@@ -337,7 +342,7 @@ class QueryOptimizer:
                 return self._pool.getconn()
             else:
                 return self._pool
-        except Exception:
+        except Exception:  # catch-all safety net (pool abstraction may raise varied errors)
             return None
 
     def _detect_query_type(self, query: str) -> QueryType:

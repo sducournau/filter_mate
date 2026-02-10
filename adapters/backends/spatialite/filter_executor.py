@@ -16,6 +16,7 @@ Updated: EPIC-1 Phase E4-S8 - Extracted prepare_spatialite_source_geom()
 """
 
 import logging
+import sqlite3
 from dataclasses import dataclass, field
 from typing import Optional, List, Any, Callable, Dict, Tuple
 
@@ -217,7 +218,7 @@ def validate_spatialite_features(
                     logger.debug(f"[Spatialite]   Skipping feature[{i}] without valid geometry")
             elif f:
                 valid_features.append(f)
-        except Exception as e:
+        except Exception as e:  # catch-all safety net (QGIS feature access, thread-safety)
             validation_errors += 1
             logger.warning(f"[Spatialite]   Feature[{i}] validation error (thread-safety): {e}")
             continue
@@ -251,7 +252,7 @@ def recover_spatialite_features_from_fids(
         if recovered:
             logger.debug(f"[Spatialite]   ✓ Recovered {len(recovered)} features using FIDs")
         return recovered
-    except Exception as e:
+    except Exception as e:  # catch-all safety net (QGIS feature request)
         logger.error(f"[Spatialite]   ❌ FID recovery failed: {e}")
         return []
 
@@ -319,7 +320,7 @@ def resolve_spatialite_features(
                         request = QgsFeatureRequest().setFilterFids(selected_fids)
                         features = list(source_layer.getFeatures(request))
                         logger.debug(f"[Spatialite]   ✓ Recovered {len(features)} from selection")
-                except Exception as e:
+                except Exception as e:  # catch-all safety net (QGIS selection recovery)
                     logger.error(f"[Spatialite]   ❌ Selection recovery failed: {e}")
 
     elif mode == SourceMode.SUBSET:
@@ -336,7 +337,7 @@ def resolve_spatialite_features(
             if selected_fids:
                 request = QgsFeatureRequest().setFilterFids(selected_fids)
                 features = list(source_layer.getFeatures(request))
-        except Exception as e:
+        except Exception as e:  # catch-all safety net (QGIS feature request)
             logger.error(f"[Spatialite] Failed to get selected features: {e}")
 
     elif mode == SourceMode.FIELD_BASED:
@@ -617,7 +618,7 @@ def prepare_spatialite_source_geom(context: SpatialiteSourceContext) -> Spatiali
                     request = QgsFeatureRequest(expr)
                     features = list(source_layer.getFeatures(request))
                     logger.info(f"[Spatialite] Expression fallback: {len(features)} features")
-            except Exception as e:
+            except Exception as e:  # catch-all safety net (QGIS expression evaluation)
                 logger.warning(f"[Spatialite] Expression fallback failed: {e}")
 
         if not features:
@@ -951,7 +952,7 @@ def apply_spatialite_subset(
                 seq_order=current_seq_order,
                 source_layer_id=source_layer_id or ''
             )
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.warning(f"[Spatialite] Failed to update Spatialite history: {e}")
         finally:
             history_repo.close()
@@ -1102,7 +1103,7 @@ def get_last_subset_info(cur, layer, project_uuid: str, conn=None) -> tuple:
                 return last_entry.id, last_entry.seq_order, layer_name, name
             else:
                 return None, 0, layer_name, name
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.warning(f"[Spatialite] Failed to get last subset info via repository: {e}")
             return None, 0, layer_name, name
         finally:
@@ -1125,7 +1126,7 @@ def get_last_subset_info(cur, layer, project_uuid: str, conn=None) -> tuple:
             return result[0], result[5], layer_name, name
         else:
             return None, 0, layer_name, name
-    except Exception as e:
+    except sqlite3.Error as e:
         logger.warning(f"[Spatialite] Failed to get last subset info: {e}")
         return None, 0, layer_name, name
 
@@ -1174,7 +1175,7 @@ def cleanup_session_temp_tables(
                 # Drop associated R-tree index
                 cur.execute(f'DROP TABLE IF EXISTS "idx_{table_name}_geometry";')  # nosec B608
                 count += 1
-            except Exception as e:
+            except sqlite3.Error as e:
                 logger.warning(f"[Spatialite] Error dropping temp table {table_name}: {e}")
 
         conn.commit()
@@ -1187,7 +1188,7 @@ def cleanup_session_temp_tables(
             )
         return count
 
-    except Exception as e:
+    except sqlite3.Error as e:
         logger.error(f"[Spatialite] Error cleaning up session tables: {e}")
         return 0
 

@@ -24,6 +24,11 @@ import logging
 import re
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Any
 
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
+
 if TYPE_CHECKING:
     from qgis.core import QgsVectorLayer
 
@@ -36,6 +41,12 @@ except ImportError:
     # Fallback for direct import
     from core.ports.geometric_filter_port import GeometricFilterPort
 
+# Import domain exceptions
+try:
+    from ....core.domain.exceptions import PostgreSQLError
+except ImportError:
+    from core.domain.exceptions import PostgreSQLError
+
 # Import safe_set_subset_string from infrastructure
 try:
     from ....infrastructure.database.sql_utils import safe_set_subset_string
@@ -46,7 +57,7 @@ except ImportError:
             return False
         try:
             return layer.setSubsetString(expression)
-        except Exception:
+        except Exception:  # catch-all safety net (fallback implementation)
             return False
 
 # v4.2.10: Import filter chain optimizer for MV-based optimization
@@ -212,7 +223,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                 table = uri.table()
                 geom_field = uri.geometryColumn() or "geom"
                 self.log_debug(f"Extracted from URI: schema={schema}, table={table}, geom={geom_field}")
-            except Exception as e:
+            except (AttributeError, RuntimeError, KeyError) as e:
                 self.log_warning(f"Failed to extract from URI: {e}")
 
         # Fallback to layer_props if URI extraction failed
@@ -558,7 +569,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             else:
                 self.log_debug("MV optimization not applied, using standard expression")
 
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             self.log_error(f"MV optimization failed: {e}")
 
         # Fallback to standard expression
@@ -638,7 +649,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
 
             return success
 
-        except Exception as e:
+        except Exception as e:  # catch-all safety net (mixed QGIS/SQL operations)
             self.log_error(f"Error applying filter: {e}")
             return False
 
@@ -661,7 +672,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                 if geom_col:
                     geom_field = geom_col
                     self.log_debug(f"Detected geometry column: '{geom_field}'")
-            except Exception as e:
+            except (AttributeError, RuntimeError, KeyError) as e:
                 self.log_warning(f"Error detecting geometry column: {e}")
 
         return geom_field
@@ -739,7 +750,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                     "FilterMate",
                     Qgis.Warning
                 )
-            except Exception as e:
+            except (ImportError, RuntimeError) as e:
                 self.log_debug(f"Could not display warning in QGIS UI: {e}")
 
     def _set_query_timeout(self, layer) -> None:
@@ -773,7 +784,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             self.log_info(f"✅ Query timeout set: {timeout_ms / 1000:.0f} seconds")
             self.log_info("   → Protection against infinite queries enabled")
 
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             self.log_warning(f"Could not set query timeout: {e}")
             # Non-critical - continue anyway
 
@@ -894,7 +905,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
               )'''
                     self.log_debug(f"Reuse buffer table expression: {exists_expr}")
                     return exists_expr
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             self.log_warning(f"Could not check table existence: {e}")
 
         # FIX v4.2.20: If buffer_expression is None (filter chaining), table should already exist
@@ -921,7 +932,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                 if result:
                     primary_key_column = result[0]
                     self.log_debug(f"Found primary key: {primary_key_column}")
-        except Exception as pk_err:
+        except (psycopg2.Error if psycopg2 else Exception) as pk_err:
             self.log_warning(f"Could not determine primary key: {pk_err}")
 
         # Fallback: try common primary key names if query failed
@@ -941,7 +952,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                             primary_key_column = candidate
                             self.log_debug(f"Using fallback PK column: {primary_key_column}")
                             break
-            except Exception as fallback_err:
+            except (psycopg2.Error if psycopg2 else Exception) as fallback_err:
                 self.log_warning(f"PK fallback detection failed: {fallback_err}")
 
         # If still no PK, skip source_id column entirely (buffer table still works for filtering)
@@ -1011,7 +1022,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
 
             return exists_expr
 
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             # FIX v4.3.6 (2026-01-22): Enhanced error logging and explicit rollback
             self.log_error(f"Failed to create buffer table: {e}")  # nosec B608
             self.log_error(f"   SQL that failed: {sql_create[:300]}...")  # nosec B608
@@ -1022,7 +1033,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             try:
                 connexion.rollback()
                 self.log_debug("Transaction rolled back")
-            except Exception as rollback_err:
+            except (psycopg2.Error if psycopg2 else Exception) as rollback_err:
                 self.log_warning(f"Rollback failed: {rollback_err}")
 
             self.log_warning("Falling back to inline buffer expression")

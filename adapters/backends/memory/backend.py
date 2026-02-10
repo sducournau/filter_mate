@@ -161,9 +161,18 @@ class MemoryBackend(BackendPort):
                 error_message="QGIS modules not available",
                 backend_name=self.name
             )
-        except Exception as e:
+        except (RuntimeError, AttributeError) as e:
             self._metrics['errors'] += 1
             logger.exception(f"Memory filter failed: {e}")
+            return FilterResult.error(
+                layer_id=layer_info.layer_id,
+                expression_raw=expression.raw,
+                error_message=str(e),
+                backend_name=self.name
+            )
+        except Exception as e:  # catch-all safety net
+            self._metrics['errors'] += 1
+            logger.exception(f"Memory filter unexpected error: {e}")
             return FilterResult.error(
                 layer_id=layer_info.layer_id,
                 expression_raw=expression.raw,

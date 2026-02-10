@@ -94,9 +94,14 @@ class BaseExecutor(ABC):
             logger.debug(f"[{self._backend_name}] Connection Established Successfully")
             return True
 
-        except Exception as e:
+        except (OSError, RuntimeError) as e:
             self._metrics['errors'] += 1
             logger.error(f"[{self._backend_name}] Connection Failed - {type(e).__name__}: {str(e)}", exc_info=True)
+            self._is_connected = False
+            return False
+        except Exception as e:  # catch-all safety net
+            self._metrics['errors'] += 1
+            logger.error(f"[{self._backend_name}] Connection unexpected error - {type(e).__name__}: {str(e)}", exc_info=True)
             self._is_connected = False
             return False
 
@@ -132,7 +137,7 @@ class BaseExecutor(ABC):
             logger.debug(f"[{self._backend_name}] Disconnected Successfully")
             return True
 
-        except Exception as e:
+        except (OSError, RuntimeError) as e:
             self._metrics['errors'] += 1
             logger.error(f"[{self._backend_name}] Disconnect Failed - {type(e).__name__}: {str(e)}", exc_info=True)
             return False
@@ -174,7 +179,7 @@ class BaseExecutor(ABC):
                 logger.warning(f"[{self._backend_name}] Connection Test Failed - Connection may be stale")
             return result
 
-        except Exception as e:
+        except (OSError, RuntimeError) as e:
             logger.error(f"[{self._backend_name}] Connection Test Error - {type(e).__name__}: {str(e)}")
             return False
 
@@ -225,7 +230,7 @@ class BaseExecutor(ABC):
             def wrapper(*args, **kwargs):
                 try:
                     return func(*args, **kwargs)
-                except Exception as e:
+                except Exception as e:  # catch-all safety net (generic decorator)
                     self._metrics['errors'] += 1
                     logger.error(
                         f"[{self._backend_name}] {operation} Failed - "

@@ -26,6 +26,13 @@ from typing import Optional, Dict, List, Tuple, Any
 from dataclasses import dataclass
 from datetime import datetime
 
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
+
+from ....core.domain.exceptions import PostgreSQLError
+
 # Import port interface
 from ....core.ports.materialized_view_port import (
     MaterializedViewPort,
@@ -343,9 +350,9 @@ class MaterializedViewManager(MaterializedViewPort):
             logger.info(f"[PostgreSQL] Created MV: {mv_name}")
             return mv_name
 
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.error(f"[PostgreSQL] Failed to create MV {mv_name}: {e}")
-            raise
+            raise PostgreSQLError(f"Failed to create MV {mv_name}: {e}") from e
 
     def refresh_mv(
         self,
@@ -400,7 +407,7 @@ class MaterializedViewManager(MaterializedViewPort):
             logger.debug(f"[PostgreSQL] Refreshed MV: {mv_name}")
             return True
 
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.error(f"[PostgreSQL] Failed to refresh MV {mv_name}: {e}")
             return False
 
@@ -444,7 +451,7 @@ class MaterializedViewManager(MaterializedViewPort):
             logger.debug(f"[PostgreSQL] Dropped MV: {mv_name}")
             return True
 
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.error(f"[PostgreSQL] Failed to drop MV {mv_name}: {e}")
             return False
 
@@ -468,7 +475,7 @@ class MaterializedViewManager(MaterializedViewPort):
             """, (self.MV_SCHEMA, mv_name))
             result = cursor.fetchone()
             return result[0] if result else False
-        except Exception:
+        except (psycopg2.Error if psycopg2 else Exception):
             return False
 
     def get_mv_info(
@@ -521,7 +528,7 @@ class MaterializedViewManager(MaterializedViewPort):
                     definition=definition
                 )
 
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.error(f"[PostgreSQL] Failed to get MV info for {mv_name}: {e}")
 
         return None
@@ -558,7 +565,7 @@ class MaterializedViewManager(MaterializedViewPort):
             if connection is None:
                 conn.commit()
 
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.error(f"[PostgreSQL] Failed to cleanup session MVs: {e}")
 
         logger.info(f"[PostgreSQL] Cleaned up {count} session MVs")
@@ -603,7 +610,7 @@ class MaterializedViewManager(MaterializedViewPort):
             cursor.execute(query)
             return cursor.fetchall()
 
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.error(f"[PostgreSQL] Failed to query MV {mv_name}: {e}")
             return []
 
@@ -699,7 +706,7 @@ class MaterializedViewManager(MaterializedViewPort):
                 return self._pool.getconn()
             else:
                 return self._pool
-        except Exception:
+        except Exception:  # catch-all safety net (pool abstraction may raise varied errors)
             return None
 
     def _generate_mv_name(self, query: str, session_scoped: bool) -> str:
@@ -732,7 +739,7 @@ class MaterializedViewManager(MaterializedViewPort):
                 CREATE INDEX IF NOT EXISTS "{index_name}"
                 ON {table_name} USING GIST ("{geometry_column}")
             """)
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.warning(f"[PostgreSQL] Failed to create spatial index: {e}")
 
     def _create_index(
@@ -750,7 +757,7 @@ class MaterializedViewManager(MaterializedViewPort):
                 CREATE INDEX IF NOT EXISTS "{index_name}"
                 ON {table_name} ("{column}")
             """)
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.warning(f"[PostgreSQL] Failed to create index on {column}: {e}")
 
 

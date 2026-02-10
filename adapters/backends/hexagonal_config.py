@@ -55,7 +55,7 @@ def enable_backend(provider_type: str) -> bool:
         set_new_backend_enabled(provider_type, True)
         logger.debug(f"✅ Hexagonal backend ENABLED for: {provider_type.upper()}")
         return True
-    except Exception as e:
+    except (ImportError, AttributeError) as e:
         logger.error(f"❌ Failed to enable {provider_type}: {e}")
         return False
 
@@ -75,7 +75,7 @@ def disable_backend(provider_type: str) -> bool:
         set_new_backend_enabled(provider_type, False)
         logger.debug(f"🔙 Hexagonal backend DISABLED for: {provider_type.upper()} (using legacy)")
         return True
-    except Exception as e:
+    except (ImportError, AttributeError) as e:
         logger.error(f"❌ Failed to disable {provider_type}: {e}")
         return False
 
@@ -123,7 +123,7 @@ def disable_hexagonal_architecture() -> Dict[str, bool]:
         disable_all_new_backends()
         logger.debug("🔙 Hexagonal architecture DISABLED - all backends using legacy")
         return {'postgresql': True, 'spatialite': True, 'ogr': True, 'memory': True}
-    except Exception as e:
+    except (ImportError, AttributeError) as e:
         logger.error(f"❌ Failed to disable hexagonal architecture: {e}")
         return {'error': str(e)}
 
@@ -147,7 +147,7 @@ def get_architecture_status() -> Dict[str, str]:
             provider: ('hexagonal' if state == 'new' else 'legacy')
             for provider, state in status.items()
         }
-    except Exception as e:
+    except (ImportError, AttributeError) as e:
         logger.error(f"Failed to get architecture status: {e}")
         return {'error': str(e)}
 
@@ -165,7 +165,7 @@ def is_hexagonal_enabled(provider_type: str) -> bool:
     try:
         from .legacy_adapter import is_new_backend_enabled
         return is_new_backend_enabled(provider_type)
-    except Exception:
+    except (ImportError, AttributeError):
         return False
 
 

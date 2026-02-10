@@ -44,7 +44,7 @@ class PostgreSQLFilterExecutor(FilterExecutorPort):
             try:
                 from .backend import PostgreSQLBackend
                 self._backend = PostgreSQLBackend()
-            except Exception as e:
+            except (ImportError, RuntimeError) as e:
                 logger.warning(f"[PostgreSQL] Could not initialize PostgreSQL backend: {e}")
         return self._backend
 
@@ -116,7 +116,7 @@ class PostgreSQLFilterExecutor(FilterExecutorPort):
                     backend='postgresql'
                 )
 
-        except Exception as e:
+        except Exception as e:  # catch-all safety net (must always return a result)
             logger.error(f"[PostgreSQL] PostgreSQL filter execution failed: {e}")
             return FilterExecutionResult.failed(str(e), backend='postgresql')
 
@@ -144,7 +144,7 @@ class PostgreSQLFilterExecutor(FilterExecutorPort):
 
             return result, None
 
-        except Exception as e:
+        except Exception as e:  # catch-all safety net (mixed imports + execution)
             logger.error(f"[PostgreSQL] PostgreSQL geometry preparation failed: {e}")
             return None, str(e)
 
@@ -157,7 +157,7 @@ class PostgreSQLFilterExecutor(FilterExecutorPort):
         try:
             from ....infrastructure.database.sql_utils import safe_set_subset_string
             return safe_set_subset_string(layer, expression)
-        except Exception as e:
+        except (ImportError, RuntimeError) as e:
             logger.error(f"[PostgreSQL] Failed to apply PostgreSQL subset: {e}")
             return False
 
@@ -167,7 +167,7 @@ class PostgreSQLFilterExecutor(FilterExecutorPort):
             from .cleanup import cleanup_materialized_views
             cleanup_materialized_views()
             logger.debug("[PostgreSQL] PostgreSQL MVs cleaned up")
-        except Exception as e:
+        except Exception as e:  # catch-all safety net (cleanup must not raise)
             logger.warning(f"[PostgreSQL] PostgreSQL cleanup failed: {e}")
 
     @property

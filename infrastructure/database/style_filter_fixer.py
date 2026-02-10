@@ -136,7 +136,7 @@ def fix_rule_based_renderer_filters(
 
             logger.debug(f"Detected VARCHAR fields: {varchar_fields}")
 
-        except Exception as e:
+        except (ImportError, AttributeError, TypeError) as e:
             logger.warning(f"Could not detect field types: {e}")
             varchar_fields = []  # Apply to all fields
 
@@ -217,7 +217,7 @@ def fix_layer_style_filters(
             if ftype.lower() in ('varchar', 'character varying', 'text', 'char', 'character')
             or ftype.lower().startswith('varchar(')
         ]
-    except Exception as e:
+    except (ImportError, AttributeError, TypeError) as e:
         logger.debug(f"Ignored in fix_layer_style_filters field type detection: {e}")
         varchar_fields = None  # Apply to all fields
 
@@ -270,7 +270,7 @@ def scan_layers_for_type_mismatches(
             success, changes = fix_layer_style_filters(layer, dry_run=not fix)
             if changes:
                 results[layer.name()] = changes
-        except Exception as e:
+        except Exception as e:  # catch-all safety net
             logger.warning(f"Error scanning layer '{layer.name()}': {e}")
 
     if results:
@@ -321,7 +321,7 @@ def fix_expression_for_postgresql(
                 if ftype.lower() in ('varchar', 'character varying', 'text', 'char', 'character')
                 or ftype.lower().startswith('varchar(')
             ]
-        except Exception as e:
+        except (ImportError, AttributeError, TypeError) as e:
             logger.debug(f"Ignored in fix_expression_for_postgresql field detection: {e}")
 
     return apply_type_casting_to_expression(expression, varchar_fields)

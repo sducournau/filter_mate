@@ -74,7 +74,7 @@ def cleanup_ogr_temp_layers() -> int:
                 project.removeMapLayer(layer_id)
                 removed_count += 1
                 logger.debug(f"[OGR] Cleaned up temp layer: {layer_id}")
-        except Exception as e:
+        except RuntimeError as e:
             logger.warning(f"[OGR] Failed to cleanup temp layer {layer_id}: {e}")
 
     if removed_count > 0:
@@ -123,7 +123,7 @@ def build_ogr_filter_from_selection(
         try:
             from qgis.core import QgsFeatureRequest
             selected_fids = list(layer.selectedFeatureIds())
-        except Exception:
+        except (RuntimeError, AttributeError):
             selected_fids = []
 
     if not selected_fids:
@@ -142,7 +142,7 @@ def build_ogr_filter_from_selection(
             else:
                 pk_value = feature[param_distant_primary_key_name]
                 features_ids.append(str(pk_value))
-    except Exception as e:
+    except (RuntimeError, KeyError, AttributeError) as e:
         logger.warning(f"[OGR] Error extracting feature IDs: {e}")
         # Fallback to fids directly
         features_ids = [str(fid) for fid in selected_fids]
@@ -312,7 +312,7 @@ def apply_ogr_subset(
         # Direct application (only safe from main thread)
         try:
             return layer.setSubsetString(subset_string)
-        except Exception as e:
+        except RuntimeError as e:
             logger.error(f"[OGR] Failed to apply OGR subset: {e}")
             return False
 
@@ -390,7 +390,7 @@ def execute_reset_action_ogr(
         logger.debug(f"[OGR] OGR Reset completed for layer: {layer.name()}")
         return True
 
-    except Exception as e:
+    except (RuntimeError, AttributeError) as e:
         logger.error(f"[OGR] Failed to execute OGR reset: {e}")
         return False
 
@@ -443,7 +443,7 @@ def execute_unfilter_action_ogr(
 
         return True
 
-    except Exception as e:
+    except (RuntimeError, AttributeError) as e:
         logger.error(f"[OGR] Failed to execute OGR unfilter: {e}")
         return False
 
@@ -586,7 +586,7 @@ def recover_features_from_fids(
         if recovered_features:
             logger.debug(f"[OGR]   ✓ Recovered {len(recovered_features)} features using FIDs")
         return recovered_features
-    except Exception as e:
+    except (RuntimeError, AttributeError) as e:
         logger.error(f"[OGR]   ❌ FID recovery failed: {e}")
         return []
 
@@ -799,7 +799,7 @@ def prepare_ogr_source_geom(
                     )
                     if layer:
                         logger.info(f"[OGR]   ✓ Filtered to {layer.featureCount()} features")
-        except Exception as e:
+        except (RuntimeError, ValueError, AttributeError) as e:
             logger.error(f"[OGR]   Expression filtering failed: {e}")
 
     elif mode == "DIRECT":

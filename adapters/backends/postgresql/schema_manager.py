@@ -18,6 +18,13 @@ Date: January 2026
 import logging
 from typing import Optional, Tuple
 
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
+
+from ....core.domain.exceptions import PostgreSQLError
+
 logger = logging.getLogger('FilterMate.PostgreSQL.SchemaManager')
 
 
@@ -44,23 +51,23 @@ def ensure_temp_schema_exists(connexion, schema_name: str) -> str:
     # Validate connection before use
     if connexion is None:
         logger.error("[PostgreSQL] Cannot ensure temp schema: connection is None")
-        raise Exception(f"Cannot create schema '{schema_name}': PostgreSQL connection is None")
+        raise PostgreSQLError(f"Cannot create schema '{schema_name}': PostgreSQL connection is None")
 
     # Check if connexion is a string (connection string) instead of a connection object
     if isinstance(connexion, str):
         logger.error(f"[PostgreSQL] Cannot ensure temp schema: connexion is a string ('{connexion[:50]}...'), not a connection object")
-        raise Exception(f"Cannot create schema '{schema_name}': PostgreSQL connexion is a string, not a connection object. This indicates ACTIVE_POSTGRESQL was not properly initialized.")
+        raise PostgreSQLError(f"Cannot create schema '{schema_name}': PostgreSQL connexion is a string, not a connection object. This indicates ACTIVE_POSTGRESQL was not properly initialized.")
 
     # Check if connection has cursor method (duck typing validation)
     if not hasattr(connexion, 'cursor') or not callable(getattr(connexion, 'cursor', None)):
         logger.error(f"[PostgreSQL] Cannot ensure temp schema: connexion object has no cursor() method (type: {type(connexion).__name__})")
-        raise Exception(f"Cannot create schema '{schema_name}': PostgreSQL connexion is not a valid connection object (type: {type(connexion).__name__})")
+        raise PostgreSQLError(f"Cannot create schema '{schema_name}': PostgreSQL connexion is not a valid connection object (type: {type(connexion).__name__})")
 
     # Check if connection is closed
     try:
         if connexion.closed:
             logger.error("[PostgreSQL] Cannot ensure temp schema: connection is closed")
-            raise Exception(f"Cannot create schema '{schema_name}': PostgreSQL connection is closed")
+            raise PostgreSQLError(f"Cannot create schema '{schema_name}': PostgreSQL connection is closed")
     except AttributeError:
         # Connection object doesn't have 'closed' attribute - proceed anyway
         pass
@@ -76,7 +83,7 @@ def ensure_temp_schema_exists(connexion, schema_name: str) -> str:
             if result:
                 logger.debug(f"[PostgreSQL] Schema '{schema_name}' already exists")
                 return schema_name
-    except Exception as check_e:
+    except (psycopg2.Error if psycopg2 else Exception) as check_e:
         logger.debug(f"[PostgreSQL] Could not check if schema exists: {check_e}")
         # Continue to try creating it
 
@@ -87,12 +94,12 @@ def ensure_temp_schema_exists(connexion, schema_name: str) -> str:
             connexion.commit()
         logger.debug(f"[PostgreSQL] Ensured schema '{schema_name}' exists")
         return schema_name
-    except Exception as e:
+    except (psycopg2.Error if psycopg2 else Exception) as e:
         logger.warning(f"[PostgreSQL] Error creating schema '{schema_name}' (no auth): {e}")
         # Rollback failed transaction
         try:
             connexion.rollback()
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.debug(f"Ignored in rollback after schema creation failure: {e}")
 
         # Try with explicit AUTHORIZATION CURRENT_USER as fallback
@@ -102,11 +109,11 @@ def ensure_temp_schema_exists(connexion, schema_name: str) -> str:
                 connexion.commit()
             logger.debug(f"[PostgreSQL] Created schema '{schema_name}' with CURRENT_USER authorization")
             return schema_name
-        except Exception as e2:
+        except (psycopg2.Error if psycopg2 else Exception) as e2:
             logger.warning(f"[PostgreSQL] Error creating schema with CURRENT_USER: {e2}")
             try:
                 connexion.rollback()
-            except Exception as e:
+            except (psycopg2.Error if psycopg2 else Exception) as e:
                 logger.debug(f"Ignored in rollback after CURRENT_USER schema failure: {e}")
 
             # Final fallback: try with postgres authorization
@@ -116,10 +123,10 @@ def ensure_temp_schema_exists(connexion, schema_name: str) -> str:
                     connexion.commit()
                 logger.debug(f"[PostgreSQL] Created schema '{schema_name}' with postgres authorization")
                 return schema_name
-            except Exception as e3:
+            except (psycopg2.Error if psycopg2 else Exception) as e3:
                 try:
                     connexion.rollback()
-                except Exception as e:
+                except (psycopg2.Error if psycopg2 else Exception) as e:
                     logger.debug(f"Ignored in rollback after postgres auth schema failure: {e}")
 
                 # v2.8.8: Fallback to 'public' schema if temp schema cannot be created
@@ -175,7 +182,7 @@ def schema_exists(connexion, schema_name: str) -> bool:
             """, (schema_name,))
             result = cursor.fetchone()
             return result is not None
-    except Exception as e:
+    except (psycopg2.Error if psycopg2 else Exception) as e:
         logger.debug(f"[PostgreSQL] Could not check if schema '{schema_name}' exists: {e}")
         return False
 
@@ -218,7 +225,7 @@ def ensure_table_stats(connexion, schema: str, table: str, geom_field: str) -> b
 
             return True
 
-    except Exception as e:
+    except (psycopg2.Error if psycopg2 else Exception) as e:
         logger.warning(f"Could not check/create stats for \"{schema}\".\"{table}\": {e}")
         return False
 
@@ -240,11 +247,11 @@ def execute_commands(connexion, commands: list) -> bool:
                 cursor.execute(command)
                 connexion.commit()
         return True
-    except Exception as e:
+    except (psycopg2.Error if psycopg2 else Exception) as e:
         logger.error(f"[PostgreSQL] Error executing PostgreSQL commands: {e}")
         try:
             connexion.rollback()
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.debug(f"Ignored in rollback after command execution failure: {e}")
         return False
 
@@ -296,11 +303,11 @@ def cleanup_orphaned_materialized_views(connexion, schema_name: str, current_ses
                     # For non-session views or very old ones, we could drop them
                     # But to be safe, we only log here
                     logger.debug(f"[PostgreSQL] Found potentially orphaned view: {view_name}")
-                except Exception as e:
+                except (ValueError, IndexError) as e:
                     logger.debug(f"[PostgreSQL] Error processing view {view_name}: {e}")
 
             return count
-    except Exception as e:
+    except (psycopg2.Error if psycopg2 else Exception) as e:
         logger.error(f"[PostgreSQL] Error checking orphaned views: {e}")
         return 0
 
@@ -337,12 +344,12 @@ def cleanup_session_materialized_views(connexion, schema_name: str, session_id: 
                 try:
                     cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema_name}"."{view_name}" CASCADE;')
                     count += 1
-                except Exception as e:
+                except (psycopg2.Error if psycopg2 else Exception) as e:
                     logger.warning(f"[PostgreSQL] Error dropping view {view_name}: {e}")
 
             connexion.commit()
             return count
-    except Exception as e:
+    except (psycopg2.Error if psycopg2 else Exception) as e:
         logger.error(f"[PostgreSQL] Error cleaning up session views: {e}")
         return 0
 

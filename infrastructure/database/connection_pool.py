@@ -62,6 +62,9 @@ logger = logging.getLogger('FilterMate.ConnectionPool')
 # Import psycopg2 availability
 from .postgresql_support import psycopg2, POSTGRESQL_AVAILABLE
 
+# Conditional exception type for psycopg2 operations
+_DatabaseError = (psycopg2.Error, OSError) if psycopg2 else (OSError,)
+
 
 @dataclass
 class PoolStats:
@@ -185,7 +188,7 @@ class PostgreSQLConnectionPool:
                 if conn:
                     self._pool.put_nowait(conn)
                     self.stats.current_pool_size += 1
-            except Exception as e:
+            except _DatabaseError as e:
                 logger.warning(f"Failed to pre-create connection: {e}")
                 break
 
@@ -216,7 +219,7 @@ class PostgreSQLConnectionPool:
             logger.debug(f"Created new connection for {self._pool_key}")
             return conn
 
-        except Exception as e:
+        except _DatabaseError as e:
             logger.error(f"Failed to create connection to {self._pool_key}: {e}")
             return None
 
@@ -234,13 +237,13 @@ class PostgreSQLConnectionPool:
                     if QApplication.instance() is None:
                         logger.debug("QApplication gone, stopping health check thread")
                         break
-                except Exception:
+                except Exception:  # catch-all safety net (QGIS import/state check)
                     # If we can't check QGIS state, assume it's shutting down
                     break
 
                 try:
                     self._perform_health_check()
-                except Exception as e:
+                except Exception as e:  # catch-all safety net (health check thread)
                     logger.debug(f"Health check error: {e}")
 
                 # Wait for interval or shutdown
@@ -286,7 +289,7 @@ class PostgreSQLConnectionPool:
                 try:
                     self._pool.put_nowait(conn)
                     self._connection_timestamps[id(conn)] = time.time()
-                except Exception:
+                except Exception:  # catch-all safety net (Queue.Full)
                     self._close_connection(conn)  # Pool is full
             else:
                 self._close_connection(conn)
@@ -302,7 +305,7 @@ class PostgreSQLConnectionPool:
                     if conn:
                         self._pool.put(conn)
                         self.stats.current_pool_size += 1
-                except Exception:
+                except _DatabaseError:
                     break
 
     def _is_connection_healthy(self, conn) -> bool:
@@ -317,7 +320,7 @@ class PostgreSQLConnectionPool:
 
             return True
 
-        except Exception:
+        except Exception:  # catch-all safety net (conn state + SELECT 1)
             return False
 
     def _is_connection_idle_too_long(self, conn) -> bool:
@@ -410,7 +413,7 @@ class PostgreSQLConnectionPool:
             # Rollback any uncommitted transaction
             try:
                 conn.rollback()
-            except Exception as e:
+            except _DatabaseError as e:
                 logger.debug(f"Ignored in release_connection rollback: {e}")
 
             # Check health and return to pool
@@ -420,14 +423,14 @@ class PostgreSQLConnectionPool:
                     self._connection_timestamps[id(conn)] = time.time()
                     logger.debug(f"Connection returned to pool {self._pool_key}")
                     return
-                except Exception as e:
+                except Exception as e:  # catch-all safety net (Queue.Full)
                     # Pool is full, close the connection
                     logger.debug(f"Ignored in release_connection pool-full: {e}")
 
             # Close the connection
             self._close_connection(conn)
 
-        except Exception as e:
+        except Exception as e:  # catch-all safety net
             logger.warning(f"Error releasing connection: {e}")
             self._close_connection(conn)
 
@@ -445,7 +448,7 @@ class PostgreSQLConnectionPool:
                 self._active_connections = max(0, self._active_connections - 1)
                 self.stats.current_pool_size = max(0, self.stats.current_pool_size - 1)
 
-        except Exception as e:
+        except Exception as e:  # catch-all safety net (connection close)
             logger.debug(f"Error closing connection: {e}")
 
     @contextmanager
@@ -648,7 +651,7 @@ class PostgreSQLPoolManager:
                 try:
                     if conn and not conn.closed:
                         conn.close()
-                except Exception as e:
+                except Exception as e:  # catch-all safety net (orphan connection close)
                     logger.debug(f"Ignored in release_connection orphan close: {e}")
 
     @contextmanager
@@ -727,7 +730,7 @@ class PostgreSQLPoolManager:
             for pool_key, pool in list(self._pools.items()):
                 try:
                     pool.shutdown()
-                except Exception as e:
+                except Exception as e:  # catch-all safety net (pool shutdown)
                     logger.warning(f"Error closing pool {pool_key}: {e}")
 
             self._pools.clear()
@@ -838,7 +841,7 @@ def get_pooled_connection_from_layer(layer) -> Tuple[Optional[Any], Optional[Any
         manager = get_pool_manager()
         conn = manager.get_connection(host, port, database, user, password, sslmode)
         return conn, source_uri
-    except Exception as e:
+    except Exception as e:  # catch-all safety net (RuntimeError or psycopg2.Error)
         logger.error(f"Failed to get pooled connection for {layer.name()}: {e}")
         return None, None
 
@@ -864,13 +867,13 @@ def release_pooled_connection(conn, source_uri) -> None:
             source_uri.port(),
             source_uri.database()
         )
-    except Exception as e:
+    except Exception as e:  # catch-all safety net
         logger.warning(f"Error releasing pooled connection: {e}")
         # Fallback: just close the connection
         try:
             if conn and not conn.closed:
                 conn.close()
-        except Exception as e:
+        except Exception as e:  # catch-all safety net (fallback close)
             logger.debug(f"Ignored in release_pooled_connection fallback close: {e}")
 
 
@@ -970,7 +973,7 @@ def _atexit_cleanup():
         try:
             _pool_manager.close_all_pools()
             _pool_manager = None
-        except Exception as e:
+        except Exception as e:  # catch-all safety net (atexit handler)
             logger.debug(f"Ignored in atexit cleanup: {e}")
 
 

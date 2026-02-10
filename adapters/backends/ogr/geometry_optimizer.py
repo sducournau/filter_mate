@@ -187,7 +187,7 @@ def simplify_source_for_ogr_fallback(source_layer, logger=None):
             log_warning("  No features after simplification, using original")
             return source_layer
 
-    except Exception as e:
+    except (RuntimeError, ValueError) as e:
         log_warning(f"  OGR simplification error: {e}, using original")
         log_debug(f"  Traceback: {traceback.format_exc()}")
         return source_layer

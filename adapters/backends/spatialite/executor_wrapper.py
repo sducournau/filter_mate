@@ -100,7 +100,7 @@ class SpatialiteFilterExecutor(FilterExecutorPort):
                     backend='spatialite'
                 )
 
-        except Exception as e:
+        except Exception as e:  # catch-all safety net
             logger.error(f"[Spatialite] Spatialite filter execution failed: {e}")
             return FilterExecutionResult.failed(str(e), backend='spatialite')
 
@@ -126,7 +126,7 @@ class SpatialiteFilterExecutor(FilterExecutorPort):
 
             return result, None
 
-        except Exception as e:
+        except Exception as e:  # catch-all safety net
             logger.error(f"[Spatialite] Spatialite geometry preparation failed: {e}")
             return None, str(e)
 
@@ -138,7 +138,7 @@ class SpatialiteFilterExecutor(FilterExecutorPort):
         """Apply subset string to layer."""
         try:
             return apply_spatialite_subset(layer, expression)
-        except Exception as e:
+        except Exception as e:  # catch-all safety net
             logger.error(f"[Spatialite] Failed to apply Spatialite subset: {e}")
             return False
 
@@ -147,7 +147,7 @@ class SpatialiteFilterExecutor(FilterExecutorPort):
         try:
             cleanup_session_temp_tables()
             logger.debug("[Spatialite] Spatialite temp tables cleaned up")
-        except Exception as e:
+        except Exception as e:  # catch-all safety net
             logger.warning(f"[Spatialite] Spatialite cleanup failed: {e}")
 
     @property

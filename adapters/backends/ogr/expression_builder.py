@@ -45,7 +45,7 @@ except ImportError:
             return False
         try:
             return layer.setSubsetString(expression)
-        except Exception:
+        except RuntimeError:
             return False
 
 # Thread safety for OGR operations
@@ -95,7 +95,7 @@ class CancellableFeedback(QgsProcessingFeedback if _HAS_PROCESSING_FEEDBACK else
         if _HAS_PROCESSING_FEEDBACK:
             try:
                 super().cancel()
-            except Exception as e:
+            except RuntimeError as e:
                 logger.debug(f"Ignored in feedback cancel: {e}")
 
     def setProgress(self, progress: float):
@@ -103,7 +103,7 @@ class CancellableFeedback(QgsProcessingFeedback if _HAS_PROCESSING_FEEDBACK else
         if _HAS_PROCESSING_FEEDBACK:
             try:
                 super().setProgress(progress)
-            except Exception as e:
+            except RuntimeError as e:
                 logger.debug(f"Ignored in feedback setProgress: {e}")
 
 
@@ -344,7 +344,7 @@ class OGRExpressionBuilder(GeometricFilterPort):
                     },
                     feedback=self._feedback
                 )
-            except Exception as e:
+            except (RuntimeError, KeyError) as e:
                 self.log_error(f"Processing failed: {e}")
                 return False
 
@@ -363,7 +363,7 @@ class OGRExpressionBuilder(GeometricFilterPort):
             storage_type = ""
             try:
                 storage_type = layer.dataProvider().storageType().lower()
-            except Exception as e:
+            except (RuntimeError, AttributeError) as e:
                 logger.debug(f"Ignored in storage type detection: {e}")
 
             # Check if this is a PostgreSQL layer accessed via OGR
@@ -419,12 +419,12 @@ class OGRExpressionBuilder(GeometricFilterPort):
                     provider = layer.dataProvider()
                     self.log_error(f"  - Provider capabilities: {provider.capabilities()}")
                     self.log_error(f"  - Storage type: {provider.storageType()}")
-                except Exception as diag_e:
+                except (RuntimeError, AttributeError) as diag_e:
                     self.log_error(f"  - Could not get diagnostics: {diag_e}")
 
             return success
 
-        except Exception as e:
+        except (RuntimeError, AttributeError) as e:
             self.log_error(f"Error in OGR apply_filter: {e}")
             return False
 
@@ -467,7 +467,7 @@ class OGRExpressionBuilder(GeometricFilterPort):
         storage_type = ""
         try:
             storage_type = layer.dataProvider().storageType().lower()
-        except Exception as e:
+        except (RuntimeError, AttributeError) as e:
             logger.debug(f"Ignored in FID filter storage type detection: {e}")
 
         pk_field = self._get_primary_key(layer)
@@ -482,7 +482,7 @@ class OGRExpressionBuilder(GeometricFilterPort):
                 from qgis.PyQt.QtCore import QVariant
                 field_type = fields.at(pk_idx).type()
                 is_numeric_pk = field_type in (QVariant.Int, QVariant.LongLong, QVariant.UInt, QVariant.ULongLong, QVariant.Double)
-        except Exception as e:
+        except (RuntimeError, AttributeError, KeyError) as e:
             logger.debug(f"Ignored in PK field type detection: {e}")
 
         # Build value list based on PK type
@@ -544,7 +544,7 @@ class OGRExpressionBuilder(GeometricFilterPort):
             if all_numeric_values:
                 is_numeric_pk = True
                 self.log_info("  - PK type detected from VALUES: numeric (all values are int/float)")
-        except Exception as val_e:
+        except (TypeError, ValueError) as val_e:
             self.log_debug(f"  - Value-based detection failed: {val_e}")
 
         # Strategy 2: Check if string values look like integers
@@ -559,7 +559,7 @@ class OGRExpressionBuilder(GeometricFilterPort):
                 if all_look_numeric:
                     is_numeric_pk = True
                     self.log_info("  - PK type detected from string VALUES: numeric (all values look like integers)")
-            except Exception as e:
+            except (TypeError, ValueError) as e:
                 logger.debug(f"Ignored in PK numeric detection from values: {e}")
 
         # Strategy 3: Check field type from layer fields (may be unreliable for OGR)
@@ -573,7 +573,7 @@ class OGRExpressionBuilder(GeometricFilterPort):
                     numeric_types = (QVariant.Int, QVariant.LongLong, QVariant.UInt, QVariant.ULongLong, QVariant.Double)
                     is_numeric_pk = field_type in numeric_types
                     self.log_info(f"  - PK type detected from field schema: {'numeric' if is_numeric_pk else 'text'} (QVariant type={field_type})")
-            except Exception as field_e:
+            except (RuntimeError, AttributeError, KeyError) as field_e:
                 self.log_debug(f"  - Field type detection failed: {field_e}")
 
         # Default: assume numeric for common PK field names
@@ -649,7 +649,7 @@ class OGRExpressionBuilder(GeometricFilterPort):
             self.log_error("Buffer processing returned no valid layer")
             return None
 
-        except Exception as e:
+        except (RuntimeError, KeyError) as e:
             self.log_error(f"Failed to apply static buffer: {e}")
             return None
 
@@ -705,7 +705,7 @@ class OGRExpressionBuilder(GeometricFilterPort):
                             self._source_layer_keep_alive.append(buffered_layer)
                             self.log_info("  ✅ Dynamic buffer (field) applied successfully")
                             return buffered_layer
-                    except Exception as e:
+                    except (RuntimeError, KeyError) as e:
                         self.log_warning(f"  bufferbym failed: {e}, trying alternatives")
 
             # Strategy 2: Compute average buffer value from expression and use static buffer
@@ -719,7 +719,7 @@ class OGRExpressionBuilder(GeometricFilterPort):
             # Strategy 3: Fallback to extracting numeric default
             return self._fallback_buffer_from_expression(layer, buffer_expression)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, AttributeError) as e:
             self.log_error(f"Failed to apply dynamic buffer: {e}")
             return self._fallback_buffer_from_expression(layer, buffer_expression)
 
@@ -774,7 +774,7 @@ class OGRExpressionBuilder(GeometricFilterPort):
 
             return None
 
-        except Exception as e:
+        except (RuntimeError, ValueError, TypeError) as e:
             self.log_warning(f"  Could not compute average buffer: {e}")
             return None
 
@@ -855,7 +855,7 @@ class OGRExpressionBuilder(GeometricFilterPort):
                     pk_name = fields.at(pk_indexes[0]).name()
                     self.log_debug(f"Using provider PK: {pk_name}")
                     return pk_name
-            except Exception as e:
+            except (RuntimeError, AttributeError, IndexError) as e:
                 logger.debug(f"Ignored in provider PK attribute detection: {e}")
 
             # 2. Look for exact match PK names
@@ -888,7 +888,7 @@ class OGRExpressionBuilder(GeometricFilterPort):
                     self.log_debug(f"Using first numeric field: {field.name()}")
                     return field.name()
 
-        except Exception as e:
+        except (RuntimeError, AttributeError) as e:
             self.log_warning(f"Error detecting primary key: {e}")
 
         # 6. Default to fid

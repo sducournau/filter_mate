@@ -9,6 +9,7 @@ Migrated from modules/appUtils.py to infrastructure/database/sql_utils.py
 
 import re
 import logging
+import sqlite3
 
 logger = logging.getLogger('FilterMate.Infrastructure.Database.SQLUtils')
 
@@ -114,7 +115,7 @@ def safe_set_subset_string(layer, subset_expression: str) -> bool:
                             pass  # No UI available (testing environment)
 
                         logger.info("💡 FilterMate will auto-apply type casting to fix this.")
-                except Exception as type_check_err:
+                except (TypeError, ValueError, ImportError) as type_check_err:
                     logger.debug(f"Type mismatch detection failed (non-critical): {type_check_err}")
 
             # FIX v4.8.1: Apply PostgreSQL type casting for PostgreSQL layers
@@ -157,7 +158,7 @@ def safe_set_subset_string(layer, subset_expression: str) -> bool:
                     provider = layer.dataProvider()
                     if provider and hasattr(provider, 'error') and provider.error():
                         logger.warning(f"[SQL]   Provider error: {provider.error().message()}")
-                except Exception as diag_e:
+                except Exception as diag_e:  # catch-all safety net (QGIS provider diagnostic)
                     logger.debug(f"[SQL]   Could not get provider error: {diag_e}")
 
                 # Log the full expression to a separate line for easy copy/paste
@@ -169,7 +170,7 @@ def safe_set_subset_string(layer, subset_expression: str) -> bool:
         else:
             logger.error(f"Layer {layer.name()} does not have setSubsetString method")
             return False
-    except Exception as e:
+    except Exception as e:  # catch-all safety net
         logger.error(f"Error setting subset string on layer {layer.name()}: {e}")
         logger.error(f"[SQL] Exception details - Expression:\n{subset_expression}")
         return False
@@ -220,7 +221,7 @@ def create_temp_spatialite_table(
         except sqlite3.OperationalError:
             try:
                 conn.load_extension('mod_spatialite.dll')  # Windows fallback
-            except Exception as e:
+            except sqlite3.OperationalError as e:
                 logger.error(f"Failed to load Spatialite extension: {e}")
                 conn.close()
                 return False
@@ -254,7 +255,7 @@ def create_temp_spatialite_table(
                     '{sanitize_sql_identifier(geom_field)}'
                 )
             """)
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.warning(f"Could not create spatial index: {e}")
             # Continue anyway - table is still usable without index
 
@@ -264,7 +265,7 @@ def create_temp_spatialite_table(
         logger.info(f"Created temporary Spatialite table: {table_name}")
         return True
 
-    except Exception as e:
+    except sqlite3.Error as e:
         logger.error(f"Error creating Spatialite temp table {table_name}: {e}")
         return False
 
@@ -325,7 +326,7 @@ def format_pk_values_for_sql(
             if all_numeric_values:
                 pk_is_numeric = True
                 logger.debug(f"PK '{pk_field}' detected as numeric from VALUES (all int/float)")
-        except Exception as e:
+        except (TypeError, ValueError) as e:
             logger.debug(f"Ignored in PK numeric detection (strategy 1): {e}")
 
     # Strategy 2: Check if string values look like integers
@@ -339,7 +340,7 @@ def format_pk_values_for_sql(
             if all_look_numeric:
                 pk_is_numeric = True
                 logger.debug(f"PK '{pk_field}' detected as numeric from string VALUES")
-        except Exception as e:
+        except (TypeError, ValueError) as e:
             logger.debug(f"Ignored in PK numeric detection (strategy 2): {e}")
 
     # Strategy 3: Check field schema (may be unreliable for OGR)
@@ -353,7 +354,7 @@ def format_pk_values_for_sql(
                 pk_is_text = 'char' in field_type or 'text' in field_type or 'string' in field_type
                 pk_is_numeric = field.isNumeric()
                 logger.debug(f"PK '{pk_field}' from schema: uuid={pk_is_uuid}, text={pk_is_text}, numeric={pk_is_numeric}")
-        except Exception as e:
+        except Exception as e:  # catch-all safety net (QGIS field schema)
             logger.debug(f"Could not get field schema: {e}")
 
     # Strategy 4: Fallback based on common PK names

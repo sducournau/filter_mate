@@ -92,7 +92,7 @@ class BaseLegacyAdapter(GeometricFilterBackend):
             if self._new_backend:
                 self._use_new_backend = self._should_use_new_backend()
                 logger.debug(f"{self.provider_type}: New backend available, use_new={self._use_new_backend}")
-        except Exception as e:
+        except (ImportError, AttributeError, RuntimeError) as e:
             logger.debug(f"{self.provider_type}: New backend unavailable: {e}")
 
         # FIX v4.0.4 (2026-01-16): ALWAYS initialize legacy backend as fallback
@@ -101,7 +101,7 @@ class BaseLegacyAdapter(GeometricFilterBackend):
         try:
             self._legacy_backend = self._create_legacy_backend()
             logger.debug(f"{self.provider_type}: Legacy backend initialized as fallback")
-        except Exception as e:
+        except (ImportError, AttributeError, RuntimeError) as e:
             logger.warning(f"{self.provider_type}: Legacy backend unavailable: {e}")
 
     @property
@@ -249,7 +249,7 @@ class BaseLegacyAdapter(GeometricFilterBackend):
             from ...infrastructure.database.sql_utils import safe_set_subset_string
             return safe_set_subset_string(layer, final_expr)
 
-        except Exception as e:
+        except (RuntimeError, ImportError, AttributeError) as e:
             logger.error(f"New backend apply_filter failed: {e}")
             if self._legacy_backend:
                 return self._legacy_backend.apply_filter(layer, expression, old_subset, combine_operator)
@@ -262,7 +262,7 @@ class BaseLegacyAdapter(GeometricFilterBackend):
                 from ...core.domain.layer_info import LayerInfo
                 layer_info = LayerInfo.from_qgis_layer(layer)
                 return self._new_backend.supports_layer(layer_info)
-            except Exception as e:
+            except (ImportError, RuntimeError, AttributeError) as e:
                 logger.debug(f"Ignored in new backend supports_layer check: {e}")
 
         if self._legacy_backend:
@@ -413,7 +413,7 @@ def get_legacy_adapter(provider_type: str, task_params: Dict) -> GeometricFilter
         adapter = adapter_class(task_params)
         logger.debug(f"🔧 Created {adapter.get_backend_name()} for provider '{provider_type}'")
         return adapter
-    except Exception as e:
+    except (ImportError, AttributeError, RuntimeError) as e:
         logger.warning(f"Could not create adapter for {provider_type}: {e}, falling back to OGR")
         return LegacyOGRAdapter(task_params)
 

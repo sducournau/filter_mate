@@ -41,6 +41,13 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from enum import Enum
 
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
+
+from ....core.domain.exceptions import PostgreSQLError
+
 logger = logging.getLogger('FilterMate.Backend.PostgreSQL.FilterChainOptimizer')
 
 
@@ -248,11 +255,11 @@ class FilterChainOptimizer:
             logger.info(f"✅ Chain MV created: {self.MV_SCHEMA}.{mv_name}")
             return mv_name
 
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.error(f"Failed to create chain MV: {e}")
             try:
                 self._connection.rollback()
-            except Exception:
+            except (psycopg2.Error if psycopg2 else Exception):
                 pass  # Rollback may fail if connection is broken
             return None
 
@@ -407,12 +414,12 @@ class FilterChainOptimizer:
                     )
                     count += 1
                     del self._created_mvs[chain_hash]
-                except Exception as e:
+                except (psycopg2.Error if psycopg2 else Exception) as e:
                     logger.warning(f"Failed to drop MV {mv_name}: {e}")
 
             self._connection.commit()
 
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.error(f"Cleanup failed: {e}")
 
         logger.info(f"Cleaned up {count} chain MVs")
@@ -539,7 +546,7 @@ WITH DATA
             """, (self.MV_SCHEMA, mv_name))
             result = cursor.fetchone()
             return result[0] if result else False
-        except Exception:
+        except (psycopg2.Error if psycopg2 else Exception):
             return False  # Assume MV doesn't exist if query fails
 
     def _generate_session_id(self) -> str:

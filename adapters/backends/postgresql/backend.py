@@ -22,10 +22,16 @@ import time
 import re
 from typing import Optional, List, Dict, Any, Tuple
 
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
+
 from ....core.ports.backend_port import BackendPort, BackendInfo, BackendCapability
 from ....core.domain.filter_expression import FilterExpression, ProviderType
 from ....core.domain.filter_result import FilterResult
 from ....core.domain.layer_info import LayerInfo
+from ....core.domain.exceptions import PostgreSQLError
 
 from .mv_manager import MaterializedViewManager, MVConfig, create_mv_manager
 from .optimizer import QueryOptimizer, create_optimizer
@@ -222,9 +228,21 @@ class PostgreSQLBackend(BackendPort):
                 backend_name=self.name
             )
 
-        except Exception as e:
+        except PostgreSQLError:
+            self._metrics['errors'] += 1
+            raise
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             self._metrics['errors'] += 1
             logger.exception(f"PostgreSQL filter execution failed: {e}")
+            return FilterResult.error(
+                layer_id=layer_info.layer_id,
+                expression_raw=expression.raw,
+                error_message=str(e),
+                backend_name=self.name
+            )
+        except Exception as e:  # catch-all safety net
+            self._metrics['errors'] += 1
+            logger.exception(f"PostgreSQL filter execution failed (unexpected): {e}")
             return FilterResult.error(
                 layer_id=layer_info.layer_id,
                 expression_raw=expression.raw,
@@ -321,7 +339,7 @@ class PostgreSQLBackend(BackendPort):
                     if conn:
                         conn_source = "layer"
                         logger.debug("[PostgreSQL] MV: Connection from layer: OK")
-                except Exception as layer_conn_err:
+                except Exception as layer_conn_err:  # catch-all safety net (layer connection fallback)
                     logger.debug(f"[PostgreSQL] MV: Layer connection failed: {layer_conn_err}")
 
             if conn is None:
@@ -394,7 +412,7 @@ class PostgreSQLBackend(BackendPort):
                     logger.error("[PostgreSQL] MV creation reported success but MV not found")
                     return None
 
-            except Exception as mv_error:
+            except (psycopg2.Error if psycopg2 else Exception) as mv_error:
                 logger.error(f"[PostgreSQL] MV creation failed: {mv_error}")
                 logger.error(f"[PostgreSQL] Query was: {query[:300]}...")
                 logger.error(f"[PostgreSQL] pk_field='{pk_field}', geom_field='{geom_field}'")
@@ -406,7 +424,7 @@ class PostgreSQLBackend(BackendPort):
                     conn, table_name, clean_pk_field, clean_geom_field, fids, formatted_fids
                 )
 
-        except Exception as e:
+        except Exception as e:  # catch-all safety net (multi-source connection + MV creation)
             logger.error(f"[PostgreSQL] create_source_selection_mv failed: {e}")  # nosec B608
             import traceback
             logger.debug(traceback.format_exc())
@@ -451,7 +469,7 @@ class PostgreSQLBackend(BackendPort):
             logger.warning(f"[PostgreSQL] Could not parse table from source: {source[:200]}")
             return None, None
 
-        except Exception as e:
+        except (ValueError, AttributeError, TypeError) as e:
             logger.error(f"[PostgreSQL] Error extracting table info: {e}")
             return None, None
 
@@ -547,7 +565,7 @@ class PostgreSQLBackend(BackendPort):
             logger.info(f"[PostgreSQL] ✅ Fallback temp table created: {full_name}")  # nosec B608
             return full_name
 
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.error(f"[PostgreSQL] Temp table fallback failed: {e}")
             return None
 
@@ -560,7 +578,7 @@ class PostgreSQLBackend(BackendPort):
                 mv_count = self._mv_manager.cleanup_session_mvs(connection=conn)
                 view_count, _ = self._cleanup_service.cleanup_session_views(conn)
                 logger.info(f"[PostgreSQL] PostgreSQL cleanup: {mv_count + view_count} objects dropped")  # nosec B608
-        except Exception as e:
+        except Exception as e:  # catch-all safety net (cleanup must not raise)
             logger.error(f"[PostgreSQL] Cleanup failed: {e}")
 
     def estimate_execution_time(
@@ -635,7 +653,7 @@ class PostgreSQLBackend(BackendPort):
             cursor.execute("SELECT 1")
             return cursor.fetchone() is not None
 
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.warning(f"[PostgreSQL] Connection test failed: {e}")
             return False
 
@@ -657,7 +675,7 @@ class PostgreSQLBackend(BackendPort):
                 return self._pool.getconn()
             else:
                 return self._pool
-        except Exception as e:
+        except Exception as e:  # catch-all safety net (pool abstraction may raise varied errors)
             logger.error(f"[PostgreSQL] Failed to get connection: {e}")
             return None
 
@@ -689,7 +707,7 @@ class PostgreSQLBackend(BackendPort):
                 logger.warning(f"[PostgreSQL] Could not get connection from layer {layer_id}")
             return conn
 
-        except Exception as e:
+        except Exception as e:  # catch-all safety net (QGIS + psycopg2 mixed)
             logger.error(f"[PostgreSQL] Failed to get connection from layer: {e}")
             return None
 
@@ -699,7 +717,7 @@ class PostgreSQLBackend(BackendPort):
             conn = self._get_connection()
             if conn:
                 self._cleanup_service.ensure_schema_exists(conn)
-        except Exception as e:
+        except Exception as e:  # catch-all safety net
             logger.warning(f"[PostgreSQL] Failed to ensure schema: {e}")
 
     def _should_use_mv(self, layer_info: LayerInfo, analysis) -> bool:
@@ -766,10 +784,10 @@ class PostgreSQLBackend(BackendPort):
             results = cursor.fetchall()
             logger.debug(f"[PostgreSQL] [PostgreSQL v4.0] DIRECT Results: {len(results)} rows")
             return [row[0] for row in results]
-        except Exception as e:
+        except (psycopg2.Error if psycopg2 else Exception) as e:
             logger.error(f"[PostgreSQL] [PostgreSQL v4.0] Direct query FAILED: {e}")
             logger.error(f"[PostgreSQL] [PostgreSQL v4.0] Failed query: {query[:1000]}")
-            raise
+            raise PostgreSQLError(f"Direct query failed: {e}") from e
 
     def _get_table_name(self, layer_info: LayerInfo) -> str:
         """Extract table name from layer source."""

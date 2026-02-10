@@ -20,6 +20,11 @@ Created: January 2026 (EPIC-1 Phase E4 - stub)
 
 import logging
 
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
+
 logger = logging.getLogger('FilterMate.Adapters.Backends.PostgreSQL.FilterExecutor')
 
 
@@ -396,7 +401,7 @@ def build_postgis_predicates(
                     else:
                         param_distant_geometry_field = 'geometry'
                         logger.debug(f"[PostgreSQL] Memory layer {param_distant_table}: using default 'geometry'")
-                except Exception as e:
+                except (AttributeError, RuntimeError) as e:
                     logger.debug(f"Ignored in memory layer geometry column detection: {e}")
                     param_distant_geometry_field = 'geometry'
             else:
@@ -408,7 +413,7 @@ def build_postgis_predicates(
                     if detected_geom:
                         param_distant_geometry_field = detected_geom
                         logger.info(f"[PostgreSQL] ✓ Auto-detected geometry column for {param_distant_table}: '{detected_geom}'")
-                except Exception as e:
+                except (AttributeError, RuntimeError, KeyError) as e:
                     logger.warning(f"[PostgreSQL] Could not auto-detect geometry column: {e}")
 
         # Final fallback to 'geom' (PostgreSQL default)
@@ -575,7 +580,7 @@ def build_spatial_join_query(
     if expression:
         try:
             is_field = QgsExpression(expression).isField()
-        except Exception as e:
+        except (RuntimeError, ValueError) as e:
             logger.debug(f"Ignored in expression field check: {e}")
 
     # Build query based on combine operator and expression type
@@ -758,7 +763,7 @@ def ensure_source_table_stats(
 
             return True
 
-    except Exception as e:
+    except (psycopg2.Error if psycopg2 else Exception) as e:
         logger.warning(f"Could not check/create stats for \"{schema}\".\"{table}\": {e}")
         return False
 
@@ -976,7 +981,7 @@ def _is_pk_numeric(layer, pk_field: str) -> bool:
                 QVariant.ULongLong, QVariant.Double
             ]
             return field_type in numeric_types
-    except Exception as e:
+    except (AttributeError, RuntimeError) as e:
         logger.debug(f"Ignored in PK numeric type check: {e}")
 
     return True  # Default to numeric

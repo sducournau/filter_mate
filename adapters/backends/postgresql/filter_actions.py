@@ -552,7 +552,7 @@ def execute_filter_action_postgresql_direct(
                 return fallback_to_materialized_fn()
             return False
 
-    except Exception as e:
+    except Exception as e:  # catch-all safety net (mixed SQL/QGIS operations)
         logger.error(f"[PostgreSQL] Error applying direct PostgreSQL filter: {str(e)}")
         import traceback
         logger.debug(f"[PostgreSQL] Traceback: {traceback.format_exc()}")
@@ -779,7 +779,7 @@ def execute_reset_action_postgresql(
     if delete_history_fn:
         try:
             delete_history_fn(project_uuid, layer.id())
-        except Exception as e:
+        except Exception as e:  # catch-all safety net (history delete with fallback)
             logger.warning(f"[PostgreSQL] History Delete Fallback - Layer: {layer.name()} - {type(e).__name__}: {str(e)}")
             # EPIC-1 E4-S9: Use centralized HistoryRepository
             history_repo = HistoryRepository(conn, cur)

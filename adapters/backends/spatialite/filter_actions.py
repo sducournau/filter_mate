@@ -66,7 +66,7 @@ def execute_reset_action_spatialite(
         message = f"Filter reset successfully for layer '{layer.name()}'"
         return True, message
 
-    except Exception as e:
+    except Exception as e:  # catch-all safety net (QGIS layer + DB cleanup)
         error_msg = f"[Spatialite] Reset Failed - Layer: {layer.name()} - {type(e).__name__}: {str(e)}"
         logger.error(error_msg, exc_info=True)
         return False, error_msg
@@ -117,7 +117,7 @@ def execute_unfilter_action_spatialite(
         message = f"Filter restored for layer '{layer.name()}'"
         return True, message
 
-    except Exception as e:
+    except Exception as e:  # catch-all safety net (QGIS layer subset restore)
         error_msg = f"[Spatialite] Unfilter Failed - Layer: {layer.name()} - {type(e).__name__}: {str(e)}"
         logger.error(error_msg, exc_info=True)
         return False, error_msg
@@ -143,7 +143,7 @@ def cleanup_spatialite_session_tables(db_path: str) -> int:
         logger.info(f"[Spatialite] Cleanup Complete - Database: {db_path} - Removed {cleaned_count} temporary tables")
         return cleaned_count
 
-    except Exception as e:
+    except Exception as e:  # catch-all safety net
         logger.error(f"[Spatialite] Cleanup Failed - Database: {db_path} - {type(e).__name__}: {str(e)}", exc_info=True)
         return 0
 
