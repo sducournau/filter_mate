@@ -5308,83 +5308,73 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if successful
         """
-        conn = None
-        cur = None
-
-        try:
-            # Initialize database connection
-            conn = self._safe_spatialite_connect()
+        with self._safe_spatialite_connect() as conn:
             self.active_connections.append(conn)
             cur = conn.cursor()
 
-            # Get layer info and history
-            last_subset_id, last_seq_order, layer_name, name = self._get_last_subset_info(cur, layer)
+            try:
+                # Get layer info and history
+                last_subset_id, last_seq_order, layer_name, name = self._get_last_subset_info(cur, layer)
 
-            # Determine backend to use
-            provider_type, use_postgresql, use_spatialite = self._determine_backend(layer)
+                # Determine backend to use
+                provider_type, use_postgresql, use_spatialite = self._determine_backend(layer)
 
-            # Log performance warning if needed
-            self._log_performance_warning_if_needed(use_spatialite, layer)
+                # Log performance warning if needed
+                self._log_performance_warning_if_needed(use_spatialite, layer)
 
-            # Execute appropriate action based on task_action
-            if self.task_action == 'filter':
-                current_seq_order = last_seq_order + 1
+                # Execute appropriate action based on task_action
+                if self.task_action == 'filter':
+                    current_seq_order = last_seq_order + 1
 
-                # CRITICAL FIX: Skip materialized view creation if sql_subset_string is empty
-                # Empty sql_subset_string causes SQL syntax error in materialized view creation
-                if not sql_subset_string or not sql_subset_string.strip():
-                    logger.warning(
-                        f"Skipping subset management for {layer.name()}: "
-                        "sql_subset_string is empty. Filter was applied via setSubsetString but "
-                        "history/materialized view creation is skipped."
-                    )
-                    return True
+                    # CRITICAL FIX: Skip materialized view creation if sql_subset_string is empty
+                    # Empty sql_subset_string causes SQL syntax error in materialized view creation
+                    if not sql_subset_string or not sql_subset_string.strip():
+                        logger.warning(
+                            f"Skipping subset management for {layer.name()}: "
+                            "sql_subset_string is empty. Filter was applied via setSubsetString but "
+                            "history/materialized view creation is skipped."
+                        )
+                        return True
 
-                # Use Spatialite backend for local layers
-                if use_spatialite:
-                    backend_name = "Spatialite" if provider_type == PROVIDER_SPATIALITE else "Local (OGR)"
-                    logger.debug(f"Using {backend_name} backend")
-                    success = self._manage_spatialite_subset(
+                    # Use Spatialite backend for local layers
+                    if use_spatialite:
+                        backend_name = "Spatialite" if provider_type == PROVIDER_SPATIALITE else "Local (OGR)"
+                        logger.debug(f"Using {backend_name} backend")
+                        success = self._manage_spatialite_subset(
+                            layer, sql_subset_string, primary_key_name, geom_key_name,
+                            name, custom, cur, conn, current_seq_order
+                        )
+                        return success
+
+                    # Use PostgreSQL backend for remote layers
+                    return self._filter_action_postgresql(
                         layer, sql_subset_string, primary_key_name, geom_key_name,
                         name, custom, cur, conn, current_seq_order
                     )
-                    return success
 
-                # Use PostgreSQL backend for remote layers
-                return self._filter_action_postgresql(
-                    layer, sql_subset_string, primary_key_name, geom_key_name,
-                    name, custom, cur, conn, current_seq_order
-                )
+                elif self.task_action == 'reset':
+                    # EPIC-1 Phase E4-S8: Distinguish OGR from Spatialite
+                    if use_postgresql:
+                        return self._reset_action_postgresql(layer, name, cur, conn)
+                    elif provider_type == PROVIDER_OGR:
+                        return self._reset_action_ogr(layer, name, cur, conn)
+                    elif use_spatialite:
+                        return self._reset_action_spatialite(layer, name, cur, conn)
 
-            elif self.task_action == 'reset':
-                # EPIC-1 Phase E4-S8: Distinguish OGR from Spatialite
-                if use_postgresql:
-                    return self._reset_action_postgresql(layer, name, cur, conn)
-                elif provider_type == PROVIDER_OGR:
-                    return self._reset_action_ogr(layer, name, cur, conn)
-                elif use_spatialite:
-                    return self._reset_action_spatialite(layer, name, cur, conn)
+                elif self.task_action == 'unfilter':
+                    return self._unfilter_action(
+                        layer, primary_key_name, geom_key_name, name, custom,
+                        cur, conn, last_subset_id, use_postgresql, use_spatialite
+                    )
 
-            elif self.task_action == 'unfilter':
-                return self._unfilter_action(
-                    layer, primary_key_name, geom_key_name, name, custom,
-                    cur, conn, last_subset_id, use_postgresql, use_spatialite
-                )
+                return True
 
-            return True
-
-        finally:
-            # Always cleanup connections
-            if cur:
+            finally:
+                # Always cleanup cursor and bookkeeping
                 try:
                     cur.close()
                 except Exception as e:
                     logger.debug(f"Could not close database cursor: {e}")
-            if conn:
-                try:
-                    conn.close()
-                except Exception as e:
-                    logger.debug(f"Could not close database connection: {e}")
                 if conn in self.active_connections:
                     self.active_connections.remove(conn)
                 # FIX v2.3.9: Reset prepared statements manager when connection closes
