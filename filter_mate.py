@@ -785,14 +785,26 @@ class FilterMate:
                 self.app.dockwidget.PROJECT_LAYERS = {}
                 self.app.dockwidget._plugin_busy = False
                 self.app.dockwidget._updating_layers = False
+                # FIX 2026-02-10: Reset _filtering_in_progress to prevent stale flag
+                self.app.dockwidget._filtering_in_progress = False
+                self.app.dockwidget._filtering_in_progress_timestamp = 0
                 
-                # Clear combobox safely
+                # FIX 2026-02-10: Block signals before clearing combobox to prevent
+                # cascading layerChanged(None) → current_layer_changed(None) that
+                # corrupts internal state and prevents subsequent layer population
                 try:
                     if hasattr(self.app.dockwidget, 'comboBox_filtering_current_layer'):
+                        self.app.dockwidget.comboBox_filtering_current_layer.blockSignals(True)
                         self.app.dockwidget.comboBox_filtering_current_layer.setLayer(None)
                         self.app.dockwidget.comboBox_filtering_current_layer.clear()
+                        self.app.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
                 except Exception as e:
                     logger.debug(f"Error clearing layer combobox on project cleared: {e}")
+                    # Ensure signals are unblocked even on error
+                    try:
+                        self.app.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
+                    except Exception:
+                        pass
                 
                 # CRITICAL FIX: Clear QgsFeaturePickerWidget to prevent access violation
                 # The widget has an internal timer that triggers scheduledReload which

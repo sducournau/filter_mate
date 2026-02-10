@@ -259,6 +259,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._updating_layers = self._updating_current_layer = self._updating_groupbox = self._signals_connected = False
         self._pending_layers_update = self._plugin_busy = self._syncing_from_qgis = False
         self._filtering_in_progress, self._filter_completed_time, self._saved_layer_id_before_filter = False, 0, None
+        self._filtering_in_progress_timestamp = 0  # FIX 2026-02-10: Track when _filtering_in_progress was set
         self._layer_tree_view_signal_connected, self._signal_connection_states, self._theme_watcher = False, {}, None
         # v5.2 FIX 2026-01-31: Flag to prevent handler interference during programmatic page changes
         self._programmatic_page_change = False

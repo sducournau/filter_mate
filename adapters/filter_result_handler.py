@@ -793,13 +793,22 @@ class FilterResultHandler:
                 # v3.0.19: CRITICAL FIX - Reset _filtering_in_progress HERE, not earlier
                 dockwidget._filtering_in_progress = False
                 
-                logger.debug("v3.0.19: ✅ Unblocked combobox, reconnected handler, and reset filtering flag after protection")
+                logger.debug("v3.0.19: Unblocked combobox, reconnected handler, and reset filtering flag after protection")
                 QgsMessageLog.logMessage(
-                    "v3.0.19: ✅ Combobox protection ENDED - signals reconnected, filtering flag reset",
+                    "v3.0.19: Combobox protection ENDED - signals reconnected, filtering flag reset",
                     "FilterMate", Qgis.Info
                 )
             except Exception as e:
                 logger.error(f"v3.0.19: Error reconnecting combobox: {e}")
+                # FIX 2026-02-10: ALWAYS reset _filtering_in_progress even on error
+                # Without this, the flag stays True permanently, blocking all UI updates
+                try:
+                    if dockwidget:
+                        dockwidget._filtering_in_progress = False
+                        dockwidget.comboBox_filtering_current_layer.blockSignals(False)
+                        logger.warning("v5.3: Safety reset of _filtering_in_progress after error")
+                except Exception:
+                    pass
         
         # Schedule checks during protection window (signals still blocked)
         # v4.1.3: Reduced delays for faster response time

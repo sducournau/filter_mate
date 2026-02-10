@@ -265,6 +265,8 @@ class FilterMateApp:
         
         v5.0.1: Optimized to early-exit for non-vector layers (raster, VRT, mesh)
         to avoid freeze with large VRT files (e.g., 333 tiles).
+        v5.3 FIX 2026-02-10: Include valid raster layers alongside vectors so they
+        appear in filtering/exporting comboboxes (controllers already handle them).
         """
         import time
         
@@ -272,11 +274,19 @@ class FilterMateApp:
         # This prevents freeze with large raster datasets (VRT, etc.)
         vector_layers_only = [l for l in (layers or []) if isinstance(l, QgsVectorLayer)]
         
-        if not vector_layers_only:
-            # No vector layers in this batch - skip all processing
-            non_vector_count = len(layers) if layers else 0
-            if non_vector_count > 0:
-                logger.debug(f"FilterMate: layersAdded signal skipped ({non_vector_count} non-vector layer(s))")
+        # FIX 2026-02-10: Also include valid raster layers (non-VRT) for combobox population
+        # Only do a fast isValid() check - no source access that could freeze on VRT
+        from qgis.core import QgsRasterLayer
+        raster_layers = []
+        for l in (layers or []):
+            if isinstance(l, QgsRasterLayer) and l.isValid():
+                raster_layers.append(l)
+        
+        if not vector_layers_only and not raster_layers:
+            # No usable layers in this batch
+            non_usable_count = len(layers) if layers else 0
+            if non_usable_count > 0:
+                logger.debug(f"FilterMate: layersAdded signal skipped ({non_usable_count} non-usable layer(s))")
             return
         
         # Debounce rapid layer additions
@@ -301,7 +311,10 @@ class FilterMateApp:
         filtered = self._filter_usable_layers(vector_layers_only)
         postgres_pending = [l for l in all_postgres if l.id() not in [f.id() for f in filtered] and not is_sip_deleted(l)]
         
-        if not filtered and not postgres_pending:
+        # FIX 2026-02-10: Combine filtered vector layers with valid raster layers
+        all_usable = filtered + raster_layers
+        
+        if not all_usable and not postgres_pending:
             logger.info("FilterMate: Ignoring layersAdded (no usable layers)"); return
         
         # Delegate PostgreSQL cleanup/retry to LayerLifecycleService
@@ -309,7 +322,7 @@ class FilterMateApp:
         if service and (postgres_to_validate := [l for l in filtered if l.providerType() == 'postgres']):
             service.validate_and_cleanup_postgres_layers_on_add(postgres_to_validate)
         
-        if filtered: self.manage_task('add_layers', filtered)
+        if all_usable: self.manage_task('add_layers', all_usable)
         
         if postgres_pending and service:
             service.schedule_postgres_layer_retry(postgres_pending, self.PROJECT_LAYERS,
@@ -656,15 +669,30 @@ class FilterMateApp:
         # Check _loading_new_project flag timeout
         if self._loading_new_project:
             if self._loading_new_project_timestamp > 0 and (elapsed := current_time - self._loading_new_project_timestamp) > timeout:
-                logger.warning(f"🔧 STABILITY: Resetting stale _loading_new_project flag (elapsed: {elapsed:.0f}ms > {timeout}ms)")
+                logger.warning(f"STABILITY: Resetting stale _loading_new_project flag (elapsed: {elapsed:.0f}ms > {timeout}ms)")
                 self._loading_new_project = False; self._loading_new_project_timestamp = 0; flags_reset = True
             elif self._loading_new_project_timestamp <= 0: self._loading_new_project_timestamp = current_time
         # Check _initializing_project flag timeout
         if self._initializing_project:
             if self._initializing_project_timestamp > 0 and (elapsed := current_time - self._initializing_project_timestamp) > timeout:
-                logger.warning(f"🔧 STABILITY: Resetting stale _initializing_project flag (elapsed: {elapsed:.0f}ms > {timeout}ms)")
+                logger.warning(f"STABILITY: Resetting stale _initializing_project flag (elapsed: {elapsed:.0f}ms > {timeout}ms)")
                 self._initializing_project = False; self._initializing_project_timestamp = 0; flags_reset = True
             elif self._initializing_project_timestamp <= 0: self._initializing_project_timestamp = current_time
+        # FIX 2026-02-10: Check _filtering_in_progress flag timeout on dockwidget
+        # This is the safety net for BUG 1 - if the timer-based reset fails, this catches it
+        if self.dockwidget and getattr(self.dockwidget, '_filtering_in_progress', False):
+            ts = getattr(self.dockwidget, '_filtering_in_progress_timestamp', 0)
+            if ts > 0 and (elapsed := current_time - ts) > timeout:
+                logger.warning(f"STABILITY: Resetting stale _filtering_in_progress flag (elapsed: {elapsed:.0f}ms > {timeout}ms)")
+                self.dockwidget._filtering_in_progress = False
+                self.dockwidget._filtering_in_progress_timestamp = 0
+                try:
+                    self.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
+                    self.dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
+                    self.dockwidget.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect')
+                except Exception as e:
+                    logger.warning(f"STABILITY: Error reconnecting signals after stale flag reset: {e}")
+                flags_reset = True
         # Check queue sizes
         max_queue = STABILITY_CONSTANTS['MAX_ADD_LAYERS_QUEUE']
         if len(self._add_layers_queue) > max_queue: self._add_layers_queue = self._add_layers_queue[-max_queue:]; flags_reset = True
@@ -1277,6 +1305,9 @@ class FilterMateApp:
         if not self.dockwidget: return
         if self._current_layer_id_before_filter: self.dockwidget._saved_layer_id_before_filter = self._current_layer_id_before_filter
         self.dockwidget._filtering_in_progress = True
+        # FIX 2026-02-10: Track timestamp for stale flag detection
+        import time
+        self.dockwidget._filtering_in_progress_timestamp = time.time() * 1000
         try:
             self.dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'disconnect')
             self.dockwidget.comboBox_filtering_current_layer.blockSignals(True)

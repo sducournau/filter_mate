@@ -154,6 +154,11 @@ class DockwidgetSignalManager:
             # Change state and update cache
             state = self.change_signal_state(widget_path, signal_name, func, custom_action)
             self._signal_connection_states[state_key] = state
+            # FIX 2026-02-10: Sync cache with dockwidget to prevent desynchronization
+            # Without this, dockwidget.manageSignal() may skip operations because
+            # its cache shows a stale state from a previous direct call
+            if hasattr(self.dockwidget, '_signal_connection_states'):
+                self.dockwidget._signal_connection_states[state_key] = state
             logger.debug(f"  -> Changed state to {state}")
         
         return True if state is None and widget_object["SIGNALS"] else state
@@ -233,9 +238,13 @@ class DockwidgetSignalManager:
             for w in self.widgets[grp]:
                 try:
                     self.manage_signal([grp, w], 'connect')
-                except Exception:
+                except TypeError:
                     # Signal may already be connected - expected
                     pass
+                except Exception as e:
+                    # FIX 2026-02-10: Log unexpected errors instead of swallowing them
+                    # This makes it visible when critical signal connections fail
+                    logger.warning(f"Failed to connect signal for [{grp}][{w}]: {e}")
     
     def disconnect_widgets_signals(self) -> None:
         """
@@ -251,9 +260,12 @@ class DockwidgetSignalManager:
             for w in self.widgets[grp]:
                 try:
                     self.manage_signal([grp, w], 'disconnect')
-                except Exception:
+                except TypeError:
                     # Signal may already be disconnected - expected
                     pass
+                except Exception as e:
+                    # FIX 2026-02-10: Log unexpected errors instead of swallowing them
+                    logger.warning(f"Failed to disconnect signal for [{grp}][{w}]: {e}")
     
     def disconnect_layer_signals(self) -> List[List[str]]:
         """
