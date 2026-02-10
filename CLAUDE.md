@@ -47,11 +47,21 @@ Use Beta for:
 - Risk analysis and test coverage mapping
 - Bug reproduction and structured bug reports
 
+### Steph (steph-cm)
+Use Steph for:
+- Discord server community management and engagement
+- Release announcements and changelogs (user-facing)
+- Tutorials, tips & tricks, use cases
+- User feedback collection and synthesis
+- Support responses and FAQ maintenance
+- Publication planning and event communication
+
 ### Inter-Agent Relationships
 ```
 Jordan (jordan-po) — Product Owner
   |-- directs --> Marco for implementation (stories, priorities, acceptance criteria)
   |-- asks --> Beta for acceptance testing before delivery
+  |-- briefs --> Steph for communication priorities and release messaging
   |-- consults --> Atlas for market/tech landscape and benchmarks
   |-- consults --> Elder Scrolls for past product decisions
   |-- produces --> User stories, roadmap, MVP scopes, prioritized backlogs
@@ -59,6 +69,7 @@ Jordan (jordan-po) — Product Owner
 Marco (tech-lead-gis) — Lead Developer [DEFAULT for dev tasks]
   |-- reports to --> Jordan for scope clarification and acceptance validation
   |-- sends to --> Beta for testing after implementation or fix
+  |-- briefs --> Steph for technical accuracy on tutorials and announcements
   |-- consults --> Atlas for tech recommendations and tool choices
   |-- consults --> Elder Scrolls for project history and past decisions
   |-- produces --> Code changes, audits, architecture docs, complexity estimates
@@ -66,13 +77,22 @@ Marco (tech-lead-gis) — Lead Developer [DEFAULT for dev tasks]
 Beta (beta-tester) — QA Tester
   |-- reports bugs to --> Marco with structured reproduction steps
   |-- validates for --> Jordan with acceptance test results (Go/No-Go)
+  |-- provides --> Steph with bug status for user support responses
   |-- consults --> Elder Scrolls for past bug history
-  |-- consults --> Atlas for testing tools and patterns
   |-- produces --> Bug reports, risk maps, test results, shadow zone audits
+  |
+Steph (steph-cm) — Community Manager
+  |-- consults --> Marco for technical accuracy verification
+  |-- consults --> Jordan for messaging priorities and feature highlights
+  |-- consults --> Atlas for trending topics and ecosystem context
+  |-- consults --> Beta for bug status before user responses
+  |-- archives via --> Elder Scrolls for community feedback persistence
+  |-- produces --> Announcements, tutorials, FAQ, support responses, feedback reports
   |
 Atlas (atlas-tech-watch) — Tech Intelligence
   |-- feeds --> Jordan with competitive/tech landscape for product decisions
   |-- feeds --> Marco with technology evaluations for implementation
+  |-- feeds --> Steph with trending topics for community content
   |-- archives via --> Elder Scrolls for knowledge persistence
   |-- produces --> Watch reports, tool comparisons, KB entries
   |
@@ -80,6 +100,7 @@ Elder Scrolls (the-elder-scrolls) — Knowledge Guardian
   |-- serves --> Jordan with past product decisions and roadmap history
   |-- serves --> Marco with project context and past technical decisions
   |-- serves --> Beta with past bug history and known issues
+  |-- serves --> Steph with feature history for storytelling
   |-- serves --> Atlas with historical tech watch data
   |-- maintains --> All project memories (Serena + auto-memory)
 ```
@@ -88,10 +109,11 @@ Elder Scrolls (the-elder-scrolls) — Knowledge Guardian
 1. Is the task about product scoping, MVP, stories, prioritization, or feasibility? → **Jordan**
 2. Is the task about writing/modifying/reviewing code? → **Marco**
 3. Is the task about testing, bugs, edge cases, or quality validation? → **Beta**
-4. Is the task about technology research or evaluation? → **Atlas**
-5. Is the task about project knowledge or memory management? → **Elder Scrolls**
-6. Ambiguous dev task? → **Marco** (default)
-7. Ambiguous product/planning task? → **Jordan**
+4. Is the task about community, tutorials, announcements, Discord, or user-facing content? → **Steph**
+5. Is the task about technology research or evaluation? → **Atlas**
+6. Is the task about project knowledge or memory management? → **Elder Scrolls**
+7. Ambiguous dev task? → **Marco** (default)
+8. Ambiguous product/planning task? → **Jordan**
 
 ## BMAD Integration
 
@@ -108,7 +130,7 @@ The project uses **BMAD v6.0** for structured workflows (slash commands `/bmad-*
 | `dev` | Amelia | **Marco (tech-lead-gis)** | Implementation, story execution |
 | `sm` | Bob | **Jordan (jordan-po)** | Sprint management, story prep |
 | `architect` | Winston | **Marco (tech-lead-gis)** | Architecture decisions |
-| `tech-writer` | Paige | **Elder Scrolls** (partial) | Documentation |
+| `tech-writer` | Paige | **Steph (steph-cm)** + **Elder Scrolls** | User docs → Steph, Internal docs → Elder Scrolls |
 | `ux-designer` | Sally | No direct mapping | UI/UX design |
 | `quick-flow` | Barry | **Marco** (fast mode) | Rapid dev + spec |
 

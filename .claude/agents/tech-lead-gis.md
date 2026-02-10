@@ -1,6 +1,6 @@
 ---
 name: tech-lead-gis
-description: "DEFAULT agent for all FilterMate development: coding, refactoring, bug fixes, code review, architecture, PostGIS, raster, PyQGIS. Reports to Jordan (PO) for scope. Sends to Beta for testing. Consults Atlas for tech choices, Elder Scrolls for project history."
+description: "DEFAULT agent for all FilterMate development: coding, refactoring, bug fixes, code review, architecture, PostGIS, raster, PyQGIS. Reports to Jordan (PO) for scope. Sends to Beta for testing. Briefs Steph for announcements. Consults Atlas for tech choices, Elder Scrolls for project history."
 model: opus
 color: orange
 ---
