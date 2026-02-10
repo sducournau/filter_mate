@@ -1658,7 +1658,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         groupbox, expression = self._pending_expression_change; self._pending_expression_change = None
         try:
             self.layer_property_changed(f"{groupbox}_expression", expression, {"ON_CHANGE": lambda x: self._execute_expression_params_change(groupbox)})
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Ignored in deferred expression change for {groupbox}: {e}")
             self._set_expression_loading_state(False)
 
     def _refresh_feature_pickers_for_field_change(self, groupbox: str, field_or_expression: str):
@@ -3121,8 +3122,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 widget.clicked.connect(handler)
                 self._signal_connection_states[key] = True
                 connected_count += 1
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in signal reconnection for {key}: {e}")
 
     def force_reconnect_exporting_signals(self):
         """
@@ -3222,8 +3223,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         # Try to manually call the handler to see what happens
                         try:
                             handler(False)  # Simulate unchecked button click
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug(f"Ignored in tool button handler simulation: {e}")
 
         if self.current_layer:
             pass
@@ -4162,7 +4163,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     if not f or not f.isValid():
                         f = None
                         logger.debug(f"_configure_single_selection_groupbox: saved FID {saved_fid} not found, falling back to widget")
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"Ignored in single selection feature retrieval for FID {saved_fid}: {e}")
                     f = None
             # Fallback to widget.feature() only if no saved FID
             if f is None:
@@ -5678,16 +5680,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.project_props and self.project_props.get("OPTIONS", {}).get("LAYERS", {}).get("LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG", False):
             try:
                 self.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect')
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in legend link signal reconnection: {e}")
 
         # Connect selectionChanged for tracking
         if self.current_layer:
             try:
                 self.current_layer.selectionChanged.connect(self.on_layer_selection_changed)
                 self.current_layer_selection_connection = True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in selectionChanged signal connection: {e}")
 
         # Restore exploring groupbox state
         if layer_props and "current_exploring_groupbox" in layer_props.get("exploring", {}):
@@ -5852,8 +5854,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         try:
                             widget_info["WIDGET"].update()
                             widget_info["WIDGET"].repaint()
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug(f"Ignored in exploring widget repaint for {key}: {e}")
                 logger.debug("Exploring widgets visually refreshed")
 
             # CRITICAL: Initialize exploring groupbox for ALL layers, not just existing ones
@@ -7023,7 +7025,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     f = self.current_layer.getFeature(saved_fid)
                     if not f or not f.isValid():
                         f = None
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"Ignored in saved feature retrieval for FID {saved_fid}: {e}")
                     f = None
             if f is None and hasattr(picker, 'feature'):
                 f = picker.feature()

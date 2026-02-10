@@ -73,7 +73,8 @@ except ImportError:
                 logger.debug(f"[Spatialite] Extension Loaded - Name: {ext}")
                 loaded = True
                 break
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Ignored in spatialite extension load ({ext}): {e}")
                 continue
 
         if not loaded:
@@ -476,8 +477,8 @@ class SpatialiteBackend(BackendPort):
         if self._owns_connection and hasattr(self, '_conn') and self._conn:
             try:
                 self._conn.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in connection close: {e}")
 
 
 def create_spatialite_backend(

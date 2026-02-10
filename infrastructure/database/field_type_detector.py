@@ -171,8 +171,8 @@ def get_postgresql_field_types(layer: 'QgsVectorLayer', connection=None) -> Dict
         if close_conn and conn:
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in field_type_detector connection cleanup: {e}")
 
 
 def suggest_type_cast(field_name: str, field_type: str, comparison_type: str) -> Optional[str]:

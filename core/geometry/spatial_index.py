@@ -89,5 +89,6 @@ def has_spatial_index(layer) -> bool:
 
     try:
         return layer.hasSpatialIndex() == QgsFeatureSource.SpatialIndexPresent
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Ignored in spatial index presence check: {e}")
         return False

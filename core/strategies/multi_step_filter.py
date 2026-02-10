@@ -906,8 +906,8 @@ class MultiStepFilterExecutor:
                 row = cur.fetchone()
                 if row:
                     return max(0, int(row[0]))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in row count estimate from pg_class: {e}")
         return 0
 
 

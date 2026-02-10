@@ -47,7 +47,8 @@ except ImportError:
             try:
                 conn.load_extension(ext)
                 break
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Ignored in spatialite extension load ({ext}): {e}")
                 continue
         return conn
 
@@ -422,8 +423,8 @@ class SpatialiteTempTableManager(MaterializedViewPort):
             # Also drop spatial index if exists
             try:
                 cursor.execute(f"SELECT DisableSpatialIndex('{view_name}', 'geometry')")  # nosec B608
-            except Exception:
-                pass  # Index may not exist
+            except Exception as e:
+                logger.debug(f"Ignored in spatial index disable: {e}")
 
             conn.commit()
 
@@ -529,8 +530,8 @@ class SpatialiteTempTableManager(MaterializedViewPort):
                         try:
                             cursor.execute(f'DROP TABLE IF EXISTS "{table_name}"')  # nosec B608
                             dropped += 1
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug(f"Ignored in orphan table cleanup ({table_name}): {e}")
 
                 conn.commit()
             except Exception as e:

@@ -520,8 +520,8 @@ class FilterMate:
                         # Clear the message bar to remove QGIS's individual warnings
                         try:
                             self.iface.messageBar().clearWidgets()
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug(f"Ignored in message bar clearWidgets: {e}")
 
                         # Show a single consolidated info message
                         count = len(self._missing_dependency_layers)
@@ -1224,9 +1224,9 @@ class FilterMate:
                                     "FilterMate",
                                     self.tr(f"Unable to delete {filename}: {e}")
                                 )
-            except Exception:
+            except Exception as e:
                 # Non-critical error, config was already reset
-                pass
+                logger.debug(f"Ignored in reset_configuration DB cleanup: {e}")
 
             # Prompt to restart QGIS
             QMessageBox.information(

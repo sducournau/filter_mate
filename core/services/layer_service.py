@@ -30,7 +30,8 @@ except ImportError:
         """Fallback: check isValid()."""
         try:
             return layer.isValid()
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Ignored in fallback layer source check: {e}")
             return False
 
 logger = logging.getLogger(__name__)
@@ -242,11 +243,13 @@ class LayerService(QObject):
         try:
             # Use local function instead of self-import
             return is_layer_source_available(layer)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Ignored in layer source availability check: {e}")
             # Fallback: check isValid()
             try:
                 return layer.isValid()
-            except Exception:
+            except Exception as e2:
+                logger.debug(f"Ignored in isValid() fallback: {e2}")
                 return False
 
     # ─────────────────────────────────────────────────────────────────
@@ -611,8 +614,8 @@ class LayerService(QObject):
             fields = layer.fields()
             if fields:
                 return fields[0].name()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in get_valid_expression field fallback: {e}")
 
         return expression or ""
 

@@ -1047,8 +1047,8 @@ class GeometryPreparationAdapter:
                         geometry=hull,
                         wkt=hull_wkt.replace("'", "''")
                     )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in convex hull fallback: {e}")
 
         # Fallback 2: Oriented Bounding Box
         try:
@@ -1062,8 +1062,8 @@ class GeometryPreparationAdapter:
                         geometry=oriented_bbox,
                         wkt=bbox_wkt.replace("'", "''")
                     )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in oriented bbox fallback: {e}")
 
         # Fallback 3: Simple Bounding Box
         try:
@@ -1078,8 +1078,8 @@ class GeometryPreparationAdapter:
                         geometry=bbox_geom,
                         wkt=bbox_wkt.replace("'", "''")
                     )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in bounding box fallback: {e}")
 
         return None
 
@@ -1130,16 +1130,16 @@ class GeometryPreparationAdapter:
             repaired = geom.makeValid()
             if repaired and repaired.isGeosValid():
                 return repaired
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in geometry repair (makeValid): {e}")
 
         # Strategy 2: buffer(0)
         try:
             buffered = geom.buffer(0, 5)
             if buffered and buffered.isGeosValid():
                 return buffered
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in geometry repair (buffer(0)): {e}")
 
         # Strategy 3: simplify then makeValid
         try:
@@ -1148,8 +1148,8 @@ class GeometryPreparationAdapter:
                 repaired = simplified.makeValid()
                 if repaired and repaired.isGeosValid():
                     return repaired
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in geometry repair (simplify+makeValid): {e}")
 
         # Strategy 4: convexHull
         try:
@@ -1157,8 +1157,8 @@ class GeometryPreparationAdapter:
             if hull and hull.isGeosValid():
                 logger.warning("Using convexHull fallback - some precision lost")
                 return hull
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in geometry repair (convexHull): {e}")
 
         return None
 

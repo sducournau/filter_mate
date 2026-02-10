@@ -410,8 +410,8 @@ class PostgreSQLConnectionPool:
             # Rollback any uncommitted transaction
             try:
                 conn.rollback()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in release_connection rollback: {e}")
 
             # Check health and return to pool
             if self._is_connection_healthy(conn):
@@ -420,9 +420,9 @@ class PostgreSQLConnectionPool:
                     self._connection_timestamps[id(conn)] = time.time()
                     logger.debug(f"Connection returned to pool {self._pool_key}")
                     return
-                except Exception:
+                except Exception as e:
                     # Pool is full, close the connection
-                    pass
+                    logger.debug(f"Ignored in release_connection pool-full: {e}")
 
             # Close the connection
             self._close_connection(conn)
@@ -648,8 +648,8 @@ class PostgreSQLPoolManager:
                 try:
                     if conn and not conn.closed:
                         conn.close()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Ignored in release_connection orphan close: {e}")
 
     @contextmanager
     def connection(
@@ -870,8 +870,8 @@ def release_pooled_connection(conn, source_uri) -> None:
         try:
             if conn and not conn.closed:
                 conn.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in release_pooled_connection fallback close: {e}")
 
 
 @contextmanager
@@ -970,8 +970,8 @@ def _atexit_cleanup():
         try:
             _pool_manager.close_all_pools()
             _pool_manager = None
-        except Exception:
-            pass  # Silently ignore errors during exit
+        except Exception as e:
+            logger.debug(f"Ignored in atexit cleanup: {e}")
 
 
 atexit.register(_atexit_cleanup)

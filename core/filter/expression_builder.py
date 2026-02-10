@@ -1111,7 +1111,8 @@ class ExpressionBuilder:
                 _backend_services = get_backend_services()
                 PostgreSQLGeometricFilter = _backend_services.get_postgresql_geometric_filter()
                 postgresql_available = PostgreSQLGeometricFilter is not None
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Ignored in PostgreSQL availability check: {e}")
                 postgresql_available = False
 
         if is_postgresql and postgresql_available and len(fids) > source_mv_fid_threshold:
@@ -1153,8 +1154,8 @@ class ExpressionBuilder:
             if pk_attrs:
                 fields = self.source_layer.fields()
                 return fields[pk_attrs[0]].name()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in primary key field detection from provider: {e}")
 
         # Fallback: try common PK names
         for common_pk in ['fid', 'id', 'gid', 'ogc_fid']:
@@ -1216,7 +1217,8 @@ class ExpressionBuilder:
             try:
                 uri = QgsDataSourceUri(self.source_layer.source())
                 source_table_name = uri.table()
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Ignored in source table name extraction from URI: {e}")
                 source_table_name = self.source_layer.name()
 
         return source_table_name
@@ -1400,7 +1402,8 @@ class ExpressionBuilder:
             try:
                 uri = QgsDataSourceUri(self.source_layer.source())
                 source_geom_field = uri.geometryColumn() or 'geom'
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Ignored in source geometry field detection from URI: {e}")
                 source_geom_field = 'geom'
 
         return source_geom_field or 'geom'

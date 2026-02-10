@@ -1041,8 +1041,8 @@ class FilteringController(BaseController, LayerSelectionMixin):
         for callback in self._on_expression_changed_callbacks:
             try:
                 callback(expression)
-            except Exception:
-                pass  # Don't let callback errors break flow
+            except Exception as e:
+                logger.debug(f"Ignored in expression changed callback: {e}")
 
     def _notify_config_changed(self) -> None:
         """Notify listeners of configuration change."""
@@ -1050,8 +1050,8 @@ class FilteringController(BaseController, LayerSelectionMixin):
         for callback in self._on_config_changed_callbacks:
             try:
                 callback(config)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in filter config changed callback: {e}")
 
     # === Lifecycle ===
 

@@ -308,8 +308,8 @@ class HistoryRepository:
         if not self._is_external_cursor and self._cursor:
             try:
                 self._cursor.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in cursor close: {e}")
 
 
 def create_history_repository(connection, cursor=None) -> HistoryRepository:

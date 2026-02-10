@@ -121,8 +121,8 @@ class CanvasRefreshService:
             # Last resort fallback
             try:
                 iface.mapCanvas().refresh()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in last resort canvas refresh: {e}")
 
     def delayed_canvas_refresh(self):
         """
@@ -173,8 +173,8 @@ class CanvasRefreshService:
                                 logger.debug(f"  → reloadData() failed for {layer.name()}: {reload_err}")
                                 try:
                                     layer.reload()
-                                except Exception:
-                                    pass
+                                except Exception as e:
+                                    logger.debug(f"Ignored in fallback reload for {layer.name()}: {e}")
                             finally:
                                 layer.blockSignals(False)
                             layers_refreshed['postgres'] += 1
@@ -182,8 +182,8 @@ class CanvasRefreshService:
                             try:
                                 layer.blockSignals(True)
                                 layer.reload()
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.debug(f"Ignored in postgres layer reload: {e}")
                             finally:
                                 layer.blockSignals(False)
 
@@ -239,8 +239,8 @@ class CanvasRefreshService:
                         if subset:
                             layer.triggerRepaint()
                             layers_repainted += 1
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Ignored in final repaint loop: {e}")
 
             # Final canvas refresh
             iface.mapCanvas().refresh()
@@ -267,8 +267,8 @@ class CanvasRefreshService:
                     subset = layer.subsetString() or ''
                     if subset:
                         return True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in postgres filtered layers check: {e}")
         return False
 
     def _refresh_filtered_layers(self) -> tuple:
@@ -305,16 +305,16 @@ class CanvasRefreshService:
                             logger.debug(f"reloadData() failed for {layer.name()}: {reload_err}")
                             try:
                                 layer.reload()
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.debug(f"Ignored in fallback reload for {layer.name()}: {e}")
                         finally:
                             layer.blockSignals(False)
                     else:
                         try:
                             layer.blockSignals(True)
                             layer.reload()
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug(f"Ignored in simple reload for {layer.name()}: {e}")
                         finally:
                             layer.blockSignals(False)
 

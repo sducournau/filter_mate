@@ -396,7 +396,8 @@ def build_postgis_predicates(
                     else:
                         param_distant_geometry_field = 'geometry'
                         logger.debug(f"[PostgreSQL] Memory layer {param_distant_table}: using default 'geometry'")
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"Ignored in memory layer geometry column detection: {e}")
                     param_distant_geometry_field = 'geometry'
             else:
                 try:
@@ -574,8 +575,8 @@ def build_spatial_join_query(
     if expression:
         try:
             is_field = QgsExpression(expression).isField()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in expression field check: {e}")
 
     # Build query based on combine operator and expression type
     if has_combine_operator:
@@ -975,8 +976,8 @@ def _is_pk_numeric(layer, pk_field: str) -> bool:
                 QVariant.ULongLong, QVariant.Double
             ]
             return field_type in numeric_types
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Ignored in PK numeric type check: {e}")
 
     return True  # Default to numeric
 

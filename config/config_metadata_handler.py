@@ -22,7 +22,10 @@ Author: FilterMate Team
 Date: December 2025 (migrated January 2026)
 """
 
+import logging
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class ConfigMetadataHandler:
@@ -227,8 +230,8 @@ class MetadataAwareConfigModel:
         if hasattr(index, 'data') and callable(index.data):
             try:
                 return index.data()  # Simplified - real implementation may differ
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in get_value_at_index index.data(): {e}")
 
         if hasattr(index, 'path'):
             return index.path

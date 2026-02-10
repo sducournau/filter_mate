@@ -972,8 +972,8 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 if qgs_expr.isField() and not self._is_valid_field_expression(custom_expr, layer_fields):
                     logger.info(f"Resetting custom_selection_expression to '{fallback_field}'")
                     exploring["custom_selection_expression"] = fallback_field
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in custom expression validation: {e}")
         elif not custom_expr:
             exploring["custom_selection_expression"] = fallback_field
 
@@ -1049,7 +1049,8 @@ class ExploringController(BaseController, LayerSelectionMixin):
                         if not feature or not feature.isValid():
                             feature = None
                             logger.debug(f"_compute_zoom_extent_for_mode: saved FID {saved_fid} not found, falling back to widget")
-                    except Exception:
+                    except Exception as e:
+                        logger.debug(f"Ignored in zoom extent feature retrieval for FID {saved_fid}: {e}")
                         feature = None
 
                 # Fallback to widget.feature()

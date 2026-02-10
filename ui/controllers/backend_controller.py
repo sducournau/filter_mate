@@ -941,8 +941,8 @@ class BackendController(BaseController):
         finally:
             try:
                 connexion.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in PostgreSQL connection close (session views cleanup): {e}")
 
     def cleanup_postgresql_schema_if_empty(self, force: bool = False) -> bool:
         """
@@ -1004,8 +1004,8 @@ class BackendController(BaseController):
         finally:
             try:
                 connexion.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in PostgreSQL connection close (schema cleanup): {e}")
 
     def get_postgresql_session_info(self) -> dict:
         """
@@ -1062,8 +1062,8 @@ class BackendController(BaseController):
             finally:
                 try:
                     connexion.close()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Ignored in PostgreSQL connection close (session info): {e}")
 
         return info
 
@@ -1169,8 +1169,8 @@ class BackendController(BaseController):
         finally:
             try:
                 connexion.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in PostgreSQL connection close (current session cleanup): {e}")
 
     def _cleanup_postgresql_all_sessions(self) -> int:
         """
@@ -1274,8 +1274,8 @@ class BackendController(BaseController):
         finally:
             try:
                 connexion.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in PostgreSQL connection close (all sessions cleanup): {e}")
 
     def _cleanup_spatialite_project_tables(self) -> int:
         """Clean Spatialite temp tables for current project databases."""

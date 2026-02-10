@@ -9,6 +9,7 @@ to the hexagonal architecture.
 Part of FilterMate Hexagonal Architecture v3.0
 """
 
+import logging
 import time
 import sqlite3
 from typing import Dict, List, Optional, Tuple, Set, Any, Callable
@@ -36,6 +37,8 @@ from ...core.ports.filter_optimizer import (
     LayerStatistics,
     PlanBuilderConfig,
 )
+
+logger = logging.getLogger(__name__)
 
 # Singleton instances
 _optimizer_instance: Optional["QgisFilterOptimizer"] = None
@@ -221,7 +224,8 @@ class QgisSelectivityEstimator(ISelectivityEstimator):
 
             return matching / evaluated
 
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Ignored in attribute selectivity estimation: {e}")
             return 0.5
 
     def estimate_spatial_selectivity(
@@ -497,7 +501,8 @@ class QgisFilterOptimizer(IFilterOptimizer):
 
             return matching_fids
 
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Ignored in attribute prefilter execution: {e}")
             return matching_fids
 
     def execute_chunked_filter(
@@ -671,8 +676,8 @@ class SpatialiteQueryBuilder:
 
             conn.close()
 
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in SQLite stats retrieval: {e}")
 
         return stats
 
@@ -817,7 +822,7 @@ class MemorySpatialIndex:
                 if match:
                     matching.add(feat.id())
 
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in spatial predicate evaluation: {e}")
 
         return matching

@@ -257,8 +257,8 @@ class LayerFilterBuilder:
             geom_col = uri.geometryColumn()
             if geom_col:
                 return geom_col
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in geometry column detection from URI: {e}")
 
         # Default by provider
         provider = layer.providerType()
@@ -279,8 +279,8 @@ class LayerFilterBuilder:
                 schema = source_uri.schema()
                 if schema:
                     return schema
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in schema detection from URI: {e}")
 
             # Regex fallback
             import re

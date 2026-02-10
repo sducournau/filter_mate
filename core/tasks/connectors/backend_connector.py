@@ -196,9 +196,9 @@ class BackendConnector:
                 cursor.close()
                 logger.debug("Reusing cached PostgreSQL connection")
                 return self._postgresql_connection
-            except Exception:
+            except Exception as e:
                 # Connection invalid, will create new one
-                logger.debug("Cached PostgreSQL connection invalid, creating new")
+                logger.debug(f"Cached PostgreSQL connection invalid, creating new: {e}")
                 self._postgresql_connection = None
 
         # Get fresh connection from layer

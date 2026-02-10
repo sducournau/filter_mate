@@ -153,12 +153,12 @@ class LayerTaskCompletionHandler:
             # STABILITY: Always close DB connection
             try:
                 cur.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in cursor close: {e}")
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in connection close: {e}")
 
         # Handle add_layers post-processing
         if task_name == 'add_layers':

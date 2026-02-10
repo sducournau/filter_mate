@@ -894,8 +894,8 @@ class ConfigurationManager(QObject):
             h = UIConfig.get_config('combobox', 'height')
             d.checkableComboBoxLayer_filtering_layers_to_filter.setMinimumHeight(h)
             d.checkableComboBoxLayer_filtering_layers_to_filter.setMaximumHeight(h)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in filtering combobox height config: {e}")
 
     def setup_exporting_tab_widgets(self):
         """v4.0 Sprint 16: Configure widgets for Exporting tab (migrated from dockwidget)."""
@@ -915,8 +915,8 @@ class ConfigurationManager(QObject):
             h = UIConfig.get_config('combobox', 'height')
             d.checkableComboBoxLayer_exporting_layers.setMinimumHeight(h)
             d.checkableComboBoxLayer_exporting_layers.setMaximumHeight(h)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in exporting combobox height config: {e}")
 
         for btn in ['pushButton_checkable_exporting_layers', 'pushButton_checkable_exporting_projection',
                     'pushButton_checkable_exporting_styles', 'pushButton_checkable_exporting_datatype',

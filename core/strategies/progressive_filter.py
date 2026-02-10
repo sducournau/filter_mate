@@ -581,8 +581,8 @@ class TwoPhaseFilter:
                         )
                         if box_match:
                             return tuple(float(x) for x in box_match.groups())
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in bbox extraction from DB: {e}")
 
             return None
 

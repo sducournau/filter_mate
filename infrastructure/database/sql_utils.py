@@ -237,7 +237,7 @@ def create_temp_spatialite_table(
         # Create spatial index
         try:
             # Register geometry column
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT RecoverGeometryColumn(
                     '{sanitize_sql_identifier(table_name)}',
                     '{sanitize_sql_identifier(geom_field)}',
@@ -248,7 +248,7 @@ def create_temp_spatialite_table(
             """)
 
             # Create R-tree spatial index
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT CreateSpatialIndex(
                     '{sanitize_sql_identifier(table_name)}',
                     '{sanitize_sql_identifier(geom_field)}'
@@ -325,8 +325,8 @@ def format_pk_values_for_sql(
             if all_numeric_values:
                 pk_is_numeric = True
                 logger.debug(f"PK '{pk_field}' detected as numeric from VALUES (all int/float)")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in PK numeric detection (strategy 1): {e}")
 
     # Strategy 2: Check if string values look like integers
     if pk_is_numeric is None:
@@ -339,8 +339,8 @@ def format_pk_values_for_sql(
             if all_look_numeric:
                 pk_is_numeric = True
                 logger.debug(f"PK '{pk_field}' detected as numeric from string VALUES")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in PK numeric detection (strategy 2): {e}")
 
     # Strategy 3: Check field schema (may be unreliable for OGR)
     if pk_is_numeric is None and layer and pk_field:

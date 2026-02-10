@@ -596,8 +596,8 @@ class LayersManagementEngineTask(QgsTask):
                 if geom_col and geom_col.strip():
                     detected_geom_field = geom_col
                     logger.debug(f"Geometry column from layer.geometryColumn(): '{detected_geom_field}'")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in geometryColumn() detection: {e}")
 
             # METHOD 1: Query GeoPackage metadata (for .gpkg files)
             if not detected_geom_field:
@@ -658,9 +658,9 @@ class LayersManagementEngineTask(QgsTask):
                 else:
                     geometry_field = 'geom'  # Ultimate fallback
                     logger.info("Final fallback: using default geometry column 'geom'")
-            except Exception:
+            except Exception as e:
                 geometry_field = 'geom'
-                logger.info("Final fallback: using default geometry column 'geom' (detection failed)")
+                logger.info(f"Final fallback: using default geometry column 'geom' (detection failed: {e})")
 
         return source_schema, geometry_field
 

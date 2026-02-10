@@ -277,8 +277,8 @@ class ExploringFeaturesCache:
             if f and hasattr(f, 'id'):
                 try:
                     result.append(f.id())
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Ignored in _extract_feature_ids: {e}")
         return result
 
     def _compute_bbox(self, features: List[Any]) -> Optional[Any]:
@@ -305,8 +305,8 @@ class ExploringFeaturesCache:
                             bbox = geom.boundingBox()
                         else:
                             bbox.combineExtentWith(geom.boundingBox())
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Ignored in _compute_bbox: {e}")
 
         return bbox if not bbox.isEmpty() else None
 

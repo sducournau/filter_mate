@@ -95,16 +95,16 @@ class CancellableFeedback(QgsProcessingFeedback if _HAS_PROCESSING_FEEDBACK else
         if _HAS_PROCESSING_FEEDBACK:
             try:
                 super().cancel()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in feedback cancel: {e}")
 
     def setProgress(self, progress: float):
         """Set progress (0-100)."""
         if _HAS_PROCESSING_FEEDBACK:
             try:
                 super().setProgress(progress)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in feedback setProgress: {e}")
 
 
 class OGRExpressionBuilder(GeometricFilterPort):
@@ -363,8 +363,8 @@ class OGRExpressionBuilder(GeometricFilterPort):
             storage_type = ""
             try:
                 storage_type = layer.dataProvider().storageType().lower()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in storage type detection: {e}")
 
             # Check if this is a PostgreSQL layer accessed via OGR
             is_postgres_via_ogr = 'postgresql' in storage_type or 'postgis' in storage_type
@@ -467,8 +467,8 @@ class OGRExpressionBuilder(GeometricFilterPort):
         storage_type = ""
         try:
             storage_type = layer.dataProvider().storageType().lower()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in FID filter storage type detection: {e}")
 
         pk_field = self._get_primary_key(layer)
         pk_field_lower = pk_field.lower()
@@ -482,8 +482,8 @@ class OGRExpressionBuilder(GeometricFilterPort):
                 from qgis.PyQt.QtCore import QVariant
                 field_type = fields.at(pk_idx).type()
                 is_numeric_pk = field_type in (QVariant.Int, QVariant.LongLong, QVariant.UInt, QVariant.ULongLong, QVariant.Double)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in PK field type detection: {e}")
 
         # Build value list based on PK type
         if is_numeric_pk:
@@ -559,8 +559,8 @@ class OGRExpressionBuilder(GeometricFilterPort):
                 if all_look_numeric:
                     is_numeric_pk = True
                     self.log_info("  - PK type detected from string VALUES: numeric (all values look like integers)")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in PK numeric detection from values: {e}")
 
         # Strategy 3: Check field type from layer fields (may be unreliable for OGR)
         if is_numeric_pk is None:
@@ -855,8 +855,8 @@ class OGRExpressionBuilder(GeometricFilterPort):
                     pk_name = fields.at(pk_indexes[0]).name()
                     self.log_debug(f"Using provider PK: {pk_name}")
                     return pk_name
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in provider PK attribute detection: {e}")
 
             # 2. Look for exact match PK names
             for field in fields:

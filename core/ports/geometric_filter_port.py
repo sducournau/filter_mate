@@ -324,8 +324,8 @@ class GeometricFilterPort(ABC):
                                 geom_col = part.split('=')[1]
                                 self.log_debug(f"Detected geometry column via URI parse: '{geom_col}'")
                                 return geom_col
-                except Exception:
-                    pass
+                except Exception as e:
+                    self.log_debug(f"Ignored in geometry column URI parse: {e}")
 
             except Exception as e:
                 self.log_warning(f"Error detecting geometry column: {e}")
@@ -375,8 +375,8 @@ class GeometricFilterPort(ABC):
                 authid = crs.authid()
                 if ':' in authid:
                     return int(authid.split(':')[1])
-        except Exception:
-            pass
+        except Exception as e:
+            self.log_debug(f"Ignored in SRID extraction from layer CRS: {e}")
 
         return 4326
 

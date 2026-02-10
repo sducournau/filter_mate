@@ -152,8 +152,8 @@ class MultiStepFilterTask(BaseFilterMateTask):
                             step.step_type.value,
                             self._current_candidates
                         )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Ignored in step completion callback: {e}")
 
                 # Early termination if no candidates
                 if candidates is not None and len(candidates) == 0:
@@ -314,8 +314,8 @@ class MultiStepFilterTask(BaseFilterMateTask):
             pk_attrs = layer.primaryKeyAttributes()
             if pk_attrs:
                 return layer.fields()[pk_attrs[0]].name()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in primary key detection: {e}")
         return "fid"
 
     def _calculate_reduction_ratio(self) -> float:

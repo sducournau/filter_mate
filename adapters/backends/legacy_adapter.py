@@ -262,8 +262,8 @@ class BaseLegacyAdapter(GeometricFilterBackend):
                 from ...core.domain.layer_info import LayerInfo
                 layer_info = LayerInfo.from_qgis_layer(layer)
                 return self._new_backend.supports_layer(layer_info)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in new backend supports_layer check: {e}")
 
         if self._legacy_backend:
             return self._legacy_backend.supports_layer(layer)

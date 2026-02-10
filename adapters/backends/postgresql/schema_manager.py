@@ -92,8 +92,8 @@ def ensure_temp_schema_exists(connexion, schema_name: str) -> str:
         # Rollback failed transaction
         try:
             connexion.rollback()
-        except Exception:
-            pass  # Connection may be in bad state
+        except Exception as e:
+            logger.debug(f"Ignored in rollback after schema creation failure: {e}")
 
         # Try with explicit AUTHORIZATION CURRENT_USER as fallback
         try:
@@ -106,8 +106,8 @@ def ensure_temp_schema_exists(connexion, schema_name: str) -> str:
             logger.warning(f"[PostgreSQL] Error creating schema with CURRENT_USER: {e2}")
             try:
                 connexion.rollback()
-            except Exception:
-                pass  # Connection may be in bad state
+            except Exception as e:
+                logger.debug(f"Ignored in rollback after CURRENT_USER schema failure: {e}")
 
             # Final fallback: try with postgres authorization
             try:
@@ -119,8 +119,8 @@ def ensure_temp_schema_exists(connexion, schema_name: str) -> str:
             except Exception as e3:
                 try:
                     connexion.rollback()
-                except Exception:
-                    pass  # Connection may be in bad state
+                except Exception as e:
+                    logger.debug(f"Ignored in rollback after postgres auth schema failure: {e}")
 
                 # v2.8.8: Fallback to 'public' schema if temp schema cannot be created
                 logger.warning(f"Cannot create schema '{schema_name}', falling back to 'public'. "
@@ -244,8 +244,8 @@ def execute_commands(connexion, commands: list) -> bool:
         logger.error(f"[PostgreSQL] Error executing PostgreSQL commands: {e}")
         try:
             connexion.rollback()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in rollback after command execution failure: {e}")
         return False
 
 

@@ -118,8 +118,8 @@ def initialize_services(config: Optional[Dict[str, Any]] = None) -> None:
                 backend = _backend_factory.get_backend_for_provider(provider_type)
                 if backend:
                     backends[provider_type] = backend
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in backend initialization for {provider_type}: {e}")
 
         _filter_service = FilterService(
             backends=backends,
@@ -321,8 +321,8 @@ def _check_spatial_index(layer: 'QgsVectorLayer') -> bool:
         provider = layer.dataProvider()
         if hasattr(provider, 'hasSpatialIndex'):
             return provider.hasSpatialIndex() == QgsFeatureSource.SpatialIndexPresent
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Ignored in spatial index check: {e}")
     return False
 
 
@@ -405,8 +405,8 @@ def _extract_primary_key(layer: 'QgsVectorLayer') -> str:
             if field.type() in [2, 4]:  # Integer types in QVariant
                 return field.name()
 
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Ignored in primary key extraction: {e}")
 
     return ""
 

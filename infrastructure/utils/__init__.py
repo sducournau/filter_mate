@@ -12,6 +12,10 @@ Common utility functions and helper classes:
 
 Migrated from modules/ (EPIC-1 v3.0).
 """
+import logging
+
+logger = logging.getLogger(__name__)
+
 from .provider_utils import (  # noqa: F401
     ProviderType,
     detect_provider_type,
@@ -217,16 +221,16 @@ class GdalErrorHandler:
             from osgeo import gdal  # noqa: F401
             self.previous_handler = gdal.GetErrorHandler()
             gdal.PushErrorHandler('CPLQuietErrorHandler')
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in GdalErrorHandler.__enter__: {e}")
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         try:
             from osgeo import gdal  # noqa: F401
             gdal.PopErrorHandler()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in GdalErrorHandler.__exit__: {e}")
         return False
 
 

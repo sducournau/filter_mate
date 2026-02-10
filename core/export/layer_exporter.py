@@ -342,8 +342,8 @@ class LayerExporter:
                     "FilterMate",
                     f"Export terminé: {len(layer_objects)} couche(s) exportée(s) vers {output_path}"
                 )
-            except Exception:
-                pass  # Don't fail if message bar not available
+            except Exception as e:
+                logger.debug(f"Ignored in message bar success notification: {e}")
 
             return ExportResult(
                 success=True,

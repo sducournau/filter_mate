@@ -304,7 +304,8 @@ class ControllerIntegration:
                     return False
                 self._registry.register(name, controller, tab_index=tab_index)
                 return True
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Ignored in controller registration for '{name}': {e}")
                 return False
 
         safe_register(
@@ -608,8 +609,8 @@ class ControllerIntegration:
             from qgis.utils import iface
             if iface and hasattr(iface, 'messageBar'):
                 iface.messageBar().pushWarning("FilterMate", f"Property error: {error_msg}")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in property error message bar display: {e}")
 
     def _on_buffer_style_changed(self, buffer_value: float) -> None:
         """Handle buffer style change event from PropertyController."""

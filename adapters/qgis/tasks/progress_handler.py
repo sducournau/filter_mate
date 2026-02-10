@@ -169,8 +169,8 @@ class ProgressHandler:
             if self._on_phase_change:
                 try:
                     self._on_phase_change(phase)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Ignored in phase change callback: {e}")
 
         base_percent = self._get_phase_start_percent(phase)
         self._emit_event(phase, base_percent, message or f"{phase.value}...")
@@ -402,8 +402,8 @@ class ProgressAggregator:
         if self._on_progress:
             try:
                 self._on_progress(avg_percent, message)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Ignored in aggregate progress callback: {e}")
 
     @property
     def percent(self) -> int:

@@ -162,8 +162,8 @@ def apply_pending_subset_requests(
                 if feature_count is not None and feature_count >= 0 and feature_count < MAX_FEATURES_FOR_UPDATE_EXTENTS:
                     try:
                         layer.updateExtents()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Ignored in updateExtents (filter already applied): {e}")
 
                 layer.triggerRepaint()
 
@@ -206,8 +206,8 @@ def apply_pending_subset_requests(
                     if feature_count is not None and feature_count >= 0 and feature_count < MAX_FEATURES_FOR_UPDATE_EXTENTS:
                         try:
                             layer.updateExtents()
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug(f"Ignored in updateExtents (new filter applied): {e}")
 
                     layer.triggerRepaint()
 
@@ -308,8 +308,8 @@ def _schedule_deferred_filter_application(
         # Final canvas refresh
         try:
             iface.mapCanvas().refresh()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in deferred canvas refresh: {e}")
 
     # Defer to allow UI to breathe
     QTimer.singleShot(100, apply_deferred_filters)
@@ -363,8 +363,8 @@ def schedule_canvas_refresh(
         # Fallback: immediate refresh
         try:
             iface.mapCanvas().refresh()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in fallback canvas refresh: {e}")
 
 
 def cleanup_memory_layer(ogr_source_geom: Optional[Any]) -> None:  # Optional[QgsVectorLayer]

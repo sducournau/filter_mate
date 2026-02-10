@@ -136,7 +136,8 @@ def format_pk_values_for_sql(
                 )
                 is_numeric = all_look_numeric
                 logger.debug(f"PK type detected from values: {'numeric' if is_numeric else 'text'}")
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Ignored in PK type detection from values: {e}")
                 is_numeric = True  # Default to numeric
 
     if is_numeric:

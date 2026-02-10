@@ -4260,7 +4260,8 @@ class FilterEngineTask(QgsTask):
                 if not os.path.exists(output_folder):
                     try:
                         os.makedirs(output_folder)
-                    except Exception:
+                    except Exception as e:
+                        logger.debug(f"Ignored in makedirs for export output: {e}")
                         self.message = f'Failed to create output directory: {output_folder}'
                         return False
 
@@ -5455,8 +5456,8 @@ class FilterEngineTask(QgsTask):
                         if subset:
                             layer.triggerRepaint()
                             layers_repainted += 1
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Ignored in final canvas repaint loop: {e}")
 
             # Final canvas refresh
             iface.mapCanvas().refresh()
@@ -5593,7 +5594,7 @@ class FilterEngineTask(QgsTask):
         try:
             logger.info(f'"{self.description()}" task was canceled')
         except Exception:
-            pass
+            pass  # Logger may be destroyed during QGIS shutdown - intentional silent catch
 
         super().cancel()
 
@@ -5777,8 +5778,8 @@ class FilterEngineTask(QgsTask):
                     # This guarantees filtered features are visible on the map
                     try:
                         iface.mapCanvas().refresh()
-                    except Exception:
-                        pass  # Ignore refresh errors, filter was still applied
+                    except Exception as e:
+                        logger.debug(f"Ignored in post-filter canvas refresh: {e}")
 
                 elif message_category == 'ExportLayers':
 

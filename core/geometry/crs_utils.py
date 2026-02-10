@@ -175,7 +175,8 @@ def get_layer_crs_info(layer) -> dict:
             'units': get_crs_units(crs),
             'description': crs.description()
         }
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Ignored in CRS info extraction: {e}")
         return {
             'authid': 'unknown',
             'is_geographic': False,

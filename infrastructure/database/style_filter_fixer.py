@@ -217,7 +217,8 @@ def fix_layer_style_filters(
             if ftype.lower() in ('varchar', 'character varying', 'text', 'char', 'character')
             or ftype.lower().startswith('varchar(')
         ]
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Ignored in fix_layer_style_filters field type detection: {e}")
         varchar_fields = None  # Apply to all fields
 
     if isinstance(renderer, QgsRuleBasedRenderer):
@@ -320,7 +321,7 @@ def fix_expression_for_postgresql(
                 if ftype.lower() in ('varchar', 'character varying', 'text', 'char', 'character')
                 or ftype.lower().startswith('varchar(')
             ]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in fix_expression_for_postgresql field detection: {e}")
 
     return apply_type_casting_to_expression(expression, varchar_fields)

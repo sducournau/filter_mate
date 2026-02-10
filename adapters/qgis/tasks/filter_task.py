@@ -215,8 +215,8 @@ class FilterTask(BaseFilterMateTask):
             pk_attrs = layer.primaryKeyAttributes()
             if pk_attrs:
                 return layer.fields()[pk_attrs[0]].name()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ignored in primary key detection: {e}")
         return "fid"
 
     def _on_completed(self, result: TaskResult) -> None:
