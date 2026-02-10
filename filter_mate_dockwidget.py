@@ -1168,33 +1168,41 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.warning(f"Could not adjust row spacing: {e}")
 
     def _setup_backend_indicator(self):
-        """v4.0 S16: Create header with indicators."""
-        self.frame_header = QtWidgets.QFrame(self.dockWidgetContents)
-        self.frame_header.setObjectName("frame_header"); self.frame_header.setFrameShape(QtWidgets.QFrame.NoFrame)
-        self.frame_header.setFixedHeight(13)  # v4.0: Compact layout, closer to frame_exploring
-        hl = QtWidgets.QHBoxLayout(self.frame_header)
-        hl.setContentsMargins(2, 0, 2, 0); hl.setSpacing(3)  # v4.0: Slight spacing increase for better visual
-        hl.addSpacerItem(QtWidgets.QSpacerItem(40, 6, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))
+        """v4.0 S16: Custom title bar with indicators (outside dockWidgetContents to avoid QSS conflicts)."""
+        title_bar = QtWidgets.QWidget(self)
+        title_bar.setObjectName("custom_title_bar")
+        vl = QtWidgets.QVBoxLayout(title_bar)
+        vl.setContentsMargins(0, 0, 0, 0); vl.setSpacing(0)
+
+        # Indicator row
+        row = QtWidgets.QWidget(title_bar)
+        hl = QtWidgets.QHBoxLayout(row)
+        hl.setContentsMargins(6, 0, 6, 2); hl.setSpacing(4)
+        hl.addSpacerItem(QtWidgets.QSpacerItem(0, 0, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))
         self.plugin_title_label = None
         # v4.0: Softer "mousse" style with rounded corners
         bb = "color:white;font-size:8pt;font-weight:500;padding:2px 8px;border-radius:10px;border:none;"
-        # v4.0: Softer colors with better hover transitions
-        self.favorites_indicator_label = self._create_indicator_label("label_favorites_indicator", "★", bb + "background-color:#f5b041;", bb + "background-color:#f39c12;", "★ Favorites\nClick to manage", self._on_favorite_indicator_clicked, 32)
+        self.favorites_indicator_label = self._create_indicator_label(row, "label_favorites_indicator", "★", bb + "background-color:#f5b041;", bb + "background-color:#f39c12;", "★ Favorites\nClick to manage", self._on_favorite_indicator_clicked)
         hl.addWidget(self.favorites_indicator_label)
-        self.backend_indicator_label = self._create_indicator_label("label_backend_indicator", "OGR" if self.has_loaded_layers else "...", bb + "background-color:#5dade2;", bb + "background-color:#3498db;", "Click to change backend", self._on_backend_indicator_clicked, 38)
+        self.backend_indicator_label = self._create_indicator_label(row, "label_backend_indicator", "OGR" if self.has_loaded_layers else "...", bb + "background-color:#5dade2;", bb + "background-color:#3498db;", "Click to change backend", self._on_backend_indicator_clicked)
         hl.addWidget(self.backend_indicator_label)
-        self.forced_backends = {}
-        if hasattr(self, 'verticalLayout_8'): self.verticalLayout_8.insertWidget(0, self.frame_header)
+        vl.addWidget(row)
 
-    def _create_indicator_label(self, name, text, style, hover_style, tooltip, click_handler, min_width):
+        # Apply as title bar widget (outside dockWidgetContents → no QSS interference)
+        self.frame_header = title_bar
+        self.forced_backends = {}
+        self.setTitleBarWidget(title_bar)
+        from qgis.PyQt.QtGui import QIcon
+        self.setWindowIcon(QIcon())
+
+    def _create_indicator_label(self, parent, name, text, style, hover_style, tooltip, click_handler):
         """v4.0 S16: Create indicator label with soft "mousse" style."""
-        lbl = ClickableLabel(self.frame_header)
+        lbl = ClickableLabel(parent)
         lbl.setObjectName(name); lbl.setText(text); lbl.setStyleSheet(f"QLabel#{name}{{{style}}}QLabel#{name}:hover{{{hover_style}}}")
-        lbl.setAlignment(Qt.AlignCenter); lbl.setMinimumWidth(min_width); lbl.setFixedHeight(18)  # v4.0: Fixed height for proper text display with padding
+        lbl.setAlignment(Qt.AlignCenter); lbl.setFixedHeight(18)
         lbl.setCursor(Qt.PointingHandCursor); lbl.setToolTip(tooltip)
-        # CRITICAL: Enable the widget to receive mouse events
         lbl.setEnabled(True)
-        lbl.setAttribute(Qt.WA_Hover, True)  # Enable hover events
+        lbl.setAttribute(Qt.WA_Hover, True)
         lbl.set_click_handler(click_handler)
         logger.debug(f"Created indicator {name}: enabled={lbl.isEnabled()}, visible={lbl.isVisible()}, handler={click_handler is not None}")
         return lbl
